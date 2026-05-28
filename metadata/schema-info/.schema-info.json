@@ -1,0 +1,14 @@
+[
+  {
+    "fields": {
+      "SchemaName": "__mj_BizAppsAccounting",
+      "EntityIDMin": 1,
+      "EntityIDMax": 1000000,
+      "EntityNamePrefix": "MJ_BizApps_Accounting: ",
+      "Description": "MemberJunction BizApps Accounting — AR subledger and journal-entry primitives"
+    },
+    "primaryKey": {
+      "ID": "7F2F85AF-0DCF-4DF3-939A-38EA459AC820"
+    }
+  }
+]
