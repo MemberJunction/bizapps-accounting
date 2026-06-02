@@ -5,7 +5,8 @@
   },
   "directoryOrder": [
     "schema-info",
-    "entities"
+    "entities",
+    "currencies"
   ],
   "sqlLogging": {
     "enabled": true,

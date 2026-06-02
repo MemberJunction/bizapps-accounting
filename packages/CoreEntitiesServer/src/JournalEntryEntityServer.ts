@@ -18,10 +18,9 @@ import { BaseEntity, EntitySaveOptions, LogError } from '@memberjunction/core';
 import { RegisterClass } from '@memberjunction/global';
 import { mjBizAppsAccountingJournalEntryEntity } from '@mj-biz-apps/accounting-entities';
 
-import { EntityNames } from './EntityNames.js';
 import { getNextJournalEntryNumber } from './SequenceService.js';
 
-@RegisterClass(BaseEntity, EntityNames.JournalEntry)
+@RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Journal Entries')
 export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEntity {
 
   override async Save(options?: EntitySaveOptions): Promise<boolean> {
@@ -32,7 +31,7 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
   }
 
   private async assignEntryNumber(): Promise<void> {
-    const companyId = this.Get<string>('CompanyID');
+    const companyId = this.CompanyID;
     if (!companyId) {
       LogError('JournalEntryEntityServer.assignEntryNumber: CompanyID is required before save');
       throw new Error('JournalEntry.CompanyID is required before save');

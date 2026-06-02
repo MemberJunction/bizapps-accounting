@@ -15,10 +15,9 @@ import { BaseEntity, EntitySaveOptions, LogError } from '@memberjunction/core';
 import { RegisterClass } from '@memberjunction/global';
 import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
 
-import { EntityNames } from './EntityNames.js';
 import { getNextBatchNumber } from './SequenceService.js';
 
-@RegisterClass(BaseEntity, EntityNames.JournalEntryBatch)
+@RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Journal Entry Batches')
 export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEntryBatchEntity {
 
   override async Save(options?: EntitySaveOptions): Promise<boolean> {
@@ -29,7 +28,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
   }
 
   private async assignBatchNumber(): Promise<void> {
-    const companyId = this.Get<string>('CompanyID');
+    const companyId = this.CompanyID;
     if (!companyId) {
       LogError('JournalEntryBatchEntityServer.assignBatchNumber: CompanyID is required before save');
       throw new Error('JournalEntryBatch.CompanyID is required before save');

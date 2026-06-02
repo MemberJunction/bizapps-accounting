@@ -42,6 +42,7 @@ export async function getNextJournalEntryNumber(
       { name: 'CompanyID', value: companyId },
       { name: 'FiscalYear', value: fiscalYear },
     ],
+    { isMutation: true, description: 'spAssignNextJournalEntryNumber' },
     contextUser,
   );
   const value = rows?.[0]?.EntryNumber;
@@ -72,6 +73,7 @@ export async function getNextBatchNumber(
   const rows = await provider.ExecuteSQL(
     sql,
     [{ name: 'CompanyID', value: companyId }],
+    { isMutation: true, description: 'spAssignNextBatchNumber' },
     contextUser,
   );
   const value = rows?.[0]?.BatchNumber;
