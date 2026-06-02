@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schema.memberjunction.org/codegen-schema-info/v1.json",
+  "description": "Additional schema info consumed by `mj codegen` (CodeGenLib additionalSchemaInfo). Declares IS-A (Table-Per-Type) inheritance relationships that CodeGen can't infer from the DB alone — it sets __mj.Entity.ParentID, mirrors parent fields as virtual fields on the child, and JOINs the parent in the child's base view.",
+  "ISARelationships": [
+    {
+      "_comment": "ChildEntity uses the BASE TABLE name (prefix-independent) so this binds regardless of the entity-name prefix; ParentEntity uses the stable core entity Name. CodeGen matches by Name OR (BaseTable + SchemaName).",
+      "ChildEntity": "AccountingCompanyProfile",
+      "ParentEntity": "MJ: Companies",
+      "SchemaName": "__mj_BizAppsAccounting"
+    }
+  ]
+}

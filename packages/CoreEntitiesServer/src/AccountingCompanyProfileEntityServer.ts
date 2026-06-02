@@ -28,7 +28,6 @@ import {
   mjBizAppsAccountingRecurringJournalEntryTemplateEntity,
 } from '@mj-biz-apps/accounting-entities';
 
-import { EntityNames } from './EntityNames.js';
 import {
   DEFAULT_CHART_OF_ACCOUNTS,
   DEFAULT_GL_ACCOUNT_REFS,
@@ -46,7 +45,7 @@ interface PeriodToGenerate {
   fiscalMonth?: number;
 }
 
-@RegisterClass(BaseEntity, EntityNames.AccountingCompanyProfile)
+@RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Accounting Company Profiles')
 export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAccountingCompanyProfileEntity {
 
   override async Save(options?: EntitySaveOptions): Promise<boolean> {
@@ -92,8 +91,8 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
   }
 
   private async seedDefaultChartOfAccounts(): Promise<void> {
-    const companyId = this.Get<string>('ID');
-    const currencyCode = this.Get<string>('FunctionalCurrencyCode');
+    const companyId = this.ID;
+    const currencyCode = this.FunctionalCurrencyCode;
     const seeds = this.getChartOfAccountsToSeed();
 
     const existingCodes = await this.loadExistingGLAccountCodes(companyId);
@@ -108,7 +107,7 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
     const rv = new RunView();
     const result = await rv.RunView<mjBizAppsAccountingGLAccountEntity>(
       {
-        EntityName: EntityNames.GLAccount,
+        EntityName: 'MJ_BizApps_Accounting: GL Accounts',
         ExtraFilter: `CompanyID = '${companyId}'`,
         ResultType: 'simple',
         Fields: ['Code'],
@@ -129,7 +128,7 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
   ): Promise<void> {
     const md = new Metadata();
     const account = await md.GetEntityObject<mjBizAppsAccountingGLAccountEntity>(
-      EntityNames.GLAccount,
+      'MJ_BizApps_Accounting: GL Accounts',
       this.ContextCurrentUser,
     );
     account.NewRecord();
@@ -153,7 +152,7 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
 
   /** Override point: deployments can replace with custom fiscal calendars (4-4-5, etc.). */
   protected getPeriodsToGenerate(fiscalYear: number): PeriodToGenerate[] {
-    const startMonth = this.Get<number>('FiscalYearStartMonth') ?? 1;
+    const startMonth = this.FiscalYearStartMonth ?? 1;
     const fyStartCalYear = startMonth === 1 ? fiscalYear : fiscalYear - 1;
     const fyStart = new Date(Date.UTC(fyStartCalYear, startMonth - 1, 1));
 
@@ -198,7 +197,7 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
   }
 
   private async generateAccountingPeriods(fiscalYear: number): Promise<void> {
-    const companyId = this.Get<string>('ID');
+    const companyId = this.ID;
     const wanted = this.getPeriodsToGenerate(fiscalYear);
     const existing = await this.loadExistingPeriodKeys(companyId);
 
@@ -213,7 +212,7 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
     const rv = new RunView();
     const result = await rv.RunView<mjBizAppsAccountingAccountingPeriodEntity>(
       {
-        EntityName: EntityNames.AccountingPeriod,
+        EntityName: 'MJ_BizApps_Accounting: Accounting Periods',
         ExtraFilter: `CompanyID = '${companyId}'`,
         ResultType: 'simple',
         Fields: ['PeriodType', 'PeriodStart'],
@@ -238,7 +237,7 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
   ): Promise<void> {
     const md = new Metadata();
     const row = await md.GetEntityObject<mjBizAppsAccountingAccountingPeriodEntity>(
-      EntityNames.AccountingPeriod,
+      'MJ_BizApps_Accounting: Accounting Periods',
       this.ContextCurrentUser,
     );
     row.NewRecord();
@@ -267,7 +266,7 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
   }
 
   private async seedDefaultRecurringTemplates(): Promise<void> {
-    const companyId = this.Get<string>('ID');
+    const companyId = this.ID;
     const templates = this.getRecurringTemplatesToSeed();
     const existingNames = await this.loadExistingRecurringTemplateNames(companyId);
 
@@ -281,7 +280,7 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
     const rv = new RunView();
     const result = await rv.RunView<mjBizAppsAccountingRecurringJournalEntryTemplateEntity>(
       {
-        EntityName: EntityNames.RecurringJournalEntryTemplate,
+        EntityName: 'MJ_BizApps_Accounting: Recurring Journal Entry Templates',
         ExtraFilter: `CompanyID = '${companyId}'`,
         ResultType: 'simple',
         Fields: ['Name'],
@@ -301,7 +300,7 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
   ): Promise<void> {
     const md = new Metadata();
     const row = await md.GetEntityObject<mjBizAppsAccountingRecurringJournalEntryTemplateEntity>(
-      EntityNames.RecurringJournalEntryTemplate,
+      'MJ_BizApps_Accounting: Recurring Journal Entry Templates',
       this.ContextCurrentUser,
     );
     row.NewRecord();
@@ -323,7 +322,7 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
   // ─── Wire default GL account refs ─────────────────────────────────────
 
   private async wireDefaultGLAccountRefs(): Promise<void> {
-    const companyId = this.Get<string>('ID');
+    const companyId = this.ID;
     const codeToId = await this.loadGLAccountIdsByCode(companyId);
 
     const refs: Array<{ field: string; code: string }> = [
@@ -359,7 +358,7 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
     const rv = new RunView();
     const result = await rv.RunView<mjBizAppsAccountingGLAccountEntity>(
       {
-        EntityName: EntityNames.GLAccount,
+        EntityName: 'MJ_BizApps_Accounting: GL Accounts',
         ExtraFilter: `CompanyID = '${companyId}'`,
         ResultType: 'simple',
         Fields: ['ID', 'Code'],

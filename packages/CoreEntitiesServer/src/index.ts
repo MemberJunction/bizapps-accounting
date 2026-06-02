@@ -20,7 +20,6 @@ export { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.j
 // Internal helpers exported for use by future EntityServer classes (period
 // close, FX revaluation, etc.) and by the AccountingService façade in
 // `@mj-biz-apps/accounting-server`.
-export { EntityNames } from './EntityNames.js';
 export {
   DEFAULT_CHART_OF_ACCOUNTS,
   DEFAULT_GL_ACCOUNT_REFS,
