@@ -1,0 +1,322 @@
+[
+  {
+    "fields": {
+      "Code": "USD",
+      "Name": "US Dollar",
+      "Symbol": "$",
+      "DecimalPlaces": 2,
+      "IsActive": true
+    },
+    "primaryKey": {
+      "ID": "8AE23703-5276-40D1-9FB7-E11D56259933"
+    },
+    "sync": {
+      "lastModified": "2026-06-02T20:36:43.189Z",
+      "checksum": "3976c0374294d55262ff746bda387bb193c5287a11a47249ce4e35067f56b772"
+    }
+  },
+  {
+    "fields": {
+      "Code": "EUR",
+      "Name": "Euro",
+      "Symbol": "€",
+      "DecimalPlaces": 2,
+      "IsActive": true
+    },
+    "primaryKey": {
+      "ID": "49696991-D874-4B4C-A2C5-9892FF8F5662"
+    },
+    "sync": {
+      "lastModified": "2026-06-02T20:36:43.205Z",
+      "checksum": "22e424d735dd3dfbfa4fb90119f8c30acf9fa18f1393f3648074fa9da056ffb3"
+    }
+  },
+  {
+    "fields": {
+      "Code": "GBP",
+      "Name": "British Pound",
+      "Symbol": "£",
+      "DecimalPlaces": 2,
+      "IsActive": true
+    },
+    "primaryKey": {
+      "ID": "E22DD818-5DA5-46A5-9FD4-AEAEDE4266DF"
+    },
+    "sync": {
+      "lastModified": "2026-06-02T20:36:43.219Z",
+      "checksum": "34fdb16885f29e2f5548db8be039afd8ebdd3cc3bbd0e15823e443a42c1a81ed"
+    }
+  },
+  {
+    "fields": {
+      "Code": "JPY",
+      "Name": "Japanese Yen",
+      "Symbol": "¥",
+      "DecimalPlaces": 0,
+      "IsActive": true
+    },
+    "primaryKey": {
+      "ID": "D3EA8B9C-2F82-471A-BFDA-219F68DED825"
+    },
+    "sync": {
+      "lastModified": "2026-06-02T20:36:43.233Z",
+      "checksum": "a344d43a40af756051e48a1c1db6e7d826a3fce550619a9c2de0ea986d8273be"
+    }
+  },
+  {
+    "fields": {
+      "Code": "CAD",
+      "Name": "Canadian Dollar",
+      "Symbol": "CA$",
+      "DecimalPlaces": 2,
+      "IsActive": true
+    },
+    "primaryKey": {
+      "ID": "2467644C-B3E0-4D62-9165-47DEA4AA86BA"
+    },
+    "sync": {
+      "lastModified": "2026-06-02T20:36:43.247Z",
+      "checksum": "0fcb7befb9326f238b7284d51a3a2a7988e612e7c26f25e2406827b25f7a86af"
+    }
+  },
+  {
+    "fields": {
+      "Code": "AUD",
+      "Name": "Australian Dollar",
+      "Symbol": "A$",
+      "DecimalPlaces": 2,
+      "IsActive": true
+    },
+    "primaryKey": {
+      "ID": "BE959CC9-7DD6-4310-8D3F-FD1F5BC306E2"
+    },
+    "sync": {
+      "lastModified": "2026-06-02T20:36:43.260Z",
+      "checksum": "53928da6df887f16751f31c42ddb1b864d8f3a36ade909b8831b0550b2c8354e"
+    }
+  },
+  {
+    "fields": {
+      "Code": "NZD",
+      "Name": "New Zealand Dollar",
+      "Symbol": "NZ$",
+      "DecimalPlaces": 2,
+      "IsActive": true
+    },
+    "primaryKey": {
+      "ID": "9F35EFF4-8088-401C-A6F7-5EB67586F8B6"
+    },
+    "sync": {
+      "lastModified": "2026-06-02T20:36:43.273Z",
+      "checksum": "863b25744bb26dc47e0fa2b48fb75c504c731c88ae42510daed447cc3a1c5b93"
+    }
+  },
+  {
+    "fields": {
+      "Code": "CHF",
+      "Name": "Swiss Franc",
+      "Symbol": "CHF",
+      "DecimalPlaces": 2,
+      "IsActive": true
+    },
+    "primaryKey": {
+      "ID": "FF8FAE1E-78DC-4816-B36F-88C821DFF25A"
+    },
+    "sync": {
+      "lastModified": "2026-06-02T20:36:43.287Z",
+      "checksum": "5986ff5bccac193aeafcd3178d9823a0fd7a9dc63e1b92a9d7a8b4e7dfb5e6f6"
+    }
+  },
+  {
+    "fields": {
+      "Code": "CNY",
+      "Name": "Chinese Yuan",
+      "Symbol": "¥",
+      "DecimalPlaces": 2,
+      "IsActive": true
+    },
+    "primaryKey": {
+      "ID": "0E384933-1DFF-493E-B3B2-A49BC4EA560C"
+    },
+    "sync": {
+      "lastModified": "2026-06-02T20:36:43.302Z",
+      "checksum": "b31491e5a506520a3dd3a1df9751d108e8cff6677a56fc9de924e36904eae74f"
+    }
+  },
+  {
+    "fields": {
+      "Code": "HKD",
+      "Name": "Hong Kong Dollar",
+      "Symbol": "HK$",
+      "DecimalPlaces": 2,
+      "IsActive": true
+    },
+    "primaryKey": {
+      "ID": "3B08D5AA-911B-4CEF-B482-795B185BA766"
+    },
+    "sync": {
+      "lastModified": "2026-06-02T20:36:43.315Z",
+      "checksum": "cb7f65998852661cbc2b5f4a6fb0a408f7d46b81e8a6179ed2b7749e1d874381"
+    }
+  },
+  {
+    "fields": {
+      "Code": "SGD",
+      "Name": "Singapore Dollar",
+      "Symbol": "S$",
+      "DecimalPlaces": 2,
+      "IsActive": true
+    },
+    "primaryKey": {
+      "ID": "75D3AFEB-EA16-4AEE-BF5C-244175DF36D1"
+    },
+    "sync": {
+      "lastModified": "2026-06-02T20:36:43.335Z",
+      "checksum": "9ae22b52c898bede0342af812cf94c0956ab907f3906134ff69731d1ab2de077"
+    }
+  },
+  {
+    "fields": {
+      "Code": "INR",
+      "Name": "Indian Rupee",
+      "Symbol": "₹",
+      "DecimalPlaces": 2,
+      "IsActive": true
+    },
+    "primaryKey": {
+      "ID": "94363986-743C-4D78-A22D-17E794426328"
+    },
+    "sync": {
+      "lastModified": "2026-06-02T20:36:43.350Z",
+      "checksum": "38e6ff3665f69e15a6ff44071da8a28e2869e21bb41ed632ae79a516c067fee5"
+    }
+  },
+  {
+    "fields": {
+      "Code": "MXN",
+      "Name": "Mexican Peso",
+      "Symbol": "MX$",
+      "DecimalPlaces": 2,
+      "IsActive": true
+    },
+    "primaryKey": {
+      "ID": "71CD0F28-ADE2-4D72-AD04-19C0E8B2EBA5"
+    },
+    "sync": {
+      "lastModified": "2026-06-02T20:36:43.365Z",
+      "checksum": "5f5a9f76525df68f2e6dfe682bb80063b48252321ea824e8a78970e88b041e26"
+    }
+  },
+  {
+    "fields": {
+      "Code": "BRL",
+      "Name": "Brazilian Real",
+      "Symbol": "R$",
+      "DecimalPlaces": 2,
+      "IsActive": true
+    },
+    "primaryKey": {
+      "ID": "5EA73613-9AF7-41C5-95FC-CE3D44387C48"
+    },
+    "sync": {
+      "lastModified": "2026-06-02T20:36:43.377Z",
+      "checksum": "1b4bc9d3b9d419f901f6d1ca3e4fb3b1093e9028facdb933fb8c53ea5e88bab2"
+    }
+  },
+  {
+    "fields": {
+      "Code": "ZAR",
+      "Name": "South African Rand",
+      "Symbol": "R",
+      "DecimalPlaces": 2,
+      "IsActive": true
+    },
+    "primaryKey": {
+      "ID": "955EF238-3A01-4E81-846E-1E651DDFB7D8"
+    },
+    "sync": {
+      "lastModified": "2026-06-02T20:36:43.391Z",
+      "checksum": "7c561767ca3a6f173a55016ee6784113ef107c9eb2b09edfbd855571c7d6f67d"
+    }
+  },
+  {
+    "fields": {
+      "Code": "SEK",
+      "Name": "Swedish Krona",
+      "Symbol": "kr",
+      "DecimalPlaces": 2,
+      "IsActive": true
+    },
+    "primaryKey": {
+      "ID": "99AE85FD-5975-48FD-A15C-3F13BF7398C0"
+    },
+    "sync": {
+      "lastModified": "2026-06-02T20:36:43.404Z",
+      "checksum": "12406338c0b947af633bd8926a0276feb0de81f0c24bc9667a7126724b7cf466"
+    }
+  },
+  {
+    "fields": {
+      "Code": "NOK",
+      "Name": "Norwegian Krone",
+      "Symbol": "kr",
+      "DecimalPlaces": 2,
+      "IsActive": true
+    },
+    "primaryKey": {
+      "ID": "881480F2-10C7-4113-B245-9A5B1E1097B0"
+    },
+    "sync": {
+      "lastModified": "2026-06-02T20:36:43.418Z",
+      "checksum": "2a28faa83e11f3e24b7c2ea5a18827cdf743d3664114c1da9dcd44e421b29768"
+    }
+  },
+  {
+    "fields": {
+      "Code": "DKK",
+      "Name": "Danish Krone",
+      "Symbol": "kr",
+      "DecimalPlaces": 2,
+      "IsActive": true
+    },
+    "primaryKey": {
+      "ID": "35171166-1C67-4133-860F-F2380EF9B928"
+    },
+    "sync": {
+      "lastModified": "2026-06-02T20:36:43.432Z",
+      "checksum": "634f725399ee1348aba63ee25b7d27142b02afc9995f73bb29018bddc514cc3a"
+    }
+  },
+  {
+    "fields": {
+      "Code": "AED",
+      "Name": "UAE Dirham",
+      "Symbol": "د.إ",
+      "DecimalPlaces": 2,
+      "IsActive": true
+    },
+    "primaryKey": {
+      "ID": "A7F18885-AF9A-4938-9633-0E5D5709174F"
+    },
+    "sync": {
+      "lastModified": "2026-06-02T20:36:43.445Z",
+      "checksum": "f68e2cd58109e806954c6e431bbef7d790d40a4f96e8aa894ae9bebbbbc5d6c9"
+    }
+  },
+  {
+    "fields": {
+      "Code": "KRW",
+      "Name": "South Korean Won",
+      "Symbol": "₩",
+      "DecimalPlaces": 0,
+      "IsActive": true
+    },
+    "primaryKey": {
+      "ID": "88021737-A995-4857-86D4-CB6FAEA77435"
+    },
+    "sync": {
+      "lastModified": "2026-06-02T20:36:43.457Z",
+      "checksum": "c376c77f9a1f3f01e78a748128f6c9bc9c7623dbfb9e3ad8fd851f0959f13bc7"
+    }
+  }
+]
