@@ -5,8 +5,7 @@
  * to live in `spInitializeAccountingCompanyProfile`:
  *   1. Seed the default chart of accounts (23 GLAccount rows)
  *   2. Generate current-FY periods (12 months + 4 quarters + 1 year = 17 rows)
- *   3. Seed the 4 standard recurring JE templates
- *   4. Wire the profile's default-account refs (AR, DefRev, SalesTax, FX)
+ *   3. Wire the profile's default-account refs (AR, DefRev, SalesTax, FX)
  *
  * Every row creation goes through `Metadata.GetEntityObject` + `.Save()`, so
  * `__mj.RecordChange` captures the audit trail for every seeded record.
@@ -15,8 +14,8 @@
  *
  * The method is idempotent: subsequent saves of the same profile do not
  * re-seed. Deployments can override the seed sets by registering a subclass
- * with higher priority that overrides `getChartOfAccountsToSeed()`,
- * `getRecurringTemplatesToSeed()`, or `getPeriodsToGenerate()`.
+ * with higher priority that overrides `getChartOfAccountsToSeed()` or
+ * `getPeriodsToGenerate()`.
  */
 
 import { BaseEntity, EntitySaveOptions, LogError, Metadata, RunView } from '@memberjunction/core';
@@ -25,15 +24,12 @@ import {
   mjBizAppsAccountingAccountingCompanyProfileEntity,
   mjBizAppsAccountingGLAccountEntity,
   mjBizAppsAccountingAccountingPeriodEntity,
-  mjBizAppsAccountingRecurringJournalEntryTemplateEntity,
 } from '@mj-biz-apps/accounting-entities';
 
 import {
   DEFAULT_CHART_OF_ACCOUNTS,
   DEFAULT_GL_ACCOUNT_REFS,
-  DEFAULT_RECURRING_TEMPLATES,
   SeededGLAccount,
-  SeededRecurringTemplate,
 } from './SeedData.js';
 
 interface PeriodToGenerate {
@@ -73,7 +69,6 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
     try {
       await this.seedDefaultChartOfAccounts();
       await this.generateAccountingPeriods(fiscalYear);
-      await this.seedDefaultRecurringTemplates();
       await this.wireDefaultGLAccountRefs();
     } catch (error: unknown) {
       LogError(
@@ -254,67 +249,6 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
     if (!saved) {
       LogError(
         `AccountingCompanyProfileEntityServer: failed to seed AccountingPeriod ${period.periodType} ${period.periodStart.toISOString()} for CompanyID=${companyId}`,
-      );
-    }
-  }
-
-  // ─── Seed recurring templates ─────────────────────────────────────────
-
-  /** Override point: deployments can replace with custom recurring templates. */
-  protected getRecurringTemplatesToSeed(): ReadonlyArray<SeededRecurringTemplate> {
-    return DEFAULT_RECURRING_TEMPLATES;
-  }
-
-  private async seedDefaultRecurringTemplates(): Promise<void> {
-    const companyId = this.ID;
-    const templates = this.getRecurringTemplatesToSeed();
-    const existingNames = await this.loadExistingRecurringTemplateNames(companyId);
-
-    for (const template of templates) {
-      if (existingNames.has(template.name)) continue;
-      await this.createSeedRecurringTemplate(companyId, template);
-    }
-  }
-
-  private async loadExistingRecurringTemplateNames(companyId: string): Promise<Set<string>> {
-    const rv = new RunView();
-    const result = await rv.RunView<mjBizAppsAccountingRecurringJournalEntryTemplateEntity>(
-      {
-        EntityName: 'MJ_BizApps_Accounting: Recurring Journal Entry Templates',
-        ExtraFilter: `CompanyID = '${companyId}'`,
-        ResultType: 'simple',
-        Fields: ['Name'],
-      },
-      this.ContextCurrentUser,
-    );
-    if (!result.Success) {
-      LogError(`Failed to load existing RecurringJournalEntryTemplates: ${result.ErrorMessage}`);
-      return new Set();
-    }
-    return new Set((result.Results ?? []).map(r => (r as { Name: string }).Name));
-  }
-
-  private async createSeedRecurringTemplate(
-    companyId: string,
-    template: SeededRecurringTemplate,
-  ): Promise<void> {
-    const md = new Metadata();
-    const row = await md.GetEntityObject<mjBizAppsAccountingRecurringJournalEntryTemplateEntity>(
-      'MJ_BizApps_Accounting: Recurring Journal Entry Templates',
-      this.ContextCurrentUser,
-    );
-    row.NewRecord();
-    row.Set('Name', template.name);
-    row.Set('Description', template.description);
-    row.Set('CompanyID', companyId);
-    row.Set('EntryType', template.entryType);
-    row.Set('AmountCalculationType', template.amountCalculationType);
-    row.Set('IsActive', true);
-
-    const saved = await row.Save();
-    if (!saved) {
-      LogError(
-        `AccountingCompanyProfileEntityServer: failed to seed RecurringJournalEntryTemplate '${template.name}' for CompanyID=${companyId}`,
       );
     }
   }

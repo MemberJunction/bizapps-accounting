@@ -11,18 +11,18 @@
 ## 0. Table of contents
 
 1. [Context and positioning](#1-context-and-positioning)
-2. [Decisions (BA-D1 through BA-D24)](#2-decisions-ba-d1-through-ba-d24)
+2. [Decisions (BA-D1 through BA-D27)](#2-decisions-ba-d1-through-ba-d27)
 3. [Architecture and scope boundaries](#3-architecture-and-scope-boundaries)
 4. [Entity model](#4-entity-model)
    - 4.1 GLAccount + hierarchy
    - 4.2 AccountingCompanyProfile (IsA Company child)
    - 4.3 Dimensions + DimensionValue + JE line tagging
    - 4.4 AccountingPeriod
-   - 4.5 JournalEntry, JournalEntryLine, JournalEntryBatch
+   - 4.5 JournalEntry, JournalEntryLine, JournalEntryBatch, JournalEntryBatchLineItem
    - 4.6 ChartOfAccountsMapping
    - 4.7 Currency + CurrencyExchangeRate (in BizAppsCommon — referenced)
    - 4.8 Tax: TaxAuthority, TaxJurisdiction, TaxRate, TaxLiability, TaxRemittance
-   - 4.9 Recurring journal entries + templates
+   - 4.9 Scheduled journal entries (revenue-recognition waterfall)
    - 4.10 Account balance materialization
 5. [Database-level enforcement](#5-database-level-enforcement)
 6. [Multi-currency mechanics](#6-multi-currency-mechanics)
@@ -66,7 +66,7 @@ BizAppsAccounting provides the **journal entry primitives and AR subsidiary ledg
 
 ---
 
-## 2. Decisions (BA-D1 through BA-D24)
+## 2. Decisions (BA-D1 through BA-D27)
 
 These are accounting-layer decisions. References to `M*` decisions point to `plans/aidp-master-plan.md`.
 
@@ -89,13 +89,16 @@ These are accounting-layer decisions. References to `M*` decisions point to `pla
 | **BA-D15** | **JE numbering**: `JE-{AccountingCompanyProfile.CompanyCode}-{FiscalYear}-{seq}` like `JE-SIDECAR-2026-000001`. Sequence resets at fiscal year boundary, scoped per Company. Gap-free (cancelled/voided numbers not reused). | Familiar pattern for accountants. Per-Company per-FY scoping aligns with audit grouping. `CompanyCode` is stored on the IsA child (not MJ core) so no `__mj.Company` field is required. |
 | **BA-D16** | **JournalEntryBatch is the locking event** (not individual JE Post). Batching aggregates JEs by `(Company, AccountingPeriod, TargetSystem)`, locks them, and ships **one consolidated JE per Company** to the ERP. | Per AN-BC. Reduces noise in ERP. Audit trail preserved by the source JEs locked in our system. |
 | **BA-D17** | **No intercompany balancing JEs originate in Accounting.** That logic lives in BizAppsOrders (and other JE-emitting apps). Accounting just receives the JE emissions per leg. | Per AN-BC. Accounting is raw primitives; orchestration lives upstream. Keeps Accounting scope tight. |
-| **BA-D18** | **JournalEntry templates + recurring entries (`RecurringJournalEntryTemplate` + `RecurringJournalEntry`)** ship in v1. For monthly accruals, FX revaluation, depreciation, prepaid amortization. | Real accounting needs this. Without it, manual posting of accrual JEs every month becomes a burden. |
+| **BA-D18** | **REVISED 2026-06: drop the cron-driven `Recurring*` tables.** The original `RecurringJournalEntryTemplate` / `RecurringJournalEntryTemplateLine` / `RecurringJournalEntry` trio is removed. The dominant in-scope need — deferred-revenue recognition — is served by **`ScheduledJournalEntry`** (BA-D25), a finite, origin-linked, known-amount waterfall. Finite amortization (prepaid, etc.) is also modeled as `ScheduledJournalEntry`. FX revaluation, whose amount depends on a live spot rate, becomes a programmatic engine action (BA-D27), not a stored template. | Per AN-BC call (2026-06-05). A cron template is the wrong primitive for rev-rec; "scheduled" (known amounts, materialized at period close) is what accountants actually reason about. Radical simplification — start clean, expand later. |
 | **BA-D19** | **Tax engine pluggable via `RegisterClass`/`ClassFactory`.** Ship Avalara + TaxJar adapters + local `TaxRate` table fallback. Underlying `TaxAuthority/Jurisdiction/Rate/Liability/Remittance` entities shared so adapter choice doesn't change schema. | `M13`. Per AN-BC. Avoids vendor lock-in. Local-mode users can manually maintain rates for simple cases. |
 | **BA-D20** | **No statistical accounts in v1.** | Per AN-BC. Statistical accounts power management reporting from a GL; we're not a GL. |
 | **BA-D21** | **No year-end closing JEs in v1.** | Per AN-BC. ERP territory. |
 | **BA-D22** | **Account balance materialization scoped to OUR accounts** — AR by Customer, Deferred Revenue by Subscription, Sales Tax Payable by Jurisdiction, Commission Payable by Salesperson. Closed-period balances materialized; open-period balances computed on demand. | Per AN-BC. We're a subledger; we don't materialize full GL balances. Performance-critical for AR aging and DefRev rollforward. |
 | **BA-D23** | **Reporting via Skip-generated interactive components** rendering against shipped read-model views (`vw_TrialBalance_AR`, `vw_GLDetail_Subledger`, `vw_AROpenByCustomer`, `vw_DefRevRollforward`, `vw_SalesTaxLiability`, `vw_ARtoGLRecon`, `vw_DimensionPL`, etc.). Reports in a "Report Gallery" MJ app (separate). | Per AN-BC. Skip generates UI; we ship the data layer. |
 | **BA-D24** | **JE generation is metadata-driven, not hardcoded.** Product / SubscriptionPlan / OrderType / etc. metadata in BizAppsOrders determines the JE pattern emitted (`Immediate`, `Ratable`, `Milestone`, `Custom`). Accounting receives the emitted JEs and validates them. | `M11` of master plan. New revrec policies via metadata, not code change. Accounting doesn't need to know about Order types — Orders generates correct JEs. |
+| **BA-D25** | **`ScheduledJournalEntry` + `ScheduledJournalEntryLineItem` (+ `ScheduledJournalEntryLineDimension`)** model the revenue-recognition / amortization waterfall. A scheduled entry is a **pre-computed FUTURE JE** with amounts known up front, a target accounting period, and an origin (Subscription/Term/Order/Contract soft refs). The **period-close engine materializes** each into a real Pending `JournalEntry` (Dr Deferred Revenue, Cr Revenue) on its target period, linking back via `GeneratedJournalEntryID`; the scheduled row locks once `Status='Generated'` (DB trigger). **The schedule itself (count, rounding — extra pennies front-loaded in entry 1 — uneven-start / no-lapse-gap rules) is computed UPSTREAM in BizAppsOrders** (per BA-D24/BA-D17) and persisted here via `AccountingService`. Single-date deferral (event tickets) is `ScheduleCount=1`. | Per AN-BC call. This is the deferred-income mechanism (subscriptions, Digital Now tickets). Accounting owns storage + materialization + the lockable audit trail; Orders owns the subscription-specific math. Replaces the dropped recurring trio (BA-D18). |
+| **BA-D26** | **`JournalEntryBatchLineItem` (+ `JournalEntryBatchLineDimension`) are the consolidated summary lines a batch ships to the ERP.** When a batch is built, the engine aggregates the locked JE lines of every JE in the batch, grouped by **GLAccount × dimension combo × side**, into one summary line each — that account×dimension granularity preserves departmental/segment breakdown so BC can still produce departmental P&Ls. The `JournalEntryLine` detail stays for drill-through. A DB trigger checks the summary foots to the batch control totals (and balances) at dispatch, and freezes the summary once `Status ∈ {Sent, Acknowledged}`. | Per AN-BC call ("journal entry batches need to have their own lines… we'll come back and fix that"). The batch is the lock event (BA-D16); the summary is what posts. Account×dimension chosen so dimensional financials survive summarization. |
+| **BA-D27** | **FX revaluation is a programmatic engine action, not a stored template.** Unrealized FX mark-to-market is computed by an action (driven from Orders / period close) using the live `CurrencySpotRate`, and the resulting JEs are stored as ordinary `JournalEntry` rows in Accounting. AR already holds the currency-specific balances. | Per AN-BC call. A reval amount can't live in a static template — it depends on the spot rate at close. Keep Accounting as core mechanics + storage; the math lives in an action that can expand later. |
 
 ---
 
@@ -112,8 +115,9 @@ BizAppsCommon                     (Person, Organization, Address, ContactMethod,
 BizAppsAccounting   ◄── this plan (GLAccount, AccountingCompanyProfile [IsA Company],
                                    AccountingPeriod, Dimension, DimensionValue,
                                    JournalEntry, JournalEntryLine, JournalEntryLineDimension,
-                                   JournalEntryBatch, ChartOfAccountsMapping,
-                                   Tax* entities, RecurringJournalEntryTemplate,
+                                   JournalEntryBatch, JournalEntryBatchLineItem,
+                                   ScheduledJournalEntry (+ line + dimension),
+                                   ChartOfAccountsMapping, Tax* entities,
                                    AccountBalance, AccountBalanceByDimension)
    ↑
 BizAppsOrders                     (Product, Order, Subscription, Payment, Invoice,
@@ -131,7 +135,7 @@ aidp                              (Consumer: CashFlowCategory, ForecastRun, Budg
 
 **BizAppsAccounting receives from upstream apps**:
 - JE post requests (with header + balanced lines + dimension tags)
-- Recurring JE template definitions
+- Rev-rec / amortization schedules (`ScheduledJournalEntry` rows, computed upstream — BA-D25)
 - Tax rate lookups (when an adapter is configured)
 
 **BizAppsAccounting provides to upstream apps**:
@@ -143,7 +147,7 @@ aidp                              (Consumer: CashFlowCategory, ForecastRun, Budg
 
 **BizAppsAccounting does NOT**:
 - Know about Orders, Subscriptions, Contracts, Payments — those are upstream-app concepts
-- Generate JEs autonomously (only as instructed by upstream apps, or via recurring templates configured upstream)
+- Generate JEs autonomously (only as instructed by upstream apps, or by materializing `ScheduledJournalEntry` rows persisted upstream)
 - Push to external GL (the batching mechanism is provided, but the actual ERP connector lives in MJ Integration framework — see §11)
 
 ---
@@ -224,6 +228,8 @@ __mj_BizAppsAccounting.AccountingCompanyProfile
                                                -- no FK to BizAppsCommon to keep dependency clean)
   JurisdictionRegion NVARCHAR(50) NULL,       -- state/province sub-national, free-form
   FederalTaxID NVARCHAR(40) NULL,             -- EIN, ABN, VAT registration, etc.
+  OperatingTimeZone NVARCHAR(60) NULL,        -- IANA tz (e.g. 'America/Chicago'); all storage is UTC/Zulu,
+                                               -- period & rev-rec boundaries evaluated in this zone (AN-BC note)
   CompanyCode NVARCHAR(20) NOT NULL,          -- short code used in JE numbering
                                                -- (e.g. 'SIDECAR', 'CIMATRI', 'BCHQ')
                                                -- UNIQUE per deployment
@@ -290,6 +296,8 @@ __mj_BizAppsAccounting.JournalEntryLineDimension
 
 Reports can group/filter by any dimension. The default ERP reports (TB, P&L) consumed from the ERP side don't see dimensions — those are our analytics. Read-model views support dimension filters.
 
+Dimensions are tagged at **every** stage of a line's life via parallel tagging tables, so the analytical breakdown survives end to end: `JournalEntryLineDimension` (the posted JE line), `ScheduledJournalEntryLineDimension` (the not-yet-materialized rev-rec line — §4.9), and `JournalEntryBatchLineDimension` (the consolidated batch summary line that ships to the ERP — §4.5/BA-D26).
+
 ### 4.4 AccountingPeriod
 
 Per `AccountingCompanyProfile`. Locks JE posting once closed.
@@ -315,7 +323,7 @@ __mj_BizAppsAccounting.AccountingPeriod
 
 Period generation is automated for the standard calendar but can be manually adjusted (e.g., 4-4-5 retail fiscal patterns) via a JE template or scheduled action.
 
-### 4.5 JournalEntry, JournalEntryLine, JournalEntryBatch
+### 4.5 JournalEntry, JournalEntryLine, JournalEntryBatch, JournalEntryBatchLineItem
 
 ```sql
 __mj_BizAppsAccounting.JournalEntry
@@ -337,9 +345,9 @@ __mj_BizAppsAccounting.JournalEntry
   SubscriptionID UUID NULL,
   PaymentID UUID NULL,
   ContractID UUID NULL,                 -- BizAppsContracts.Contract
-  RevRecScheduleID UUID NULL,
+  RevRecScheduleID UUID NULL,           -- soft ref to upstream Orders RevenueRecognitionSchedule
   IntercompanyFlowID UUID NULL,
-  RecurringJournalEntryID UUID FK → RecurringJournalEntry NULL,
+  ScheduledJournalEntryID UUID FK → ScheduledJournalEntry NULL,  -- internal: the scheduled row that materialized into this JE (BA-D25)
   TaxRemittanceID UUID FK → TaxRemittance NULL,
   -- Reversal references
   ReversesJournalEntryID UUID FK → JournalEntry NULL,
@@ -391,7 +399,29 @@ __mj_BizAppsAccounting.JournalEntryBatch
   SentAt DATETIMEOFFSET NULL,
   AcknowledgedAt DATETIMEOFFSET NULL,
   ErrorMessage NVARCHAR(MAX) NULL
+
+__mj_BizAppsAccounting.JournalEntryBatchLineItem      -- the SUMMARY lines that post to the ERP (BA-D26)
+  ID UUID PK,
+  BatchID UUID FK NOT NULL,
+  CompanyID UUID FK → __mj.Company NOT NULL,
+  GLAccountID UUID FK NOT NULL,
+  LineNumber INT NOT NULL,
+  DebitAmount DECIMAL(18,2) NULL,       -- exactly one of Debit/Credit set (one-side CHECK)
+  CreditAmount DECIMAL(18,2) NULL,
+  SourceLineCount INT NOT NULL,         -- how many JournalEntryLine rows rolled up here
+  ExternalAccountID NVARCHAR(100) NULL, -- target ERP account, resolved via ChartOfAccountsMapping at batch time
+  Description NVARCHAR(MAX) NULL
+  -- Built (grouped by GLAccount × dimension combo × side) when the batch is created while Pending.
+  -- Frozen once Status ∈ {Sent, Acknowledged}; must foot to TotalDebits/TotalCredits at dispatch (triggers).
+
+__mj_BizAppsAccounting.JournalEntryBatchLineDimension -- preserves dimension breakdown to the ERP (account × dimension)
+  ID UUID PK,
+  JournalEntryBatchLineItemID UUID FK NOT NULL,
+  DimensionID UUID FK NOT NULL,
+  DimensionValueID UUID FK NOT NULL
 ```
+
+The batch summary is the consolidated GL movement BC actually posts; the `JournalEntryLine` detail stays in our subledger for drill-through (per AN-BC: "your general ledger doesn't have all the details… it has the link back to the subledger"). Aggregating at **account × dimension** granularity (BA-D26) keeps departmental/segment financials reproducible on the ERP side.
 
 ### 4.6 ChartOfAccountsMapping
 
@@ -511,46 +541,46 @@ Tax rates can be populated by:
 
 The tax engine itself (calculation logic at order time) lives in BizAppsOrders, calling `TaxCalculationProvider` (interface in BizAppsAccounting, implementations registered via `RegisterClass`).
 
-### 4.9 Recurring journal entries
+### 4.9 Scheduled journal entries (revenue-recognition waterfall) — BA-D25
+
+> **REVISED 2026-06:** the cron-driven `Recurring*` trio (BA-D18) is **removed**. Deferred-revenue recognition — the dominant in-scope need — is modeled as a finite, origin-linked, known-amount waterfall of **scheduled** future entries. FX revaluation moves to a programmatic action (§6.4 / BA-D27).
+
+When a subscription or event ticket is sold, revenue is parked in Deferred Revenue (a liability) and recognized over time. The upstream BizAppsOrders subscription engine computes the recognition schedule (count, per-period amounts with front-loaded rounding, uneven-start / no-lapse-gap handling — all per BA-D24/BA-D17) and calls `AccountingService` to persist a set of `ScheduledJournalEntry` rows. Each is a **pre-computed FUTURE JE** that the period-close engine materializes into a real Pending `JournalEntry` (Dr Deferred Revenue, Cr Revenue) on its target period.
 
 ```sql
-__mj_BizAppsAccounting.RecurringJournalEntryTemplate
+__mj_BizAppsAccounting.ScheduledJournalEntry
   ID UUID PK,
-  Name NVARCHAR(200) NOT NULL,
-  Description NVARCHAR(MAX),
   CompanyID UUID FK → __mj.Company,
-  EntryType NVARCHAR(40),               -- 'PeriodEndAccrual', 'FXRevaluation', 'Manual', ...
-  AmountCalculationType NVARCHAR(40),   -- 'Fixed' | 'Formula' | 'ExternalLookup'
-  AmountValue DECIMAL(18,2) NULL,       -- if Fixed
-  AmountFormula NVARCHAR(MAX) NULL,     -- if Formula (e.g., "SELECT SUM(...) FROM ...")
-  IsActive BIT NOT NULL DEFAULT 1
+  EntryType NVARCHAR(40),               -- 'RevenueRecognition' | 'DeferredRevenueRelease'
+                                         -- | 'PrepaidAmortization' | 'DepreciationAccrual'
+                                         -- | 'PeriodEndAccrual' | 'Manual'
+  Status NVARCHAR(20),                  -- 'Scheduled' | 'Generated' | 'Cancelled' | 'Superseded'
+  ScheduleSequence INT,                 -- 1-based position in the waterfall (the "3" of "3 of 12")
+  ScheduleCount INT,                    -- total entries in the schedule (1 = single-date deferral, e.g. event ticket)
+  ScheduledEffectiveDate DATE,          -- accounting date the materialized JE will bear (period-end)
+  TargetAccountingPeriodID UUID FK NULL,-- resolved target period (null until that period exists)
+  CurrencyCode CHAR(3) FK,
+  TotalAmount DECIMAL(18,2),            -- gross recognized by this entry; lines carry Dr/Cr detail
+  -- Origin (soft refs to upstream BizAppsOrders / Contracts; NO FK)
+  SubscriptionID, SubscriptionTermID, OrderID, OrderLineID, ContractID, RevRecScheduleID UUID NULL,
+  -- Materialization (internal)
+  GeneratedJournalEntryID UUID FK → JournalEntry NULL,   -- the JE produced when this fired
+  GeneratedAt DATETIMEOFFSET NULL,
+  SupersededByScheduledJournalEntryID UUID FK → ScheduledJournalEntry NULL  -- on renewal/amendment
 
-__mj_BizAppsAccounting.RecurringJournalEntryTemplateLine
-  ID UUID PK,
-  TemplateID UUID FK,
-  LineNumber INT,
-  GLAccountID UUID FK,
-  DimensionTagsJson NVARCHAR(MAX) NULL,  -- which dimension values to tag on emit
-  IsDebitSide BIT,                       -- which side this line is on (Dr or Cr)
+__mj_BizAppsAccounting.ScheduledJournalEntryLineItem      -- mirrors JournalEntryLine; copied onto the materialized JE
+  ID, ScheduledJournalEntryID UUID FK, LineNumber INT, GLAccountID UUID FK,
+  DebitAmount DECIMAL(18,2) NULL, CreditAmount DECIMAL(18,2) NULL, Description NVARCHAR(MAX) NULL
 
-__mj_BizAppsAccounting.RecurringJournalEntry
-  ID UUID PK,
-  TemplateID UUID FK,
-  ScheduleCron NVARCHAR(100),            -- standard cron expression
-  StartDate DATE,
-  EndDate DATE NULL,
-  LastEmittedAt DATETIMEOFFSET,
-  NextScheduledAt DATETIMEOFFSET,
-  RequiresApproval BIT NOT NULL DEFAULT 1,  -- if true, emitted JEs go to Pending awaiting approval
-  IsActive BIT NOT NULL DEFAULT 1
+__mj_BizAppsAccounting.ScheduledJournalEntryLineDimension -- analytical tags carried through to the materialized line
+  ID, ScheduledJournalEntryLineItemID UUID FK, DimensionID UUID FK, DimensionValueID UUID FK
 ```
 
-Seeded templates (shipped with the package):
+**Materialization** runs at period close (or a scheduled action): every `Scheduled` row whose target period ≤ the closing period generates a Pending `JournalEntry`, copies its lines + dimensions, sets `GeneratedJournalEntryID`, and flips to `Generated`. A DB trigger (`trg_SJE_Immutability`) then freezes the row so it can't drift from the JE it produced. Renewals/amendments that recompute a future schedule set the old rows to `Superseded` with `SupersededByScheduledJournalEntryID`.
 
-- Monthly **FX Revaluation** (revalues open foreign-currency balances at period-end spot rate; reverses at start of next period to avoid compounding)
-- Monthly **Prepaid Insurance Amortization** (template — deployments instantiate)
-- Monthly **Depreciation Accrual** (template — deployments instantiate)
-- Monthly **Sales Tax Liability Snapshot** (rolls forward open TaxLiability balances)
+- **Single-date deferral** (event tickets — Digital Now): one `ScheduledJournalEntry`, `ScheduleCount=1`, target = the event's period.
+- **Ratable subscription**: N rows (e.g. 12 monthly), amounts even except sequence 1 which carries the rounding remainder (front-loaded per AN-BC).
+- **Finite amortization** (prepaid, depreciation register): also modeled here as `ScheduledJournalEntry` (`EntryType='PrepaidAmortization' | 'DepreciationAccrual'`) rather than a recurring template.
 
 ### 4.10 Account balance materialization
 
@@ -750,11 +780,11 @@ JournalEntry (EntryType = 'PaymentReceipt'):
 
 The Realized FX Gain/Loss GL account is referenced via `AccountingCompanyProfile.RealizedFXGainLossGLAccountID`.
 
-### 6.4 Unrealized FX revaluation
+### 6.4 Unrealized FX revaluation (programmatic action — BA-D27)
 
-At period close, for every open foreign-currency balance (AR, AP, etc.) in any Company, a `RecurringJournalEntry` of type `FXRevaluation` revalues the balance at current spot rate. The difference posts to Unrealized FX Gain/Loss.
+At period close, a **programmatic mark-to-market action** (driven from BizAppsOrders / the period-close engine, not a stored template) walks every open foreign-currency balance (AR holds the currency-specific balances) and revalues it at the current `CurrencySpotRate`. The difference posts to Unrealized FX Gain/Loss as an ordinary `JournalEntry` (`EntryType='FXRevaluation'`) stored in Accounting. The action also emits the auto-reversal dated to the start of the next period, so the unrealized adjustment doesn't compound when the actual settlement occurs.
 
-The revaluation JE auto-reverses at the start of the next period (template emits both the revaluation entry and its reversal-dated-next-period). Prevents the unrealized adjustment from compounding when the actual settlement occurs.
+This replaces the dropped `RecurringJournalEntry` FX template (BA-D18): a reval amount depends on the spot rate at close and can't live in a static template. Accounting stays the storage + mechanics layer; the math lives in an action that can expand later.
 
 ### 6.5 Reporting currency translation
 
@@ -788,7 +818,7 @@ stateDiagram-v2
 - All JEs in the period have `Status = 'Batched'` or `'GLPosted'` (no Pending JEs)
 - All batches for the period have `Status = 'Acknowledged'` (ERP confirmed receipt)
 - All TaxLiability records for the period have `Status` ∈ `{Open, Filed, Paid}` (i.e., not in an indeterminate state)
-- All recurring JE templates due in the period have emitted their entries
+- All `ScheduledJournalEntry` rows targeting the period have materialized (Status='Generated')
 - No critical recon variances open (defined per deployment)
 
 If any prerequisite fails, period stays in `Closing` status with the validation report visible. Admin must resolve and re-trigger.
@@ -816,7 +846,7 @@ Post-close JEs that adjust a previously-closed period don't actually post to the
 
 | Status | Meaning | Mutable? | Triggers |
 |---|---|---|---|
-| `Pending` | Generated by an upstream business event (Order Posted, Payment Captured, recurring template fired). Sits awaiting next batch run. | Yes (only if no FK constraints prevent it; in practice, mutations happen via business-entity reversal which emits new Pending JEs) | None block |
+| `Pending` | Generated by an upstream business event (Order Posted, Payment Captured) or by a `ScheduledJournalEntry` materializing at period close. Sits awaiting next batch run. | Yes (only if no FK constraints prevent it; in practice, mutations happen via business-entity reversal which emits new Pending JEs) | None block |
 | `Batched` | Included in a `JournalEntryBatch` sent to the ERP. Locked. | **No** | Triggers reject UPDATE / DELETE |
 | `GLPosted` | ERP has confirmed receipt and posting. The batch's `Status = 'Acknowledged'`. | **No**, except for receiving the GL reference back | Triggers allow only the GLPostedAt / GLReferenceID / Status to change |
 
@@ -981,7 +1011,9 @@ class AccountingService {
   getPeriodStatus(companyId: string, date: Date): Promise<AccountingPeriod>;
   getMappedGLAccount(companyId: string, externalSystem: string, externalAccountId: string): Promise<GLAccount>;
   reverseJournalEntry(originalJeId: string, reason: string): Promise<JournalEntry>;
-  scheduleRecurringEntry(template: RecurringJournalEntryTemplate, schedule: string): Promise<RecurringJournalEntry>;
+  // Persist a rev-rec / amortization waterfall computed upstream (BA-D25). Accounting
+  // stores the ScheduledJournalEntry rows and materializes them at period close.
+  createScheduledJournalEntries(schedule: ScheduledJournalEntryDraft[]): Promise<ScheduledJournalEntry[]>;
 }
 ```
 
@@ -1079,15 +1111,15 @@ Modular delivery per `M23` from master plan: working modules demonstrable every 
 
 **Demo**: calculate sales tax for an order via Local provider; switch to Avalara via config; sync rates; emit tax JE; close period with TaxLiability records.
 
-### Phase E: Recurring JEs + Account balance materialization (Weeks 11–13)
+### Phase E: Scheduled JEs (rev-rec) + FX action + Account balance materialization (Weeks 11–13)
 
-- [ ] RecurringJournalEntryTemplate + RecurringJournalEntry
-- [ ] Seeded FX revaluation template
-- [ ] Seeded depreciation, prepaid amortization templates
+- [ ] ScheduledJournalEntry + ScheduledJournalEntryLineItem + ScheduledJournalEntryLineDimension
+- [ ] Period-close materialization of `Scheduled` rows → Pending JEs (+ `trg_SJE_Immutability`)
+- [ ] Programmatic FX mark-to-market action (uses `CurrencySpotRate`; emits reval + next-period reversal)
 - [ ] AccountBalance + AccountBalanceByDimension
 - [ ] Period-close-triggered balance materialization
 
-**Demo**: configure a monthly FX revaluation; close a period; see auto-emitted FX revaluation JE; see materialized balances per account and per dimension.
+**Demo**: persist a 12-month subscription rev-rec schedule (rounding front-loaded in entry 1); close successive periods; watch each scheduled row materialize into a Dr DefRev / Cr Revenue JE; run the FX action and see the reval + auto-reversal; see materialized balances per account and per dimension.
 
 ### Phase F: Reports + read-model views (Weeks 13–15)
 
@@ -1132,7 +1164,7 @@ These were considered and excluded from v1 to maintain the subledger scope and v
 - **Year-end closing JEs** (P&L → Retained Earnings). ERP territory.
 - **Statistical accounts** (non-monetary tracking). Per `BA-D20`.
 - **Inventory and COGS** accounting. Future app.
-- **Fixed assets and depreciation** as first-class entities. Templates support depreciation as a recurring JE; first-class FixedAsset entity is in a future `BizAppsFixedAssets`.
+- **Fixed assets and depreciation** as first-class entities. Depreciation can be modeled as a `ScheduledJournalEntry` (finite, known-amount); a first-class FixedAsset entity is in a future `BizAppsFixedAssets`.
 - **Loan amortization** as first-class. Future.
 - **Multi-currency consolidation translation** (in `aidp` analytics layer instead).
 - **Bank reconciliation** workflow (consumers of `vw_FxExposure` and ERP recon do this; future enhancement).

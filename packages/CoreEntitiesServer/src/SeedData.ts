@@ -3,8 +3,8 @@
  *
  * Deployments that need a different starter chart can override the
  * `AccountingCompanyProfileEntityServer` via @RegisterClass with a higher
- * priority and replace `getDefaultChartOfAccounts()` / `getDefaultRecurringTemplates()`.
- * Plan reference: §4.1 (COA), §4.9 (recurring templates).
+ * priority and replace `getChartOfAccountsToSeed()`.
+ * Plan reference: §4.1 (COA).
  */
 
 export interface SeededGLAccount {
@@ -58,45 +58,7 @@ export const DEFAULT_GL_ACCOUNT_REFS = {
   UnrealizedFXGainLoss: '50500',
 } as const;
 
-export interface SeededRecurringTemplate {
-  name: string;
-  description: string;
-  entryType:
-    | 'FXRevaluation'
-    | 'PeriodEndAccrual'
-    | 'CommissionAccrual'
-    | 'PartnerRevShare'
-    | 'Manual';
-  amountCalculationType: 'Fixed' | 'Formula' | 'ExternalLookup';
-}
-
-export const DEFAULT_RECURRING_TEMPLATES: ReadonlyArray<SeededRecurringTemplate> = [
-  {
-    name: 'Monthly FX Revaluation',
-    description:
-      'Revalues open foreign-currency balances at period-end spot rate; reverses at start of next period to avoid compounding.',
-    entryType: 'FXRevaluation',
-    amountCalculationType: 'ExternalLookup',
-  },
-  {
-    name: 'Monthly Prepaid Amortization',
-    description:
-      'Amortizes prepaid balances on a straight-line basis. Customize per deployment to point at your prepaid schedule.',
-    entryType: 'PeriodEndAccrual',
-    amountCalculationType: 'Formula',
-  },
-  {
-    name: 'Monthly Depreciation Accrual',
-    description:
-      'Records depreciation accruals. First-class FixedAsset entity is out of scope for v1; deployments wire to their own register.',
-    entryType: 'PeriodEndAccrual',
-    amountCalculationType: 'Formula',
-  },
-  {
-    name: 'Monthly Sales Tax Liability Snapshot',
-    description:
-      'Rolls forward open TaxLiability balances each period.',
-    entryType: 'PeriodEndAccrual',
-    amountCalculationType: 'ExternalLookup',
-  },
-];
+// NOTE: Recurring-JE template seeds were removed when the Recurring* tables were
+// dropped (BA-D18 revision). Period-end accruals are now handled either by the
+// ScheduledJournalEntry waterfall (finite, known-amount: amortization, etc.) or
+// by programmatic engine actions (FX mark-to-market). See plan §4.9 / §6.4.
