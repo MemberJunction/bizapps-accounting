@@ -23,7 +23,6 @@ export { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.j
 export {
   DEFAULT_CHART_OF_ACCOUNTS,
   DEFAULT_GL_ACCOUNT_REFS,
-  DEFAULT_RECURRING_TEMPLATES,
 } from './SeedData.js';
-export type { SeededGLAccount, SeededRecurringTemplate } from './SeedData.js';
+export type { SeededGLAccount } from './SeedData.js';
 export { getNextJournalEntryNumber, getNextBatchNumber } from './SequenceService.js';
