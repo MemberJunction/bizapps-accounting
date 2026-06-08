@@ -10,14 +10,14 @@ This doc is the bridge from "the app is scaffolded and runs locally" to "build t
 
 ## 1. Where things stand (what's landed)
 
-A working local dev environment and the core schema foundations are in `main` (PRs #3 → #4).
+A working local dev environment and the core schema foundations are in `main` (PRs #3 → #4 → #5; #5 added the rev-rec / batch-summary redesign — BA-D18/25/26/27).
 
 **Platform / deps**
 - **SQL Server** is the dev dialect (DB `bizapps_accounting`, local). PostgreSQL is a release-time conversion, not maintained day-to-day (revised **BA-D2**).
 - Targets **MemberJunction 5.38.0** across all manifests.
 - Depends on **bizapps-common** (consumed from published npm `5.30.1`, installed as an MJ Open App). Provides `Organization` (used by tax profiles).
 
-**Schema** — 26 entities in `__mj_BizAppsAccounting`, all named `MJ_BizApps_Accounting: <Name>`:
+**Schema** — 28 entities in `__mj_BizAppsAccounting`, all named `MJ_BizApps_Accounting: <Name>`:
 - Core JE primitives: `JournalEntry`, `JournalEntryLine`, `JournalEntryBatch` (+ `JournalEntrySequence`, `JournalEntryBatchSequence`).
 - `GLAccount`, `AccountingPeriod`, `AccountingCompanyProfile` (**IS-A child of `MJ: Companies`** — shares the Company PK; saving cascades to the Company row).
 - `Currency` (**owned here**, revised **BA-D11** — common never shipped it) + `CurrencySpotRate` (spot FX, follow-on FX feature).
@@ -30,7 +30,7 @@ A working local dev environment and the core schema foundations are in `main` (P
 - **W1** `AccountingCompanyProfileEntityServer.Save()` — on first save, seeds the 23-account default COA and 17 current-FY periods (12 month + 4 qtr + 1 year), and wires the profile's default GL-account refs — all via `BaseEntity.Save()` so Record Changes audits each row. (The recurring-template seed was removed — BA-D18 revision.)
 - **W2/W3** — `JournalEntry` / `JournalEntryBatch` numbering via the atomic sprocs.
 
-**Migration** — `migrations/B202605281200__v0.1.0__Schema_and_Tables.sql` is **self-contained**: hand-authored schema, then (below a big banner) the full verbatim `mj codegen` output (entity/field metadata, `vw*` views, CRUD sprocs, AI-generated validators + descriptions). A single `mj migrate` reproduces the complete DB state.
+**Migration** — `migrations/B202605281200__v0.1.0__Schema_and_Tables.sql` holds the hand-authored schema (tables, FKs, CHECKs, triggers, sprocs, extended properties). **The folded `mj codegen` output below the banner was stripped in #5** (the rev-rec/batch redesign made it stale), so the baseline is **not** currently self-contained: `mj migrate` creates the tables but **not** the MJ entity/field metadata, `vw*` views, or CRUD sprocs — `mj codegen` (step 4 of §2) regenerates those. Once codegen runs against a clean DB, fold its `CodeGen_Run_*.sql` back below the banner to restore a single-`mj migrate` reproduction. The PostgreSQL counterpart (`migrations-pg/`) likewise still needs regenerating via `mj sql-convert`.
 
 ---
 
@@ -99,7 +99,7 @@ Per-feature loop: edit `packages/CoreEntitiesServer/` (or wherever) → `npm run
 - **`schema-info` metadata sync is broken.** `metadata/schema-info/.schema-info.json` has a hardcoded ID that drifts from the codegen-created `__mj.SchemaInfo` row → unique-key violation on push. Workaround: move its `.mj-sync.json` aside during `mj sync push`. **Proper fix (do this):** push schema-info *before* the first codegen so it creates the row with the file's ID, or align the file's ID to the row. The entity-name prefix does **not** depend on it (it comes from the config rule below).
 - **Entity-name prefix** `MJ_BizApps_Accounting: ` comes from `mj.config.cjs` `newEntityDefaults.NameRulesBySchema` (matches the bizapps-common family convention). It's applied only at entity **creation**, so changing it requires recreating entities (a clean codegen on a fresh schema). There is intentionally **no `EntityNames.ts`** — entity-name strings are inlined in the server subclasses and must match the generated `@RegisterClass` names exactly.
 - **Gemini key.** Codegen's AI passes (field validators, descriptions, form layouts) need a valid `AI_VENDOR_API_KEY__GeminiLLM`; without it codegen still succeeds but skips those enhancements.
-- **Migrations are immutable once published.** New schema work = a **new** migration + fresh codegen folded into it. Never edit `B202605281200…`.
+- **Migrations are immutable once published.** The baseline `B202605281200…` was revised in-place once more in **#5** (BA-D18/25/26/27) because it was still pre-release; treat it as **frozen now**. New schema work from here = a **new** migration + fresh codegen folded into it. Never edit `B202605281200…` again.
 - **Branching:** feature branch → PR → **`main`**. (The `next → main` flow described in `CLAUDE.md`'s "Branching Model" is **not** in use — that section is stale and should be updated.)
 
 ---
@@ -108,7 +108,7 @@ Per-feature loop: edit `packages/CoreEntitiesServer/` (or wherever) → `npm run
 
 | Path | What |
 |---|---|
-| `plans/bizapps-accounting-master.md` | Full design, entity model, `BA-D1..BA-D24` decisions, §13 phasing, scope boundaries |
+| `plans/bizapps-accounting-master.md` | Full design, entity model, `BA-D1..BA-D27` decisions, §13 phasing, scope boundaries |
 | `workflows-and-agents.plan.md` | W1–W9 hooks, S1–S7 scheduled actions, A/F agents, implementation status table |
 | `migrations/B202605281200__v0.1.0__Schema_and_Tables.sql` | Baseline: hand-schema + (below banner) folded codegen output |
 | `packages/CoreEntitiesServer/src/` | Server-side `BaseEntity` subclasses (W1/W2/W3 done; W4–W9 go here) |
