@@ -16,6 +16,7 @@
 export { AccountingCompanyProfileEntityServer } from './AccountingCompanyProfileEntityServer.js';
 export { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 export { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
+export { AccountingPeriodEntityServer } from './AccountingPeriodEntityServer.js';
 
 // Internal helpers exported for use by future EntityServer classes (period
 // close, FX revaluation, etc.) and by the AccountingService façade in
