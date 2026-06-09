@@ -21,6 +21,11 @@ import './generated/generated.js';
 import { CLASS_REGISTRATIONS } from './generated/class-registrations-manifest.js';
 
 // Re-export the manifest for consumers
+export { AccountingService } from './AccountingService.js';
+export { BatchingService } from './BatchingService.js';
+export { RoutineJEValidatorAgent } from './RoutineJEValidatorAgent.js';
+export { COAMappingSuggesterAgent } from './COAMappingSuggesterAgent.js';
+export { ReportingService } from './ReportingService.js';
 export { CLASS_REGISTRATIONS } from './generated/class-registrations-manifest.js';
 
 import { fileURLToPath } from 'node:url';
