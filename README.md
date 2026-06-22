@@ -55,7 +55,7 @@ BizApps Accounting is a [MemberJunction Open App](https://github.com/MemberJunct
 mj app install https://github.com/MemberJunction/bizapps-accounting
 ```
 
-The CLI resolves dependencies automatically — installing this app will install [BizApps Common](https://github.com/MemberJunction/bizapps-common) first (for `Currency`, `Organization`, `Address`) and require an MJ core version that supports the `__mj.Company` IsA pattern.
+The CLI resolves dependencies automatically — installing this app will install [BizApps Common](https://github.com/MemberJunction/bizapps-common) first (for `Organization`, `Address`) and require an MJ core version that supports the `__mj.Company` IsA pattern. (`Currency` and the exchange-rate table are owned by **this** app — see [BA-D11](plans/bizapps-accounting-master.md).)
 
 ### Managing an installed app
 
@@ -77,6 +77,7 @@ mj app remove mj-bizapps-accounting   # Uninstall (--keep-data to preserve schem
 |---|---|---|
 | **Chart of Accounts** | `GLAccount`, `ChartOfAccountsMapping` | Internal COA + mapping to the ERP's COA |
 | **Company profile** | `AccountingCompanyProfile` | IsA Disjoint child of `__mj.Company` — functional currency, fiscal year, default GL accounts, business-profile fields |
+| **Currency / FX** | `Currency`, `CurrencySpotRate` | ISO-4217 currencies + pluggable exchange-rate providers — owned by **this** app (BA-D11), not BizApps Common |
 | **Periods** | `AccountingPeriod` | Per-company period set with hard-close semantics |
 | **Journal Entries** | `JournalEntry`, `JournalEntryLine`, `JournalEntryBatch` | Balanced JEs with `Pending → Batched → GLPosted` lifecycle, immutability after batch |
 | **Dimensions** | `Dimension`, `DimensionValue`, `JournalEntryLineDimension` | First-class analytical tags (Department, CostCenter, Project, Region, …) |
@@ -155,8 +156,6 @@ The cumulative effect: the **audit trail is correct by construction**. There is 
 
 | FK on Accounting entity | Refers to | Lives in |
 |---|---|---|
-| `AccountingCompanyProfile.FunctionalCurrencyCode` | `Currency.Code` | `bizapps-common` |
-| `JournalEntryLine.OriginalCurrencyCode` | `Currency.Code` | `bizapps-common` |
 | `JournalEntryLine.CounterpartyOrganizationID` | `Organization.ID` | `bizapps-common` |
 | `CustomerTaxProfile.OrganizationID` | `Organization.ID` | `bizapps-common` |
 | `JournalEntry.OrderID` / `SubscriptionID` / `PaymentID` | (polymorphic, soft refs) | `bizapps-orders` (future) |
@@ -205,7 +204,7 @@ JournalEntry (EntryType = 'PaymentReceipt'):
 -- Balanced: Dr 640+20 = Cr 660 ✓
 ```
 
-`CurrencyExchangeRate` itself lives in [`bizapps-common`](https://github.com/MemberJunction/bizapps-common) with pluggable providers (`ExchangeRate-API`, `ECB`, `OpenExchangeRates`, `Manual`). Auto-fetch is **off by default**; deployments opt in via a Scheduled Action.
+Currency and the exchange-rate table (`Currency` + `CurrencySpotRate`) are **owned by this app** (BA-D11; BizApps Common never shipped them) with pluggable providers (`ExchangeRate-API`, `ECB`, `OpenExchangeRates`, `Manual`). Auto-fetch is **off by default**; deployments opt in via a Scheduled Action.
 
 ---
 
