@@ -2476,3 +2476,24 @@ GO
 --   2. `npx mj sql-convert migrations/B202605281200__v0.1.0__Schema_and_Tables.sql --from tsql --to postgres --output migrations-pg/B202605281200__v0.1.0__Schema_and_Tables.pg.sql --schema __mj_BizAppsAccounting`
 --      to produce the PostgreSQL counterpart (see migrations-pg/README.md)
 -- =============================================================================
+
+
+-- MANUAL UPDATE OF SCHEMA INFO from metadata file to ensure we have things set for the codegeneration
+INSERT INTO __mj.SchemaInfo 
+(
+  ID,
+  SchemaName,
+  EntityIDMin, EntityIDMax,
+  Comments,
+  Description,
+  EntityNamePrefix, EntityNameSuffix
+)
+VALUES
+(
+  'F3B7E21A-9C4D-4A18-BD63-47E291F05C84',
+  '__mj_BizAppsAccounting',
+  1, 1000000,
+  NULL,
+  'MemberJunction: Common Business App Data',
+  'MJ_BizApps_Accounting: ', NULL
+)
