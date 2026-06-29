@@ -116,29 +116,12 @@ async function bootstrap(): Promise<Ctx> {
     options: { encrypt: false, trustServerCertificate: true },
   }).connect();
 
-  // ── Test prerequisite — grant entity permissions if missing ────────────────
-  // KNOWN PROVISIONING ARTIFACT (NOT an app-code issue, NOT a Block-0 change): on instances
-  // provisioned via live-codegen, several __mj_BizAppsAccounting entities can land with ZERO
-  // __mj.EntityPermission rows, so even the Owner user is denied and the hooks can't run.
-  // CodeGen *does* generate these perms; they just didn't land here. We mirror the sibling
-  // 'Currencies' permission rows onto the entities this harness touches. Idempotent; runs
-  // before the provider loads metadata. (Same workaround the IS-A validation used — flagged
-  // in that report too.)
-  await pool.request().query(`
-    INSERT INTO __mj.EntityPermission (ID, EntityID, RoleID, CanCreate, CanRead, CanUpdate, CanDelete)
-    SELECT NEWID(), tgt.ID, src.RoleID, src.CanCreate, src.CanRead, src.CanUpdate, src.CanDelete
-    FROM __mj.EntityPermission src
-    JOIN __mj.Entity srcE ON srcE.ID = src.EntityID AND srcE.Name = 'MJ_BizApps_Accounting: Currencies'
-    CROSS JOIN __mj.Entity tgt
-    WHERE tgt.Name IN (
-        'MJ_BizApps_Accounting: Accounting Company Profiles',
-        'MJ_BizApps_Accounting: GL Accounts',
-        'MJ_BizApps_Accounting: Accounting Periods',
-        'MJ_BizApps_Accounting: Journal Entries',
-        'MJ_BizApps_Accounting: Journal Entry Batches')
-      AND NOT EXISTS (
-        SELECT 1 FROM __mj.EntityPermission ex WHERE ex.EntityID = tgt.ID AND ex.RoleID = src.RoleID);`);
-
+  // NOTE on permissions: CodeGen creates the EntityPermission rows for every
+  // __mj_BizAppsAccounting entity on this instance (verified — all 28 entities have their 3 perm
+  // rows, created in the codegen run, not by this harness). So NO permission grant is needed here.
+  // (An earlier draft of this harness carried a defensive grant copied from the IS-A validation
+  // harness — a DIFFERENT instance that genuinely lacked perms; it was a redundant no-op here and
+  // was removed.)
   await setupSQLServerClient(new SQLServerProviderConfigData(pool, schema));
   await UserCache.Instance.Refresh(pool);
   const ctxUser = UserCache.Users.find(u => u?.Type?.trim().toLowerCase() === 'owner') ?? UserCache.Users[0];

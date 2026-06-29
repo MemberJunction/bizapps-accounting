@@ -30,7 +30,8 @@ up the rows it creates (teardown by CompanyID), so runs are idempotent.
 | `block0-runtime.ts` | Block 0 foundation hooks — W1 profile-init seeding (10-account COA, 17 periods, 5 GL refs, `OperatingTimeZone='UTC'`, RecordChange audit), W2 JE numbering, W3 batch numbering |
 
 ## Note on permissions
-On instances provisioned via live-codegen, some `__mj_BizAppsAccounting` entities can land
-with no `__mj.EntityPermission` rows (a provisioning artifact — CodeGen *does* generate
-them). The harness grants them idempotently at bootstrap (mirrored from the `Currencies`
-sibling) so the hooks can run. This is a **test prerequisite**, not an app-code change.
+No permission setup is needed. CodeGen creates the `__mj.EntityPermission` rows for all
+`__mj_BizAppsAccounting` entities at provisioning — verified on this instance (all 28 entities
+have their perm rows from the codegen run), and the harness passes without any grant. An earlier
+draft carried a defensive grant copied from the IS-A validation harness (a different instance that
+genuinely lacked perms); it was a redundant no-op here and was removed.

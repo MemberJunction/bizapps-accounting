@@ -10,7 +10,7 @@
 
 ## Preface: Conflict Resolution
 
-> **Status (2026-06-28):** Resolutions below come from Marcelo's conversations with Amith Nagarajan, recorded against the conflicts flagged between this v2 doc and the authoritative sources (the transcript + `bizapps-accounting-master.md`). **Where a resolution overrides the master plan, the transcript / Amith is authoritative** — the master predates the 2026-06-05 call. Two items remain **OPEN** pending Amith (OQ-A, OQ-B).
+> **Status (2026-06-28):** Resolutions below come from Marcelo's conversations with Amith Nagarajan, recorded against the conflicts flagged between this v2 doc and the authoritative sources (the transcript + `bizapps-accounting-master.md`). **Where a resolution overrides the master plan, the transcript / Amith is authoritative** — the master predates the 2026-06-05 call. **Update 2026-06-28:** the two previously-open items (OQ-A intercompany accounts, OQ-B batch granularity) are now **RESOLVED by Amith** — see §C5 and the OQ-A resolution below.
 
 ### Guiding principle (resolves ambiguity in favor of real accounting)
 This app must **mirror real-world accounting practice and structure as closely as possible**, so that professional accountants and auditors find it approachable and auditable. When a design choice is between "technically convenient" and "what a real ledger does," choose what a real ledger does. Framing: this is an **AR subledger (subsidiary ledger of record)** — it ingests the output of the Orders + Payments apps, **batches and locks** it, and posts **summaries** up to the general ledger (Business Central). It is **not** the GL. We deliberately do **not** use a truly-immutable store (e.g. blockchain) — too slow at scale; instead we enforce the strictest practical DB-level controls and **trust a CFO-level human not to bypass them**, and we correct mistakes with **adjusting / corrective entries (pen, not pencil)**, never by editing locked history.
@@ -30,15 +30,44 @@ The `AccountBalance*` materialization tables are deferred to post-v1; balances a
 ### C4 — Branching model — RESOLVED: `next → main` (§10 stands)
 Confirmed correct. `handoff-next-steps.md §5` ("feature → main") is **stale** and should be corrected.
 
-### C5 — Batch summary granularity — OPEN (OQ-B)
-Decided: batching **aggregates + locks** JE detail into a **summary** that posts to the GL, and Accounting stays the source of truth for the detail the GL no longer holds. **Undecided:** whether the summary groups **per-company** vs **per-account** (vs the account × dimension of AD-10). Pending Amith.
+### C5 — Batch summary granularity — RESOLVED (OQ-B; refines AD-10)
+Batching **aggregates + locks** JE detail into a **summary** that posts to the GL (Accounting keeps the full detail). **Amith's answer (2026-06-28):** group each batch by **(a) Company → (b) GL Account → (c) Dimension-combo**; when a grouping's dimension is null, all its a/b entries aggregate together. **Net debits against credits within each grouping to a single side** — e.g. $2,000 Dr + $1,500 Cr for the same group → one **$500 Dr** summary line. So: one `JournalEntryBatchLineItem` per (Company × GLAccount × Dimension-combo) carrying the **net** amount on one side, **not** separate Dr/Cr lines. This **refines AD-10** (which kept "× side" separate → now netted).
 
 ### New requirement surfaced — CFO batch approval via the Tasks app
 A batch must be **approved before dispatch** to BC, via a **task created in the open-apps Tasks app** (`bizapps-tasks`, now dev-linked into this instance). The batch cannot move to `Sent` until the approval task is completed. Affects **Block 2 (batching)**. *TODO: read the `bizapps-tasks` docs in this instance and spec the integration before building Block 2.*
 
-### Open questions to confirm with Amith
-- **OQ-A — intercompany account provisioning.** How are the per-pair `Due To` / `Due From` accounts created and tracked? Amith indicated they must exist for every transacting company pair and be represented in **a table associated with `AccountingCompanyProfile`**. Confirm (a) the table / shape, and (b) **eager** provisioning (pre-create for all pairs) vs **lazy** (create on first intercompany entry) — leaning **eager**, since the DB-level invariants likely require the account to exist before a line can reference it.
-- **OQ-B — batch summary granularity (C5).** Per-company, per-account, or account × dimension?
+### OQ-A — intercompany account provisioning — RESOLVED (Amith, 2026-06-28)
+**Amith's answer:** a **sub-table that joins two `AccountingCompanyProfile` records**, with **two company FKs** and **all four Due-To/Due-From accounts** (a pair on each side), **pre-created (eager) for every company pairing**. Example — Blue Cypress (BC) + BettyBot (BB): one row holds BC's "Due To BB"/"Due From BB" and BB's "Due To BC"/"Due From BC".
+
+**Proposed schema** (table name open — Amith suggested `AccountingCompanyProfileIntercompanyRelationship`; proposing the shorter `IntercompanyRelationship`). *This is a proposal for review — not yet migrated.*
+```sql
+__mj_BizAppsAccounting.IntercompanyRelationship
+  ID UNIQUEIDENTIFIER NOT NULL DEFAULT NEWSEQUENTIALID(),
+  CompanyAID UNIQUEIDENTIFIER NOT NULL,   -- FK -> AccountingCompanyProfile(ID); one row per UNORDERED pair (canonical order)
+  CompanyBID UNIQUEIDENTIFIER NOT NULL,   -- FK -> AccountingCompanyProfile(ID)
+  ADueToBGLAccountID   UNIQUEIDENTIFIER NOT NULL,  -- A's Liability "Due To B"   (GLAccount.CompanyID = CompanyAID)
+  ADueFromBGLAccountID UNIQUEIDENTIFIER NOT NULL,  -- A's Asset     "Due From B" (GLAccount.CompanyID = CompanyAID)
+  BDueToAGLAccountID   UNIQUEIDENTIFIER NOT NULL,  -- B's Liability "Due To A"   (GLAccount.CompanyID = CompanyBID)
+  BDueFromAGLAccountID UNIQUEIDENTIFIER NOT NULL,  -- B's Asset     "Due From A" (GLAccount.CompanyID = CompanyBID)
+  IsActive BIT NOT NULL DEFAULT 1,
+  CONSTRAINT PK_IntercompanyRelationship PRIMARY KEY (ID),
+  CONSTRAINT FK_ICR_CompanyA  FOREIGN KEY (CompanyAID)            REFERENCES __mj_BizAppsAccounting.AccountingCompanyProfile(ID),
+  CONSTRAINT FK_ICR_CompanyB  FOREIGN KEY (CompanyBID)            REFERENCES __mj_BizAppsAccounting.AccountingCompanyProfile(ID),
+  CONSTRAINT FK_ICR_ADueToB   FOREIGN KEY (ADueToBGLAccountID)    REFERENCES __mj_BizAppsAccounting.GLAccount(ID),
+  CONSTRAINT FK_ICR_ADueFromB FOREIGN KEY (ADueFromBGLAccountID)  REFERENCES __mj_BizAppsAccounting.GLAccount(ID),
+  CONSTRAINT FK_ICR_BDueToA   FOREIGN KEY (BDueToAGLAccountID)    REFERENCES __mj_BizAppsAccounting.GLAccount(ID),
+  CONSTRAINT FK_ICR_BDueFromA FOREIGN KEY (BDueFromAGLAccountID)  REFERENCES __mj_BizAppsAccounting.GLAccount(ID),
+  CONSTRAINT CK_ICR_distinct  CHECK (CompanyAID <> CompanyBID),
+  CONSTRAINT UQ_ICR_pair      UNIQUE (CompanyAID, CompanyBID)
+  -- CodeGen adds __mj_CreatedAt/UpdatedAt + FK indexes — do not hand-add them.
+```
+**Design notes / points for review:**
+- **One row per unordered pair.** `UQ_ICR_pair` + `CK_ICR_distinct` block dupes/self-pairs but not a reversed `(B,A)` row — provisioning stores pairs in a **canonical order** (e.g. by `CompanyCode`); optionally enforce via trigger.
+- **Account-ownership invariant (trigger).** FKs can't enforce that A's two accounts have `CompanyID = CompanyAID` (Due-To = Liability, Due-From = Asset). Add a DB trigger → joins the invariant test matrix (§11.1).
+- **Pre-creation (eager).** When a new ACP is added, a hook creates the relationship row **and** the 4 GL accounts against every existing ACP. The Due-To/Due-From **account-code scheme** is an open design point (e.g. base code + counterparty `CompanyCode` suffix).
+- **Ties to C1.** These are the per-company-pair accounts C1 requires; the **balancing legs are still generated upstream** (Orders/Payments) — this table only holds the account wiring those legs post into. Block 3.
+
+### OQ-B — batch summary granularity — RESOLVED → see §C5 above.
 
 ---
 
