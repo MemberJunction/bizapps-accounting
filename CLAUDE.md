@@ -321,6 +321,10 @@ This repo uses MemberJunction's CodeGen system to generate entity and action sub
 - Never include `__mj_CreatedAt`/`__mj_UpdatedAt` columns in CREATE TABLE - CodeGen handles them
 - Never create indexes for foreign key columns - CodeGen creates them automatically
 
+### Keep the ERD + docs current (convention)
+- **After any schema change** (new/edited migration, new entity, new column) **update `docs/bizapps-accounting-erd.md` in the same change** — the ERD is the at-a-glance schema reference and must not drift from the migrations.
+- Likewise update `docs/lifecycle-hooks.md` when a `BaseEntity.Save()` hook changes, and `docs/ARCHITECTURE.md` as each build block lands. Treat these three docs as part of every change's Definition of Done.
+
 ### SQL Server is the source of truth; PostgreSQL is converted
 - Write all migrations as **T-SQL** in `migrations/` (`V<TS>__v<X.Y.x>__<description>.sql`).
 - The PostgreSQL counterparts in `migrations-pg/` are produced by the MJ converter (`@memberjunction/sql-converter`) via `npx mj sql-convert <file> --from tsql --to postgres --output migrations-pg/<file>.pg.sql --schema __mj_BizAppsAccounting`. PG-only patches use the `.pg-only.sql` extension.

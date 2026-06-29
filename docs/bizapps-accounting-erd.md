@@ -79,6 +79,8 @@ erDiagram
     Entity ||--o{ JournalEntryLink : "polymorphic"
     File ||--o{ JournalEntry : "attachment"
     User ||--o{ JournalEntryBatch : "batched-by"
+    AccountingCompanyProfile ||--o{ IntercompanyRelationship : "🟦 proposed (pair)"
+    GLAccount ||--o{ IntercompanyRelationship : "🟦 Due-To/Due-From accts"
 ```
 
 > Soft-refs (no lines above): `JournalEntry.{OrderID, OrderLineID, SubscriptionID, PaymentID, ContractID,
@@ -471,7 +473,9 @@ erDiagram
 
 ## 7. Proposed (not yet migrated) — Intercompany relationship (OQ-A)
 
-Per Amith's OQ-A answer; **on hold until ~Block 3** (Marcelo is finalizing it). Shown for context only.
+Per Amith's OQ-A answer — **under review now** (added for Marcelo to confirm it "fits"). The schema is
+**finalized for review, NOT yet migrated**; the intercompany *engine* stays deferred (§C1: balancing-leg
+generation lives upstream in Orders/Payments).
 
 ```mermaid
 erDiagram
@@ -488,6 +492,26 @@ erDiagram
 ```
 
 ---
+
+### Consistency review (for Marcelo — does it fit?)
+- **One row per unordered pair** (Amith: "a single row… track all 4 accounts"). `CompanyAID`/`CompanyBID` FK
+  to `AccountingCompanyProfile(ID)` (= the company id; ensures both ends are accounting-enabled). Enforce a
+  **canonical order** (e.g. by `CompanyCode`) so `(B,A)` can't duplicate `(A,B)`: `UQ(CompanyAID,CompanyBID)`
+  + `CK(CompanyAID <> CompanyBID)` + a trigger for the ordering.
+- **4 GL accounts, 2 per side** — A's *Due-To-B* (Liability) / *Due-From-B* (Asset); B's mirror. Each must
+  live in its owner's COA (`GLAccount.CompanyID = CompanyAID` / `= CompanyBID`) with the right `AccountType` —
+  FKs can't enforce that, so a **trigger** does (joins the §11.1 invariant matrix), consistent with how the
+  rest of the system enforces invariants at the DB level.
+- **Provisioning (eager):** when an ACP is added, a hook creates the relationship row + the 4 GL accounts
+  against every existing ACP. The **account-code scheme** (e.g. `11211-<counterpartyCode>` /
+  `21501-<counterpartyCode>`) is the main open naming decision.
+- **Naming for review:** table `IntercompanyRelationship` (entity `MJ_BizApps_Accounting: Intercompany
+  Relationships`) — Amith's alternative was `AccountingCompanyProfileIntercompanyRelationship`. The column
+  names (`CompanyAID`, `ADueToBGLAccountID`, …) are placeholders — rename freely.
+- **Ties to the rest:** the 4 accounts are ordinary `GLAccount` rows (per-company COA, `IsSystemSeeded`); the
+  pair is two `AccountingCompanyProfile`s; a multi-company transaction's legs are grouped by
+  `JournalEntry.IntercompanyFlowID` (soft-ref). Per **§C1** this table holds **only the account wiring** — the
+  balancing legs themselves are generated **upstream** (Orders/Payments), not by Accounting.
 
 ## Domain index (28 entities)
 - **Company/COA/Periods (§2):** AccountingCompanyProfile, GLAccount, AccountingPeriod, ChartOfAccountsMapping
