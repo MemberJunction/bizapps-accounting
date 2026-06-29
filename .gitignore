@@ -1,3 +1,7 @@
+
+# Local configuration overrides for mjdev
+**/.mjrc.cjs
+
 .DS_Store
 .cache/
 node_modules/
