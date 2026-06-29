@@ -26,3 +26,7 @@ export {
 } from './SeedData.js';
 export type { SeededGLAccount } from './SeedData.js';
 export { getNextJournalEntryNumber, getNextBatchNumber } from './SequenceService.js';
+
+// F1 — post-time JE validation guard (balance / two-line / period-open / GL-active).
+export { validateJournalEntry, checkBalance } from './JournalEntryValidation.js';
+export type { JournalEntryValidationResult } from './JournalEntryValidation.js';

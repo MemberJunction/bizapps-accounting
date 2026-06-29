@@ -71,8 +71,24 @@ default **`OperatingTimeZone='UTC'`** (AD-16), and wire the **5 default GL-accou
 
 <a id="je-lifecycle"></a>
 ### 5.2 JE lifecycle (Pending → Batched → GLPosted)
-_Numbering wired (W2/W3). Immutability/period-close/balanced-JE triggers exist at the DB level;
-the hook-side lifecycle (W4–W9) + their automated invariant tests land in Block 1._
+Numbering wired (W2/W3). **Block 1 added the hook-side lifecycle + the DB-invariant test suites:**
+- **W4** adjusting-entry routing — a JE targeting a **Closed** period errors unless `OriginalAccountingPeriodID`
+  is set, in which case it routes to the next open period (the period-close trigger 50007 rejects ANY Closed
+  `AccountingPeriodID`; `OriginalAccountingPeriodID` is the audit reference). No silent re-route.
+- **W6** `generateReversal(reason)` — new Pending JE (`EntryType='Reversal'`, required by trg 50012), Dr/Cr
+  swapped on every line, back-referenced both ways (`ReversedByJournalEntryID` is the one field the
+  immutability trigger lets change on a locked JE).
+- **W9** attachment validation — a non-null `FileID` must reference an existing `__mj.File`.
+- **F1** `validateJournalEntry()` — read-only guard: balance, two-line minimum, period-open, GL-active.
+- **DB invariants (triggers)** validated by `test-harness/block1-runtime.ts` (**12/12**), each with a raw-SQL
+  bypass case: balanced-on-lock (50001), JE immutability (50003/50004), JE-line immutability (50006),
+  period-close (50007). Status-coherence CHECKs also confirmed: `CK_JournalEntry_BatchedHasBatch`
+  (Batched ⇒ `BatchID` set), `CK_JournalEntry_GLPostedHasRef`, `CK_AccountingPeriod_ClosedCoherence`
+  (Closed ⇒ `ClosedAt`/`ClosedByUserID`).
+- **Still open — W5** realized-FX auto-emit: **deferred** pending a design decision. It appears to contradict
+  the resolved §C1 (JE/line generation — including the FX balancing line — lives **upstream** in
+  Orders/Payments; Accounting receives balanced JEs). Recommend: Accounting owns the FX *mechanics* (the ACP
+  `RealizedFXGainLossGLAccountID` ref) but the Payments app computes + posts the FX line.
 
 ## 6. Connection map
 Hand-written, cross-layer files carry a top-of-file `CONNECTS TO:` block (CALLED BY / CALLS /
