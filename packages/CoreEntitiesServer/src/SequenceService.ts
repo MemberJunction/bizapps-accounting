@@ -36,12 +36,12 @@ export async function getNextJournalEntryNumber(
         @EntryNumber = @entryNumber OUTPUT;
     SELECT @entryNumber AS EntryNumber;
   `;
+  // ExecuteSQL binds an OBJECT of parameters BY NAME (@CompanyID, @FiscalYear). An array is
+  // treated as positional (p0, p1) — which would neither match the named @-params in the SQL
+  // above nor bind correctly (it would try to bind the element object itself). Pass an object.
   const rows = await provider.ExecuteSQL(
     sql,
-    [
-      { name: 'CompanyID', value: companyId },
-      { name: 'FiscalYear', value: fiscalYear },
-    ],
+    { CompanyID: companyId, FiscalYear: fiscalYear },
     { isMutation: true, description: 'spAssignNextJournalEntryNumber' },
     contextUser,
   );
@@ -70,9 +70,10 @@ export async function getNextBatchNumber(
         @BatchNumber  = @batchNumber OUTPUT;
     SELECT @batchNumber AS BatchNumber;
   `;
+  // Named-object params (see getNextJournalEntryNumber) — an array binds positionally (p0).
   const rows = await provider.ExecuteSQL(
     sql,
-    [{ name: 'CompanyID', value: companyId }],
+    { CompanyID: companyId },
     { isMutation: true, description: 'spAssignNextBatchNumber' },
     contextUser,
   );
