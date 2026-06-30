@@ -15,6 +15,12 @@ import './lib/generated/generated-forms.module';
 // Import custom form components (must come AFTER generated to override via @RegisterClass priority)
 import './lib/custom/custom-forms.module';
 
+// Import custom Explorer resource components (dashboards). Static import + the Load* calls in
+// LoadBizAppsAccountingClient() keep their @RegisterClass decorators from being tree-shaken out.
+import { BatchDispatchModule } from './lib/custom/BatchDispatch/batch-dispatch.module';
+import { LoadBatchDispatchDashboard } from './lib/custom/BatchDispatch/batch-dispatch-dashboard.component';
+import { LoadBatchDispatchResource } from './lib/custom/BatchDispatch/batch-dispatch-resource.component';
+
 // Import class registrations manifest
 import { CLASS_REGISTRATIONS } from './lib/generated/class-registrations-manifest';
 
@@ -22,11 +28,16 @@ import { CLASS_REGISTRATIONS } from './lib/generated/class-registrations-manifes
 export { CLASS_REGISTRATIONS } from './lib/generated/class-registrations-manifest';
 export { GeneratedFormsModule } from './lib/generated/generated-forms.module';
 export { CustomFormsModule } from './lib/custom/custom-forms.module';
+export { BatchDispatchModule } from './lib/custom/BatchDispatch/batch-dispatch.module';
 
 /**
  * Bootstrap function called during MJExplorer initialization.
- * Static imports above handle all registration.
+ * Static imports above handle most registration; the explicit Load* calls below
+ * anchor the custom resource components' @RegisterClass decorators against tree-shaking.
  */
 export function LoadBizAppsAccountingClient(): void {
-    // Static imports ensure all classes are registered.
+    LoadBatchDispatchDashboard();
+    LoadBatchDispatchResource();
+    // Reference the module so the bundler keeps it (declarations register the components).
+    void BatchDispatchModule;
 }

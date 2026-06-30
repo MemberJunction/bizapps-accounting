@@ -1,0 +1,170 @@
+<mj-page-layout>
+  <mj-page-header
+    Title="Batch Dispatch"
+    Icon="fa-solid fa-paper-plane"
+    Subtitle="Review, approve, and dispatch journal-entry batches to the ERP">
+
+    <div meta>
+      @if (SelectedCompanyID) {
+        <mj-stat-badge [Count]="Batches.length" Label="batches" />
+      }
+    </div>
+
+    <div actions>
+      <mj-refresh-button [Loading]="IsLoading" (Clicked)="loadData()"></mj-refresh-button>
+      <button mjButton variant="primary" size="sm" [disabled]="!CanBuild" (click)="OnBuildBatch()">
+        @if (Building) {
+          <i class="fa-solid fa-spinner fa-spin"></i> Building…
+        } @else {
+          <i class="fa-solid fa-layer-group"></i> Build Batch
+        }
+      </button>
+    </div>
+
+    <div toolbar>
+      <label class="bd-field">
+        <span class="bd-field__label">Company</span>
+        <select class="mj-input" [value]="SelectedCompanyID ?? ''"
+                (change)="OnCompanyChange($any($event.target).value)">
+          @for (c of Companies; track c.ID) {
+            <option [value]="c.ID">{{ c.Name }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="bd-field">
+        <span class="bd-field__label">Period (for build)</span>
+        <select class="mj-input" [value]="SelectedPeriodID ?? ''"
+                (change)="OnPeriodChange($any($event.target).value)">
+          <option value="" disabled>Select a period…</option>
+          @for (p of Periods; track p.ID) {
+            <option [value]="p.ID">{{ p.Label }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="bd-field">
+        <span class="bd-field__label">Target ERP</span>
+        <select class="mj-input" [value]="TargetSystem"
+                (change)="OnTargetSystemChange($any($event.target).value)">
+          <option value="BusinessCentral">Business Central</option>
+          <option value="QuickBooks">QuickBooks</option>
+          <option value="NetSuite">NetSuite</option>
+          <option value="Sage">Sage</option>
+          <option value="Xero">Xero</option>
+          <option value="Other">Other</option>
+        </select>
+      </label>
+    </div>
+  </mj-page-header>
+
+  <mj-page-body>
+    @if (IsLoading) {
+      <mj-loading text="Loading batches…"></mj-loading>
+    } @else {
+      @if (LoadError) {
+        <div class="bd-banner bd-banner--error" role="alert">
+          <i class="fa-solid fa-triangle-exclamation"></i> {{ LoadError }}
+        </div>
+      }
+
+      @if (ActionMessage) {
+        <div class="bd-banner"
+             [class.bd-banner--error]="ActionMessageIsError"
+             [class.bd-banner--success]="!ActionMessageIsError"
+             role="status">
+          <i class="fa-solid" [class.fa-circle-check]="!ActionMessageIsError"
+             [class.fa-triangle-exclamation]="ActionMessageIsError"></i>
+          {{ ActionMessage }}
+        </div>
+      }
+
+      @if (Batches.length === 0) {
+        <mj-empty-state
+          Icon="fa-solid fa-inbox"
+          Title="No batches yet"
+          Message="Select a company and an open period, then Build Batch to net its pending journal entries into a dispatchable batch.">
+        </mj-empty-state>
+      } @else {
+        <div class="bd-list">
+          @for (row of Batches; track row.ID) {
+            <div class="bd-card">
+              <div class="bd-card__head">
+                <div class="bd-card__title">
+                  <i class="fa-solid fa-receipt"></i>
+                  <span class="bd-card__number">{{ row.BatchNumber }}</span>
+                  <span class="bd-card__target">→ {{ row.TargetSystem }}</span>
+                </div>
+                <div class="bd-card__badges">
+                  <mj-stat-badge Label="{{ row.Status }}" [Variant]="statusVariant(row.Status)" />
+                  @if (row.Status === 'Pending') {
+                    @if (row.Approved === true) {
+                      <mj-stat-badge Icon="fa-solid fa-circle-check" Label="Approved" Variant="success" />
+                    } @else if (row.Approved === false) {
+                      <mj-stat-badge Icon="fa-solid fa-hourglass-half" Label="Awaiting approval" Variant="warning" />
+                    } @else if (row.Approved === null) {
+                      <mj-stat-badge Icon="fa-solid fa-question" Label="Approval unknown" Variant="info" />
+                    }
+                  }
+                </div>
+              </div>
+
+              <div class="bd-card__metrics">
+                <div class="bd-metric">
+                  <span class="bd-metric__label">JEs</span>
+                  <span class="bd-metric__value">{{ row.TotalEntries }}</span>
+                </div>
+                <div class="bd-metric">
+                  <span class="bd-metric__label">Total Debits</span>
+                  <span class="bd-metric__value">{{ row.TotalDebits | number:'1.2-2' }}</span>
+                </div>
+                <div class="bd-metric">
+                  <span class="bd-metric__label">Total Credits</span>
+                  <span class="bd-metric__value">{{ row.TotalCredits | number:'1.2-2' }}</span>
+                </div>
+                @if (row.ExternalBatchRef) {
+                  <div class="bd-metric">
+                    <span class="bd-metric__label">ERP Ref</span>
+                    <span class="bd-metric__value">{{ row.ExternalBatchRef }}</span>
+                  </div>
+                }
+              </div>
+
+              @if (row.Status === 'Failed' && row.ErrorMessage) {
+                <div class="bd-banner bd-banner--error bd-card__error" role="alert">
+                  <i class="fa-solid fa-triangle-exclamation"></i> {{ row.ErrorMessage }}
+                </div>
+              }
+
+              @if (row.Status === 'Pending' && row.Approved === false && row.ApprovalReason) {
+                <div class="bd-card__hint">
+                  <i class="fa-solid fa-circle-info"></i> {{ row.ApprovalReason }}
+                </div>
+              }
+
+              <div class="bd-card__actions">
+                <!-- Confirm/affirmative LEFT, then secondary, per the MJ button convention. -->
+                @if (canDispatch(row)) {
+                  <button mjButton variant="primary" size="sm" [disabled]="row.Busy" (click)="OnDispatch(row)">
+                    <i class="fa-solid fa-paper-plane"></i> Dispatch to {{ row.TargetSystem }}
+                  </button>
+                }
+                @if (canDecide(row)) {
+                  <button mjButton variant="success" size="sm" [disabled]="row.Busy" (click)="OnRecordDecision(row, 'Approved')">
+                    <i class="fa-solid fa-thumbs-up"></i> Approve
+                  </button>
+                  <button mjButton variant="danger" size="sm" [disabled]="row.Busy" (click)="OnRecordDecision(row, 'Rejected')">
+                    <i class="fa-solid fa-thumbs-down"></i> Reject
+                  </button>
+                }
+                @if (row.Busy) {
+                  <span class="bd-card__busy"><i class="fa-solid fa-spinner fa-spin"></i> Working…</span>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      }
+    }
+  </mj-page-body>
+</mj-page-layout>

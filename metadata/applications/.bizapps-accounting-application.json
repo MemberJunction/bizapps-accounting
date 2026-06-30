@@ -1,0 +1,29 @@
+{
+  "fields": {
+    "Name": "Accounting",
+    "Description": "AR subledger, journal entries, and JE batch dispatch to the ERP",
+    "Icon": "fa-solid fa-book",
+    "DefaultForNewUser": false,
+    "Color": "#0076b6",
+    "DefaultSequence": 2010,
+    "DefaultNavItems": [
+      {
+        "Label": "Batches",
+        "Icon": "fa-solid fa-paper-plane",
+        "ResourceType": "Custom",
+        "DriverClass": "BatchDispatchResource",
+        "isDefault": true
+      }
+    ]
+  },
+  "relatedEntities": {
+    "MJ: Application Entities": []
+  },
+  "primaryKey": {
+    "ID": "08B5D905-6FB3-438B-94E5-2C5FF021B794"
+  },
+  "sync": {
+    "lastModified": "2026-06-30T16:25:24.206Z",
+    "checksum": "5a8217eb3d1d883bb183a26398d5e7b02c196f114d99c9ddb2fa95f55b884398"
+  }
+}
