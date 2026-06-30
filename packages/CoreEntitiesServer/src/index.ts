@@ -53,3 +53,18 @@ export type {
   BatchApprovalGate,
   SendBatchOptions,
 } from './BatchingEngine.js';
+
+// S3 — scheduled-JE schedules + materializer (Block 4). See ScheduledJournalEntryService.ts.
+export {
+  createScheduledEntries,
+  materializeDueScheduledEntries,
+  computeStraightLineSchedule,
+  mapScheduledEntryType,
+} from './ScheduledJournalEntryService.js';
+export type {
+  ScheduledEntryType,
+  JournalEntryType,
+  SchedulePeriod,
+  CreateScheduleSpec,
+  MaterializeResult,
+} from './ScheduledJournalEntryService.js';
