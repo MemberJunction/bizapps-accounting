@@ -27,8 +27,8 @@ happen; the trigger is the floor that catches anything — even raw SQL.
 | **W4** | Adjusting-entry routing | `JournalEntry` | a **new** JE is saved whose target `AccountingPeriod.Status='Closed'` | auto · `Save()` | ✅ Block 1 |
 | **W5** | Realized FX auto-emit | `JournalEntryLine` | n/a — generation is upstream (Orders/Payments) | — | 🚫 retired (Payments-side) |
 | **W6** | Reversal generation | `JournalEntry` | code **calls `generateReversal(reason)`** | explicit call | ✅ Block 1 |
-| **W7** | Period-close orchestration | `AccountingPeriod` | a save changes `Status` **`Open → Closing`** | auto · `Save()` | ⏳ Block 2 |
-| **W8** | Period reopen | `AccountingPeriod` | a save changes `Status` **`Closed → Reopened`** | auto · `Save()` | ⏳ Block 2 |
+| **W7** | Period-close orchestration | `AccountingPeriod` | a save changes `Status` **`Open → Closing`/`Closed`** | auto · `Save()` | ✅ Block 2 |
+| **W8** | Period reopen | `AccountingPeriod` | a save changes `Status` **`Closed → Reopened`** | auto · `Save()` | ✅ Block 2 |
 | **W9** | Attachment validation | `JournalEntry` | a JE is saved with a non-null **`FileID`** | auto · `Save()` | ✅ Block 1 |
 | **F1** | Routine JE validator | `JournalEntry` (read-only) | code **calls `validateJournalEntry(id)`** | explicit call | ✅ Block 1 |
 
@@ -92,17 +92,21 @@ nothing auto-reverses.
 original's `ReversedByJournalEntryID` (the one field the immutability trigger lets change on a locked JE). The
 original stays put; the audit chain is preserved (pen, not pencil).
 
-### W7 — Period-close orchestration *(⏳ Block 2 — `AccountingPeriodEntityServer.ts`, not built)*
-**Will fire:** in `AccountingPeriodEntityServer.Save()` when the save **transitions `Status` `Open → Closing`**
-(i.e. an admin initiating a close).
-**Will do:** validate prerequisites — no Pending JEs, all batches Acknowledged, TaxLiabilities resolved, all
-due `ScheduledJournalEntry` rows materialized — then flip to `Closed`. **No balance materialization in v1**
-(`AccountBalance*` deferred — AD-12); close = validate + lock only.
+### W7 — Period-close orchestration *(✅ Block 2 — `AccountingPeriodEntityServer.ts`)*
+**Fires:** in `AccountingPeriodEntityServer.Save()` when the save **transitions `Status` `Open → Closing`/`Closed`**
+(an admin initiating a close).
+**Does:** runs `validateCloseable()` — no Pending JEs, all batches Acknowledged, all due
+`ScheduledJournalEntry` rows materialized (each read with `BypassCache: true` so the gate sees TRUE DB state) —
+and on success flips to `Closed`, stamping `ClosedAt` + `ClosedByUserID`; on failure it throws (the period stays
+as-is). **No balance materialization in v1** (`AccountBalance*` deferred — AD-12); close = validate + lock only.
+Once `Closed`, `trg_JournalEntry_PeriodClose` (50007) blocks any new JE into the period (the un-bypassable floor).
+*(Live-proven: blocked while a Pending JE remains; allowed once the period's batch is Acknowledged.)*
 
-### W8 — Period reopen *(⏳ Block 2 — not built)*
-**Will fire:** on a save that transitions `Status` **`Closed → Reopened`**.
-**Will do:** require an admin role + a non-empty `ReopenReason`, write an audit entry; the period must be
-re-closed after any new activity.
+### W8 — Period reopen *(✅ Block 2 — `AccountingPeriodEntityServer.ts`)*
+**Fires:** on a save that transitions `Status` **`Closed → Reopened`**.
+**Does:** requires a non-empty `ReopenReason`, stamps `ReopenedAt`/`ReopenedByUserID`; `ClosedAt` is intentionally
+left set (`CK_AccountingPeriod_ClosedCoherence` requires it for `Reopened` too). The period must be re-closed
+after any new activity.
 
 ### W9 — JE attachment validation *(✅ `JournalEntryEntityServer.ts`)*
 **Fires:** in `JournalEntryEntityServer.Save()` whenever the JE has a **non-null `FileID`** (new or update).
@@ -121,10 +125,14 @@ earlier. (`checkBalance` is exported + unit-tested.)
 ## 2. Related (not `Save()` hooks)
 
 **Scheduled actions (S1–S7)** fire on a **cron cadence or at period close**, not on entity save — e.g. **S1
-Batch dispatch** (daily; groups Pending JEs → batch → post to BC, with §C5 netting + the Tasks-app CFO
-approval), **S3 Scheduled-JE materializer** (turns due `ScheduledJournalEntry` rows into Pending JEs).
+Batch dispatch** (groups Pending JEs → batch → post to ERP, with §C5 netting + the Tasks-app CFO approval),
+**S3 Scheduled-JE materializer** (turns due `ScheduledJournalEntry` rows into Pending JEs).
 *(Note: the old plan's S3/S6/S7 are framed around the dropped `Recurring*` templates — superseded by
-`ScheduledJournalEntry`, BA-D18.)* All ⏳ planned (Block 2+).
+`ScheduledJournalEntry`, BA-D18.)*
+- **S1 batch dispatch — ✅ Block 2** (`BatchingEngine.ts`: `buildBatch` nets a Company×Period's Pending JEs into a
+  footing batch + locks them; `sendBatch` enforces a pluggable `BatchApprovalGate` (CFO) + an `ErpPoster` seam
+  (mock for now) → Pending→Sent (trg 50014 foots) → Acknowledged + JEs→GLPosted). Live-proven incl. raw-SQL bypass.
+- **S3 Scheduled-JE materializer — ⏳ Block 4.** Other scheduled actions ⏳ later.
 
 **`AccountingService` façade** — the public TypeScript API downstream apps call (`postJournalEntry`,
 `reverseJournalEntry` → wraps W6, `createScheduledJournalEntries`, …). Each method goes through `BaseEntity`,
@@ -133,9 +141,12 @@ so saving through it is exactly what fires W2/W4/W9 etc. ⏳ Block 2/8.
 ---
 
 ## Build status at a glance
-- ✅ **Done (Block 0):** W1, W2, W3 · **(Block 1):** W4, W6, W9, F1 — Vitest 11/11 + live harness 12/12.
-- ⚠ **Escalated:** W5 (needs the §C1 decision).
-- ⏳ **Next:** W7/W8 + S1 (batching) in **Block 2**; S3 materializer in **Block 4**.
+- ✅ **Done (Block 0):** W1, W2, W3 · **(Block 1):** W4, W6, W9, F1 · **(Block 2):** W7, W8 + **S1 batching engine**.
+- 🧪 **Live-proven:** Block 0 harness 8/8 · Block 1 12/12 · Block 2 13/13 (incl. raw-SQL bypass of trg 50014/50009/50008
+  + §5.5 unmapped-GL hard-fail) · Vitest 18/18.
+- 🚫 **Retired:** W5 (realized-FX generation is upstream/Payments — DECIDED 2026-06-29).
+- ⏳ **Next:** S3 Scheduled-JE materializer in **Block 4**; dimension/COA-mapping server workflows in **Block 5**;
+  read-model views in **Block 6**.
 
 > AI agents (A1–A9, F2–F8) from the workflows plan are **out of v1 scope** (AD-14); this is the deterministic
 > hook layer only.
