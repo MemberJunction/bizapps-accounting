@@ -12,7 +12,7 @@
  */
 import sql from 'mssql';
 
-/** The 14 hand-authored financial-invariant triggers from the baseline migration (NOT CodeGen's trgUpdate*). */
+/** The hand-authored financial-invariant triggers from the baseline + later migrations (NOT CodeGen's trgUpdate*). */
 export const INVARIANT_TRIGGERS = [
   'trg_JournalEntry_BalancedOnLock',
   'trg_JEL_RecheckParentBalance',
@@ -28,6 +28,7 @@ export const INVARIANT_TRIGGERS = [
   'trg_JEBLDimension_Immutability',
   'trg_SJE_Immutability',
   'trg_SJELI_Immutability',
+  'trg_ICR_AccountOwnershipAndType',
 ] as const;
 
 /**
