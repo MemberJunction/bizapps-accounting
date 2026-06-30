@@ -11,7 +11,7 @@
  *       period-close (50007).
  *
  * USAGE (cwd = instance worktree root, where .env resolves):
- *   npx tsx packages/dev-apps/bizapps-accounting/test-harness/block1-runtime.ts
+ *   npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/block1-runtime.ts
  * Exit: 0 all passed · 1 failures · 2 bootstrap error. Idempotent (FK-aware teardown).
  */
 import sql from 'mssql';
@@ -281,7 +281,7 @@ async function main(): Promise<void> {
   await exec(`DELETE FROM __mj.Company WHERE ID='${companyId}'`);
   const leftover = (await pool.request().query(`SELECT COUNT(*) n FROM __mj.Company WHERE ID='${companyId}'`)).recordset[0].n;
   if (leftover > 0) {
-    console.log(`  (teardown note: company ${companyId} + its Batched (immutable-by-design) test JEs persist — full cleanup needs ALTER-TRIGGER rights the app DB user lacks. Run against a resettable test DB for a pristine state; see test-harness/README.)`);
+    console.log(`  (teardown note: company ${companyId} + its Batched (immutable-by-design) test JEs persist — full cleanup needs ALTER-TRIGGER rights the app DB user lacks. Run against a resettable test DB for a pristine state; see test-harnesses/server/README.)`);
   }
 
   const failed = outcomes.filter(o => !o.Passed);

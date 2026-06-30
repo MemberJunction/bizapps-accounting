@@ -53,3 +53,12 @@ report.json
 
 
 metadata/sql_logging
+
+# test-harnesses: local auth artifacts + Playwright run output (keep the harness code + docs).
+# Everything under test-auth/ is gitignored EXCEPT its doc; see test-harnesses/test-auth/test-auth.md.
+test-harnesses/test-auth/*
+!test-harnesses/test-auth/test-auth.md
+test-harnesses/playwright/.auth/
+test-harnesses/playwright/test-results/
+test-harnesses/playwright/playwright-report/
+test-harnesses/playwright/node_modules/

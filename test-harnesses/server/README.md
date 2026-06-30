@@ -17,7 +17,7 @@ Manager instance that is `~/MJDev/instances/<slug>/mj`:
 
 ```bash
 cd ~/MJDev/instances/<slug>/mj
-npx tsx packages/dev-apps/bizapps-accounting/test-harness/block0-runtime.ts
+npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/block0-runtime.ts
 ```
 
 Exit code: `0` all passed · `1` test failures · `2` bootstrap error. Every script cleans

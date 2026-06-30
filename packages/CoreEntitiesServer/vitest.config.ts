@@ -4,7 +4,7 @@
  * ISOLATED, no-DB unit tests ONLY (MJ convention: no database connections in unit
  * tests; keep them deterministic and < 5s). Live, DB-backed hook validation (W1/W2/W3
  * firing against a real instance) lives in the tsx harness at
- * `<app-root>/test-harness/block0-runtime.ts`, NOT here.
+ * `<app-root>/test-harnesses/server/block0-runtime.ts`, NOT here.
  */
 import { defineConfig } from 'vitest/config';
 

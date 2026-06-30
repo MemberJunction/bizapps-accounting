@@ -80,7 +80,7 @@ Numbering wired (W2/W3). **Block 1 added the hook-side lifecycle + the DB-invari
   immutability trigger lets change on a locked JE).
 - **W9** attachment validation — a non-null `FileID` must reference an existing `__mj.File`.
 - **F1** `validateJournalEntry()` — read-only guard: balance, two-line minimum, period-open, GL-active.
-- **DB invariants (triggers)** validated by `test-harness/block1-runtime.ts` (**12/12**), each with a raw-SQL
+- **DB invariants (triggers)** validated by `test-harnesses/server/block1-runtime.ts` (**12/12**), each with a raw-SQL
   bypass case: balanced-on-lock (50001), JE immutability (50003/50004), JE-line immutability (50006),
   period-close (50007). Status-coherence CHECKs also confirmed: `CK_JournalEntry_BatchedHasBatch`
   (Batched ⇒ `BatchID` set), `CK_JournalEntry_GLPostedHasRef`, `CK_AccountingPeriod_ClosedCoherence`

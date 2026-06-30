@@ -12,7 +12,7 @@
  *
  * (dimension-through-batch — the other Block-5 server concern — is delivered + proven in block2-runtime.ts.)
  *
- * USAGE (cwd = instance worktree root): npx tsx packages/dev-apps/bizapps-accounting/test-harness/block5-runtime.ts
+ * USAGE (cwd = instance worktree root): npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/block5-runtime.ts
  * Exit: 0 all passed · 1 failures · 2 bootstrap error.
  */
 import sql from 'mssql';

@@ -4,7 +4,7 @@
  * CONNECTS TO:
  *   TESTS:     SeedData.DEFAULT_CHART_OF_ACCOUNTS + DEFAULT_GL_ACCOUNT_REFS
  *   SEEDED BY: AccountingCompanyProfileEntityServer (W1) — the LIVE seeding behavior is
- *              covered by test-harness/block0-runtime.ts (this file is pure-logic, no DB)
+ *              covered by test-harnesses/server/block0-runtime.ts (this file is pure-logic, no DB)
  *   DOC:       docs/ARCHITECTURE.md#company-profile-init
  *
  * Pure logic, no database, deterministic, < 5s (MJ unit-test convention).

@@ -13,7 +13,7 @@
  *       summary-foots (50014) · batch immutability update (50009) · batch immutability delete (50008).
  *
  * USAGE (cwd = instance worktree root, where .env resolves):
- *   npx tsx packages/dev-apps/bizapps-accounting/test-harness/block2-runtime.ts
+ *   npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/block2-runtime.ts
  * Exit: 0 all passed · 1 failures · 2 bootstrap error. FK-aware teardown (disables triggers to drop locked rows).
  */
 import sql from 'mssql';

@@ -9,7 +9,7 @@
  *   W7 tie-in: a Scheduled row blocks its period's close until materialized.
  *   Block4→Block2: a materialized Pending JE flows into buildBatch.
  *
- * USAGE (cwd = instance worktree root): npx tsx packages/dev-apps/bizapps-accounting/test-harness/block4-runtime.ts
+ * USAGE (cwd = instance worktree root): npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/block4-runtime.ts
  * Exit: 0 all passed · 1 failures · 2 bootstrap error. FK-aware teardown (disables triggers to drop locked rows).
  */
 import sql from 'mssql';

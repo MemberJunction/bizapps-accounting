@@ -4,7 +4,7 @@
  * CONNECTS TO:
  *   TESTS:  JournalEntryValidation.checkBalance
  *   LIVE:   the DB-backed validateJournalEntry + the balanced-on-lock trigger are exercised by
- *           test-harness/block1-runtime.ts (this file is pure-logic, no DB)
+ *           test-harnesses/server/block1-runtime.ts (this file is pure-logic, no DB)
  *   DOC:    docs/ARCHITECTURE.md#je-lifecycle
  */
 import { describe, it, expect } from 'vitest';

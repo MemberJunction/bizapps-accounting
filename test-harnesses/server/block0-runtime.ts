@@ -22,7 +22,7 @@
  *
  * USAGE (cwd MUST be the instance worktree root so .env resolves, e.g.
  *   ~/MJDev/instances/bizapps-accounting-dev/mj):
- *   npx tsx packages/dev-apps/bizapps-accounting/test-harness/block0-runtime.ts
+ *   npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/block0-runtime.ts
  *
  * Exit code: 0 = all passed, 1 = test failures, 2 = bootstrap error.
  */
