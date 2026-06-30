@@ -38,7 +38,6 @@ import {
   DEFAULT_GL_ACCOUNT_REFS,
   SeededGLAccount,
 } from './SeedData.js';
-import { provisionIntercompanyAccountsFor } from './IntercompanyBalancingService.js';
 
 interface PeriodToGenerate {
   periodType: 'Month' | 'Quarter' | 'Year';
@@ -86,10 +85,6 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
       await this.seedDefaultChartOfAccounts();
       await this.generateAccountingPeriods(fiscalYear);
       await this.wireDefaultGLAccountRefs();
-      // Block 3 — eager intercompany provisioning. Runs AFTER COA seeding so the per-pair
-      // 11211-/21501- Due-From/Due-To accounts are added on top of the fully-seeded chart, and
-      // the trg_ICR_AccountOwnershipAndType (50015) invariant is satisfied by construction.
-      await this.provisionIntercompanyWiring();
     } catch (error: unknown) {
       LogError(
         `AccountingCompanyProfileEntityServer.initializeProfile failed for CompanyID=${this.Get('ID')}: ${error}`,
@@ -329,19 +324,6 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
       map.set(r.Code, r.ID);
     }
     return map;
-  }
-
-  // ─── Intercompany provisioning (Block 3) ─────────────────────────────────
-
-  /**
-   * Eagerly wire this new company's intercompany Due-To/Due-From accounts + relationship rows
-   * against every other existing accounting-enabled company. Idempotent (skips existing pairs).
-   */
-  private async provisionIntercompanyWiring(): Promise<void> {
-    await provisionIntercompanyAccountsFor(
-      { id: this.ID, code: this.CompanyCode, currencyCode: this.FunctionalCurrencyCode },
-      this.ContextCurrentUser,
-    );
   }
 
   // ─── Utilities ────────────────────────────────────────────────────────

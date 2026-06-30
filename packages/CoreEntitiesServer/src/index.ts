@@ -69,19 +69,6 @@ export type {
   MaterializeResult,
 } from './ScheduledJournalEntryService.js';
 
-// Block 3 — intercompany net+batch engine: eager per-pair Due-To/Due-From provisioning +
-// bilateral position netting ("gross preserved, net shipped", §C1). See IntercompanyBalancingService.ts.
-export {
-  provisionIntercompanyAccountsFor,
-  netIntercompanyPositions,
-  applyIntercompanyNetting,
-  canonicalPair,
-  compareSqlServerGuid,
-} from './IntercompanyBalancingService.js';
-export type {
-  IntercompanyPair,
-} from './IntercompanyBalancingService.js';
-
 // Block 5 — Chart-of-Accounts mapping approval workflow (propose → approve, strict 1:1). See ChartOfAccountsMappingService.ts.
 export {
   proposeMapping,

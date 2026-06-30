@@ -4,7 +4,7 @@
 > **authoritative design docs for the build.**: `bizapps-accounting-master.md` and `Transcript of Amith's Explanation.docx`
 > **Primary input:** `Transcript of Amith's Explanation.md` (Amith Nagarajan, 2026-06-05) + analysis of the current repo, `bizapps-common` open-app patterns, and MJ Open-App standards.
 > **Supersedes for design authority:** Transcripts and master plan were used as input for this doc, but this doc is the primary devlopemnt driver. Direct conflicts will be resolved in the conflict resolution section below or through edits before developemnt begins. If a conflict is recognized between this doc and the authoritative sources, or between the sources, notify the user so it can be added here.
-> **Locked decisions:** branching `next → main`; PR #8 = cherry-pick after codegen regen; intercompany = N single-company JEs + flow link, **generation upstream (Orders/Payments) + per-company-pair Due-To/Due-From accounts — NO centralized intercompany account, NO Accounting-side generation (see Preface §C1)**; balance snapshots deferred; minimal seed COA; no AI agents in v1; rev-rec computed upstream (Accounting persists+materializes); batch summary granularity **OPEN — per-company vs per-account vs account×dimension (OQ-B)**; PostgreSQL conversion is the **last** block.
+> **Locked decisions:** branching `next → main`; PR #8 = cherry-pick after codegen regen; intercompany = N single-company JEs + flow link, **generation upstream (Orders/Payments) + per-company-pair Due-To/Due-From accounts — NO centralized intercompany account, NO Accounting-side generation, and (Amith 2026-06-30) **NO Accounting-side intercompany balancing/netting — Payments generates the Due-To/Due-From balancing legs; Accounting only receives + batches** (see Preface §C1)**; FX handled in Orders/Payments (§C1b); balance snapshots deferred; minimal seed COA; no AI agents in v1; rev-rec computed upstream (Accounting persists+materializes); batch summary granularity **OPEN — per-company vs per-account vs account×dimension (OQ-B)**; PostgreSQL conversion is the **last** block.
 
 ---
 
@@ -20,14 +20,30 @@ This app must **mirror real-world accounting practice and structure as closely a
 - **No centralized Due-To / Due-From account — VETOED by Amith.** Replace the single generic intercompany accounts with **per-company-pair** accounts: each company's chart carries a `Due To <Counterparty>` + `Due From <Counterparty>` account for each counterparty it transacts with → **4 GL accounts per company-pair** (scales ≈ 2·N·(N−1)). This mirrors standard intercompany books and keeps the trail auditable.
 - **Routing is upstream.** Orders/Payments own the product-catalog → company/account mapping and emit **split entries per account**, each stamped with a **source entity ID** that Accounting uses as the **linking key** to reassemble a logical multi-company transaction. The split happens upstream, so Accounting never decomposes a lump entry — which is *why* no centralized due-to/from is needed.
 - **Internal follow-on (Block 3 cleanup):** the v2-proposed `AccountingService.recordCrossCompanySettlement()` and the new `JournalEntryLine.CounterpartyCompanyID` migration were predicated on Accounting doing the generation — **revisit / likely drop**: the counterparty is encoded by the chosen per-pair account, and linking is via the source-entity ref.
+- **⚠ Update 2026-06-30 (Amith — AUTHORITATIVE; resolves the "who balances intercompany" question):** the full flow is:
+  **Orders** posts each company's initial JE (Dr A/R, Cr Revenue/Deferred, per company). **Payments** posts
+  the Dr-Cash for the receiving entity **AND generates the intercompany balancing entries (the Due-To/Due-From
+  legs).** Amith: *"Due To/From is handled in the Payments component … You're good with current design for
+  accounting."* → **Accounting does NOT generate AND does NOT net/balance the intercompany position.** It
+  **receives** the already-balanced per-company JEs (from Orders + Payments), **batches** them with the normal
+  §C5 (Company × GLAccount × Dimension) netting, locks, and posts summaries to the GL. **There is NO
+  Accounting-side intercompany balancing/netting engine.** (This corrects the 2b interpretation — relayed from a
+  prior partial answer — that Accounting should net the bilateral Due-To vs Due-From before batching. That
+  netting was built in this roll as Task 3c and is being reverted; see the "3c disposition" decision.)
+- **Open sub-question flagged for Amith:** OQ-A had **Accounting** eagerly provision the per-pair Due-To/Due-From
+  GL accounts + the `IntercompanyRelationship` wiring table. If Payments now owns the intercompany legs
+  end-to-end, does Accounting still own that **account wiring** (it owns the COA), or does Payments/Orders define
+  those accounts? Not addressed in the 2026-06-30 note — needs a one-line confirm before we keep or drop the
+  `IntercompanyRelationship` table + its eager provisioning.
 
 ### C1b — Realized & unrealized FX responsibility — RESOLVED (2026-06-29)
 Both realized and unrealized FX are **computed + posted UPSTREAM** (Orders/Payments). Accounting stays a
 separate subledger that owns only the GL-account *mechanics* (`AccountingCompanyProfile.RealizedFXGainLossGLAccountID`)
 and **validates** that incoming JEs balance (F1 + the balanced-on-lock trigger). **W5-as-an-Accounting-hook is
 retired** — no Accounting-side FX generation. Consistent with §C1, BA-D27 ("FX reval driven from Orders"), and
-Amith's keep-accounting-separate principle. *(Neither the accounting nor the bizapps-orders repo pinned this
-explicitly — the orders repo is still a design skeleton — so confirm with Amith.)*
+Amith's keep-accounting-separate principle. **CONFIRMED by Amith (2026-06-30): "FX is handled in
+Orders/Payments."** No Accounting-side FX work beyond holding the GL-account refs; the `vw_FxExposure`
+read-model view (reporting only) is fine to keep.
 
 ### C2 — Seeded COA size — RESOLVED (AD-8 stands; intercompany rows removed per C1)
 Keep the ~12-account trim. Amith confirmed the *specific* seeded accounts don't matter — the master's 23 were illustrative. We will **generate our own test data** and validate changes against it (his explicit recommendation). The two **centralized** intercompany accounts drop out of the seed (per C1); intercompany accounts are per-pair.

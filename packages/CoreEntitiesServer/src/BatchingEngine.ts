@@ -34,7 +34,6 @@ import type {
   mjBizAppsAccountingJournalEntryBatchLineDimensionEntity,
   mjBizAppsAccountingJournalEntryEntity,
 } from '@mj-biz-apps/accounting-entities';
-import { applyIntercompanyNetting } from './IntercompanyBalancingService.js';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
@@ -143,9 +142,7 @@ export async function buildBatch(
   const jeIds = await loadPendingJEIds(companyId, accountingPeriodId, contextUser);
   if (jeIds.length === 0) return null;
 
-  // Account×dim net groups (BA-D26), then fold each intercompany company-pair's gross
-  // Due-To/Due-From groups into a single bilateral net group (§C1 "gross preserved, net shipped").
-  const groups = await applyIntercompanyNetting(netLines(await loadNettableLines(jeIds, contextUser)), companyId, contextUser);
+  const groups = netLines(await loadNettableLines(jeIds, contextUser));
   if (groups.length === 0) return null; // everything netted to zero
 
   const batch = await createBatchHeader(companyId, accountingPeriodId, targetSystem, batchedByUserId, jeIds.length, contextUser);
