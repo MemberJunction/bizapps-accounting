@@ -83,3 +83,8 @@ export type {
   ProposeMappingSpec,
   ApproveMappingResult,
 } from './ChartOfAccountsMappingService.js';
+
+// Block 4 — deterministic, idempotent Association demo seed (multi-company AR/DefRev/Tax/Intercompany
+// data so the Explorer GUI + the read-model views have meaningful fixtures). See AssociationDemoSeedData.ts.
+export { seedAssociationDemo } from './AssociationDemoSeedData.js';
+export type { DemoSeedReport } from './AssociationDemoSeedData.js';
