@@ -1,0 +1,87 @@
+<mj-page-layout>
+  <mj-page-header
+    Title="Revenue & Tax"
+    Icon="fa-solid fa-receipt"
+    Subtitle="Deferred-revenue rollforward and sales-tax liability over committed journal entries">
+
+    <div meta>
+      @if (SelectedCompanyID && !IsLoading) {
+        @if (ActiveTab === 'deferred-revenue') {
+          <mj-stat-badge Icon="fa-solid fa-piggy-bank" Label="deferred (closing)"
+            [Count]="LatestDeferredClosing | number:'1.0-0'" Variant="info" />
+        } @else if (ActiveTab === 'sales-tax') {
+          <mj-stat-badge Icon="fa-solid fa-landmark" Label="outstanding tax"
+            [Count]="TotalOutstandingTax | number:'1.0-0'"
+            [Variant]="OutstandingTaxVariant" />
+        }
+      }
+    </div>
+
+    <div actions>
+      <mj-refresh-button [Loading]="IsLoading" (Clicked)="Reload()"></mj-refresh-button>
+    </div>
+
+    <div toolbar>
+      <label class="rm-field">
+        <span class="rm-field__label">Company</span>
+        <select class="mj-input" [value]="SelectedCompanyID ?? ''"
+                (change)="OnCompanyChange($any($event.target).value)">
+          @for (co of Companies; track co.ID) {
+            <option [value]="co.ID">{{ co.Name }}</option>
+          }
+        </select>
+      </label>
+
+      <div class="rm-tabs" role="tablist">
+        <button mjButton [variant]="TabVariant(ActiveTab === 'deferred-revenue')" size="sm"
+                (click)="SetTab('deferred-revenue')">
+          <i class="fa-solid fa-piggy-bank"></i> Deferred Revenue
+        </button>
+        <button mjButton [variant]="TabVariant(ActiveTab === 'sales-tax')" size="sm"
+                (click)="SetTab('sales-tax')">
+          <i class="fa-solid fa-landmark"></i> Sales Tax
+        </button>
+      </div>
+    </div>
+  </mj-page-header>
+
+  <mj-page-body>
+    @if (IsLoading) {
+      <mj-loading text="Loading read models…"></mj-loading>
+    } @else if (LoadError) {
+      <div class="rm-banner rm-banner--error" role="alert">
+        <i class="fa-solid fa-triangle-exclamation"></i> {{ LoadError }}
+      </div>
+    } @else if (!SelectedCompanyID) {
+      <mj-empty-state Icon="fa-solid fa-building"
+        Title="No accounting-enabled companies"
+        Message="No company has an Accounting Company Profile yet.">
+      </mj-empty-state>
+    } @else {
+      @switch (ActiveTab) {
+        @case ('deferred-revenue') {
+          @if (DeferredRevenue.length === 0) {
+            <mj-empty-state Icon="fa-solid fa-inbox" Title="No deferred-revenue activity"
+              Message="No journal entries posted to the deferred-revenue control account for this company yet.">
+            </mj-empty-state>
+          } @else {
+            <ag-grid-angular class="rm-grid" [theme]="Theme" [columnDefs]="DeferredRevenueCols"
+              [defaultColDef]="DefaultColDef" [gridOptions]="GridOptions" [rowData]="DeferredRevenue"
+              (gridReady)="OnGridReady($event)"></ag-grid-angular>
+          }
+        }
+        @case ('sales-tax') {
+          @if (SalesTax.length === 0) {
+            <mj-empty-state Icon="fa-solid fa-inbox" Title="No tax liability"
+              Message="No sales-tax liability rows for this company yet.">
+            </mj-empty-state>
+          } @else {
+            <ag-grid-angular class="rm-grid" [theme]="Theme" [columnDefs]="SalesTaxCols"
+              [defaultColDef]="DefaultColDef" [gridOptions]="GridOptions" [rowData]="SalesTax"
+              (gridReady)="OnGridReady($event)"></ag-grid-angular>
+          }
+        }
+      }
+    }
+  </mj-page-body>
+</mj-page-layout>

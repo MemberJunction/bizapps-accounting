@@ -13,6 +13,70 @@
         "ResourceType": "Custom",
         "DriverClass": "BatchDispatchResource",
         "isDefault": true
+      },
+      {
+        "Label": "Trial Balance & AR",
+        "Icon": "fa-solid fa-scale-balanced",
+        "ResourceType": "Custom",
+        "DriverClass": "TrialBalanceARResource",
+        "isDefault": false
+      },
+      {
+        "Label": "Revenue & Tax",
+        "Icon": "fa-solid fa-receipt",
+        "ResourceType": "Custom",
+        "DriverClass": "RevenueTaxResource",
+        "isDefault": false
+      },
+      {
+        "Label": "Batch Status",
+        "Icon": "fa-solid fa-list-check",
+        "ResourceType": "Custom",
+        "DriverClass": "BatchStatusResource",
+        "isDefault": false
+      },
+      {
+        "Label": "Intercompany Flow",
+        "Icon": "fa-solid fa-arrows-turn-to-dots",
+        "ResourceType": "Custom",
+        "DriverClass": "IntercompanyFlowResource",
+        "isDefault": false
+      },
+      {
+        "Label": "GL Accounts",
+        "Icon": "fa-solid fa-list-tree",
+        "ResourceType": "User Views",
+        "Configuration": {
+          "Entity": "MJ_BizApps_Accounting: GL Accounts"
+        },
+        "isDefault": false
+      },
+      {
+        "Label": "Journal Entries",
+        "Icon": "fa-solid fa-book-open",
+        "ResourceType": "User Views",
+        "Configuration": {
+          "Entity": "MJ_BizApps_Accounting: Journal Entries"
+        },
+        "isDefault": false
+      },
+      {
+        "Label": "Periods",
+        "Icon": "fa-solid fa-calendar-days",
+        "ResourceType": "User Views",
+        "Configuration": {
+          "Entity": "MJ_BizApps_Accounting: Accounting Periods"
+        },
+        "isDefault": false
+      },
+      {
+        "Label": "Dimensions",
+        "Icon": "fa-solid fa-tags",
+        "ResourceType": "User Views",
+        "Configuration": {
+          "Entity": "MJ_BizApps_Accounting: Dimensions"
+        },
+        "isDefault": false
       }
     ]
   },
@@ -23,7 +87,7 @@
     "ID": "08B5D905-6FB3-438B-94E5-2C5FF021B794"
   },
   "sync": {
-    "lastModified": "2026-06-30T16:25:24.206Z",
-    "checksum": "5a8217eb3d1d883bb183a26398d5e7b02c196f114d99c9ddb2fa95f55b884398"
+    "lastModified": "2026-06-30T16:49:14.469Z",
+    "checksum": "6c457f8fc62fa0543faa27bf28c8b00732e211ca204bd5b7ca3ad39f66a55a39"
   }
 }

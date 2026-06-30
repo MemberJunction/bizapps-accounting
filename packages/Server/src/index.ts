@@ -20,6 +20,8 @@ import './generated/generated.js';
 // Import custom (hand-written) GraphQL resolvers so their @Resolver decorators fire.
 // These also need to be in RESOLVER_PATHS (below) so TypeGraphQL builds them into the schema.
 import './resolvers/BatchDispatchResolver.js';
+import './resolvers/ReadModelsResolver.js';
+import './resolvers/JournalEntryResolver.js';
 
 // Import generated class registrations manifest
 import { CLASS_REGISTRATIONS } from './generated/class-registrations-manifest.js';

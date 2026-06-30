@@ -1,0 +1,94 @@
+/* Shared styles for the Stage-2 read-model dashboards (rm-* prefix).
+   Design tokens only — no hardcoded colors (CI hex-token gate must pass). */
+:host {
+  display: block;
+  height: 100%;
+}
+
+/* Toolbar company selector. */
+.rm-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 200px;
+}
+
+.rm-field__label {
+  font-size: var(--mj-text-xs);
+  color: var(--mj-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Tab group inside the toolbar. */
+.rm-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Banners (error). */
+.rm-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--mj-radius-md);
+  border: 1px solid var(--mj-border-default);
+  background: var(--mj-bg-surface-card);
+  color: var(--mj-text-primary);
+  margin-bottom: 16px;
+  font-size: var(--mj-text-sm);
+}
+
+.rm-banner--error {
+  background: var(--mj-status-error-bg);
+  border-color: var(--mj-status-error-border);
+  color: var(--mj-status-error-text);
+}
+
+/* AG Grid wrapper — fills the body, scrolls internally. */
+.rm-grid {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 360px;
+}
+
+/* Summary metric cards (used by Revenue & Tax / Batch summary rollups). */
+.rm-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.rm-card {
+  flex: 1 1 180px;
+  border: 1px solid var(--mj-border-default);
+  border-radius: var(--mj-radius-lg);
+  background: var(--mj-bg-surface);
+  padding: 14px 16px;
+  box-shadow: var(--mj-shadow-sm);
+}
+
+.rm-card__label {
+  font-size: var(--mj-text-xs);
+  color: var(--mj-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rm-card__value {
+  font-size: var(--mj-text-xl);
+  font-weight: var(--mj-font-semibold);
+  color: var(--mj-text-primary);
+  margin-top: 4px;
+}
+
+/* A grid that sits below summary cards still needs a floor height. */
+.rm-grid-region {
+  height: calc(100% - 96px);
+  min-height: 320px;
+}

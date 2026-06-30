@@ -1,0 +1,52 @@
+<mj-page-layout>
+  <mj-page-header
+    Title="Intercompany Flow"
+    Icon="fa-solid fa-arrows-turn-to-dots"
+    Subtitle="Every leg of each intercompany flow, reassembled across companies">
+
+    <div meta>
+      @if (SelectedCompanyID && !IsLoading && Legs.length > 0) {
+        <mj-stat-badge Icon="fa-solid fa-diagram-project" [Count]="FlowCount" Label="flows" Variant="info" />
+      }
+    </div>
+
+    <div actions>
+      <mj-refresh-button [Loading]="IsLoading" (Clicked)="Reload()"></mj-refresh-button>
+    </div>
+
+    <div toolbar>
+      <label class="rm-field">
+        <span class="rm-field__label">Company</span>
+        <select class="mj-input" [value]="SelectedCompanyID ?? ''"
+                (change)="OnCompanyChange($any($event.target).value)">
+          @for (co of Companies; track co.ID) {
+            <option [value]="co.ID">{{ co.Name }}</option>
+          }
+        </select>
+      </label>
+    </div>
+  </mj-page-header>
+
+  <mj-page-body>
+    @if (IsLoading) {
+      <mj-loading text="Loading intercompany flows…"></mj-loading>
+    } @else if (LoadError) {
+      <div class="rm-banner rm-banner--error" role="alert">
+        <i class="fa-solid fa-triangle-exclamation"></i> {{ LoadError }}
+      </div>
+    } @else if (!SelectedCompanyID) {
+      <mj-empty-state Icon="fa-solid fa-building"
+        Title="No accounting-enabled companies"
+        Message="No company has an Accounting Company Profile yet.">
+      </mj-empty-state>
+    } @else if (Legs.length === 0) {
+      <mj-empty-state Icon="fa-solid fa-inbox" Title="No intercompany flows"
+        Message="No journal entries tagged with an IntercompanyFlowID for this company yet.">
+      </mj-empty-state>
+    } @else {
+      <ag-grid-angular class="rm-grid" [theme]="Theme" [columnDefs]="LegCols"
+        [defaultColDef]="DefaultColDef" [gridOptions]="GridOptions" [rowData]="Legs"
+        (gridReady)="OnGridReady($event)"></ag-grid-angular>
+    }
+  </mj-page-body>
+</mj-page-layout>

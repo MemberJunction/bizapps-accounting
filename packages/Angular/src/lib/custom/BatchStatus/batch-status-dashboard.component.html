@@ -1,0 +1,73 @@
+<mj-page-layout>
+  <mj-page-header
+    Title="Batch Status"
+    Icon="fa-solid fa-list-check"
+    Subtitle="Read-only roll-up of journal-entry batch lifecycle and control totals">
+
+    <div meta>
+      @if (SelectedCompanyID && !IsLoading && TotalBatches > 0) {
+        <mj-stat-badge Icon="fa-solid fa-layer-group" [Count]="TotalBatches" Label="batches" Variant="info" />
+      }
+    </div>
+
+    <div actions>
+      <mj-refresh-button [Loading]="IsLoading" (Clicked)="Reload()"></mj-refresh-button>
+    </div>
+
+    <div toolbar>
+      <label class="rm-field">
+        <span class="rm-field__label">Company</span>
+        <select class="mj-input" [value]="SelectedCompanyID ?? ''"
+                (change)="OnCompanyChange($any($event.target).value)">
+          @for (co of Companies; track co.ID) {
+            <option [value]="co.ID">{{ co.Name }}</option>
+          }
+        </select>
+      </label>
+    </div>
+  </mj-page-header>
+
+  <mj-page-body>
+    @if (IsLoading) {
+      <mj-loading text="Loading batch status…"></mj-loading>
+    } @else if (LoadError) {
+      <div class="rm-banner rm-banner--error" role="alert">
+        <i class="fa-solid fa-triangle-exclamation"></i> {{ LoadError }}
+      </div>
+    } @else if (!SelectedCompanyID) {
+      <mj-empty-state Icon="fa-solid fa-building"
+        Title="No accounting-enabled companies"
+        Message="No company has an Accounting Company Profile yet.">
+      </mj-empty-state>
+    } @else if (Batches.length === 0) {
+      <mj-empty-state Icon="fa-solid fa-inbox" Title="No batches"
+        Message="No journal-entry batches have been built for this company yet.">
+      </mj-empty-state>
+    } @else {
+      <div class="rm-summary">
+        <div class="rm-card">
+          <div class="rm-card__label">Pending</div>
+          <div class="rm-card__value">{{ PendingCount }}</div>
+        </div>
+        <div class="rm-card">
+          <div class="rm-card__label">Sent</div>
+          <div class="rm-card__value">{{ SentCount }}</div>
+        </div>
+        <div class="rm-card">
+          <div class="rm-card__label">Acknowledged</div>
+          <div class="rm-card__value">{{ AcknowledgedCount }}</div>
+        </div>
+        <div class="rm-card">
+          <div class="rm-card__label">Failed</div>
+          <div class="rm-card__value">{{ FailedCount }}</div>
+        </div>
+      </div>
+
+      <div class="rm-grid-region">
+        <ag-grid-angular class="rm-grid" [theme]="Theme" [columnDefs]="BatchCols"
+          [defaultColDef]="DefaultColDef" [gridOptions]="GridOptions" [rowData]="Batches"
+          (gridReady)="OnGridReady($event)"></ag-grid-angular>
+      </div>
+    }
+  </mj-page-body>
+</mj-page-layout>
