@@ -21,6 +21,14 @@ This app must **mirror real-world accounting practice and structure as closely a
 - **Routing is upstream.** Orders/Payments own the product-catalog → company/account mapping and emit **split entries per account**, each stamped with a **source entity ID** that Accounting uses as the **linking key** to reassemble a logical multi-company transaction. The split happens upstream, so Accounting never decomposes a lump entry — which is *why* no centralized due-to/from is needed.
 - **Internal follow-on (Block 3 cleanup):** the v2-proposed `AccountingService.recordCrossCompanySettlement()` and the new `JournalEntryLine.CounterpartyCompanyID` migration were predicated on Accounting doing the generation — **revisit / likely drop**: the counterparty is encoded by the chosen per-pair account, and linking is via the source-entity ref.
 
+### C1b — Realized & unrealized FX responsibility — RESOLVED (2026-06-29)
+Both realized and unrealized FX are **computed + posted UPSTREAM** (Orders/Payments). Accounting stays a
+separate subledger that owns only the GL-account *mechanics* (`AccountingCompanyProfile.RealizedFXGainLossGLAccountID`)
+and **validates** that incoming JEs balance (F1 + the balanced-on-lock trigger). **W5-as-an-Accounting-hook is
+retired** — no Accounting-side FX generation. Consistent with §C1, BA-D27 ("FX reval driven from Orders"), and
+Amith's keep-accounting-separate principle. *(Neither the accounting nor the bizapps-orders repo pinned this
+explicitly — the orders repo is still a design skeleton — so confirm with Amith.)*
+
 ### C2 — Seeded COA size — RESOLVED (AD-8 stands; intercompany rows removed per C1)
 Keep the ~12-account trim. Amith confirmed the *specific* seeded accounts don't matter — the master's 23 were illustrative. We will **generate our own test data** and validate changes against it (his explicit recommendation). The two **centralized** intercompany accounts drop out of the seed (per C1); intercompany accounts are per-pair.
 

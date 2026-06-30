@@ -25,7 +25,7 @@ happen; the trigger is the floor that catches anything — even raw SQL.
 | **W2** | JE numbering | `JournalEntry` | a **new** JE is saved with **no `EntryNumber`** | auto · `Save()` | ✅ Block 0 |
 | **W3** | Batch numbering | `JournalEntryBatch` | a **new** batch is saved with **no `BatchNumber`** | auto · `Save()` | ✅ Block 0 |
 | **W4** | Adjusting-entry routing | `JournalEntry` | a **new** JE is saved whose target `AccountingPeriod.Status='Closed'` | auto · `Save()` | ✅ Block 1 |
-| **W5** | Realized FX auto-emit | `JournalEntryLine` | a payment line is saved whose paid rate ≠ booking rate | auto · `Save()` | ⚠ escalated |
+| **W5** | Realized FX auto-emit | `JournalEntryLine` | n/a — generation is upstream (Orders/Payments) | — | 🚫 retired (Payments-side) |
 | **W6** | Reversal generation | `JournalEntry` | code **calls `generateReversal(reason)`** | explicit call | ✅ Block 1 |
 | **W7** | Period-close orchestration | `AccountingPeriod` | a save changes `Status` **`Open → Closing`** | auto · `Save()` | ⏳ Block 2 |
 | **W8** | Period reopen | `AccountingPeriod` | a save changes `Status` **`Closed → Reopened`** | auto · `Save()` | ⏳ Block 2 |
@@ -69,7 +69,7 @@ the legitimate adjustment case:
 - Closed **+ `OriginalAccountingPeriodID` not set** → **error** (must explicitly flag the adjusting-entry pattern; no silent re-route — §6/§7.5).
 - Closed **+ `OriginalAccountingPeriodID` set** → **routes** `AccountingPeriodID` to the **next open period** of the same type, keeping `OriginalAccountingPeriodID` as the audit reference.
 
-### W5 — Realized FX gain/loss *(⚠ ESCALATED — NOT implemented)*
+### W5 — Realized FX gain/loss *(🚫 RETIRED — handled upstream, NOT an Accounting hook)*
 **Would fire:** on a `JournalEntryLine` save where the payment-currency rate differs from the original AR
 booking rate.
 **Would do:** auto-add the FX gain/loss line so the payment JE balances (posting to
@@ -78,7 +78,10 @@ booking rate.
 generation **upstream** (Orders/Payments emit balanced JEs; Accounting receives them) — the same reversal
 AD-5 got. **Recommendation:** the **Payments app computes + posts** the FX line; Accounting keeps the GL-ref
 mechanics + validates balance (F1 / the balanced-on-lock trigger reject anything that doesn't foot).
-**Decision pending.**
+**✅ DECIDED (2026-06-29):** Orders/Payments **computes + posts** the realized-FX line; Accounting owns only
+the `RealizedFXGainLossGLAccountID` mechanics + balance validation (F1 / balanced-on-lock trigger reject
+anything that doesn't foot). **W5-as-an-Accounting-hook is retired** — no Accounting-side FX generation
+(consistent with §C1 + BA-D27 + Amith's keep-accounting-separate principle). Worth a one-line Amith confirm.
 
 ### W6 — Reversal generation *(✅ `JournalEntryEntityServer.generateReversal(reason)`)*
 **Fires:** **only when code explicitly calls `generateReversal(reason)`** on a saved JE (e.g. from

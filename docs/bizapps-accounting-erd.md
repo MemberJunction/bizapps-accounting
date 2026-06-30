@@ -473,9 +473,10 @@ erDiagram
 
 ## 7. Proposed (not yet migrated) — Intercompany relationship (OQ-A)
 
-Per Amith's OQ-A answer — **under review now** (added for Marcelo to confirm it "fits"). The schema is
-**finalized for review, NOT yet migrated**; the intercompany *engine* stays deferred (§C1: balancing-leg
-generation lives upstream in Orders/Payments).
+Per Amith's OQ-A answer — **✅ APPROVED by Marcelo (2026-06-29)**, confirmed consistent with the §5.5
+COA-mapping precedence (inline default + mapping-table override, strict 1:1 to one ERP account). **Not yet
+migrated** — lands in **Block 3**; the intercompany *engine* stays deferred (§C1: balancing-leg generation
+lives upstream in Orders/Payments).
 
 ```mermaid
 erDiagram
