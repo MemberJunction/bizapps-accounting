@@ -54,6 +54,10 @@ export type {
   SendBatchOptions,
 } from './BatchingEngine.js';
 
+// S1 — the REAL CFO-approval gate, backed by the bizapps-tasks app (replaces AutoApproveGate in
+// production). See TasksAppApprovalGate.ts.
+export { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
+
 // S3 — scheduled-JE schedules + materializer (Block 4). See ScheduledJournalEntryService.ts.
 export {
   createScheduledEntries,

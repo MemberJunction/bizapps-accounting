@@ -23,7 +23,9 @@
     "vitest": "^4.0.18"
   },
   "dependencies": {
-    "@mj-biz-apps/accounting-entities": "0.1.0"
+    "@mj-biz-apps/accounting-entities": "0.1.0",
+    "@mj-biz-apps/tasks-core": "1.1.1",
+    "@mj-biz-apps/tasks-entities": "1.1.1"
   },
   "peerDependencies": {
     "@memberjunction/core": "^5.42.0",

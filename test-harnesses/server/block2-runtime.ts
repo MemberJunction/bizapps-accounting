@@ -26,16 +26,21 @@ import { assertInvariantTriggers } from './trigger-preflight.js';
 import '@memberjunction/server-bootstrap-lite';
 import '@mj-biz-apps/common-entities';
 import '@mj-biz-apps/accounting-entities';
+import '@mj-biz-apps/tasks-entities';
 import '@mj-biz-apps/accounting-core-entities-server';
-import { buildBatch, sendBatch, resolveExternalAccount, AutoApproveGate, type BatchApprovalGate } from '@mj-biz-apps/accounting-core-entities-server';
+import { buildBatch, sendBatch, resolveExternalAccount, AutoApproveGate, TasksAppApprovalGate, type BatchApprovalGate } from '@mj-biz-apps/accounting-core-entities-server';
 import type {
   mjBizAppsAccountingAccountingCompanyProfileEntity,
   mjBizAppsAccountingJournalEntryEntity,
   mjBizAppsAccountingJournalEntryLineEntity,
   mjBizAppsAccountingAccountingPeriodEntity,
 } from '@mj-biz-apps/accounting-entities';
+import type { mjBizAppsCommonPersonEntity } from '@mj-biz-apps/common-entities';
 
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
+const PERSON_ENTITY = 'MJ_BizApps_Common: People';
+const TASK_ENTITY = 'MJ_BizApps_Tasks: Tasks';
+const TASK_SCHEMA = '__mj_BizAppsTasks';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
 const PERIOD_ENTITY = 'MJ_BizApps_Accounting: Accounting Periods';
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
@@ -66,9 +71,15 @@ async function expectThrow(fn: () => Promise<unknown>, mustContain: string): Pro
 const DenyGate: BatchApprovalGate = { async assertApproved() { throw new Error('batch not approved by CFO'); } };
 
 interface Ctx {
-  pool: sql.ConnectionPool; user: UserInfo; companyId: string;
+  pool: sql.ConnectionPool;
+  /** db_owner pool (MJ_CodeGen) used ONLY for FK-aware teardown — the app user MJ_Connect lacks ALTER
+   *  (can't DISABLE TRIGGER) and can't delete locked JEs/batches, which is the security model. */
+  teardownPool: sql.ConnectionPool;
+  user: UserInfo; companyId: string;
   arGL: string; revGL: string; unmappedGL: string;
   openPeriods: { ID: string }[]; dimId: string; dimValSales: string; dimValMktg: string;
+  /** Person rows the real-gate scenario created (CFO, decider) — cleaned up in teardown. */
+  personIds: string[];
 }
 
 async function bootstrap(): Promise<Ctx> {
@@ -76,6 +87,10 @@ async function bootstrap(): Promise<Ctx> {
   const { DB_HOST: host, DB_DATABASE: database, DB_USERNAME: user, DB_PASSWORD: password } = process.env;
   if (!host || !database || !user || !password) throw new Error('Missing DB settings in .env (run from the instance worktree root).');
   const pool = await new sql.ConnectionPool({ server: host, port: Number(process.env.DB_PORT ?? 1433), user, password, database, options: { encrypt: false, trustServerCertificate: true } }).connect();
+  // db_owner pool for teardown only (DISABLE TRIGGER + locked-row deletes the app user can't do).
+  const { CODEGEN_DB_USERNAME: cgUser, CODEGEN_DB_PASSWORD: cgPassword } = process.env;
+  if (!cgUser || !cgPassword) throw new Error('Missing CODEGEN_DB_USERNAME/PASSWORD in .env (needed for the db_owner teardown pool).');
+  const teardownPool = await new sql.ConnectionPool({ server: host, port: Number(process.env.DB_PORT ?? 1433), user: cgUser, password: cgPassword, database, options: { encrypt: false, trustServerCertificate: true } }).connect();
   await setupSQLServerClient(new SQLServerProviderConfigData(pool, process.env.MJ_CORE_SCHEMA || '__mj'));
   await assertInvariantTriggers(pool); // 1b pre-flight: fail fast if any invariant trigger is missing/disabled
   await UserCache.Instance.Refresh(pool);
@@ -111,7 +126,7 @@ async function bootstrap(): Promise<Ctx> {
   await pool.request().query(`INSERT INTO ${SCHEMA}.Dimension (ID, Code, Name) VALUES ('${dimId}','DEPT-${RUN_TAG}','Department ${RUN_TAG}')`);
   await pool.request().query(`INSERT INTO ${SCHEMA}.DimensionValue (ID, DimensionID, Code, Name) VALUES ('${dimValSales}','${dimId}','SALES','Sales'),('${dimValMktg}','${dimId}','MKTG','Marketing')`);
 
-  return { pool, user: ctxUser, companyId, arGL: byCode.get('11201')!, revGL: byCode.get('40100')!, unmappedGL: byCode.get('50400')!, openPeriods: periods, dimId, dimValSales, dimValMktg };
+  return { pool, teardownPool, user: ctxUser, companyId, arGL: byCode.get('11201')!, revGL: byCode.get('40100')!, unmappedGL: byCode.get('50400')!, openPeriods: periods, dimId, dimValSales, dimValMktg, personIds: [] };
 }
 
 interface LineSpec { gl: string; debit?: number; credit?: number; dimValueId?: string }
@@ -146,12 +161,51 @@ async function jeStatus(ctx: Ctx, jeId: string): Promise<string> {
   return (await ctx.pool.request().query(`SELECT Status FROM ${SCHEMA}.JournalEntry WHERE ID='${jeId}'`)).recordset[0].Status;
 }
 
+// ─── real-gate scenario helpers ──────────────────────────────────────────────
+
+/** App-path: create a CFO Person in MJ_BizApps_Common.People. Tracks the id for teardown. Returns it. */
+async function makeCFOPerson(ctx: Ctx, label: string): Promise<string> {
+  const md = new Metadata();
+  const person = await md.GetEntityObject<mjBizAppsCommonPersonEntity>(PERSON_ENTITY, ctx.user);
+  person.NewRecord();
+  person.FirstName = 'CFO';
+  person.LastName = `${label}-${RUN_TAG}`;
+  person.Status = 'Active';
+  if (!(await person.Save())) throw new Error(`Person save failed: ${person.LatestResult?.CompleteMessage ?? 'unknown'}`);
+  ctx.personIds.push(person.ID);
+  return person.ID;
+}
+
+/** Set AccountingCompanyProfile.ApprovalCFOPersonID on the test company (app path). */
+async function setCompanyCFO(ctx: Ctx, cfoPersonId: string | null): Promise<void> {
+  const md = new Metadata();
+  const acp = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, ctx.user);
+  if (!(await acp.Load(ctx.companyId))) throw new Error(`could not load ACP for ${ctx.companyId}`);
+  acp.ApprovalCFOPersonID = cfoPersonId;
+  if (!(await acp.Save())) throw new Error(`ACP CFO update failed: ${acp.LatestResult?.CompleteMessage ?? 'unknown'}`);
+}
+
+/** The approval Task linked to a batch (polymorphic Task Link on the batch entity). Null if none. */
+async function batchTask(ctx: Ctx, batchId: string): Promise<{ id: string; name: string } | null> {
+  const r = await ctx.pool.request().query(
+    `SELECT TOP 1 t.ID id, t.Name name FROM ${TASK_SCHEMA}.TaskLink l JOIN ${TASK_SCHEMA}.Task t ON t.ID=l.TaskID JOIN __mj.Entity e ON e.ID=l.EntityID WHERE e.Name='${BATCH_ENTITY}' AND l.RecordID='${batchId}' ORDER BY l.__mj_CreatedAt DESC`);
+  const row = r.recordset[0];
+  return row ? { id: row.id, name: row.name } : null;
+}
+
+/** How many TaskAssignments name `cfoPersonId` (in the People entity) for `taskId`. */
+async function assignmentCountForCFO(ctx: Ctx, taskId: string, cfoPersonId: string): Promise<number> {
+  const r = await ctx.pool.request().query(
+    `SELECT COUNT(*) c FROM ${TASK_SCHEMA}.TaskAssignment a JOIN __mj.Entity e ON e.ID=a.AssigneeEntityID WHERE a.TaskID='${taskId}' AND e.Name='${PERSON_ENTITY}' AND a.AssigneeRecordID='${cfoPersonId}'`);
+  return Number(r.recordset[0].c);
+}
+
 async function main(): Promise<void> {
   let ctx: Ctx;
   try { ctx = await bootstrap(); } catch (e) { console.error('BOOTSTRAP ERROR:', e instanceof Error ? (e.stack ?? e.message) : String(e)); process.exit(2); }
   const { pool, user, companyId } = ctx;
   console.log(`\n══════ Block 2 runtime validation — user=${user.Email} company=${companyId} tag=${RUN_TAG} ══════\n`);
-  assert(ctx.openPeriods.length >= 8, `need >=8 open month periods, got ${ctx.openPeriods.length}`);
+  assert(ctx.openPeriods.length >= 10, `need >=10 open month periods, got ${ctx.openPeriods.length}`);
   const P = ctx.openPeriods.map(p => p.ID);
 
   // ─── §5.5 GL resolution ───────────────────────────────────────────────────
@@ -221,6 +275,55 @@ async function main(): Promise<void> {
     assert((await batchTotals(ctx, built!.batchId)).status === 'Pending', 'batch must remain Pending after a denied send');
   });
 
+  // ─── S1 REAL gate: TasksAppApprovalGate backed by bizapps-tasks ────────────
+  // Replaces AutoApproveGate in production. CFO resolved per-company via
+  // AccountingCompanyProfile.ApprovalCFOPersonID (NO role fallback — hard-fail if unset).
+  const realGate = new TasksAppApprovalGate();
+
+  await test('S1 real gate — no CFO configured → buildBatch hard-fails with a clear "no CFO configured" error', async () => {
+    await setCompanyCFO(ctx, null); // ensure unset
+    // NOTE: onBatchBuilt is the LAST step of buildBatch — the batch + locked JEs already exist when it
+    // throws. So this period (P[1]) is "spent"; the approve scenario uses a fresh period (P[9]).
+    await makeJE(ctx, P[1], [{ gl: ctx.arGL, debit: 50 }, { gl: ctx.revGL, credit: 50 }]);
+    await expectThrow(() => buildBatch(companyId, P[1], 'BusinessCentral', user.ID, user, realGate), 'no CFO configured');
+  });
+
+  let approveBatchId = '';
+  let cfoPersonId = '';
+  await test('S1 real gate — CFO set → buildBatch creates an "Approve JE Batch" Task + Task Link, assigned to the CFO', async () => {
+    cfoPersonId = await makeCFOPerson(ctx, 'Approve');
+    await setCompanyCFO(ctx, cfoPersonId);
+    await makeJE(ctx, P[9], [{ gl: ctx.arGL, debit: 50 }, { gl: ctx.revGL, credit: 50 }]);
+    const built = await buildBatch(companyId, P[9], 'BusinessCentral', user.ID, user, realGate);
+    assert(built !== null, 'buildBatch returned null (expected a batch)');
+    approveBatchId = built!.batchId;
+    const task = await batchTask(ctx, approveBatchId);
+    assert(task !== null, 'expected an approval Task linked to the batch');
+    assert(/^Approve JE Batch #/.test(task!.name), `expected an "Approve JE Batch #…" Task, got '${task!.name}'`);
+    assert((await assignmentCountForCFO(ctx, task!.id, cfoPersonId)) === 1, 'expected the Task assigned to the CFO Person');
+  });
+
+  await test('S1 real gate — sendBatch with NO decision is BLOCKED (not approved); batch stays Pending', async () => {
+    await expectThrow(() => sendBatch(approveBatchId, user, { gate: realGate }), 'not approved');
+    assert((await batchTotals(ctx, approveBatchId)).status === 'Pending', 'batch must remain Pending before approval');
+  });
+
+  await test('S1 real gate — recordDecision(Approved) → sendBatch succeeds → Acknowledged (JEs GLPosted)', async () => {
+    await realGate.recordDecision(approveBatchId, 'Approved', cfoPersonId, 'Looks good — approved.', user);
+    const batch = await sendBatch(approveBatchId, user, { gate: realGate });
+    assert(batch.Status === 'Acknowledged', `expected Acknowledged after approval, got ${batch.Status}`);
+    assert((batch.ExternalBatchRef ?? '').startsWith('MOCK-'), `expected a MOCK- ExternalBatchRef, got ${batch.ExternalBatchRef}`);
+  });
+
+  await test('S1 real gate — a separate batch, recordDecision(Rejected) → sendBatch BLOCKED; batch stays Pending', async () => {
+    await makeJE(ctx, P[8], [{ gl: ctx.arGL, debit: 30 }, { gl: ctx.revGL, credit: 30 }]);
+    const built = await buildBatch(companyId, P[8], 'BusinessCentral', user.ID, user, realGate);
+    assert(built !== null, 'buildBatch returned null for the reject scenario');
+    await realGate.recordDecision(built!.batchId, 'Rejected', cfoPersonId, 'Numbers off — rejected.', user);
+    await expectThrow(() => sendBatch(built!.batchId, user, { gate: realGate }), 'not approved');
+    assert((await batchTotals(ctx, built!.batchId)).status === 'Pending', 'rejected batch must remain Pending');
+  });
+
   // ─── INV summary-foots (trg 50014) — RAW-SQL bypass ────────────────────────
   await test('INV summary-foots — DB-bypass: tamper control total then raw UPDATE Status=Sent → rejected (50014)', async () => {
     await makeJE(ctx, P[6], [{ gl: ctx.arGL, debit: 75 }, { gl: ctx.revGL, credit: 75 }]);
@@ -267,8 +370,29 @@ async function main(): Promise<void> {
     assert(period.ClosedAt !== null, 'ClosedAt must be stamped on close');
   });
 
-  // ─── Teardown (disable accounting triggers to clean locked/acknowledged rows) ──
-  const exec = async (q: string) => { try { await pool.request().query(q); } catch (e) { console.log(`      teardown warn: ${(e instanceof Error ? e.message : String(e)).split('\n')[0]}`); } };
+  // ─── Teardown ──────────────────────────────────────────────────────────────
+  // Use the db_owner teardownPool (MJ_CodeGen): the app user can't DISABLE TRIGGER (no ALTER) nor
+  // delete locked JEs/Acknowledged batches. db_owner does the FK-aware, trigger-off cleanup cleanly.
+  const exec = async (q: string) => { try { await ctx.teardownPool.request().query(q); } catch (e) { console.log(`      teardown warn: ${(e instanceof Error ? e.message : String(e)).split('\n')[0]}`); } };
+
+  // 1. Tasks-app rows our real-gate scenario created — linked to this company's batches via TaskLink.
+  //    No immutability triggers here; delete children → links → tasks (FK-safe order). Capture the
+  //    Task IDs to JS first (pool connections differ per query, so a #temp table wouldn't survive).
+  let b2TaskIdList = '';
+  try {
+    const r = await ctx.teardownPool.request().query(
+      `SELECT DISTINCT l.TaskID id FROM ${TASK_SCHEMA}.TaskLink l JOIN __mj.Entity e ON e.ID=l.EntityID JOIN ${SCHEMA}.JournalEntryBatch b ON b.ID=l.RecordID WHERE e.Name='${BATCH_ENTITY}' AND b.CompanyID='${companyId}'`);
+    b2TaskIdList = (r.recordset ?? []).map((x: { id: string }) => `'${x.id}'`).join(',');
+  } catch (e) { console.log(`      teardown warn: ${(e instanceof Error ? e.message : String(e)).split('\n')[0]}`); }
+  if (b2TaskIdList) {
+    await exec(`DELETE FROM ${TASK_SCHEMA}.TaskDecision WHERE TaskID IN (${b2TaskIdList})`);
+    await exec(`DELETE FROM ${TASK_SCHEMA}.TaskActivity WHERE TaskID IN (${b2TaskIdList})`);
+    await exec(`DELETE FROM ${TASK_SCHEMA}.TaskAssignment WHERE TaskID IN (${b2TaskIdList})`);
+    await exec(`DELETE FROM ${TASK_SCHEMA}.TaskLink WHERE TaskID IN (${b2TaskIdList})`);
+    await exec(`DELETE FROM ${TASK_SCHEMA}.Task WHERE ID IN (${b2TaskIdList})`);
+  }
+
+  // 2. Accounting rows (locked JEs / Acknowledged batches) — disable triggers via db_owner.
   for (const t of ['JournalEntryLine', 'JournalEntry', 'JournalEntryBatchLineItem', 'JournalEntryBatch']) await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
   await exec(`DELETE d FROM ${SCHEMA}.JournalEntryLineDimension d JOIN ${SCHEMA}.JournalEntryLine l ON l.ID=d.JournalEntryLineID JOIN ${SCHEMA}.JournalEntry j ON j.ID=l.JournalEntryID WHERE j.CompanyID='${companyId}'`);
   await exec(`DELETE bd FROM ${SCHEMA}.JournalEntryBatchLineDimension bd JOIN ${SCHEMA}.JournalEntryBatchLineItem li ON li.ID=bd.JournalEntryBatchLineItemID WHERE li.CompanyID='${companyId}'`);
@@ -287,9 +411,13 @@ async function main(): Promise<void> {
   await exec(`DELETE FROM ${SCHEMA}.AccountingPeriod WHERE CompanyID='${companyId}'`);
   await exec(`DELETE FROM __mj.Company WHERE ID='${companyId}'`);
 
+  // 3. CFO Person rows.
+  for (const pid of ctx.personIds) await exec(`DELETE FROM __mj_BizAppsCommon.Person WHERE ID='${pid}'`);
+
   const failed = outcomes.filter(o => !o.Passed);
   console.log(`\n────── Block 2 runtime: ${outcomes.length - failed.length}/${outcomes.length} passed ──────`);
   await pool.close();
+  await ctx.teardownPool.close();
   process.exit(failed.length > 0 ? 1 : 0);
 }
 
