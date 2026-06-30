@@ -16,6 +16,7 @@
 export { AccountingCompanyProfileEntityServer } from './AccountingCompanyProfileEntityServer.js';
 export { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 export { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
+export { AccountingPeriodEntityServer } from './AccountingPeriodEntityServer.js';
 
 // Internal helpers exported for use by future EntityServer classes (period
 // close, FX revaluation, etc.) and by the AccountingService façade in
@@ -30,3 +31,25 @@ export { getNextJournalEntryNumber, getNextBatchNumber } from './SequenceService
 // F1 — post-time JE validation guard (balance / two-line / period-open / GL-active).
 export { validateJournalEntry, checkBalance } from './JournalEntryValidation.js';
 export type { JournalEntryValidationResult } from './JournalEntryValidation.js';
+
+// S1 — batching engine: net Pending JEs into a Company×Period batch, resolve ERP accounts,
+// lock + dispatch (CFO-approval gate + ERP-post seam). See BatchingEngine.ts.
+export {
+  buildBatch,
+  sendBatch,
+  netLines,
+  resolveExternalAccount,
+  mockErpPoster,
+  AutoApproveGate,
+} from './BatchingEngine.js';
+export type {
+  BatchTargetSystem,
+  DimRef,
+  NettableLine,
+  NetGroup,
+  BuildBatchResult,
+  ErpPostResult,
+  ErpPoster,
+  BatchApprovalGate,
+  SendBatchOptions,
+} from './BatchingEngine.js';
