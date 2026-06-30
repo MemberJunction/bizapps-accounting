@@ -232,8 +232,15 @@ async function main(): Promise<void> {
   await test('INV batch immutability — DB-bypass UPDATE of a locked field on an Acknowledged batch → rejected (50009)', async () => {
     await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET TotalDebits = TotalDebits + 1 WHERE ID='${happyBatchId}'`), 'locked');
   });
-  await test('INV batch immutability — DB-bypass DELETE of an Acknowledged batch → rejected (50008)', async () => {
-    await expectThrow(() => pool.request().query(`DELETE FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${happyBatchId}'`), 'cannot be deleted');
+  await test('INV batch immutability — DB-bypass DELETE of an Acknowledged batch → rejected (FK_JE_Batch / trg 50008 defense-in-depth)', async () => {
+    // A real Acknowledged batch always has GLPosted JEs pointing at it (FK_JE_Batch), so the FK rejects
+    // the raw DELETE first; trg_JEBatch_Immutability (50008) is the backstop for the no-references case.
+    // Either way the guarantee holds: a posted batch cannot be deleted. Accept whichever guard fires.
+    let threw = false, msg = '';
+    try { await pool.request().query(`DELETE FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${happyBatchId}'`); }
+    catch (e) { threw = true; msg = e instanceof Error ? e.message : String(e); }
+    assert(threw, 'expected the Acknowledged-batch DELETE to be rejected');
+    assert(/cannot be deleted|REFERENCE constraint|FK_JE_Batch/i.test(msg), `expected rejection by FK or trg 50008, got: ${msg.split('\n')[0]}`);
   });
 
   // ─── W7 period-close orchestration ─────────────────────────────────────────

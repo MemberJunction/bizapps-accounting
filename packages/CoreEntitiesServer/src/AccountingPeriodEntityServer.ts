@@ -62,10 +62,13 @@ export class AccountingPeriodEntityServer extends mjBizAppsAccountingAccountingP
   /** Returns a list of human-readable blockers; empty = closeable. */
   public async validateCloseable(): Promise<string[]> {
     const rv = new RunView();
+    // BypassCache: a period-close gate MUST read TRUE DB state — a stale filtered cache (e.g. a JE
+    // read as Pending moments before it was batched/GLPosted) would otherwise falsely block (or, worse,
+    // falsely allow) a close. The live harness caught exactly this on the close-after-acknowledge path.
     const [pending, openBatches, scheduled] = await rv.RunViews([
-      { EntityName: JE_ENTITY, ExtraFilter: `AccountingPeriodID='${this.ID}' AND Status='Pending'`, Fields: ['ID'], ResultType: 'simple' },
-      { EntityName: BATCH_ENTITY, ExtraFilter: `AccountingPeriodID='${this.ID}' AND Status <> 'Acknowledged'`, Fields: ['ID'], ResultType: 'simple' },
-      { EntityName: SJE_ENTITY, ExtraFilter: `TargetAccountingPeriodID='${this.ID}' AND Status='Scheduled'`, Fields: ['ID'], ResultType: 'simple' },
+      { EntityName: JE_ENTITY, ExtraFilter: `AccountingPeriodID='${this.ID}' AND Status='Pending'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true },
+      { EntityName: BATCH_ENTITY, ExtraFilter: `AccountingPeriodID='${this.ID}' AND Status <> 'Acknowledged'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true },
+      { EntityName: SJE_ENTITY, ExtraFilter: `TargetAccountingPeriodID='${this.ID}' AND Status='Scheduled'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true },
     ], this.ContextCurrentUser);
 
     const blockers: string[] = [];
