@@ -31,6 +31,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { Metadata, RunView, UserInfo } from '@memberjunction/core';
 import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
+import { assertInvariantTriggers } from './trigger-preflight.js';
 // Register core + bizapps entity subclasses AND the accounting server hooks (W1/W2/W3) on
 // the ClassFactory so GetEntityObject returns the real server subclasses (matches MJAPI boot).
 import '@memberjunction/server-bootstrap-lite';
@@ -123,6 +124,7 @@ async function bootstrap(): Promise<Ctx> {
   // harness — a DIFFERENT instance that genuinely lacked perms; it was a redundant no-op here and
   // was removed.)
   await setupSQLServerClient(new SQLServerProviderConfigData(pool, schema));
+  await assertInvariantTriggers(pool); // 1b pre-flight: fail fast if any invariant trigger is missing/disabled
   await UserCache.Instance.Refresh(pool);
   const ctxUser = UserCache.Users.find(u => u?.Type?.trim().toLowerCase() === 'owner') ?? UserCache.Users[0];
   if (!ctxUser) throw new Error('No context user found in UserCache.');
