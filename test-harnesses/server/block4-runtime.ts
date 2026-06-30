@@ -18,6 +18,7 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import { Metadata, RunView, UserInfo } from '@memberjunction/core';
 import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
+import { finishAndExit } from './harness-exit.js';
 import { assertInvariantTriggers } from './trigger-preflight.js';
 import '@memberjunction/server-bootstrap-lite';
 import '@mj-biz-apps/common-entities';
@@ -190,13 +191,18 @@ async function main(): Promise<void> {
 
   // ─── Teardown ──────────────────────────────────────────────────────────────
   const exec = async (q: string) => { try { await pool.request().query(q); } catch (e) { /* best-effort */ void e; } };
-  for (const t of ['JournalEntryLine', 'JournalEntry', 'JournalEntryBatchLineItem', 'JournalEntryBatch']) await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
-  await exec(`DELETE d FROM ${SCHEMA}.JournalEntryLineDimension d JOIN ${SCHEMA}.JournalEntryLine l ON l.ID=d.JournalEntryLineID JOIN ${SCHEMA}.JournalEntry j ON j.ID=l.JournalEntryID WHERE j.CompanyID='${companyId}'`);
-  await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatchLineItem WHERE CompanyID='${companyId}'`);
-  await exec(`DELETE FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID IN (SELECT ID FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${companyId}')`);
-  await exec(`DELETE FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${companyId}'`);
-  await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatch WHERE CompanyID='${companyId}'`);
-  for (const t of ['JournalEntryLine', 'JournalEntry', 'JournalEntryBatchLineItem', 'JournalEntryBatch']) await exec(`ENABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
+  // Re-enable in a finally so the invariant triggers are NEVER left disabled, even if a DELETE throws.
+  const b4Toggled = ['JournalEntryLine', 'JournalEntry', 'JournalEntryBatchLineItem', 'JournalEntryBatch'];
+  try {
+    for (const t of b4Toggled) await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
+    await exec(`DELETE d FROM ${SCHEMA}.JournalEntryLineDimension d JOIN ${SCHEMA}.JournalEntryLine l ON l.ID=d.JournalEntryLineID JOIN ${SCHEMA}.JournalEntry j ON j.ID=l.JournalEntryID WHERE j.CompanyID='${companyId}'`);
+    await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatchLineItem WHERE CompanyID='${companyId}'`);
+    await exec(`DELETE FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID IN (SELECT ID FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${companyId}')`);
+    await exec(`DELETE FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${companyId}'`);
+    await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatch WHERE CompanyID='${companyId}'`);
+  } finally {
+    for (const t of b4Toggled) await exec(`ENABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
+  }
   await exec(`DELETE sld FROM ${SCHEMA}.ScheduledJournalEntryLineDimension sld JOIN ${SCHEMA}.ScheduledJournalEntryLineItem sli ON sli.ID=sld.ScheduledJournalEntryLineItemID JOIN ${SCHEMA}.ScheduledJournalEntry s ON s.ID=sli.ScheduledJournalEntryID WHERE s.CompanyID='${companyId}'`);
   await exec(`DELETE sli FROM ${SCHEMA}.ScheduledJournalEntryLineItem sli JOIN ${SCHEMA}.ScheduledJournalEntry s ON s.ID=sli.ScheduledJournalEntryID WHERE s.CompanyID='${companyId}'`);
   await exec(`DELETE FROM ${SCHEMA}.ScheduledJournalEntry WHERE CompanyID='${companyId}'`);
@@ -210,9 +216,8 @@ async function main(): Promise<void> {
   await exec(`DELETE FROM __mj.Company WHERE ID='${companyId}'`);
 
   const failed = outcomes.filter(o => !o.Passed);
-  console.log(`\n────── Block 4 runtime: ${outcomes.length - failed.length}/${outcomes.length} passed ──────`);
-  await pool.close();
-  process.exit(failed.length > 0 ? 1 : 0);
+  // NEVER `await pool.close()` before exit — the MJ provider pool can hang on close. Non-blocking close + force-exit.
+  finishAndExit(`\n────── Block 4 runtime: ${outcomes.length - failed.length}/${outcomes.length} passed ──────`, failed.length > 0 ? 1 : 0, pool);
 }
 
 void main();

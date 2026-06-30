@@ -21,6 +21,7 @@ import { randomUUID } from 'crypto';
 import { Metadata, RunView, UserInfo } from '@memberjunction/core';
 import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
 import { assertInvariantTriggers } from './trigger-preflight.js';
+import { finishAndExit } from './harness-exit.js';
 import '@memberjunction/server-bootstrap-lite';
 import '@mj-biz-apps/common-entities';
 import '@mj-biz-apps/accounting-entities';
@@ -266,12 +267,17 @@ async function main(): Promise<void> {
 
   // ─── Teardown (disable accounting triggers to clean locked rows) ──────────
   const exec = async (q: string) => { try { await pool.request().query(q); } catch (e) { console.log(`      teardown warn: ${(e instanceof Error ? e.message : String(e)).split('\n')[0]}`); } };
-  await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.JournalEntryLine`);
-  await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.JournalEntry`);
-  await exec(`DELETE FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID IN (SELECT ID FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${companyId}')`);
-  await exec(`DELETE FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${companyId}'`);
-  await exec(`ENABLE TRIGGER ALL ON ${SCHEMA}.JournalEntry`);
-  await exec(`ENABLE TRIGGER ALL ON ${SCHEMA}.JournalEntryLine`);
+  // The invariant triggers must NEVER be left disabled (a dev-instance integrity gap), so re-enable
+  // every toggled table in a finally — even if a DELETE between disable and enable throws. Enabling an
+  // already-enabled trigger is harmless/idempotent.
+  const toggledTables = ['JournalEntryLine', 'JournalEntry'];
+  try {
+    for (const t of toggledTables) await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
+    await exec(`DELETE FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID IN (SELECT ID FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${companyId}')`);
+    await exec(`DELETE FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${companyId}'`);
+  } finally {
+    for (const t of toggledTables) await exec(`ENABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
+  }
   await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatch WHERE CompanyID='${companyId}'`);
   await exec(`DELETE FROM ${SCHEMA}.JournalEntrySequence WHERE CompanyID='${companyId}'`);
   await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatchSequence WHERE CompanyID='${companyId}'`);
@@ -285,9 +291,8 @@ async function main(): Promise<void> {
   }
 
   const failed = outcomes.filter(o => !o.Passed);
-  console.log(`\n────── Block 1 runtime: ${outcomes.length - failed.length}/${outcomes.length} passed ──────`);
-  await pool.close();
-  process.exit(failed.length > 0 ? 1 : 0);
+  // NEVER `await pool.close()` before exit — the MJ provider pool can hang on close. Non-blocking close + force-exit.
+  finishAndExit(`\n────── Block 1 runtime: ${outcomes.length - failed.length}/${outcomes.length} passed ──────`, failed.length > 0 ? 1 : 0, pool);
 }
 
 void main();

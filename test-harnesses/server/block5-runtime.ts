@@ -20,6 +20,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { Metadata, RunView, UserInfo } from '@memberjunction/core';
 import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
+import { finishAndExit } from './harness-exit.js';
 import { assertInvariantTriggers } from './trigger-preflight.js';
 import '@memberjunction/server-bootstrap-lite';
 import '@mj-biz-apps/common-entities';
@@ -140,9 +141,8 @@ async function main(): Promise<void> {
   await exec(`DELETE FROM __mj.Company WHERE ID='${companyId}'`);
 
   const failed = outcomes.filter(o => !o.Passed);
-  console.log(`\n────── Block 5 runtime: ${outcomes.length - failed.length}/${outcomes.length} passed ──────`);
-  await pool.close();
-  process.exit(failed.length > 0 ? 1 : 0);
+  // NEVER `await pool.close()` before exit — the MJ provider pool can hang on close. Non-blocking close + force-exit.
+  finishAndExit(`\n────── Block 5 runtime: ${outcomes.length - failed.length}/${outcomes.length} passed ──────`, failed.length > 0 ? 1 : 0, pool);
 }
 
 void main();

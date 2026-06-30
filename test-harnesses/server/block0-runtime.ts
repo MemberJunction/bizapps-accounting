@@ -32,6 +32,7 @@ import path from 'path';
 import { Metadata, RunView, UserInfo } from '@memberjunction/core';
 import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
 import { assertInvariantTriggers } from './trigger-preflight.js';
+import { finishAndExit } from './harness-exit.js';
 // Register core + bizapps entity subclasses AND the accounting server hooks (W1/W2/W3) on
 // the ClassFactory so GetEntityObject returns the real server subclasses (matches MJAPI boot).
 import '@memberjunction/server-bootstrap-lite';
@@ -312,9 +313,9 @@ async function main(): Promise<void> {
   }
 
   const failed = outcomes.filter(o => !o.Passed);
-  console.log(`\n────── Block 0 runtime: ${outcomes.length - failed.length}/${outcomes.length} passed ──────`);
-  await pool.close();
-  process.exit(failed.length > 0 ? 1 : 0);
+  // NEVER `await pool.close()` before exit — the MJ provider pool can hang on close (lingering
+  // handles), so the process would print the summary and never exit. Non-blocking close + force-exit.
+  finishAndExit(`\n────── Block 0 runtime: ${outcomes.length - failed.length}/${outcomes.length} passed ──────`, failed.length > 0 ? 1 : 0, pool);
 }
 
 void main();
