@@ -46,7 +46,7 @@ async function test(name: string, fn: () => Promise<void>): Promise<void> {
 }
 function assert(cond: boolean, message: string): void { if (!cond) throw new Error(message); }
 
-interface Ctx { pool: sql.ConnectionPool; user: UserInfo; companyId: string; arGL: string; revGL: string; deferredGL: string; periods: { ID: string; PeriodStart: string }[]; currencyCode: string; dimId: string; dimVal: string }
+interface Ctx { pool: sql.ConnectionPool; user: UserInfo; companyId: string; arGL: string; revGL: string; deferredGL: string; periods: { ID: string; PeriodStart: string }[]; currencyCode: string; foreignCurrency: string; dimId: string; dimVal: string }
 
 async function bootstrap(): Promise<Ctx> {
   dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
@@ -59,9 +59,10 @@ async function bootstrap(): Promise<Ctx> {
   const ctxUser = UserCache.Users.find(u => u?.Type?.trim().toLowerCase() === 'owner') ?? UserCache.Users[0];
   if (!ctxUser) throw new Error('No context user found.');
   const rv = new RunView();
-  const cur = await rv.RunView<{ Code: string }>({ EntityName: CURRENCY_ENTITY, Fields: ['Code'], MaxRows: 1, ResultType: 'simple' }, ctxUser);
+  const cur = await rv.RunView<{ Code: string }>({ EntityName: CURRENCY_ENTITY, Fields: ['Code'], OrderBy: 'Code ASC', MaxRows: 2, ResultType: 'simple' }, ctxUser);
   const currencyCode = cur.Results?.[0]?.Code as string;
-  if (!currencyCode) throw new Error(`no currency resolved (success=${cur.Success})`);
+  const foreignCurrency = cur.Results?.[1]?.Code as string;
+  if (!currencyCode || !foreignCurrency) throw new Error(`need >=2 currencies for the FX test (success=${cur.Success})`);
 
   const md = new Metadata();
   const acp = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, ctxUser);
@@ -80,7 +81,7 @@ async function bootstrap(): Promise<Ctx> {
   const dimId = randomUUID(), dimVal = randomUUID();
   await pool.request().query(`INSERT INTO ${SCHEMA}.Dimension (ID, Code, Name) VALUES ('${dimId}','DEPT-${RUN_TAG}','Department ${RUN_TAG}')`);
   await pool.request().query(`INSERT INTO ${SCHEMA}.DimensionValue (ID, DimensionID, Code, Name) VALUES ('${dimVal}','${dimId}','SALES','Sales')`);
-  return { pool, user: ctxUser, companyId, arGL: byCode.get('11201')!, revGL: byCode.get('40100')!, deferredGL: byCode.get('21301')!, periods, currencyCode, dimId, dimVal };
+  return { pool, user: ctxUser, companyId, arGL: byCode.get('11201')!, revGL: byCode.get('40100')!, deferredGL: byCode.get('21301')!, periods, currencyCode, foreignCurrency, dimId, dimVal };
 }
 
 /** Create a balanced Dr AR / Cr Rev JE; tag the Rev line with the Sales dimension. Returns JE id. */
@@ -169,8 +170,34 @@ async function main(): Promise<void> {
     assert(Number(sched.EntryCount) === 3 && Number(sched.TotalAmount) === 300, `expected 3 entries / $300, got ${sched?.EntryCount}/${sched?.TotalAmount}`);
   });
 
+  await test('vw_FxExposure — foreign-currency position + unrealized delta vs current spot', async () => {
+    // A foreign-currency booking in period[1]: Dr AR 110 functional (= 100 foreign @ 1.10) / Cr Rev 110 functional.
+    const md = new Metadata();
+    const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
+    je.NewRecord(); je.CompanyID = companyId; je.AccountingPeriodID = periods[1].ID; je.EffectiveDate = new Date();
+    je.EntryType = 'OrderBooking'; je.Status = 'Pending'; je.Description = `${RUN_TAG} fx`;
+    if (!(await je.Save())) throw new Error(`fx JE save failed: ${je.LatestResult?.CompleteMessage}`);
+    const ar = await md.GetEntityObject<mjBizAppsAccountingJournalEntryLineEntity>(JEL_ENTITY, user);
+    ar.NewRecord(); ar.JournalEntryID = je.ID; ar.LineNumber = 1; ar.GLAccountID = ctx.arGL;
+    ar.DebitAmount = 110; ar.OriginalDebitAmount = 100; ar.OriginalCurrencyCode = ctx.foreignCurrency; ar.ExchangeRateUsed = 1.10;
+    if (!(await ar.Save())) throw new Error(`fx AR line save failed: ${ar.LatestResult?.CompleteMessage}`);
+    const rev = await md.GetEntityObject<mjBizAppsAccountingJournalEntryLineEntity>(JEL_ENTITY, user);
+    rev.NewRecord(); rev.JournalEntryID = je.ID; rev.LineNumber = 2; rev.GLAccountID = ctx.revGL; rev.CreditAmount = 110;
+    if (!(await rev.Save())) throw new Error(`fx Rev line save failed: ${rev.LatestResult?.CompleteMessage}`);
+    const built = await buildBatch(companyId, periods[1].ID, 'BusinessCentral', user.ID, user, AutoApproveGate);
+    await sendBatch(built!.batchId, user, { gate: AutoApproveGate });
+    // current spot foreign→functional = 1.20 (booked at 1.10) → +10 unrealized on the 100-unit position
+    await pool.request().query(`INSERT INTO ${SCHEMA}.CurrencySpotRate (ID, FromCurrencyCode, ToCurrencyCode, RateDate, Rate, Source) VALUES (NEWID(),'${ctx.foreignCurrency}','${ctx.currencyCode}','${new Date().toISOString().slice(0, 10)}',1.20,'Test')`);
+    const rows = await q(`SELECT OriginalCurrencyCode, NetOriginalAmount, NetFunctionalBooked, CurrentSpotRate, UnrealizedFxDelta FROM ${SCHEMA}.vw_FxExposure WHERE CompanyID='${companyId}'`);
+    const fx = rows.find((r: { OriginalCurrencyCode: string }) => r.OriginalCurrencyCode === ctx.foreignCurrency);
+    assert(!!fx, 'expected an FX exposure row for the foreign currency');
+    assert(Number(fx.NetOriginalAmount) === 100 && Number(fx.NetFunctionalBooked) === 110, `expected 100 original / 110 booked, got ${fx.NetOriginalAmount}/${fx.NetFunctionalBooked}`);
+    assert(Number(fx.CurrentSpotRate) === 1.20 && Number(fx.UnrealizedFxDelta) === 10, `expected spot 1.20 / delta 10, got ${fx.CurrentSpotRate}/${fx.UnrealizedFxDelta}`);
+  });
+
   // ─── Teardown ──────────────────────────────────────────────────────────────
   const exec = async (sqlText: string) => { try { await pool.request().query(sqlText); } catch (e) { void e; } };
+  await exec(`DELETE FROM ${SCHEMA}.CurrencySpotRate WHERE FromCurrencyCode='${ctx.foreignCurrency}' AND ToCurrencyCode='${ctx.currencyCode}' AND Source='Test'`);
   for (const t of ['JournalEntryLine', 'JournalEntry', 'JournalEntryBatchLineItem', 'JournalEntryBatch']) await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
   await exec(`DELETE d FROM ${SCHEMA}.JournalEntryLineDimension d JOIN ${SCHEMA}.JournalEntryLine l ON l.ID=d.JournalEntryLineID JOIN ${SCHEMA}.JournalEntry j ON j.ID=l.JournalEntryID WHERE j.CompanyID='${companyId}'`);
   await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatchLineItem WHERE CompanyID='${companyId}'`);
