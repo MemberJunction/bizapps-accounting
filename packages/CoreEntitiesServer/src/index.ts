@@ -68,3 +68,14 @@ export type {
   CreateScheduleSpec,
   MaterializeResult,
 } from './ScheduledJournalEntryService.js';
+
+// Block 5 — Chart-of-Accounts mapping approval workflow (propose → approve, strict 1:1). See ChartOfAccountsMappingService.ts.
+export {
+  proposeMapping,
+  approveMapping,
+  rangesOverlap,
+} from './ChartOfAccountsMappingService.js';
+export type {
+  ProposeMappingSpec,
+  ApproveMappingResult,
+} from './ChartOfAccountsMappingService.js';
