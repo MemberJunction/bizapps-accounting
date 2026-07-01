@@ -61,6 +61,14 @@ on every substantive change. (The Vitest unit tier is separate: pure logic, no D
 9. **Ignore the `MISSING FIELDS … BaseEntity::SetMany` console warning** — it's non-fatal noise
    from the provider loading an entity with virtual/extra fields; it does not affect results.
 
+## ‼ Author harnesses at the MAIN process level — NOT in a subagent
+**Hard rule (cost + steerability).** Write harnesses yourself, in the main/orchestrator process. Do
+NOT delegate harness *authoring* to a subagent. A delegated **Playwright** harness once burned
+**~500k tokens / 496 tool calls / ~92 min and hit the org spend limit before finishing** — browser
+harnesses thrash on auth + selector iteration, and you cannot see or cap a subagent's loop from the
+outside (the cost is invisible until the bill). Author + run + verify harnesses at the top level;
+delegate only stable, bounded sub-steps. This is doubly true for Playwright/browser harnesses.
+
 ## Checklist for a NEW server harness
 - [ ] `import { finishAndExit } from './harness-exit.js';` and `import { assertInvariantTriggers } from './trigger-preflight.js';`
 - [ ] Connect the app pool; if you'll touch locked rows, also open a `MJ_CodeGen` db_owner pool.
