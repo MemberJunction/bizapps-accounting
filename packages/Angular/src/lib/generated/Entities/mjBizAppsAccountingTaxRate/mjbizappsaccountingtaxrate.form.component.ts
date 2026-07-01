@@ -15,9 +15,7 @@ export class mjBizAppsAccountingTaxRateFormComponent extends BaseFormComponent {
     override async ngOnInit() {
         await super.ngOnInit();
         this.initSections([
-            { sectionKey: 'jurisdictionAndCategory', sectionName: 'Jurisdiction and Category', isExpanded: true },
-            { sectionKey: 'rateAndValidity', sectionName: 'Rate and Validity', isExpanded: true },
-            { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false }
+            { sectionKey: 'details', sectionName: 'Details', isExpanded: true }
         ]);
     }
 }

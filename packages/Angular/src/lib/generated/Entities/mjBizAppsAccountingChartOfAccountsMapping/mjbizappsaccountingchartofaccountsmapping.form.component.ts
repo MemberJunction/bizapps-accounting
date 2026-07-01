@@ -15,11 +15,7 @@ export class mjBizAppsAccountingChartOfAccountsMappingFormComponent extends Base
     override async ngOnInit() {
         await super.ngOnInit();
         this.initSections([
-            { sectionKey: 'mappingConfiguration', sectionName: 'Mapping Configuration', isExpanded: true },
-            { sectionKey: 'accountDetails', sectionName: 'Account Details', isExpanded: true },
-            { sectionKey: 'validityPeriod', sectionName: 'Validity Period', isExpanded: true },
-            { sectionKey: 'approvalAudit', sectionName: 'Approval Audit', isExpanded: true },
-            { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false }
+            { sectionKey: 'details', sectionName: 'Details', isExpanded: true }
         ]);
     }
 }

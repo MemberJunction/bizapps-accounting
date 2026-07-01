@@ -10,11 +10,11 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Period Configuration Section -->
+    <!-- Details Section -->
     <mj-collapsible-panel
-        SectionKey="periodConfiguration"
-        SectionName="Period Configuration"
-        Icon="fa fa-cog"
+        SectionKey="details"
+        SectionName="Details"
+        Icon="fa fa-align-left"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -34,16 +34,6 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Period Timeline Section -->
-    <mj-collapsible-panel
-        SectionKey="periodTimeline"
-        SectionName="Period Timeline"
-        Icon="fa fa-calendar-alt"
-        [Form]="this"
-        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -84,16 +74,6 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Lifecycle and Audit Section -->
-    <mj-collapsible-panel
-        SectionKey="lifecycleAndAudit"
-        SectionName="Lifecycle and Audit"
-        Icon="fa fa-history"
-        [Form]="this"
-        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -144,16 +124,6 @@
             [FormContext]="formContext"
             LinkType="Record"
         ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- System Metadata Section -->
-    <mj-collapsible-panel
-        SectionKey="systemMetadata"
-        SectionName="System Metadata"
-        Icon="fa fa-database"
-        [Form]="this"
-        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -183,7 +153,7 @@
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingJournalEntryBatches"
         SectionName="Journal Entry Batches"
-        Icon="fa fa-file-invoice-dollar"
+        Icon="fa fa-table"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"
@@ -204,75 +174,25 @@
         }
     </mj-collapsible-panel>
 
-    <!-- Journal Entries (Accounting Period) Section -->
+    <!-- Tax Liabilities Section -->
     <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingJournalEntriesAccountingPeriodID"
-        SectionName="Journal Entries (Accounting Period)"
-        Icon="fa fa-book"
+        SectionKey="mJBizAppsAccountingTaxLiabilities"
+        SectionName="Tax Liabilities"
+        Icon="fa fa-table"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingJournalEntriesAccountingPeriodID')"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingTaxLiabilities')"
         [DefaultExpanded]="false">
         @if (record.IsSaved) {
         <div>
             <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entries','AccountingPeriodID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entries')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntriesAccountingPeriodID')"
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Tax Liabilities','AccountingPeriodID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Tax Liabilities')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingTaxLiabilities')"
                 [ShowToolbar]="false"
                 (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntriesAccountingPeriodID', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
-    <!-- Journal Entries (Original Accounting Period) Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingJournalEntriesOriginalAccountingPeriodID"
-        SectionName="Journal Entries (Original Accounting Period)"
-        Icon="fa fa-book"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingJournalEntriesOriginalAccountingPeriodID')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entries','OriginalAccountingPeriodID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entries')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntriesOriginalAccountingPeriodID')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntriesOriginalAccountingPeriodID', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
-    <!-- Account Balance By Dimensions Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingAccountBalanceByDimensions"
-        SectionName="Account Balance By Dimensions"
-        Icon="fa fa-balance-scale"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingAccountBalanceByDimensions')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Account Balance By Dimensions','AccountingPeriodID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Account Balance By Dimensions')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingAccountBalanceByDimensions')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingAccountBalanceByDimensions', $event.totalRowCount)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingTaxLiabilities', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>
@@ -283,7 +203,7 @@
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingAccountBalances"
         SectionName="Account Balances"
-        Icon="fa fa-balance-scale"
+        Icon="fa fa-table"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"
@@ -304,25 +224,100 @@
         }
     </mj-collapsible-panel>
 
-    <!-- Tax Liabilities Section -->
+    <!-- Account Balance By Dimensions Section -->
     <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingTaxLiabilities"
-        SectionName="Tax Liabilities"
-        Icon="fa fa-file-invoice-dollar"
+        SectionKey="mJBizAppsAccountingAccountBalanceByDimensions"
+        SectionName="Account Balance By Dimensions"
+        Icon="fa fa-table"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingTaxLiabilities')"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingAccountBalanceByDimensions')"
         [DefaultExpanded]="false">
         @if (record.IsSaved) {
         <div>
             <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Tax Liabilities','AccountingPeriodID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Tax Liabilities')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingTaxLiabilities')"
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Account Balance By Dimensions','AccountingPeriodID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Account Balance By Dimensions')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingAccountBalanceByDimensions')"
                 [ShowToolbar]="false"
                 (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingTaxLiabilities', $event.totalRowCount)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingAccountBalanceByDimensions', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- Scheduled Journal Entries Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingScheduledJournalEntries"
+        SectionName="Scheduled Journal Entries"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingScheduledJournalEntries')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Scheduled Journal Entries','TargetAccountingPeriodID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Scheduled Journal Entries')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingScheduledJournalEntries')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingScheduledJournalEntries', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- Journal Entries (Original Accounting Period ID) Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingJournalEntriesOriginalAccountingPeriodID"
+        SectionName="Journal Entries (Original Accounting Period ID)"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingJournalEntriesOriginalAccountingPeriodID')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entries','OriginalAccountingPeriodID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entries')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntriesOriginalAccountingPeriodID')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntriesOriginalAccountingPeriodID', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- Journal Entries (Accounting Period ID) Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingJournalEntriesAccountingPeriodID"
+        SectionName="Journal Entries (Accounting Period ID)"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingJournalEntriesAccountingPeriodID')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entries','AccountingPeriodID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entries')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntriesAccountingPeriodID')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntriesAccountingPeriodID', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>

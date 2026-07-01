@@ -16,16 +16,16 @@ export class mjBizAppsAccountingCurrencyFormComponent extends BaseFormComponent 
     override async ngOnInit() {
         await super.ngOnInit();
         this.initSections([
-            { sectionKey: 'currencyDetails', sectionName: 'Currency Details', isExpanded: true },
-            { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingCurrencySpotRatesToCurrencyCode', sectionName: 'Currency Spot Rates (To Currency)', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingCurrencySpotRatesFromCurrencyCode', sectionName: 'Currency Spot Rates (From Currency)', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingAccountBalances', sectionName: 'Account Balances', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingAccountingCompanyProfilesFunctionalCurrencyCode', sectionName: 'Accounting Company Profiles (Functional Currency)', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingAccountingCompanyProfilesReportingCurrencyCode', sectionName: 'Accounting Company Profiles (Reporting Currency)', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingGLAccounts', sectionName: 'GL Accounts', isExpanded: false },
+            { sectionKey: 'details', sectionName: 'Details', isExpanded: true },
             { sectionKey: 'mJBizAppsAccountingJournalEntryLines', sectionName: 'Journal Entry Lines', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingAccountBalanceByDimensions', sectionName: 'Account Balance By Dimensions', isExpanded: false }
+            { sectionKey: 'mJBizAppsAccountingAccountBalanceByDimensions', sectionName: 'Account Balance By Dimensions', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingCurrencySpotRatesFromCurrencyCode', sectionName: 'Currency Spot Rates (From Currency Code)', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingCurrencySpotRatesToCurrencyCode', sectionName: 'Currency Spot Rates (To Currency Code)', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingGLAccounts', sectionName: 'GL Accounts', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingAccountingCompanyProfilesFunctionalCurrencyCode', sectionName: 'Accounting Company Profiles (Functional Currency Code)', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingAccountingCompanyProfilesReportingCurrencyCode', sectionName: 'Accounting Company Profiles (Reporting Currency Code)', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingScheduledJournalEntries', sectionName: 'Scheduled Journal Entries', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingAccountBalances', sectionName: 'Account Balances', isExpanded: false }
         ]);
     }
 }

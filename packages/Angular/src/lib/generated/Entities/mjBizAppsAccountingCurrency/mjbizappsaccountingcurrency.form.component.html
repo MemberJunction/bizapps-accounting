@@ -10,11 +10,11 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Currency Details Section -->
+    <!-- Details Section -->
     <mj-collapsible-panel
-        SectionKey="currencyDetails"
-        SectionName="Currency Details"
-        Icon="fa fa-money-bill-wave"
+        SectionKey="details"
+        SectionName="Details"
+        Icon="fa fa-align-left"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -57,16 +57,6 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- System Metadata Section -->
-    <mj-collapsible-panel
-        SectionKey="systemMetadata"
-        SectionName="System Metadata"
-        Icon="fa fa-database"
-        [Form]="this"
-        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -92,161 +82,11 @@
          RELATED ENTITY PANELS
          ======================================== -->
 
-    <!-- Currency Spot Rates (To Currency) Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingCurrencySpotRatesToCurrencyCode"
-        SectionName="Currency Spot Rates (To Currency)"
-        Icon="fa fa-exchange-alt"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingCurrencySpotRatesToCurrencyCode')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Currency Spot Rates','ToCurrencyCode')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Currency Spot Rates')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingCurrencySpotRatesToCurrencyCode')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingCurrencySpotRatesToCurrencyCode', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
-    <!-- Currency Spot Rates (From Currency) Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingCurrencySpotRatesFromCurrencyCode"
-        SectionName="Currency Spot Rates (From Currency)"
-        Icon="fa fa-exchange-alt"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingCurrencySpotRatesFromCurrencyCode')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Currency Spot Rates','FromCurrencyCode')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Currency Spot Rates')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingCurrencySpotRatesFromCurrencyCode')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingCurrencySpotRatesFromCurrencyCode', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
-    <!-- Account Balances Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingAccountBalances"
-        SectionName="Account Balances"
-        Icon="fa fa-balance-scale"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingAccountBalances')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Account Balances','CurrencyCode')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Account Balances')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingAccountBalances')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingAccountBalances', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
-    <!-- Accounting Company Profiles (Functional Currency) Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingAccountingCompanyProfilesFunctionalCurrencyCode"
-        SectionName="Accounting Company Profiles (Functional Currency)"
-        Icon="fa fa-balance-scale"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingAccountingCompanyProfilesFunctionalCurrencyCode')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Accounting Company Profiles','FunctionalCurrencyCode')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Accounting Company Profiles')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingAccountingCompanyProfilesFunctionalCurrencyCode')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingAccountingCompanyProfilesFunctionalCurrencyCode', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
-    <!-- Accounting Company Profiles (Reporting Currency) Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingAccountingCompanyProfilesReportingCurrencyCode"
-        SectionName="Accounting Company Profiles (Reporting Currency)"
-        Icon="fa fa-balance-scale"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingAccountingCompanyProfilesReportingCurrencyCode')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Accounting Company Profiles','ReportingCurrencyCode')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Accounting Company Profiles')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingAccountingCompanyProfilesReportingCurrencyCode')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingAccountingCompanyProfilesReportingCurrencyCode', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
-    <!-- GL Accounts Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingGLAccounts"
-        SectionName="GL Accounts"
-        Icon="fa fa-book"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingGLAccounts')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: GL Accounts','CurrencyCode')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: GL Accounts')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingGLAccounts')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingGLAccounts', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
     <!-- Journal Entry Lines Section -->
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingJournalEntryLines"
         SectionName="Journal Entry Lines"
-        Icon="fa fa-book"
+        Icon="fa fa-table"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"
@@ -271,7 +111,7 @@
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingAccountBalanceByDimensions"
         SectionName="Account Balance By Dimensions"
-        Icon="fa fa-balance-scale"
+        Icon="fa fa-table"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"
@@ -286,6 +126,181 @@
                 [ShowToolbar]="false"
                 (Navigate)="OnFormNavigate($event)"
                 (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingAccountBalanceByDimensions', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- Currency Spot Rates (From Currency Code) Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingCurrencySpotRatesFromCurrencyCode"
+        SectionName="Currency Spot Rates (From Currency Code)"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingCurrencySpotRatesFromCurrencyCode')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Currency Spot Rates','FromCurrencyCode')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Currency Spot Rates')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingCurrencySpotRatesFromCurrencyCode')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingCurrencySpotRatesFromCurrencyCode', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- Currency Spot Rates (To Currency Code) Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingCurrencySpotRatesToCurrencyCode"
+        SectionName="Currency Spot Rates (To Currency Code)"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingCurrencySpotRatesToCurrencyCode')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Currency Spot Rates','ToCurrencyCode')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Currency Spot Rates')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingCurrencySpotRatesToCurrencyCode')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingCurrencySpotRatesToCurrencyCode', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- GL Accounts Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingGLAccounts"
+        SectionName="GL Accounts"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingGLAccounts')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: GL Accounts','CurrencyCode')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: GL Accounts')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingGLAccounts')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingGLAccounts', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- Accounting Company Profiles (Functional Currency Code) Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingAccountingCompanyProfilesFunctionalCurrencyCode"
+        SectionName="Accounting Company Profiles (Functional Currency Code)"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingAccountingCompanyProfilesFunctionalCurrencyCode')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Accounting Company Profiles','FunctionalCurrencyCode')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Accounting Company Profiles')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingAccountingCompanyProfilesFunctionalCurrencyCode')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingAccountingCompanyProfilesFunctionalCurrencyCode', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- Accounting Company Profiles (Reporting Currency Code) Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingAccountingCompanyProfilesReportingCurrencyCode"
+        SectionName="Accounting Company Profiles (Reporting Currency Code)"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingAccountingCompanyProfilesReportingCurrencyCode')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Accounting Company Profiles','ReportingCurrencyCode')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Accounting Company Profiles')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingAccountingCompanyProfilesReportingCurrencyCode')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingAccountingCompanyProfilesReportingCurrencyCode', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- Scheduled Journal Entries Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingScheduledJournalEntries"
+        SectionName="Scheduled Journal Entries"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingScheduledJournalEntries')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Scheduled Journal Entries','CurrencyCode')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Scheduled Journal Entries')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingScheduledJournalEntries')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingScheduledJournalEntries', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- Account Balances Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingAccountBalances"
+        SectionName="Account Balances"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingAccountBalances')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Account Balances','CurrencyCode')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Account Balances')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingAccountBalances')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingAccountBalances', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>

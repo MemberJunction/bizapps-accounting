@@ -10,32 +10,22 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Account Ownership Section -->
+    <!-- Details Section -->
     <mj-collapsible-panel
-        SectionKey="accountOwnership"
-        SectionName="Account Ownership"
-        Icon="fa fa-building"
+        SectionKey="details"
+        SectionName="Details"
+        Icon="fa fa-align-left"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
-            [ShowLabel]="false"
+            [ShowLabel]="true"
             FieldName="CompanyID"
             Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
             LinkType="Record"
         ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Account Details Section -->
-    <mj-collapsible-panel
-        SectionKey="accountDetails"
-        SectionName="Account Details"
-        Icon="fa fa-info-circle"
-        [Form]="this"
-        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -63,24 +53,6 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="Description"
-            Type="textarea"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Hierarchy and Rollup Section -->
-    <mj-collapsible-panel
-        SectionKey="hierarchyAndRollup"
-        SectionName="Hierarchy and Rollup"
-        Icon="fa fa-sitemap"
-        [Form]="this"
-        [FormContext]="formContext">
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
             FieldName="ParentGLAccountID"
             Type="textbox"
             [EditMode]="EditMode"
@@ -90,48 +62,12 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="RootParentGLAccountID"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Financial Settings Section -->
-    <mj-collapsible-panel
-        SectionKey="financialSettings"
-        SectionName="Financial Settings"
-        Icon="fa fa-money-bill"
-        [Form]="this"
-        [FormContext]="formContext">
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
             FieldName="CurrencyCode"
             Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
             LinkType="Record"
         ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="IsActive"
-            Type="checkbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Integration Settings Section -->
-    <mj-collapsible-panel
-        SectionKey="integrationSettings"
-        SectionName="Integration Settings"
-        Icon="fa fa-plug"
-        [Form]="this"
-        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -148,21 +84,27 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- System Metadata Section -->
-    <mj-collapsible-panel
-        SectionKey="systemMetadata"
-        SectionName="System Metadata"
-        Icon="fa fa-cog"
-        [Form]="this"
-        [FormContext]="formContext">
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="IsActive"
+            Type="checkbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
             FieldName="IsSystemSeeded"
             Type="checkbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="Description"
+            Type="textarea"
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
@@ -182,6 +124,14 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="RootParentGLAccountID"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
 
     </mj-collapsible-panel>
 
@@ -191,200 +141,50 @@
          RELATED ENTITY PANELS
          ======================================== -->
 
-    <!-- Accounting Company Profiles (Unrealized FX Gain/Loss GL Account) Section -->
+    <!-- Account Balance By Dimensions Section -->
     <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingAccountingCompanyProfilesUnrealizedFXGainLossGLAccountID"
-        SectionName="Accounting Company Profiles (Unrealized FX Gain/Loss GL Account)"
-        Icon="fa fa-balance-scale"
+        SectionKey="mJBizAppsAccountingAccountBalanceByDimensions"
+        SectionName="Account Balance By Dimensions"
+        Icon="fa fa-table"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingAccountingCompanyProfilesUnrealizedFXGainLossGLAccountID')"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingAccountBalanceByDimensions')"
         [DefaultExpanded]="false">
         @if (record.IsSaved) {
         <div>
             <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Accounting Company Profiles','UnrealizedFXGainLossGLAccountID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Accounting Company Profiles')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingAccountingCompanyProfilesUnrealizedFXGainLossGLAccountID')"
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Account Balance By Dimensions','GLAccountID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Account Balance By Dimensions')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingAccountBalanceByDimensions')"
                 [ShowToolbar]="false"
                 (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingAccountingCompanyProfilesUnrealizedFXGainLossGLAccountID', $event.totalRowCount)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingAccountBalanceByDimensions', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>
         }
     </mj-collapsible-panel>
 
-    <!-- Accounting Company Profiles (Sales Tax Payable GL Account) Section -->
+    <!-- Scheduled Journal Entry Line Items Section -->
     <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingAccountingCompanyProfilesSalesTaxPayableGLAccountID"
-        SectionName="Accounting Company Profiles (Sales Tax Payable GL Account)"
-        Icon="fa fa-balance-scale"
+        SectionKey="mJBizAppsAccountingScheduledJournalEntryLineItems"
+        SectionName="Scheduled Journal Entry Line Items"
+        Icon="fa fa-table"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingAccountingCompanyProfilesSalesTaxPayableGLAccountID')"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingScheduledJournalEntryLineItems')"
         [DefaultExpanded]="false">
         @if (record.IsSaved) {
         <div>
             <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Accounting Company Profiles','SalesTaxPayableGLAccountID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Accounting Company Profiles')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingAccountingCompanyProfilesSalesTaxPayableGLAccountID')"
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Scheduled Journal Entry Line Items','GLAccountID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Scheduled Journal Entry Line Items')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingScheduledJournalEntryLineItems')"
                 [ShowToolbar]="false"
                 (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingAccountingCompanyProfilesSalesTaxPayableGLAccountID', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
-    <!-- Accounting Company Profiles (AR GL Account) Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingAccountingCompanyProfilesAROpenGLAccountID"
-        SectionName="Accounting Company Profiles (AR GL Account)"
-        Icon="fa fa-balance-scale"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingAccountingCompanyProfilesAROpenGLAccountID')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Accounting Company Profiles','AROpenGLAccountID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Accounting Company Profiles')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingAccountingCompanyProfilesAROpenGLAccountID')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingAccountingCompanyProfilesAROpenGLAccountID', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
-    <!-- Accounting Company Profiles (Deferred Revenue GL Account) Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingAccountingCompanyProfilesDeferredRevenueGLAccountID"
-        SectionName="Accounting Company Profiles (Deferred Revenue GL Account)"
-        Icon="fa fa-balance-scale"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingAccountingCompanyProfilesDeferredRevenueGLAccountID')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Accounting Company Profiles','DeferredRevenueGLAccountID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Accounting Company Profiles')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingAccountingCompanyProfilesDeferredRevenueGLAccountID')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingAccountingCompanyProfilesDeferredRevenueGLAccountID', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
-    <!-- Accounting Company Profiles (Realized FX Gain/Loss GL Account) Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingAccountingCompanyProfilesRealizedFXGainLossGLAccountID"
-        SectionName="Accounting Company Profiles (Realized FX Gain/Loss GL Account)"
-        Icon="fa fa-balance-scale"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingAccountingCompanyProfilesRealizedFXGainLossGLAccountID')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Accounting Company Profiles','RealizedFXGainLossGLAccountID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Accounting Company Profiles')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingAccountingCompanyProfilesRealizedFXGainLossGLAccountID')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingAccountingCompanyProfilesRealizedFXGainLossGLAccountID', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
-    <!-- Account Balances Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingAccountBalances"
-        SectionName="Account Balances"
-        Icon="fa fa-balance-scale"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingAccountBalances')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Account Balances','GLAccountID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Account Balances')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingAccountBalances')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingAccountBalances', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
-    <!-- Recurring Journal Entry Template Lines Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingRecurringJournalEntryTemplateLines"
-        SectionName="Recurring Journal Entry Template Lines"
-        Icon="fa fa-file-invoice-dollar"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingRecurringJournalEntryTemplateLines')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Recurring Journal Entry Template Lines','GLAccountID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Recurring Journal Entry Template Lines')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingRecurringJournalEntryTemplateLines')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingRecurringJournalEntryTemplateLines', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
-    <!-- Chart Of Accounts Mappings Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingChartOfAccountsMappings"
-        SectionName="Chart Of Accounts Mappings"
-        Icon="fa fa-exchange-alt"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingChartOfAccountsMappings')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Chart Of Accounts Mappings','InternalGLAccountID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Chart Of Accounts Mappings')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingChartOfAccountsMappings')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingChartOfAccountsMappings', $event.totalRowCount)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingScheduledJournalEntryLineItems', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>
@@ -395,7 +195,7 @@
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingJournalEntryLines"
         SectionName="Journal Entry Lines"
-        Icon="fa fa-book"
+        Icon="fa fa-table"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"
@@ -416,11 +216,36 @@
         }
     </mj-collapsible-panel>
 
+    <!-- Chart Of Accounts Mappings Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingChartOfAccountsMappings"
+        SectionName="Chart Of Accounts Mappings"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingChartOfAccountsMappings')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Chart Of Accounts Mappings','InternalGLAccountID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Chart Of Accounts Mappings')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingChartOfAccountsMappings')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingChartOfAccountsMappings', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
     <!-- GL Accounts Section -->
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingGLAccounts"
         SectionName="GL Accounts"
-        Icon="fa fa-book"
+        Icon="fa fa-table"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"
@@ -441,25 +266,175 @@
         }
     </mj-collapsible-panel>
 
-    <!-- Account Balance By Dimensions Section -->
+    <!-- Accounting Company Profiles (Deferred Revenue GL Account ID) Section -->
     <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingAccountBalanceByDimensions"
-        SectionName="Account Balance By Dimensions"
-        Icon="fa fa-balance-scale"
+        SectionKey="mJBizAppsAccountingAccountingCompanyProfilesDeferredRevenueGLAccountID"
+        SectionName="Accounting Company Profiles (Deferred Revenue GL Account ID)"
+        Icon="fa fa-table"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingAccountBalanceByDimensions')"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingAccountingCompanyProfilesDeferredRevenueGLAccountID')"
         [DefaultExpanded]="false">
         @if (record.IsSaved) {
         <div>
             <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Account Balance By Dimensions','GLAccountID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Account Balance By Dimensions')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingAccountBalanceByDimensions')"
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Accounting Company Profiles','DeferredRevenueGLAccountID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Accounting Company Profiles')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingAccountingCompanyProfilesDeferredRevenueGLAccountID')"
                 [ShowToolbar]="false"
                 (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingAccountBalanceByDimensions', $event.totalRowCount)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingAccountingCompanyProfilesDeferredRevenueGLAccountID', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- Accounting Company Profiles (Sales Tax Payable GL Account ID) Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingAccountingCompanyProfilesSalesTaxPayableGLAccountID"
+        SectionName="Accounting Company Profiles (Sales Tax Payable GL Account ID)"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingAccountingCompanyProfilesSalesTaxPayableGLAccountID')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Accounting Company Profiles','SalesTaxPayableGLAccountID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Accounting Company Profiles')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingAccountingCompanyProfilesSalesTaxPayableGLAccountID')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingAccountingCompanyProfilesSalesTaxPayableGLAccountID', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- Accounting Company Profiles (Unrealized FX Gain Loss GL Account ID) Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingAccountingCompanyProfilesUnrealizedFXGainLossGLAccountID"
+        SectionName="Accounting Company Profiles (Unrealized FX Gain Loss GL Account ID)"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingAccountingCompanyProfilesUnrealizedFXGainLossGLAccountID')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Accounting Company Profiles','UnrealizedFXGainLossGLAccountID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Accounting Company Profiles')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingAccountingCompanyProfilesUnrealizedFXGainLossGLAccountID')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingAccountingCompanyProfilesUnrealizedFXGainLossGLAccountID', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- Accounting Company Profiles (Realized FX Gain Loss GL Account ID) Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingAccountingCompanyProfilesRealizedFXGainLossGLAccountID"
+        SectionName="Accounting Company Profiles (Realized FX Gain Loss GL Account ID)"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingAccountingCompanyProfilesRealizedFXGainLossGLAccountID')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Accounting Company Profiles','RealizedFXGainLossGLAccountID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Accounting Company Profiles')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingAccountingCompanyProfilesRealizedFXGainLossGLAccountID')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingAccountingCompanyProfilesRealizedFXGainLossGLAccountID', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- Accounting Company Profiles (AR Open GL Account ID) Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingAccountingCompanyProfilesAROpenGLAccountID"
+        SectionName="Accounting Company Profiles (AR Open GL Account ID)"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingAccountingCompanyProfilesAROpenGLAccountID')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Accounting Company Profiles','AROpenGLAccountID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Accounting Company Profiles')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingAccountingCompanyProfilesAROpenGLAccountID')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingAccountingCompanyProfilesAROpenGLAccountID', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- Journal Entry Batch Line Items Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingJournalEntryBatchLineItems"
+        SectionName="Journal Entry Batch Line Items"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingJournalEntryBatchLineItems')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entry Batch Line Items','GLAccountID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entry Batch Line Items')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntryBatchLineItems')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntryBatchLineItems', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- Account Balances Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingAccountBalances"
+        SectionName="Account Balances"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingAccountBalances')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Account Balances','GLAccountID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Account Balances')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingAccountBalances')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingAccountBalances', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>

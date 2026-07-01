@@ -16,9 +16,7 @@ export class mjBizAppsAccountingTaxRemittanceFormComponent extends BaseFormCompo
     override async ngOnInit() {
         await super.ngOnInit();
         this.initSections([
-            { sectionKey: 'remittanceDetails', sectionName: 'Remittance Details', isExpanded: true },
-            { sectionKey: 'accountingRecords', sectionName: 'Accounting Records', isExpanded: true },
-            { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false },
+            { sectionKey: 'details', sectionName: 'Details', isExpanded: true },
             { sectionKey: 'mJBizAppsAccountingJournalEntries', sectionName: 'Journal Entries', isExpanded: false }
         ]);
     }
