@@ -1766,6 +1766,24 @@ END;
 GO
 
 ---------------------------------------------------------------------------
+-- 5.2.1 EXECUTE grants for the numbering sprocs (5.1, 5.2)
+--   These two sprocs are hand-authored in this baseline, so CodeGen's
+--   "Applying permissions" step never grants EXECUTE on them — it grants only
+--   the sprocs IT generates (every spCreate/spUpdate/spDelete gets
+--   GRANT EXECUTE TO cdp_Developer, cdp_Integration). Without this block the
+--   numbering sprocs are the only app sprocs with no cdp-role EXECUTE grant, so
+--   a runtime user whose EXECUTE comes solely from cdp-role membership (e.g. a
+--   plain `mj migrate` deploy that does NOT also receive the installer's
+--   database-scoped GRANT EXECUTE) is denied at JE/batch creation. Grant to the
+--   same roles CodeGen uses so the app works under the cdp-role permission model
+--   too. Uses the literal app schema to match the CREATE PROCEDURE statements
+--   above (5.1/5.2), guaranteeing the grant targets exactly those objects.
+---------------------------------------------------------------------------
+GRANT EXECUTE ON __mj_BizAppsAccounting.spAssignNextJournalEntryNumber TO [cdp_Developer], [cdp_Integration];
+GRANT EXECUTE ON __mj_BizAppsAccounting.spAssignNextBatchNumber TO [cdp_Developer], [cdp_Integration];
+GO
+
+---------------------------------------------------------------------------
 -- 5.3 — Seeding / initialization sprocs intentionally NOT in this migration.
 --
 -- Earlier drafts had spSeedDefaultChartOfAccounts, spGenerateAccountingPeriods,
