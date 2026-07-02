@@ -1,6 +1,6 @@
 {
   "name": "bizapps-accounting",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "license": "ISC",
   "description": "BizApps Accounting - AR subsidiary ledger of record and journal entry primitives built on MemberJunction",
   "workspaces": [
