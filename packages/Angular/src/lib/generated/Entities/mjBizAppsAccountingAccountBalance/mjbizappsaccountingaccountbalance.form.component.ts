@@ -15,10 +15,7 @@ export class mjBizAppsAccountingAccountBalanceFormComponent extends BaseFormComp
     override async ngOnInit() {
         await super.ngOnInit();
         this.initSections([
-            { sectionKey: 'accountContext', sectionName: 'Account Context', isExpanded: true },
-            { sectionKey: 'financialMetrics', sectionName: 'Financial Metrics', isExpanded: true },
-            { sectionKey: 'processingInformation', sectionName: 'Processing Information', isExpanded: true },
-            { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false }
+            { sectionKey: 'details', sectionName: 'Details', isExpanded: true }
         ]);
     }
 }

@@ -16,6 +16,7 @@
 export { AccountingCompanyProfileEntityServer } from './AccountingCompanyProfileEntityServer.js';
 export { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 export { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
+export { AccountingPeriodEntityServer } from './AccountingPeriodEntityServer.js';
 
 // Internal helpers exported for use by future EntityServer classes (period
 // close, FX revaluation, etc.) and by the AccountingService façade in
@@ -26,3 +27,64 @@ export {
 } from './SeedData.js';
 export type { SeededGLAccount } from './SeedData.js';
 export { getNextJournalEntryNumber, getNextBatchNumber } from './SequenceService.js';
+
+// F1 — post-time JE validation guard (balance / two-line / period-open / GL-active).
+export { validateJournalEntry, checkBalance } from './JournalEntryValidation.js';
+export type { JournalEntryValidationResult } from './JournalEntryValidation.js';
+
+// S1 — batching engine: net Pending JEs into a Company×Period batch, resolve ERP accounts,
+// lock + dispatch (CFO-approval gate + ERP-post seam). See BatchingEngine.ts.
+export {
+  buildBatch,
+  sendBatch,
+  netLines,
+  resolveExternalAccount,
+  mockErpPoster,
+  AutoApproveGate,
+} from './BatchingEngine.js';
+export type {
+  BatchTargetSystem,
+  DimRef,
+  NettableLine,
+  NetGroup,
+  BuildBatchResult,
+  ErpPostResult,
+  ErpPoster,
+  BatchApprovalGate,
+  SendBatchOptions,
+} from './BatchingEngine.js';
+
+// S1 — the REAL CFO-approval gate, backed by the bizapps-tasks app (replaces AutoApproveGate in
+// production). See TasksAppApprovalGate.ts.
+export { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
+
+// S3 — scheduled-JE schedules + materializer (Block 4). See ScheduledJournalEntryService.ts.
+export {
+  createScheduledEntries,
+  materializeDueScheduledEntries,
+  computeStraightLineSchedule,
+  mapScheduledEntryType,
+} from './ScheduledJournalEntryService.js';
+export type {
+  ScheduledEntryType,
+  JournalEntryType,
+  SchedulePeriod,
+  CreateScheduleSpec,
+  MaterializeResult,
+} from './ScheduledJournalEntryService.js';
+
+// Block 5 — Chart-of-Accounts mapping approval workflow (propose → approve, strict 1:1). See ChartOfAccountsMappingService.ts.
+export {
+  proposeMapping,
+  approveMapping,
+  rangesOverlap,
+} from './ChartOfAccountsMappingService.js';
+export type {
+  ProposeMappingSpec,
+  ApproveMappingResult,
+} from './ChartOfAccountsMappingService.js';
+
+// Block 4 — deterministic, idempotent Association demo seed (multi-company AR/DefRev/Tax/Intercompany
+// data so the Explorer GUI + the read-model views have meaningful fixtures). See AssociationDemoSeedData.ts.
+export { seedAssociationDemo } from './AssociationDemoSeedData.js';
+export type { DemoSeedReport } from './AssociationDemoSeedData.js';

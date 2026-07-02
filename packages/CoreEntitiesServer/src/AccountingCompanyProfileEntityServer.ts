@@ -3,7 +3,7 @@
  *
  * On first save (new record), runs the per-Company initialization that used
  * to live in `spInitializeAccountingCompanyProfile`:
- *   1. Seed the default chart of accounts (23 GLAccount rows)
+ *   1. Seed the default chart of accounts (10 GLAccount rows; minimal AR-subledger set — see SeedData.ts)
  *   2. Generate current-FY periods (12 months + 4 quarters + 1 year = 17 rows)
  *   3. Wire the profile's default-account refs (AR, DefRev, SalesTax, FX)
  *
@@ -16,6 +16,13 @@
  * re-seed. Deployments can override the seed sets by registering a subclass
  * with higher priority that overrides `getChartOfAccountsToSeed()` or
  * `getPeriodsToGenerate()`.
+ *
+ * CONNECTS TO:
+ *   ENTITY:   'MJ_BizApps_Accounting: Accounting Company Profiles' (IS-A child of __mj.Company)
+ *   SEEDS:    GL Accounts (SeedData.DEFAULT_CHART_OF_ACCOUNTS) · Accounting Periods (17/FY) · wires 5 default GL refs
+ *   WRITES:   __mj.RecordChange (audit-by-construction — every seeded row via BaseEntity.Save)
+ *   SIBLINGS: JournalEntryEntityServer (W2 numbering) · JournalEntryBatchEntityServer (W3) · SequenceService
+ *   DOC:      docs/ARCHITECTURE.md#company-profile-init
  */
 
 import { BaseEntity, EntitySaveOptions, LogError, Metadata, RunView } from '@memberjunction/core';
@@ -46,6 +53,14 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
 
   override async Save(options?: EntitySaveOptions): Promise<boolean> {
     const isNewRecord = !this.IsSaved;
+
+    // Block 0 / AD-16: default OperatingTimeZone to UTC for a new profile when the
+    // caller didn't supply one. All storage is Zulu; period & rev-rec boundaries are
+    // evaluated in this zone. Set before the first persist so __mj.RecordChange
+    // captures it (audit-by-construction).
+    if (isNewRecord && !this.OperatingTimeZone) {
+      this.OperatingTimeZone = 'UTC';
+    }
 
     const saved = await super.Save(options);
     if (!saved) {

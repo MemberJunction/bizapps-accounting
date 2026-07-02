@@ -10,11 +10,11 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Remittance Details Section -->
+    <!-- Details Section -->
     <mj-collapsible-panel
-        SectionKey="remittanceDetails"
-        SectionName="Remittance Details"
-        Icon="fa fa-money-bill-wave"
+        SectionKey="details"
+        SectionName="Details"
+        Icon="fa fa-align-left"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -50,35 +50,15 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Accounting Records Section -->
-    <mj-collapsible-panel
-        SectionKey="accountingRecords"
-        SectionName="Accounting Records"
-        Icon="fa fa-book"
-        [Form]="this"
-        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
-            [ShowLabel]="false"
+            [ShowLabel]="true"
             FieldName="PostedJournalEntryID"
             Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
             LinkType="Record"
         ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- System Metadata Section -->
-    <mj-collapsible-panel
-        SectionKey="systemMetadata"
-        SectionName="System Metadata"
-        Icon="fa fa-cog"
-        [Form]="this"
-        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -108,7 +88,7 @@
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingJournalEntries"
         SectionName="Journal Entries"
-        Icon="fa fa-book"
+        Icon="fa fa-table"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"

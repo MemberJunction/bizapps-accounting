@@ -1,0 +1,121 @@
+/* GL Account custom form — design tokens only (no hardcoded colors). */
+
+.gl-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.gl-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 180px;
+}
+
+.gl-field__label {
+  font-size: var(--mj-text-xs);
+  color: var(--mj-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.gl-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--mj-radius-md);
+  border: 1px solid var(--mj-border-default);
+  background: var(--mj-bg-surface-card);
+  color: var(--mj-text-primary);
+  font-size: var(--mj-text-sm);
+}
+
+.gl-banner--error {
+  background: var(--mj-status-error-bg);
+  border-color: var(--mj-status-error-border);
+  color: var(--mj-status-error-text);
+}
+
+/* Tree. */
+.gl-tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--mj-border-subtle);
+  border-radius: var(--mj-radius-md);
+  overflow: hidden;
+}
+
+.gl-node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--mj-border-subtle);
+  font-size: var(--mj-text-sm);
+  color: var(--mj-text-primary);
+}
+
+.gl-node:last-child {
+  border-bottom: none;
+}
+
+.gl-node--current {
+  background: color-mix(in srgb, var(--mj-brand-primary) 10%, var(--mj-bg-surface));
+}
+
+.gl-node__toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--mj-text-secondary);
+  cursor: pointer;
+  border-radius: var(--mj-radius-sm);
+}
+
+.gl-node__toggle:hover {
+  background: var(--mj-bg-surface-hover, color-mix(in srgb, var(--mj-brand-primary) 6%, var(--mj-bg-surface)));
+  color: var(--mj-text-primary);
+}
+
+.gl-node__leaf {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  color: var(--mj-text-disabled);
+  font-size: 5px;
+}
+
+.gl-node__code {
+  font-weight: var(--mj-font-semibold);
+  font-variant-numeric: tabular-nums;
+  min-width: 80px;
+}
+
+.gl-node__name {
+  flex: 1;
+  color: var(--mj-text-primary);
+}
+
+.gl-node__type {
+  font-size: var(--mj-text-xs);
+  color: var(--mj-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.gl-node__inactive {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--mj-text-xs);
+  color: var(--mj-status-warning-text);
+}

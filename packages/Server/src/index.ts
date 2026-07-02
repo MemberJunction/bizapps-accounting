@@ -17,6 +17,12 @@ import '@mj-biz-apps/accounting-core-entities-server';
 // Import generated GraphQL resolvers
 import './generated/generated.js';
 
+// Import custom (hand-written) GraphQL resolvers so their @Resolver decorators fire.
+// These also need to be in RESOLVER_PATHS (below) so TypeGraphQL builds them into the schema.
+import './resolvers/BatchDispatchResolver.js';
+import './resolvers/ReadModelsResolver.js';
+import './resolvers/JournalEntryResolver.js';
+
 // Import generated class registrations manifest
 import { CLASS_REGISTRATIONS } from './generated/class-registrations-manifest.js';
 
@@ -28,8 +34,16 @@ import { resolve } from 'node:path';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
-/** Absolute paths to the generated resolver files, for use with createMJServer() */
-export const RESOLVER_PATHS = [resolve(__dirname, 'generated/generated.{js,ts}')];
+/**
+ * Absolute paths to the resolver files (generated + custom), for use with createMJServer().
+ * NOTE the `*Resolver.{js,ts}` suffix (not `*.{js,ts}`): brace-expansion of `*.{js,ts}` would
+ * also match the emitted `*.d.ts` declaration files (the `*` absorbs the `.d`), which ts-node
+ * then fails to require. Requiring the literal `Resolver.js`/`Resolver.ts` ending excludes `.d.ts`.
+ */
+export const RESOLVER_PATHS = [
+    resolve(__dirname, 'generated/generated.{js,ts}'),
+    resolve(__dirname, 'resolvers/*Resolver.{js,ts}'),
+];
 
 /**
  * Bootstrap function called by DynamicPackageLoader during MJAPI startup.

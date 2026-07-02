@@ -1,0 +1,100 @@
+<mj-page-layout>
+  <mj-page-header
+    Title="Trial Balance & AR"
+    Icon="fa-solid fa-scale-balanced"
+    Subtitle="Trial balance, open accounts-receivable, and AR aging over committed journal entries">
+
+    <div meta>
+      @if (SelectedCompanyID && !IsLoading) {
+        @if (ActiveTab === 'trial-balance') {
+          <mj-stat-badge [Icon]="BalancedIcon" [Label]="BalancedLabel" [Variant]="BalancedVariant" />
+        } @else if (ActiveTab === 'open-ar') {
+          <mj-stat-badge Icon="fa-solid fa-sack-dollar" Label="open AR"
+            [Count]="TotalOpenAR | number:'1.0-0'" Variant="info" />
+        }
+      }
+    </div>
+
+    <div actions>
+      <mj-refresh-button [Loading]="IsLoading" (Clicked)="Reload()"></mj-refresh-button>
+    </div>
+
+    <div toolbar>
+      <label class="rm-field">
+        <span class="rm-field__label">Company</span>
+        <select class="mj-input" [value]="SelectedCompanyID ?? ''"
+                (change)="OnCompanyChange($any($event.target).value)">
+          @for (co of Companies; track co.ID) {
+            <option [value]="co.ID">{{ co.Name }}</option>
+          }
+        </select>
+      </label>
+
+      <div class="rm-tabs" role="tablist">
+        <button mjButton [variant]="TabVariant(ActiveTab === 'trial-balance')" size="sm"
+                (click)="SetTab('trial-balance')">
+          <i class="fa-solid fa-scale-balanced"></i> Trial Balance
+        </button>
+        <button mjButton [variant]="TabVariant(ActiveTab === 'open-ar')" size="sm"
+                (click)="SetTab('open-ar')">
+          <i class="fa-solid fa-file-invoice-dollar"></i> Open AR
+        </button>
+        <button mjButton [variant]="TabVariant(ActiveTab === 'aging')" size="sm"
+                (click)="SetTab('aging')">
+          <i class="fa-solid fa-hourglass-half"></i> Aging
+        </button>
+      </div>
+    </div>
+  </mj-page-header>
+
+  <mj-page-body>
+    @if (IsLoading) {
+      <mj-loading text="Loading read models…"></mj-loading>
+    } @else if (LoadError) {
+      <div class="rm-banner rm-banner--error" role="alert">
+        <i class="fa-solid fa-triangle-exclamation"></i> {{ LoadError }}
+      </div>
+    } @else if (!SelectedCompanyID) {
+      <mj-empty-state Icon="fa-solid fa-building"
+        Title="No accounting-enabled companies"
+        Message="No company has an Accounting Company Profile yet. Create one to see its trial balance and AR.">
+      </mj-empty-state>
+    } @else {
+      @switch (ActiveTab) {
+        @case ('trial-balance') {
+          @if (TrialBalance.length === 0) {
+            <mj-empty-state Icon="fa-solid fa-inbox" Title="No committed entries"
+              Message="The trial balance is empty — no Batched or GLPosted journal entries for this company yet.">
+            </mj-empty-state>
+          } @else {
+            <ag-grid-angular class="rm-grid" [theme]="Theme" [columnDefs]="TrialBalanceCols"
+              [defaultColDef]="DefaultColDef" [gridOptions]="GridOptions" [rowData]="TrialBalance"
+              (gridReady)="OnGridReady($event)"></ag-grid-angular>
+          }
+        }
+        @case ('open-ar') {
+          @if (OpenAR.length === 0) {
+            <mj-empty-state Icon="fa-solid fa-inbox" Title="No open AR"
+              Message="No customer carries an open AR balance for this company (fully-settled customers are excluded).">
+            </mj-empty-state>
+          } @else {
+            <ag-grid-angular class="rm-grid" [theme]="Theme" [columnDefs]="OpenARCols"
+              [defaultColDef]="DefaultColDef" [gridOptions]="GridOptions" [rowData]="OpenAR"
+              (gridReady)="OnGridReady($event)"></ag-grid-angular>
+          }
+        }
+        @case ('aging') {
+          @if (Aging.length === 0) {
+            <mj-empty-state Icon="fa-solid fa-inbox" Title="No aged AR"
+              Message="No open AR to age for this company.">
+            </mj-empty-state>
+          } @else {
+            <ag-grid-angular class="rm-grid" [theme]="Theme" [columnDefs]="AgingCols"
+              [defaultColDef]="DefaultColDef" [gridOptions]="GridOptions" [rowData]="Aging"
+              (gridReady)="OnGridReady($event)"></ag-grid-angular>
+          }
+        }
+      }
+    }
+  </mj-page-body>
+</mj-page-layout>

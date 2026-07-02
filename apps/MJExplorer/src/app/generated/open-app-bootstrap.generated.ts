@@ -5,15 +5,22 @@
  * Each import below loads an Open App's client bootstrap package, which triggers
  * @RegisterClass decorators and makes the app's components available to MJ's class factory.
  *
- * Generated: 2026-06-02T20:31:41.471Z
+ * Generated: 2026-06-22T20:05:27.746Z
  */
 
-// mj-bizapps-common (v5.30.1)
+// mj-bizapps-common (v5.31.1)
 import '@mj-biz-apps/common-ng';
 
-// mj-bizapps-common (v5.30.1)
+// mj-bizapps-common (v5.31.1)
 import '@mj-biz-apps/common-entities';
 
-// mj-bizapps-common (v5.30.1)
+// mj-bizapps-common (v5.31.1)
 import '@mj-biz-apps/common-actions';
 
+// MJ bizapps-tasks
+import '@mj-biz-apps/tasks-actions';
+import '@mj-biz-apps/tasks-ng';
+import '@mj-biz-apps/tasks-core';
+import '@mj-biz-apps/tasks-entities';
+import '@mj-biz-apps/tasks-entities-server';
+import '@mj-biz-apps/tasks-server';

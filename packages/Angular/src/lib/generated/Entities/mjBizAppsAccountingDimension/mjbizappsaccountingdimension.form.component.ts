@@ -16,11 +16,11 @@ export class mjBizAppsAccountingDimensionFormComponent extends BaseFormComponent
     override async ngOnInit() {
         await super.ngOnInit();
         this.initSections([
-            { sectionKey: 'dimensionDefinition', sectionName: 'Dimension Definition', isExpanded: true },
-            { sectionKey: 'configuration', sectionName: 'Configuration', isExpanded: true },
-            { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false },
+            { sectionKey: 'details', sectionName: 'Details', isExpanded: true },
             { sectionKey: 'mJBizAppsAccountingJournalEntryLineDimensions', sectionName: 'Journal Entry Line Dimensions', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingDimensionValues', sectionName: 'Dimension Values', isExpanded: false }
+            { sectionKey: 'mJBizAppsAccountingJournalEntryBatchLineDimensions', sectionName: 'Journal Entry Batch Line Dimensions', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingDimensionValues', sectionName: 'Dimension Values', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingScheduledJournalEntryLineDimensions', sectionName: 'Scheduled Journal Entry Line Dimensions', isExpanded: false }
         ]);
     }
 }

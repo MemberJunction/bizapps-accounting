@@ -10,32 +10,22 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Dimension Configuration Section -->
+    <!-- Details Section -->
     <mj-collapsible-panel
-        SectionKey="dimensionConfiguration"
-        SectionName="Dimension Configuration"
-        Icon="fa fa-cogs"
+        SectionKey="details"
+        SectionName="Details"
+        Icon="fa fa-align-left"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
-            [ShowLabel]="false"
+            [ShowLabel]="true"
             FieldName="DimensionID"
             Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
             LinkType="Record"
         ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Value Details Section -->
-    <mj-collapsible-panel
-        SectionKey="valueDetails"
-        SectionName="Value Details"
-        Icon="fa fa-tag"
-        [Form]="this"
-        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -55,48 +45,12 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="IsActive"
-            Type="checkbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Hierarchy Section -->
-    <mj-collapsible-panel
-        SectionKey="hierarchy"
-        SectionName="Hierarchy"
-        Icon="fa fa-sitemap"
-        [Form]="this"
-        [FormContext]="formContext">
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
             FieldName="ParentDimensionValueID"
             Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
             LinkType="Record"
         ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="RootParentDimensionValueID"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Validity Period Section -->
-    <mj-collapsible-panel
-        SectionKey="validityPeriod"
-        SectionName="Validity Period"
-        Icon="fa fa-calendar-alt"
-        [Form]="this"
-        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -113,16 +67,14 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- System Metadata Section -->
-    <mj-collapsible-panel
-        SectionKey="systemMetadata"
-        SectionName="System Metadata"
-        Icon="fa fa-database"
-        [Form]="this"
-        [FormContext]="formContext">
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="IsActive"
+            Type="checkbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -139,6 +91,14 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="RootParentDimensionValueID"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
 
     </mj-collapsible-panel>
 
@@ -148,25 +108,50 @@
          RELATED ENTITY PANELS
          ======================================== -->
 
-    <!-- Journal Entry Line Dimensions Section -->
+    <!-- Scheduled Journal Entry Line Dimensions Section -->
     <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingJournalEntryLineDimensions"
-        SectionName="Journal Entry Line Dimensions"
-        Icon="fa fa-tags"
+        SectionKey="mJBizAppsAccountingScheduledJournalEntryLineDimensions"
+        SectionName="Scheduled Journal Entry Line Dimensions"
+        Icon="fa fa-table"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingJournalEntryLineDimensions')"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingScheduledJournalEntryLineDimensions')"
         [DefaultExpanded]="false">
         @if (record.IsSaved) {
         <div>
             <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entry Line Dimensions','DimensionValueID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entry Line Dimensions')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntryLineDimensions')"
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Scheduled Journal Entry Line Dimensions','DimensionValueID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Scheduled Journal Entry Line Dimensions')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingScheduledJournalEntryLineDimensions')"
                 [ShowToolbar]="false"
                 (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntryLineDimensions', $event.totalRowCount)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingScheduledJournalEntryLineDimensions', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- Journal Entry Batch Line Dimensions Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingJournalEntryBatchLineDimensions"
+        SectionName="Journal Entry Batch Line Dimensions"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingJournalEntryBatchLineDimensions')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entry Batch Line Dimensions','DimensionValueID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entry Batch Line Dimensions')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntryBatchLineDimensions')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntryBatchLineDimensions', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>
@@ -177,7 +162,7 @@
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingDimensionValues"
         SectionName="Dimension Values"
-        Icon="fa fa-layer-group"
+        Icon="fa fa-table"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"
@@ -192,6 +177,31 @@
                 [ShowToolbar]="false"
                 (Navigate)="OnFormNavigate($event)"
                 (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingDimensionValues', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- Journal Entry Line Dimensions Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingJournalEntryLineDimensions"
+        SectionName="Journal Entry Line Dimensions"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingJournalEntryLineDimensions')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entry Line Dimensions','DimensionValueID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entry Line Dimensions')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntryLineDimensions')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntryLineDimensions', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>

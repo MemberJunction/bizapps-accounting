@@ -15,10 +15,7 @@ export class mjBizAppsAccountingAccountBalanceByDimensionFormComponent extends B
     override async ngOnInit() {
         await super.ngOnInit();
         this.initSections([
-            { sectionKey: 'accountingContext', sectionName: 'Accounting Context', isExpanded: true },
-            { sectionKey: 'dimensionAnalysis', sectionName: 'Dimension Analysis', isExpanded: true },
-            { sectionKey: 'financialMetrics', sectionName: 'Financial Metrics', isExpanded: true },
-            { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false }
+            { sectionKey: 'details', sectionName: 'Details', isExpanded: true }
         ]);
     }
 }

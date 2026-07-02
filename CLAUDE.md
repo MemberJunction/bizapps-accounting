@@ -321,6 +321,10 @@ This repo uses MemberJunction's CodeGen system to generate entity and action sub
 - Never include `__mj_CreatedAt`/`__mj_UpdatedAt` columns in CREATE TABLE - CodeGen handles them
 - Never create indexes for foreign key columns - CodeGen creates them automatically
 
+### Keep the ERD + docs current (convention)
+- **After any schema change** (new/edited migration, new entity, new column) **update `docs/bizapps-accounting-erd.md` in the same change** — the ERD is the at-a-glance schema reference and must not drift from the migrations.
+- Likewise update `docs/lifecycle-hooks.md` when a `BaseEntity.Save()` hook changes, and `docs/ARCHITECTURE.md` as each build block lands. Treat these three docs as part of every change's Definition of Done.
+
 ### SQL Server is the source of truth; PostgreSQL is converted
 - Write all migrations as **T-SQL** in `migrations/` (`V<TS>__v<X.Y.x>__<description>.sql`).
 - The PostgreSQL counterparts in `migrations-pg/` are produced by the MJ converter (`@memberjunction/sql-converter`) via `npx mj sql-convert <file> --from tsql --to postgres --output migrations-pg/<file>.pg.sql --schema __mj_BizAppsAccounting`. PG-only patches use the `.pg-only.sql` extension.
@@ -333,6 +337,12 @@ This repo uses MemberJunction's CodeGen system to generate entity and action sub
 - JE immutability after `Status ∈ {Batched, GLPosted}` enforced by trigger — only `GLPostedAt`/`GLReferenceID`/`Status` may change after lock.
 - Period-close trigger blocks JE inserts into a closed `AccountingPeriod` unless `OriginalAccountingPeriodID` is set (adjusting entry pattern).
 - `AccountingCompanyProfile` is an IsA Disjoint child of `__mj.Company` — same UUID as the parent row, never INSERT a Profile without a matching Company.
+
+### Time is ALWAYS stored in UTC (convention)
+Every timestamp this app persists is **UTC** — no exceptions, no local-time storage.
+- **Code writes UTC instants:** use `new Date()` (a JS Date is a UTC instant; the mssql driver persists it to `DATETIMEOFFSET` as `+00:00`), `new Date().toISOString().slice(0,10)` for `DATE` values, and `getUTC*()` for any date-part math (e.g. fiscal year). **Never** use local-time getters (`getFullYear()`, `getMonth()`, `toLocaleString()`, `toDateString()`) for a value that gets stored or compared — they introduce the runner's local zone.
+- **DB defaults are UTC:** the SQL Server container runs at `+00:00`, so `SYSDATETIMEOFFSET()` / `GETUTCDATE()` defaults (and CodeGen's `__mj_CreatedAt`/`__mj_UpdatedAt`) are UTC. Verify with `SELECT DATENAME(TZOFFSET, SYSDATETIMEOFFSET())` → must be `+00:00`. If a deployment's server is NOT UTC, fix the server/container TZ — do not paper over it in code.
+- **Display/zone is a presentation concern:** `AccountingCompanyProfile.OperatingTimeZone` (defaults `'UTC'`, W1) is for *rendering* dates to a company's users; storage stays UTC regardless.
 
 ---
 

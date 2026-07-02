@@ -1,0 +1,138 @@
+@if (record) {
+<mj-record-form-container [Record]="record" [FormComponent]="this"
+    (Navigate)="OnFormNavigate($event)"
+    (DeleteRequested)="OnDeleteRequested()"
+    (FavoriteToggled)="OnFavoriteToggled()"
+    (HistoryRequested)="OnHistoryRequested()"
+    (ListManagementRequested)="OnListManagementRequested()">
+
+  <!-- ── Status timeline + reversal affordance ─────────────────────────────── -->
+  <div class="je-header">
+    <div class="je-timeline" role="list" aria-label="Journal entry status">
+      @for (step of Timeline; track step.Key; let last = $last) {
+        <div class="je-step" role="listitem"
+             [class.je-step--done]="step.Done" [class.je-step--current]="step.Current">
+          <span class="je-step__dot"><i [class]="step.Icon"></i></span>
+          <span class="je-step__label">{{ step.Label }}</span>
+        </div>
+        @if (!last) {
+          <span class="je-step__sep" [class.je-step__sep--done]="step.Done"></span>
+        }
+      }
+    </div>
+
+    @if (CanReverse) {
+      <div class="je-reversal">
+        @if (!ShowReversalForm) {
+          <button mjButton variant="warning" size="sm" (click)="OpenReversalForm()">
+            <i class="fa-solid fa-rotate-left"></i> Generate Reversal
+          </button>
+        } @else {
+          <div class="je-reversal__form">
+            <input class="mj-input je-reversal__reason" [(ngModel)]="ReversalReason"
+                   name="reversalReason" placeholder="Reason for reversal (optional)" />
+            <button mjButton variant="primary" size="sm" [disabled]="ReversalBusy" (click)="ConfirmReversal()">
+              @if (ReversalBusy) {
+                <i class="fa-solid fa-spinner fa-spin"></i> Reversing…
+              } @else {
+                <i class="fa-solid fa-check"></i> Confirm
+              }
+            </button>
+            <button mjButton variant="flat" size="sm" [disabled]="ReversalBusy" (click)="CancelReversal()">
+              Cancel
+            </button>
+          </div>
+        }
+      </div>
+    }
+  </div>
+
+  @if (ReversalMessage) {
+    <div class="je-banner"
+         [class.je-banner--error]="ReversalMessageIsError"
+         [class.je-banner--success]="!ReversalMessageIsError"
+         role="status">
+      <i class="fa-solid" [class.fa-circle-check]="!ReversalMessageIsError"
+         [class.fa-triangle-exclamation]="ReversalMessageIsError"></i>
+      {{ ReversalMessage }}
+    </div>
+  }
+
+  <!-- ── Details (key fields) ──────────────────────────────────────────────── -->
+  <mj-collapsible-panel SectionKey="details" SectionName="Details" Icon="fa fa-align-left"
+      [Form]="this" [FormContext]="formContext">
+    <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="EntryNumber" Type="textbox"
+        [EditMode]="EditMode" [FormContext]="formContext"></mj-form-field>
+    <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="CompanyID" Type="textbox"
+        [EditMode]="EditMode" [FormContext]="formContext" LinkType="Record"></mj-form-field>
+    <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="EntryType" Type="textbox"
+        [EditMode]="EditMode" [FormContext]="formContext"></mj-form-field>
+    <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="Status" Type="textbox"
+        [EditMode]="EditMode" [FormContext]="formContext"></mj-form-field>
+    <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="EffectiveDate" Type="textbox"
+        [EditMode]="EditMode" [FormContext]="formContext"></mj-form-field>
+    <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="Description" Type="textarea"
+        [EditMode]="EditMode" [FormContext]="formContext"></mj-form-field>
+  </mj-collapsible-panel>
+
+  <!-- ── Lines with dimension chips ────────────────────────────────────────── -->
+  <mj-collapsible-panel SectionKey="lines" SectionName="Lines & Dimensions" Icon="fa fa-list-ol"
+      [Form]="this" [FormContext]="formContext">
+    @if (LinesLoading) {
+      <mj-loading text="Loading lines…" size="small"></mj-loading>
+    } @else if (LinesError) {
+      <div class="je-banner je-banner--error" role="alert">
+        <i class="fa-solid fa-triangle-exclamation"></i> {{ LinesError }}
+      </div>
+    } @else if (Lines.length === 0) {
+      <mj-empty-state Icon="fa-solid fa-inbox" Title="No lines" Message="This journal entry has no lines.">
+      </mj-empty-state>
+    } @else {
+      <table class="je-lines">
+        <thead>
+          <tr>
+            <th class="je-lines__num">#</th>
+            <th>Account</th>
+            <th>Description</th>
+            <th>Counterparty</th>
+            <th class="je-lines__amt">Debit</th>
+            <th class="je-lines__amt">Credit</th>
+            <th>Dimensions</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (line of Lines; track line.ID) {
+            <tr>
+              <td class="je-lines__num">{{ line.LineNumber }}</td>
+              <td>{{ line.GLAccount }}</td>
+              <td class="je-lines__desc">{{ line.Description }}</td>
+              <td>{{ line.CounterpartyOrganization }}</td>
+              <td class="je-lines__amt">{{ line.DebitAmount ? (line.DebitAmount | number:'1.2-2') : '' }}</td>
+              <td class="je-lines__amt">{{ line.CreditAmount ? (line.CreditAmount | number:'1.2-2') : '' }}</td>
+              <td>
+                <div class="je-chips">
+                  @for (dim of line.Dimensions; track dim.Dimension + dim.DimensionValue) {
+                    <span class="je-chip">
+                      <span class="je-chip__key">{{ dim.Dimension }}</span>
+                      <span class="je-chip__val">{{ dim.DimensionValue }}</span>
+                    </span>
+                  }
+                </div>
+              </td>
+            </tr>
+          }
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="4" class="je-lines__total-label">Totals</td>
+            <td class="je-lines__amt je-lines__total">{{ TotalDebits | number:'1.2-2' }}</td>
+            <td class="je-lines__amt je-lines__total">{{ TotalCredits | number:'1.2-2' }}</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    }
+  </mj-collapsible-panel>
+
+</mj-record-form-container>
+}

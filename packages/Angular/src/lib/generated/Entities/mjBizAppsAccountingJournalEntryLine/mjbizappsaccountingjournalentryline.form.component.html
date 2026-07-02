@@ -10,11 +10,11 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Journal Entry Context Section -->
+    <!-- Details Section -->
     <mj-collapsible-panel
-        SectionKey="journalEntryContext"
-        SectionName="Journal Entry Context"
-        Icon="fa fa-info-circle"
+        SectionKey="details"
+        SectionName="Details"
+        Icon="fa fa-align-left"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -37,40 +37,12 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="Description"
-            Type="textarea"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Accounting Classification Section -->
-    <mj-collapsible-panel
-        SectionKey="accountingClassification"
-        SectionName="Accounting Classification"
-        Icon="fa fa-book-open"
-        [Form]="this"
-        [FormContext]="formContext">
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="false"
             FieldName="GLAccountID"
             Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
             LinkType="Record"
         ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Financial Values Section -->
-    <mj-collapsible-panel
-        SectionKey="financialValues"
-        SectionName="Financial Values"
-        Icon="fa fa-dollar-sign"
-        [Form]="this"
-        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -87,16 +59,6 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Multi-Currency Details Section -->
-    <mj-collapsible-panel
-        SectionKey="multiCurrencyDetails"
-        SectionName="Multi-Currency Details"
-        Icon="fa fa-globe"
-        [Form]="this"
-        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -130,16 +92,14 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Related Transactions Section -->
-    <mj-collapsible-panel
-        SectionKey="relatedTransactions"
-        SectionName="Related Transactions"
-        Icon="fa fa-link"
-        [Form]="this"
-        [FormContext]="formContext">
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="Description"
+            Type="textarea"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -157,16 +117,6 @@
             [FormContext]="formContext"
             LinkType="Record"
         ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- System Metadata Section -->
-    <mj-collapsible-panel
-        SectionKey="systemMetadata"
-        SectionName="System Metadata"
-        Icon="fa fa-cog"
-        [Form]="this"
-        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -196,7 +146,7 @@
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingJournalEntryLineDimensions"
         SectionName="Journal Entry Line Dimensions"
-        Icon="fa fa-tags"
+        Icon="fa fa-table"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"

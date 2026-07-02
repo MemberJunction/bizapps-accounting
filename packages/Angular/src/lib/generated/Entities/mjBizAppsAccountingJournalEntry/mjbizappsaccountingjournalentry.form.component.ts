@@ -16,17 +16,13 @@ export class mjBizAppsAccountingJournalEntryFormComponent extends BaseFormCompon
     override async ngOnInit() {
         await super.ngOnInit();
         this.initSections([
-            { sectionKey: 'journalEntryDetails', sectionName: 'Journal Entry Details', isExpanded: true },
-            { sectionKey: 'sourceReferences', sectionName: 'Source References', isExpanded: true },
-            { sectionKey: 'reversalAndAdjustment', sectionName: 'Reversal and Adjustment', isExpanded: true },
-            { sectionKey: 'gLIntegration', sectionName: 'GL Integration', isExpanded: true },
-            { sectionKey: 'attachments', sectionName: 'Attachments', isExpanded: true },
-            { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingJournalEntriesReversedByJournalEntryID', sectionName: 'Journal Entries (Reversed By Journal Entry)', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingJournalEntriesReversesJournalEntryID', sectionName: 'Journal Entries (Reverses Journal Entry)', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingTaxRemittances', sectionName: 'Tax Remittances', isExpanded: false },
+            { sectionKey: 'details', sectionName: 'Details', isExpanded: true },
             { sectionKey: 'mJBizAppsAccountingJournalEntryLines', sectionName: 'Journal Entry Lines', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingJournalEntryLinks', sectionName: 'Journal Entry Links', isExpanded: false }
+            { sectionKey: 'mJBizAppsAccountingJournalEntriesReversedByJournalEntryID', sectionName: 'Journal Entries (Reversed By Journal Entry ID)', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingJournalEntriesReversesJournalEntryID', sectionName: 'Journal Entries (Reverses Journal Entry ID)', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingJournalEntryLinks', sectionName: 'Journal Entry Links', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingScheduledJournalEntries', sectionName: 'Scheduled Journal Entries', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingTaxRemittances', sectionName: 'Tax Remittances', isExpanded: false }
         ]);
     }
 }

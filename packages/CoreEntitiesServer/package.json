@@ -13,21 +13,25 @@
   ],
   "scripts": {
     "build": "tsc && tsc-alias -f",
-    "test": "echo \"No tests configured yet\""
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "author": "MemberJunction.com",
   "license": "ISC",
   "devDependencies": {
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   },
   "dependencies": {
-    "@mj-biz-apps/accounting-entities": "0.1.0"
+    "@mj-biz-apps/accounting-entities": "0.1.0",
+    "@mj-biz-apps/tasks-core": "1.1.1",
+    "@mj-biz-apps/tasks-entities": "1.1.1"
   },
   "peerDependencies": {
-    "@memberjunction/core": "^5.38.0",
-    "@memberjunction/core-entities": "^5.38.0",
-    "@memberjunction/global": "^5.38.0",
-    "@memberjunction/sqlserver-dataprovider": "^5.38.0"
+    "@memberjunction/core": "^5.44.0",
+    "@memberjunction/core-entities": "^5.44.0",
+    "@memberjunction/global": "^5.44.0",
+    "@memberjunction/sqlserver-dataprovider": "^5.44.0"
   },
   "repository": {
     "type": "git",
