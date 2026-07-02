@@ -19,13 +19,13 @@ export class mjBizAppsAccountingCurrencyFormComponent extends BaseFormComponent 
             { sectionKey: 'details', sectionName: 'Details', isExpanded: true },
             { sectionKey: 'mJBizAppsAccountingJournalEntryLines', sectionName: 'Journal Entry Lines', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingAccountBalanceByDimensions', sectionName: 'Account Balance By Dimensions', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingCurrencySpotRatesFromCurrencyCode', sectionName: 'Currency Spot Rates (From Currency Code)', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingCurrencySpotRatesToCurrencyCode', sectionName: 'Currency Spot Rates (To Currency Code)', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingGLAccounts', sectionName: 'GL Accounts', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingAccountingCompanyProfilesFunctionalCurrencyCode', sectionName: 'Accounting Company Profiles (Functional Currency Code)', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingAccountingCompanyProfilesReportingCurrencyCode', sectionName: 'Accounting Company Profiles (Reporting Currency Code)', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingAccountingCompanyProfilesFunctionalCurrencyCode', sectionName: 'Accounting Company Profiles (Functional Currency Code)', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingScheduledJournalEntries', sectionName: 'Scheduled Journal Entries', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingAccountBalances', sectionName: 'Account Balances', isExpanded: false }
+            { sectionKey: 'mJBizAppsAccountingAccountBalances', sectionName: 'Account Balances', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingCurrencySpotRatesToCurrencyCode', sectionName: 'Currency Spot Rates (To Currency Code)', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingCurrencySpotRatesFromCurrencyCode', sectionName: 'Currency Spot Rates (From Currency Code)', isExpanded: false }
         ]);
     }
 }

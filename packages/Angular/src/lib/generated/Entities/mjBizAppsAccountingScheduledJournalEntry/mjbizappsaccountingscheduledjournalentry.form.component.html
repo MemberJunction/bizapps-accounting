@@ -232,31 +232,6 @@
         }
     </mj-collapsible-panel>
 
-    <!-- Scheduled Journal Entry Line Items Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingScheduledJournalEntryLineItems"
-        SectionName="Scheduled Journal Entry Line Items"
-        Icon="fa fa-table"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingScheduledJournalEntryLineItems')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Scheduled Journal Entry Line Items','ScheduledJournalEntryID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Scheduled Journal Entry Line Items')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingScheduledJournalEntryLineItems')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingScheduledJournalEntryLineItems', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
     <!-- Scheduled Journal Entries Section -->
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingScheduledJournalEntries"
@@ -276,6 +251,31 @@
                 [ShowToolbar]="false"
                 (Navigate)="OnFormNavigate($event)"
                 (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingScheduledJournalEntries', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- Scheduled Journal Entry Line Items Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingScheduledJournalEntryLineItems"
+        SectionName="Scheduled Journal Entry Line Items"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingScheduledJournalEntryLineItems')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Scheduled Journal Entry Line Items','ScheduledJournalEntryID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Scheduled Journal Entry Line Items')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingScheduledJournalEntryLineItems')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingScheduledJournalEntryLineItems', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>

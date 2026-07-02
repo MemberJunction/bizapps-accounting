@@ -18,8 +18,8 @@ export class mjBizAppsAccountingScheduledJournalEntryFormComponent extends BaseF
         this.initSections([
             { sectionKey: 'details', sectionName: 'Details', isExpanded: true },
             { sectionKey: 'mJBizAppsAccountingJournalEntries', sectionName: 'Journal Entries', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingScheduledJournalEntryLineItems', sectionName: 'Scheduled Journal Entry Line Items', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingScheduledJournalEntries', sectionName: 'Scheduled Journal Entries', isExpanded: false }
+            { sectionKey: 'mJBizAppsAccountingScheduledJournalEntries', sectionName: 'Scheduled Journal Entries', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingScheduledJournalEntryLineItems', sectionName: 'Scheduled Journal Entry Line Items', isExpanded: false }
         ]);
     }
 }

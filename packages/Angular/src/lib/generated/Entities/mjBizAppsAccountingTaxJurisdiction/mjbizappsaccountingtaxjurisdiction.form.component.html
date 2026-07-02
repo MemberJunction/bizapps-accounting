@@ -165,31 +165,6 @@
         }
     </mj-collapsible-panel>
 
-    <!-- Customer Tax Profiles Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingCustomerTaxProfiles"
-        SectionName="Customer Tax Profiles"
-        Icon="fa fa-table"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingCustomerTaxProfiles')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Customer Tax Profiles','TaxJurisdictionID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Customer Tax Profiles')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingCustomerTaxProfiles')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingCustomerTaxProfiles', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
     <!-- Tax Rates Section -->
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingTaxRates"
@@ -209,6 +184,31 @@
                 [ShowToolbar]="false"
                 (Navigate)="OnFormNavigate($event)"
                 (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingTaxRates', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- Customer Tax Profiles Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingCustomerTaxProfiles"
+        SectionName="Customer Tax Profiles"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingCustomerTaxProfiles')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Customer Tax Profiles','TaxJurisdictionID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Customer Tax Profiles')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingCustomerTaxProfiles')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingCustomerTaxProfiles', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>
