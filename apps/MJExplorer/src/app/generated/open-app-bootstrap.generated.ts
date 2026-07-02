@@ -17,3 +17,10 @@ import '@mj-biz-apps/common-entities';
 // mj-bizapps-common (v5.31.1)
 import '@mj-biz-apps/common-actions';
 
+// MJ bizapps-tasks
+import '@mj-biz-apps/tasks-actions';
+import '@mj-biz-apps/tasks-ng';
+import '@mj-biz-apps/tasks-core';
+import '@mj-biz-apps/tasks-entities';
+import '@mj-biz-apps/tasks-entities-server';
+import '@mj-biz-apps/tasks-server';
