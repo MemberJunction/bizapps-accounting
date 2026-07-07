@@ -7,12 +7,16 @@
     "schema-info",
     "entities",
     "currencies",
+    "gl-account-roles",
     "applications"
   ],
   "sqlLogging": {
     "enabled": true,
     "outputDirectory": "./sql_logging",
-    "filterPatterns": ["*spCreateAIPromptRun*", "*spUpdateAIPromptRun*"],
+    "filterPatterns": [
+      "*spCreateAIPromptRun*",
+      "*spUpdateAIPromptRun*"
+    ],
     "filterType": "exclude",
     "formatAsMigration": false
   },

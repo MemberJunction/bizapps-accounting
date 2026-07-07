@@ -28,24 +28,6 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="CompanyID"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-            LinkType="Record"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="AccountingPeriodID"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-            LinkType="Record"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
             FieldName="TargetSystem"
             Type="select"
             [EditMode]="EditMode"
@@ -111,6 +93,23 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
+            FieldName="ApprovedAt"
+            Type="datepicker"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="ApprovedByUserID"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+            LinkType="Record"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
             FieldName="SentAt"
             Type="datepicker"
             [EditMode]="EditMode"
@@ -119,7 +118,7 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="AcknowledgedAt"
+            FieldName="PostedAt"
             Type="datepicker"
             [EditMode]="EditMode"
             [FormContext]="formContext"
@@ -157,31 +156,6 @@
          RELATED ENTITY PANELS
          ======================================== -->
 
-    <!-- Journal Entry Batch Line Items Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingJournalEntryBatchLineItems"
-        SectionName="Journal Entry Batch Line Items"
-        Icon="fa fa-table"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingJournalEntryBatchLineItems')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entry Batch Line Items','BatchID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entry Batch Line Items')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntryBatchLineItems')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntryBatchLineItems', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
     <!-- Journal Entries Section -->
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingJournalEntries"
@@ -201,6 +175,31 @@
                 [ShowToolbar]="false"
                 (Navigate)="OnFormNavigate($event)"
                 (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntries', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- Journal Entry Batch Line Items Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingJournalEntryBatchLineItems"
+        SectionName="Journal Entry Batch Line Items"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingJournalEntryBatchLineItems')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entry Batch Line Items','BatchID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entry Batch Line Items')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntryBatchLineItems')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntryBatchLineItems', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>

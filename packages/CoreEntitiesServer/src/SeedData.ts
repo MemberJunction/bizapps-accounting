@@ -7,20 +7,12 @@
  * Plan reference: §4.1 (COA).
  */
 
+import type { mjBizAppsAccountingGLAccountEntity } from '@mj-biz-apps/accounting-entities';
+
 export interface SeededGLAccount {
   code: string;
   name: string;
-  accountType:
-    | 'Asset'
-    | 'Liability'
-    | 'Equity'
-    | 'Revenue'
-    | 'Expense'
-    | 'ContraAsset'
-    | 'ContraLiability'
-    | 'ContraRevenue'
-    | 'ContraExpense'
-    | 'Statistical';
+  accountType: mjBizAppsAccountingGLAccountEntity['AccountType'];
 }
 
 // Minimal AR-subledger starter chart (Block 0 — AD-8 + plan Conflict-Resolution §C1).

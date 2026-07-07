@@ -2,17 +2,20 @@
  * PRIORITY 2 — JE-batch approval + dispatch BEHAVIOR (Amith's priority).
  *
  * Drives the real engine through the Batch Dispatch GUI on a DEDICATED throwaway company that
- * `lib/batching-fixture.ts` provisions in `beforeAll` (a company with a CFO configured + one
- * balanced Pending JE) and tears down in `afterAll`. The seeded demo companies can't be used here:
+ * `lib/batching-fixture.ts` provisions in `beforeAll` (a company with a CFO configured + three
+ * balanced Pending JEs) and tears down in `afterAll`. The seeded demo companies can't be used here:
  * they only carry already-dispatched batches and have no CFO, so there is nothing to approve.
  *
+ * 2026-07-06 rework (CH-4): batches are MULTI-COMPANY and Build is GLOBAL — the dashboard has NO
+ * company/period pickers (Build nets ALL pending JEs); the lifecycle is Pending → Approved →
+ * Sent → Posted. The fixture asserts a stray-Pending-free DB, so Build sweeps exactly its JEs.
+ *
  * The flow proven end-to-end (presence AND behavior, per TEST-PROTOCOL.md):
- *   1. Build Batch         → a Pending batch appears; it shows "Awaiting approval" (the CFO gate
- *                            raised an approval Task because ApprovalCFOPersonID is set).
- *   2. Approve (CFO)       → RecordJEBatchDecision('Approved') → the approval badge flips to
- *                            "Approved" and the Dispatch button becomes enabled.
- *   3. Dispatch to BC      → DispatchJEBatch (gate.assertApproved passes → mock ERP poster) → the
- *                            batch status advances to Sent/Acknowledged.
+ *   1. Build Batch (header) → a Pending batch card appears with "Awaiting approval" (the CFO gate
+ *                             raised an approval Task because ApprovalCFOPersonID is set).
+ *   2. Approve (CFO)        → RecordJEBatchDecision('Approved') (also flips Pending→Approved) →
+ *                             the Dispatch button appears.
+ *   3. Dispatch to BC       → DispatchJEBatch (gate passes → mock ERP poster) → status 'Posted'.
  *
  * Honesty note: the in-app "Approve" records a terminal Approved decision via the gate; the gate
  * does NOT verify the decider IS the CFO (it only requires the CFO to be CONFIGURED at build time),
@@ -35,7 +38,7 @@ const FIXTURE = path.resolve(__dirname, '..', 'lib', 'batching-fixture.ts');
 const WORKTREE_ROOT = path.resolve(__dirname, '..', '..', '..', '..', '..', '..');
 const TSX = path.resolve(WORKTREE_ROOT, 'node_modules', '.bin', 'tsx');
 
-interface Fixture { companyId: string; companyName: string; runTag: string; periodLabel: string; periodId: string; cfoPersonId: string }
+interface Fixture { companyId: string; companyName: string; runTag: string; cfoPersonId: string }
 let fixture: Fixture;
 
 test.beforeAll(() => {
@@ -56,31 +59,22 @@ test.afterAll(() => {
   }
 });
 
-test('Batch Dispatch — Build → CFO Approve → Dispatch advances the batch to Sent/Acknowledged', async ({ page }) => {
+test('Batch Dispatch — Build → CFO Approve → Dispatch advances the batch to Posted', async ({ page }) => {
   await loginViaMagicLink(page);
   const sink = captureConsoleErrors(page);
 
   await openAccountingApp(page);
   await openNavItem(page, NAV.batches);
 
-  // ── Select the fixture company ────────────────────────────────────────────
-  const companySelect = page.locator('select').first();
-  const companyOptionLabels = await companySelect.locator('option').allTextContents();
-  const companyLabel = companyOptionLabels.find((o) => o.includes(fixture.runTag));
-  expect(companyLabel, `fixture company "${fixture.runTag}" must be selectable (got ${JSON.stringify(companyOptionLabels)})`).toBeTruthy();
-  await companySelect.selectOption({ label: companyLabel! });
-  await page.waitForTimeout(3500);
+  // ── The dashboard has NO company/period pickers (CH-4 global build) — only the Target ERP
+  //    selector in the toolbar. Verify it's present and defaulted to Business Central.
+  const targetSelect = page.locator('select').first();
+  await expect(targetSelect, 'the Target ERP selector should render in the toolbar').toBeVisible();
+  await expect(targetSelect).toHaveValue('BusinessCentral');
 
-  // ── Select the EXACT open period the fixture put the pending JE in ─────────
-  // All 12 Month periods share the label "Month · FY<year>", so we must select by the option's
-  // value (the period ID), not by label — otherwise Build runs against an empty period.
-  const periodSelect = page.locator('select').nth(1);
-  await periodSelect.selectOption({ value: fixture.periodId });
-  await page.waitForTimeout(1500);
-
-  // ── 1. Build Batch ────────────────────────────────────────────────────────
+  // ── 1. Build Batch (header action — sweeps ALL pending JEs) ───────────────
   const buildBtn = page.getByRole('button', { name: /Build Batch/i }).first();
-  await expect(buildBtn, 'Build Batch enabled once company + period are selected').toBeEnabled();
+  await expect(buildBtn, 'Build Batch should be enabled (global build needs no selection)').toBeEnabled();
   await buildBtn.click();
   await page.waitForTimeout(7000);
 
@@ -100,10 +94,10 @@ test('Batch Dispatch — Build → CFO Approve → Dispatch advances the batch t
   await approveBtn.click();
   await page.waitForTimeout(6000);
 
-  // The approval badge flips to "Approved".
+  // The batch status flips to Approved (the decision also moves the batch Pending→Approved).
   await expect(
     page.getByText('Approved', { exact: false }).first(),
-    'after approving, the batch should display an "Approved" badge',
+    'after approving, the batch should display an "Approved" status badge',
   ).toBeVisible({ timeout: 15_000 });
 
   // ── 3. Dispatch to BusinessCentral ────────────────────────────────────────
@@ -113,14 +107,14 @@ test('Batch Dispatch — Build → CFO Approve → Dispatch advances the batch t
   await dispatchBtn.click();
   await page.waitForTimeout(8000);
 
-  // The action banner reports a successful dispatch, and the batch status advances to Sent/Acknowledged.
+  // The action banner reports a successful dispatch, and the batch status advances to Posted.
   await expect(
-    page.getByText(/Dispatched batch .* (Sent|Acknowledged)/i).first(),
-    'dispatch should report the batch advanced to Sent/Acknowledged (mock ERP poster)',
+    page.getByText(/Dispatched batch .* (Posted|Sent)/i).first(),
+    'dispatch should report the batch advanced to Posted (mock ERP poster)',
   ).toBeVisible({ timeout: 20_000 });
   await expect(
-    page.locator('.bd-card mj-stat-badge').filter({ hasText: /Sent|Acknowledged/i }).first(),
-    'the batch card status badge should read Sent or Acknowledged after dispatch',
+    page.locator('.bd-card mj-stat-badge').filter({ hasText: /Posted/i }).first(),
+    'the batch card status badge should read Posted after dispatch',
   ).toBeVisible({ timeout: 15_000 });
 
   expectNoConsoleErrors(sink, 'driving the Build → Approve → Dispatch batch flow');

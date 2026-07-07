@@ -6,11 +6,12 @@
  * dedicated, tagged throwaway company that is READY for the GUI to drive the full
  * Build → Approve → Dispatch flow, then prints a JSON descriptor on stdout.
  *
- *   setup  → create a tagged Company + AccountingCompanyProfile (W1 auto-seeds COA + periods),
+ *   setup  → create a tagged Company + AccountingCompanyProfile (W1 auto-seeds the COA),
  *            map its GL accounts to BusinessCentral, create a CFO Person, set
- *            AccountingCompanyProfile.ApprovalCFOPersonID to that Person, and create ONE balanced
- *            Pending JE in an open Month period (so a batch can be built + has the CFO approval gate).
- *            Prints: { companyId, companyName, periodLabel, cfoPersonId }
+ *            AccountingCompanyProfile.ApprovalCFOPersonID to that Person, and create THREE balanced
+ *            Pending JEs (netting-with-canceling shape). 2026-07-06: periods are GONE and
+ *            buildBatch is GLOBAL — setup fails fast if any stray Pending JE exists.
+ *            Prints: { companyId, companyName, runTag, cfoPersonId, jeId, expected }
  *   teardown <companyId> [cfoPersonId] → FK-aware cleanup (disables triggers to drop locked rows),
  *            mirroring block2-runtime.ts teardown.
  *
@@ -57,7 +58,6 @@ const SCHEMA = '__mj_BizAppsAccounting';
 const TASK_SCHEMA = '__mj_BizAppsTasks';
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
-const PERIOD_ENTITY = 'MJ_BizApps_Accounting: Accounting Periods';
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
 const CURRENCY_ENTITY = 'MJ_BizApps_Accounting: Currencies';
@@ -86,14 +86,21 @@ async function connect(): Promise<Pools> {
   return { pool, teardownPool, user: ctxUser };
 }
 
+/** buildBatch is GLOBAL — stray Pending JEs would be swept into the fixture's batch. Fail fast. */
+async function assertNoStrayPending(pool: sql.ConnectionPool): Promise<void> {
+  const stray = (await pool.request().query(`SELECT COUNT(*) n FROM ${SCHEMA}.JournalEntry WHERE Status='Pending'`)).recordset[0].n;
+  if (Number(stray) > 0) throw new Error(`${stray} stray Pending JE(s) exist — clean them up before the batching fixture runs.`);
+}
+
 async function setup(p: Pools): Promise<void> {
   const { pool, user } = p;
+  await assertNoStrayPending(pool);
   const rv = new RunView();
   const cur = await rv.RunView<{ Code: string }>({ EntityName: CURRENCY_ENTITY, Fields: ['Code'], MaxRows: 1, ResultType: 'simple' }, user);
   const currencyCode = cur.Results?.[0]?.Code;
   if (!currencyCode) throw new Error(`no currency resolved (success=${cur.Success} err=${cur.ErrorMessage})`);
 
-  // Company + ACP (the ACP Save triggers W1 → seeds the 10-account COA + 17 periods).
+  // Company + ACP (the ACP Save triggers W1 → seeds the 10-account COA).
   const md = new Metadata();
   const acp = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, user);
   acp.NewRecord();
@@ -115,13 +122,6 @@ async function setup(p: Pools): Promise<void> {
   const revGL = byCode.get('40100');
   if (!arGL || !revGL) throw new Error(`could not resolve seeded GL accounts (AR 11201 / Rev 40100) for ${companyId}`);
 
-  const periodRes = await rv.RunView<{ ID: string; PeriodType: string; FiscalYear: number }>(
-    { EntityName: PERIOD_ENTITY, ExtraFilter: `CompanyID='${companyId}' AND PeriodType='Month' AND Status='Open'`, OrderBy: 'PeriodStart ASC', ResultType: 'simple' }, user,
-  );
-  const period = periodRes.Results?.[0];
-  if (!period) throw new Error(`no open Month period seeded for ${companyId}`);
-  const periodLabel = `${period.PeriodType} · FY${period.FiscalYear}`;
-
   const cashGL = byCode.get('11101');
   if (!cashGL) throw new Error(`could not resolve seeded Cash GL account (11101) for ${companyId}`);
 
@@ -140,7 +140,7 @@ async function setup(p: Pools): Promise<void> {
   for (let i = 0; i < jeSpecs.length; i++) {
     const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
     je.NewRecord();
-    je.CompanyID = companyId; je.AccountingPeriodID = period.ID; je.EffectiveDate = new Date();
+    je.EffectiveDate = new Date();
     je.EntryType = 'Manual'; je.Status = 'Pending'; je.Description = `${RUN_TAG} pending JE ${i + 1} for GUI batching`;
     if (!(await je.Save())) throw new Error(`JE ${i + 1} save failed: ${je.LatestResult?.CompleteMessage}`);
     if (i === 0) firstJeId = je.ID;
@@ -155,7 +155,7 @@ async function setup(p: Pools): Promise<void> {
   }
   // Expected NETTED batch (canceling proven: AR 500−200+100=400 Dr; Cash 200 Dr; Rev 600 Cr → 3 summary
   // lines; netted debits 600, NOT the gross 800). The API harness asserts these EXACT values.
-  const expected = { jeCount: 3, summaryLineCount: 3, totalDebits: 600, totalCredits: 600, grossDebits: 800 };
+  const expected = { jeCount: 3, summaryLineCount: 3, totalDebits: 600, totalCredits: 600, grossDebits: 800, companyCount: 1 };
 
   // CFO Person + set it on the company profile (the gate hard-fails the build without it).
   const person = await md.GetEntityObject<mjBizAppsCommonPersonEntity>(PERSON_ENTITY, user);
@@ -169,10 +169,9 @@ async function setup(p: Pools): Promise<void> {
   acp2.ApprovalCFOPersonID = cfoPersonId;
   if (!(await acp2.Save())) throw new Error(`set CFO failed: ${acp2.LatestResult?.CompleteMessage}`);
 
-  // Machine-readable descriptor on the LAST stdout line for the spec to parse.
-  // periodId is REQUIRED for the spec to pick the right dropdown <option> — all 12 Month periods
-  // share the label "Month · FY<year>", so the JE's period can only be disambiguated by its ID.
-  console.log(`FIXTURE_JSON ${JSON.stringify({ companyId, companyName: `${RUN_TAG} GUI Batch Co`, runTag: RUN_TAG, periodLabel, periodId: period.ID, cfoPersonId, jeId: firstJeId, expected })}`);
+  // Machine-readable descriptor on the LAST stdout line for the spec/harness to parse.
+  // (2026-07-06: no period fields — the dashboard lost its company/period pickers; the build is global.)
+  console.log(`FIXTURE_JSON ${JSON.stringify({ companyId, companyName: `${RUN_TAG} GUI Batch Co`, runTag: RUN_TAG, cfoPersonId, jeId: firstJeId, expected })}`);
 }
 
 async function teardown(p: Pools, companyId: string, cfoPersonId?: string): Promise<void> {
@@ -193,24 +192,34 @@ async function teardown(p: Pools, companyId: string, cfoPersonId?: string): Prom
   } catch (e) { console.log(`  teardown warn (tasks): ${(e instanceof Error ? e.message : String(e)).split('\n')[0]}`); }
 
   // Locked accounting rows need triggers disabled. Always re-enable in finally (harness-notes #3).
-  const toggled = ['JournalEntryBatchLineItem', 'JournalEntryLine', 'JournalEntry', 'JournalEntryBatch'];
+  // JEs/batches are GLOBAL now — identify this company's JEs via their lines' GLAccount.CompanyID,
+  // and its batches via JournalEntryBatchLineItem.CompanyID (a fixture batch only spans this company).
+  const toggled = ['JournalEntryBatchLineDimension', 'JournalEntryBatchLineItem', 'JournalEntryLine', 'JournalEntry', 'JournalEntryBatch'];
   try {
+    // Capture the company's JE IDs BEFORE deleting lines (a JE belongs to this fixture iff it has a
+    // line on one of this company's GL accounts — that includes reversals created by the API harness).
+    let jeIdList = '';
+    try {
+      const r = await p.teardownPool.request().query(
+        `SELECT DISTINCT l.JournalEntryID id FROM ${SCHEMA}.JournalEntryLine l JOIN ${SCHEMA}.GLAccount gl ON gl.ID=l.GLAccountID WHERE gl.CompanyID='${companyId}'`);
+      jeIdList = r.recordset.map((x: { id: string }) => `'${x.id}'`).join(',');
+    } catch (e) { console.log(`  teardown warn (je scan): ${(e instanceof Error ? e.message : String(e)).split('\n')[0]}`); }
     for (const t of toggled) await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
     await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatchLineDimension WHERE JournalEntryBatchLineItemID IN (SELECT ID FROM ${SCHEMA}.JournalEntryBatchLineItem WHERE CompanyID='${companyId}')`);
+    if (jeIdList) {
+      await exec(`DELETE FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID IN (${jeIdList})`);
+      await exec(`DELETE FROM ${SCHEMA}.JournalEntry WHERE ID IN (${jeIdList})`);
+    }
     await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatchLineItem WHERE CompanyID='${companyId}'`);
-    await exec(`DELETE FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID IN (SELECT ID FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${companyId}')`);
-    await exec(`DELETE FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${companyId}'`);
-    await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatch WHERE CompanyID='${companyId}'`);
+    // Fixture batches are single-company: after their line items are gone, drop any batch no JE references.
+    await exec(`DELETE b FROM ${SCHEMA}.JournalEntryBatch b WHERE NOT EXISTS (SELECT 1 FROM ${SCHEMA}.JournalEntryBatchLineItem li WHERE li.BatchID=b.ID) AND NOT EXISTS (SELECT 1 FROM ${SCHEMA}.JournalEntry je WHERE je.BatchID=b.ID)`);
   } finally {
     for (const t of toggled) await exec(`ENABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
   }
 
   await exec(`DELETE FROM ${SCHEMA}.ChartOfAccountsMapping WHERE CompanyID='${companyId}'`);
-  await exec(`DELETE FROM ${SCHEMA}.JournalEntrySequence WHERE CompanyID='${companyId}'`);
-  await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatchSequence WHERE CompanyID='${companyId}'`);
   await exec(`DELETE FROM ${SCHEMA}.AccountingCompanyProfile WHERE ID='${companyId}'`);
   await exec(`DELETE FROM ${SCHEMA}.GLAccount WHERE CompanyID='${companyId}'`);
-  await exec(`DELETE FROM ${SCHEMA}.AccountingPeriod WHERE CompanyID='${companyId}'`);
   await exec(`DELETE FROM __mj.Company WHERE ID='${companyId}'`);
   if (cfoPersonId) await exec(`DELETE FROM __mj_BizAppsCommon.Person WHERE ID='${cfoPersonId}'`);
   console.log(`  teardown complete for company ${companyId}`);

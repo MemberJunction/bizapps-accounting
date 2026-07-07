@@ -67,11 +67,8 @@ export class ARAgingRow {
 
 @ObjectType()
 export class DefRevRollforwardRow {
-  @Field(() => ID) AccountingPeriodID: string;
-  @Field(() => Int) FiscalYear: number;
-  @Field() PeriodType: string;
-  @Field({ nullable: true }) PeriodStart?: string;
-  @Field({ nullable: true }) PeriodEnd?: string;
+  /** First day of the rollforward month (month-grain on EffectiveDate — periods were retired 2026-07-06, CH-1). */
+  @Field() PeriodMonth: string;
   @Field(() => Float) OpeningBalance: number;
   @Field(() => Float) Additions: number;
   @Field(() => Float) Releases: number;
@@ -87,8 +84,6 @@ export class SalesTaxLiabilityRow {
   @Field(() => ID) TaxJurisdictionID: string;
   @Field() JurisdictionCode: string;
   @Field() JurisdictionName: string;
-  @Field(() => Int) FiscalYear: number;
-  @Field() PeriodType: string;
   @Field(() => Float) AccruedAmount: number;
   @Field(() => Float) RemittedAmount: number;
   @Field(() => Float) OutstandingLiability: number;
@@ -101,8 +96,6 @@ export class SalesTaxLiabilityRow {
 export class BatchDispatchStatusRow {
   @Field(() => ID) BatchID: string;
   @Field() BatchNumber: string;
-  @Field(() => Int) FiscalYear: number;
-  @Field() PeriodType: string;
   @Field() TargetSystem: string;
   @Field() Status: string;
   @Field(() => Int) TotalEntries: number;
@@ -110,9 +103,12 @@ export class BatchDispatchStatusRow {
   @Field(() => Float) TotalCredits: number;
   @Field({ nullable: true }) ExternalBatchRef?: string;
   @Field({ nullable: true }) BatchedAt?: string;
+  @Field({ nullable: true }) ApprovedAt?: string;
   @Field({ nullable: true }) SentAt?: string;
-  @Field({ nullable: true }) AcknowledgedAt?: string;
+  @Field({ nullable: true }) PostedAt?: string;
   @Field(() => Int) SummaryLineCount: number;
+  /** Batches are MULTI-COMPANY now (CH-4) — how many companies this batch's summary lines span. */
+  @Field(() => Int) CompanyCount: number;
 }
 
 @ObjectType()
@@ -181,7 +177,7 @@ export class ReadModelsResolver extends ResolverBase {
     );
   }
 
-  /** Deferred-revenue rollforward per period for a company. (vw_DefRevRollforward) */
+  /** Deferred-revenue rollforward per month for a company. (vw_DefRevRollforward — month-grain, CH-1) */
   @Query(() => [DefRevRollforwardRow])
   async AccountingDefRevRollforward(
     @Arg('companyID', () => ID) companyID: string,
@@ -189,9 +185,8 @@ export class ReadModelsResolver extends ResolverBase {
   ): Promise<DefRevRollforwardRow[]> {
     return this.runView<DefRevRollforwardRow>(
       userPayload,
-      `SELECT AccountingPeriodID, FiscalYear, PeriodType, PeriodStart, PeriodEnd,
-              OpeningBalance, Additions, Releases, NetChange, ClosingBalance
-         FROM ${SCHEMA}.vw_DefRevRollforward WHERE CompanyID = @CompanyID ORDER BY PeriodStart`,
+      `SELECT PeriodMonth, OpeningBalance, Additions, Releases, NetChange, ClosingBalance
+         FROM ${SCHEMA}.vw_DefRevRollforward WHERE CompanyID = @CompanyID ORDER BY PeriodMonth`,
       'AccountingDefRevRollforward',
       companyID,
     );
@@ -206,7 +201,7 @@ export class ReadModelsResolver extends ResolverBase {
     return this.runView<SalesTaxLiabilityRow>(
       userPayload,
       `SELECT TaxAuthorityID, AuthorityCode, AuthorityName, TaxJurisdictionID, JurisdictionCode, JurisdictionName,
-              FiscalYear, PeriodType, AccruedAmount, RemittedAmount, OutstandingLiability, Status, DueDate, FilingFrequency
+              AccruedAmount, RemittedAmount, OutstandingLiability, Status, DueDate, FilingFrequency
          FROM ${SCHEMA}.vw_SalesTaxLiability WHERE CompanyID = @CompanyID
         ORDER BY AuthorityCode, JurisdictionCode`,
       'AccountingSalesTaxLiability',
@@ -214,7 +209,11 @@ export class ReadModelsResolver extends ResolverBase {
     );
   }
 
-  /** Batch lifecycle + control totals for a company (read-only summary). (vw_BatchDispatchStatus) */
+  /**
+   * Batch lifecycle + control totals (read-only summary). (vw_BatchDispatchStatus)
+   * Batches are MULTI-COMPANY now (CH-4) — the view has no CompanyID; `companyID` scopes to
+   * batches that CONTAIN summary lines for that company (its dispatch history).
+   */
   @Query(() => [BatchDispatchStatusRow])
   async AccountingBatchDispatchStatus(
     @Arg('companyID', () => ID) companyID: string,
@@ -222,9 +221,11 @@ export class ReadModelsResolver extends ResolverBase {
   ): Promise<BatchDispatchStatusRow[]> {
     return this.runView<BatchDispatchStatusRow>(
       userPayload,
-      `SELECT BatchID, BatchNumber, FiscalYear, PeriodType, TargetSystem, Status, TotalEntries, TotalDebits, TotalCredits,
-              ExternalBatchRef, BatchedAt, SentAt, AcknowledgedAt, SummaryLineCount
-         FROM ${SCHEMA}.vw_BatchDispatchStatus WHERE CompanyID = @CompanyID ORDER BY BatchedAt DESC`,
+      `SELECT v.BatchID, v.BatchNumber, v.TargetSystem, v.Status, v.TotalEntries, v.TotalDebits, v.TotalCredits,
+              v.ExternalBatchRef, v.BatchedAt, v.ApprovedAt, v.SentAt, v.PostedAt, v.SummaryLineCount, v.CompanyCount
+         FROM ${SCHEMA}.vw_BatchDispatchStatus v
+        WHERE EXISTS (SELECT 1 FROM ${SCHEMA}.JournalEntryBatchLineItem li WHERE li.BatchID = v.BatchID AND li.CompanyID = @CompanyID)
+        ORDER BY v.BatchedAt DESC`,
       'AccountingBatchDispatchStatus',
       companyID,
     );

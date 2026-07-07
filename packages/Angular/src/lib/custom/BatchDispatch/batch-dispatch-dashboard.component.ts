@@ -6,21 +6,11 @@ import { RunView } from '@memberjunction/core';
 import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
 import {
   mjBizAppsAccountingJournalEntryBatchEntity,
-  mjBizAppsAccountingAccountingPeriodEntity,
 } from '@mj-biz-apps/accounting-entities';
 import { BatchDispatchClient, BatchDecision } from './batch-dispatch.client';
 
-/** One selectable company (accounting-enabled). */
-interface CompanyOption {
-  ID: string;
-  Name: string;
-}
-
-/** One accounting period available for batching. */
-interface PeriodOption {
-  ID: string;
-  Label: string;
-}
+/** The generated batch Status union (rule 2c: derived, never hand-copied). */
+type BatchStatus = mjBizAppsAccountingJournalEntryBatchEntity['Status'];
 
 /**
  * One batch row in the list, with its derived display + (lazily-loaded) CFO approval state.
@@ -30,8 +20,7 @@ interface PeriodOption {
 interface BatchRow {
   ID: string;
   BatchNumber: string;
-  CompanyName: string;
-  Status: 'Acknowledged' | 'Failed' | 'Pending' | 'Sent';
+  Status: BatchStatus;
   TargetSystem: string;
   TotalEntries: number;
   TotalDebits: number;
@@ -46,19 +35,17 @@ interface BatchRow {
 }
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
-const PERIOD_ENTITY = 'MJ_BizApps_Accounting: Accounting Periods';
-const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
-const COMPANY_ENTITY = 'MJ: Companies';
 
 /**
  * Batch Dispatch — the Block 2 JE-batch review/dispatch + CFO-approve dashboard.
+ * REWORKED 2026-07-06: batches are MULTI-COMPANY (CH-4) — no company/period selection; ONE build
+ * gathers ALL pending JEs; the send splits by company at the ERP boundary.
  *
- * Lists JE Batches for a selected accounting-enabled company (status / control totals /
- * summary-line count + CFO approval state), and drives the engine via the thin
- * BatchDispatchClient (→ BatchDispatchResolver → CoreEntitiesServer buildBatch/sendBatch/gate):
- *   - Build batch  (pending JEs → a Pending batch + approval task)
- *   - In-app CFO Approve / Reject  (recordDecision against the batch's approval Task)
- *   - Dispatch to ERP  (enabled only when the gate reports the batch Approved; mock poster for v1)
+ * Lists ALL JE Batches (status / control totals + CFO approval state), and drives the engine via the
+ * thin BatchDispatchClient (→ BatchDispatchResolver → CoreEntitiesServer buildBatch/approveBatch/sendBatch/gate):
+ *   - Build batch  (ALL pending JEs → ONE Pending multi-company batch + approval task)
+ *   - In-app CFO Approve / Reject  (recordDecision; an approval also flips the batch Pending→Approved)
+ *   - Dispatch to ERP  (enabled only for an Approved batch; mock poster for v1)
  */
 @Component({
   standalone: false,
@@ -72,12 +59,8 @@ export class BatchDispatchDashboardComponent extends BaseDashboard {
   public IsLoading = false;
   public LoadError: string | null = null;
 
-  public Companies: CompanyOption[] = [];
-  public Periods: PeriodOption[] = [];
   public Batches: BatchRow[] = [];
 
-  public SelectedCompanyID: string | null = null;
-  public SelectedPeriodID: string | null = null;
   /** Target ERP for newly-built batches. BC is the headline target; mock poster dispatches it. */
   public TargetSystem = 'BusinessCentral';
 
@@ -101,13 +84,7 @@ export class BatchDispatchDashboardComponent extends BaseDashboard {
     this.IsLoading = true;
     this.LoadError = null;
     try {
-      await this.loadCompanies();
-      if (!this.SelectedCompanyID && this.Companies.length > 0) {
-        this.SelectedCompanyID = this.Companies[0].ID;
-      }
-      if (this.SelectedCompanyID) {
-        await Promise.all([this.loadPeriods(this.SelectedCompanyID), this.loadBatches(this.SelectedCompanyID)]);
-      }
+      await this.loadBatches();
     } catch (e) {
       this.LoadError = e instanceof Error ? e.message : String(e);
     } finally {
@@ -119,25 +96,6 @@ export class BatchDispatchDashboardComponent extends BaseDashboard {
 
   // ─── selection handlers ──────────────────────────────────────────────────
 
-  public async OnCompanyChange(companyID: string): Promise<void> {
-    this.SelectedCompanyID = companyID;
-    this.SelectedPeriodID = null;
-    this.ActionMessage = null;
-    this.IsLoading = true;
-    this.cdr.markForCheck();
-    try {
-      await Promise.all([this.loadPeriods(companyID), this.loadBatches(companyID)]);
-    } finally {
-      this.IsLoading = false;
-      this.cdr.markForCheck();
-    }
-  }
-
-  public OnPeriodChange(periodID: string): void {
-    this.SelectedPeriodID = periodID;
-    this.cdr.markForCheck();
-  }
-
   public OnTargetSystemChange(target: string): void {
     this.TargetSystem = target;
     this.cdr.markForCheck();
@@ -145,22 +103,22 @@ export class BatchDispatchDashboardComponent extends BaseDashboard {
 
   // ─── actions ───────────────────────────────────────────────────────────────
 
-  /** Build a batch from the selected company×period's pending JEs. */
+  /** Build ONE multi-company batch from ALL pending JEs. */
   public async OnBuildBatch(): Promise<void> {
-    if (!this.SelectedCompanyID || !this.SelectedPeriodID || this.Building) return;
+    if (this.Building) return;
     this.Building = true;
     this.clearActionMessage();
     this.cdr.markForCheck();
     try {
-      const res = await this.client().BuildBatch(this.SelectedCompanyID, this.SelectedPeriodID, this.TargetSystem);
+      const res = await this.client().BuildBatch(this.TargetSystem);
       if (res.Success && res.NothingToBatch) {
-        this.setActionMessage('No pending journal entries to batch for this company and period.', false);
+        this.setActionMessage('No pending journal entries to batch.', false);
       } else if (res.Success) {
         this.setActionMessage(
-          `Built batch with ${res.JECount} JE(s) → ${res.SummaryLineCount} summary line(s); Dr ${res.TotalDebits} / Cr ${res.TotalCredits}. Awaiting CFO approval.`,
+          `Built batch with ${res.JECount} JE(s) across ${res.CompanyCount} company(ies) → ${res.SummaryLineCount} summary line(s); Dr ${res.TotalDebits} / Cr ${res.TotalCredits}. Awaiting CFO approval.`,
           false,
         );
-        await this.loadBatches(this.SelectedCompanyID);
+        await this.loadBatches();
       } else {
         this.setActionMessage(res.ErrorMessage ?? 'Build failed.', true);
       }
@@ -180,7 +138,7 @@ export class BatchDispatchDashboardComponent extends BaseDashboard {
       const res = await this.client().RecordDecision(row.ID, decision);
       if (res.Success) {
         this.setActionMessage(`Recorded "${decision}" on batch ${row.BatchNumber}.`, false);
-        await this.refreshApprovalState(row);
+        await this.loadBatches(); // an approval also flips the batch Pending→Approved
       } else {
         this.setActionMessage(res.ErrorMessage ?? 'Failed to record decision.', true);
       }
@@ -203,7 +161,7 @@ export class BatchDispatchDashboardComponent extends BaseDashboard {
           `Dispatched batch ${row.BatchNumber} → ${res.Status}${res.ExternalBatchRef ? ` (ref ${res.ExternalBatchRef})` : ''}.`,
           false,
         );
-        if (this.SelectedCompanyID) await this.loadBatches(this.SelectedCompanyID);
+        await this.loadBatches();
       } else {
         this.setActionMessage(res.ErrorMessage ?? 'Dispatch failed.', true);
       }
@@ -215,17 +173,16 @@ export class BatchDispatchDashboardComponent extends BaseDashboard {
 
   // ─── view helpers (template-facing) ──────────────────────────────────────
 
-  /** Build enabled only when a company AND a period are selected. */
   public get CanBuild(): boolean {
-    return !!this.SelectedCompanyID && !!this.SelectedPeriodID && !this.Building;
+    return !this.Building;
   }
 
-  /** A Pending batch with a positive gate result can dispatch. */
+  /** An Approved batch (status flip happens with the CFO decision) can dispatch. */
   public canDispatch(row: BatchRow): boolean {
-    return row.Status === 'Pending' && row.Approved === true && !row.Busy;
+    return row.Status === 'Approved' && row.Approved === true && !row.Busy;
   }
 
-  /** CFO decision controls show only while the batch is still Pending and not yet approved. */
+  /** CFO decision controls show only while the batch is still Pending. */
   public canDecide(row: BatchRow): boolean {
     return row.Status === 'Pending' && row.Approved !== true && !row.Busy;
   }
@@ -233,56 +190,23 @@ export class BatchDispatchDashboardComponent extends BaseDashboard {
   /** Map a batch status to a stat-badge variant for the status pill. */
   public statusVariant(status: BatchRow['Status']): 'success' | 'warning' | 'error' | 'info' | 'default' {
     switch (status) {
-      case 'Acknowledged': return 'success';
+      case 'Posted': return 'success';
       case 'Sent': return 'info';
+      case 'Approved': return 'info';
       case 'Failed': return 'error';
       case 'Pending': return 'warning';
+      case 'Cancelled': return 'default';
       default: return 'default';
     }
   }
 
   // ─── data loading ──────────────────────────────────────────────────────────
 
-  private async loadCompanies(): Promise<void> {
-    // Accounting-enabled companies = those with an AccountingCompanyProfile (IsA child; same PK as Company).
-    const rv = this.runView();
-    const acpRes = await rv.RunView<{ ID: string }>(
-      { EntityName: ACP_ENTITY, Fields: ['ID'], OrderBy: 'ID ASC', ResultType: 'simple' },
-      this.contextUser(),
-    );
-    const ids = acpRes.Success ? (acpRes.Results ?? []).map(r => r.ID) : [];
-    if (ids.length === 0) { this.Companies = []; return; }
-
-    const inList = ids.map(id => `'${id}'`).join(',');
-    const coRes = await rv.RunView<{ ID: string; Name: string }>(
-      { EntityName: COMPANY_ENTITY, ExtraFilter: `ID IN (${inList})`, Fields: ['ID', 'Name'], OrderBy: 'Name ASC', ResultType: 'simple' },
-      this.contextUser(),
-    );
-    this.Companies = coRes.Success ? (coRes.Results ?? []).map(c => ({ ID: c.ID, Name: c.Name })) : [];
-  }
-
-  private async loadPeriods(companyID: string): Promise<void> {
-    const rv = this.runView();
-    const res = await rv.RunView<mjBizAppsAccountingAccountingPeriodEntity>(
-      {
-        EntityName: PERIOD_ENTITY,
-        ExtraFilter: `CompanyID='${companyID}' AND Status='Open'`,
-        OrderBy: 'FiscalYear ASC, PeriodType ASC',
-        ResultType: 'simple',
-      },
-      this.contextUser(),
-    );
-    this.Periods = res.Success
-      ? (res.Results ?? []).map(p => ({ ID: p.ID, Label: `${p.PeriodType} · FY${p.FiscalYear}` }))
-      : [];
-  }
-
-  private async loadBatches(companyID: string): Promise<void> {
+  private async loadBatches(): Promise<void> {
     const rv = this.runView();
     const res = await rv.RunView<mjBizAppsAccountingJournalEntryBatchEntity>(
       {
         EntityName: BATCH_ENTITY,
-        ExtraFilter: `CompanyID='${companyID}'`,
         OrderBy: 'BatchedAt DESC',
         ResultType: 'simple',
       },
@@ -294,15 +218,16 @@ export class BatchDispatchDashboardComponent extends BaseDashboard {
       return;
     }
     this.Batches = (res.Results ?? []).map(b => this.toRow(b));
-    // Resolve CFO approval state for the Pending batches (the only ones whose dispatch it gates).
-    await Promise.all(this.Batches.filter(r => r.Status === 'Pending').map(r => this.refreshApprovalState(r)));
+    // Resolve CFO approval state for Pending batches (their decide/dispatch controls gate on it)
+    // AND Approved batches (canDispatch requires the gate state, not just the status flip — a
+    // Pending-only filter left row.Approved undefined after approval, hiding the Dispatch button).
+    await Promise.all(this.Batches.filter(r => r.Status === 'Pending' || r.Status === 'Approved').map(r => this.refreshApprovalState(r)));
   }
 
   private toRow(b: mjBizAppsAccountingJournalEntryBatchEntity): BatchRow {
     return {
       ID: b.ID,
       BatchNumber: b.BatchNumber,
-      CompanyName: b.Company,
       Status: b.Status,
       TargetSystem: b.TargetSystem,
       TotalEntries: b.TotalEntries,

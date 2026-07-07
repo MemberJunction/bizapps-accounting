@@ -37,7 +37,7 @@ Pending JE) and tears down in `afterAll`:
 
 1. **Build Batch** → a Pending batch appears, "Awaiting approval" (CFO gate raised an approval Task).
 2. **Approve (CFO)** → the approval badge flips to **Approved** and the Dispatch button enables.
-3. **Dispatch to BusinessCentral** → batch status advances to **Sent/Acknowledged** (mock ERP poster).
+3. **Dispatch to BusinessCentral** → batch status advances to **Posted** (mock ERP poster; Pending→Approved→Sent→Posted lifecycle, CH-4).
 
 > **Gate semantics (honest scope).** The CFO gate (`TasksAppApprovalGate`) gates the **build** on a
 > CFO being *configured* (`AccountingCompanyProfile.ApprovalCFOPersonID`), and the **dispatch** on a

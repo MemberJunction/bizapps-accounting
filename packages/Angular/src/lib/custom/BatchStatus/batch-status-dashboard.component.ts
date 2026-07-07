@@ -36,7 +36,7 @@ export class BatchStatusDashboardComponent extends ReadModelDashboardBase {
     { field: 'BatchNumber', headerName: 'Batch', flex: 1, minWidth: 180, tooltipField: 'BatchNumber' },
     { field: 'TargetSystem', headerName: 'Target', width: 150 },
     { field: 'Status', headerName: 'Status', width: 140 },
-    { field: 'FiscalYear', headerName: 'FY', width: 90, type: 'numericColumn' },
+    { field: 'CompanyCount', headerName: 'Companies', width: 110, type: 'numericColumn' },
     { field: 'TotalEntries', headerName: 'JEs', width: 90, type: 'numericColumn' },
     { field: 'SummaryLineCount', headerName: 'Lines', width: 90, type: 'numericColumn' },
     moneyColumn<BatchDispatchStatusRow>('TotalDebits', 'Debits'),
@@ -48,9 +48,9 @@ export class BatchStatusDashboardComponent extends ReadModelDashboardBase {
   get DashboardTitle(): string { return 'Batch Status'; }
 
   public get TotalBatches(): number { return this.Batches.length; }
-  public get PendingCount(): number { return this.Batches.filter(b => b.Status === 'Pending').length; }
+  public get PendingCount(): number { return this.Batches.filter(b => b.Status === 'Pending' || b.Status === 'Approved').length; }
   public get SentCount(): number { return this.Batches.filter(b => b.Status === 'Sent').length; }
-  public get AcknowledgedCount(): number { return this.Batches.filter(b => b.Status === 'Acknowledged').length; }
+  public get PostedCount(): number { return this.Batches.filter(b => b.Status === 'Posted').length; }
   public get FailedCount(): number { return this.Batches.filter(b => b.Status === 'Failed').length; }
 
   public OnGridReady(_event: GridReadyEvent): void { /* rowData binding drives the grid. */ }

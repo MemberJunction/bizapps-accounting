@@ -5,9 +5,7 @@
     Subtitle="Review, approve, and dispatch journal-entry batches to the ERP">
 
     <div meta>
-      @if (SelectedCompanyID) {
-        <mj-stat-badge [Count]="Batches.length" Label="batches" />
-      }
+      <mj-stat-badge [Count]="Batches.length" Label="batches" />
     </div>
 
     <div actions>
@@ -22,27 +20,7 @@
     </div>
 
     <div toolbar>
-      <label class="bd-field">
-        <span class="bd-field__label">Company</span>
-        <select class="mj-input" [value]="SelectedCompanyID ?? ''"
-                (change)="OnCompanyChange($any($event.target).value)">
-          @for (c of Companies; track c.ID) {
-            <option [value]="c.ID">{{ c.Name }}</option>
-          }
-        </select>
-      </label>
-
-      <label class="bd-field">
-        <span class="bd-field__label">Period (for build)</span>
-        <select class="mj-input" [value]="SelectedPeriodID ?? ''"
-                (change)="OnPeriodChange($any($event.target).value)">
-          <option value="" disabled>Select a period…</option>
-          @for (p of Periods; track p.ID) {
-            <option [value]="p.ID">{{ p.Label }}</option>
-          }
-        </select>
-      </label>
-
+      <!-- Batches are MULTI-COMPANY (CH-4): one build gathers ALL pending JEs — no company/period pickers. -->
       <label class="bd-field">
         <span class="bd-field__label">Target ERP</span>
         <select class="mj-input" [value]="TargetSystem"
@@ -83,7 +61,7 @@
         <mj-empty-state
           Icon="fa-solid fa-inbox"
           Title="No batches yet"
-          Message="Select a company and an open period, then Build Batch to net its pending journal entries into a dispatchable batch.">
+          Message="Build Batch nets ALL pending journal entries (across every company) into one dispatchable multi-company batch.">
         </mj-empty-state>
       } @else {
         <div class="bd-list">
@@ -98,9 +76,7 @@
                 <div class="bd-card__badges">
                   <mj-stat-badge Label="{{ row.Status }}" [Variant]="statusVariant(row.Status)" />
                   @if (row.Status === 'Pending') {
-                    @if (row.Approved === true) {
-                      <mj-stat-badge Icon="fa-solid fa-circle-check" Label="Approved" Variant="success" />
-                    } @else if (row.Approved === false) {
+                    @if (row.Approved === false) {
                       <mj-stat-badge Icon="fa-solid fa-hourglass-half" Label="Awaiting approval" Variant="warning" />
                     } @else if (row.Approved === null) {
                       <mj-stat-badge Icon="fa-solid fa-question" Label="Approval unknown" Variant="info" />

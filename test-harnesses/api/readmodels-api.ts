@@ -29,7 +29,7 @@ import { execSync } from 'node:child_process';
 const API_URL = (process.env.MJ_API_URL ?? 'http://localhost:4070').replace(/\/+$/, '');
 const GRAPHQL_URL = `${API_URL}/`;
 const MJDEV_LAUNCHER = '/Users/marcelotorres/MJDev/bin/mjdev';
-const INSTANCE_SLUG = 'bizapps-accounting-dev';
+const INSTANCE_SLUG = process.env.MJDEV_SLUG ?? 'bizapps-accounting-dev';
 // Association demo companies (test-harnesses/server/seed-demo.ts). CO1 = AR/DefRev/Tax demos;
 // CO2 = intercompany leg 1 (so intercompany is validated on the company that actually OWNS the flow).
 const CO1 = 'a55c0de1-0001-4000-8000-000000000001';
@@ -118,7 +118,7 @@ interface AROpenRow { CustomerName: string; OpenBalance: number; }
 interface AgingRow { CustomerName: string; Current_0_30: number; Days_31_60: number; Days_61_90: number; Days_Over_90: number; TotalOpen: number; }
 interface DefRevRow { Additions: number; Releases: number; ClosingBalance: number; }
 interface TaxRow { AccruedAmount: number; RemittedAmount: number; OutstandingLiability: number; Status: string; }
-interface BatchRow { Status: string; }
+interface BatchRow { Status: string; CompanyCount: number; }
 interface ICRow { EntryType: string; GLAccountCode: string; }
 
 // helper: find a customer's value by name fragment
@@ -183,12 +183,14 @@ async function run(apiKey: string): Promise<void> {
     check('PartiallyPaid row = accrued 1000 / outstanding 650', partial?.AccruedAmount === 1000 && partial?.OutstandingLiability === 650, JSON.stringify(partial));
   } catch (e) { check('AccountingSalesTaxLiability executes', false, e instanceof Error ? e.message : String(e)); }
 
-  // 6. Batch Dispatch Status — the seed posts 4 batches for CO1, all dispatched (Acknowledged).
+  // 6. Batch Dispatch Status — the seed posts 4 batches containing CO1 lines, all Posted
+  //    (2026-07-06 lifecycle: Pending → Approved → Sent → Posted; company scope = batches with CO1 summary lines).
   console.log('\nAccountingBatchDispatchStatus(CO1) — all dispatched:');
   try {
-    const rows = await fetchRows<BatchRow>(apiKey, 'AccountingBatchDispatchStatus', CO1, 'Status');
-    check('4 batches', rows.length === 4, `got ${rows.length}`);
-    check('every batch Status === Acknowledged', rows.every(r => r.Status === 'Acknowledged'), `statuses ${rows.map(r => r.Status).join(',')}`);
+    const rows = await fetchRows<BatchRow>(apiKey, 'AccountingBatchDispatchStatus', CO1, 'Status CompanyCount');
+    check('4 batches contain CO1 lines', rows.length === 4, `got ${rows.length}`);
+    check("every batch Status === 'Posted'", rows.every(r => r.Status === 'Posted'), `statuses ${rows.map(r => r.Status).join(',')}`);
+    check('every batch reports a CompanyCount >= 1 (CH-4 shape)', rows.every(r => Number(r.CompanyCount) >= 1), JSON.stringify(rows));
   } catch (e) { check('AccountingBatchDispatchStatus executes', false, e instanceof Error ? e.message : String(e)); }
 
   // 7. Intercompany Flow — proves BY-COMPANY SCOPING: CO1 owns none (0), CO2 owns the seeded leg.

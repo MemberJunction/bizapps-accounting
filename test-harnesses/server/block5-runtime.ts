@@ -2,7 +2,8 @@
  * block5-runtime.ts — live validation of the Block-5 COA-mapping approval workflow (server-side).
  *
  * Runs against a REAL instance DB through the REAL provider + server subclasses (MJAPI's path).
- *   propose → UNapproved mapping is INVISIBLE to §5.5 resolution (resolveExternalAccount ignores it).
+ *   propose → UNapproved mapping is INVISIBLE to §5.5 resolution (resolveExternalAccount ignores it
+ *             and falls back to the account Code — AM-4 2026-07-06: resolution never hard-fails).
  *   approve → the mapping now resolves (override beats inline).
  *   strict 1:1 → approving a SECOND mapping for the same local GL supersedes the prior (EffectiveTo closed),
  *               and resolution returns the NEW external account.
@@ -65,8 +66,11 @@ async function bootstrap(): Promise<Ctx> {
   const md = new Metadata();
   const acp = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, ctxUser);
   acp.NewRecord();
-  acp.Set('Name', `${RUN_TAG} Co`); acp.Set('Description', `${RUN_TAG} block5 test`);
-  acp.Set('CompanyCode', companyCode()); acp.Set('FunctionalCurrencyCode', currencyCode); acp.Set('EntityType', 'Subsidiary');
+  acp.Name = `${RUN_TAG} Co`;
+  acp.Description = `${RUN_TAG} block5 test`;
+  acp.CompanyCode = companyCode();
+  acp.FunctionalCurrencyCode = currencyCode;
+  acp.EntityType = 'Subsidiary';
   const companyId = acp.ID;
   if (!(await acp.Save())) throw new Error(`ACP save failed: ${acp.LatestResult?.CompleteMessage ?? 'unknown'}`);
 
@@ -91,7 +95,9 @@ async function main(): Promise<void> {
       user,
     );
     const resolved = await resolveExternalAccount(glId, companyId, 'BusinessCentral', user);
-    assert(resolved === null, `unapproved mapping must NOT resolve; got '${resolved}'`);
+    // The unapproved mapping is invisible; with no inline ExternalAccountID either, resolution
+    // falls back to the account Code (AM-4 — never null, never hard-fail).
+    assert(resolved === '40100', `unapproved mapping must NOT resolve (Code fallback expected); got '${resolved}'`);
   });
 
   await test('approve — the mapping now resolves (BC-1000)', async () => {
@@ -137,7 +143,6 @@ async function main(): Promise<void> {
   await exec(`DELETE FROM ${SCHEMA}.ChartOfAccountsMapping WHERE CompanyID='${companyId}'`);
   await exec(`DELETE FROM ${SCHEMA}.AccountingCompanyProfile WHERE ID='${companyId}'`);
   await exec(`DELETE FROM ${SCHEMA}.GLAccount WHERE CompanyID='${companyId}'`);
-  await exec(`DELETE FROM ${SCHEMA}.AccountingPeriod WHERE CompanyID='${companyId}'`);
   await exec(`DELETE FROM __mj.Company WHERE ID='${companyId}'`);
 
   const failed = outcomes.filter(o => !o.Passed);

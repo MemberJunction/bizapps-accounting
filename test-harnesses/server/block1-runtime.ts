@@ -2,17 +2,21 @@
  * block1-runtime.ts — live validation of the Block-1 JE-lifecycle hooks + DB invariants.
  *
  * Runs against a REAL instance DB through the REAL provider + server subclasses (MJAPI's path).
- *   W4  adjusting-entry routing: post to a CLOSED period — error w/o OriginalAccountingPeriodID;
- *       routes to the next open period w/ it.
+ *
+ * 2026-07-06 rework (engine-meeting rulings): AccountingPeriod is GONE, so the W4
+ * adjusting-entry routing + period-close (50007) tests are RETIRED. JEs are now
+ * MULTI-COMPANY (no header CompanyID — company derives from GLAccount.CompanyID per line),
+ * which adds the AM-4 per-company balance invariant (50019):
+ *
  *   W6  generateReversal: new Pending JE (EntryType='Reversal'), Dr/Cr swapped, back-referenced.
- *   F1  validateJournalEntry: balanced/open/active → valid; unbalanced → invalid.
- *   INV (DB triggers, §11.1 — each with a RAW-SQL bypass case + an allowed counter-case):
- *       balanced-on-lock (50001) · JE immutability (50003/50004) · JE-line immutability (50006) ·
- *       period-close (50007).
+ *   F1  validateJournalEntry: balanced/active → valid; unbalanced → invalid.
+ *   INV (DB triggers, each with a RAW-SQL bypass case + an allowed counter-case):
+ *       balanced-on-lock overall (50001) · balanced-on-lock PER COMPANY (50019, AM-4) ·
+ *       JE immutability (50003/50004) · JE-line immutability (50006).
  *
  * USAGE (cwd = instance worktree root, where .env resolves):
  *   npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/block1-runtime.ts
- * Exit: 0 all passed · 1 failures · 2 bootstrap error. Idempotent (FK-aware teardown).
+ * Exit: 0 all passed · 1 failures · 2 bootstrap error. Idempotent (FK-aware teardown by tracked IDs).
  */
 import sql from 'mssql';
 import dotenv from 'dotenv';
@@ -38,7 +42,6 @@ import type { JournalEntryEntityServer } from '@mj-biz-apps/accounting-core-enti
 
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
-const PERIOD_ENTITY = 'MJ_BizApps_Accounting: Accounting Periods';
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
 const CURRENCY_ENTITY = 'MJ_BizApps_Accounting: Currencies';
@@ -46,7 +49,10 @@ const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const SCHEMA = '__mj_BizAppsAccounting';
 
 const RUN_TAG = `BLOCK1-${Date.now()}`;
-function companyCode(): string { return `B1${Date.now().toString(36).slice(-7)}`.toUpperCase(); }
+let companyCodeCounter = 0;
+function companyCode(): string { return `B1${(companyCodeCounter++)}${Date.now().toString(36).slice(-6)}`.toUpperCase(); }
+
+type JEStatus = mjBizAppsAccountingJournalEntryEntity['Status']; // rule 2c — derive, never hand-copy
 
 interface Outcome { Name: string; Passed: boolean; Ms: number; Error?: string }
 const outcomes: Outcome[] = [];
@@ -63,64 +69,87 @@ async function expectThrow(fn: () => Promise<unknown>, mustContain: string): Pro
   assert(msg.includes(mustContain), `expected error to contain "${mustContain}", got: ${msg.split('\n')[0]}`);
 }
 
-interface Ctx { pool: sql.ConnectionPool; user: UserInfo; companyId: string; arGL: string; revGL: string; openPeriods: { ID: string; PeriodStart: string }[]; batchId: string }
+interface Company { id: string; arGL: string; revGL: string }
+interface Ctx {
+  pool: sql.ConnectionPool;
+  /** db_owner pool (MJ_CodeGen) used ONLY for FK-aware teardown — the app user MJ_Connect lacks ALTER
+   *  (can't DISABLE TRIGGER) and can't delete locked JEs/batches, which is the security model. */
+  teardownPool: sql.ConnectionPool;
+  user: UserInfo; companyA: Company; companyB: Company; batchId: string;
+}
+
+/** Tracked created rows for the FK-aware teardown (JEs are global now — no CompanyID to sweep by). */
+const createdJEIds: string[] = [];
+
+async function createCompany(user: UserInfo, currencyCode: string, label: string): Promise<Company> {
+  const md = new Metadata();
+  const rv = new RunView();
+  const acp = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, user);
+  acp.NewRecord();
+  acp.Name = `${RUN_TAG} ${label}`;
+  acp.Description = `${RUN_TAG} block1 test (${label})`;
+  acp.CompanyCode = companyCode();
+  acp.FunctionalCurrencyCode = currencyCode;
+  acp.EntityType = 'Subsidiary';
+  const id = acp.ID;
+  if (!(await acp.Save())) throw new Error(`ACP save failed (${label}): ${acp.LatestResult?.CompleteMessage ?? 'unknown'}`);
+  const glRes = await rv.RunView<{ ID: string; Code: string }>(
+    { EntityName: GL_ENTITY, ExtraFilter: `CompanyID='${id}'`, Fields: ['ID', 'Code'], ResultType: 'simple' }, user);
+  const byCode = new Map((glRes.Results ?? []).map(r => [r.Code, r.ID]));
+  const arGL = byCode.get('11201'); const revGL = byCode.get('40100');
+  if (!arGL || !revGL) throw new Error(`seeded GL accounts not found for ${label}`);
+  return { id, arGL, revGL };
+}
 
 async function bootstrap(): Promise<Ctx> {
   dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
   const { DB_HOST: host, DB_DATABASE: database, DB_USERNAME: user, DB_PASSWORD: password } = process.env;
   if (!host || !database || !user || !password) throw new Error('Missing DB settings in .env (run from the instance worktree root).');
   const pool = await new sql.ConnectionPool({ server: host, port: Number(process.env.DB_PORT ?? 1433), user, password, database, options: { encrypt: false, trustServerCertificate: true } }).connect();
+  // db_owner pool for teardown only (DISABLE TRIGGER + locked-row deletes the app user can't do).
+  const { CODEGEN_DB_USERNAME: cgUser, CODEGEN_DB_PASSWORD: cgPassword } = process.env;
+  if (!cgUser || !cgPassword) throw new Error('Missing CODEGEN_DB_USERNAME/PASSWORD in .env (needed for the db_owner teardown pool).');
+  const teardownPool = await new sql.ConnectionPool({ server: host, port: Number(process.env.DB_PORT ?? 1433), user: cgUser, password: cgPassword, database, options: { encrypt: false, trustServerCertificate: true } }).connect();
   await setupSQLServerClient(new SQLServerProviderConfigData(pool, process.env.MJ_CORE_SCHEMA || '__mj'));
-  await assertInvariantTriggers(pool); // 1b pre-flight: fail fast if any invariant trigger is missing/disabled
+  await assertInvariantTriggers(pool); // pre-flight: fail fast if any invariant trigger is missing/disabled
   await UserCache.Instance.Refresh(pool);
   const ctxUser = UserCache.Users.find(u => u?.Type?.trim().toLowerCase() === 'owner') ?? UserCache.Users[0];
   if (!ctxUser) throw new Error('No context user found.');
   const rv = new RunView();
   const cur = await rv.RunView<{ Code: string }>({ EntityName: CURRENCY_ENTITY, Fields: ['Code'], MaxRows: 1, ResultType: 'simple' }, ctxUser);
-  const currencyCode = cur.Results?.[0]?.Code as string;
+  const currencyCode = cur.Results?.[0]?.Code;
   if (!currencyCode) throw new Error(`no currency resolved (success=${cur.Success} err=${cur.ErrorMessage})`);
 
-  // Create the test company (W1 seeds COA + periods).
-  const md = new Metadata();
-  const acp = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, ctxUser);
-  acp.NewRecord();
-  acp.Set('Name', `${RUN_TAG} Co`);
-  acp.Set('Description', `${RUN_TAG} block1 test`);
-  acp.Set('CompanyCode', companyCode());
-  acp.Set('FunctionalCurrencyCode', currencyCode);
-  acp.Set('EntityType', 'Subsidiary');
-  const companyId = acp.ID;
-  if (!(await acp.Save())) throw new Error(`ACP save failed: ${acp.LatestResult?.CompleteMessage ?? 'unknown'}`);
-
-  const glRes = await rv.RunView<{ ID: string; Code: string }>({ EntityName: GL_ENTITY, ExtraFilter: `CompanyID='${companyId}'`, Fields: ['ID', 'Code'], ResultType: 'simple' }, ctxUser);
-  const byCode = new Map((glRes.Results ?? []).map(r => [r.Code, r.ID]));
-  const periodRes = await rv.RunView<{ ID: string; PeriodStart: string }>({ EntityName: PERIOD_ENTITY, ExtraFilter: `CompanyID='${companyId}' AND PeriodType='Month' AND Status='Open'`, Fields: ['ID', 'PeriodStart'], OrderBy: 'PeriodStart ASC', ResultType: 'simple' }, ctxUser);
-  const periods = periodRes.Results ?? [];
+  // Two test companies — the AM-4 per-company invariant (50019) needs lines spanning companies.
+  const companyA = await createCompany(ctxUser, currencyCode, 'Co A');
+  const companyB = await createCompany(ctxUser, currencyCode, 'Co B');
 
   // A Pending batch for the lock tests — a JE can only be Batched if BatchID is set
   // (CK_JournalEntry_BatchedHasBatch). The batch stays Pending so it can be referenced + cleaned.
+  const md = new Metadata();
   const batch = await md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, ctxUser);
   batch.NewRecord();
-  batch.Set('CompanyID', companyId); batch.Set('AccountingPeriodID', periods[0].ID);
-  batch.Set('TargetSystem', 'BusinessCentral'); batch.Set('BatchedAt', new Date());
-  batch.Set('BatchedByUserID', ctxUser.ID); batch.Set('Status', 'Pending');
-  batch.Set('TotalEntries', 0); batch.Set('TotalDebits', 0); batch.Set('TotalCredits', 0);
+  batch.TargetSystem = 'BusinessCentral';
+  batch.BatchedAt = new Date();
+  batch.BatchedByUserID = ctxUser.ID;
+  batch.Status = 'Pending';
+  batch.TotalEntries = 0; batch.TotalDebits = 0; batch.TotalCredits = 0;
   if (!(await batch.Save())) throw new Error(`batch save failed: ${batch.LatestResult?.CompleteMessage}`);
 
-  return { pool, user: ctxUser, companyId, arGL: byCode.get('11201')!, revGL: byCode.get('40100')!, openPeriods: periods, batchId: batch.ID };
+  return { pool, teardownPool, user: ctxUser, companyA, companyB, batchId: batch.ID };
 }
 
-/** App-path helper: create a Pending JE with a balanced (or unbalanced) Dr-AR / Cr-Revenue pair. */
-async function makeJE(ctx: Ctx, periodId: string, debit: number, credit: number, opts?: { originalPeriodId?: string }): Promise<mjBizAppsAccountingJournalEntryEntity> {
+/** App-path helper: create a Pending JE with a balanced (or unbalanced) Dr-AR / Cr-Revenue pair in one company. */
+async function makeJE(ctx: Ctx, co: Company, debit: number, credit: number): Promise<mjBizAppsAccountingJournalEntryEntity> {
   const md = new Metadata();
   const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, ctx.user);
   je.NewRecord();
-  je.CompanyID = ctx.companyId; je.AccountingPeriodID = periodId; je.EffectiveDate = new Date();
+  je.EffectiveDate = new Date();
   je.EntryType = 'Manual'; je.Status = 'Pending'; je.Description = `${RUN_TAG} test`;
-  if (opts?.originalPeriodId) je.OriginalAccountingPeriodID = opts.originalPeriodId;
   if (!(await je.Save())) throw new Error(`JE save failed: ${je.LatestResult?.CompleteMessage}`);
-  await addLine(ctx, je.ID, 1, ctx.arGL, debit, null);
-  await addLine(ctx, je.ID, 2, ctx.revGL, null, credit);
+  createdJEIds.push(je.ID);
+  await addLine(ctx, je.ID, 1, co.arGL, debit, null);
+  await addLine(ctx, je.ID, 2, co.revGL, null, credit);
   return je;
 }
 async function addLine(ctx: Ctx, jeId: string, lineNo: number, glId: string, debit: number | null, credit: number | null): Promise<void> {
@@ -130,12 +159,12 @@ async function addLine(ctx: Ctx, jeId: string, lineNo: number, glId: string, deb
   l.DebitAmount = debit; l.CreditAmount = credit;
   if (!(await l.Save())) throw new Error(`line save failed: ${l.LatestResult?.CompleteMessage}`);
 }
-async function setStatus(ctx: Ctx, jeId: string, status: string): Promise<boolean> {
+async function setStatus(ctx: Ctx, jeId: string, status: JEStatus): Promise<boolean> {
   const md = new Metadata();
   const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, ctx.user);
   await je.Load(jeId);
-  if (status === 'Batched' || status === 'GLPosted') je.Set('BatchID', ctx.batchId); // CK_JournalEntry_BatchedHasBatch
-  je.Status = status as 'Pending' | 'Batched' | 'GLPosted';
+  if (status === 'Batched' || status === 'GLPosted') je.BatchID = ctx.batchId; // CK_JournalEntry_BatchedHasBatch
+  je.Status = status;
   try {
     const ok = await je.Save();
     if (!ok) console.log(`      [setStatus ${status} → false] ${je.LatestResult?.CompleteMessage ?? 'no message'}`);
@@ -149,54 +178,55 @@ async function setStatus(ctx: Ctx, jeId: string, status: string): Promise<boolea
 async function main(): Promise<void> {
   let ctx: Ctx;
   try { ctx = await bootstrap(); } catch (e) { console.error('BOOTSTRAP ERROR:', e instanceof Error ? e.message : String(e)); process.exit(2); }
-  const { pool, user, companyId, arGL } = ctx;
-  console.log(`\n══════ Block 1 runtime validation — user=${user.Email} company=${companyId} tag=${RUN_TAG} ══════\n`);
-  assert(ctx.openPeriods.length >= 3, `need >=3 open month periods, got ${ctx.openPeriods.length}`);
-  const openP = ctx.openPeriods[0].ID;        // general open period
+  const { pool, user, companyA, companyB } = ctx;
+  console.log(`\n══════ Block 1 runtime validation — user=${user.Email} companies=${companyA.id},${companyB.id} tag=${RUN_TAG} ══════\n`);
   const md = new Metadata();
 
-  // ─── W4 — adjusting-entry routing ─────────────────────────────────────────
-  await test('W4.1 post to a CLOSED period WITHOUT OriginalAccountingPeriodID → blocked', async () => {
-    const closed = ctx.openPeriods[5];
-    await pool.request().query(`UPDATE ${SCHEMA}.AccountingPeriod SET Status='Closed', ClosedAt=GETUTCDATE(), ClosedByUserID='${user.ID}' WHERE ID='${closed.ID}'`);
-    await expectThrow(async () => {
-      const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
-      je.NewRecord(); je.CompanyID = companyId; je.AccountingPeriodID = closed.ID; je.EffectiveDate = new Date();
-      je.EntryType = 'Manual'; je.Status = 'Pending';
-      const ok = await je.Save();
-      if (!ok) throw new Error(je.LatestResult?.CompleteMessage ?? 'save returned false');
-    }, 'CLOSED period');
-  });
-
-  await test('W4.2 post to a CLOSED period WITH OriginalAccountingPeriodID → routed to next open period', async () => {
-    const closed = ctx.openPeriods[5];   // closed in W4.1
-    const expectedNextOpen = ctx.openPeriods[6].ID;
-    const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
-    je.NewRecord(); je.CompanyID = companyId; je.AccountingPeriodID = closed.ID; je.EffectiveDate = new Date();
-    je.EntryType = 'Adjustment'; je.Status = 'Pending'; je.OriginalAccountingPeriodID = closed.ID;
-    assert(await je.Save(), `routed JE save failed: ${je.LatestResult?.CompleteMessage}`);
-    assert(je.AccountingPeriodID === expectedNextOpen, `expected routing to ${expectedNextOpen}, got ${je.AccountingPeriodID}`);
-    assert(je.OriginalAccountingPeriodID === closed.ID, 'OriginalAccountingPeriodID should reference the closed period');
-    // reopen for clean teardown
-    await pool.request().query(`UPDATE ${SCHEMA}.AccountingPeriod SET Status='Open', ClosedAt=NULL, ClosedByUserID=NULL WHERE ID='${closed.ID}'`);
-  });
-
-  // ─── INV: balanced-on-lock (trg 50001) ────────────────────────────────────
+  // ─── INV: balanced-on-lock, overall (trg 50001) ───────────────────────────
   await test('INV balanced-on-lock — DB-bypass raw UPDATE to Batched on an unbalanced JE → rejected (50001)', async () => {
     const jeId = randomUUID();
-    await pool.request().query(`INSERT INTO ${SCHEMA}.JournalEntry (ID, EntryNumber, CompanyID, AccountingPeriodID, EffectiveDate, EntryType, Status) VALUES ('${jeId}','RAW-${RUN_TAG}-1','${companyId}','${openP}', GETUTCDATE(), 'Manual','Pending')`);
-    await pool.request().query(`INSERT INTO ${SCHEMA}.JournalEntryLine (ID, JournalEntryID, LineNumber, GLAccountID, DebitAmount) VALUES (NEWID(), '${jeId}', 1, '${arGL}', 100.00)`);
+    createdJEIds.push(jeId);
+    await pool.request().query(`INSERT INTO ${SCHEMA}.JournalEntry (ID, EntryNumber, EffectiveDate, EntryType, Status) VALUES ('${jeId}','RAW-${RUN_TAG}-1', GETUTCDATE(), 'Manual','Pending')`);
+    await pool.request().query(`INSERT INTO ${SCHEMA}.JournalEntryLine (ID, JournalEntryID, LineNumber, GLAccountID, DebitAmount) VALUES (NEWID(), '${jeId}', 1, '${companyA.arGL}', 100.00)`);
     await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntry SET Status='Batched', BatchID='${ctx.batchId}' WHERE ID='${jeId}'`), 'Sum(Debits)');
   });
 
   await test('INV balanced-on-lock — allowed: a balanced JE locks to Batched', async () => {
-    const je = await makeJE(ctx, openP, 100, 100);
+    const je = await makeJE(ctx, companyA, 100, 100);
     assert(await setStatus(ctx, je.ID, 'Batched'), 'balanced JE should lock to Batched');
+  });
+
+  // ─── INV: balanced-on-lock PER COMPANY (trg 50019 — AM-4) ─────────────────
+  await test('INV per-company balance — overall-balanced but cross-company-unbalanced JE locks → rejected (50019, AM-4)', async () => {
+    // Dr 100 in company A, Cr 100 in company B: Sum(Dr)=Sum(Cr) overall (passes 50001),
+    // but each company is one-sided — must be rejected by the per-company rule.
+    const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
+    je.NewRecord(); je.EffectiveDate = new Date();
+    je.EntryType = 'Manual'; je.Status = 'Pending'; je.Description = `${RUN_TAG} cross-company unbalanced`;
+    assert(await je.Save(), `JE save failed: ${je.LatestResult?.CompleteMessage}`);
+    createdJEIds.push(je.ID);
+    await addLine(ctx, je.ID, 1, companyA.arGL, 100, null);
+    await addLine(ctx, je.ID, 2, companyB.revGL, null, 100);
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntry SET Status='Batched', BatchID='${ctx.batchId}' WHERE ID='${je.ID}'`), 'WITHIN EACH company');
+  });
+
+  await test('INV per-company balance — allowed: a multi-company JE balanced within EACH company locks', async () => {
+    // Two balanced pairs, one per company — balanced overall AND within each company.
+    const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
+    je.NewRecord(); je.EffectiveDate = new Date();
+    je.EntryType = 'Manual'; je.Status = 'Pending'; je.Description = `${RUN_TAG} multi-company balanced`;
+    assert(await je.Save(), `JE save failed: ${je.LatestResult?.CompleteMessage}`);
+    createdJEIds.push(je.ID);
+    await addLine(ctx, je.ID, 1, companyA.arGL, 100, null);
+    await addLine(ctx, je.ID, 2, companyA.revGL, null, 100);
+    await addLine(ctx, je.ID, 3, companyB.arGL, 40, null);
+    await addLine(ctx, je.ID, 4, companyB.revGL, null, 40);
+    assert(await setStatus(ctx, je.ID, 'Batched'), 'per-company-balanced multi-company JE should lock to Batched');
   });
 
   // ─── INV: JE immutability (trg 50003 delete / 50004 update) ───────────────
   await test('INV JE immutability — DB-bypass UPDATE of a frozen field on a Batched JE → rejected (50004)', async () => {
-    const je = await makeJE(ctx, openP, 50, 50);
+    const je = await makeJE(ctx, companyA, 50, 50);
     assert(await setStatus(ctx, je.ID, 'Batched'), 'lock failed');
     await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntry SET EffectiveDate = DATEADD(day,1,EffectiveDate) WHERE ID='${je.ID}'`), 'locked');
   });
@@ -204,38 +234,32 @@ async function main(): Promise<void> {
   await test('INV JE immutability — DB-bypass DELETE of a Batched JE → rejected (50003)', async () => {
     // Use a LINE-LESS JE so the FK (JEL→JE) doesn't pre-empt the trigger; 0 lines balances (0=0).
     const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
-    je.NewRecord(); je.CompanyID = companyId; je.AccountingPeriodID = openP; je.EffectiveDate = new Date();
+    je.NewRecord(); je.EffectiveDate = new Date();
     je.EntryType = 'Manual'; je.Status = 'Pending'; je.Description = `${RUN_TAG} delete-test`;
     assert(await je.Save(), `je save failed: ${je.LatestResult?.CompleteMessage}`);
+    createdJEIds.push(je.ID);
     assert(await setStatus(ctx, je.ID, 'Batched'), 'lock failed');
     await expectThrow(() => pool.request().query(`DELETE FROM ${SCHEMA}.JournalEntry WHERE ID='${je.ID}'`), 'cannot be deleted');
   });
 
   await test('INV JE immutability — allowed: GL-roundtrip fields update on a Batched JE', async () => {
-    const je = await makeJE(ctx, openP, 70, 70);
+    const je = await makeJE(ctx, companyA, 70, 70);
     assert(await setStatus(ctx, je.ID, 'Batched'), 'lock failed');
     await pool.request().query(`UPDATE ${SCHEMA}.JournalEntry SET GLReferenceID='BC-REF-1', GLPostedAt=GETUTCDATE() WHERE ID='${je.ID}'`);
   });
 
   // ─── INV: JE-line immutability (trg 50006) ────────────────────────────────
   await test('INV JE-line immutability — DB-bypass UPDATE of a line on a Batched JE → rejected (50006)', async () => {
-    const je = await makeJE(ctx, openP, 80, 80);
+    const je = await makeJE(ctx, companyA, 80, 80);
     assert(await setStatus(ctx, je.ID, 'Batched'), 'lock failed');
     await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryLine SET DebitAmount=999 WHERE JournalEntryID='${je.ID}' AND DebitAmount IS NOT NULL`), 'locked');
   });
 
-  // ─── INV: period-close (trg 50007) ────────────────────────────────────────
-  await test('INV period-close — DB-bypass raw INSERT into a Closed period → rejected (50007)', async () => {
-    const closed = ctx.openPeriods[7];
-    await pool.request().query(`UPDATE ${SCHEMA}.AccountingPeriod SET Status='Closed', ClosedAt=GETUTCDATE(), ClosedByUserID='${user.ID}' WHERE ID='${closed.ID}'`);
-    await expectThrow(() => pool.request().query(`INSERT INTO ${SCHEMA}.JournalEntry (ID, EntryNumber, CompanyID, AccountingPeriodID, EffectiveDate, EntryType, Status) VALUES (NEWID(),'RAW-${RUN_TAG}-PC','${companyId}','${closed.ID}', GETUTCDATE(),'Manual','Pending')`), 'Closed period');
-    await pool.request().query(`UPDATE ${SCHEMA}.AccountingPeriod SET Status='Open', ClosedAt=NULL, ClosedByUserID=NULL WHERE ID='${closed.ID}'`);
-  });
-
   // ─── W6 — reversal ────────────────────────────────────────────────────────
   await test('W6 generateReversal — new Reversal JE with Dr/Cr swapped + back-references', async () => {
-    const orig = await makeJE(ctx, openP, 100, 100) as JournalEntryEntityServer;
+    const orig = await makeJE(ctx, companyA, 100, 100) as JournalEntryEntityServer;
     const reversal = await orig.generateReversal('block1 test reversal', user);
+    createdJEIds.push(reversal.ID);
     assert(reversal.EntryType === 'Reversal', `reversal EntryType=${reversal.EntryType}`);
     assert(reversal.ReversesJournalEntryID === orig.ID, 'reversal must reference the original');
     assert(reversal.Status === 'Pending', `reversal Status=${reversal.Status}`);
@@ -247,52 +271,53 @@ async function main(): Promise<void> {
     const rv = new RunView();
     const lr = await rv.RunView<{ LineNumber: number; GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null }>(
       { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID='${reversal.ID}'`, OrderBy: 'LineNumber ASC', Fields: ['LineNumber', 'GLAccountID', 'DebitAmount', 'CreditAmount'], ResultType: 'simple' }, user);
-    const arLine = (lr.Results ?? []).find(l => l.GLAccountID === arGL);
+    const arLine = (lr.Results ?? []).find(l => l.GLAccountID === companyA.arGL);
     assert(!!arLine && arLine.CreditAmount === 100 && (arLine.DebitAmount ?? null) === null, `AR line should be swapped to a 100 credit, got Dr=${arLine?.DebitAmount} Cr=${arLine?.CreditAmount}`);
   });
 
   // ─── F1 — validateJournalEntry ────────────────────────────────────────────
-  await test('F1 validateJournalEntry — balanced/open/active JE is valid', async () => {
-    const je = await makeJE(ctx, openP, 100, 100);
+  await test('F1 validateJournalEntry — balanced/active JE is valid', async () => {
+    const je = await makeJE(ctx, companyA, 100, 100);
     const r = await validateJournalEntry(je.ID, user);
     assert(r.valid, `expected valid, got errors: ${r.errors.join('; ')}`);
   });
 
   await test('F1 validateJournalEntry — unbalanced JE is invalid (balance error)', async () => {
-    const je = await makeJE(ctx, openP, 100, 100);
-    await addLine(ctx, je.ID, 3, ctx.revGL, null, 25); // tip it out of balance (extra credit)
+    const je = await makeJE(ctx, companyA, 100, 100);
+    await addLine(ctx, je.ID, 3, companyA.revGL, null, 25); // tip it out of balance (extra credit)
     const r = await validateJournalEntry(je.ID, user);
     assert(!r.valid && r.errors.some(e => e.includes('unbalanced')), `expected unbalanced invalid, got: valid=${r.valid} errors=${r.errors.join('; ')}`);
   });
 
   // ─── Teardown (disable accounting triggers to clean locked rows) ──────────
-  const exec = async (q: string) => { try { await pool.request().query(q); } catch (e) { console.log(`      teardown warn: ${(e instanceof Error ? e.message : String(e)).split('\n')[0]}`); } };
-  // The invariant triggers must NEVER be left disabled (a dev-instance integrity gap), so re-enable
-  // every toggled table in a finally — even if a DELETE between disable and enable throws. Enabling an
-  // already-enabled trigger is harmless/idempotent.
+  const exec = async (q: string) => { try { await ctx.teardownPool.request().query(q); } catch (e) { console.log(`      teardown warn: ${(e instanceof Error ? e.message : String(e)).split('\n')[0]}`); } };
+  // JEs are global (no CompanyID) → sweep by the tracked ID list. The invariant triggers must
+  // NEVER be left disabled, so re-enable every toggled table in a finally.
+  const jeIdList = createdJEIds.map(id => `'${id}'`).join(',');
   const toggledTables = ['JournalEntryLine', 'JournalEntry'];
-  try {
-    for (const t of toggledTables) await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
-    await exec(`DELETE FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID IN (SELECT ID FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${companyId}')`);
-    await exec(`DELETE FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${companyId}'`);
-  } finally {
-    for (const t of toggledTables) await exec(`ENABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
+  if (jeIdList.length > 0) {
+    try {
+      for (const t of toggledTables) await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
+      await exec(`DELETE FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID IN (${jeIdList})`);
+      await exec(`DELETE FROM ${SCHEMA}.JournalEntry WHERE ID IN (${jeIdList})`);
+    } finally {
+      for (const t of toggledTables) await exec(`ENABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
+    }
   }
-  await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatch WHERE CompanyID='${companyId}'`);
-  await exec(`DELETE FROM ${SCHEMA}.JournalEntrySequence WHERE CompanyID='${companyId}'`);
-  await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatchSequence WHERE CompanyID='${companyId}'`);
-  await exec(`DELETE FROM ${SCHEMA}.AccountingCompanyProfile WHERE ID='${companyId}'`);
-  await exec(`DELETE FROM ${SCHEMA}.GLAccount WHERE CompanyID='${companyId}'`);
-  await exec(`DELETE FROM ${SCHEMA}.AccountingPeriod WHERE CompanyID='${companyId}'`);
-  await exec(`DELETE FROM __mj.Company WHERE ID='${companyId}'`);
-  const leftover = (await pool.request().query(`SELECT COUNT(*) n FROM __mj.Company WHERE ID='${companyId}'`)).recordset[0].n;
+  await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${ctx.batchId}'`);
+  for (const co of [companyA, companyB]) {
+    await exec(`DELETE FROM ${SCHEMA}.AccountingCompanyProfile WHERE ID='${co.id}'`);
+    await exec(`DELETE FROM ${SCHEMA}.GLAccount WHERE CompanyID='${co.id}'`);
+    await exec(`DELETE FROM __mj.Company WHERE ID='${co.id}'`);
+  }
+  const leftover = (await pool.request().query(`SELECT COUNT(*) n FROM __mj.Company WHERE ID IN ('${companyA.id}','${companyB.id}')`)).recordset[0].n;
   if (leftover > 0) {
-    console.log(`  (teardown note: company ${companyId} + its Batched (immutable-by-design) test JEs persist — full cleanup needs ALTER-TRIGGER rights the app DB user lacks. Run against a resettable test DB for a pristine state; see test-harnesses/server/README.)`);
+    console.log(`  (teardown note: ${leftover} test company row(s) persist — investigate, the db_owner teardown pool should have cleaned them.)`);
   }
 
   const failed = outcomes.filter(o => !o.Passed);
   // NEVER `await pool.close()` before exit — the MJ provider pool can hang on close. Non-blocking close + force-exit.
-  finishAndExit(`\n────── Block 1 runtime: ${outcomes.length - failed.length}/${outcomes.length} passed ──────`, failed.length > 0 ? 1 : 0, pool);
+  finishAndExit(`\n────── Block 1 runtime: ${outcomes.length - failed.length}/${outcomes.length} passed ──────`, failed.length > 0 ? 1 : 0, pool, ctx.teardownPool);
 }
 
 void main();

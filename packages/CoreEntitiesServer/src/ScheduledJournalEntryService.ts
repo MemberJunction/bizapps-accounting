@@ -1,44 +1,38 @@
 /**
- * ScheduledJournalEntryService — Block 4 (S3). Scheduled/recurring JE schedules + their materialization.
+ * ScheduledJournalEntryService — Block 4 (S3). Scheduled/recurring JE schedule CREATION.
  *
  *   createScheduledEntries(): lay down a straight-line schedule — N ScheduledJournalEntry rows (one per
  *     period, sequence i of N) each with a balanced Dr/Cr line pair, summing EXACTLY to the total (the
  *     rounding remainder is spread cent-by-cent, never lost). This is how a rev-rec waterfall / prepaid
  *     amortization / depreciation schedule is recorded ahead of time.
- *   materializeDueScheduledEntries(): the S3 scheduled action — turn every DUE `Scheduled` row
- *     (ScheduledEffectiveDate ≤ asOf) into a real Pending JournalEntry (lines + dimensions copied, EntryType
- *     mapped to the JE vocabulary), back-reference it, and flip the row to `Generated`. Idempotent: a
- *     `Generated` row is never materialized twice (CK_SJE_GeneratedCoherence enforces the one-JE link).
+ *
+ *   ⚠ The MATERIALIZER (materializeDueScheduledEntries) was RETIRED 2026-07-06 (AM-6): there is no
+ *     period-close materialization — periods are removed; DOMAIN entity servers (e.g. a future
+ *     SubscriptionEntityServer) generate the real Pending JournalEntry when a scheduled row comes due.
+ *     Robert to walk through the pattern; do not reintroduce a central materializer here.
  *
  * Per §C1 the *origin* of a schedule is usually upstream (Orders/Contracts) — Accounting RECEIVES the rows;
- * createScheduledEntries() is the Accounting-side helper for period-end accruals it owns + for seeding.
+ * createScheduledEntries() is the Accounting-side helper for accruals it owns + for seeding.
  *
  * CONNECTS TO:
- *   READS/WRITES: Scheduled Journal Entries (+ Line Items + Line Dimensions) · Journal Entries (+ Lines + Dims)
- *   HOOKS:        the materialized JE saves through JournalEntryEntityServer → W2 numbering, W4 closed-period routing
- *   GATES:        a `Scheduled` row in a period blocks that period's close (W7 validateCloseable) until materialized
+ *   READS/WRITES: Scheduled Journal Entries (+ Line Items + Line Dimensions)
  *   ENTITY:       'MJ_BizApps_Accounting: Scheduled Journal Entries'
  *   DOC:          docs/lifecycle-hooks.md (S3) · docs/ARCHITECTURE.md · plan §C1
  */
-import { Metadata, RunView, UserInfo } from '@memberjunction/core';
+import { Metadata, UserInfo } from '@memberjunction/core';
 import type {
+  mjBizAppsAccountingJournalEntryEntity,
   mjBizAppsAccountingScheduledJournalEntryEntity,
   mjBizAppsAccountingScheduledJournalEntryLineItemEntity,
-  mjBizAppsAccountingScheduledJournalEntryLineDimensionEntity,
-  mjBizAppsAccountingJournalEntryEntity,
-  mjBizAppsAccountingJournalEntryLineEntity,
-  mjBizAppsAccountingJournalEntryLineDimensionEntity,
 } from '@mj-biz-apps/accounting-entities';
 
 const SJE_ENTITY = 'MJ_BizApps_Accounting: Scheduled Journal Entries';
 const SJELI_ENTITY = 'MJ_BizApps_Accounting: Scheduled Journal Entry Line Items';
-const SJELD_ENTITY = 'MJ_BizApps_Accounting: Scheduled Journal Entry Line Dimensions';
-const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
-const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
-const JELD_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Line Dimensions';
 
-export type ScheduledEntryType = 'DeferredRevenueRelease' | 'DepreciationAccrual' | 'Manual' | 'PeriodEndAccrual' | 'PrepaidAmortization' | 'RevenueRecognition';
-export type JournalEntryType = 'Adjustment' | 'CommissionAccrual' | 'FXRevaluation' | 'IntercompanyFlow' | 'Manual' | 'OpeningBalance' | 'OrderBooking' | 'PartnerRevShare' | 'PaymentReceipt' | 'PeriodEndAccrual' | 'Refund' | 'RevenueRecognition' | 'Reversal' | 'TaxRemittance' | 'WaterfallDistribution' | 'Writeoff';
+// Rule 2c: derive the value-list unions from the generated entities — they track the CHECK
+// constraints via CodeGen, so a widened enum surfaces here as a compile error, not silent drift.
+export type ScheduledEntryType = mjBizAppsAccountingScheduledJournalEntryEntity['EntryType'];
+export type JournalEntryType = mjBizAppsAccountingJournalEntryEntity['EntryType'];
 
 // ─── Pure helpers (unit-tested without a DB) ─────────────────────────────────
 
@@ -77,7 +71,7 @@ export function computeStraightLineSchedule(total: number, count: number): numbe
 
 // ─── Schedule creation ───────────────────────────────────────────────────────
 
-export interface SchedulePeriod { accountingPeriodId: string; effectiveDate: Date }
+export interface SchedulePeriod { effectiveDate: Date }
 export interface CreateScheduleSpec {
   companyId: string;
   entryType: ScheduledEntryType;
@@ -109,7 +103,6 @@ export async function createScheduledEntries(spec: CreateScheduleSpec, contextUs
     sje.ScheduleSequence = i + 1;
     sje.ScheduleCount = count;
     sje.ScheduledEffectiveDate = spec.periods[i].effectiveDate;
-    sje.TargetAccountingPeriodID = spec.periods[i].accountingPeriodId;
     sje.CurrencyCode = spec.currencyCode;
     sje.TotalAmount = amounts[i];
     sje.Description = spec.description ?? null;
@@ -137,95 +130,4 @@ async function createScheduledLinePair(sjeId: string, debitGL: string, creditGL:
     li.CreditAmount = s.credit;
     if (!(await li.Save())) throw new Error(`createScheduledEntries: line ${s.lineNo} save failed: ${li.LatestResult?.CompleteMessage ?? 'unknown'}`);
   }
-}
-
-// ─── S3 materializer ───────────────────────────────────────────────────────
-
-export interface MaterializeResult { materialized: number; journalEntryIds: string[] }
-
-/** Materialize every DUE Scheduled row (ScheduledEffectiveDate ≤ asOf) for a company into Pending JEs. */
-export async function materializeDueScheduledEntries(companyId: string, asOf: Date, contextUser: UserInfo): Promise<MaterializeResult> {
-  const due = await loadDueScheduledEntries(companyId, asOf, contextUser);
-  const journalEntryIds: string[] = [];
-  for (const sjeId of due) journalEntryIds.push(await materializeOne(sjeId, contextUser));
-  return { materialized: journalEntryIds.length, journalEntryIds };
-}
-
-async function loadDueScheduledEntries(companyId: string, asOf: Date, contextUser: UserInfo): Promise<string[]> {
-  const rv = new RunView();
-  const asOfStr = asOf.toISOString().slice(0, 10);
-  const res = await rv.RunView<{ ID: string }>(
-    { EntityName: SJE_ENTITY, ExtraFilter: `CompanyID='${companyId}' AND Status='Scheduled' AND ScheduledEffectiveDate <= '${asOfStr}'`, Fields: ['ID'], OrderBy: 'ScheduledEffectiveDate ASC, ScheduleSequence ASC', ResultType: 'simple', BypassCache: true },
-    contextUser,
-  );
-  return (res.Results ?? []).map(r => r.ID);
-}
-
-/** Materialize one Scheduled row → a Pending JE; flip the row to Generated. Returns the new JE id. */
-async function materializeOne(sjeId: string, contextUser: UserInfo): Promise<string> {
-  const md = new Metadata();
-  const sje = await md.GetEntityObject<mjBizAppsAccountingScheduledJournalEntryEntity>(SJE_ENTITY, contextUser);
-  if (!(await sje.Load(sjeId))) throw new Error(`materialize: scheduled entry ${sjeId} not found`);
-  if (!sje.TargetAccountingPeriodID) throw new Error(`materialize: scheduled entry ${sjeId} has no TargetAccountingPeriodID (cannot resolve a period)`);
-
-  const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
-  je.NewRecord();
-  je.CompanyID = sje.CompanyID;
-  je.AccountingPeriodID = sje.TargetAccountingPeriodID;
-  je.EffectiveDate = sje.ScheduledEffectiveDate;
-  je.EntryType = mapScheduledEntryType(sje.EntryType);
-  je.Status = 'Pending';
-  je.ScheduledJournalEntryID = sje.ID;
-  je.Description = sje.Description ?? `Materialized from scheduled entry ${sje.ScheduleSequence}/${sje.ScheduleCount}`;
-  if (!(await je.Save())) throw new Error(`materialize: JE save failed for SJE ${sjeId}: ${je.LatestResult?.CompleteMessage ?? 'unknown'}`);
-
-  await copyScheduledLines(sje.ID, je.ID, contextUser);
-  await markScheduledGenerated(sje, je.ID);
-  return je.ID;
-}
-
-/** Copy the scheduled line items (+ their dimension tags) onto the materialized JE. */
-async function copyScheduledLines(sjeId: string, jeId: string, contextUser: UserInfo): Promise<void> {
-  const rv = new RunView();
-  const lineRes = await rv.RunView<{ ID: string; LineNumber: number; GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null; Description: string | null }>(
-    { EntityName: SJELI_ENTITY, ExtraFilter: `ScheduledJournalEntryID='${sjeId}'`, OrderBy: 'LineNumber ASC', Fields: ['ID', 'LineNumber', 'GLAccountID', 'DebitAmount', 'CreditAmount', 'Description'], ResultType: 'simple', BypassCache: true },
-    contextUser,
-  );
-  const md = new Metadata();
-  for (const sl of lineRes.Results ?? []) {
-    const line = await md.GetEntityObject<mjBizAppsAccountingJournalEntryLineEntity>(JEL_ENTITY, contextUser);
-    line.NewRecord();
-    line.JournalEntryID = jeId;
-    line.LineNumber = sl.LineNumber;
-    line.GLAccountID = sl.GLAccountID;
-    line.DebitAmount = sl.DebitAmount;
-    line.CreditAmount = sl.CreditAmount;
-    line.Description = sl.Description;
-    if (!(await line.Save())) throw new Error(`materialize: JE line ${sl.LineNumber} save failed: ${line.LatestResult?.CompleteMessage ?? 'unknown'}`);
-    await copyScheduledLineDimensions(sl.ID, line.ID, contextUser);
-  }
-}
-
-async function copyScheduledLineDimensions(scheduledLineItemId: string, jeLineId: string, contextUser: UserInfo): Promise<void> {
-  const rv = new RunView();
-  const dimRes = await rv.RunView<{ DimensionID: string; DimensionValueID: string }>(
-    { EntityName: SJELD_ENTITY, ExtraFilter: `ScheduledJournalEntryLineItemID='${scheduledLineItemId}'`, Fields: ['DimensionID', 'DimensionValueID'], ResultType: 'simple', BypassCache: true },
-    contextUser,
-  );
-  const md = new Metadata();
-  for (const d of dimRes.Results ?? []) {
-    const dim = await md.GetEntityObject<mjBizAppsAccountingJournalEntryLineDimensionEntity>(JELD_ENTITY, contextUser);
-    dim.NewRecord();
-    dim.JournalEntryLineID = jeLineId;
-    dim.DimensionID = d.DimensionID;
-    dim.DimensionValueID = d.DimensionValueID;
-    if (!(await dim.Save())) throw new Error(`materialize: JE line dimension save failed: ${dim.LatestResult?.CompleteMessage ?? 'unknown'}`);
-  }
-}
-
-async function markScheduledGenerated(sje: mjBizAppsAccountingScheduledJournalEntryEntity, jeId: string): Promise<void> {
-  sje.Status = 'Generated';
-  sje.GeneratedJournalEntryID = jeId;
-  sje.GeneratedAt = new Date();
-  if (!(await sje.Save())) throw new Error(`materialize: failed to flip SJE ${sje.ID} to Generated: ${sje.LatestResult?.CompleteMessage ?? 'unknown'}`);
 }

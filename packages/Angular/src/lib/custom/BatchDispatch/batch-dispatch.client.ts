@@ -23,6 +23,7 @@ export interface BuildJEBatchResult {
   TotalDebits: number;
   TotalCredits: number;
   JECount: number;
+  CompanyCount: number;
   NothingToBatch: boolean;
   ErrorMessage?: string;
 }
@@ -55,17 +56,17 @@ export class BatchDispatchClient {
     this.dataProvider = dataProvider;
   }
 
-  /** Build a Pending batch from a Company×Period's pending JEs (raises the CFO approval task). */
-  public async BuildBatch(companyID: string, accountingPeriodID: string, targetSystem: string): Promise<BuildJEBatchResult> {
-    const empty = { Success: false, SummaryLineCount: 0, TotalDebits: 0, TotalCredits: 0, JECount: 0, NothingToBatch: false };
+  /** Build ONE Pending multi-company batch from ALL pending JEs (raises the CFO approval task). */
+  public async BuildBatch(targetSystem: string): Promise<BuildJEBatchResult> {
+    const empty = { Success: false, SummaryLineCount: 0, TotalDebits: 0, TotalCredits: 0, JECount: 0, CompanyCount: 0, NothingToBatch: false };
     try {
       const mutation = `
-        mutation BuildJEBatch($companyID: ID!, $accountingPeriodID: ID!, $targetSystem: String!) {
-          BuildJEBatch(companyID: $companyID, accountingPeriodID: $accountingPeriodID, targetSystem: $targetSystem) {
-            Success BatchID SummaryLineCount TotalDebits TotalCredits JECount NothingToBatch ErrorMessage
+        mutation BuildJEBatch($targetSystem: String!) {
+          BuildJEBatch(targetSystem: $targetSystem) {
+            Success BatchID SummaryLineCount TotalDebits TotalCredits JECount CompanyCount NothingToBatch ErrorMessage
           }
         }`;
-      const res = await this.dataProvider.ExecuteGQL(mutation, { companyID, accountingPeriodID, targetSystem });
+      const res = await this.dataProvider.ExecuteGQL(mutation, { targetSystem });
       return (res?.BuildJEBatch as BuildJEBatchResult) ?? { ...empty, ErrorMessage: 'No response from server.' };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -74,7 +75,7 @@ export class BatchDispatchClient {
     }
   }
 
-  /** Dispatch a Pending, CFO-approved batch to the ERP (mock poster for v1). */
+  /** Dispatch an Approved batch to the ERP (mock poster for v1). */
   public async DispatchBatch(batchID: string): Promise<DispatchJEBatchResult> {
     try {
       const mutation = `

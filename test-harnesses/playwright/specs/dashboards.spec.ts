@@ -8,8 +8,8 @@
  * UI bugs the way TEST-PROTOCOL.md mandates.
  *
  * Demo data (seed-demo.ts): 3 companies; the 6 vw_* read models populate; ~31 GL accounts +
- * GLPosted JEs; one Acknowledged batch per demo company. Assertions reflect THAT state — they do
- * not assume rows that aren't seeded (e.g. the deferred-revenue tab is legitimately empty).
+ * GLPosted JEs; 6 Posted batches (2026-07-06 lifecycle: Pending → Approved → Sent → Posted).
+ * Assertions reflect THAT state — they do not assume rows that aren't seeded.
  */
 import { test, expect, type Page } from '@playwright/test';
 import { loginViaMagicLink } from '../lib/auth';
@@ -53,20 +53,19 @@ async function gotoDashboard(page: Page, navLabel: string): Promise<ErrorSink> {
   return sink;
 }
 
-test('Batch Dispatch — batch card + status/approval badges render over demo data', async ({ page }) => {
+test('Batch Dispatch — batch cards + status badges render over demo data (global, picker-less)', async ({ page }) => {
   const sink = await gotoDashboard(page, NAV.batches);
 
-  // Company + period selectors populated from the 3 demo companies.
-  const companies = await companyOptions(page);
-  expect(companies.some((c) => /Assoc Demo/i.test(c)), `company selector should list the demo companies (got ${JSON.stringify(companies)})`).toBeTruthy();
+  // 2026-07-06 (CH-4): the dashboard is GLOBAL — no company/period pickers; only the Target ERP selector.
+  await expect(page.locator('select').first(), 'the Target ERP selector should render').toBeVisible();
 
-  // Default company (Cascadia) has one Acknowledged demo batch → exactly one batch card with a status badge.
+  // The demo seed leaves 6 Posted batches → batch cards with status badges.
   const cards = page.locator('.bd-card');
-  await expect(cards.first(), 'at least one batch card should render for the default demo company').toBeVisible();
+  await expect(cards.first(), 'at least one batch card should render over the demo batches').toBeVisible();
   await expect(page.locator('.bd-card mj-stat-badge').first(), 'a batch card should show a status badge').toBeVisible();
-  // Real-value (not just presence): the default demo company's seeded batch was dispatched, so the
-  // status must actually read Acknowledged — proving the value travelled API → client → DOM.
-  await expect(page.getByText(/Acknowledged/i).first(), 'the demo batch card should show the Acknowledged status').toBeVisible({ timeout: 15_000 });
+  // Real-value (not just presence): the demo batches were dispatched, so the status must actually
+  // read Posted — proving the value travelled API → client → DOM.
+  await expect(page.getByText(/Posted/i).first(), 'a demo batch card should show the Posted status').toBeVisible({ timeout: 15_000 });
 
   expectNoConsoleErrors(sink, 'viewing the Batch Dispatch dashboard');
 });
@@ -117,12 +116,12 @@ test('Batch Status — summary cards + batch grid render over demo batches', asy
   const companies = await companyOptions(page);
   expect(companies.some((c) => /Assoc Demo/i.test(c))).toBeTruthy();
 
-  // The status roll-up shows 4 summary cards (Pending/Sent/Acknowledged/Failed) + a grid of batches.
+  // The status roll-up shows 4 summary cards (Pending/Sent/Posted/Failed) + a grid of batches.
   await expect(page.locator('.rm-card').first(), 'Batch Status should render its summary cards').toBeVisible();
   expect(await page.locator('.rm-card').count(), 'expected the 4 status summary cards').toBeGreaterThanOrEqual(4);
   await expect(agGridRows(page).first(), 'Batch Status grid should have at least one batch row').toBeVisible({ timeout: 30_000 });
-  // Real-value: the demo batches are dispatched, so an Acknowledged status must appear in the roll-up.
-  await expect(page.getByText(/Acknowledged/i).first(), 'Batch Status should show an Acknowledged batch').toBeVisible({ timeout: 15_000 });
+  // Real-value: the demo batches are dispatched, so a Posted status must appear in the roll-up.
+  await expect(page.getByText(/Posted/i).first(), 'Batch Status should show a Posted batch').toBeVisible({ timeout: 15_000 });
 
   expectNoConsoleErrors(sink, 'viewing the Batch Status dashboard');
 });

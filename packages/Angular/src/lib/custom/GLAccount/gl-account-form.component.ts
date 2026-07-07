@@ -58,7 +58,6 @@ export class GLAccountFormComponentExtended extends mjBizAppsAccountingGLAccount
 
   public readonly AccountTypes: AccountType[] = [
     'Asset', 'Liability', 'Equity', 'Revenue', 'Expense',
-    'ContraAsset', 'ContraLiability', 'ContraRevenue', 'ContraExpense', 'Statistical',
   ];
 
   override async ngOnInit(): Promise<void> {

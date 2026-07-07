@@ -1,21 +1,26 @@
 /**
- * block4-runtime.ts — live validation of the Block-4 scheduled-JE schedule + materializer (S3).
+ * block4-runtime.ts — live validation of the Block-4 scheduled-JE schedule (S3).
  *
  * Runs against a REAL instance DB through the REAL provider + server subclasses (MJAPI's path).
- *   S3 createScheduledEntries: a straight-line schedule lays down N Scheduled rows + balanced line pairs.
- *   S3 materializeDueScheduledEntries: only DUE rows (ScheduledEffectiveDate ≤ asOf) become Pending JEs;
- *      future rows stay Scheduled; the JE is correct (mapped EntryType, back-ref, lines + dimensions copied);
- *      the row flips to Generated (coherent); re-running is idempotent (no double-materialization).
- *   W7 tie-in: a Scheduled row blocks its period's close until materialized.
- *   Block4→Block2: a materialized Pending JE flows into buildBatch.
+ *
+ * 2026-07-06 rework (engine-meeting rulings): the central MATERIALIZER was RETIRED (AM-6) —
+ * DOMAIN entity servers generate the real Pending JE when a scheduled row comes due, then flip
+ * the SJE to Generated. AccountingPeriod is gone, so schedules are keyed by effective date only.
+ *
+ *   S3  createScheduledEntries: a straight-line schedule lays down N Scheduled rows + balanced
+ *       line pairs, summing EXACTLY to the total (cent-remainder spread, never lost).
+ *   AM-6 domain-generation flow: the schema supports the new pattern — an entity-path update to
+ *       Generated with the JE back-ref + GeneratedAt satisfies CK_SJE_GeneratedCoherence.
+ *   INV (DB constraints/triggers — each proven with a RAW-SQL bypass):
+ *       Generated-coherence CK · SJE delete lock (50016) · SJE field lock (50017) ·
+ *       SJE line-item lock (50018).
  *
  * USAGE (cwd = instance worktree root): npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/block4-runtime.ts
- * Exit: 0 all passed · 1 failures · 2 bootstrap error. FK-aware teardown (disables triggers to drop locked rows).
+ * Exit: 0 all passed · 1 failures · 2 bootstrap error. FK-aware teardown via the db_owner pool.
  */
 import sql from 'mssql';
 import dotenv from 'dotenv';
 import path from 'path';
-import { randomUUID } from 'crypto';
 import { Metadata, RunView, UserInfo } from '@memberjunction/core';
 import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
 import { finishAndExit } from './harness-exit.js';
@@ -24,12 +29,17 @@ import '@memberjunction/server-bootstrap-lite';
 import '@mj-biz-apps/common-entities';
 import '@mj-biz-apps/accounting-entities';
 import '@mj-biz-apps/accounting-core-entities-server';
-import { createScheduledEntries, materializeDueScheduledEntries, buildBatch, AutoApproveGate } from '@mj-biz-apps/accounting-core-entities-server';
-import type { mjBizAppsAccountingAccountingCompanyProfileEntity, mjBizAppsAccountingAccountingPeriodEntity } from '@mj-biz-apps/accounting-entities';
+import { createScheduledEntries } from '@mj-biz-apps/accounting-core-entities-server';
+import type {
+  mjBizAppsAccountingAccountingCompanyProfileEntity,
+  mjBizAppsAccountingJournalEntryEntity,
+  mjBizAppsAccountingScheduledJournalEntryEntity,
+} from '@mj-biz-apps/accounting-entities';
 
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
-const PERIOD_ENTITY = 'MJ_BizApps_Accounting: Accounting Periods';
+const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
+const SJE_ENTITY = 'MJ_BizApps_Accounting: Scheduled Journal Entries';
 const CURRENCY_ENTITY = 'MJ_BizApps_Accounting: Currencies';
 const SCHEMA = '__mj_BizAppsAccounting';
 const RUN_TAG = `BLOCK4-${Date.now()}`;
@@ -50,174 +60,163 @@ async function expectThrow(fn: () => Promise<unknown>, mustContain: string): Pro
   assert(msg.toLowerCase().includes(mustContain.toLowerCase()), `expected "${mustContain}", got: ${msg.split('\n')[0]}`);
 }
 
-interface Ctx { pool: sql.ConnectionPool; user: UserInfo; companyId: string; deferredGL: string; revenueGL: string; periods: { ID: string; PeriodStart: string }[]; currencyCode: string; dimId: string; dimVal: string }
+/** First-of-month UTC dates, n installments starting next month (future-dated schedule). */
+function monthlyEffectiveDates(n: number): Date[] {
+  const now = new Date();
+  return Array.from({ length: n }, (_, i) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1 + i, 1)));
+}
+
+interface Ctx {
+  pool: sql.ConnectionPool;
+  /** db_owner pool (MJ_CodeGen) used ONLY for FK-aware teardown (locked Generated rows). */
+  teardownPool: sql.ConnectionPool;
+  user: UserInfo; companyId: string; deferredGL: string; revenueGL: string; currencyCode: string;
+}
+const createdJEIds: string[] = [];
 
 async function bootstrap(): Promise<Ctx> {
   dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
   const { DB_HOST: host, DB_DATABASE: database, DB_USERNAME: user, DB_PASSWORD: password } = process.env;
   if (!host || !database || !user || !password) throw new Error('Missing DB settings in .env (run from the instance worktree root).');
   const pool = await new sql.ConnectionPool({ server: host, port: Number(process.env.DB_PORT ?? 1433), user, password, database, options: { encrypt: false, trustServerCertificate: true } }).connect();
+  const { CODEGEN_DB_USERNAME: cgUser, CODEGEN_DB_PASSWORD: cgPassword } = process.env;
+  if (!cgUser || !cgPassword) throw new Error('Missing CODEGEN_DB_USERNAME/PASSWORD in .env (needed for the db_owner teardown pool).');
+  const teardownPool = await new sql.ConnectionPool({ server: host, port: Number(process.env.DB_PORT ?? 1433), user: cgUser, password: cgPassword, database, options: { encrypt: false, trustServerCertificate: true } }).connect();
   await setupSQLServerClient(new SQLServerProviderConfigData(pool, process.env.MJ_CORE_SCHEMA || '__mj'));
-  await assertInvariantTriggers(pool); // 1b pre-flight: fail fast if any invariant trigger is missing/disabled
+  await assertInvariantTriggers(pool); // pre-flight: fail fast if any invariant trigger is missing/disabled
   await UserCache.Instance.Refresh(pool);
   const ctxUser = UserCache.Users.find(u => u?.Type?.trim().toLowerCase() === 'owner') ?? UserCache.Users[0];
   if (!ctxUser) throw new Error('No context user found.');
   const rv = new RunView();
   const cur = await rv.RunView<{ Code: string }>({ EntityName: CURRENCY_ENTITY, Fields: ['Code'], MaxRows: 1, ResultType: 'simple' }, ctxUser);
-  const currencyCode = cur.Results?.[0]?.Code as string;
+  const currencyCode = cur.Results?.[0]?.Code;
   if (!currencyCode) throw new Error(`no currency resolved (success=${cur.Success})`);
 
   const md = new Metadata();
   const acp = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, ctxUser);
   acp.NewRecord();
-  acp.Set('Name', `${RUN_TAG} Co`); acp.Set('Description', `${RUN_TAG} block4 test`);
-  acp.Set('CompanyCode', companyCode()); acp.Set('FunctionalCurrencyCode', currencyCode); acp.Set('EntityType', 'Subsidiary');
+  acp.Name = `${RUN_TAG} Co`;
+  acp.Description = `${RUN_TAG} block4 test`;
+  acp.CompanyCode = companyCode();
+  acp.FunctionalCurrencyCode = currencyCode;
+  acp.EntityType = 'Subsidiary';
   const companyId = acp.ID;
   if (!(await acp.Save())) throw new Error(`ACP save failed: ${acp.LatestResult?.CompleteMessage ?? 'unknown'}`);
 
   const glRes = await rv.RunView<{ ID: string; Code: string }>({ EntityName: GL_ENTITY, ExtraFilter: `CompanyID='${companyId}'`, Fields: ['ID', 'Code'], ResultType: 'simple' }, ctxUser);
   const byCode = new Map((glRes.Results ?? []).map(r => [r.Code, r.ID]));
-  await pool.request().query(`UPDATE ${SCHEMA}.GLAccount SET ExternalSystem='BusinessCentral', ExternalAccountID=Code WHERE CompanyID='${companyId}'`); // map all for batching tie-in
-  const periodRes = await rv.RunView<{ ID: string; PeriodStart: string }>({ EntityName: PERIOD_ENTITY, ExtraFilter: `CompanyID='${companyId}' AND PeriodType='Month' AND Status='Open'`, Fields: ['ID', 'PeriodStart'], OrderBy: 'PeriodStart ASC', ResultType: 'simple' }, ctxUser);
-  const periods = periodRes.Results ?? [];
-
-  const dimId = randomUUID(), dimVal = randomUUID();
-  await pool.request().query(`INSERT INTO ${SCHEMA}.Dimension (ID, Code, Name) VALUES ('${dimId}','DEPT-${RUN_TAG}','Department ${RUN_TAG}')`);
-  await pool.request().query(`INSERT INTO ${SCHEMA}.DimensionValue (ID, DimensionID, Code, Name) VALUES ('${dimVal}','${dimId}','SALES','Sales')`);
-
-  return { pool, user: ctxUser, companyId, deferredGL: byCode.get('21301')!, revenueGL: byCode.get('40100')!, periods, currencyCode, dimId, dimVal };
-}
-
-async function sjeStatusCounts(ctx: Ctx): Promise<{ scheduled: number; generated: number }> {
-  const r = await ctx.pool.request().query(`SELECT Status, COUNT(*) c FROM ${SCHEMA}.ScheduledJournalEntry WHERE CompanyID='${ctx.companyId}' GROUP BY Status`);
-  const m = new Map(r.recordset.map((x: { Status: string; c: number }) => [x.Status, Number(x.c)]));
-  return { scheduled: m.get('Scheduled') ?? 0, generated: m.get('Generated') ?? 0 };
+  const deferredGL = byCode.get('21301'); const revenueGL = byCode.get('40100');
+  if (!deferredGL || !revenueGL) throw new Error('seeded GL accounts not found');
+  return { pool, teardownPool, user: ctxUser, companyId, deferredGL, revenueGL, currencyCode };
 }
 
 async function main(): Promise<void> {
   let ctx: Ctx;
   try { ctx = await bootstrap(); } catch (e) { console.error('BOOTSTRAP ERROR:', e instanceof Error ? (e.stack ?? e.message) : String(e)); process.exit(2); }
-  const { pool, user, companyId, deferredGL, revenueGL, periods, currencyCode } = ctx;
+  const { pool, user, companyId, deferredGL, revenueGL, currencyCode } = ctx;
   console.log(`\n══════ Block 4 runtime validation — user=${user.Email} company=${companyId} tag=${RUN_TAG} ══════\n`);
-  assert(periods.length >= 12, `need >=12 open month periods, got ${periods.length}`);
-  const schedulePeriods = periods.slice(0, 12).map(p => ({ accountingPeriodId: p.ID, effectiveDate: new Date(p.PeriodStart) }));
+  const md = new Metadata();
 
   let scheduleIds: string[] = [];
-  await test('S3 createScheduledEntries — 12-period $1200 rev-rec schedule → 12 Scheduled rows, balanced line pairs', async () => {
+  await test('S3 createScheduledEntries — 12-installment $1200 rev-rec schedule → 12 Scheduled rows, balanced line pairs, exact sum', async () => {
     scheduleIds = await createScheduledEntries(
-      { companyId, entryType: 'RevenueRecognition', currencyCode, totalAmount: 1200, debitGLAccountId: deferredGL, creditGLAccountId: revenueGL, periods: schedulePeriods, description: `${RUN_TAG} revrec` },
+      { companyId, entryType: 'RevenueRecognition', currencyCode, totalAmount: 1200, debitGLAccountId: deferredGL, creditGLAccountId: revenueGL, periods: monthlyEffectiveDates(12).map(d => ({ effectiveDate: d })), description: `${RUN_TAG} revrec` },
       user,
     );
     assert(scheduleIds.length === 12, `expected 12 SJE rows, got ${scheduleIds.length}`);
-    const counts = await sjeStatusCounts(ctx);
-    assert(counts.scheduled === 12, `expected 12 Scheduled, got ${counts.scheduled}`);
-    const tot = (await pool.request().query(`SELECT SUM(TotalAmount) s, COUNT(*) c FROM ${SCHEMA}.ScheduledJournalEntry WHERE CompanyID='${companyId}'`)).recordset[0];
-    assert(Number(tot.s) === 1200, `schedule must sum to 1200, got ${tot.s}`);
+    const agg = (await pool.request().query(`SELECT COUNT(*) c, SUM(TotalAmount) s, SUM(CASE WHEN Status='Scheduled' THEN 1 ELSE 0 END) sch FROM ${SCHEMA}.ScheduledJournalEntry WHERE CompanyID='${companyId}'`)).recordset[0];
+    assert(Number(agg.c) === 12 && Number(agg.sch) === 12, `expected 12 Scheduled rows, got ${agg.c}/${agg.sch}`);
+    assert(Number(agg.s) === 1200, `schedule must sum to EXACTLY 1200, got ${agg.s}`);
     const lines = (await pool.request().query(`SELECT COUNT(*) c FROM ${SCHEMA}.ScheduledJournalEntryLineItem li JOIN ${SCHEMA}.ScheduledJournalEntry s ON s.ID=li.ScheduledJournalEntryID WHERE s.CompanyID='${companyId}'`)).recordset[0].c;
     assert(Number(lines) === 24, `expected 24 line items (12×2), got ${lines}`);
+    const seq = (await pool.request().query(`SELECT MIN(ScheduleSequence) mn, MAX(ScheduleSequence) mx, MIN(ScheduleCount) c FROM ${SCHEMA}.ScheduledJournalEntry WHERE CompanyID='${companyId}'`)).recordset[0];
+    assert(Number(seq.mn) === 1 && Number(seq.mx) === 12 && Number(seq.c) === 12, `sequence must run 1..12 of 12, got ${seq.mn}..${seq.mx} of ${seq.c}`);
   });
 
-  await test('W7 tie-in — a Scheduled (un-materialized) row blocks its period\'s close', async () => {
-    // Run BEFORE any materialization: periods[5] still carries its pristine Scheduled row (and no Pending JE),
-    // so the close gate's blocker is specifically "not yet materialized".
-    const md = new Metadata();
-    const period = await md.GetEntityObject<mjBizAppsAccountingAccountingPeriodEntity>(PERIOD_ENTITY, user);
-    await period.Load(periods[5].ID);
-    period.Status = 'Closing';
-    await expectThrow(() => period.Save(), 'not yet materialized');
-  });
-
-  await test('S3 materialize — only DUE rows (asOf = period 3) become Pending JEs; future rows stay Scheduled', async () => {
-    const asOf = new Date(periods[2].PeriodStart); // due: periods 1,2,3
-    const res = await materializeDueScheduledEntries(companyId, asOf, user);
-    assert(res.materialized === 3, `expected 3 materialized, got ${res.materialized}`);
-    const counts = await sjeStatusCounts(ctx);
-    assert(counts.generated === 3 && counts.scheduled === 9, `expected 3 Generated / 9 Scheduled, got ${counts.generated}/${counts.scheduled}`);
-  });
-
-  await test('S3 materialized JE is correct — Pending, EntryType mapped, back-ref set, balanced Dr/Cr lines copied', async () => {
-    const je = (await pool.request().query(`SELECT TOP 1 j.ID, j.Status, j.EntryType, j.ScheduledJournalEntryID FROM ${SCHEMA}.JournalEntry j WHERE j.CompanyID='${companyId}' ORDER BY j.EffectiveDate ASC`)).recordset[0];
-    assert(je.Status === 'Pending', `JE Status=${je.Status}`);
-    assert(je.EntryType === 'RevenueRecognition', `JE EntryType=${je.EntryType} (expected mapped RevenueRecognition)`);
-    assert(!!je.ScheduledJournalEntryID, 'JE must back-reference its ScheduledJournalEntryID');
-    const ls = (await pool.request().query(`SELECT GLAccountID, DebitAmount, CreditAmount FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID='${je.ID}' ORDER BY LineNumber`)).recordset;
-    assert(ls.length === 2, `expected 2 lines, got ${ls.length}`);
-    const dr = ls.find((l: { DebitAmount: number | null }) => l.DebitAmount != null), cr = ls.find((l: { CreditAmount: number | null }) => l.CreditAmount != null);
-    assert(!!dr && dr.GLAccountID.toUpperCase() === deferredGL.toUpperCase() && Number(dr.DebitAmount) === 100, `Dr line should be DeferredRevenue 100`);
-    assert(!!cr && cr.GLAccountID.toUpperCase() === revenueGL.toUpperCase() && Number(cr.CreditAmount) === 100, `Cr line should be Revenue 100`);
-  });
-
-  await test('S3 coherence — a Generated SJE has GeneratedJournalEntryID + GeneratedAt (CK_SJE_GeneratedCoherence)', async () => {
-    const g = (await pool.request().query(`SELECT COUNT(*) c FROM ${SCHEMA}.ScheduledJournalEntry WHERE CompanyID='${companyId}' AND Status='Generated' AND (GeneratedJournalEntryID IS NULL OR GeneratedAt IS NULL)`)).recordset[0].c;
-    assert(Number(g) === 0, `every Generated SJE must carry GeneratedJournalEntryID + GeneratedAt; ${g} incoherent`);
-  });
-
-  await test('S3 idempotency — re-running materialize for the same asOf materializes NOTHING new', async () => {
-    const asOf = new Date(periods[2].PeriodStart);
-    const res = await materializeDueScheduledEntries(companyId, asOf, user);
-    assert(res.materialized === 0, `re-run should materialize 0, got ${res.materialized}`);
-  });
-
-  await test('S3 EntryType mapping — a PrepaidAmortization schedule materializes JEs with EntryType=PeriodEndAccrual', async () => {
+  await test('S3 cent-remainder spread — $100 over 3 → 33.34 + 33.33 + 33.33 (exact, no penny lost)', async () => {
     const ids = await createScheduledEntries(
-      { companyId, entryType: 'PrepaidAmortization', currencyCode, totalAmount: 300, debitGLAccountId: revenueGL, creditGLAccountId: deferredGL, periods: [schedulePeriods[10]], description: `${RUN_TAG} prepaid` },
+      { companyId, entryType: 'PrepaidAmortization', currencyCode, totalAmount: 100, debitGLAccountId: revenueGL, creditGLAccountId: deferredGL, periods: monthlyEffectiveDates(3).map(d => ({ effectiveDate: d })), description: `${RUN_TAG} remainder` },
       user,
     );
-    assert(ids.length === 1, 'expected 1 prepaid SJE');
-    const res = await materializeDueScheduledEntries(companyId, new Date(periods[11].PeriodStart), user);
-    assert(res.materialized >= 1, 'prepaid row should materialize');
-    const je = (await pool.request().query(`SELECT EntryType FROM ${SCHEMA}.JournalEntry WHERE ScheduledJournalEntryID='${ids[0]}'`)).recordset[0];
-    assert(je && je.EntryType === 'PeriodEndAccrual', `expected PeriodEndAccrual, got ${je?.EntryType}`);
+    const idList = ids.map(id => `'${id}'`).join(',');
+    const rows = (await pool.request().query(`SELECT ScheduleSequence sq, TotalAmount amt FROM ${SCHEMA}.ScheduledJournalEntry WHERE ID IN (${idList}) ORDER BY ScheduleSequence`)).recordset as Array<{ sq: number; amt: number }>;
+    assert(rows.length === 3, `expected 3 rows, got ${rows.length}`);
+    assert(Number(rows[0].amt) === 33.34 && Number(rows[1].amt) === 33.33 && Number(rows[2].amt) === 33.33,
+      `expected 33.34/33.33/33.33, got ${rows.map(r => r.amt).join('/')}`);
   });
 
-  await test('S3 dimension carry-through — a tag on a scheduled line is copied to the materialized JE line', async () => {
-    const ids = await createScheduledEntries(
-      { companyId, entryType: 'RevenueRecognition', currencyCode, totalAmount: 50, debitGLAccountId: deferredGL, creditGLAccountId: revenueGL, periods: [schedulePeriods[8]], description: `${RUN_TAG} dim` },
-      user,
-    );
-    // tag the credit (Revenue) scheduled line with a dimension
-    const sli = (await pool.request().query(`SELECT TOP 1 ID FROM ${SCHEMA}.ScheduledJournalEntryLineItem WHERE ScheduledJournalEntryID='${ids[0]}' AND CreditAmount IS NOT NULL`)).recordset[0].ID;
-    await pool.request().query(`INSERT INTO ${SCHEMA}.ScheduledJournalEntryLineDimension (ID, ScheduledJournalEntryLineItemID, DimensionID, DimensionValueID) VALUES (NEWID(),'${sli}','${ctx.dimId}','${ctx.dimVal}')`);
-    await materializeDueScheduledEntries(companyId, new Date(periods[8].PeriodStart), user);
-    const tagged = (await pool.request().query(`SELECT COUNT(*) c FROM ${SCHEMA}.JournalEntryLineDimension d JOIN ${SCHEMA}.JournalEntryLine l ON l.ID=d.JournalEntryLineID JOIN ${SCHEMA}.JournalEntry j ON j.ID=l.JournalEntryID WHERE j.ScheduledJournalEntryID='${ids[0]}'`)).recordset[0].c;
-    assert(Number(tagged) === 1, `expected the dimension carried to 1 JE line, got ${tagged}`);
+  // ─── AM-6 domain-generation flow (the pattern that REPLACED the materializer) ──
+  let generatedSjeId = '';
+  await test('AM-6 domain-generation — entity-path flip to Generated with JE back-ref + GeneratedAt saves cleanly', async () => {
+    // Simulate what a domain entity server (e.g. a future SubscriptionEntityServer) does when a
+    // scheduled row comes due: create the real Pending JE, then mark the SJE Generated with the back-ref.
+    const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
+    je.NewRecord();
+    je.EffectiveDate = new Date();
+    je.EntryType = 'RevenueRecognition';
+    je.Status = 'Pending';
+    je.Description = `${RUN_TAG} domain-generated`;
+    assert(await je.Save(), `JE save failed: ${je.LatestResult?.CompleteMessage}`);
+    createdJEIds.push(je.ID);
+
+    generatedSjeId = scheduleIds[0];
+    const sje = await md.GetEntityObject<mjBizAppsAccountingScheduledJournalEntryEntity>(SJE_ENTITY, user);
+    assert(await sje.Load(generatedSjeId), 'could not load the SJE');
+    sje.Status = 'Generated';
+    sje.GeneratedJournalEntryID = je.ID;
+    sje.GeneratedAt = new Date();
+    assert(await sje.Save(), `SJE Generated flip failed: ${sje.LatestResult?.CompleteMessage}`);
+    // Raw cross-check: coherence holds in the DB.
+    const g = (await pool.request().query(`SELECT COUNT(*) c FROM ${SCHEMA}.ScheduledJournalEntry WHERE ID='${generatedSjeId}' AND Status='Generated' AND GeneratedJournalEntryID IS NOT NULL AND GeneratedAt IS NOT NULL`)).recordset[0].c;
+    assert(Number(g) === 1, 'Generated SJE must carry GeneratedJournalEntryID + GeneratedAt');
   });
 
-  await test('Block4→Block2 — a materialized Pending JE flows into buildBatch (Company×Period)', async () => {
-    // period 1 (index 0) has a materialized Pending rev-rec JE; batch it.
-    const res = await buildBatch(companyId, periods[0].ID, 'BusinessCentral', user.ID, user, AutoApproveGate);
-    assert(res !== null && res.jeCount >= 1, `expected the materialized JE to batch, got ${JSON.stringify(res)}`);
+  await test('INV Generated-coherence — DB-bypass raw flip to Generated WITHOUT the back-ref → rejected (CK_SJE_GeneratedCoherence)', async () => {
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.ScheduledJournalEntry SET Status='Generated' WHERE ID='${scheduleIds[1]}'`), 'CK_SJE_GeneratedCoherence');
   });
 
-  // ─── Teardown ──────────────────────────────────────────────────────────────
-  const exec = async (q: string) => { try { await pool.request().query(q); } catch (e) { /* best-effort */ void e; } };
-  // Re-enable in a finally so the invariant triggers are NEVER left disabled, even if a DELETE throws.
-  const b4Toggled = ['JournalEntryLine', 'JournalEntry', 'JournalEntryBatchLineItem', 'JournalEntryBatch'];
+  await test('INV SJE delete lock — DB-bypass DELETE of a Generated SJE → rejected (FK_SJELI / trg 50016 defense-in-depth)', async () => {
+    // A real SJE always has line items pointing at it (FK_SJELI_ScheduledJE), so the FK rejects the
+    // raw DELETE first; trg_SJE_Immutability (50016) is the backstop for a line-less row. Either way
+    // the guarantee holds: a Generated schedule row cannot be deleted. Accept whichever guard fires.
+    let threw = false, msg = '';
+    try { await pool.request().query(`DELETE FROM ${SCHEMA}.ScheduledJournalEntry WHERE ID='${generatedSjeId}'`); }
+    catch (e) { threw = true; msg = e instanceof Error ? e.message : String(e); }
+    assert(threw, 'expected the Generated-SJE DELETE to be rejected');
+    assert(/cannot be deleted|REFERENCE constraint|FK_SJELI/i.test(msg), `expected rejection by FK or trg 50016, got: ${msg.split('\n')[0]}`);
+  });
+
+  await test('INV SJE field lock — DB-bypass UPDATE of TotalAmount on a Generated SJE → rejected (50017)', async () => {
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.ScheduledJournalEntry SET TotalAmount = TotalAmount + 1 WHERE ID='${generatedSjeId}'`), 'locked once Generated');
+  });
+
+  await test('INV SJE line lock — DB-bypass UPDATE of a line item on a Generated SJE → rejected (50018)', async () => {
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.ScheduledJournalEntryLineItem SET DebitAmount = DebitAmount + 1 WHERE ScheduledJournalEntryID='${generatedSjeId}' AND DebitAmount IS NOT NULL`), 'cannot change once');
+  });
+
+  // ─── Teardown (db_owner pool — Generated rows are locked for the app user) ──
+  const exec = async (q: string) => { try { await ctx.teardownPool.request().query(q); } catch (e) { console.log(`      teardown warn: ${(e instanceof Error ? e.message : String(e)).split('\n')[0]}`); } };
+  const toggled = ['ScheduledJournalEntryLineItem', 'ScheduledJournalEntry', 'JournalEntry'];
   try {
-    for (const t of b4Toggled) await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
-    await exec(`DELETE d FROM ${SCHEMA}.JournalEntryLineDimension d JOIN ${SCHEMA}.JournalEntryLine l ON l.ID=d.JournalEntryLineID JOIN ${SCHEMA}.JournalEntry j ON j.ID=l.JournalEntryID WHERE j.CompanyID='${companyId}'`);
-    await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatchLineItem WHERE CompanyID='${companyId}'`);
-    await exec(`DELETE FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID IN (SELECT ID FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${companyId}')`);
-    await exec(`DELETE FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${companyId}'`);
-    await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatch WHERE CompanyID='${companyId}'`);
+    for (const t of toggled) await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
+    await exec(`DELETE sld FROM ${SCHEMA}.ScheduledJournalEntryLineDimension sld JOIN ${SCHEMA}.ScheduledJournalEntryLineItem sli ON sli.ID=sld.ScheduledJournalEntryLineItemID JOIN ${SCHEMA}.ScheduledJournalEntry s ON s.ID=sli.ScheduledJournalEntryID WHERE s.CompanyID='${companyId}'`);
+    await exec(`DELETE sli FROM ${SCHEMA}.ScheduledJournalEntryLineItem sli JOIN ${SCHEMA}.ScheduledJournalEntry s ON s.ID=sli.ScheduledJournalEntryID WHERE s.CompanyID='${companyId}'`);
+    await exec(`DELETE FROM ${SCHEMA}.ScheduledJournalEntry WHERE CompanyID='${companyId}'`);
+    if (createdJEIds.length > 0) {
+      const jeIdList = createdJEIds.map(id => `'${id}'`).join(',');
+      await exec(`DELETE FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID IN (${jeIdList})`);
+      await exec(`DELETE FROM ${SCHEMA}.JournalEntry WHERE ID IN (${jeIdList})`);
+    }
   } finally {
-    for (const t of b4Toggled) await exec(`ENABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
+    for (const t of toggled) await exec(`ENABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
   }
-  await exec(`DELETE sld FROM ${SCHEMA}.ScheduledJournalEntryLineDimension sld JOIN ${SCHEMA}.ScheduledJournalEntryLineItem sli ON sli.ID=sld.ScheduledJournalEntryLineItemID JOIN ${SCHEMA}.ScheduledJournalEntry s ON s.ID=sli.ScheduledJournalEntryID WHERE s.CompanyID='${companyId}'`);
-  await exec(`DELETE sli FROM ${SCHEMA}.ScheduledJournalEntryLineItem sli JOIN ${SCHEMA}.ScheduledJournalEntry s ON s.ID=sli.ScheduledJournalEntryID WHERE s.CompanyID='${companyId}'`);
-  await exec(`DELETE FROM ${SCHEMA}.ScheduledJournalEntry WHERE CompanyID='${companyId}'`);
-  await exec(`DELETE FROM ${SCHEMA}.DimensionValue WHERE DimensionID='${ctx.dimId}'`);
-  await exec(`DELETE FROM ${SCHEMA}.Dimension WHERE ID='${ctx.dimId}'`);
-  await exec(`DELETE FROM ${SCHEMA}.JournalEntrySequence WHERE CompanyID='${companyId}'`);
-  await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatchSequence WHERE CompanyID='${companyId}'`);
   await exec(`DELETE FROM ${SCHEMA}.AccountingCompanyProfile WHERE ID='${companyId}'`);
   await exec(`DELETE FROM ${SCHEMA}.GLAccount WHERE CompanyID='${companyId}'`);
-  await exec(`DELETE FROM ${SCHEMA}.AccountingPeriod WHERE CompanyID='${companyId}'`);
   await exec(`DELETE FROM __mj.Company WHERE ID='${companyId}'`);
 
   const failed = outcomes.filter(o => !o.Passed);
   // NEVER `await pool.close()` before exit — the MJ provider pool can hang on close. Non-blocking close + force-exit.
-  finishAndExit(`\n────── Block 4 runtime: ${outcomes.length - failed.length}/${outcomes.length} passed ──────`, failed.length > 0 ? 1 : 0, pool);
+  finishAndExit(`\n────── Block 4 runtime: ${outcomes.length - failed.length}/${outcomes.length} passed ──────`, failed.length > 0 ? 1 : 0, pool, ctx.teardownPool);
 }
 
 void main();

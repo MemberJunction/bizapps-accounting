@@ -1,17 +1,24 @@
 /**
  * batching-multicompany-runtime.ts — Tier-2 (in-process, direct SQL) belt-and-suspenders for
  * MULTI-COMPANY batching. Proves at the ENGINE level (calls `buildBatch` directly — no API) what
- * `test-harnesses/api/batching-scenarios-api.ts` proves at the API contract:
+ * `test-harnesses/api/batching-scenarios-api.ts` proves at the API contract.
  *
- *   1. Multi-company INDEPENDENCE — building CoA's batch touches ONLY CoA's JEs; CoB's JE stays
- *      Pending (no cross-company bleed). Each company's batch jeCount === its own JE count.
+ * 2026-07-06 rework (engine-meeting rulings, CH-4): batches are MULTI-COMPANY and buildBatch is
+ * GLOBAL — one build sweeps every company's Pending JEs into ONE batch, and the ERP-post seam
+ * splits by company downstream. "Independence" therefore now lives INSIDE the batch:
+ *
+ *   1. Per-company netting isolation — the SAME GL account code in two companies must NOT net
+ *      together: netting keys on company × account × dims, so each company gets its own summary
+ *      lines with exact per-company amounts.
  *   2. Due-to/from, NO balancing (Payments owns intercompany — per Amith) — an intercompany-tagged
- *      JE batches as-is: it locks to Batched, its JE-line CounterpartyOrganizationID is preserved,
- *      and NO balancing/offset JE is auto-created (CoA still has exactly its provisioned JEs).
+ *      JE batches as-is: it locks to Batched, its JE-line CounterpartyOrganizationID and the JE's
+ *      IntercompanyFlowID are preserved, and NO balancing/offset JE is auto-created.
+ *
+ * PRECONDITION: buildBatch is global — requires ZERO stray Pending JEs at bootstrap (fails fast).
  *
  * Run from the INSTANCE WORKTREE ROOT:
  *   npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/batching-multicompany-runtime.ts
- * Exit: 0 all passed · 1 failures · 2 bootstrap error. FK-aware teardown (triggers toggled).
+ * Exit: 0 all passed · 1 failures · 2 bootstrap error. FK-aware teardown (db_owner pool, triggers toggled).
  */
 import sql from 'mssql';
 import dotenv from 'dotenv';
@@ -35,7 +42,6 @@ import type { mjBizAppsCommonOrganizationEntity } from '@mj-biz-apps/common-enti
 const SCHEMA = '__mj_BizAppsAccounting';
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
-const PERIOD_ENTITY = 'MJ_BizApps_Accounting: Accounting Periods';
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
 const CURRENCY_ENTITY = 'MJ_BizApps_Accounting: Currencies';
@@ -51,8 +57,10 @@ function assert(cond: boolean, label: string, detail?: string): void {
 
 interface Pools { pool: sql.ConnectionPool; teardownPool: sql.ConnectionPool; user: UserInfo }
 interface LineSpec { glCode: string; debit?: number; credit?: number; counterparty?: string }
-interface JESpec { entryType: string; intercompanyFlowId?: string; lines: LineSpec[] }
-interface Co { companyId: string; periodId: string; jeIds: string[] }
+interface JESpec { entryType: mjBizAppsAccountingJournalEntryEntity['EntryType']; intercompanyFlowId?: string; lines: LineSpec[] }
+interface Co { companyId: string; jeIds: string[] }
+
+const allJEIds: string[] = [];
 
 async function connect(): Promise<Pools> {
   dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
@@ -70,6 +78,8 @@ async function connect(): Promise<Pools> {
   await UserCache.Instance.Refresh(pool);
   const ctxUser = UserCache.Users.find((u) => u?.Type?.trim().toLowerCase() === 'owner') ?? UserCache.Users[0];
   if (!ctxUser) throw new Error('No context user found.');
+  const stray = (await pool.request().query(`SELECT COUNT(*) n FROM ${SCHEMA}.JournalEntry WHERE Status='Pending'`)).recordset[0].n;
+  if (Number(stray) > 0) throw new Error(`${stray} stray Pending JE(s) exist — clean up first (buildBatch sweeps ALL Pending JEs).`);
   return { pool, teardownPool, user: ctxUser };
 }
 
@@ -89,20 +99,18 @@ async function provision(p: Pools, suffix: string, currency: string, jeSpecs: JE
   await pool.request().query(`UPDATE ${SCHEMA}.GLAccount SET ExternalSystem='BusinessCentral', ExternalAccountID=Code WHERE CompanyID='${companyId}'`);
   const glRes = await rv.RunView<{ ID: string; Code: string }>({ EntityName: GL_ENTITY, ExtraFilter: `CompanyID='${companyId}'`, Fields: ['ID', 'Code'], ResultType: 'simple' }, user);
   const byCode = new Map((glRes.Results ?? []).map((r) => [r.Code, r.ID]));
-  const periodRes = await rv.RunView<{ ID: string }>({ EntityName: PERIOD_ENTITY, ExtraFilter: `CompanyID='${companyId}' AND PeriodType='Month' AND Status='Open'`, OrderBy: 'PeriodStart ASC', ResultType: 'simple' }, user);
-  const periodId = periodRes.Results?.[0]?.ID;
-  if (!periodId) throw new Error(`no open Month period for Co${suffix}`);
   const jeIds: string[] = [];
   for (let i = 0; i < jeSpecs.length; i++) {
     const spec = jeSpecs[i];
     const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
     je.NewRecord();
-    je.CompanyID = companyId; je.AccountingPeriodID = periodId; je.EffectiveDate = new Date();
-    je.EntryType = spec.entryType as mjBizAppsAccountingJournalEntryEntity['EntryType'];
+    je.EffectiveDate = new Date();
+    je.EntryType = spec.entryType;
     je.Status = 'Pending'; je.Description = `${RUN_TAG} Co${suffix} JE ${i + 1}`;
     if (spec.intercompanyFlowId) je.IntercompanyFlowID = spec.intercompanyFlowId;
     if (!(await je.Save())) throw new Error(`Co${suffix} JE ${i + 1} save failed: ${je.LatestResult?.CompleteMessage}`);
     jeIds.push(je.ID);
+    allJEIds.push(je.ID);
     let ln = 0;
     for (const ls of spec.lines) {
       ln += 1;
@@ -113,7 +121,7 @@ async function provision(p: Pools, suffix: string, currency: string, jeSpecs: JE
       if (!(await l.Save())) throw new Error(`Co${suffix} JE ${i + 1} line ${ln} save failed: ${l.LatestResult?.CompleteMessage}`);
     }
   }
-  return { companyId, periodId, jeIds };
+  return { companyId, jeIds };
 }
 
 async function scalar(pool: sql.ConnectionPool, q: string): Promise<unknown> {
@@ -122,26 +130,38 @@ async function scalar(pool: sql.ConnectionPool, q: string): Promise<unknown> {
   return row ? Object.values(row)[0] : undefined;
 }
 
-async function teardownCo(p: Pools, companyId: string): Promise<void> {
+async function teardown(p: Pools, companies: Co[], counterpartyId: string): Promise<void> {
   const exec = async (q: string) => { try { await p.teardownPool.request().query(q); } catch (e) { console.log(`  teardown warn: ${(e instanceof Error ? e.message : String(e)).split('\n')[0]}`); } };
-  const toggled = ['JournalEntryBatchLineItem', 'JournalEntryLine', 'JournalEntry', 'JournalEntryBatch'];
+  const jeIdList = allJEIds.map(id => `'${id}'`).join(',');
+  let batchIdList = '';
+  if (jeIdList) {
+    try {
+      const r = await p.teardownPool.request().query(`SELECT DISTINCT BatchID id FROM ${SCHEMA}.JournalEntry WHERE ID IN (${jeIdList}) AND BatchID IS NOT NULL`);
+      batchIdList = (r.recordset ?? []).map((x: { id: string }) => `'${x.id}'`).join(',');
+    } catch (e) { console.log(`  teardown warn: ${(e instanceof Error ? e.message : String(e)).split('\n')[0]}`); }
+  }
+  const toggled = ['JournalEntryLine', 'JournalEntry', 'JournalEntryBatchLineDimension', 'JournalEntryBatchLineItem', 'JournalEntryBatch'];
   try {
     for (const t of toggled) await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
-    await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatchLineDimension WHERE JournalEntryBatchLineItemID IN (SELECT ID FROM ${SCHEMA}.JournalEntryBatchLineItem WHERE CompanyID='${companyId}')`);
-    await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatchLineItem WHERE CompanyID='${companyId}'`);
-    await exec(`DELETE FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID IN (SELECT ID FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${companyId}')`);
-    await exec(`DELETE FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${companyId}'`);
-    await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatch WHERE CompanyID='${companyId}'`);
+    if (jeIdList) {
+      await exec(`DELETE FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID IN (${jeIdList})`);
+      await exec(`DELETE FROM ${SCHEMA}.JournalEntry WHERE ID IN (${jeIdList})`);
+    }
+    if (batchIdList) {
+      await exec(`DELETE bd FROM ${SCHEMA}.JournalEntryBatchLineDimension bd JOIN ${SCHEMA}.JournalEntryBatchLineItem li ON li.ID=bd.JournalEntryBatchLineItemID WHERE li.BatchID IN (${batchIdList})`);
+      await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatchLineItem WHERE BatchID IN (${batchIdList})`);
+      await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatch WHERE ID IN (${batchIdList})`);
+    }
   } finally {
     for (const t of toggled) await exec(`ENABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
   }
-  await exec(`DELETE FROM ${SCHEMA}.ChartOfAccountsMapping WHERE CompanyID='${companyId}'`);
-  await exec(`DELETE FROM ${SCHEMA}.JournalEntrySequence WHERE CompanyID='${companyId}'`);
-  await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatchSequence WHERE CompanyID='${companyId}'`);
-  await exec(`DELETE FROM ${SCHEMA}.AccountingCompanyProfile WHERE ID='${companyId}'`);
-  await exec(`DELETE FROM ${SCHEMA}.GLAccount WHERE CompanyID='${companyId}'`);
-  await exec(`DELETE FROM ${SCHEMA}.AccountingPeriod WHERE CompanyID='${companyId}'`);
-  await exec(`DELETE FROM __mj.Company WHERE ID='${companyId}'`);
+  for (const co of companies) {
+    await exec(`DELETE FROM ${SCHEMA}.ChartOfAccountsMapping WHERE CompanyID='${co.companyId}'`);
+    await exec(`DELETE FROM ${SCHEMA}.AccountingCompanyProfile WHERE ID='${co.companyId}'`);
+    await exec(`DELETE FROM ${SCHEMA}.GLAccount WHERE CompanyID='${co.companyId}'`);
+    await exec(`DELETE FROM __mj.Company WHERE ID='${co.companyId}'`);
+  }
+  await exec(`DELETE FROM __mj_BizAppsCommon.Organization WHERE ID='${counterpartyId}'`);
 }
 
 async function main(): Promise<void> {
@@ -162,38 +182,46 @@ async function main(): Promise<void> {
   const counterpartyId = org.ID;
   const flowId = randomUUID();
 
-  let coA: Co | undefined, coB: Co | undefined;
+  const companies: Co[] = [];
   try {
-    coA = await provision(p, 'A', currency, [
+    const coA = await provision(p, 'A', currency, [
       { entryType: 'Manual', lines: [{ glCode: '11201', debit: 500 }, { glCode: '40100', credit: 500 }] },
       { entryType: 'IntercompanyFlow', intercompanyFlowId: flowId, lines: [{ glCode: '11201', debit: 300, counterparty: counterpartyId }, { glCode: '40100', credit: 300 }] },
     ]);
-    coB = await provision(p, 'B', currency, [{ entryType: 'Manual', lines: [{ glCode: '11201', debit: 200 }, { glCode: '40100', credit: 200 }] }]);
+    companies.push(coA);
+    const coB = await provision(p, 'B', currency, [{ entryType: 'Manual', lines: [{ glCode: '11201', debit: 200 }, { glCode: '40100', credit: 200 }] }]);
+    companies.push(coB);
 
-    // ── 1. Multi-company INDEPENDENCE ───────────────────────────────────────
-    console.log('\n1. Multi-company independence:');
-    const batchA = await buildBatch(coA.companyId, coA.periodId, TARGET, p.user.ID, p.user, AutoApproveGate);
-    assert(batchA !== null && batchA.jeCount === 2, 'CoA batch contains exactly CoA\'s 2 JEs', `jeCount=${batchA?.jeCount}`);
-    const coBPendingAfterA = Number(await scalar(p.pool, `SELECT COUNT(*) c FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${coB.companyId}' AND Status='Pending'`));
-    assert(coBPendingAfterA === 1, 'building CoA left CoB\'s JE untouched (still Pending) — no cross-company bleed', `CoB pending=${coBPendingAfterA}`);
-    const batchB = await buildBatch(coB.companyId, coB.periodId, TARGET, p.user.ID, p.user, AutoApproveGate);
-    assert(batchB !== null && batchB.jeCount === 1, 'CoB batch contains exactly CoB\'s 1 JE', `jeCount=${batchB?.jeCount}`);
+    // ── 1. One GLOBAL build sweeps both companies; netting is ISOLATED per company ──
+    console.log('\n1. Global sweep + per-company netting isolation (CH-4):');
+    const built = await buildBatch(TARGET, p.user.ID, p.user, AutoApproveGate);
+    assert(built !== null && built.jeCount === 3, 'ONE global build swept all 3 Pending JEs across both companies', `jeCount=${built?.jeCount}`);
+    assert(built !== null && built.companyCount === 2, 'the batch reports companyCount = 2 (CH-4 multi-company batch)', `companyCount=${built?.companyCount}`);
+    assert(built !== null && built.summaryLineCount === 4, 'same account codes did NOT net across companies — 4 summary lines (2 per company)', `summaryLineCount=${built?.summaryLineCount}`);
+    // Exact per-company summary amounts: A nets 500+300 → AR Dr 800 / Rev Cr 800; B → AR Dr 200 / Rev Cr 200.
+    const sums = (await p.pool.request().query(
+      `SELECT CompanyID, ISNULL(SUM(DebitAmount),0) dr, ISNULL(SUM(CreditAmount),0) cr FROM ${SCHEMA}.JournalEntryBatchLineItem WHERE BatchID='${built!.batchId}' GROUP BY CompanyID`)).recordset as Array<{ CompanyID: string; dr: number; cr: number }>;
+    const sumOf = (id: string) => sums.find(s => s.CompanyID.toLowerCase() === id.toLowerCase());
+    const a = sumOf(coA.companyId), b = sumOf(coB.companyId);
+    assert(!!a && Number(a.dr) === 800 && Number(a.cr) === 800, 'CoA summary nets to EXACTLY Dr 800 / Cr 800 (500 + 300, CoA only)', `got ${a?.dr}/${a?.cr}`);
+    assert(!!b && Number(b.dr) === 200 && Number(b.cr) === 200, 'CoB summary nets to EXACTLY Dr 200 / Cr 200 (CoB only)', `got ${b?.dr}/${b?.cr}`);
 
-    // ── 2. Due-to/from: batched as-is, tag preserved, NO balancing ──────────
+    // ── 2. Due-to/from: batched as-is, tags preserved, NO balancing ─────────
     console.log('\n2. Due-to/from (no balancing — Payments owns intercompany):');
     const icJeId = coA.jeIds[1]; // the IntercompanyFlow JE
     const icStatus = await scalar(p.pool, `SELECT Status FROM ${SCHEMA}.JournalEntry WHERE ID='${icJeId}'`);
     assert(icStatus === 'Batched', 'the intercompany JE locked to Batched (Accounting received + batched it)', `status=${String(icStatus)}`);
+    const preservedFlow = await scalar(p.pool, `SELECT IntercompanyFlowID FROM ${SCHEMA}.JournalEntry WHERE ID='${icJeId}'`);
+    assert(String(preservedFlow).toUpperCase() === flowId.toUpperCase(), 'the JE\'s IntercompanyFlowID is PRESERVED through batching', `got ${String(preservedFlow)}`);
     const preservedCp = await scalar(p.pool, `SELECT TOP 1 CounterpartyOrganizationID FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID='${icJeId}' AND CounterpartyOrganizationID IS NOT NULL`);
     assert(String(preservedCp).toUpperCase() === counterpartyId.toUpperCase(), 'the JE-line CounterpartyOrganizationID is PRESERVED through batching', `got ${String(preservedCp)}`);
-    const coAJeTotal = Number(await scalar(p.pool, `SELECT COUNT(*) c FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${coA.companyId}'`));
-    assert(coAJeTotal === 2, 'NO balancing/offset JE was auto-created (CoA still has exactly its 2 JEs)', `CoA JE count=${coAJeTotal}`);
+    const totalJEs = Number(await scalar(p.pool, `SELECT COUNT(*) c FROM ${SCHEMA}.JournalEntry WHERE ID IN (${allJEIds.map(id => `'${id}'`).join(',')})`));
+    const anyExtra = Number(await scalar(p.pool, `SELECT COUNT(*) c FROM ${SCHEMA}.JournalEntry WHERE BatchID='${built!.batchId}'`));
+    assert(totalJEs === 3 && anyExtra === 3, 'NO balancing/offset JE was auto-created (the batch holds exactly the 3 provisioned JEs)', `tracked=${totalJEs} inBatch=${anyExtra}`);
   } catch (e) {
     assert(false, 'multi-company scenarios completed without throwing', e instanceof Error ? e.message : String(e));
   } finally {
-    if (coA) await teardownCo(p, coA.companyId);
-    if (coB) await teardownCo(p, coB.companyId);
-    try { await p.teardownPool.request().query(`DELETE FROM __mj_BizAppsCommon.Organization WHERE ID='${counterpartyId}'`); } catch { /* best effort */ }
+    await teardown(p, companies, counterpartyId);
   }
 
   const total = passed + failed;

@@ -10,8 +10,9 @@ on every substantive change. (The Vitest unit tier is separate: pure logic, no D
 - From the **instance worktree root** (so the instance `.env` resolves from cwd):
   `cd ~/MJDev/instances/<slug>/mj && npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/block0-runtime.ts`
 - Exit codes: **0** all passed · **1** test failures · **2** bootstrap error.
-- Each harness self-bootstraps (creates a tagged throwaway company → W1 seeds COA + periods)
-  and tears down by `CompanyID`, so runs are idempotent.
+- Each harness self-bootstraps (creates a tagged throwaway company → W1 seeds the COA)
+  and tears down company-scoped rows by `CompanyID` and the now-GLOBAL JEs/batches by
+  **tracked ID lists** (2026-07-06: JE/batch headers lost CompanyID), so runs are idempotent.
 
 ## Hard-won lessons (the WHY — don't relearn these the hard way)
 
@@ -50,9 +51,15 @@ on every substantive change. (The Vitest unit tier is separate: pure logic, no D
    naming any missing/disabled invariant trigger — so a raw-SQL "bypass" test can never pass
    **vacuously** (succeed because the trigger it was supposed to hit isn't actually there).
 
-7. **Self-bootstrap + FK-aware teardown by `CompanyID`, tagged with a `RUN_TAG`.** Create a
-   uniquely-tagged company so runs don't collide, and delete child→parent. Keeps runs idempotent
-   and lets you identify/purge orphans from a crashed run.
+7. **Self-bootstrap + FK-aware teardown, tagged with a `RUN_TAG`.** Create a uniquely-tagged
+   company so runs don't collide, and delete child→parent. Company-scoped rows sweep by
+   `CompanyID`; **JEs/batches are GLOBAL (2026-07-06)** — track their IDs as you create them
+   (including reversal JEs + every batch a tracked JE references) and delete by ID list.
+   Keeps runs idempotent and lets you identify/purge orphans from a crashed run.
+
+7b. **buildBatch is GLOBAL — assert zero stray Pending JEs at bootstrap.** Any leftover Pending
+   JE gets swept into your test's batch and corrupts exact-value assertions. Every batching
+   harness/fixture fails fast on `SELECT COUNT(*) … WHERE Status='Pending' > 0`.
 
 8. **Don't leave stray background harness processes.** A backgrounded run that lingers (lesson #1)
    or a forgotten wait-loop piles up and then contends with the next run (lesson #2). If you must

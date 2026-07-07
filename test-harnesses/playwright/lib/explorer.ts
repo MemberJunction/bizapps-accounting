@@ -19,6 +19,12 @@ const IGNORED_CONSOLE_PATTERNS: RegExp[] = [
   // The provider logs this when loading an entity that carries virtual/extra fields — documented
   // non-fatal noise (see test-harnesses/harness-notes.md lesson #9). Matches server + client.
   /MISSING FIELDS.*SetMany/i,
+  // UPSTREAM MJ-core bug (NOT this app): the Explorer home Data Explorer widget's relative-time
+  // binding ("12m ago") ticks across a change-detection pass → dev-mode NG0100. Timing-dependent
+  // (fires when a CD cycle spans a minute boundary), component is MJ core's
+  // DataExplorerDashboardComponent. Logged in the instance BUGS.md 2026-07-06 for upstream MJ.
+  // Scoped to THAT component only so a real NG0100 in the accounting UI still fails the keystone.
+  /NG0100: ExpressionChangedAfterItHasBeenCheckedError[\s\S]*DataExplorerDashboardComponent/,
   // NOTE: 404s are NOT blanket-ignored anymore — they're handled url-aware in the console handler
   // below, so a 404 on a STATIC ASSET is benign noise but a 404 on an API/GraphQL/data request
   // stays a REAL signal. A blanket 404 filter would mask genuine backend failures.

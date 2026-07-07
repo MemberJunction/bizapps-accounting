@@ -58,16 +58,24 @@ Override the endpoint or key via env: `MJ_API_URL` (default `http://localhost:40
 - **`AccountingARAging`** — drift-proof invariant: each customer's buckets sum to `TotalOpen`; totals match AR-open (the exact buckets age with the calendar, so they're intentionally NOT asserted).
 - **`AccountingDefRevRollforward`** — `sum(Additions) === 300`, `sum(Releases) === 120`, a period closes at 180.
 - **`AccountingSalesTaxLiability`** — accrued 1500 / remitted 350 / outstanding 1150; PartiallyPaid row = 1000/650.
-- **`AccountingBatchDispatchStatus`** — 4 batches, all Acknowledged.
+- **`AccountingBatchDispatchStatus`** — 4 batches contain CO1 lines, all **Posted** (CH-4: batches are multi-company; the query scopes to batches with the company's summary lines).
 - **`AccountingIntercompanyFlow`** — scoping: CO1 = 0 rows, CO2 = the seeded leg (EntryType `IntercompanyFlow`).
 
 **`batch-dispatch-api.ts`** — the write flow, end to end:
 `BuildJEBatch` (Success, BatchID, JECount≥1) → `JEBatchApprovalState` (Approved=false) →
 `RecordJEBatchDecision('Approved')` → `JEBatchApprovalState` (Approved=true) → `DispatchJEBatch`
-(Status ∈ {Sent, Acknowledged}) → `GenerateJournalEntryReversal` (a new Pending reversal JE).
+(Status == 'Posted'; early dispatch before the decision is refused) → `GenerateJournalEntryReversal` (a new Pending reversal JE).
 
 ## Exit codes
 
 `0` all passed · `1` assertion failures · `2` bootstrap/connection error. Pure HTTP, so the process
 exits on its own — no DB-pool-close machinery (that exists in `server/` only because the MJ pool can
 hang on close; irrelevant here).
+
+## engine-op-api.ts — 'Accounting.CreateJournalEntry' over `ExecuteRemoteOperation`
+
+The A5 "runs on local" proof: the SAME typed op the server runs in-process is invoked over pure
+HTTP/GraphQL (`mutation ExecuteRemoteOperation(operationKey, inputJSON, invokeMode)`) with an
+X-API-Key. Asserts the exact success contract (EntryNumber JE-{FY}-{seq}, merged LineCount), a typed
+logical failure INSIDE the output (UNBALANCED — transport stays green), and the registry gate
+(unknown key → UNKNOWN_OPERATION). Uses the batching fixture for an isolated company.

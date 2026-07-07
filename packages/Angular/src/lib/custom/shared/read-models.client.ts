@@ -41,11 +41,8 @@ export interface ARAgingRow {
 }
 
 export interface DefRevRollforwardRow {
-  AccountingPeriodID: string;
-  FiscalYear: number;
-  PeriodType: string;
-  PeriodStart: string | null;
-  PeriodEnd: string | null;
+  /** First day of the rollforward month (month-grain on EffectiveDate — periods retired 2026-07-06). */
+  PeriodMonth: string;
   OpeningBalance: number;
   Additions: number;
   Releases: number;
@@ -60,8 +57,6 @@ export interface SalesTaxLiabilityRow {
   TaxJurisdictionID: string;
   JurisdictionCode: string;
   JurisdictionName: string;
-  FiscalYear: number;
-  PeriodType: string;
   AccruedAmount: number;
   RemittedAmount: number;
   OutstandingLiability: number;
@@ -73,8 +68,6 @@ export interface SalesTaxLiabilityRow {
 export interface BatchDispatchStatusRow {
   BatchID: string;
   BatchNumber: string;
-  FiscalYear: number;
-  PeriodType: string;
   TargetSystem: string;
   Status: string;
   TotalEntries: number;
@@ -82,9 +75,12 @@ export interface BatchDispatchStatusRow {
   TotalCredits: number;
   ExternalBatchRef: string | null;
   BatchedAt: string | null;
+  ApprovedAt: string | null;
   SentAt: string | null;
-  AcknowledgedAt: string | null;
+  PostedAt: string | null;
   SummaryLineCount: number;
+  /** Batches are MULTI-COMPANY now (CH-4) — how many companies the batch's summary lines span. */
+  CompanyCount: number;
 }
 
 export interface IntercompanyFlowRow {
@@ -139,7 +135,7 @@ export class ReadModelsClient {
   public DefRevRollforward(companyID: string): Promise<DefRevRollforwardRow[]> {
     return this.run<DefRevRollforwardRow>(
       'AccountingDefRevRollforward',
-      'AccountingPeriodID FiscalYear PeriodType PeriodStart PeriodEnd OpeningBalance Additions Releases NetChange ClosingBalance',
+      'PeriodMonth OpeningBalance Additions Releases NetChange ClosingBalance',
       companyID,
     );
   }
@@ -147,7 +143,7 @@ export class ReadModelsClient {
   public SalesTaxLiability(companyID: string): Promise<SalesTaxLiabilityRow[]> {
     return this.run<SalesTaxLiabilityRow>(
       'AccountingSalesTaxLiability',
-      'TaxAuthorityID AuthorityCode AuthorityName TaxJurisdictionID JurisdictionCode JurisdictionName FiscalYear PeriodType AccruedAmount RemittedAmount OutstandingLiability Status DueDate FilingFrequency',
+      'TaxAuthorityID AuthorityCode AuthorityName TaxJurisdictionID JurisdictionCode JurisdictionName AccruedAmount RemittedAmount OutstandingLiability Status DueDate FilingFrequency',
       companyID,
     );
   }
@@ -155,7 +151,7 @@ export class ReadModelsClient {
   public BatchDispatchStatus(companyID: string): Promise<BatchDispatchStatusRow[]> {
     return this.run<BatchDispatchStatusRow>(
       'AccountingBatchDispatchStatus',
-      'BatchID BatchNumber FiscalYear PeriodType TargetSystem Status TotalEntries TotalDebits TotalCredits ExternalBatchRef BatchedAt SentAt AcknowledgedAt SummaryLineCount',
+      'BatchID BatchNumber TargetSystem Status TotalEntries TotalDebits TotalCredits ExternalBatchRef BatchedAt ApprovedAt SentAt PostedAt SummaryLineCount CompanyCount',
       companyID,
     );
   }

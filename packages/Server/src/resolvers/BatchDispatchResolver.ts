@@ -9,10 +9,11 @@
  *   2. delegates to the engine,
  *   3. maps the engine result to a GraphQL `@ObjectType`.
  *
- * Three mutations + one query:
- *   - BuildJEBatch       → buildBatch(...)            (pending JEs → a Pending batch + approval task)
- *   - DispatchJEBatch    → sendBatch(...)             (gate.assertApproved → mock ERP post → Acknowledged)
- *   - RecordJEBatchDecision → gate.recordDecision(...) (in-app CFO approve / reject)
+ * Three mutations + one query (multi-company model, CH-3/CH-4/AM-4):
+ *   - BuildJEBatch       → buildBatch(...)            (ALL pending JEs → ONE Pending multi-company batch + approval task)
+ *   - DispatchJEBatch    → sendBatch(...)             (requires Status=Approved + gate → mock ERP post → Posted)
+ *   - RecordJEBatchDecision → gate.recordDecision(...) (in-app CFO approve / reject; an approval also flips
+ *                              the batch Pending→Approved via approveBatch so it becomes dispatchable)
  *   - JEBatchApprovalState → gate.assertApproved probe (read-only "is this batch approved to send?")
  *
  * The gate is `TasksAppApprovalGate` (the REAL bizapps-tasks-backed CFO gate) for
@@ -29,6 +30,7 @@ import {
 import { LogError, RunView, UserInfo } from '@memberjunction/core';
 import {
   buildBatch,
+  approveBatch,
   sendBatch,
   mockErpPoster,
   TasksAppApprovalGate,
@@ -50,6 +52,8 @@ export class BuildJEBatchResult {
   @Field(() => Float) TotalDebits: number;
   @Field(() => Float) TotalCredits: number;
   @Field(() => Int) JECount: number;
+  /** Distinct companies represented in the batch's summary lines (batches are multi-company, CH-4). */
+  @Field(() => Int) CompanyCount: number;
   /** True when the engine found nothing to batch (no pending JEs / all netted to zero). */
   @Field() NothingToBatch: boolean;
   @Field({ nullable: true }) ErrorMessage?: string;
@@ -80,22 +84,18 @@ export class JEBatchApprovalState {
 
 @Resolver()
 export class BatchDispatchResolver extends ResolverBase {
-  /** Build a Pending batch from a Company×Period's pending JEs (raises the CFO approval task via the gate). */
+  /** Build ONE Pending multi-company batch from ALL pending JEs (raises the CFO approval task via the gate). */
   @Mutation(() => BuildJEBatchResult)
   async BuildJEBatch(
-    @Arg('companyID', () => ID) companyID: string,
-    @Arg('accountingPeriodID', () => ID) accountingPeriodID: string,
     @Arg('targetSystem', () => String) targetSystem: string,
     @Ctx() { userPayload }: AppContext,
   ): Promise<BuildJEBatchResult> {
-    const empty = { Success: false, SummaryLineCount: 0, TotalDebits: 0, TotalCredits: 0, JECount: 0, NothingToBatch: false };
+    const empty = { Success: false, SummaryLineCount: 0, TotalDebits: 0, TotalCredits: 0, JECount: 0, CompanyCount: 0, NothingToBatch: false };
     try {
       const user = this.GetUserFromPayload(userPayload);
       if (!user) return { ...empty, ErrorMessage: 'No authenticated user.' };
 
       const result = await buildBatch(
-        companyID,
-        accountingPeriodID,
         targetSystem as BatchTargetSystem,
         user.ID,
         user,
@@ -111,6 +111,7 @@ export class BatchDispatchResolver extends ResolverBase {
         TotalDebits: result.totalDebits,
         TotalCredits: result.totalCredits,
         JECount: result.jeCount,
+        CompanyCount: result.companyCount,
       };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -119,7 +120,7 @@ export class BatchDispatchResolver extends ResolverBase {
     }
   }
 
-  /** Dispatch a Pending, CFO-approved batch to the ERP (mock poster for v1). Gate blocks if not approved. */
+  /** Dispatch an Approved batch to the ERP (mock poster for v1). Gate + Status=Approved block otherwise. */
   @Mutation(() => DispatchJEBatchResult)
   async DispatchJEBatch(
     @Arg('batchID', () => ID) batchID: string,
@@ -155,6 +156,10 @@ export class BatchDispatchResolver extends ResolverBase {
 
       const personId = await this.resolveCurrentPersonId(user);
       await new TasksAppApprovalGate().recordDecision(batchID, decision as BatchDecisionOutcome, personId, notes, user);
+      // An approval decision also flips the batch Pending→Approved (content freeze + dispatchable state).
+      if (decision === 'Approved' || decision === 'ApprovedWithConditions') {
+        await approveBatch(batchID, user.ID, user);
+      }
       return { Success: true };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

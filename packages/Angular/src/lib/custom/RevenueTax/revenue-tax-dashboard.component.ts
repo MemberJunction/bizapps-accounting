@@ -39,9 +39,7 @@ export class RevenueTaxDashboardComponent extends ReadModelDashboardBase {
   };
 
   public readonly DeferredRevenueCols: ColDef<DefRevRollforwardRow>[] = [
-    { field: 'FiscalYear', headerName: 'FY', width: 90, type: 'numericColumn' },
-    { field: 'PeriodType', headerName: 'Period', width: 110 },
-    { field: 'PeriodStart', headerName: 'Start', width: 130, valueFormatter: utcDateFormatter },
+    { field: 'PeriodMonth', headerName: 'Month', width: 140, valueFormatter: utcDateFormatter },
     moneyColumn<DefRevRollforwardRow>('OpeningBalance', 'Opening', 140),
     moneyColumn<DefRevRollforwardRow>('Additions', 'Additions'),
     moneyColumn<DefRevRollforwardRow>('Releases', 'Releases'),
@@ -52,8 +50,6 @@ export class RevenueTaxDashboardComponent extends ReadModelDashboardBase {
   public readonly SalesTaxCols: ColDef<SalesTaxLiabilityRow>[] = [
     { field: 'AuthorityName', headerName: 'Authority', flex: 1, minWidth: 160, tooltipField: 'AuthorityName' },
     { field: 'JurisdictionName', headerName: 'Jurisdiction', flex: 1, minWidth: 160, tooltipField: 'JurisdictionName' },
-    { field: 'FiscalYear', headerName: 'FY', width: 90, type: 'numericColumn' },
-    { field: 'PeriodType', headerName: 'Period', width: 110 },
     moneyColumn<SalesTaxLiabilityRow>('AccruedAmount', 'Accrued'),
     moneyColumn<SalesTaxLiabilityRow>('RemittedAmount', 'Remitted'),
     moneyColumn<SalesTaxLiabilityRow>('OutstandingLiability', 'Outstanding', 150),

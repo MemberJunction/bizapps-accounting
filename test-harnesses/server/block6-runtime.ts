@@ -2,16 +2,28 @@
  * block6-runtime.ts — live validation of the Block-6 read-model views.
  *
  * Seeds a company with posted (GLPosted) JEs + dimension tags + a scheduled schedule, then queries each
- * delivered read-model view and asserts it returns MEANINGFUL, correct results (not just "no error"):
- *   vw_TrialBalance_AR     — foots to zero across accounts for balanced JEs (AR debit-net = Rev credit-net).
- *   vw_JEAuditTrail        — one row per JE line, flattened with account/period/batch, all GLPosted.
- *   vw_ARtoGLRecon         — per-period entry-status counts (GLPosted after dispatch; 0 Pending).
+ * delivered read-model view and asserts it returns MEANINGFUL, correct results (not just "no error").
+ *
+ * 2026-07-06 rework (engine-meeting rulings): AccountingPeriod is GONE — the views are now
+ * month-grain on EffectiveDate (vw_ARtoGLRecon global by year/month; vw_DefRevRollforward by
+ * PeriodMonth); company always derives from GLAccount.CompanyID; the batch lifecycle ends at
+ * 'Posted' (not 'Acknowledged') and vw_BatchDispatchStatus carries ApprovedAt/PostedAt + CompanyCount.
+ *
+ *   vw_TrialBalance_AR     — foots to zero across accounts for balanced JEs.
+ *   vw_JEAuditTrail        — one row per JE line, flattened with account/batch, all GLPosted.
+ *   vw_ARtoGLRecon         — month-grain entry-status counts (GLPosted after dispatch; 0 Pending).
  *   vw_DimensionPL         — revenue netted by the tagged dimension value.
- *   vw_BatchDispatchStatus — the Acknowledged batch with its summary-line count + ExternalBatchRef.
+ *   vw_BatchDispatchStatus — the Posted batch with summary-line count, CompanyCount + ExternalBatchRef.
  *   vw_ScheduledJESummary  — the scheduled rollup (count + total) by company/entry-type/status.
+ *   vw_FxExposure          — foreign-currency position + unrealized delta vs current spot.
+ *   vw_AROpenByCustomer / vw_ARAging / vw_DefRevRollforward / vw_SalesTaxLiability / vw_IntercompanyFlow.
+ *
+ * PRECONDITION: buildBatch is global — requires ZERO stray Pending JEs at bootstrap (fails fast).
+ * Each test seeds its JEs and immediately posts them (postPending), so the global sweep only ever
+ * picks up its own rows (tests run serially).
  *
  * USAGE (cwd = instance worktree root): npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/block6-runtime.ts
- * Exit: 0 all passed · 1 failures · 2 bootstrap error. FK-aware teardown (disables triggers to drop locked rows).
+ * Exit: 0 all passed · 1 failures · 2 bootstrap error. FK-aware teardown via the db_owner pool.
  */
 import sql from 'mssql';
 import dotenv from 'dotenv';
@@ -25,7 +37,7 @@ import '@memberjunction/server-bootstrap-lite';
 import '@mj-biz-apps/common-entities';
 import '@mj-biz-apps/accounting-entities';
 import '@mj-biz-apps/accounting-core-entities-server';
-import { buildBatch, sendBatch, createScheduledEntries, AutoApproveGate } from '@mj-biz-apps/accounting-core-entities-server';
+import { buildBatch, approveBatch, sendBatch, createScheduledEntries, AutoApproveGate } from '@mj-biz-apps/accounting-core-entities-server';
 import type {
   mjBizAppsAccountingAccountingCompanyProfileEntity,
   mjBizAppsAccountingJournalEntryEntity,
@@ -38,7 +50,6 @@ import type { mjBizAppsCommonOrganizationEntity } from '@mj-biz-apps/common-enti
 
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
-const PERIOD_ENTITY = 'MJ_BizApps_Accounting: Accounting Periods';
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
 const CURRENCY_ENTITY = 'MJ_BizApps_Accounting: Currencies';
@@ -55,82 +66,75 @@ async function test(name: string, fn: () => Promise<void>): Promise<void> {
 }
 function assert(cond: boolean, message: string): void { if (!cond) throw new Error(message); }
 
-interface Ctx { pool: sql.ConnectionPool; user: UserInfo; companyId: string; arGL: string; revGL: string; deferredGL: string; cashGL: string; periods: { ID: string; PeriodStart: string }[]; currencyCode: string; foreignCurrency: string; dimId: string; dimVal: string }
+interface Ctx {
+  pool: sql.ConnectionPool;
+  /** db_owner pool (MJ_CodeGen) used ONLY for FK-aware teardown (locked GLPosted rows). */
+  teardownPool: sql.ConnectionPool;
+  user: UserInfo; companyId: string; arGL: string; revGL: string; deferredGL: string; cashGL: string;
+  currencyCode: string; foreignCurrency: string; dimId: string; dimVal: string;
+}
+
+/** Every JE this run created — buildBatch is global, so teardown sweeps by tracked ID. */
+const createdJEIds: string[] = [];
 
 async function bootstrap(): Promise<Ctx> {
   dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
   const { DB_HOST: host, DB_DATABASE: database, DB_USERNAME: user, DB_PASSWORD: password } = process.env;
   if (!host || !database || !user || !password) throw new Error('Missing DB settings in .env (run from the instance worktree root).');
   const pool = await new sql.ConnectionPool({ server: host, port: Number(process.env.DB_PORT ?? 1433), user, password, database, options: { encrypt: false, trustServerCertificate: true } }).connect();
+  const { CODEGEN_DB_USERNAME: cgUser, CODEGEN_DB_PASSWORD: cgPassword } = process.env;
+  if (!cgUser || !cgPassword) throw new Error('Missing CODEGEN_DB_USERNAME/PASSWORD in .env (needed for the db_owner teardown pool).');
+  const teardownPool = await new sql.ConnectionPool({ server: host, port: Number(process.env.DB_PORT ?? 1433), user: cgUser, password: cgPassword, database, options: { encrypt: false, trustServerCertificate: true } }).connect();
   await setupSQLServerClient(new SQLServerProviderConfigData(pool, process.env.MJ_CORE_SCHEMA || '__mj'));
-  await assertInvariantTriggers(pool); // 1b pre-flight: fail fast if any invariant trigger is missing/disabled
+  await assertInvariantTriggers(pool); // pre-flight: fail fast if any invariant trigger is missing/disabled
   await UserCache.Instance.Refresh(pool);
   const ctxUser = UserCache.Users.find(u => u?.Type?.trim().toLowerCase() === 'owner') ?? UserCache.Users[0];
   if (!ctxUser) throw new Error('No context user found.');
+  const stray = (await pool.request().query(`SELECT COUNT(*) n FROM ${SCHEMA}.JournalEntry WHERE Status='Pending'`)).recordset[0].n;
+  if (Number(stray) > 0) throw new Error(`${stray} stray Pending JE(s) exist — clean up first (buildBatch sweeps ALL Pending JEs).`);
   const rv = new RunView();
   const cur = await rv.RunView<{ Code: string }>({ EntityName: CURRENCY_ENTITY, Fields: ['Code'], OrderBy: 'Code ASC', MaxRows: 2, ResultType: 'simple' }, ctxUser);
-  const currencyCode = cur.Results?.[0]?.Code as string;
-  const foreignCurrency = cur.Results?.[1]?.Code as string;
+  const currencyCode = cur.Results?.[0]?.Code;
+  const foreignCurrency = cur.Results?.[1]?.Code;
   if (!currencyCode || !foreignCurrency) throw new Error(`need >=2 currencies for the FX test (success=${cur.Success})`);
 
   const md = new Metadata();
   const acp = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, ctxUser);
   acp.NewRecord();
-  acp.Set('Name', `${RUN_TAG} Co`); acp.Set('Description', `${RUN_TAG} block6 test`);
-  acp.Set('CompanyCode', companyCode()); acp.Set('FunctionalCurrencyCode', currencyCode); acp.Set('EntityType', 'Subsidiary');
+  acp.Name = `${RUN_TAG} Co`;
+  acp.Description = `${RUN_TAG} block6 test`;
+  acp.CompanyCode = companyCode();
+  acp.FunctionalCurrencyCode = currencyCode;
+  acp.EntityType = 'Subsidiary';
   const companyId = acp.ID;
   if (!(await acp.Save())) throw new Error(`ACP save failed: ${acp.LatestResult?.CompleteMessage ?? 'unknown'}`);
 
   const glRes = await rv.RunView<{ ID: string; Code: string }>({ EntityName: GL_ENTITY, ExtraFilter: `CompanyID='${companyId}'`, Fields: ['ID', 'Code'], ResultType: 'simple' }, ctxUser);
   const byCode = new Map((glRes.Results ?? []).map(r => [r.Code, r.ID]));
   await pool.request().query(`UPDATE ${SCHEMA}.GLAccount SET ExternalSystem='BusinessCentral', ExternalAccountID=Code WHERE CompanyID='${companyId}'`);
-  const periodRes = await rv.RunView<{ ID: string; PeriodStart: string }>({ EntityName: PERIOD_ENTITY, ExtraFilter: `CompanyID='${companyId}' AND PeriodType='Month' AND Status='Open'`, Fields: ['ID', 'PeriodStart'], OrderBy: 'PeriodStart ASC', ResultType: 'simple' }, ctxUser);
-  const periods = periodRes.Results ?? [];
 
   const dimId = randomUUID(), dimVal = randomUUID();
   await pool.request().query(`INSERT INTO ${SCHEMA}.Dimension (ID, Code, Name) VALUES ('${dimId}','DEPT-${RUN_TAG}','Department ${RUN_TAG}')`);
   await pool.request().query(`INSERT INTO ${SCHEMA}.DimensionValue (ID, DimensionID, Code, Name) VALUES ('${dimVal}','${dimId}','SALES','Sales')`);
-  return { pool, user: ctxUser, companyId, arGL: byCode.get('11201')!, revGL: byCode.get('40100')!, deferredGL: byCode.get('21301')!, cashGL: byCode.get('11101')!, periods, currencyCode, foreignCurrency, dimId, dimVal };
+  return { pool, teardownPool, user: ctxUser, companyId, arGL: byCode.get('11201')!, revGL: byCode.get('40100')!, deferredGL: byCode.get('21301')!, cashGL: byCode.get('11101')!, currencyCode, foreignCurrency, dimId, dimVal };
 }
-
-/** Create a balanced Dr AR / Cr Rev JE; tag the Rev line with the Sales dimension. Returns JE id. */
-async function makeTaggedJE(ctx: Ctx, periodId: string, amount: number): Promise<string> {
-  const md = new Metadata();
-  const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, ctx.user);
-  je.NewRecord();
-  je.CompanyID = ctx.companyId; je.AccountingPeriodID = periodId; je.EffectiveDate = new Date();
-  je.EntryType = 'OrderBooking'; je.Status = 'Pending'; je.Description = `${RUN_TAG}`;
-  if (!(await je.Save())) throw new Error(`JE save failed: ${je.LatestResult?.CompleteMessage}`);
-  const lAR = await md.GetEntityObject<mjBizAppsAccountingJournalEntryLineEntity>(JEL_ENTITY, ctx.user);
-  lAR.NewRecord(); lAR.JournalEntryID = je.ID; lAR.LineNumber = 1; lAR.GLAccountID = ctx.arGL; lAR.DebitAmount = amount; lAR.CreditAmount = null;
-  if (!(await lAR.Save())) throw new Error(`AR line save failed: ${lAR.LatestResult?.CompleteMessage}`);
-  const lRev = await md.GetEntityObject<mjBizAppsAccountingJournalEntryLineEntity>(JEL_ENTITY, ctx.user);
-  lRev.NewRecord(); lRev.JournalEntryID = je.ID; lRev.LineNumber = 2; lRev.GLAccountID = ctx.revGL; lRev.DebitAmount = null; lRev.CreditAmount = amount;
-  if (!(await lRev.Save())) throw new Error(`Rev line save failed: ${lRev.LatestResult?.CompleteMessage}`);
-  await ctx.pool.request().query(`INSERT INTO ${SCHEMA}.JournalEntryLineDimension (ID, JournalEntryLineID, DimensionID, DimensionValueID) VALUES (NEWID(),'${lRev.ID}','${ctx.dimId}','${ctx.dimVal}')`);
-  return je.ID;
-}
-
-const TAX_PREFIX = 'TX' + Date.now().toString(36).slice(-6).toUpperCase();
-const TAX_AUTH_CODE = `${TAX_PREFIX}-AUTH`;
-const TAX_JUR_CODE = `${TAX_PREFIX}-JUR`;
-const ORG_PREFIX = `ORG-${RUN_TAG}`;
 
 /** A single JE line spec: a debit OR a credit on a GL account, optionally tagging a counterparty customer. */
 interface LineSpec { glId: string; debit?: number; credit?: number; counterparty?: string }
 
 /**
- * Create a JE in `periodId` with the given balanced lines, optional EffectiveDate (defaults to now/UTC)
- * and optional IntercompanyFlowID. Stays Pending — call postPeriod() to flip it to GLPosted.
+ * Create a Pending JE with the given balanced lines, optional EffectiveDate (defaults now/UTC) and
+ * optional IntercompanyFlowID. Stays Pending — call postPending() to flip it to GLPosted.
  */
-async function makeJE(ctx: Ctx, periodId: string, entryType: string, lines: LineSpec[], opts: { effectiveDate?: Date; intercompanyFlowId?: string } = {}): Promise<string> {
+async function makeJE(ctx: Ctx, entryType: mjBizAppsAccountingJournalEntryEntity['EntryType'], lines: LineSpec[], opts: { effectiveDate?: Date; intercompanyFlowId?: string } = {}): Promise<string> {
   const md = new Metadata();
   const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, ctx.user);
   je.NewRecord();
-  je.CompanyID = ctx.companyId; je.AccountingPeriodID = periodId; je.EffectiveDate = opts.effectiveDate ?? new Date();
+  je.EffectiveDate = opts.effectiveDate ?? new Date();
   je.EntryType = entryType; je.Status = 'Pending'; je.Description = `${RUN_TAG}`;
   if (opts.intercompanyFlowId) je.IntercompanyFlowID = opts.intercompanyFlowId;
   if (!(await je.Save())) throw new Error(`makeJE save failed: ${je.LatestResult?.CompleteMessage}`);
+  createdJEIds.push(je.ID);
   let lineNo = 0;
   for (const spec of lines) {
     lineNo += 1;
@@ -143,30 +147,32 @@ async function makeJE(ctx: Ctx, periodId: string, entryType: string, lines: Line
   return je.ID;
 }
 
-/** Build + dispatch the batch for a period → all its Pending JEs become GLPosted. */
-async function postPeriod(ctx: Ctx, periodId: string): Promise<void> {
-  const built = await buildBatch(ctx.companyId, periodId, 'BusinessCentral', ctx.user.ID, ctx.user, AutoApproveGate);
-  if (built === null) throw new Error('postPeriod: buildBatch returned null (no pending JEs or all netted to zero)');
-  const batch = await sendBatch(built.batchId, ctx.user, { gate: AutoApproveGate });
-  if (batch.Status !== 'Acknowledged') throw new Error(`postPeriod: batch should be Acknowledged, got ${batch.Status}`);
+/** Create a balanced Dr AR / Cr Rev JE; tag the Rev line with the Sales dimension. Returns JE id. */
+async function makeTaggedJE(ctx: Ctx, amount: number): Promise<string> {
+  const md = new Metadata();
+  const jeId = await makeJE(ctx, 'OrderBooking', [{ glId: ctx.arGL, debit: amount }]);
+  // append the tagged Rev line (makeJE built line 1; add line 2 + its dimension tag)
+  const lRev = await md.GetEntityObject<mjBizAppsAccountingJournalEntryLineEntity>(JEL_ENTITY, ctx.user);
+  lRev.NewRecord(); lRev.JournalEntryID = jeId; lRev.LineNumber = 2; lRev.GLAccountID = ctx.revGL; lRev.DebitAmount = null; lRev.CreditAmount = amount;
+  if (!(await lRev.Save())) throw new Error(`Rev line save failed: ${lRev.LatestResult?.CompleteMessage}`);
+  await ctx.pool.request().query(`INSERT INTO ${SCHEMA}.JournalEntryLineDimension (ID, JournalEntryLineID, DimensionID, DimensionValueID) VALUES (NEWID(),'${lRev.ID}','${ctx.dimId}','${ctx.dimVal}')`);
+  return jeId;
 }
 
-/**
- * Open a db_owner connection for teardown (CODEGEN_DB_USERNAME/PASSWORD → MJ_CodeGen). Needed because
- * MJ_Connect lacks ALTER rights to DISABLE TRIGGER, which is required to drop locked (Batched/GLPosted)
- * JEs + their batches. Falls back to the main MJ_Connect pool if the creds are absent or the connect
- * fails (teardown then still removes the unlocked rows — the locked rows would survive, as before).
- */
-async function openTeardownPool(fallback: sql.ConnectionPool): Promise<sql.ConnectionPool> {
-  const user = process.env.CODEGEN_DB_USERNAME, password = process.env.CODEGEN_DB_PASSWORD;
-  if (!user || !password) { console.warn('  ⚠ teardown: CODEGEN_DB creds absent — locked JEs/batches may survive teardown'); return fallback; }
-  try {
-    return await new sql.ConnectionPool({
-      server: process.env.DB_HOST!, port: Number(process.env.DB_PORT ?? 1433), user, password,
-      database: process.env.DB_DATABASE!, options: { encrypt: false, trustServerCertificate: true },
-    }).connect();
-  } catch (e) { console.warn(`  ⚠ teardown: db_owner connect failed (${e instanceof Error ? e.message : String(e)}) — falling back`); return fallback; }
+/** Build + approve + dispatch ALL Pending JEs → GLPosted. Returns the batch id. */
+async function postPending(ctx: Ctx): Promise<string> {
+  const built = await buildBatch('BusinessCentral', ctx.user.ID, ctx.user, AutoApproveGate);
+  if (built === null) throw new Error('postPending: buildBatch returned null (no pending JEs or all netted to zero)');
+  await approveBatch(built.batchId, ctx.user.ID, ctx.user);
+  const batch = await sendBatch(built.batchId, ctx.user, { gate: AutoApproveGate });
+  if (batch.Status !== 'Posted') throw new Error(`postPending: batch should be Posted, got ${batch.Status}`);
+  return built.batchId;
 }
+
+const TAX_PREFIX = 'TX' + Date.now().toString(36).slice(-6).toUpperCase();
+const TAX_AUTH_CODE = `${TAX_PREFIX}-AUTH`;
+const TAX_JUR_CODE = `${TAX_PREFIX}-JUR`;
+const ORG_PREFIX = `ORG-${RUN_TAG}`;
 
 /** Create a customer Organization in __mj_BizAppsCommon; returns its ID. */
 async function makeOrg(ctx: Ctx, name: string): Promise<string> {
@@ -180,24 +186,19 @@ async function makeOrg(ctx: Ctx, name: string): Promise<string> {
 async function main(): Promise<void> {
   let ctx: Ctx;
   try { ctx = await bootstrap(); } catch (e) { console.error('BOOTSTRAP ERROR:', e instanceof Error ? (e.stack ?? e.message) : String(e)); process.exit(2); }
-  const { pool, user, companyId, periods } = ctx;
+  const { pool, user, companyId } = ctx;
   console.log(`\n══════ Block 6 runtime validation — user=${user.Email} company=${companyId} tag=${RUN_TAG} ══════\n`);
-  assert(periods.length >= 7, `need >=7 open month periods, got ${periods.length}`);
-  const createdOrgIds: string[] = []; // customer Organizations created across the new tests, for teardown
+  const createdOrgIds: string[] = []; // customer Organizations created across the tests, for teardown
   const q = (sqlText: string) => pool.request().query(sqlText).then(r => r.recordset);
 
-  // Seed: 2 balanced JEs (Dr AR 100 / Cr Rev 100) in P[0], dimension-tagged, then batch+send → GLPosted.
+  // Seed: 2 balanced JEs (Dr AR 100 / Cr Rev 100), dimension-tagged, then batch+approve+send → GLPosted.
   let batchId = '';
-  await test('seed — 2 posted JEs + a batch (Acknowledged) for the views to read', async () => {
-    await makeTaggedJE(ctx, periods[0].ID, 100);
-    await makeTaggedJE(ctx, periods[0].ID, 100);
-    const built = await buildBatch(companyId, periods[0].ID, 'BusinessCentral', user.ID, user, AutoApproveGate);
-    assert(built !== null, 'buildBatch returned null');
-    batchId = built!.batchId;
-    const batch = await sendBatch(batchId, user, { gate: AutoApproveGate });
-    assert(batch.Status === 'Acknowledged', `batch should be Acknowledged, got ${batch.Status}`);
+  await test('seed — 2 posted JEs + a Posted batch for the views to read', async () => {
+    await makeTaggedJE(ctx, 100);
+    await makeTaggedJE(ctx, 100);
+    batchId = await postPending(ctx);
     await createScheduledEntries(
-      { companyId, entryType: 'RevenueRecognition', currencyCode: ctx.currencyCode, totalAmount: 300, debitGLAccountId: ctx.deferredGL, creditGLAccountId: ctx.revGL, periods: periods.slice(0, 3).map(p => ({ accountingPeriodId: p.ID, effectiveDate: new Date(p.PeriodStart) })) },
+      { companyId, entryType: 'RevenueRecognition', currencyCode: ctx.currencyCode, totalAmount: 300, debitGLAccountId: ctx.deferredGL, creditGLAccountId: ctx.revGL, periods: [1, 2, 3].map(i => ({ effectiveDate: new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + i, 1)) })) },
       user,
     );
   });
@@ -218,10 +219,14 @@ async function main(): Promise<void> {
     assert(rows.every((r: { BatchNumber: string | null }) => !!r.BatchNumber), 'every row should carry its BatchNumber');
   });
 
-  await test('vw_ARtoGLRecon — per-period status counts (2 GLPosted, 0 Pending)', async () => {
-    const rows = await q(`SELECT PendingEntries, BatchedEntries, GLPostedEntries, TotalEntries FROM ${SCHEMA}.vw_ARtoGLRecon WHERE CompanyID='${companyId}' AND AccountingPeriodID='${periods[0].ID}'`);
-    assert(rows.length === 1, `expected 1 recon row, got ${rows.length}`);
+  await test('vw_ARtoGLRecon — month-grain status counts for the current month (2 GLPosted, 0 Pending)', async () => {
+    // The view is GLOBAL by (year, month) now — periods are gone. At this point in the run the
+    // current month holds exactly the 2 seed JEs (the DB was verified Pending-clean at bootstrap).
+    const now = new Date();
+    const rows = await q(`SELECT PendingEntries, BatchedEntries, GLPostedEntries, TotalEntries FROM ${SCHEMA}.vw_ARtoGLRecon WHERE EffectiveYear=${now.getUTCFullYear()} AND EffectiveMonth=${now.getUTCMonth() + 1}`);
+    assert(rows.length === 1, `expected 1 recon row for the current month, got ${rows.length}`);
     assert(Number(rows[0].GLPostedEntries) === 2 && Number(rows[0].PendingEntries) === 0, `expected 2 GLPosted / 0 Pending, got ${rows[0].GLPostedEntries}/${rows[0].PendingEntries}`);
+    assert(Number(rows[0].TotalEntries) === 2, `expected 2 total entries this month, got ${rows[0].TotalEntries}`);
   });
 
   await test('vw_DimensionPL — revenue netted by the tagged Sales dimension value', async () => {
@@ -231,11 +236,14 @@ async function main(): Promise<void> {
     assert(sales.AccountType === 'Revenue' && Number(sales.NetAmount) === 200, `expected Revenue NetAmount 200, got ${sales?.AccountType}/${sales?.NetAmount}`);
   });
 
-  await test('vw_BatchDispatchStatus — the Acknowledged batch with summary-line count + ExternalBatchRef', async () => {
-    const rows = await q(`SELECT Status, SummaryLineCount, ExternalBatchRef, TotalDebits, TotalCredits FROM ${SCHEMA}.vw_BatchDispatchStatus WHERE BatchID='${batchId}'`);
+  await test('vw_BatchDispatchStatus — the Posted batch: summary lines, CompanyCount, audit stamps + ExternalBatchRef', async () => {
+    const rows = await q(`SELECT Status, SummaryLineCount, CompanyCount, ExternalBatchRef, ApprovedAt, PostedAt, TotalDebits, TotalCredits FROM ${SCHEMA}.vw_BatchDispatchStatus WHERE BatchID='${batchId}'`);
     assert(rows.length === 1, `expected 1 batch row, got ${rows.length}`);
-    assert(rows[0].Status === 'Acknowledged', `batch status ${rows[0].Status}`);
+    assert(rows[0].Status === 'Posted', `batch status ${rows[0].Status}`);
     assert(Number(rows[0].SummaryLineCount) === 2, `expected 2 summary lines, got ${rows[0].SummaryLineCount}`);
+    assert(Number(rows[0].CompanyCount) === 1, `expected CompanyCount 1, got ${rows[0].CompanyCount}`);
+    assert(rows[0].ApprovedAt !== null && rows[0].PostedAt !== null, 'ApprovedAt + PostedAt must be stamped in the view');
+    assert(!!rows[0].ExternalBatchRef, 'ExternalBatchRef must be present after post');
     assert(Number(rows[0].TotalDebits) === Number(rows[0].TotalCredits), 'batch totals must foot in the view');
   });
 
@@ -247,21 +255,14 @@ async function main(): Promise<void> {
   });
 
   await test('vw_FxExposure — foreign-currency position + unrealized delta vs current spot', async () => {
-    // A foreign-currency booking in period[1]: Dr AR 110 functional (= 100 foreign @ 1.10) / Cr Rev 110 functional.
+    // A foreign-currency booking: Dr AR 110 functional (= 100 foreign @ 1.10) / Cr Rev 110 functional.
     const md = new Metadata();
-    const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
-    je.NewRecord(); je.CompanyID = companyId; je.AccountingPeriodID = periods[1].ID; je.EffectiveDate = new Date();
-    je.EntryType = 'OrderBooking'; je.Status = 'Pending'; je.Description = `${RUN_TAG} fx`;
-    if (!(await je.Save())) throw new Error(`fx JE save failed: ${je.LatestResult?.CompleteMessage}`);
+    const jeId = await makeJE(ctx, 'OrderBooking', [{ glId: ctx.revGL, credit: 110 }]);
     const ar = await md.GetEntityObject<mjBizAppsAccountingJournalEntryLineEntity>(JEL_ENTITY, user);
-    ar.NewRecord(); ar.JournalEntryID = je.ID; ar.LineNumber = 1; ar.GLAccountID = ctx.arGL;
+    ar.NewRecord(); ar.JournalEntryID = jeId; ar.LineNumber = 2; ar.GLAccountID = ctx.arGL;
     ar.DebitAmount = 110; ar.OriginalDebitAmount = 100; ar.OriginalCurrencyCode = ctx.foreignCurrency; ar.ExchangeRateUsed = 1.10;
     if (!(await ar.Save())) throw new Error(`fx AR line save failed: ${ar.LatestResult?.CompleteMessage}`);
-    const rev = await md.GetEntityObject<mjBizAppsAccountingJournalEntryLineEntity>(JEL_ENTITY, user);
-    rev.NewRecord(); rev.JournalEntryID = je.ID; rev.LineNumber = 2; rev.GLAccountID = ctx.revGL; rev.CreditAmount = 110;
-    if (!(await rev.Save())) throw new Error(`fx Rev line save failed: ${rev.LatestResult?.CompleteMessage}`);
-    const built = await buildBatch(companyId, periods[1].ID, 'BusinessCentral', user.ID, user, AutoApproveGate);
-    await sendBatch(built!.batchId, user, { gate: AutoApproveGate });
+    await postPending(ctx);
     // current spot foreign→functional = 1.20 (booked at 1.10) → +10 unrealized on the 100-unit position
     await pool.request().query(`INSERT INTO ${SCHEMA}.CurrencySpotRate (ID, FromCurrencyCode, ToCurrencyCode, RateDate, Rate, Source) VALUES (NEWID(),'${ctx.foreignCurrency}','${ctx.currencyCode}','${new Date().toISOString().slice(0, 10)}',1.20,'Test')`);
     const rows = await q(`SELECT OriginalCurrencyCode, NetOriginalAmount, NetFunctionalBooked, CurrentSpotRate, UnrealizedFxDelta FROM ${SCHEMA}.vw_FxExposure WHERE CompanyID='${companyId}'`);
@@ -271,29 +272,23 @@ async function main(): Promise<void> {
     assert(Number(fx.CurrentSpotRate) === 1.20 && Number(fx.UnrealizedFxDelta) === 10, `expected spot 1.20 / delta 10, got ${fx.CurrentSpotRate}/${fx.UnrealizedFxDelta}`);
   });
 
-  // ═══ Block-6 deferred read-model views (V202606300500) ═══════════════════════
-  // Each view test seeds in its OWN period so buildBatch (which nets ALL pending JEs
-  // in a company×period) never cross-contaminates another test's data.
-
   // ── vw_AROpenByCustomer ──────────────────────────────────────────────────────
-  // periods[2]. Customer A: charge 500 + partial payment 200 → open 300. Customer B:
-  // charge 1000 → open 1000. Customer C: charge 400 + full payment 400 → net 0 → ABSENT
-  // (HAVING). Each JE self-balances (AR debit/credit ↔ Rev/Cash) so it can lock to GLPosted.
+  // Customer A: charge 500 + partial payment 200 → open 300. Customer B: charge 1000 → open 1000.
+  // Customer C: charge 400 + full payment 400 → net 0 → ABSENT (HAVING). Each JE self-balances.
   let arOrgA = '', arOrgB = '', arOrgC = '';
   await test('vw_AROpenByCustomer — exact open balance per customer; fully-settled customer absent (HAVING)', async () => {
     arOrgA = await makeOrg(ctx, `${ORG_PREFIX}-A`); createdOrgIds.push(arOrgA);
     arOrgB = await makeOrg(ctx, `${ORG_PREFIX}-B`); createdOrgIds.push(arOrgB);
     arOrgC = await makeOrg(ctx, `${ORG_PREFIX}-C`); createdOrgIds.push(arOrgC);
-    const p = periods[2].ID;
     // A: charge 500 (Dr AR/Cr Rev), pay 200 (Dr Cash/Cr AR) → 300 open
-    await makeJE(ctx, p, 'OrderBooking', [{ glId: ctx.arGL, debit: 500, counterparty: arOrgA }, { glId: ctx.revGL, credit: 500 }]);
-    await makeJE(ctx, p, 'PaymentReceipt', [{ glId: ctx.cashGL, debit: 200 }, { glId: ctx.arGL, credit: 200, counterparty: arOrgA }]);
+    await makeJE(ctx, 'OrderBooking', [{ glId: ctx.arGL, debit: 500, counterparty: arOrgA }, { glId: ctx.revGL, credit: 500 }]);
+    await makeJE(ctx, 'PaymentReceipt', [{ glId: ctx.cashGL, debit: 200 }, { glId: ctx.arGL, credit: 200, counterparty: arOrgA }]);
     // B: charge 1000 → 1000 open
-    await makeJE(ctx, p, 'OrderBooking', [{ glId: ctx.arGL, debit: 1000, counterparty: arOrgB }, { glId: ctx.revGL, credit: 1000 }]);
+    await makeJE(ctx, 'OrderBooking', [{ glId: ctx.arGL, debit: 1000, counterparty: arOrgB }, { glId: ctx.revGL, credit: 1000 }]);
     // C: charge 400 + pay 400 → net 0 → absent
-    await makeJE(ctx, p, 'OrderBooking', [{ glId: ctx.arGL, debit: 400, counterparty: arOrgC }, { glId: ctx.revGL, credit: 400 }]);
-    await makeJE(ctx, p, 'PaymentReceipt', [{ glId: ctx.cashGL, debit: 400 }, { glId: ctx.arGL, credit: 400, counterparty: arOrgC }]);
-    await postPeriod(ctx, p);
+    await makeJE(ctx, 'OrderBooking', [{ glId: ctx.arGL, debit: 400, counterparty: arOrgC }, { glId: ctx.revGL, credit: 400 }]);
+    await makeJE(ctx, 'PaymentReceipt', [{ glId: ctx.cashGL, debit: 400 }, { glId: ctx.arGL, credit: 400, counterparty: arOrgC }]);
+    await postPending(ctx);
 
     const rows = await q(`SELECT CustomerOrganizationID, OpenBalance, TotalCharges, TotalPayments, EntryCount FROM ${SCHEMA}.vw_AROpenByCustomer WHERE CompanyID='${companyId}' AND CustomerOrganizationID IN ('${arOrgA}','${arOrgB}','${arOrgC}')`);
     const a = rows.find((r: { CustomerOrganizationID: string }) => r.CustomerOrganizationID === arOrgA);
@@ -306,18 +301,16 @@ async function main(): Promise<void> {
   });
 
   // ── vw_ARAging ───────────────────────────────────────────────────────────────
-  // periods[3], dedicated customer. 4 charges with EffectiveDates ~15/45/75/120 days ago
-  // → land in Current_0_30 / Days_31_60 / Days_61_90 / Days_Over_90. TotalOpen reconciles.
+  // 4 charges with EffectiveDates ~15/45/75/120 days ago → land in the 4 buckets. TotalOpen reconciles.
   let agingOrg = '';
   await test('vw_ARAging — charges by age land in correct buckets; TotalOpen reconciles', async () => {
     agingOrg = await makeOrg(ctx, `${ORG_PREFIX}-AGE`); createdOrgIds.push(agingOrg);
-    const p = periods[3].ID;
     const daysAgo = (n: number): Date => { const d = new Date(); d.setUTCDate(d.getUTCDate() - n); return d; };
-    await makeJE(ctx, p, 'OrderBooking', [{ glId: ctx.arGL, debit: 100, counterparty: agingOrg }, { glId: ctx.revGL, credit: 100 }], { effectiveDate: daysAgo(15) });
-    await makeJE(ctx, p, 'OrderBooking', [{ glId: ctx.arGL, debit: 200, counterparty: agingOrg }, { glId: ctx.revGL, credit: 200 }], { effectiveDate: daysAgo(45) });
-    await makeJE(ctx, p, 'OrderBooking', [{ glId: ctx.arGL, debit: 300, counterparty: agingOrg }, { glId: ctx.revGL, credit: 300 }], { effectiveDate: daysAgo(75) });
-    await makeJE(ctx, p, 'OrderBooking', [{ glId: ctx.arGL, debit: 400, counterparty: agingOrg }, { glId: ctx.revGL, credit: 400 }], { effectiveDate: daysAgo(120) });
-    await postPeriod(ctx, p);
+    await makeJE(ctx, 'OrderBooking', [{ glId: ctx.arGL, debit: 100, counterparty: agingOrg }, { glId: ctx.revGL, credit: 100 }], { effectiveDate: daysAgo(15) });
+    await makeJE(ctx, 'OrderBooking', [{ glId: ctx.arGL, debit: 200, counterparty: agingOrg }, { glId: ctx.revGL, credit: 200 }], { effectiveDate: daysAgo(45) });
+    await makeJE(ctx, 'OrderBooking', [{ glId: ctx.arGL, debit: 300, counterparty: agingOrg }, { glId: ctx.revGL, credit: 300 }], { effectiveDate: daysAgo(75) });
+    await makeJE(ctx, 'OrderBooking', [{ glId: ctx.arGL, debit: 400, counterparty: agingOrg }, { glId: ctx.revGL, credit: 400 }], { effectiveDate: daysAgo(120) });
+    await postPending(ctx);
 
     const rows = await q(`SELECT Current_0_30, Days_31_60, Days_61_90, Days_Over_90, TotalOpen FROM ${SCHEMA}.vw_ARAging WHERE CompanyID='${companyId}' AND CustomerOrganizationID='${agingOrg}'`);
     assert(rows.length === 1, `expected 1 aging row for the customer, got ${rows.length}`);
@@ -330,29 +323,27 @@ async function main(): Promise<void> {
   });
 
   // ── vw_DefRevRollforward ─────────────────────────────────────────────────────
-  // periods[4] (deferral, Cr DefRev 300) then periods[5] (release, Dr DefRev 120). Deferred
-  // Revenue is credit-normal: Additions=credits, Releases=debits. Opening/Closing cumulative.
-  await test('vw_DefRevRollforward — deferral then release across 2 periods; Additions/Releases/Opening/Closing correct', async () => {
-    const pDefer = periods[4].ID, pRelease = periods[5].ID;
-    // Period 4: defer 300 — Cr DefRev 300 / Dr Cash 300
-    await makeJE(ctx, pDefer, 'RevenueRecognition', [{ glId: ctx.cashGL, debit: 300 }, { glId: ctx.deferredGL, credit: 300 }]);
-    await postPeriod(ctx, pDefer);
-    // Period 5: release 120 — Dr DefRev 120 / Cr Rev 120
-    await makeJE(ctx, pRelease, 'RevenueRecognition', [{ glId: ctx.deferredGL, debit: 120 }, { glId: ctx.revGL, credit: 120 }]);
-    await postPeriod(ctx, pRelease);
+  // Month-grain on EffectiveDate now (periods gone): deferral (Cr DefRev 300) TWO months ago,
+  // release (Dr DefRev 120) ONE month ago. Additions=credits, Releases=debits; Opening/Closing cumulative.
+  await test('vw_DefRevRollforward — deferral then release across 2 months; Additions/Releases/Opening/Closing correct', async () => {
+    const now = new Date();
+    const monthStart = (offset: number): Date => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 2));
+    const deferDate = monthStart(-2), releaseDate = monthStart(-1);
+    await makeJE(ctx, 'RevenueRecognition', [{ glId: ctx.cashGL, debit: 300 }, { glId: ctx.deferredGL, credit: 300 }], { effectiveDate: deferDate });
+    await makeJE(ctx, 'RevenueRecognition', [{ glId: ctx.deferredGL, debit: 120 }, { glId: ctx.revGL, credit: 120 }], { effectiveDate: releaseDate });
+    await postPending(ctx);
 
-    const rows = await q(`SELECT AccountingPeriodID, OpeningBalance, Additions, Releases, NetChange, ClosingBalance FROM ${SCHEMA}.vw_DefRevRollforward WHERE CompanyID='${companyId}' ORDER BY PeriodStart ASC`);
-    const d = rows.find((r: { AccountingPeriodID: string }) => r.AccountingPeriodID === pDefer);
-    const rel = rows.find((r: { AccountingPeriodID: string }) => r.AccountingPeriodID === pRelease);
-    assert(!!d && Number(d.Additions) === 300 && Number(d.Releases) === 0, `deferral period: Additions/Releases should be 300/0, got ${d?.Additions}/${d?.Releases}`);
-    assert(Number(d.OpeningBalance) === 0 && Number(d.ClosingBalance) === 300, `deferral period: Opening/Closing should be 0/300, got ${d?.OpeningBalance}/${d?.ClosingBalance}`);
-    assert(!!rel && Number(rel.Additions) === 0 && Number(rel.Releases) === 120, `release period: Additions/Releases should be 0/120, got ${rel?.Additions}/${rel?.Releases}`);
-    assert(Number(rel.OpeningBalance) === 300 && Number(rel.ClosingBalance) === 180, `release period: Opening/Closing should be 300/180, got ${rel?.OpeningBalance}/${rel?.ClosingBalance}`);
+    const rows = await q(`SELECT PeriodMonth, OpeningBalance, Additions, Releases, NetChange, ClosingBalance FROM ${SCHEMA}.vw_DefRevRollforward WHERE CompanyID='${companyId}' ORDER BY PeriodMonth ASC`);
+    assert(rows.length === 2, `expected 2 rollforward months, got ${rows.length}`);
+    const [d, rel] = rows;
+    assert(Number(d.Additions) === 300 && Number(d.Releases) === 0, `deferral month: Additions/Releases should be 300/0, got ${d.Additions}/${d.Releases}`);
+    assert(Number(d.OpeningBalance) === 0 && Number(d.ClosingBalance) === 300, `deferral month: Opening/Closing should be 0/300, got ${d.OpeningBalance}/${d.ClosingBalance}`);
+    assert(Number(rel.Additions) === 0 && Number(rel.Releases) === 120, `release month: Additions/Releases should be 0/120, got ${rel.Additions}/${rel.Releases}`);
+    assert(Number(rel.OpeningBalance) === 300 && Number(rel.ClosingBalance) === 180, `release month: Opening/Closing should be 300/180, got ${rel.OpeningBalance}/${rel.ClosingBalance}`);
   });
 
   // ── vw_SalesTaxLiability ─────────────────────────────────────────────────────
-  // Create a TaxAuthority + TaxJurisdiction, then a TaxLiability (accrued 1000, remitted 350)
-  // → OutstandingLiability = 650. No JE involved (the view reads TaxLiability directly).
+  // TaxAuthority + TaxJurisdiction, then a TaxLiability (accrued 1000, remitted 350) → Outstanding 650.
   let taxAuthId = '', taxJurId = '';
   await test('vw_SalesTaxLiability — OutstandingLiability = AccruedAmount − RemittedAmount', async () => {
     const md2 = new Metadata();
@@ -366,7 +357,7 @@ async function main(): Promise<void> {
     taxJurId = jur.ID;
     const liab = await md2.GetEntityObject<mjBizAppsAccountingTaxLiabilityEntity>('MJ_BizApps_Accounting: Tax Liabilities', user);
     liab.NewRecord(); liab.CompanyID = companyId; liab.TaxAuthorityID = taxAuthId; liab.TaxJurisdictionID = taxJurId;
-    liab.AccountingPeriodID = periods[6].ID; liab.AccruedAmount = 1000; liab.RemittedAmount = 350; liab.Status = 'PartiallyPaid';
+    liab.AccruedAmount = 1000; liab.RemittedAmount = 350; liab.Status = 'PartiallyPaid';
     if (!(await liab.Save())) throw new Error(`TaxLiability save failed: ${liab.LatestResult?.CompleteMessage}`);
 
     const rows = await q(`SELECT AuthorityCode, JurisdictionCode, AccruedAmount, RemittedAmount, OutstandingLiability, Status FROM ${SCHEMA}.vw_SalesTaxLiability WHERE CompanyID='${companyId}' AND TaxAuthorityID='${taxAuthId}'`);
@@ -378,19 +369,17 @@ async function main(): Promise<void> {
   });
 
   // ── vw_IntercompanyFlow ──────────────────────────────────────────────────────
-  // periods[6]. 2 JEs sharing one IntercompanyFlowID, each with a counterparty org → BOTH
-  // legs returned for that flow. Each JE self-balances so it can lock.
+  // 2 JEs sharing one IntercompanyFlowID, each with a counterparty org → BOTH legs returned.
   let icOrgX = '', icOrgY = '';
   const icFlowId = randomUUID();
   await test('vw_IntercompanyFlow — both legs of one IntercompanyFlowID returned, with counterparty orgs', async () => {
     icOrgX = await makeOrg(ctx, `${ORG_PREFIX}-ICX`); createdOrgIds.push(icOrgX);
     icOrgY = await makeOrg(ctx, `${ORG_PREFIX}-ICY`); createdOrgIds.push(icOrgY);
-    const p = periods[6].ID;
     // Leg 1: Dr AR 250 (counterparty X) / Cr Rev 250
-    await makeJE(ctx, p, 'IntercompanyFlow', [{ glId: ctx.arGL, debit: 250, counterparty: icOrgX }, { glId: ctx.revGL, credit: 250 }], { intercompanyFlowId: icFlowId });
+    await makeJE(ctx, 'IntercompanyFlow', [{ glId: ctx.arGL, debit: 250, counterparty: icOrgX }, { glId: ctx.revGL, credit: 250 }], { intercompanyFlowId: icFlowId });
     // Leg 2: Dr Cash 250 / Cr AR 250 (counterparty Y)
-    await makeJE(ctx, p, 'IntercompanyFlow', [{ glId: ctx.cashGL, debit: 250 }, { glId: ctx.arGL, credit: 250, counterparty: icOrgY }], { intercompanyFlowId: icFlowId });
-    await postPeriod(ctx, p);
+    await makeJE(ctx, 'IntercompanyFlow', [{ glId: ctx.cashGL, debit: 250 }, { glId: ctx.arGL, credit: 250, counterparty: icOrgY }], { intercompanyFlowId: icFlowId });
+    await postPending(ctx);
 
     const rows = await q(`SELECT JournalEntryID, CounterpartyOrganizationID, CounterpartyName, GLAccountCode FROM ${SCHEMA}.vw_IntercompanyFlow WHERE IntercompanyFlowID='${icFlowId}'`);
     assert(rows.length === 4, `expected 4 line rows for the flow (2 JEs × 2 lines), got ${rows.length}`);
@@ -400,43 +389,45 @@ async function main(): Promise<void> {
     assert(cpOrgs.has(icOrgX) && cpOrgs.has(icOrgY), `expected both counterparty orgs (X,Y) on the flow's lines, got ${[...cpOrgs].join(',')}`);
   });
 
-  // ─── Teardown ──────────────────────────────────────────────────────────────
-  // Locked JEs/batches can only be dropped by DISABLE TRIGGER (the immutability triggers block
-  // DELETE on Batched/GLPosted rows). MJ_Connect is NOT db_owner and cannot ALTER tables to disable
-  // triggers, so route teardown through the db_owner CodeGen account when available (fall back to the
-  // main pool, which still cleans the unlocked rows). NOTE: the immutability-trigger tables include
-  // JournalEntryBatchLineDimension (trg_JEBLDimension_Immutability) — it MUST be in the disable set
-  // and its rows deleted before the batch line items it references.
-  const teardownPool = await openTeardownPool(pool);
-  const exec = async (sqlText: string) => { try { await teardownPool.request().query(sqlText); } catch (e) { void e; } };
-  const lockedTables = ['JournalEntryLine', 'JournalEntry', 'JournalEntryBatchLineItem', 'JournalEntryBatch', 'JournalEntryBatchLineDimension'];
-
-  await exec(`DELETE FROM ${SCHEMA}.CurrencySpotRate WHERE FromCurrencyCode='${ctx.foreignCurrency}' AND ToCurrencyCode='${ctx.currencyCode}' AND Source='Test'`);
-  // Re-enable in a finally so the invariant triggers are NEVER left disabled, even if a DELETE throws.
-  try {
-    for (const t of lockedTables) await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
-    await exec(`DELETE bld FROM ${SCHEMA}.JournalEntryBatchLineDimension bld JOIN ${SCHEMA}.JournalEntryBatchLineItem bli ON bli.ID=bld.JournalEntryBatchLineItemID WHERE bli.CompanyID='${companyId}'`);
-    await exec(`DELETE d FROM ${SCHEMA}.JournalEntryLineDimension d JOIN ${SCHEMA}.JournalEntryLine l ON l.ID=d.JournalEntryLineID JOIN ${SCHEMA}.JournalEntry j ON j.ID=l.JournalEntryID WHERE j.CompanyID='${companyId}'`);
-    await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatchLineItem WHERE CompanyID='${companyId}'`);
-    await exec(`DELETE FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID IN (SELECT ID FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${companyId}')`);
-    await exec(`DELETE FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${companyId}'`);
-    await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatch WHERE CompanyID='${companyId}'`);
-  } finally {
-    for (const t of lockedTables) await exec(`ENABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
+  // ─── Teardown (db_owner pool — locked GLPosted rows) ────────────────────────
+  const exec = async (sqlText: string) => { try { await ctx.teardownPool.request().query(sqlText); } catch (e) { console.log(`      teardown warn: ${(e instanceof Error ? e.message : String(e)).split('\n')[0]}`); } };
+  const jeIdList = createdJEIds.map(id => `'${id}'`).join(',');
+  let batchIdList = '';
+  if (jeIdList) {
+    try {
+      const r = await ctx.teardownPool.request().query(`SELECT DISTINCT BatchID id FROM ${SCHEMA}.JournalEntry WHERE ID IN (${jeIdList}) AND BatchID IS NOT NULL`);
+      batchIdList = (r.recordset ?? []).map((x: { id: string }) => `'${x.id}'`).join(',');
+    } catch (e) { console.log(`      teardown warn: ${(e instanceof Error ? e.message : String(e)).split('\n')[0]}`); }
   }
+  await exec(`DELETE FROM ${SCHEMA}.CurrencySpotRate WHERE FromCurrencyCode='${ctx.foreignCurrency}' AND ToCurrencyCode='${ctx.currencyCode}' AND Source='Test'`);
+  const toggled = ['JournalEntryLine', 'JournalEntry', 'JournalEntryBatchLineDimension', 'JournalEntryBatchLineItem', 'JournalEntryBatch'];
+  try {
+    for (const t of toggled) await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
+    if (jeIdList) {
+      await exec(`DELETE d FROM ${SCHEMA}.JournalEntryLineDimension d JOIN ${SCHEMA}.JournalEntryLine l ON l.ID=d.JournalEntryLineID WHERE l.JournalEntryID IN (${jeIdList})`);
+      await exec(`DELETE FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID IN (${jeIdList})`);
+      await exec(`DELETE FROM ${SCHEMA}.JournalEntry WHERE ID IN (${jeIdList})`);
+    }
+    if (batchIdList) {
+      await exec(`DELETE bd FROM ${SCHEMA}.JournalEntryBatchLineDimension bd JOIN ${SCHEMA}.JournalEntryBatchLineItem li ON li.ID=bd.JournalEntryBatchLineItemID WHERE li.BatchID IN (${batchIdList})`);
+      await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatchLineItem WHERE BatchID IN (${batchIdList})`);
+      await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatch WHERE ID IN (${batchIdList})`);
+    }
+  } finally {
+    for (const t of toggled) await exec(`ENABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
+  }
+  await exec(`DELETE sld FROM ${SCHEMA}.ScheduledJournalEntryLineDimension sld JOIN ${SCHEMA}.ScheduledJournalEntryLineItem sli ON sli.ID=sld.ScheduledJournalEntryLineItemID JOIN ${SCHEMA}.ScheduledJournalEntry s ON s.ID=sli.ScheduledJournalEntryID WHERE s.CompanyID='${companyId}'`);
   await exec(`DELETE sli FROM ${SCHEMA}.ScheduledJournalEntryLineItem sli JOIN ${SCHEMA}.ScheduledJournalEntry s ON s.ID=sli.ScheduledJournalEntryID WHERE s.CompanyID='${companyId}'`);
   await exec(`DELETE FROM ${SCHEMA}.ScheduledJournalEntry WHERE CompanyID='${companyId}'`);
   await exec(`DELETE FROM ${SCHEMA}.DimensionValue WHERE DimensionID='${ctx.dimId}'`);
   await exec(`DELETE FROM ${SCHEMA}.Dimension WHERE ID='${ctx.dimId}'`);
-  await exec(`DELETE FROM ${SCHEMA}.JournalEntrySequence WHERE CompanyID='${companyId}'`);
-  await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatchSequence WHERE CompanyID='${companyId}'`);
   // Tax: TaxLiability (company-scoped) → TaxJurisdiction → TaxAuthority (global; keyed off created IDs).
   await exec(`DELETE FROM ${SCHEMA}.TaxLiability WHERE CompanyID='${companyId}'`);
   if (taxJurId) await exec(`DELETE FROM ${SCHEMA}.TaxJurisdiction WHERE ID='${taxJurId}'`);
   if (taxAuthId) await exec(`DELETE FROM ${SCHEMA}.TaxAuthority WHERE ID='${taxAuthId}'`);
+  await exec(`DELETE FROM ${SCHEMA}.ChartOfAccountsMapping WHERE CompanyID='${companyId}'`);
   await exec(`DELETE FROM ${SCHEMA}.AccountingCompanyProfile WHERE ID='${companyId}'`);
   await exec(`DELETE FROM ${SCHEMA}.GLAccount WHERE CompanyID='${companyId}'`);
-  await exec(`DELETE FROM ${SCHEMA}.AccountingPeriod WHERE CompanyID='${companyId}'`);
   await exec(`DELETE FROM __mj.Company WHERE ID='${companyId}'`);
   // Customer Organizations created in __mj_BizAppsCommon (AR-by-customer, aging, intercompany).
   if (createdOrgIds.length > 0) {
@@ -445,7 +436,7 @@ async function main(): Promise<void> {
   }
   const failed = outcomes.filter(o => !o.Passed);
   // NEVER `await pool.close()` before exit — the MJ provider pool can hang on close. Non-blocking close + force-exit.
-  finishAndExit(`\n────── Block 6 runtime: ${outcomes.length - failed.length}/${outcomes.length} passed ──────`, failed.length > 0 ? 1 : 0, pool, teardownPool);
+  finishAndExit(`\n────── Block 6 runtime: ${outcomes.length - failed.length}/${outcomes.length} passed ──────`, failed.length > 0 ? 1 : 0, pool, ctx.teardownPool);
 }
 
 void main();

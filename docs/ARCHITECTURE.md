@@ -19,17 +19,25 @@ management, or inventory/COGS (master plan §15).
 possible, so accountants and auditors find it approachable and auditable. Corrections are
 **adjusting/corrective entries (pen, not pencil)** — never edits to locked history.
 
-## 2. Layered architecture
+## 2. Layered architecture (updated 2026-07-06 — engine-meeting rulings)
 ```
-UI (MJExplorer, Angular)            GL tree · JE list/detail · batch review/dispatch · COA mapping
-Integration edge (Actions)          BC COA-sync (reuse) · BC batch-post (new) · QBO (reuse)
-Service façade (CoreEntitiesServer) AccountingService — thin, stateless, contextUser per call   [later block]
-Lifecycle hooks (CoreEntitiesServer) W1–W9 BaseEntity.Save() overrides
-DB invariants (migrations)          14 triggers + 2 atomic numbering sprocs  ◄── the un-bypassable floor
+UI (MJExplorer, Angular)             GL tree · JE list/detail · batch review/dispatch · COA mapping
+Integration edge (Actions)           BC COA-sync (reuse) · BC batch-post (new) · QBO (reuse)
+THE ENGINE (EngineBase + CoreEntitiesServer)
+   AccountingEngineBase              browser-safe caches (GL/roles/links/dims/profiles) + ResolveLinkedAccount
+                                     + the PURE draft pipeline + the typed contract
+   AccountingEngine                  CreateJournalEntry — validate (7 typed error codes, per-company balance)
+                                     → ONE-TransactionGroup atomic write
+   'Accounting.CreateJournalEntry'   the remotable op — same call in-process (orders-server) and over GraphQL
+Lifecycle hooks (CoreEntitiesServer) W1/W2/W3/W6/W9 BaseEntity.Save() overrides (W4/W7/W8 retired with periods)
+Batching (CoreEntitiesServer)        GLOBAL multi-company buildBatch → approveBatch → sendBatch → Posted
+DB invariants (migrations)           12 triggers (incl. AM-4 per-company balance 50019/50023/50022)
+                                     + 2 GLOBAL numbering sprocs  ◄── the un-bypassable floor
 ```
-How a write travels: upstream app → `BaseEntity.Save()` (hook) → DB (triggers enforce
-invariants; `__mj.RecordChange` captures audit) → later batched → summary posted to BC.
-_(Expand with the full data-flow diagram as Block 1–2 land.)_
+How a write travels: caller (Orders, browser, script) → **`Accounting.CreateJournalEntry`** →
+engine pipeline → `BaseEntity.Save()` in one TransactionGroup (hooks number; triggers enforce;
+`__mj.RecordChange` audits) → later swept into a multi-company batch → CFO-approved → posted to
+the ERP **by account number, split per company** (AM-4). Periods/close live in the ERP (CH-1).
 
 ## 3. Design patterns used
 - **Audit by construction (AD-2):** every ledger mutation goes through `BaseEntity.Save()`
@@ -37,10 +45,16 @@ _(Expand with the full data-flow diagram as Block 1–2 land.)_
 - **Triggers enforce invariants; BaseEntity orchestrates (AD-2):** triggers can't be bypassed
   even by elevated DB privilege; sprocs can.
 - **Soft-refs / `JournalEntryLink` lineage (AD-15):** plain UUIDs to downstream apps, no hard FKs.
-- **Single-company JEs + flow link (AD-4):** a multi-company transaction is N single-company
-  JEs reassembled by `IntercompanyFlowID`. **Intercompany balancing legs are generated
-  UPSTREAM (Orders/Payments), not here**, and use **per-company-pair Due-To/Due-From
-  accounts** — see Conflict-Resolution §C1.
+- **MULTI-COMPANY JEs (CH-2, supersedes AD-4's single-company rule):** a JE has NO header
+  CompanyID — each line's company derives from its `GLAccount.CompanyID`, and the entry must
+  balance overall AND within each company (AM-4, triggers 50019/50022). `IntercompanyFlowID`
+  still reassembles related legs; **intercompany balancing legs are generated UPSTREAM
+  (Orders/Payments), not here** (§C1) — Accounting batches tagged legs as-is, no netting.
+- **Role-based account resolution (AM-2/AM-5):** `GLAccountRole` (Cash, AR, Sales, …) +
+  polymorphic date-windowed `GLAccountLink` rows (+ ordered `GLAccountLinkDimension`) let any
+  record (product, category, company default) carry account links; the engine's
+  `ResolveLinkedAccount` is the per-record lookup — the WALK order (product → category →
+  default) is the caller's.
 - **Pluggable providers:** currency (AD-7) and tax (AD-19) via `@RegisterClass`.
 - _(More as blocks land.)_
 
@@ -53,42 +67,44 @@ plan is authoritative.
 ## 5. Key code sections (capability → where to look)
 | To change… | Look at |
 |---|---|
-| Company profile init / starter COA / periods | `CoreEntitiesServer/AccountingCompanyProfileEntityServer.ts` (W1) + `SeedData.ts` |
-| JE numbering | `JournalEntryEntityServer.ts` (W2) + `SequenceService.ts` + `spAssignNextJournalEntryNumber` |
-| Batch numbering | `JournalEntryBatchEntityServer.ts` (W3) + `spAssignNextBatchNumber` |
+| Company profile init / starter COA | `CoreEntitiesServer/AccountingCompanyProfileEntityServer.ts` (W1) + `SeedData.ts` |
+| JE numbering (GLOBAL per FY) | `JournalEntryEntityServer.ts` (W2) + `SequenceService.ts` + `spAssignNextJournalEntryNumber` |
+| Batch numbering (GLOBAL) | `JournalEntryBatchEntityServer.ts` (W3) + `spAssignNextBatchNumber` |
 | The minimal seeded chart | `CoreEntitiesServer/SeedData.ts` (`DEFAULT_CHART_OF_ACCOUNTS`, `DEFAULT_GL_ACCOUNT_REFS`) |
-| Batching → summary → BC | _Block 2 (not built): `BatchDispatchAction` + `trg_JEBatch_*` + `JournalEntryBatchLineItem`_ |
+| **The engine contract / pure pipeline / caches / ResolveLinkedAccount** | `packages/EngineBase/src/{contract,pipeline,AccountingEngineBase}.ts` |
+| **CreateJournalEntry write path + the remotable op** | `CoreEntitiesServer/AccountingEngine.ts` + `CreateJournalEntryOperation.ts` |
+| Batching → approval → ERP post | `CoreEntitiesServer/BatchingEngine.ts` (buildBatch/approveBatch/sendBatch) + `TasksAppApprovalGate.ts` + `trg_JEBatch_*` |
+| Read-model views (12) | baseline migration §"read-model views" + `Server/resolvers/ReadModelsResolver.ts` |
 
 <a id="company-profile-init"></a>
 ### 5.1 Company profile initialization (W1)
 On first save of an `AccountingCompanyProfile`, `AccountingCompanyProfileEntityServer.Save()`
 runs a per-company, idempotent init: seed the **10-account minimal COA** (AD-8 + §C1) with
-`IsSystemSeeded=1`, generate **17 periods** (12 month + 4 quarter + 1 year) for the current FY,
-default **`OperatingTimeZone='UTC'`** (AD-16), and wire the **5 default GL-account refs**
-(AR / Deferred Revenue / Sales Tax / Realized FX / Unrealized FX). All via `BaseEntity.Save()`
-(audit-by-construction). The COA is **per-company runtime seed via the hook — not metadata**
-(metadata sync is for global reference data like Currency; a per-company COA can't be static).
+`IsSystemSeeded=1`, default **`OperatingTimeZone='UTC'`** (AD-16), and wire the **5 default
+GL-account refs** (AR / Deferred Revenue / Sales Tax / Realized FX / Unrealized FX). All via
+`BaseEntity.Save()` (audit-by-construction). *(Period generation was REMOVED 2026-07-06 —
+periods live in the ERP, CH-1.)* The COA is **per-company runtime seed via the hook — not
+metadata**; global reference data (Currency, **GLAccountRole**) seeds via metadata sync.
 
 <a id="je-lifecycle"></a>
-### 5.2 JE lifecycle (Pending → Batched → GLPosted)
-Numbering wired (W2/W3). **Block 1 added the hook-side lifecycle + the DB-invariant test suites:**
-- **W4** adjusting-entry routing — a JE targeting a **Closed** period errors unless `OriginalAccountingPeriodID`
-  is set, in which case it routes to the next open period (the period-close trigger 50007 rejects ANY Closed
-  `AccountingPeriodID`; `OriginalAccountingPeriodID` is the audit reference). No silent re-route.
-- **W6** `generateReversal(reason)` — new Pending JE (`EntryType='Reversal'`, required by trg 50012), Dr/Cr
-  swapped on every line, back-referenced both ways (`ReversedByJournalEntryID` is the one field the
-  immutability trigger lets change on a locked JE).
+### 5.2 JE lifecycle (Pending → Batched → GLPosted) — updated 2026-07-06
+JEs are **multi-company** (no header CompanyID; per-line company via `GLAccount.CompanyID`).
+The front door for external callers is **`Accounting.CreateJournalEntry`** (§2) — its pipeline
+validates shape/accounts/dimensions, merges duplicate lines (debits ordered first), checks
+balance **overall and per company** (AM-4), and writes atomically. Hooks on the entity path:
+- **W6** `generateReversal(reason)` — new Pending JE (`EntryType='Reversal'`, trg 50012), Dr/Cr
+  swapped, back-referenced both ways.
 - **W9** attachment validation — a non-null `FileID` must reference an existing `__mj.File`.
-- **F1** `validateJournalEntry()` — read-only guard: balance, two-line minimum, period-open, GL-active.
-- **DB invariants (triggers)** validated by `test-harnesses/server/block1-runtime.ts` (**12/12**), each with a raw-SQL
-  bypass case: balanced-on-lock (50001), JE immutability (50003/50004), JE-line immutability (50006),
-  period-close (50007). Status-coherence CHECKs also confirmed: `CK_JournalEntry_BatchedHasBatch`
-  (Batched ⇒ `BatchID` set), `CK_JournalEntry_GLPostedHasRef`, `CK_AccountingPeriod_ClosedCoherence`
-  (Closed ⇒ `ClosedAt`/`ClosedByUserID`).
-- **Still open — W5** realized-FX auto-emit: **deferred** pending a design decision. It appears to contradict
-  the resolved §C1 (JE/line generation — including the FX balancing line — lives **upstream** in
-  Orders/Payments; Accounting receives balanced JEs). Recommend: Accounting owns the FX *mechanics* (the ACP
-  `RealizedFXGainLossGLAccountID` ref) but the Payments app computes + posts the FX line.
+- **F1** `validateJournalEntry()` — read-only guard: balance overall + per company, two-line
+  minimum, GL-active.
+- **DB invariants (triggers)** validated by `test-harnesses/server/block1-runtime.ts`, each with
+  a raw-SQL bypass case: balanced-on-lock overall (50001) **and per company (50019/50022 —
+  AM-4)**, JE immutability (50003/50004), JE-line immutability (50006). Batch side: summary
+  foots overall (50014) **and per company (50023)**, batch immutability (50008/50009).
+  *(The period-close trigger + W4 routing were retired with the period tables.)*
+- **Batch lifecycle (CH-3):** `Pending → Approved → Sent → Posted | Failed | Cancelled` — see
+  `BatchingEngine.ts`; the ERP wire is **account numbers, split per company** (AM-4).
+- **W5** realized-FX auto-emit: retired — Orders/Payments computes + posts the FX line (§C1).
 
 ## 6. Connection map
 Hand-written, cross-layer files carry a top-of-file `CONNECTS TO:` block (CALLED BY / CALLS /

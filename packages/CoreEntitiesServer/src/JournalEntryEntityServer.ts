@@ -1,20 +1,19 @@
 /**
  * Server-side subclass of JournalEntry — Block 0 + Block 1 lifecycle hooks.
  *
- *   W2 (Block 0) numbering: assign EntryNumber on a new record via the atomic sproc.
- *   W4 (Block 1) adjusting-entry routing: a JE that targets a CLOSED period is re-routed to the
- *       next open period — but ONLY if the caller explicitly set OriginalAccountingPeriodID
- *       (the closed period it's adjusting). If not, it ERRORS — no silent re-route (plan §6 / §7.5).
- *       Required because trg_JournalEntry_PeriodClose (50007) rejects ANY JE whose AccountingPeriodID
- *       is a Closed period.
+ *   W2 (Block 0) numbering: assign EntryNumber on a new record via the atomic sproc
+ *       (GLOBAL per-fiscal-year sequence — D-SEQ 2026-07-06: JEs are multi-company).
  *   W6 (Block 1) generateReversal: create a new Pending JE (EntryType='Reversal', per
  *       trg_JE_ReversalConsistency 50012) with Dr/Cr swapped on every line, back-referenced both ways.
  *   W9 (Block 1) attachment validation: a non-null FileID must reference an existing __mj.File.
  *
+ *   (W4 adjusting-entry routing was RETIRED 2026-07-06 with the AccountingPeriod removal —
+ *    the ERP owns periods; there is nothing to route around. Engine-meeting ruling CH-1.)
+ *
  * CONNECTS TO:
  *   CALLS:       SequenceService.getNextJournalEntryNumber → spAssignNextJournalEntryNumber
- *   DB TRIGGERS: trg_JournalEntry_PeriodClose (W4) · trg_JE_ReversalConsistency / _Immutability (W6) · trg_*_BalancedOnLock
- *   SIBLINGS:    JournalEntryLineEntityServer (W5 FX) · validateJournalEntry (F1, ./JournalEntryValidation)
+ *   DB TRIGGERS: trg_JE_ReversalConsistency / _Immutability (W6) · trg_*_BalancedOnLock (incl. AM-4 per-company)
+ *   SIBLINGS:    validateJournalEntry (F1, ./JournalEntryValidation)
  *   ENTITY:      'MJ_BizApps_Accounting: Journal Entries'
  *   DOC:         docs/ARCHITECTURE.md#je-lifecycle
  */
@@ -24,82 +23,23 @@ import { RegisterClass } from '@memberjunction/global';
 import {
   mjBizAppsAccountingJournalEntryEntity,
   mjBizAppsAccountingJournalEntryLineEntity,
-  mjBizAppsAccountingAccountingPeriodEntity,
 } from '@mj-biz-apps/accounting-entities';
 
 import { getNextJournalEntryNumber } from './SequenceService.js';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
-const PERIOD_ENTITY = 'MJ_BizApps_Accounting: Accounting Periods';
 const FILE_ENTITY = 'Files'; // __mj.File
 
 @RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Journal Entries')
 export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEntity {
 
   override async Save(options?: EntitySaveOptions): Promise<boolean> {
-    if (!this.IsSaved) {
-      await this.routeAdjustingEntryIfClosed(); // W4
-    }
     await this.validateAttachment();            // W9
-    if (!this.IsSaved && !this.Get('EntryNumber')) {
+    if (!this.IsSaved && !this.EntryNumber) {
       await this.assignEntryNumber();           // W2
     }
     return super.Save(options);
-  }
-
-  // ─── W4: adjusting-entry routing ──────────────────────────────────────────
-
-  private async routeAdjustingEntryIfClosed(): Promise<void> {
-    const period = await this.loadPeriod(this.AccountingPeriodID);
-    if (!period || period.Status !== 'Closed') {
-      return; // open/reopened period (or unknown) — let the DB triggers handle anything odd
-    }
-    if (!this.OriginalAccountingPeriodID) {
-      throw new Error(
-        `JournalEntry targets a CLOSED period (${this.AccountingPeriodID}). To post an adjusting entry, ` +
-        `set OriginalAccountingPeriodID to that period — it is then routed to the next open period. ` +
-        `No silent re-route (W4 / plan §6, §7.5).`,
-      );
-    }
-    const nextOpen = await this.findNextOpenPeriod(period);
-    if (!nextOpen) {
-      throw new Error(
-        `No open ${period.PeriodType} period after ${this.toDateKey(period.PeriodStart)} for company ` +
-        `${this.CompanyID} to route the adjusting entry into.`,
-      );
-    }
-    this.AccountingPeriodID = nextOpen.ID;
-  }
-
-  private async loadPeriod(periodId: string): Promise<mjBizAppsAccountingAccountingPeriodEntity | null> {
-    if (!periodId) return null;
-    const rv = new RunView();
-    const res = await rv.RunView<mjBizAppsAccountingAccountingPeriodEntity>(
-      { EntityName: PERIOD_ENTITY, ExtraFilter: `ID='${periodId}'`, ResultType: 'entity_object' },
-      this.ContextCurrentUser,
-    );
-    return res.Success && res.Results.length ? res.Results[0] : null;
-  }
-
-  private async findNextOpenPeriod(
-    closed: mjBizAppsAccountingAccountingPeriodEntity,
-  ): Promise<mjBizAppsAccountingAccountingPeriodEntity | null> {
-    const rv = new RunView();
-    const after = this.toDateKey(closed.PeriodStart);
-    const res = await rv.RunView<mjBizAppsAccountingAccountingPeriodEntity>(
-      {
-        EntityName: PERIOD_ENTITY,
-        ExtraFilter:
-          `CompanyID='${this.CompanyID}' AND PeriodType='${closed.PeriodType}' ` +
-          `AND Status='Open' AND PeriodStart > '${after}'`,
-        OrderBy: 'PeriodStart ASC',
-        MaxRows: 1,
-        ResultType: 'entity_object',
-      },
-      this.ContextCurrentUser,
-    );
-    return res.Success && res.Results.length ? res.Results[0] : null;
   }
 
   // ─── W9: attachment validation ────────────────────────────────────────────
@@ -144,8 +84,6 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
     const md = new Metadata();
     const reversal = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
     reversal.NewRecord();
-    reversal.CompanyID = this.CompanyID;
-    reversal.AccountingPeriodID = this.AccountingPeriodID; // W4 on the reversal re-routes if closed
     reversal.EffectiveDate = new Date();
     reversal.EntryType = 'Reversal'; // required by trg_JE_ReversalConsistency (50012)
     reversal.Status = 'Pending';
@@ -197,33 +135,24 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
   // ─── W2: numbering (Block 0) ──────────────────────────────────────────────
 
   private async assignEntryNumber(): Promise<void> {
-    const companyId = this.CompanyID;
-    if (!companyId) {
-      LogError('JournalEntryEntityServer.assignEntryNumber: CompanyID is required before save');
-      throw new Error('JournalEntry.CompanyID is required before save');
-    }
     const fiscalYear = this.deriveFiscalYear();
     if (!this.ContextCurrentUser) {
       throw new Error('JournalEntryEntityServer.assignEntryNumber: ContextCurrentUser is required');
     }
-    const entryNumber = await getNextJournalEntryNumber(companyId, fiscalYear, this.ContextCurrentUser);
-    this.Set('EntryNumber', entryNumber);
+    const entryNumber = await getNextJournalEntryNumber(fiscalYear, this.ContextCurrentUser);
+    this.EntryNumber = entryNumber;
   }
 
   private deriveFiscalYear(): number {
-    const raw = this.Get('EffectiveDate');
-    if (!raw) {
+    const effectiveDate = this.EffectiveDate;
+    if (!effectiveDate) {
       throw new Error('JournalEntryEntityServer.deriveFiscalYear: EffectiveDate must be set before save (NOT NULL constraint)');
     }
-    const d = raw instanceof Date ? raw : new Date(raw as string);
+    // Defensive: a raw-loaded value can arrive as an ISO string at runtime despite the Date type.
+    const d = effectiveDate instanceof Date ? effectiveDate : new Date(effectiveDate);
     if (Number.isNaN(d.getTime())) {
-      throw new Error(`JournalEntryEntityServer.deriveFiscalYear: invalid EffectiveDate value: ${String(raw)}`);
+      throw new Error(`JournalEntryEntityServer.deriveFiscalYear: invalid EffectiveDate value: ${String(effectiveDate)}`);
     }
     return d.getUTCFullYear();
-  }
-
-  private toDateKey(d: Date | string): string {
-    const dd = d instanceof Date ? d : new Date(d);
-    return dd.toISOString().slice(0, 10);
   }
 }

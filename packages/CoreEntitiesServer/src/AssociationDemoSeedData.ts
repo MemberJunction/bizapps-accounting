@@ -9,7 +9,8 @@
  * WHAT IT SEEDS (all through the MJ app path — typed entities + .Save(); raw SQL only for the
  * tiny dimension-link + ERP-mapping plumbing that has no entity surface in this seed):
  *   • 3 "Assoc Demo" companies (AccountingCompanyProfile) — each new profile fires W1
- *     (AccountingCompanyProfileEntityServer.Save) → its ~10-account COA + 17 periods.
+ *     (AccountingCompanyProfileEntityServer.Save) → its ~10-account COA.
+ *     (Periods retired 2026-07-06 — CH-1; temporal placement is by EffectiveDate.)
  *   • 4 customer Organizations (MJ_BizApps_Common) used as JournalEntryLine.CounterpartyOrganizationID.
  *   • Company 1 — AR activity (→ vw_AROpenByCustomer, vw_ARAging): balanced JEs across the aging
  *     buckets (~15/45/75/120 days), a partial payment (one customer partially open), and a fully
@@ -23,8 +24,8 @@
  *     does NOT generate/net intercompany — these are illustrative tagged JEs (as Payments would
  *     emit them); no netting/provisioning is called.
  *
- * All JEs self-balance (the balanced-on-lock trigger 50001 enforces it) and are posted to GLPosted
- * (via buildBatch + sendBatch with the AutoApproveGate) so the views — which filter Batched/GLPosted
+ * All JEs self-balance (triggers 50001 + per-company 50019 enforce it) and are posted to GLPosted
+ * (via buildBatch + approveBatch + sendBatch with the AutoApproveGate) so the views — which filter Batched/GLPosted
  * — show data. This is DEMO data: it PERSISTS by design (unlike the test harnesses, there is no
  * teardown). Idempotency comes entirely from the static IDs.
  *
@@ -49,12 +50,11 @@ import {
 } from '@mj-biz-apps/accounting-entities';
 import type { mjBizAppsCommonOrganizationEntity } from '@mj-biz-apps/common-entities';
 
-import { buildBatch, sendBatch, AutoApproveGate } from './BatchingEngine.js';
+import { buildBatch, approveBatch, sendBatch, AutoApproveGate } from './BatchingEngine.js';
 
 // ─── Entity name constants ───────────────────────────────────────────────────
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
-const PERIOD_ENTITY = 'MJ_BizApps_Accounting: Accounting Periods';
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
 const CURRENCY_ENTITY = 'MJ_BizApps_Accounting: Currencies';
@@ -120,7 +120,7 @@ export interface DemoSeedReport {
   Customers: { ID: string; Name: string; Created: boolean }[];
   JournalEntriesCreated: number;
   JournalEntriesSkipped: number;
-  PeriodsPosted: number;
+  BatchesPosted: number;
   TaxRows: { ID: string; Created: boolean }[];
   Notes: string[];
 }
@@ -128,7 +128,6 @@ export interface DemoSeedReport {
 interface CompanyContext {
   companyId: string;
   glByCode: Map<string, string>;
-  monthPeriods: { ID: string; PeriodStart: string }[];
 }
 
 /** A single JE line spec: a debit OR a credit on a GL account, optionally tagging a counterparty. */
@@ -150,7 +149,7 @@ export async function seedAssociationDemo(contextUser: UserInfo): Promise<DemoSe
     Customers: [],
     JournalEntriesCreated: 0,
     JournalEntriesSkipped: 0,
-    PeriodsPosted: 0,
+    BatchesPosted: 0,
     TaxRows: [],
     Notes: [],
   };
@@ -224,11 +223,7 @@ async function ensureCompany(
   report.Companies.push({ ID: companyId, Name: name, Created: !exists });
 
   const glByCode = await loadGLByCode(contextUser, companyId);
-  const monthPeriods = await loadOpenMonthPeriods(contextUser, companyId);
-  if (monthPeriods.length < 7) {
-    throw new Error(`ensureCompany: ${name} has ${monthPeriods.length} open month periods; need >= 7 (W1 should seed 12).`);
-  }
-  return { companyId, glByCode, monthPeriods };
+  return { companyId, glByCode };
 }
 
 async function loadGLByCode(contextUser: UserInfo, companyId: string): Promise<Map<string, string>> {
@@ -238,22 +233,6 @@ async function loadGLByCode(contextUser: UserInfo, companyId: string): Promise<M
     contextUser,
   );
   return new Map((res.Results ?? []).map(r => [r.Code, r.ID]));
-}
-
-async function loadOpenMonthPeriods(contextUser: UserInfo, companyId: string): Promise<{ ID: string; PeriodStart: string }[]> {
-  const rv = new RunView();
-  const res = await rv.RunView<{ ID: string; PeriodStart: string }>(
-    {
-      EntityName: PERIOD_ENTITY,
-      ExtraFilter: `CompanyID='${companyId}' AND PeriodType='Month' AND Status='Open'`,
-      Fields: ['ID', 'PeriodStart'],
-      OrderBy: 'PeriodStart ASC',
-      ResultType: 'simple',
-      BypassCache: true,
-    },
-    contextUser,
-  );
-  return res.Results ?? [];
 }
 
 // ─── Customers (Organizations) ───────────────────────────────────────────────
@@ -319,14 +298,12 @@ async function makeJE(
   jeId: string,
   entryType: JEEntryType,
   lines: LineSpec[],
-  opts: { effectiveDate?: Date; intercompanyFlowId?: string; periodId?: string } = {},
+  opts: { effectiveDate?: Date; intercompanyFlowId?: string } = {},
 ): Promise<string> {
   const md = new Metadata();
   const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
   je.NewRecord();
   je.ID = jeId;
-  je.CompanyID = ctx.companyId;
-  je.AccountingPeriodID = opts.periodId ?? ctx.monthPeriods[0].ID;
   je.EffectiveDate = opts.effectiveDate ?? new Date();
   je.EntryType = entryType;
   je.Status = 'Pending';
@@ -352,13 +329,14 @@ async function makeJE(
   return je.ID;
 }
 
-/** Build + dispatch the batch for a period → all its Pending JEs become GLPosted. */
-async function postPeriod(contextUser: UserInfo, ctx: CompanyContext, periodId: string, report: DemoSeedReport): Promise<void> {
-  const built = await buildBatch(ctx.companyId, periodId, TARGET_SYSTEM, contextUser.ID, contextUser, AutoApproveGate);
-  if (built === null) throw new Error(`postPeriod: buildBatch returned null for period ${periodId} (no pending JEs or all netted to zero).`);
+/** Build + approve + dispatch a batch over ALL Pending JEs → they become GLPosted. */
+async function postPending(contextUser: UserInfo, report: DemoSeedReport): Promise<void> {
+  const built = await buildBatch(TARGET_SYSTEM, contextUser.ID, contextUser, AutoApproveGate);
+  if (built === null) throw new Error('postPending: buildBatch returned null (no pending JEs or all netted to zero).');
+  await approveBatch(built.batchId, contextUser.ID, contextUser);
   const batch = await sendBatch(built.batchId, contextUser, { gate: AutoApproveGate });
-  if (batch.Status !== 'Acknowledged') throw new Error(`postPeriod: batch should be Acknowledged, got ${batch.Status}`);
-  report.PeriodsPosted += 1;
+  if (batch.Status !== 'Posted') throw new Error(`postPending: batch should be Posted, got ${batch.Status}`);
+  report.BatchesPosted += 1;
 }
 
 // ─── AR activity (→ vw_AROpenByCustomer, vw_ARAging) ──────────────────────────
@@ -376,16 +354,15 @@ async function seedArOpenBalances(contextUser: UserInfo, ctx: CompanyContext, re
     report.Notes.push('AR open-balance JEs already present — skipped (idempotent).');
     return;
   }
-  const p = ctx.monthPeriods[0].ID;
   // Acme: charge 500 then pay 200 → 300 open.
-  await makeJE(contextUser, ctx, JE_AR_PARTIAL_CHARGE, 'OrderBooking', [{ glCode: GL_AR, debit: 500, counterparty: CUST_PARTIAL }, { glCode: GL_REVENUE, credit: 500 }], { periodId: p });
-  await makeJE(contextUser, ctx, JE_AR_PARTIAL_PAY, 'PaymentReceipt', [{ glCode: GL_CASH, debit: 200 }, { glCode: GL_AR, credit: 200, counterparty: CUST_PARTIAL }], { periodId: p });
+  await makeJE(contextUser, ctx, JE_AR_PARTIAL_CHARGE, 'OrderBooking', [{ glCode: GL_AR, debit: 500, counterparty: CUST_PARTIAL }, { glCode: GL_REVENUE, credit: 500 }]);
+  await makeJE(contextUser, ctx, JE_AR_PARTIAL_PAY, 'PaymentReceipt', [{ glCode: GL_CASH, debit: 200 }, { glCode: GL_AR, credit: 200, counterparty: CUST_PARTIAL }]);
   // Globex: charge 1000 → 1000 open.
-  await makeJE(contextUser, ctx, JE_AR_OPEN_CHARGE, 'OrderBooking', [{ glCode: GL_AR, debit: 1000, counterparty: CUST_OPEN }, { glCode: GL_REVENUE, credit: 1000 }], { periodId: p });
+  await makeJE(contextUser, ctx, JE_AR_OPEN_CHARGE, 'OrderBooking', [{ glCode: GL_AR, debit: 1000, counterparty: CUST_OPEN }, { glCode: GL_REVENUE, credit: 1000 }]);
   // Initech: charge 400 + pay 400 → net 0 → absent from vw_AROpenByCustomer (HAVING).
-  await makeJE(contextUser, ctx, JE_AR_SETTLED_CHARGE, 'OrderBooking', [{ glCode: GL_AR, debit: 400, counterparty: CUST_SETTLED }, { glCode: GL_REVENUE, credit: 400 }], { periodId: p });
-  await makeJE(contextUser, ctx, JE_AR_SETTLED_PAY, 'PaymentReceipt', [{ glCode: GL_CASH, debit: 400 }, { glCode: GL_AR, credit: 400, counterparty: CUST_SETTLED }], { periodId: p });
-  await postPeriod(contextUser, ctx, p, report);
+  await makeJE(contextUser, ctx, JE_AR_SETTLED_CHARGE, 'OrderBooking', [{ glCode: GL_AR, debit: 400, counterparty: CUST_SETTLED }, { glCode: GL_REVENUE, credit: 400 }]);
+  await makeJE(contextUser, ctx, JE_AR_SETTLED_PAY, 'PaymentReceipt', [{ glCode: GL_CASH, debit: 400 }, { glCode: GL_AR, credit: 400, counterparty: CUST_SETTLED }]);
+  await postPending(contextUser, report);
   report.JournalEntriesCreated += 5;
 }
 
@@ -395,18 +372,18 @@ async function seedArAging(contextUser: UserInfo, ctx: CompanyContext, report: D
     report.Notes.push('AR aging JEs already present — skipped (idempotent).');
     return;
   }
-  const p = ctx.monthPeriods[1].ID;
   // 4 charges spanning the aging buckets — EffectiveDate ~15/45/75/120 days ago (UTC).
-  await makeJE(contextUser, ctx, JE_AGE_15, 'OrderBooking', [{ glCode: GL_AR, debit: 100, counterparty: CUST_AGING }, { glCode: GL_REVENUE, credit: 100 }], { periodId: p, effectiveDate: daysAgoUtc(15) });
-  await makeJE(contextUser, ctx, JE_AGE_45, 'OrderBooking', [{ glCode: GL_AR, debit: 200, counterparty: CUST_AGING }, { glCode: GL_REVENUE, credit: 200 }], { periodId: p, effectiveDate: daysAgoUtc(45) });
-  await makeJE(contextUser, ctx, JE_AGE_75, 'OrderBooking', [{ glCode: GL_AR, debit: 300, counterparty: CUST_AGING }, { glCode: GL_REVENUE, credit: 300 }], { periodId: p, effectiveDate: daysAgoUtc(75) });
-  await makeJE(contextUser, ctx, JE_AGE_120, 'OrderBooking', [{ glCode: GL_AR, debit: 400, counterparty: CUST_AGING }, { glCode: GL_REVENUE, credit: 400 }], { periodId: p, effectiveDate: daysAgoUtc(120) });
-  await postPeriod(contextUser, ctx, p, report);
+  await makeJE(contextUser, ctx, JE_AGE_15, 'OrderBooking', [{ glCode: GL_AR, debit: 100, counterparty: CUST_AGING }, { glCode: GL_REVENUE, credit: 100 }], { effectiveDate: daysAgoUtc(15) });
+  await makeJE(contextUser, ctx, JE_AGE_45, 'OrderBooking', [{ glCode: GL_AR, debit: 200, counterparty: CUST_AGING }, { glCode: GL_REVENUE, credit: 200 }], { effectiveDate: daysAgoUtc(45) });
+  await makeJE(contextUser, ctx, JE_AGE_75, 'OrderBooking', [{ glCode: GL_AR, debit: 300, counterparty: CUST_AGING }, { glCode: GL_REVENUE, credit: 300 }], { effectiveDate: daysAgoUtc(75) });
+  await makeJE(contextUser, ctx, JE_AGE_120, 'OrderBooking', [{ glCode: GL_AR, debit: 400, counterparty: CUST_AGING }, { glCode: GL_REVENUE, credit: 400 }], { effectiveDate: daysAgoUtc(120) });
+  await postPending(contextUser, report);
   report.JournalEntriesCreated += 4;
 }
 
 // ─── Deferred-revenue waterfall (→ vw_DefRevRollforward) ──────────────────────
-// Defer 300 in monthPeriods[2] (Cr DefRev), release 120 in monthPeriods[3] (Dr DefRev).
+// Defer 300 ~60 days ago (Cr DefRev), release 120 ~30 days ago (Dr DefRev) — the view is
+// month-grained on EffectiveDate, so the two land in different months.
 
 async function seedDeferredRevenue(contextUser: UserInfo, ctx: CompanyContext, report: DemoSeedReport): Promise<void> {
   if (await jeExists(contextUser, JE_DEFER)) {
@@ -414,14 +391,12 @@ async function seedDeferredRevenue(contextUser: UserInfo, ctx: CompanyContext, r
     report.Notes.push('Deferred-revenue waterfall JEs already present — skipped (idempotent).');
     return;
   }
-  const pDefer = ctx.monthPeriods[2].ID;
-  const pRelease = ctx.monthPeriods[3].ID;
-  // Defer: Dr Cash 300 / Cr DefRev 300.
-  await makeJE(contextUser, ctx, JE_DEFER, 'RevenueRecognition', [{ glCode: GL_CASH, debit: 300 }, { glCode: GL_DEFERRED, credit: 300 }], { periodId: pDefer });
-  await postPeriod(contextUser, ctx, pDefer, report);
-  // Release: Dr DefRev 120 / Cr Revenue 120.
-  await makeJE(contextUser, ctx, JE_RELEASE, 'RevenueRecognition', [{ glCode: GL_DEFERRED, debit: 120 }, { glCode: GL_REVENUE, credit: 120 }], { periodId: pRelease });
-  await postPeriod(contextUser, ctx, pRelease, report);
+  // Defer: Dr Cash 300 / Cr DefRev 300 (~60 days ago).
+  await makeJE(contextUser, ctx, JE_DEFER, 'RevenueRecognition', [{ glCode: GL_CASH, debit: 300 }, { glCode: GL_DEFERRED, credit: 300 }], { effectiveDate: daysAgoUtc(60) });
+  await postPending(contextUser, report);
+  // Release: Dr DefRev 120 / Cr Revenue 120 (~30 days ago).
+  await makeJE(contextUser, ctx, JE_RELEASE, 'RevenueRecognition', [{ glCode: GL_DEFERRED, debit: 120 }, { glCode: GL_REVENUE, credit: 120 }], { effectiveDate: daysAgoUtc(30) });
+  await postPending(contextUser, report);
   report.JournalEntriesCreated += 2;
 }
 
@@ -431,8 +406,8 @@ async function seedDeferredRevenue(contextUser: UserInfo, ctx: CompanyContext, r
 async function seedSalesTax(contextUser: UserInfo, ctx: CompanyContext, report: DemoSeedReport): Promise<void> {
   await ensureTaxAuthority(contextUser, report);
   await ensureTaxJurisdiction(contextUser, report);
-  await ensureTaxLiability(contextUser, ctx, TAX_LIAB_PARTIAL, ctx.monthPeriods[4].ID, 1000, 350, 'PartiallyPaid', report);
-  await ensureTaxLiability(contextUser, ctx, TAX_LIAB_FULL, ctx.monthPeriods[5].ID, 500, 0, 'Open', report);
+  await ensureTaxLiability(contextUser, ctx, TAX_LIAB_PARTIAL, 1000, 350, 'PartiallyPaid', report);
+  await ensureTaxLiability(contextUser, ctx, TAX_LIAB_FULL, 500, 0, 'Open', report);
 }
 
 async function ensureTaxAuthority(contextUser: UserInfo, report: DemoSeedReport): Promise<void> {
@@ -473,7 +448,6 @@ async function ensureTaxLiability(
   contextUser: UserInfo,
   ctx: CompanyContext,
   liabId: string,
-  periodId: string,
   accrued: number,
   remitted: number,
   status: 'Filed' | 'Open' | 'Paid' | 'PartiallyPaid',
@@ -488,7 +462,6 @@ async function ensureTaxLiability(
     liab.CompanyID = ctx.companyId;
     liab.TaxAuthorityID = TAX_AUTH;
     liab.TaxJurisdictionID = TAX_JUR;
-    liab.AccountingPeriodID = periodId;
     liab.AccruedAmount = accrued;
     liab.RemittedAmount = remitted;
     liab.Status = status;
@@ -513,13 +486,11 @@ async function seedIntercompany(
     return;
   }
   // CO2 leg: Dr AR 250 (counterparty = CO3's customer-ish org) / Cr Rev 250.
-  const p2 = co2.monthPeriods[0].ID;
-  await makeJE(contextUser, co2, JE_IC_CO2, 'IntercompanyFlow', [{ glCode: GL_AR, debit: 250, counterparty: CUST_OPEN }, { glCode: GL_REVENUE, credit: 250 }], { periodId: p2, intercompanyFlowId: IC_FLOW });
-  await postPeriod(contextUser, co2, p2, report);
+  await makeJE(contextUser, co2, JE_IC_CO2, 'IntercompanyFlow', [{ glCode: GL_AR, debit: 250, counterparty: CUST_OPEN }, { glCode: GL_REVENUE, credit: 250 }], { intercompanyFlowId: IC_FLOW });
+  await postPending(contextUser, report);
   // CO3 leg: Dr Cash 250 / Cr AR 250 (counterparty).
-  const p3 = co3.monthPeriods[0].ID;
-  await makeJE(contextUser, co3, JE_IC_CO3, 'IntercompanyFlow', [{ glCode: GL_CASH, debit: 250 }, { glCode: GL_AR, credit: 250, counterparty: CUST_PARTIAL }], { periodId: p3, intercompanyFlowId: IC_FLOW });
-  await postPeriod(contextUser, co3, p3, report);
+  await makeJE(contextUser, co3, JE_IC_CO3, 'IntercompanyFlow', [{ glCode: GL_CASH, debit: 250 }, { glCode: GL_AR, credit: 250, counterparty: CUST_PARTIAL }], { intercompanyFlowId: IC_FLOW });
+  await postPending(contextUser, report);
   report.JournalEntriesCreated += 2;
 }
 

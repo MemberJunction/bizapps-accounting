@@ -53,7 +53,7 @@ function printSeedReport(report: DemoSeedReport): void {
   for (const c of report.Companies) console.log(`  company  ${c.Created ? 'CREATED' : 'reused '}  ${c.ID}  ${c.Name}`);
   for (const c of report.Customers) console.log(`  customer ${c.Created ? 'CREATED' : 'reused '}  ${c.ID}  ${c.Name}`);
   for (const t of report.TaxRows) console.log(`  tax row  ${t.Created ? 'CREATED' : 'reused '}  ${t.ID}`);
-  console.log(`  JEs created: ${report.JournalEntriesCreated} · skipped (already present): ${report.JournalEntriesSkipped} · periods posted: ${report.PeriodsPosted}`);
+  console.log(`  JEs created: ${report.JournalEntriesCreated} · skipped (already present): ${report.JournalEntriesSkipped} · batches posted: ${report.BatchesPosted}`);
   for (const n of report.Notes) console.log(`  note: ${n}`);
   console.log('──────────────────────────────────────────────────────────\n');
 }
@@ -86,7 +86,7 @@ async function verifyViews(pool: sql.ConnectionPool): Promise<void> {
   await verifyView(pool, 'vw_ARAging',
     `SELECT CustomerName, Current_0_30, Days_31_60, Days_61_90, Days_Over_90, TotalOpen FROM ${SCHEMA}.vw_ARAging WHERE CompanyID='${CO1}'`);
   await verifyView(pool, 'vw_DefRevRollforward',
-    `SELECT PeriodStart, OpeningBalance, Additions, Releases, ClosingBalance FROM ${SCHEMA}.vw_DefRevRollforward WHERE CompanyID='${CO1}' ORDER BY PeriodStart`);
+    `SELECT PeriodMonth, OpeningBalance, Additions, Releases, ClosingBalance FROM ${SCHEMA}.vw_DefRevRollforward WHERE CompanyID='${CO1}' ORDER BY PeriodMonth`);
   await verifyView(pool, 'vw_SalesTaxLiability',
     `SELECT AuthorityCode, JurisdictionCode, AccruedAmount, RemittedAmount, OutstandingLiability, Status FROM ${SCHEMA}.vw_SalesTaxLiability WHERE CompanyID='${CO1}'`);
   await verifyView(pool, 'vw_IntercompanyFlow',

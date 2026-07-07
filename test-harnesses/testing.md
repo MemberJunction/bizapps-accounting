@@ -15,24 +15,39 @@ Tiers: **1** Vitest (unit) · **2** server (tsx, in-process direct SQL) · **3**
 
 ## Coverage matrix (✓ = real-value/exact · ⚠ = intentional, see register · ✗ = GAP, fill it)
 
+_Reworked 2026-07-06 for the engine-meeting rulings: AccountingPeriod/AccountBalance retired (CH-1),
+multi-company JEs + GLOBAL multi-company batches (CH-4/AM-4), batch lifecycle
+Pending→Approved→Sent→Posted, ERP resolution falls back to the account Code (AM-4), the SJE
+materializer retired (AM-6 — domain servers generate). W4 routing + period-close rows are gone
+WITH their features; new rows cover the new invariants._
+
 | Feature / interaction | T1 | T2 | T3 | T5 |
 |---|---|---|---|---|
-| W1 company seeding (COA/periods/refs/TZ/audit) | — | ✓ | — | — |
-| JE + batch numbering (W2/W3) | — | ✓ | — | — |
-| JE balanced / immutability / period-close (bypass-proven) | ✓ | ✓ | — | — |
-| JE validation (F1) | ✓ | ✓ | — | — |
-| Adjusting-entry routing (W4) | — | ✓ | — | — |
+| W1 company seeding (COA/refs/TZ/audit) | — | ✓ | — | — |
+| GLAccountRole reference data (8 roles, metadata-sync seed) | — | ✓ | — | — |
+| JE + batch numbering — GLOBAL sequences, monotonic (W2/W3, D-SEQ) | — | ✓ | — | — |
+| JE balanced-on-lock overall (50001, bypass-proven) | ✓ | ✓ | — | — |
+| **JE balanced PER COMPANY (50019, AM-4, bypass-proven)** | ✓ | ✓ | — | — |
+| JE / JE-line immutability (50003/50004/50006) | — | ✓ | — | — |
+| JE validation (F1, incl. per-company) | ✓ | ✓ | — | — |
 | Reversal (W6) | — | ✓ | ✓ | ⚠ |
 | Batch **netting + canceling** (exact values) | ✓ | ✓ | ✓ | ⚠ |
-| GL resolution + COA-mapping approval (Block 5) | — | ✓ | — | — |
+| **GLOBAL multi-company sweep (companyCount, per-company netting isolation)** | ✓ | ✓ | ✓ | ⚠ |
+| GL resolution — mapping override · inline · **Code fallback (AM-4)** + COA-mapping approval (Block 5) | — | ✓ | — | — |
 | Dimension-through-batch | ✓ | ✓ | ⚠ | ⚠ |
-| CFO gate: approve → dispatch | — | ✓ | ✓ | ✓ |
-| **Reject/deny → dispatch refused** | — | ✓ | ✓ | ⚠ |
+| **approveBatch step (audit stamps · only-Pending guard · dispatch-before-approve refused)** | — | ✓ | ✓ | ✓ |
+| CFO gate: approve → dispatch → **Posted** | — | ✓ | ✓ | ✓ |
+| **Reject/deny → dispatch refused (both layers)** | — | ✓ | ✓ | ⚠ |
 | **No-CFO → build hard-fails** | — | ✓ | ✓ | — |
-| **Multi-company independence (no cross-company bleed)** | — | ✓ | ✓ | ⚠ |
-| **Due-to/from batched as-is, tag preserved, NO balancing** | — | ✓ | ✓ | ⚠ |
-| Scheduled JEs (S3) | ✓ | ✓ | — | — |
-| Read-models (TB/AR/aging/defrev/tax/dispatch/intercompany) | — | ✓ | ✓ | ⚠ |
+| **Multi-company CFO UNION (one Task, all companies' CFOs)** | — | ✓ | — | — |
+| **Due-to/from batched as-is, tags preserved, NO balancing** | — | ✓ | ✓ | ⚠ |
+| Batch summary foots overall (50014) + **per company (50023, AM-4)** — bypass-proven | — | ✓ | — | — |
+| Scheduled JEs (S3 create + cent-spread) + **AM-6 domain-generation flow** + SJE locks (50016-18) | ✓ | ✓ | — | — |
+| Read-models (all 12 views, exact values; month-grain recon/rollforward) | — | ✓ | ✓ | ⚠ |
+| **Engine: CreateJournalEntry pipeline (7 error codes, merge/order, per-company balance)** | ✓ | ✓ | ✓ | — |
+| **Engine: atomic write (mid-write failure → ZERO partial rows, raw-SQL proven)** | — | ✓ | — | — |
+| **Engine: ResolveLinkedAccount (role links, date windows, ordered dims)** | ✓ | ✓ | — | — |
+| **Engine: op over GraphQL ExecuteRemoteOperation (A5 "runs on local")** | — | — | ✓ | — |
 | GUI dashboards + forms + nav | — | — | — | ✓ |
 
 **No open ✗.** Every cell is covered or a justified ⚠ below.
@@ -41,36 +56,48 @@ Tiers: **1** Vitest (unit) · **2** server (tsx, in-process direct SQL) · **3**
 
 - **Dimension-through-batch @ T3** — fully proven at **T2** (`block2` B5: same account × 2 dim values
   → separate, tagged summary lines, via SQL). The API's `BuildJEBatchResult` is aggregate; the
-  consolidation it *does* report (`SummaryLineCount`) is already asserted at T3 (the canceling test in
-  `batch-dispatch-api.ts`, 6 lines → 3 summary lines). A dimension-specific T3 test would re-prove the
-  same `SummaryLineCount` mechanism on the same engine — redundant. **No API change needed** (an
-  earlier proposal to add summary-line dimension fields was withdrawn — never grow the API to serve a test).
+  consolidation it *does* report (`SummaryLineCount`) is already asserted at T3. **No API change
+  needed** (never grow the API to serve a test).
 - **Reject · netting-exact · reversal · read-model-exact · intercompany · multi-company @ T5** —
   deliberately **thin at tier 5** (browser e2e is expensive). Exact values + variations are proven at
-  T1/T2/T3; T5 proves the end-to-end *state machine* + that values reach the screen. This is the
-  motto's "prudent discrimination"; tier-4 (the parked mjdev overlay) is the relief valve for fast exact-DOM.
+  T1/T2/T3; T5 proves the end-to-end *state machine* + that values reach the screen.
 
 ## Ledger — tests still to create + open questions (roll-through: log, proceed, circle back)
 
-**Tests to create:** _none open_ — every matrix gap is filled or a justified ⚠.
+**Tests to create:** _none open._
+- ✅ GLAccountLink / GLAccountLinkDimension — covered 2026-07-06 with the AM-7 step-4 engine:
+  `pickActiveLinkIndex` unit suite (windows/status/tie-break) + `engine-runtime.ts` E4 (real link
+  rows, role by name/ID, ordered dimensions, unknown-record/role nulls).
 
 **Open questions for the human:** _none open._
 - ✅ Due-to/from semantics **confirmed** (Marcelo): Accounting does **no** intercompany netting —
-  the Payments component owns it. Accounting receives + batches the tagged JEs as-is. Tested exactly
-  that at T2 (`batching-multicompany-runtime.ts`) + T3 (`batching-scenarios-api.ts`).
-- ✅ "Change the API for T3 dimension" — **withdrawn** (not needed; observable behavior is covered).
+  Payments owns it. Accounting receives + batches the tagged JEs as-is. Tested at T2
+  (`batching-multicompany-runtime.ts`) + T3 (`batching-scenarios-api.ts`).
 
 ## Harness inventory + run commands (cwd = instance worktree root)
 
 | Tier | Harness | Run |
 |---|---|---|
 | 1 | `packages/CoreEntitiesServer/src/__tests__/*.test.ts` | `cd packages/dev-apps/bizapps-accounting/packages/CoreEntitiesServer && npx vitest run` |
-| 2 | `test-harnesses/server/block{0,1,2,4,5,6}-runtime.ts` · `batching-multicompany-runtime.ts` | `npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/<file>.ts` (per file) |
-| 3 | `test-harnesses/api/readmodels-api.ts` · `batch-dispatch-api.ts` · `batching-scenarios-api.ts` | `npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/api/<file>.ts` |
+| 2 | `test-harnesses/server/block{0,1,2,4,5,6}-runtime.ts` · `batching-multicompany-runtime.ts` · `engine-runtime.ts` | `npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/<file>.ts` (per file) |
+| 3 | `test-harnesses/api/readmodels-api.ts` · `batch-dispatch-api.ts` · `batching-scenarios-api.ts` · `engine-op-api.ts` | `npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/api/<file>.ts` |
 | 5 | `test-harnesses/playwright/specs/{dashboards,batching}.spec.ts` | `cd …/test-harnesses/playwright && npx playwright test` (MJAPI+Explorer up) |
 
-Latest verified (this session): T1 **32/32** · T2 **65/65** (blocks) + **6/6** (multi-company) ·
-T3 **28/28** + **17/17** + **12/12** · T5 dashboards **9/9** + batching green.
+Latest verified (2026-07-06, instance accounting-engine-dev, post-rework — API :4050, Explorer :4310):
+T1 **39/39** · T2 **76/76** (block0 10 · block1 11 · block2 21 · block4 7 · block5 5 · block6 13 ·
+multi-company 9) + seed **6/6** views · T3 **64/64** (dispatch 20 · readmodels 29 · scenarios 15) ·
+T5 **10/10** in one run, 4.3m (after two REAL catches: the dashboard's Pending-only approval-state
+refresh hid the Dispatch button — fixed; and MJ core's DataExplorerDashboard NG0100 relative-time
+flake — logged in BUGS.md + component-scoped keystone allowlist). **Total 195 checks green.**
+AM-7 step-4 ENGINE (2026-07-06, same instance): unit **76/76** (EngineBase 37 — pipeline+link picker;
+CoreEntitiesServer 39) · T2 `engine-runtime.ts` **12/12** (success/merge/order · all 7 typed error codes
+live · ATOMIC ROLLBACK raw-SQL-proven · ResolveLinkedAccount windows) · T3 `engine-op-api.ts` **8/8**
+(the op over GraphQL `ExecuteRemoteOperation` — typed contract on the wire, logical failures inside the
+output, unknown-key gate). The engine has a bounded cache-miss retry (one forced refresh on
+unknown-reference errors) for cross-process reference writes. ⚠ MJ-core TG-failure crash bug + guard:
+see BUGS.md.
+(Explorer needs the peer-dep workaround from MJDEV-ISSUES until fixed: `npm install
+@angular/service-worker@21.1.3 aws-amplify@6.16.3 primeng@21.1.1 --no-save` after any full npm install.)
 
 **Equivalence run — `codegen-commit-accounting-3` (squashed v1.0 baseline), 2026-06-30 — ALL GREEN:**
 T1 **32/32** · T2 **71/71** (65 blocks incl. block2 18/18 once `bizapps-tasks` linked + 6 multi-company) ·

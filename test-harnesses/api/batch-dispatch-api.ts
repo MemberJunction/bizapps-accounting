@@ -11,12 +11,14 @@
  * ISOLATED throwaway company with a CFO + one balanced Pending JE, runs the flow, then tears it down
  * (always, in finally) — so it never touches the persistent demo companies.
  *
- * Flow asserted:
- *   1. BuildJEBatch(company, period, BusinessCentral) → Success, a BatchID, JECount ≥ 1, not "nothing to batch".
- *   2. JEBatchApprovalState(batch)                    → Approved == false (CFO gate engaged, awaiting decision).
- *   3. RecordJEBatchDecision(batch, 'Approved')       → Success.
- *   4. JEBatchApprovalState(batch)                    → Approved == true.
- *   5. DispatchJEBatch(batch)                         → Success, Status ∈ {Sent, Acknowledged}.
+ * Flow asserted (2026-07-06 rework: buildBatch is GLOBAL — no company/period args; the batch
+ * lifecycle is Pending → Approved → Sent → Posted with an explicit approve step):
+ *   1. BuildJEBatch(BusinessCentral)            → Success, a BatchID, exact netted totals + CompanyCount.
+ *   2. JEBatchApprovalState(batch)              → Approved == false (CFO gate engaged, awaiting decision).
+ *   2b. DispatchJEBatch(batch) BEFORE decision  → REFUSED (only an Approved batch can be sent).
+ *   3. RecordJEBatchDecision(batch, 'Approved') → Success (also flips the batch Pending→Approved).
+ *   4. JEBatchApprovalState(batch)              → Approved == true.
+ *   5. DispatchJEBatch(batch)                   → Success, Status == 'Posted'.
  *
  * Run from the INSTANCE WORKTREE ROOT (so .env + the fixture resolve):
  *   cd ~/MJDev/instances/<slug>/mj
@@ -29,7 +31,7 @@ import path from 'node:path';
 const API_URL = (process.env.MJ_API_URL ?? 'http://localhost:4070').replace(/\/+$/, '');
 const GRAPHQL_URL = `${API_URL}/`;
 const MJDEV_LAUNCHER = '/Users/marcelotorres/MJDev/bin/mjdev';
-const INSTANCE_SLUG = 'bizapps-accounting-dev';
+const INSTANCE_SLUG = process.env.MJDEV_SLUG ?? 'bizapps-accounting-dev';
 const WORKTREE_ROOT = process.cwd();
 const TSX = path.resolve(WORKTREE_ROOT, 'node_modules', '.bin', 'tsx');
 const FIXTURE = path.resolve(WORKTREE_ROOT, 'packages/dev-apps/bizapps-accounting/test-harnesses/playwright/lib/batching-fixture.ts');
@@ -69,7 +71,7 @@ async function gql<T>(apiKey: string, query: string): Promise<T> {
   return (json as { data: T }).data;
 }
 
-interface Fixture { companyId: string; periodId: string; cfoPersonId: string; runTag: string; jeId: string; expected: { jeCount: number; summaryLineCount: number; totalDebits: number; totalCredits: number; grossDebits: number } }
+interface Fixture { companyId: string; cfoPersonId: string; runTag: string; jeId: string; expected: { jeCount: number; summaryLineCount: number; totalDebits: number; totalCredits: number; grossDebits: number; companyCount: number } }
 
 function fixtureSetup(): Fixture {
   const out = execFileSync(TSX, [FIXTURE, 'setup'], { cwd: WORKTREE_ROOT, encoding: 'utf8', timeout: 180_000 });
@@ -101,14 +103,14 @@ async function main(): Promise<void> {
 
   console.log('Provisioning isolated CFO company via the batching fixture…');
   const fx = fixtureSetup();
-  console.log(`  fixture company ${fx.companyId} (${fx.runTag}), period ${fx.periodId}`);
+  console.log(`  fixture company ${fx.companyId} (${fx.runTag})`);
 
   try {
     // 1. Build the batch.
     console.log('\n1. BuildJEBatch (real multi-JE netting + canceling — EXACT values):');
-    const build = await gql<{ BuildJEBatch: { Success: boolean; BatchID?: string; JECount: number; SummaryLineCount: number; TotalDebits: number; TotalCredits: number; NothingToBatch: boolean; ErrorMessage?: string } }>(
+    const build = await gql<{ BuildJEBatch: { Success: boolean; BatchID?: string; JECount: number; SummaryLineCount: number; TotalDebits: number; TotalCredits: number; CompanyCount: number; NothingToBatch: boolean; ErrorMessage?: string } }>(
       apiKey,
-      `mutation { BuildJEBatch(companyID:"${fx.companyId}", accountingPeriodID:"${fx.periodId}", targetSystem:"${TARGET_SYSTEM}") { Success BatchID JECount SummaryLineCount TotalDebits TotalCredits NothingToBatch ErrorMessage } }`,
+      `mutation { BuildJEBatch(targetSystem:"${TARGET_SYSTEM}") { Success BatchID JECount SummaryLineCount TotalDebits TotalCredits CompanyCount NothingToBatch ErrorMessage } }`,
     );
     const b = build.BuildJEBatch;
     const ex = fx.expected;
@@ -121,6 +123,7 @@ async function main(): Promise<void> {
     check(`TotalCredits === ${ex.totalCredits} (EXACT netted total)`, b.TotalCredits === ex.totalCredits, `got ${b.TotalCredits}`);
     check('batch FOOTS (TotalDebits === TotalCredits)', b.TotalDebits === b.TotalCredits, `${b.TotalDebits} vs ${b.TotalCredits}`);
     check(`CANCELING happened (netted ${b.TotalDebits} < gross ${ex.grossDebits} — AR debit/credit netted down)`, b.TotalDebits < ex.grossDebits, `netted ${b.TotalDebits} not < gross ${ex.grossDebits}`);
+    check(`CompanyCount === ${ex.companyCount} (CH-4 multi-company batch shape)`, b.CompanyCount === ex.companyCount, `got ${b.CompanyCount}`);
     const batchID = b.BatchID;
     if (!batchID) throw new Error('no BatchID — cannot continue the flow');
 
@@ -132,7 +135,15 @@ async function main(): Promise<void> {
     check('approval-state query Success', before.JEBatchApprovalState.Success === true);
     check('Approved == false (CFO gate engaged, awaiting decision)', before.JEBatchApprovalState.Approved === false, `Approved=${before.JEBatchApprovalState.Approved}`);
 
-    // 3. Record the CFO Approved decision.
+    // 2b. Dispatch BEFORE any decision → refused at the engine-status layer (batch still Pending).
+    console.log('\n2b. DispatchJEBatch before approval (must be refused):');
+    const early = await gql<{ DispatchJEBatch: { Success: boolean; Status?: string; ErrorMessage?: string } }>(
+      apiKey, `mutation { DispatchJEBatch(batchID:"${batchID}") { Success Status ErrorMessage } }`,
+    );
+    check('early dispatch is REFUSED (batch not yet Approved)', early.DispatchJEBatch.Success === false, JSON.stringify(early.DispatchJEBatch));
+    check('refusal names the Approved requirement', /approved/i.test(early.DispatchJEBatch.ErrorMessage ?? ''), `ErrorMessage='${early.DispatchJEBatch.ErrorMessage ?? ''}'`);
+
+    // 3. Record the CFO Approved decision (also flips the batch Pending→Approved).
     console.log('\n3. RecordJEBatchDecision(Approved):');
     const decision = await gql<{ RecordJEBatchDecision: { Success: boolean; ErrorMessage?: string } }>(
       apiKey, `mutation { RecordJEBatchDecision(batchID:"${batchID}", decision:"Approved", notes:"tier-3 api harness") { Success ErrorMessage } }`,
@@ -153,7 +164,7 @@ async function main(): Promise<void> {
     );
     const d = dispatch.DispatchJEBatch;
     check('DispatchJEBatch Success', d.Success === true, d.ErrorMessage);
-    check('Status ∈ {Sent, Acknowledged}', d.Status === 'Sent' || d.Status === 'Acknowledged', `Status=${d.Status}`);
+    check("Status == 'Posted' (Approved → Sent → Posted lifecycle)", d.Status === 'Posted', `Status=${d.Status}`);
 
     // 6. Reverse the now-GLPosted JE (W6) via the API → a NEW Pending reversal JE (Dr/Cr swapped).
     //    (The engine behavior is proven at tier 2/block1; this closes the API-CONTRACT coverage.)

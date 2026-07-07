@@ -12,16 +12,19 @@
  */
 import sql from 'mssql';
 
-/** The 14 hand-authored financial-invariant triggers from the baseline migration (NOT CodeGen's trgUpdate*). */
+/**
+ * The 12 hand-authored financial-invariant triggers from the baseline migration (NOT CodeGen's
+ * trgUpdate*). 2026-07-06 rework: trg_JournalEntry_PeriodClose + trg_AccountingPeriod_NoOverlap
+ * were RETIRED with the AccountingPeriod removal (the ERP owns periods — engine-meeting CH-1);
+ * BalancedOnLock/RecheckParentBalance now ALSO enforce AM-4 per-company balance (THROW 50019/50022).
+ */
 export const INVARIANT_TRIGGERS = [
   'trg_JournalEntry_BalancedOnLock',
   'trg_JEL_RecheckParentBalance',
   'trg_JournalEntry_Immutability',
   'trg_JEL_Immutability',
-  'trg_JournalEntry_PeriodClose',
   'trg_JEBatch_Immutability',
   'trg_ACP_NoChains',
-  'trg_AccountingPeriod_NoOverlap',
   'trg_JE_ReversalConsistency',
   'trg_JEBLI_Immutability',
   'trg_JEBatch_SummaryReconciles',

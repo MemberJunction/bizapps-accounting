@@ -17,8 +17,8 @@ export class mjBizAppsAccountingJournalEntryBatchFormComponent extends BaseFormC
         await super.ngOnInit();
         this.initSections([
             { sectionKey: 'details', sectionName: 'Details', isExpanded: true },
-            { sectionKey: 'mJBizAppsAccountingJournalEntryBatchLineItems', sectionName: 'Journal Entry Batch Line Items', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingJournalEntries', sectionName: 'Journal Entries', isExpanded: false }
+            { sectionKey: 'mJBizAppsAccountingJournalEntries', sectionName: 'Journal Entries', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingJournalEntryBatchLineItems', sectionName: 'Journal Entry Batch Line Items', isExpanded: false }
         ]);
     }
 }

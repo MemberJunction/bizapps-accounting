@@ -2,20 +2,23 @@
  * Block 2 unit tests — the PURE netting core of the batching engine (no DB).
  *
  * netLines() is the heart of §C5 batch summarization: collapse many JE lines into one consolidated
- * summary line per (GLAccount × dimension-combo), netting Dr against Cr to a single side. These tests
- * pin the behavior the live harness then proves end-to-end against the real triggers.
+ * summary line per (Company × GLAccount × dimension-combo) — batches are MULTI-COMPANY since the
+ * 2026-07-06 rework (CH-4/AM-4), so company is part of the grouping key and the summary must foot
+ * within each company. These tests pin the behavior the live harness then proves end-to-end.
  */
 import { describe, it, expect } from 'vitest';
 import { netLines, type NettableLine } from '../BatchingEngine.js';
 
 const GL_A = 'aaaaaaaa-0000-0000-0000-000000000001';
 const GL_B = 'bbbbbbbb-0000-0000-0000-000000000002';
+const CO_1 = '11111111-0000-0000-0000-000000000001';
+const CO_2 = '22222222-0000-0000-0000-000000000002';
 const DIM_DEPT = 'dddddddd-0000-0000-0000-00000000000d';
 const SALES = 'eeeeeeee-0000-0000-0000-0000000000e1';
 const MKTG = 'eeeeeeee-0000-0000-0000-0000000000e2';
 
-const line = (glAccountId: string, debit: number, credit: number, dims: NettableLine['dims'] = []): NettableLine =>
-  ({ glAccountId, debit, credit, dims });
+const line = (glAccountId: string, debit: number, credit: number, dims: NettableLine['dims'] = [], companyId = CO_1): NettableLine =>
+  ({ companyId, glAccountId, debit, credit, dims });
 
 describe('netLines (pure batch summarization)', () => {
   it('collapses many lines on one account+combo into a single netted summary line', () => {
@@ -73,5 +76,30 @@ describe('netLines (pure batch summarization)', () => {
     expect(debitTotal).toBe(140);
     expect(creditTotal).toBe(140);
     expect(debitTotal).toBe(creditTotal); // foots → trg_JEBatch_SummaryReconciles (50014) will pass
+  });
+
+  it('separates the SAME account into distinct groups by COMPANY (multi-company batches, CH-4)', () => {
+    const groups = netLines([
+      line(GL_A, 100, 0, [], CO_1),
+      line(GL_A, 60, 0, [], CO_2),
+    ]);
+    expect(groups).toHaveLength(2);
+    const byCo = Object.fromEntries(groups.map(g => [g.companyId, g.net]));
+    expect(byCo[CO_1]).toBe(100);
+    expect(byCo[CO_2]).toBe(60);
+  });
+
+  it('foots WITHIN each company when per-company JE sets balance (AM-4 → trigger 50023)', () => {
+    // CO_1: Dr A 100 / Cr B 100 · CO_2: Dr A 40 / Cr B 40 — each company's slice must stand alone.
+    const groups = netLines([
+      line(GL_A, 100, 0, [], CO_1), line(GL_B, 0, 100, [], CO_1),
+      line(GL_A, 40, 0, [], CO_2), line(GL_B, 0, 40, [], CO_2),
+    ]);
+    for (const co of [CO_1, CO_2]) {
+      const mine = groups.filter(g => g.companyId === co);
+      const dr = mine.filter(g => g.side === 'Debit').reduce((s, g) => s + g.net, 0);
+      const cr = mine.filter(g => g.side === 'Credit').reduce((s, g) => s - g.net, 0);
+      expect(dr).toBe(cr);
+    }
   });
 });

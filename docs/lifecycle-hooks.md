@@ -1,152 +1,118 @@
-# BizApps Accounting — Lifecycle Hooks (W1–W9)
+# BizApps Accounting — Lifecycle Hooks (W1–W9) + the Engine
 
 > **What this is:** the per-entity **`BaseEntity.Save()` lifecycle hooks** — the server-side logic that runs
 > when an accounting record is created/changed. They live in `packages/CoreEntitiesServer/` and route every
 > mutation through `BaseEntity` so `__mj.RecordChange` audits it (P1: *audit by construction*).
-> **Source:** `plans/workflows-and-agents.plan.md` §2.1, **reconciled here with what's actually built + the
-> current decisions** (parts of that plan predate §C1 and BA-D18, noted inline). **Updated 2026-06-29.**
+> **Updated 2026-07-06** for the engine-meeting rulings (AM-1..7): **AccountingPeriod is GONE** (the ERP owns
+> periods — CH-1), JEs/batches are **multi-company** (CH-2/CH-4), numbering is **global** (D-SEQ), the SJE
+> **materializer is retired** (AM-6), and the **accounting engine** (`AccountingEngine` +
+> `Accounting.CreateJournalEntry`) is the front door for external callers.
 
-**Division of labor (P2):** *DB triggers* enforce un-bypassable invariants (balance, immutability,
-period-close); *hooks* orchestrate (seed, number, route, reverse, validate). A hook makes the friendly thing
-happen; the trigger is the floor that catches anything — even raw SQL.
+**Division of labor (P2):** *DB triggers* enforce un-bypassable invariants (balance overall **and per
+company** — AM-4, immutability); *hooks* orchestrate (seed, number, reverse, validate). A hook makes the
+friendly thing happen; the trigger is the floor that catches anything — even raw SQL.
 
 **How a hook "fires" — two kinds:**
 - **Auto (in `Save()`):** the hook is an override of the entity's `Save()`. It runs **every time that entity
-  is saved**, then a guard condition decides whether it acts. So the *cause* is "someone saved this entity"
-  (via `Metadata.GetEntityObject(...).Save()` — UI, API, service, agent, or another hook) **and** the
-  condition holds. Nothing fires it on a schedule or from the DB.
+  is saved**, then a guard condition decides whether it acts.
 - **Explicit call:** not wired into `Save()` — it runs only when code **calls the method by name** (W6, F1).
 
-**Status legend:** ✅ built + tested · ⚠ escalated (decision needed) · ⏳ planned (later block).
+**Status legend:** ✅ built + tested · 🚫 retired.
 
 | # | Hook | Entity | What causes it to fire | How | Status |
 |---|---|---|---|---|---|
-| **W1** | Profile init (seed) | `AccountingCompanyProfile` | a **new** profile is saved (`!IsSaved`) | auto · `Save()` | ✅ Block 0 |
-| **W2** | JE numbering | `JournalEntry` | a **new** JE is saved with **no `EntryNumber`** | auto · `Save()` | ✅ Block 0 |
-| **W3** | Batch numbering | `JournalEntryBatch` | a **new** batch is saved with **no `BatchNumber`** | auto · `Save()` | ✅ Block 0 |
-| **W4** | Adjusting-entry routing | `JournalEntry` | a **new** JE is saved whose target `AccountingPeriod.Status='Closed'` | auto · `Save()` | ✅ Block 1 |
-| **W5** | Realized FX auto-emit | `JournalEntryLine` | n/a — generation is upstream (Orders/Payments) | — | 🚫 retired (Payments-side) |
-| **W6** | Reversal generation | `JournalEntry` | code **calls `generateReversal(reason)`** | explicit call | ✅ Block 1 |
-| **W7** | Period-close orchestration | `AccountingPeriod` | a save changes `Status` **`Open → Closing`/`Closed`** | auto · `Save()` | ✅ Block 2 |
-| **W8** | Period reopen | `AccountingPeriod` | a save changes `Status` **`Closed → Reopened`** | auto · `Save()` | ✅ Block 2 |
-| **W9** | Attachment validation | `JournalEntry` | a JE is saved with a non-null **`FileID`** | auto · `Save()` | ✅ Block 1 |
-| **F1** | Routine JE validator | `JournalEntry` (read-only) | code **calls `validateJournalEntry(id)`** | explicit call | ✅ Block 1 |
+| **W1** | Profile init (seed) | `AccountingCompanyProfile` | a **new** profile is saved (`!IsSaved`) | auto · `Save()` | ✅ |
+| **W2** | JE numbering (GLOBAL) | `JournalEntry` | a **new** JE is saved with **no `EntryNumber`** | auto · `Save()` | ✅ |
+| **W3** | Batch numbering (GLOBAL) | `JournalEntryBatch` | a **new** batch is saved with **no `BatchNumber`** | auto · `Save()` | ✅ |
+| **W4** | Adjusting-entry routing | — | — | — | 🚫 retired 2026-07-06 (periods removed, CH-1) |
+| **W5** | Realized FX auto-emit | — | — | — | 🚫 retired (Payments-side, §C1) |
+| **W6** | Reversal generation | `JournalEntry` | code **calls `generateReversal(reason)`** | explicit call | ✅ |
+| **W7** | Period-close orchestration | — | — | — | 🚫 retired 2026-07-06 (periods removed, CH-1) |
+| **W8** | Period reopen | — | — | — | 🚫 retired 2026-07-06 (periods removed, CH-1) |
+| **W9** | Attachment validation | `JournalEntry` | a JE is saved with a non-null **`FileID`** | auto · `Save()` | ✅ |
+| **F1** | Routine JE validator | `JournalEntry` (read-only) | code **calls `validateJournalEntry(id)`** | explicit call | ✅ |
 
 ---
 
 ## 1. The hooks in detail
 
 ### W1 — Profile init *(✅ `AccountingCompanyProfileEntityServer.ts`)*
-**Fires:** automatically inside `AccountingCompanyProfileEntityServer.Save()`, **only on the first save of a
-new profile** (the override checks `isNew = !this.IsSaved`; later saves skip it — idempotent). The cause is
-"a new `AccountingCompanyProfile` was created and saved."
-**Does:** the per-company setup that used to live in a stored proc — all via `BaseEntity.Save()` so every
-seeded row is audited:
-- Seeds the **minimal starter chart of accounts** (the **10**-account AR-subledger set — trimmed from 23 in
-  Block 0, per AD-8 + §C1; the centralized intercompany accounts were removed).
-- Generates the **current fiscal year's 17 periods** (12 month + 4 quarter + 1 year).
+**Fires:** automatically on the **first save of a new profile** (idempotent — later saves skip it).
+**Does:** the per-company setup, all via `BaseEntity.Save()` so every seeded row is audited:
+- Seeds the **minimal starter chart of accounts** (the **10**-account AR-subledger set — AD-8 + §C1).
 - Wires the profile's **5 default GL-account refs** (AR / Deferred Revenue / Sales Tax / Realized FX / Unrealized FX).
-- Defaults **`OperatingTimeZone = 'UTC'`** (added Block 0).
-- *(The old plan's "seed 4 recurring-JE templates" step is **gone** — BA-D18 dropped the `Recurring*` tables.)*
+- Defaults **`OperatingTimeZone = 'UTC'`**.
+- *(Period generation was REMOVED 2026-07-06 — no `AccountingPeriod` rows exist to create.)*
 
 ### W2 — JE numbering *(✅ `JournalEntryEntityServer.ts` + `SequenceService.ts`)*
-**Fires:** automatically in `JournalEntryEntityServer.Save()` when **`isNew && !EntryNumber`** — i.e. a brand-new
-JournalEntry that doesn't already carry a number. (Re-saves of an existing JE don't re-number.)
-**Does:** calls the atomic DB sproc `spAssignNextJournalEntryNumber(CompanyID, FiscalYear)` (HOLDLOCK/UPDLOCK
-— gap-free under concurrency) and sets `EntryNumber = JE-{CompanyCode}-{FY}-{seq:000000}` before `super.Save()`.
-FY is derived from `EffectiveDate`. *(Block-0 fix: pass the sproc params to `ExecuteSQL` as a named object, not an array.)*
+**Fires:** on a brand-new JournalEntry with no number.
+**Does:** calls the atomic sproc `spAssignNextJournalEntryNumber(@FiscalYear)` (HOLDLOCK/UPDLOCK — gap-free
+under concurrency) and sets **`EntryNumber = JE-{FY}-{seq:000000}`** before `super.Save()`. FY derives from
+`EffectiveDate` (UTC). **The sequence is GLOBAL per fiscal year** (D-SEQ 2026-07-06 — JEs are multi-company;
+there is no company segment in the number anymore).
 
 ### W3 — Batch numbering *(✅ `JournalEntryBatchEntityServer.ts` + `SequenceService.ts`)*
-**Fires:** in `JournalEntryBatchEntityServer.Save()` when **`isNew && !BatchNumber`**.
-**Does:** `spAssignNextBatchNumber(CompanyID)` → `BatchNumber = BATCH-{CompanyCode}-{seq:000000}`.
-
-### W4 — Adjusting-entry routing *(✅ `JournalEntryEntityServer.ts`)*
-**Fires:** in `JournalEntryEntityServer.Save()` on a **new** JE, **only when the target `AccountingPeriodID`
-points at a `Closed` period** (the hook loads the period and checks `Status='Closed'`; for open periods it does
-nothing). The cause is "someone tried to post a new JE into a closed period."
-**Does:** the DB trigger `trg_JournalEntry_PeriodClose` (50007) rejects **any** Closed-period JE, so W4 handles
-the legitimate adjustment case:
-- Closed **+ `OriginalAccountingPeriodID` not set** → **error** (must explicitly flag the adjusting-entry pattern; no silent re-route — §6/§7.5).
-- Closed **+ `OriginalAccountingPeriodID` set** → **routes** `AccountingPeriodID` to the **next open period** of the same type, keeping `OriginalAccountingPeriodID` as the audit reference.
-
-### W5 — Realized FX gain/loss *(🚫 RETIRED — handled upstream, NOT an Accounting hook)*
-**Would fire:** on a `JournalEntryLine` save where the payment-currency rate differs from the original AR
-booking rate.
-**Would do:** auto-add the FX gain/loss line so the payment JE balances (posting to
-`AccountingCompanyProfile.RealizedFXGainLossGLAccountID`).
-**Why parked:** the plan put this *generation* in Accounting, but the resolved **§C1** moved all JE/line
-generation **upstream** (Orders/Payments emit balanced JEs; Accounting receives them) — the same reversal
-AD-5 got. **Recommendation:** the **Payments app computes + posts** the FX line; Accounting keeps the GL-ref
-mechanics + validates balance (F1 / the balanced-on-lock trigger reject anything that doesn't foot).
-**✅ DECIDED (2026-06-29):** Orders/Payments **computes + posts** the realized-FX line; Accounting owns only
-the `RealizedFXGainLossGLAccountID` mechanics + balance validation (F1 / balanced-on-lock trigger reject
-anything that doesn't foot). **W5-as-an-Accounting-hook is retired** — no Accounting-side FX generation
-(consistent with §C1 + BA-D27 + Amith's keep-accounting-separate principle). Worth a one-line Amith confirm.
+**Fires:** on a brand-new batch with no number.
+**Does:** `spAssignNextBatchNumber()` → **`BatchNumber = BATCH-{seq:000000}`** — a single **GLOBAL** counter
+(batches are multi-company, CH-4).
 
 ### W6 — Reversal generation *(✅ `JournalEntryEntityServer.generateReversal(reason)`)*
-**Fires:** **only when code explicitly calls `generateReversal(reason)`** on a saved JE (e.g. from
-`AccountingService.reverseJournalEntry` or the UI's "Generate Reversal"). It is **not** wired into `Save()` —
-nothing auto-reverses.
+**Fires:** only when code explicitly calls it on a saved JE.
 **Does:** creates a **new Pending JE** — `EntryType='Reversal'` (required by `trg_JE_ReversalConsistency`
 50012), every line's **Dr/Cr swapped**, `ReversesJournalEntryID =` the original — then back-references the
-original's `ReversedByJournalEntryID` (the one field the immutability trigger lets change on a locked JE). The
-original stays put; the audit chain is preserved (pen, not pencil).
-
-### W7 — Period-close orchestration *(✅ Block 2 — `AccountingPeriodEntityServer.ts`)*
-**Fires:** in `AccountingPeriodEntityServer.Save()` when the save **transitions `Status` `Open → Closing`/`Closed`**
-(an admin initiating a close).
-**Does:** runs `validateCloseable()` — no Pending JEs, all batches Acknowledged, all due
-`ScheduledJournalEntry` rows materialized (each read with `BypassCache: true` so the gate sees TRUE DB state) —
-and on success flips to `Closed`, stamping `ClosedAt` + `ClosedByUserID`; on failure it throws (the period stays
-as-is). **No balance materialization in v1** (`AccountBalance*` deferred — AD-12); close = validate + lock only.
-Once `Closed`, `trg_JournalEntry_PeriodClose` (50007) blocks any new JE into the period (the un-bypassable floor).
-*(Live-proven: blocked while a Pending JE remains; allowed once the period's batch is Acknowledged.)*
-
-### W8 — Period reopen *(✅ Block 2 — `AccountingPeriodEntityServer.ts`)*
-**Fires:** on a save that transitions `Status` **`Closed → Reopened`**.
-**Does:** requires a non-empty `ReopenReason`, stamps `ReopenedAt`/`ReopenedByUserID`; `ClosedAt` is intentionally
-left set (`CK_AccountingPeriod_ClosedCoherence` requires it for `Reopened` too). The period must be re-closed
-after any new activity.
+original's `ReversedByJournalEntryID` (the one field the immutability trigger lets change on a locked JE).
 
 ### W9 — JE attachment validation *(✅ `JournalEntryEntityServer.ts`)*
-**Fires:** in `JournalEntryEntityServer.Save()` whenever the JE has a **non-null `FileID`** (new or update).
-**Does:** verifies the `FileID` references an existing `__mj.File` (degrades gracefully if the File entity
-isn't reachable in context — the DB FK is the hard guarantee).
+**Fires:** whenever a JE is saved with a non-null `FileID`.
+**Does:** verifies the `FileID` references an existing `__mj.File` (the DB FK is the hard guarantee).
 
 ### F1 — Routine JE validator *(✅ `JournalEntryValidation.ts` → `validateJournalEntry()`)*
-**Fires:** **only when called explicitly** — `validateJournalEntry(journalEntryId, ctx)` — by an upstream
-caller (the future `AccountingService`) before locking/batching. Not a `Save()` hook.
-**Does:** read-only guard — checks **balanced** (±0.005), **≥2 lines**, **period open**, **GL accounts active**;
-returns an aggregated error list. Hard guarantees still live in the triggers; F1 just surfaces a clean error
-earlier. (`checkBalance` is exported + unit-tested.)
+**Fires:** only when called explicitly (the batching engine / callers before locking).
+**Does:** read-only guard — checks **balanced overall** (±0.005), **balanced WITHIN EACH company** (AM-4 —
+company = the line's `GLAccount.CompanyID`; mirrors trigger 50019), **≥2 lines**, **GL accounts active**;
+returns an aggregated error list. *(The period-open check was retired with the period tables.)*
+Pure parts (`checkBalance`, `checkPerCompanyBalance`) are exported + unit-tested.
 
 ---
 
-## 2. Related (not `Save()` hooks)
+## 2. The accounting ENGINE (the front door — plan §2)
 
-**Scheduled actions (S1–S7)** fire on a **cron cadence or at period close**, not on entity save — e.g. **S1
-Batch dispatch** (groups Pending JEs → batch → post to ERP, with §C5 netting + the Tasks-app CFO approval),
-**S3 Scheduled-JE materializer** (turns due `ScheduledJournalEntry` rows into Pending JEs).
-*(Note: the old plan's S3/S6/S7 are framed around the dropped `Recurring*` templates — superseded by
-`ScheduledJournalEntry`, BA-D18.)*
-- **S1 batch dispatch — ✅ Block 2** (`BatchingEngine.ts`: `buildBatch` nets a Company×Period's Pending JEs into a
-  footing batch + locks them; `sendBatch` enforces a pluggable `BatchApprovalGate` (CFO) + an `ErpPoster` seam
-  (mock for now) → Pending→Sent (trg 50014 foots) → Acknowledged + JEs→GLPosted). Live-proven incl. raw-SQL bypass.
-- **S3 Scheduled-JE materializer — ⏳ Block 4.** Other scheduled actions ⏳ later.
+**`AccountingEngineBase`** (`packages/EngineBase`, browser-safe) caches the reference tables (GL accounts,
+**roles**, **links** + link dimensions, dimensions/values, company profiles, currencies) with BaseEngine
+auto-refresh, and exposes:
+- **`ResolveLinkedAccount(entityId, recordId, role, asOfDate)`** — the per-record `GLAccountLink` primitive
+  (Active links, StartedAt/EndedAt windows, latest-start wins, ordered `GLAccountLinkDimension` list).
+- the **pure draft pipeline** (`runDraftPipeline`) + the typed contract (`JournalEntryDraft`,
+  `CreateJournalEntryResult`, the 7 error codes) — importable by Orders' client code with zero server deps.
 
-**`AccountingService` façade** — the public TypeScript API downstream apps call (`postJournalEntry`,
-`reverseJournalEntry` → wraps W6, `createScheduledJournalEntries`, …). Each method goes through `BaseEntity`,
-so saving through it is exactly what fires W2/W4/W9 etc. ⏳ Block 2/8.
+**`AccountingEngine`** (`packages/CoreEntitiesServer`) adds the server write path —
+**`CreateJournalEntry(draft, user, provider)`**: stages 1-5 pure validation (shape → accounts → dimensions →
+merge/order → balance overall AND per company), then stage 6 writes header + lines + line-dimensions in
+**one TransactionGroup** (all rows or none; numbering rides W2). Logical failures never throw — typed
+`Errors[]` (`MALFORMED_DRAFT · ACCOUNT_UNKNOWN · ACCOUNT_INACTIVE · DIMENSION_UNKNOWN ·
+DIMENSION_VALUE_UNKNOWN · UNBALANCED · INTERNAL_ERROR`). A bounded **cache-miss retry** (one forced refresh)
+heals cross-process reference writes.
 
----
+**`CreateJournalEntryOperation`** — `@RegisterClass(BaseRemotableOperation, 'Accounting.CreateJournalEntry')`,
+code-only. Orders-server calls `op.Execute(input, {provider, user})` in-process; browsers/scripts invoke the
+identical op over GraphQL `ExecuteRemoteOperation`.
+
+## 3. Related (not `Save()` hooks)
+
+- **S1 batch dispatch — ✅** (`BatchingEngine.ts`): `buildBatch(targetSystem, …)` is **GLOBAL** — nets ALL
+  Pending JEs (every company) into ONE multi-company batch (netting keys on company × account × dims; the
+  ERP-post seam splits by company, by **account number** — AM-4); `approveBatch` flips Pending→Approved with
+  audit stamps; `sendBatch` requires Approved + the CFO gate (`TasksAppApprovalGate` — per-company CFO
+  **union**: one Task assigned to every involved company's CFO) → Sent → **Posted** (mock ERP poster for
+  now) + JEs→GLPosted. Lifecycle: `Pending → Approved → Sent → Posted | Failed | Cancelled`.
+- **S3 scheduled-JE schedules — ✅ creation only** (`ScheduledJournalEntryService.createScheduledEntries`:
+  straight-line schedules with exact cent-remainder spread). **The central materializer is RETIRED (AM-6)**
+  — *domain entity servers* (e.g. a future SubscriptionEntityServer) generate the real Pending JE when a row
+  comes due and flip the SJE to Generated (schema-supported: `CK_SJE_GeneratedCoherence` + locks 50016-18).
 
 ## Build status at a glance
-- ✅ **Done (Block 0):** W1, W2, W3 · **(Block 1):** W4, W6, W9, F1 · **(Block 2):** W7, W8 + **S1 batching engine**.
-- 🧪 **Live-proven:** Block 0 harness 8/8 · Block 1 12/12 · Block 2 13/13 (incl. raw-SQL bypass of trg 50014/50009/50008
-  + §5.5 unmapped-GL hard-fail) · Vitest 18/18.
-- 🚫 **Retired:** W5 (realized-FX generation is upstream/Payments — DECIDED 2026-06-29).
-- ⏳ **Next:** S3 Scheduled-JE materializer in **Block 4**; dimension/COA-mapping server workflows in **Block 5**;
-  read-model views in **Block 6**.
-
-> AI agents (A1–A9, F2–F8) from the workflows plan are **out of v1 scope** (AD-14); this is the deterministic
-> hook layer only.
+- ✅ W1, W2, W3, W6, W9, F1 · S1 batching (6-status, multi-company) · S3 creation · Block 5 COA-mapping
+  approval · Block 6 read models (12 views) · **the engine + `Accounting.CreateJournalEntry`**.
+- 🧪 **Live-proven (2026-07-06):** T1 76/76 · T2 76/76 blocks + engine 12/12 + seed 6/6 · T3 64/64 + engine-op
+  8/8 · T5 10/10 — see `test-harnesses/testing.md` for the coverage matrix.
+- 🚫 **Retired:** W4/W7/W8 (periods — CH-1), W5 (FX generation is Payments'), the S3 materializer (AM-6).
