@@ -1,0 +1,88 @@
+<mj-page-layout>
+  <mj-page-header
+    Title="Company Setup"
+    Icon="fa-solid fa-building"
+    Subtitle="Review each accounting company profile — identity, fiscal year, currencies, and default GL accounts. Open a profile to edit it.">
+
+    <div meta>
+      <mj-stat-badge Icon="fa-solid fa-building" [Count]="Companies.length" Label="companies" Variant="info" />
+    </div>
+
+    <div actions>
+      <mj-refresh-button [Loading]="IsBusy" (Clicked)="loadData()"></mj-refresh-button>
+    </div>
+  </mj-page-header>
+
+  <mj-page-body>
+    @if (IsBusy) {
+      <mj-loading text="Loading company profiles…"></mj-loading>
+    } @else {
+      @if (LoadError) {
+        <div class="cs-banner cs-banner--error" role="alert">
+          <i class="fa-solid fa-triangle-exclamation"></i> {{ LoadError }}
+        </div>
+      }
+
+      @if (Companies.length === 0) {
+        <mj-empty-state Icon="fa-solid fa-building" Title="No company profiles yet"
+          Message="Create an Accounting Company Profile to configure a company's fiscal year, currencies, and default GL accounts.">
+        </mj-empty-state>
+      } @else {
+        <div class="cs-layout">
+          <aside class="cs-list">
+            @for (c of Companies; track c.ID) {
+              <button class="cs-listitem" [class.cs-listitem--on]="IsSelected(c)" (click)="SelectCompany(c)">
+                <span class="cs-listitem__name">{{ c.Name }}</span>
+                <span class="cs-listitem__code">{{ c.CompanyCode }}</span>
+                @if (!c.IsActive) { <span class="cs-tag cs-tag--muted">inactive</span> }
+              </button>
+            }
+          </aside>
+
+          <section class="cs-detail">
+            @if (Selected) {
+              <div class="cs-card">
+                <header class="cs-card__head">
+                  <div>
+                    <h2 class="cs-card__title">{{ Selected.Name }}</h2>
+                    <span class="cs-card__code">{{ Selected.CompanyCode }}</span>
+                  </div>
+                  <button mjButton variant="primary" size="sm" (click)="OpenProfile()">
+                    <i class="fa-solid fa-arrow-up-right-from-square"></i> Open profile
+                  </button>
+                </header>
+
+                <div class="cs-grid">
+                  <div class="cs-field"><span class="cs-field__label">Entity type</span><span class="cs-field__value">{{ Selected.EntityType }}</span></div>
+                  <div class="cs-field"><span class="cs-field__label">Legal structure</span><span class="cs-field__value">{{ Selected.LegalStructureType ?? '—' }}</span></div>
+                  <div class="cs-field"><span class="cs-field__label">Functional currency</span><span class="cs-field__value">{{ Selected.FunctionalCurrencyCode }}</span></div>
+                  <div class="cs-field"><span class="cs-field__label">Reporting currency</span><span class="cs-field__value">{{ ReportingCurrency }}</span></div>
+                  <div class="cs-field"><span class="cs-field__label">Fiscal year start</span><span class="cs-field__value">{{ FiscalYearStart }}</span></div>
+                  <div class="cs-field"><span class="cs-field__label">Status</span><span class="cs-field__value">{{ Selected.IsActive ? 'Active' : 'Inactive' }}</span></div>
+                </div>
+
+                <h3 class="cs-section">Default GL accounts</h3>
+                <div class="cs-accounts">
+                  @for (a of DefaultAccounts; track a.Label) {
+                    <div class="cs-account" [class.cs-account--unset]="!a.ID">
+                      <span class="cs-account__label">{{ a.Label }}</span>
+                      @if (a.ID) {
+                        <span class="cs-account__value">{{ a.Name }}</span>
+                      } @else {
+                        <span class="cs-account__value cs-account__value--unset"><i class="fa-solid fa-minus"></i> not set</span>
+                      }
+                    </div>
+                  }
+                </div>
+              </div>
+            } @else {
+              <mj-empty-state Icon="fa-solid fa-hand-pointer" Title="Select a company"
+                Message="Choose a company from the list to see its accounting configuration.">
+              </mj-empty-state>
+            }
+          </section>
+        </div>
+      }
+    }
+  </mj-page-body>
+</mj-page-layout>

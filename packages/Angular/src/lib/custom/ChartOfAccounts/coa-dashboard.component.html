@@ -1,0 +1,75 @@
+<mj-page-layout>
+  <mj-page-header
+    Title="Chart of Accounts"
+    Icon="fa-solid fa-sitemap"
+    Subtitle="Browse the GL account hierarchy by company — filter by account type or search, and open any account to edit it">
+
+    <div meta>
+      <mj-stat-badge Icon="fa-solid fa-list" [Count]="AllAccounts.length" Label="accounts" Variant="info" />
+      <mj-stat-badge Icon="fa-solid fa-building" [Count]="CompanyCount" Label="companies" Variant="default" />
+    </div>
+
+    <div actions>
+      <mj-refresh-button [Loading]="IsBusy" (Clicked)="loadData()"></mj-refresh-button>
+    </div>
+
+    <div toolbar>
+      <div class="coa-filters">
+        <select class="mj-input coa-companyselect" [(ngModel)]="SelectedCompanyID">
+          <option value="All">All companies</option>
+          @for (c of Companies; track c.ID) {
+            <option [value]="c.ID">{{ c.Name }} ({{ c.CompanyCode }})</option>
+          }
+        </select>
+
+        <div class="coa-chips">
+          <button class="coa-chip" [class.coa-chip--on]="AccountTypeFilter === 'All'" (click)="SetAccountTypeFilter('All')">All types</button>
+          @for (t of AccountTypes; track t) {
+            <button class="coa-chip" [attr.data-variant]="TypeVariant(t)" [class.coa-chip--on]="AccountTypeFilter === t" (click)="SetAccountTypeFilter(t)">{{ t }}</button>
+          }
+        </div>
+
+        <div class="coa-searchbox">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input class="mj-input" type="text" placeholder="Search code or name…" [(ngModel)]="Search" />
+        </div>
+      </div>
+    </div>
+  </mj-page-header>
+
+  <mj-page-body>
+    @if (IsBusy) {
+      <mj-loading text="Loading chart of accounts…"></mj-loading>
+    } @else {
+      @if (LoadError) {
+        <div class="coa-banner coa-banner--error" role="alert">
+          <i class="fa-solid fa-triangle-exclamation"></i> {{ LoadError }}
+        </div>
+      }
+
+      @if (AllAccounts.length === 0) {
+        <mj-empty-state Icon="fa-solid fa-sitemap" Title="No GL accounts yet"
+          Message="Seed a company's default chart of accounts to populate this tree.">
+        </mj-empty-state>
+      } @else if (FilteredTree.length === 0) {
+        <mj-empty-state Icon="fa-solid fa-filter-circle-xmark" Title="No matching accounts"
+          Message="No accounts match the current company, type, or search filters.">
+        </mj-empty-state>
+      } @else {
+        <div class="coa-tree">
+          @for (node of FilteredTree; track node.Row.ID) {
+            <button class="coa-row" (click)="OpenAccount(node.Row)" [style.padding-left]="Indent(node.Depth)">
+              <span class="coa-code">{{ node.Row.Code }}</span>
+              <span class="coa-name">{{ node.Row.Name }}</span>
+              <span class="coa-pill" [attr.data-variant]="TypeVariant(node.Row.AccountType)">{{ node.Row.AccountType }}</span>
+              @if (!node.Row.IsActive) { <span class="coa-tag coa-tag--muted"><i class="fa-solid fa-ban"></i> inactive</span> }
+              <span class="coa-spacer"></span>
+              @if (node.Row.CurrencyCode) { <span class="coa-ccy">{{ node.Row.CurrencyCode }}</span> }
+              <i class="fa-solid fa-arrow-up-right-from-square coa-open"></i>
+            </button>
+          }
+        </div>
+      }
+    }
+  </mj-page-body>
+</mj-page-layout>

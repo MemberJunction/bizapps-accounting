@@ -1,0 +1,112 @@
+/* Company Setup — master/detail hub for accounting company profiles. Design-token-only. */
+
+/* ─── banner ─────────────────────────────────────────────────────────────────── */
+.cs-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+}
+.cs-banner--error { background: var(--mj-status-error-bg); color: var(--mj-status-error-text); border: 1px solid var(--mj-status-error-border); }
+
+/* ─── layout ─────────────────────────────────────────────────────────────────── */
+.cs-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+/* ─── company list ─────────────────────────────────────────────────────────── */
+.cs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--mj-border-default);
+  border-radius: 10px;
+  background: var(--mj-bg-surface);
+  padding: 8px;
+}
+.cs-listitem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.cs-listitem:hover { background: var(--mj-bg-surface-hover); }
+.cs-listitem--on { background: color-mix(in srgb, var(--mj-brand-primary) 12%, var(--mj-bg-surface)); }
+.cs-listitem__name { font-weight: 600; color: var(--mj-text-primary); flex: 1 1 auto; }
+.cs-listitem__code { font-size: 0.75rem; color: var(--mj-text-muted); font-variant-numeric: tabular-nums; }
+
+/* ─── detail card ─────────────────────────────────────────────────────────── */
+.cs-detail { min-width: 0; }
+.cs-card {
+  border: 1px solid var(--mj-border-default);
+  border-radius: 12px;
+  background: var(--mj-bg-surface-card);
+  padding: 20px 24px;
+}
+.cs-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.cs-card__title { margin: 0; font-size: 1.25rem; color: var(--mj-text-primary); }
+.cs-card__code { font-size: 0.8rem; color: var(--mj-text-muted); }
+
+.cs-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 24px;
+}
+.cs-field { display: flex; flex-direction: column; gap: 2px; }
+.cs-field__label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--mj-text-muted); }
+.cs-field__value { color: var(--mj-text-primary); font-weight: 500; }
+
+.cs-section {
+  margin: 24px 0 10px;
+  font-size: 0.9rem;
+  color: var(--mj-text-secondary);
+  border-top: 1px solid var(--mj-border-subtle);
+  padding-top: 16px;
+}
+.cs-accounts { display: flex; flex-direction: column; gap: 6px; }
+.cs-account {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--mj-bg-surface-sunken);
+}
+.cs-account__label { color: var(--mj-text-secondary); font-size: 0.85rem; }
+.cs-account__value { color: var(--mj-text-primary); font-weight: 500; text-align: right; }
+.cs-account__value--unset { color: var(--mj-text-disabled); font-weight: 400; }
+.cs-account--unset { opacity: 0.85; }
+
+.cs-tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.68rem;
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+.cs-tag--muted { background: var(--mj-bg-surface-sunken); color: var(--mj-text-muted); }
+
+@media (max-width: 720px) {
+  .cs-layout { grid-template-columns: 1fr; }
+  .cs-grid { grid-template-columns: 1fr; }
+}

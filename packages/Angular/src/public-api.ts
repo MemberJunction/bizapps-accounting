@@ -33,6 +33,18 @@ import { LoadBatchStatusResource } from './lib/custom/BatchStatus/batch-status-r
 import { LoadIntercompanyFlowDashboard } from './lib/custom/Intercompany/intercompany-flow-dashboard.component';
 import { LoadIntercompanyFlowResource } from './lib/custom/Intercompany/intercompany-flow-resource.component';
 
+// Journal Entries Console (filterable ledger list + expandable lines + reversal + source-order drill).
+import { JournalEntryConsoleModule } from './lib/custom/JournalEntryConsole/je-console.module';
+import { LoadJournalEntryConsoleResource } from './lib/custom/JournalEntryConsole/je-console-resource.component';
+
+// Chart of Accounts tree, Company Setup hub, and Batch Approvals inbox.
+import { ChartOfAccountsModule } from './lib/custom/ChartOfAccounts/chart-of-accounts.module';
+import { LoadChartOfAccountsResource } from './lib/custom/ChartOfAccounts/coa-resource.component';
+import { CompanySetupModule } from './lib/custom/CompanySetup/company-setup.module';
+import { LoadCompanySetupResource } from './lib/custom/CompanySetup/company-setup-resource.component';
+import { BatchApprovalsModule } from './lib/custom/BatchApprovals/batch-approvals.module';
+import { LoadBatchApprovalsResource } from './lib/custom/BatchApprovals/batch-approvals-resource.component';
+
 // Import class registrations manifest
 import { CLASS_REGISTRATIONS } from './lib/generated/class-registrations-manifest';
 
@@ -67,4 +79,16 @@ export function LoadBizAppsAccountingClient(): void {
 
     // Stage 2 — custom forms (Journal Entry, GL Account).
     LoadCustomForms();
+
+    // Journal Entries Console.
+    LoadJournalEntryConsoleResource();
+    void JournalEntryConsoleModule;
+
+    // Chart of Accounts tree, Company Setup hub, Batch Approvals inbox.
+    LoadChartOfAccountsResource();
+    void ChartOfAccountsModule;
+    LoadCompanySetupResource();
+    void CompanySetupModule;
+    LoadBatchApprovalsResource();
+    void BatchApprovalsModule;
 }
