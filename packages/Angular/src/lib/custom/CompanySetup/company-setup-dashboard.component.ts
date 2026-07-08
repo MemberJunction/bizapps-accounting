@@ -1,5 +1,6 @@
 import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@angular/core';
 import { BaseDashboard } from '@memberjunction/ng-shared';
+import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
 import { RegisterClass } from '@memberjunction/global';
 import { CompositeKey, Metadata, RunView, UserInfo } from '@memberjunction/core';
 import { ResourceData } from '@memberjunction/core-entities';
@@ -92,6 +93,7 @@ const MONTH_NAMES = [
 @RegisterClass(BaseDashboard, 'CompanySetupDashboard')
 export class CompanySetupDashboardComponent extends BaseDashboard {
   private cdr = inject(ChangeDetectorRef);
+  private forms = inject(MJFormPresenterService);
 
   public IsBusy = false;
   public LoadError: string | null = null;
@@ -268,7 +270,7 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
   public OpenProfile(): void {
     const c = this.Selected;
     if (!c) return;
-    this.navigationService.OpenEntityRecord(COMPANY_PROFILE_ENTITY, CompositeKey.FromID(c.ID));
+    this.forms.Open({ EntityName: COMPANY_PROFILE_ENTITY, PrimaryKey: CompositeKey.FromID(c.ID), Presentation: 'dialog', Width: '94vw' });
   }
 
   // ─── CFO assignment ─────────────────────────────────────────────────────────

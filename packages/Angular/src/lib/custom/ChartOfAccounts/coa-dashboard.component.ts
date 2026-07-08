@@ -1,5 +1,6 @@
 import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@angular/core';
 import { BaseDashboard } from '@memberjunction/ng-shared';
+import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
 import { RegisterClass } from '@memberjunction/global';
 import { CompositeKey, RunView } from '@memberjunction/core';
 import { ResourceData } from '@memberjunction/core-entities';
@@ -55,6 +56,7 @@ interface TreeNode {
 @RegisterClass(BaseDashboard, 'ChartOfAccountsDashboard')
 export class ChartOfAccountsDashboardComponent extends BaseDashboard {
   private cdr = inject(ChangeDetectorRef);
+  private forms = inject(MJFormPresenterService);
 
   public IsBusy = false;
   public LoadError: string | null = null;
@@ -235,7 +237,7 @@ export class ChartOfAccountsDashboardComponent extends BaseDashboard {
   // ─── actions ──────────────────────────────────────────────────────────────────
 
   public OpenAccount(row: GLAccountRow): void {
-    this.navigationService.OpenEntityRecord(GL_ACCOUNT_ENTITY, CompositeKey.FromID(row.ID));
+    this.forms.Open({ EntityName: GL_ACCOUNT_ENTITY, PrimaryKey: CompositeKey.FromID(row.ID), Presentation: 'dialog', Width: '94vw' });
   }
 }
 

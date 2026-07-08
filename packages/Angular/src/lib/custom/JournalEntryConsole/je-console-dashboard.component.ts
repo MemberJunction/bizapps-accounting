@@ -1,5 +1,6 @@
 import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@angular/core';
 import { BaseDashboard } from '@memberjunction/ng-shared';
+import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
 import { RegisterClass } from '@memberjunction/global';
 import { CompositeKey, RunView } from '@memberjunction/core';
 import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
@@ -61,6 +62,7 @@ interface JELineRow {
 @RegisterClass(BaseDashboard, 'JournalEntryConsoleDashboard')
 export class JournalEntryConsoleDashboardComponent extends BaseDashboard {
   private cdr = inject(ChangeDetectorRef);
+  private forms = inject(MJFormPresenterService);
 
   public readonly Statuses: readonly JEStatus[] = STATUSES;
 
@@ -223,7 +225,7 @@ export class JournalEntryConsoleDashboardComponent extends BaseDashboard {
 
   public OpenSourceOrder(row: JERow): void {
     if (!row.OrderID) return;
-    this.navigationService.OpenEntityRecord(ORDER_ENTITY, CompositeKey.FromID(row.OrderID));
+    this.forms.Open({ EntityName: ORDER_ENTITY, PrimaryKey: CompositeKey.FromID(row.OrderID), Presentation: 'dialog', Width: '94vw' });
   }
 
   public CanReverse(row: JERow): boolean {
