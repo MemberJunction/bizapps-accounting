@@ -1,11 +1,13 @@
 import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@angular/core';
 import { BaseDashboard } from '@memberjunction/ng-shared';
 import { RegisterClass } from '@memberjunction/global';
-import { CompositeKey, RunView } from '@memberjunction/core';
+import { CompositeKey, Metadata, RunView, UserInfo } from '@memberjunction/core';
 import { ResourceData } from '@memberjunction/core-entities';
 import { mjBizAppsAccountingAccountingCompanyProfileEntity } from '@mj-biz-apps/accounting-entities';
+import { mjBizAppsCommonPersonEntity } from '@mj-biz-apps/common-entities';
 
 const COMPANY_PROFILE_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
+const PERSON_ENTITY = 'MJ_BizApps_Common: People';
 
 /** Value-list unions, derived from the generated entity (rule 2c — never hand-copied). */
 type EntityType = mjBizAppsAccountingAccountingCompanyProfileEntity['EntityType'];
@@ -34,6 +36,16 @@ interface CompanyProfileRow {
   RealizedFXGainLossGLAccount: string | null;
   UnrealizedFXGainLossGLAccountID: string | null;
   UnrealizedFXGainLossGLAccount: string | null;
+  // CFO approver (the bizapps-tasks approval gate assigns batch-approval Tasks to this Person).
+  ApprovalCFOPersonID: string | null;
+  ApprovalCFOPerson: string | null;
+}
+
+/** A selectable Person for the CFO picker. */
+interface PersonOption {
+  ID: string;
+  Name: string;
+  LinkedUserID: string | null;
 }
 
 /** One "default GL account" display slot for the detail card. */
@@ -71,6 +83,13 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
   public LoadError: string | null = null;
 
   public Companies: CompanyProfileRow[] = [];
+  public People: PersonOption[] = [];
+
+  // ─── CFO assignment state ────────────────────────────────────────────────────
+  public SelectedPersonID = '';
+  public Saving = false;
+  public ActionMessage: string | null = null;
+  public ActionIsError = false;
 
   private _selectedID: string | null = null;
 
@@ -99,23 +118,29 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
 
   private async loadCompanies(): Promise<void> {
     const rv = new RunView();
-    const res = await rv.RunView<CompanyProfileRow>({
-      EntityName: COMPANY_PROFILE_ENTITY,
-      Fields: [
-        'ID', 'Name', 'CompanyCode', 'EntityType', 'LegalStructureType',
-        'FunctionalCurrencyCode', 'ReportingCurrencyCode', 'FiscalYearStartMonth', 'FiscalYearStartDay', 'IsActive',
-        'AROpenGLAccountID', 'AROpenGLAccount',
-        'DeferredRevenueGLAccountID', 'DeferredRevenueGLAccount',
-        'SalesTaxPayableGLAccountID', 'SalesTaxPayableGLAccount',
-        'RealizedFXGainLossGLAccountID', 'RealizedFXGainLossGLAccount',
-        'UnrealizedFXGainLossGLAccountID', 'UnrealizedFXGainLossGLAccount',
-      ],
-      OrderBy: 'Name ASC',
-      MaxRows: 1000,
-      ResultType: 'simple',
-    });
-    if (!res.Success) throw new Error(res.ErrorMessage ?? 'Failed to load company profiles.');
-    this.Companies = res.Results ?? [];
+    const [companies, people] = await rv.RunViews([
+      {
+        EntityName: COMPANY_PROFILE_ENTITY,
+        Fields: [
+          'ID', 'Name', 'CompanyCode', 'EntityType', 'LegalStructureType',
+          'FunctionalCurrencyCode', 'ReportingCurrencyCode', 'FiscalYearStartMonth', 'FiscalYearStartDay', 'IsActive',
+          'AROpenGLAccountID', 'AROpenGLAccount',
+          'DeferredRevenueGLAccountID', 'DeferredRevenueGLAccount',
+          'SalesTaxPayableGLAccountID', 'SalesTaxPayableGLAccount',
+          'RealizedFXGainLossGLAccountID', 'RealizedFXGainLossGLAccount',
+          'UnrealizedFXGainLossGLAccountID', 'UnrealizedFXGainLossGLAccount',
+          'ApprovalCFOPersonID', 'ApprovalCFOPerson',
+        ],
+        OrderBy: 'Name ASC',
+        MaxRows: 1000,
+        ResultType: 'simple',
+      },
+      { EntityName: PERSON_ENTITY, Fields: ['ID', 'DisplayName', 'FirstName', 'LastName', 'LinkedUserID'], OrderBy: 'LastName ASC, FirstName ASC', MaxRows: 500, ResultType: 'simple' },
+    ]);
+    if (!companies.Success) throw new Error(companies.ErrorMessage ?? 'Failed to load company profiles.');
+    this.Companies = (companies.Results ?? []) as CompanyProfileRow[];
+    this.People = ((people.Results ?? []) as Array<{ ID: string; DisplayName: string | null; FirstName: string; LastName: string; LinkedUserID: string | null }>)
+      .map(p => ({ ID: p.ID, Name: p.DisplayName?.trim() || `${p.FirstName} ${p.LastName}`.trim(), LinkedUserID: p.LinkedUserID }));
     this._selectedID = this.Companies.length > 0 ? this.Companies[0].ID : null;
   }
 
@@ -175,6 +200,109 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
     if (!c) return;
     this.OpenEntityRecord.emit({ EntityName: COMPANY_PROFILE_ENTITY, RecordPKey: CompositeKey.FromID(c.ID) });
   }
+
+  // ─── CFO assignment ─────────────────────────────────────────────────────────
+
+  /** The selected company's current CFO approver name, or null when unassigned. */
+  public get CurrentCFO(): string | null {
+    return this.Selected?.ApprovalCFOPerson ?? null;
+  }
+
+  public get CanAssignSelected(): boolean {
+    return !!this.Selected && !!this.SelectedPersonID && !this.Saving;
+  }
+
+  /**
+   * Make the CURRENT logged-in user the CFO of the selected company — robust to sign-in method
+   * (magic link or otherwise). Finds or creates a Person linked to the current user
+   * (Person.LinkedUserID == user.ID), then assigns it as the company's approver. The server's
+   * approval gate resolves the same link when attributing decisions, so "approve as me" works.
+   */
+  public async MakeMeCFO(): Promise<void> {
+    const company = this.Selected;
+    if (!company || this.Saving) return;
+    this.beginSave();
+    try {
+      const user = this.ProviderToUse.CurrentUser;
+      if (!user) { this.setError('No current user is available.'); return; }
+      const personId = await this.findOrCreateSelfPerson(user);
+      if (!personId) return;
+      await this.setCompanyCFO(company.ID, personId, `You are now the CFO approver for ${company.Name}.`);
+    } catch (e) {
+      this.setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      this.endSave();
+    }
+  }
+
+  /** Assign an existing Person (picked from the dropdown) as the selected company's CFO. */
+  public async AssignSelectedCFO(): Promise<void> {
+    const company = this.Selected;
+    if (!company || !this.SelectedPersonID || this.Saving) return;
+    this.beginSave();
+    try {
+      const person = this.People.find(p => p.ID === this.SelectedPersonID);
+      await this.setCompanyCFO(company.ID, this.SelectedPersonID, `CFO approver set to ${person?.Name ?? 'the selected person'} for ${company.Name}.`);
+      this.SelectedPersonID = '';
+    } catch (e) {
+      this.setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      this.endSave();
+    }
+  }
+
+  /** Clear the selected company's CFO approver. */
+  public async ClearCFO(): Promise<void> {
+    const company = this.Selected;
+    if (!company || this.Saving) return;
+    this.beginSave();
+    try {
+      await this.setCompanyCFO(company.ID, null, `CFO approver cleared for ${company.Name}.`);
+    } catch (e) {
+      this.setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      this.endSave();
+    }
+  }
+
+  /** Find the Person linked to this user (LinkedUserID), or create one from the user's identity. */
+  private async findOrCreateSelfPerson(user: UserInfo): Promise<string | null> {
+    const existing = this.People.find(p => p.LinkedUserID && p.LinkedUserID.toUpperCase() === user.ID.toUpperCase());
+    if (existing) return existing.ID;
+
+    const md = new Metadata();
+    const person = await md.GetEntityObject<mjBizAppsCommonPersonEntity>(PERSON_ENTITY);
+    person.NewRecord();
+    person.FirstName = user.FirstName?.trim() || user.Name?.split(' ')[0]?.trim() || 'Test';
+    person.LastName = user.LastName?.trim() || user.Name?.split(' ').slice(1).join(' ').trim() || 'User';
+    person.Email = user.Email || `${user.ID}@mjdev.local`;
+    person.LinkedUserID = user.ID;
+    if (!(await person.Save())) {
+      this.setError(`Could not create your Person record: ${person.LatestResult?.CompleteMessage ?? 'unknown error'}`);
+      return null;
+    }
+    return person.ID;
+  }
+
+  /** Set (or clear) a company's ApprovalCFOPersonID, then reload so the detail reflects it. */
+  private async setCompanyCFO(companyID: string, personID: string | null, successMessage: string): Promise<void> {
+    const md = new Metadata();
+    const acp = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(COMPANY_PROFILE_ENTITY);
+    if (!(await acp.Load(companyID))) { this.setError('Could not load the company profile.'); return; }
+    acp.ApprovalCFOPersonID = personID;
+    if (!(await acp.Save())) {
+      this.setError(`Could not save the CFO: ${acp.LatestResult?.CompleteMessage ?? 'unknown error'}`);
+      return;
+    }
+    this.ActionMessage = successMessage;
+    this.ActionIsError = false;
+    await this.loadCompanies();
+    this._selectedID = companyID;
+  }
+
+  private beginSave(): void { this.Saving = true; this.ActionMessage = null; this.cdr.markForCheck(); }
+  private endSave(): void { this.Saving = false; this.cdr.markForCheck(); }
+  private setError(message: string): void { this.ActionMessage = message; this.ActionIsError = true; this.cdr.markForCheck(); }
 }
 
 /** Tree-shaking prevention — called from public-api.ts. */

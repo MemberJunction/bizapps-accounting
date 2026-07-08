@@ -74,6 +74,41 @@
                     </div>
                   }
                 </div>
+
+                <h3 class="cs-section"><i class="fa-solid fa-user-tie"></i> CFO approver</h3>
+                <p class="cs-hint">The CFO approver receives this company's JE-batch approval tasks. A batch can only be built + approved when every involved company has one.</p>
+                <div class="cs-cfo">
+                  <div class="cs-cfo__current">
+                    <span class="cs-cfo__label">Current</span>
+                    @if (CurrentCFO) {
+                      <span class="cs-cfo__name"><i class="fa-solid fa-user-check"></i> {{ CurrentCFO }}</span>
+                      <button mjButton variant="flat" size="sm" [disabled]="Saving" (click)="ClearCFO()"><i class="fa-solid fa-xmark"></i> Clear</button>
+                    } @else {
+                      <span class="cs-cfo__name cs-cfo__name--unset"><i class="fa-solid fa-user-slash"></i> not set</span>
+                    }
+                  </div>
+
+                  <div class="cs-cfo__actions">
+                    <button mjButton variant="primary" size="sm" [disabled]="Saving" (click)="MakeMeCFO()">
+                      @if (Saving) { <i class="fa-solid fa-spinner fa-spin"></i> } @else { <i class="fa-solid fa-user-plus"></i> }
+                      Make me the CFO
+                    </button>
+                    <span class="cs-cfo__or">or assign someone</span>
+                    <select class="mj-input cs-cfo__select" [(ngModel)]="SelectedPersonID">
+                      <option value="" disabled>Select a person…</option>
+                      @for (p of People; track p.ID) { <option [value]="p.ID">{{ p.Name }}</option> }
+                    </select>
+                    <button mjButton variant="success" size="sm" [disabled]="!CanAssignSelected" (click)="AssignSelectedCFO()">
+                      <i class="fa-solid fa-check"></i> Assign
+                    </button>
+                  </div>
+
+                  @if (ActionMessage) {
+                    <div class="cs-banner" [class.cs-banner--error]="ActionIsError" [class.cs-banner--success]="!ActionIsError" role="status">
+                      <i class="fa-solid" [class.fa-circle-check]="!ActionIsError" [class.fa-triangle-exclamation]="ActionIsError"></i> {{ ActionMessage }}
+                    </div>
+                  }
+                </div>
               </div>
             } @else {
               <mj-empty-state Icon="fa-solid fa-hand-pointer" Title="Select a company"
