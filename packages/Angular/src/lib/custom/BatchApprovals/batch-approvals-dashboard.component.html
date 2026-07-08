@@ -2,7 +2,7 @@
   <mj-page-header
     Title="Approvals"
     Icon="fa-solid fa-clipboard-check"
-    Subtitle="Open batch approvals — review each JE batch awaiting CFO sign-off and approve or reject it in place">
+    Subtitle="Open batch approvals — review each journal-entry batch awaiting CFO sign-off and approve or reject it in place">
 
     <div meta>
       <mj-stat-badge Icon="fa-solid fa-clipboard-check" [Count]="PendingCount" Label="pending approvals" Variant="warning" />
@@ -31,7 +31,7 @@
 
       @if (Rows.length === 0) {
         <mj-empty-state Icon="fa-solid fa-clipboard-check" Title="No pending approvals"
-          Message="No batch approvals are waiting. Build and dispatch a JE batch to raise a new approval request.">
+          Message="No batch approvals are waiting. Build and dispatch a journal-entry batch to raise a new approval request.">
         </mj-empty-state>
       } @else {
         <div class="ba-list">

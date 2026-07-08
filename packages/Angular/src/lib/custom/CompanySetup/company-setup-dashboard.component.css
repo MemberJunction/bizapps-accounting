@@ -84,18 +84,33 @@
 }
 .cs-accounts { display: flex; flex-direction: column; gap: 6px; }
 .cs-account {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(120px, 160px) minmax(0, 1fr) minmax(180px, 240px);
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   padding: 8px 12px;
   border-radius: 8px;
   background: var(--mj-bg-surface-sunken);
 }
+@media (max-width: 720px) {
+  .cs-account { grid-template-columns: 1fr; }
+}
 .cs-account__label { color: var(--mj-text-secondary); font-size: 0.85rem; }
-.cs-account__value { color: var(--mj-text-primary); font-weight: 500; text-align: right; }
+.cs-account__value { color: var(--mj-text-primary); font-weight: 500; display: inline-flex; align-items: baseline; gap: 8px; min-width: 0; }
+.cs-account__code {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--mj-text-primary);
+  background: color-mix(in srgb, var(--mj-brand-primary) 12%, var(--mj-bg-surface));
+  padding: 1px 7px;
+  border-radius: 5px;
+  font-size: 0.8rem;
+  flex: 0 0 auto;
+}
+.cs-account__name { color: var(--mj-text-secondary); font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cs-account__value--unset { color: var(--mj-text-disabled); font-weight: 400; }
-.cs-account--unset { opacity: 0.85; }
+.cs-account__select { width: 100%; }
+.cs-account--unset { opacity: 0.95; }
 
 .cs-tag {
   display: inline-flex;

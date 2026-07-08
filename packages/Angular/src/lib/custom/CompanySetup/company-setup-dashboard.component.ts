@@ -8,6 +8,10 @@ import { mjBizAppsCommonPersonEntity } from '@mj-biz-apps/common-entities';
 
 const COMPANY_PROFILE_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 const PERSON_ENTITY = 'MJ_BizApps_Common: People';
+const GL_ACCOUNT_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
+
+/** The five editable default-account slots on a company profile. */
+type DefaultAccountKey = 'AROpen' | 'DeferredRevenue' | 'SalesTaxPayable' | 'RealizedFX' | 'UnrealizedFX';
 
 /** Value-list unions, derived from the generated entity (rule 2c — never hand-copied). */
 type EntityType = mjBizAppsAccountingAccountingCompanyProfileEntity['EntityType'];
@@ -50,9 +54,19 @@ interface PersonOption {
 
 /** One "default GL account" display slot for the detail card. */
 interface DefaultAccountSlot {
+  Key: DefaultAccountKey;
   Label: string;
   ID: string | null;
   Name: string | null;
+  Code: string | null;
+}
+
+/** A GL account option for the company-scoped default-account pickers. */
+interface GLAccountOption {
+  ID: string;
+  Code: string;
+  Name: string;
+  CompanyID: string;
 }
 
 const MONTH_NAMES = [
@@ -84,6 +98,8 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
 
   public Companies: CompanyProfileRow[] = [];
   public People: PersonOption[] = [];
+  public GLAccounts: GLAccountOption[] = [];
+  private glByID = new Map<string, GLAccountOption>();
 
   // ─── CFO assignment state ────────────────────────────────────────────────────
   public SelectedPersonID = '';
@@ -118,7 +134,7 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
 
   private async loadCompanies(): Promise<void> {
     const rv = new RunView();
-    const [companies, people] = await rv.RunViews([
+    const [companies, people, accounts] = await rv.RunViews([
       {
         EntityName: COMPANY_PROFILE_ENTITY,
         Fields: [
@@ -136,11 +152,14 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
         ResultType: 'simple',
       },
       { EntityName: PERSON_ENTITY, Fields: ['ID', 'DisplayName', 'FirstName', 'LastName', 'LinkedUserID'], OrderBy: 'LastName ASC, FirstName ASC', MaxRows: 500, ResultType: 'simple' },
+      { EntityName: GL_ACCOUNT_ENTITY, ExtraFilter: `IsActive=1`, Fields: ['ID', 'Code', 'Name', 'CompanyID'], OrderBy: 'Code ASC', MaxRows: 5000, ResultType: 'simple' },
     ]);
     if (!companies.Success) throw new Error(companies.ErrorMessage ?? 'Failed to load company profiles.');
     this.Companies = (companies.Results ?? []) as CompanyProfileRow[];
     this.People = ((people.Results ?? []) as Array<{ ID: string; DisplayName: string | null; FirstName: string; LastName: string; LinkedUserID: string | null }>)
       .map(p => ({ ID: p.ID, Name: p.DisplayName?.trim() || `${p.FirstName} ${p.LastName}`.trim(), LinkedUserID: p.LinkedUserID }));
+    this.GLAccounts = (accounts.Results ?? []) as GLAccountOption[];
+    this.glByID = new Map(this.GLAccounts.map(a => [a.ID.toUpperCase(), a]));
     this._selectedID = this.Companies.length > 0 ? this.Companies[0].ID : null;
   }
 
@@ -185,12 +204,63 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
     const c = this.Selected;
     if (!c) return [];
     return [
-      { Label: 'AR Open', ID: c.AROpenGLAccountID, Name: c.AROpenGLAccount },
-      { Label: 'Deferred Revenue', ID: c.DeferredRevenueGLAccountID, Name: c.DeferredRevenueGLAccount },
-      { Label: 'Sales Tax Payable', ID: c.SalesTaxPayableGLAccountID, Name: c.SalesTaxPayableGLAccount },
-      { Label: 'Realized FX Gain/Loss', ID: c.RealizedFXGainLossGLAccountID, Name: c.RealizedFXGainLossGLAccount },
-      { Label: 'Unrealized FX Gain/Loss', ID: c.UnrealizedFXGainLossGLAccountID, Name: c.UnrealizedFXGainLossGLAccount },
+      this.slot('AROpen', 'AR Open', c.AROpenGLAccountID, c.AROpenGLAccount),
+      this.slot('DeferredRevenue', 'Deferred Revenue', c.DeferredRevenueGLAccountID, c.DeferredRevenueGLAccount),
+      this.slot('SalesTaxPayable', 'Sales Tax Payable', c.SalesTaxPayableGLAccountID, c.SalesTaxPayableGLAccount),
+      this.slot('RealizedFX', 'Realized FX Gain/Loss', c.RealizedFXGainLossGLAccountID, c.RealizedFXGainLossGLAccount),
+      this.slot('UnrealizedFX', 'Unrealized FX Gain/Loss', c.UnrealizedFXGainLossGLAccountID, c.UnrealizedFXGainLossGLAccount),
     ];
+  }
+
+  private slot(key: DefaultAccountKey, label: string, id: string | null, name: string | null): DefaultAccountSlot {
+    return { Key: key, Label: label, ID: id, Name: name, Code: id ? this.glByID.get(id.toUpperCase())?.Code ?? null : null };
+  }
+
+  /** GL accounts belonging to the selected company (profile ID == company ID, IsA pattern). */
+  public get AccountsForSelectedCompany(): GLAccountOption[] {
+    const c = this.Selected;
+    if (!c) return [];
+    const target = c.ID.toUpperCase();
+    return this.GLAccounts.filter(a => a.CompanyID.toUpperCase() === target);
+  }
+
+  /** Assign (or clear) a default GL account on the selected company, then reload. */
+  public async SetDefaultAccount(key: DefaultAccountKey, glAccountID: string): Promise<void> {
+    const company = this.Selected;
+    if (!company || this.Saving) return;
+    this.beginSave();
+    try {
+      const md = new Metadata();
+      const acp = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(COMPANY_PROFILE_ENTITY);
+      if (!(await acp.Load(company.ID))) { this.setError('Could not load the company profile.'); return; }
+      const value = glAccountID || null;
+      this.applyDefaultAccount(acp, key, value);
+      if (!(await acp.Save())) { this.setError(`Could not save the account: ${acp.LatestResult?.CompleteMessage ?? 'unknown error'}`); return; }
+      const acct = value ? this.glByID.get(value.toUpperCase()) : null;
+      this.ActionMessage = value ? `Set ${this.labelFor(key)} to ${acct?.Code ?? ''} ${acct?.Name ?? ''}.` : `Cleared ${this.labelFor(key)}.`;
+      this.ActionIsError = false;
+      await this.loadCompanies();
+      this._selectedID = company.ID;
+    } catch (e) {
+      this.setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      this.endSave();
+    }
+  }
+
+  /** Typed writer — sets the specific profile FK for each slot (no stringly-typed .Set()). */
+  private applyDefaultAccount(acp: mjBizAppsAccountingAccountingCompanyProfileEntity, key: DefaultAccountKey, value: string | null): void {
+    switch (key) {
+      case 'AROpen': acp.AROpenGLAccountID = value; break;
+      case 'DeferredRevenue': acp.DeferredRevenueGLAccountID = value; break;
+      case 'SalesTaxPayable': acp.SalesTaxPayableGLAccountID = value; break;
+      case 'RealizedFX': acp.RealizedFXGainLossGLAccountID = value; break;
+      case 'UnrealizedFX': acp.UnrealizedFXGainLossGLAccountID = value; break;
+    }
+  }
+
+  private labelFor(key: DefaultAccountKey): string {
+    return this.DefaultAccounts.find(s => s.Key === key)?.Label ?? key;
   }
 
   // ─── actions ──────────────────────────────────────────────────────────────────
@@ -198,7 +268,7 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
   public OpenProfile(): void {
     const c = this.Selected;
     if (!c) return;
-    this.OpenEntityRecord.emit({ EntityName: COMPANY_PROFILE_ENTITY, RecordPKey: CompositeKey.FromID(c.ID) });
+    this.navigationService.OpenEntityRecord(COMPANY_PROFILE_ENTITY, CompositeKey.FromID(c.ID));
   }
 
   // ─── CFO assignment ─────────────────────────────────────────────────────────

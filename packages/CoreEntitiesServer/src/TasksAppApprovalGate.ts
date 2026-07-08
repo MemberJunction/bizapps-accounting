@@ -73,9 +73,9 @@ export class TasksAppApprovalGate implements BatchApprovalGate {
     const batchEntityId = this.batchEntityId();
     const personEntityId = this.resolvePersonEntityId();
     await this.orchestration.CreateApprovalRequest({
-      Name: `Approve JE Batch #${batch.BatchNumber}`,
+      Name: `Approve Journal Entry Batch #${batch.BatchNumber}`,
       TypeID: typeId,
-      Description: `CFO approval required to dispatch JE Batch #${batch.BatchNumber} to ${batch.TargetSystem}.`,
+      Description: `CFO approval required to dispatch Journal Entry Batch #${batch.BatchNumber} to ${batch.TargetSystem}.`,
       Priority: 'High',
       LinkEntityID: batchEntityId,
       LinkRecordID: batchId,

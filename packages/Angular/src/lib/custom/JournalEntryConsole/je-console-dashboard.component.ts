@@ -223,7 +223,7 @@ export class JournalEntryConsoleDashboardComponent extends BaseDashboard {
 
   public OpenSourceOrder(row: JERow): void {
     if (!row.OrderID) return;
-    this.OpenEntityRecord.emit({ EntityName: ORDER_ENTITY, RecordPKey: CompositeKey.FromID(row.OrderID) });
+    this.navigationService.OpenEntityRecord(ORDER_ENTITY, CompositeKey.FromID(row.OrderID));
   }
 
   public CanReverse(row: JERow): boolean {

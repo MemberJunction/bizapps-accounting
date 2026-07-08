@@ -235,7 +235,7 @@ export class ChartOfAccountsDashboardComponent extends BaseDashboard {
   // ─── actions ──────────────────────────────────────────────────────────────────
 
   public OpenAccount(row: GLAccountRow): void {
-    this.OpenEntityRecord.emit({ EntityName: GL_ACCOUNT_ENTITY, RecordPKey: CompositeKey.FromID(row.ID) });
+    this.navigationService.OpenEntityRecord(GL_ACCOUNT_ENTITY, CompositeKey.FromID(row.ID));
   }
 }
 

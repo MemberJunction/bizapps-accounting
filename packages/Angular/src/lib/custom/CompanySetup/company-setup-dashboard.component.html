@@ -62,21 +62,31 @@
                 </div>
 
                 <h3 class="cs-section">Default GL accounts</h3>
+                <p class="cs-hint">Map each role to one of this company's GL accounts — the order-booking engine resolves these when a company-level account is needed.</p>
                 <div class="cs-accounts">
-                  @for (a of DefaultAccounts; track a.Label) {
+                  @for (a of DefaultAccounts; track a.Key) {
                     <div class="cs-account" [class.cs-account--unset]="!a.ID">
                       <span class="cs-account__label">{{ a.Label }}</span>
-                      @if (a.ID) {
-                        <span class="cs-account__value">{{ a.Name }}</span>
-                      } @else {
-                        <span class="cs-account__value cs-account__value--unset"><i class="fa-solid fa-minus"></i> not set</span>
-                      }
+                      <span class="cs-account__value">
+                        @if (a.ID) {
+                          <span class="cs-account__code">{{ a.Code ?? '—' }}</span>
+                          <span class="cs-account__name">{{ a.Name }}</span>
+                        } @else {
+                          <span class="cs-account__value--unset"><i class="fa-solid fa-minus"></i> not set</span>
+                        }
+                      </span>
+                      <select class="mj-input cs-account__select" [ngModel]="a.ID ?? ''" (ngModelChange)="SetDefaultAccount(a.Key, $event)" [disabled]="Saving">
+                        <option value="">— none —</option>
+                        @for (opt of AccountsForSelectedCompany; track opt.ID) {
+                          <option [value]="opt.ID">{{ opt.Code }} — {{ opt.Name }}</option>
+                        }
+                      </select>
                     </div>
                   }
                 </div>
 
                 <h3 class="cs-section"><i class="fa-solid fa-user-tie"></i> CFO approver</h3>
-                <p class="cs-hint">The CFO approver receives this company's JE-batch approval tasks. A batch can only be built + approved when every involved company has one.</p>
+                <p class="cs-hint">The CFO approver receives this company's journal-entry-batch approval tasks. A batch can only be built + approved when every involved company has one.</p>
                 <div class="cs-cfo">
                   <div class="cs-cfo__current">
                     <span class="cs-cfo__label">Current</span>
