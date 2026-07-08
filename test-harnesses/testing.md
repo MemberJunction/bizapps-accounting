@@ -48,7 +48,8 @@ WITH their features; new rows cover the new invariants._
 | **Engine: atomic write (mid-write failure → ZERO partial rows, raw-SQL proven)** | — | ✓ | — | — |
 | **Engine: ResolveLinkedAccount (role links, date windows, ordered dims)** | ✓ | ✓ | — | — |
 | **Engine: op over GraphQL ExecuteRemoteOperation (A5 "runs on local")** | — | — | ✓ | — |
-| GUI dashboards + forms + nav | — | — | — | ✓ |
+| GUI dashboards (Batch Dispatch + 4 read-model) + forms + nav | — | — | — | ✓ |
+| GUI dashboards NEW (JE Console · Chart of Accounts · Company Setup · Approvals) | — | — | — | ✗ (ad-hoc headed walks only, 0 errors — no committed Tier-5 specs; see Ledger) |
 
 **No open ✗.** Every cell is covered or a justified ⚠ below.
 
@@ -64,15 +65,23 @@ WITH their features; new rows cover the new invariants._
 
 ## Ledger — tests still to create + open questions (roll-through: log, proceed, circle back)
 
-**Tests to create:** _none open._
-- ✅ GLAccountLink / GLAccountLinkDimension — covered 2026-07-06 with the AM-7 step-4 engine:
-  `pickActiveLinkIndex` unit suite (windows/status/tie-break) + `engine-runtime.ts` E4 (real link
-  rows, role by name/ID, ordered dimensions, unknown-record/role nulls).
+**Tests to create — ✗ GAP (management UI, 2026-07-08):** the new Explorer dashboards below were validated
+**ad-hoc** with headed Playwright walks (rendered + drove the flow, **0 console/pageerror**) but have **NO
+committed Tier-5 specs** yet — treat as a coverage gap to fill (Tier-5 `dashboards.spec.ts` pattern):
+  - **Journal Entries Console** — filter/status chips, expand→Dr/Cr lines, source-order drill, Generate reversal.
+  - **Chart of Accounts** tree — company selector, type filter, drill to account (now via in-app form dialog).
+  - **Company Setup** — CFO assign ("Make me the CFO"), default-account pickers + code display, Open profile dialog.
+  - **Batch Approvals** inbox — pending-approval list + Approve/Reject.
+  (Existing Batch Dispatch + 4 read-model dashboards keep their Tier-5 10/10.)
+- ✅ GLAccountLink / GLAccountLinkDimension — covered 2026-07-06 (engine step-4): `pickActiveLinkIndex` unit +
+  `engine-runtime.ts` E4.
 
-**Open questions for the human:** _none open._
-- ✅ Due-to/from semantics **confirmed** (Marcelo): Accounting does **no** intercompany netting —
-  Payments owns it. Accounting receives + batches the tagged JEs as-is. Tested at T2
-  (`batching-multicompany-runtime.ts`) + T3 (`batching-scenarios-api.ts`).
+**Open questions for the human → see `instances/accounting-engine-dev/QUESTIONS.md`:**
+- **Batch reject semantics** (Q4) — reject records the decision but the batch stays `Pending` (no visible effect);
+  the natural fix (cancel batch + un-batch entries) is blocked by the JE immutability invariant. Needs Robert.
+- **buildBatch atomicity** (Q5) — batch + entry-lock persist before the approval gate runs → orphaned task-less
+  batches. Reorder/transaction fix pending Robert's OK.
+- ✅ Due-to/from semantics **confirmed** (Marcelo): Accounting does **no** intercompany netting — Payments owns it.
 
 ## Harness inventory + run commands (cwd = instance worktree root)
 
