@@ -1,5 +1,11 @@
 # BizApps Accounting — Design & Build Roadmap (v2)
 
+> **🚦 NEWER DECISIONS (2026-07-08):** **`plans/2026-07-08-robert-meeting-decisions.md`** reworks the **batching
+> lock/approval model** — batches get **levels of locking** (pre-approval = preliminary/reversible; approval =
+> permanent), **reject UNLOCKS** the entries back to the candidate pool, and an open batch can be **regenerated**.
+> This **supersedes** the current "`Batched` = permanent immutable lock" here and requires a redesign of
+> `trg_JournalEntry_Immutability`. Read that doc before touching batching/immutability.
+>
 > **Status:** Design / pre-implementation roadmap 
 > **authoritative design docs for the build.**: `bizapps-accounting-master.md` and `Transcript of Amith's Explanation.docx`
 > **Primary input:** `Transcript of Amith's Explanation.md` (Amith Nagarajan, 2026-06-05) + analysis of the current repo, `bizapps-common` open-app patterns, and MJ Open-App standards.
