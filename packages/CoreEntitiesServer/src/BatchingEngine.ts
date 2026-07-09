@@ -159,10 +159,25 @@ export async function buildBatch(
   const { totalDebits, totalCredits } = await writeSummaryLines(batch.ID, targetSystem, groups, contextUser);
   await setControlTotals(batch, totalDebits, totalCredits);
   await lockJournalEntries(jeIds, batch.ID, contextUser);
-  if (gate.onBatchBuilt) await gate.onBatchBuilt(batch.ID, contextUser);
+  await raiseApprovalTaskOrReverse(batch.ID, gate, contextUser);
 
   const companyCount = new Set(groups.map(g => g.companyId)).size;
   return { batchId: batch.ID, summaryLineCount: groups.length, totalDebits, totalCredits, jeCount: jeIds.length, companyCount };
+}
+
+/**
+ * Raise the approval task; if the gate throws (e.g. a company has no CFO) do NOT leave a locked, task-less
+ * batch stranded — with reversible preliminary locks we cancel it (unlock JEs + Cancelled) and rethrow, so
+ * the caller sees the real failure and the candidate pool is intact. (Fixes the Q5 orphan-batch atomicity gap.)
+ */
+async function raiseApprovalTaskOrReverse(batchId: string, gate: BatchApprovalGate, contextUser: UserInfo): Promise<void> {
+  if (!gate.onBatchBuilt) return;
+  try {
+    await gate.onBatchBuilt(batchId, contextUser);
+  } catch (e) {
+    await cancelBatch(batchId, contextUser);
+    throw e;
+  }
 }
 
 async function loadPendingJEIds(contextUser: UserInfo): Promise<string[]> {
@@ -323,6 +338,105 @@ async function lockJournalEntries(jeIds: string[], batchId: string, contextUser:
     je.BatchID = batchId;
     je.Status = 'Batched';
     if (!(await je.Save())) throw new Error(`buildBatch: failed to lock JE ${jeId}: ${je.LatestResult?.CompleteMessage ?? 'unknown'}`);
+  }
+}
+
+// ─── cancelBatch / regenerateBatch — reverse a PRELIMINARY (unapproved) lock ──
+
+/**
+ * Reverse an unapproved (Pending) batch: return its journal entries to the candidate pool, clear its summary,
+ * and mark it Cancelled. Valid ONLY while Status='Pending' (approval makes the lock permanent — plan §6). This
+ * is the reject path's engine action (task #12) and the atomicity-safety net for a failed approval-task raise.
+ */
+export async function cancelBatch(
+  batchId: string, contextUser: UserInfo,
+): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
+  const md = new Metadata();
+  const batch = await md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
+  if (!(await batch.Load(batchId))) throw new Error(`cancelBatch: batch ${batchId} not found`);
+  if (batch.Status !== 'Pending') {
+    throw new Error(`cancelBatch: batch ${batchId} is ${batch.Status}; only a Pending (unapproved) batch can be cancelled/reversed`);
+  }
+  // Order matters: unlock the JEs while the batch is still Pending — the immutability trigger permits the
+  // Batched→Pending reversal only when the owning batch's status is Pending.
+  await unlockJournalEntries(batchId, contextUser);
+  await clearSummaryLines(batchId, contextUser);
+  batch.Status = 'Cancelled';
+  if (!(await batch.Save())) throw new Error(`cancelBatch: Pending→Cancelled failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
+  return batch;
+}
+
+/**
+ * Regenerate an OPEN (Pending) batch in place: unlock its current JEs + clear its summary, then re-gather ALL
+ * current candidates (every unbatched Pending JE, incl. ones added since) and rebuild the netted summary on the
+ * SAME batch record. Candidate FILTERS are a future enhancement (plan §13) — for now it takes everything pending.
+ */
+export async function regenerateBatch(
+  batchId: string, targetSystem: BatchTargetSystem, contextUser: UserInfo,
+): Promise<BuildBatchResult> {
+  const md = new Metadata();
+  const batch = await md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
+  if (!(await batch.Load(batchId))) throw new Error(`regenerateBatch: batch ${batchId} not found`);
+  if (batch.Status !== 'Pending') {
+    throw new Error(`regenerateBatch: batch ${batchId} is ${batch.Status}; only a Pending batch can be regenerated`);
+  }
+  await unlockJournalEntries(batchId, contextUser);
+  await clearSummaryLines(batchId, contextUser);
+
+  const jeIds = await loadPendingJEIds(contextUser);
+  const groups = netLines(await loadNettableLines(jeIds, contextUser));
+  const { totalDebits, totalCredits } = await writeSummaryLines(batch.ID, targetSystem, groups, contextUser);
+  batch.TargetSystem = targetSystem;
+  batch.TotalEntries = jeIds.length;
+  await setControlTotals(batch, totalDebits, totalCredits);
+  await lockJournalEntries(jeIds, batch.ID, contextUser);
+
+  const companyCount = new Set(groups.map(g => g.companyId)).size;
+  return { batchId: batch.ID, summaryLineCount: groups.length, totalDebits, totalCredits, jeCount: jeIds.length, companyCount };
+}
+
+/**
+ * Reverse the preliminary lock on every Batched JE in the batch: Status Batched→Pending, BatchID→NULL.
+ * MUST run while the batch is still Pending (the reworked immutability trigger permits the unlock only then).
+ */
+async function unlockJournalEntries(batchId: string, contextUser: UserInfo): Promise<void> {
+  const rv = new RunView();
+  const res = await rv.RunView<{ ID: string }>(
+    { EntityName: JE_ENTITY, ExtraFilter: `BatchID='${batchId}' AND Status='Batched'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true },
+    contextUser,
+  );
+  const md = new Metadata();
+  for (const row of res.Results ?? []) {
+    const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
+    await je.Load(row.ID);
+    je.Status = 'Pending';
+    je.BatchID = null;
+    if (!(await je.Save())) throw new Error(`unlockJournalEntries: JE ${row.ID} Batched→Pending failed: ${je.LatestResult?.CompleteMessage ?? 'unknown'}`);
+  }
+}
+
+/** Delete a Pending batch's summary line items (+ their dimension tags). Allowed while the batch isn't Approved. */
+async function clearSummaryLines(batchId: string, contextUser: UserInfo): Promise<void> {
+  const rv = new RunView();
+  const res = await rv.RunView<mjBizAppsAccountingJournalEntryBatchLineItemEntity>(
+    { EntityName: JEBLI_ENTITY, ExtraFilter: `BatchID='${batchId}'`, ResultType: 'entity_object', BypassCache: true },
+    contextUser,
+  );
+  for (const li of res.Results ?? []) {
+    await clearLineDimensions(li.ID, contextUser);
+    if (!(await li.Delete())) throw new Error(`clearSummaryLines: delete line ${li.ID} failed: ${li.LatestResult?.CompleteMessage ?? 'unknown'}`);
+  }
+}
+
+/** Delete the dimension tags on a batch summary line (FK children — must go before the line item). */
+async function clearLineDimensions(batchLineItemId: string, contextUser: UserInfo): Promise<void> {
+  const rv = new RunView();
+  const res = await rv.RunView<mjBizAppsAccountingJournalEntryBatchLineDimensionEntity>(
+    { EntityName: JEBLD_ENTITY, ExtraFilter: `JournalEntryBatchLineItemID='${batchLineItemId}'`, ResultType: 'entity_object', BypassCache: true },
+    contextUser,
+  );
+  for (const d of res.Results ?? []) {
+    if (!(await d.Delete())) throw new Error(`clearLineDimensions: delete dim ${d.ID} failed: ${d.LatestResult?.CompleteMessage ?? 'unknown'}`);
   }
 }
 

@@ -38,6 +38,8 @@ export {
   buildBatch,
   approveBatch,
   sendBatch,
+  cancelBatch,
+  regenerateBatch,
   netLines,
   resolveExternalAccount,
   mockErpPoster,

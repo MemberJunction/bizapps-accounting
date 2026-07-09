@@ -32,6 +32,8 @@ import {
   buildBatch,
   approveBatch,
   sendBatch,
+  cancelBatch,
+  regenerateBatch,
   mockErpPoster,
   TasksAppApprovalGate,
   type BatchTargetSystem,
@@ -160,11 +162,50 @@ export class BatchDispatchResolver extends ResolverBase {
       if (decision === 'Approved' || decision === 'ApprovedWithConditions') {
         await approveBatch(batchID, user.ID, user);
       }
+      // A rejection REVERSES the (still-preliminary) lock: the batch is Cancelled and its journal entries
+      // return to the candidate pool (task #12 — reject now has a visible financial effect, not a dead no-op).
+      if (decision === 'Rejected') {
+        await cancelBatch(batchID, user);
+      }
       return { Success: true };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       LogError(`RecordJEBatchDecision failed: ${msg}`);
       return { Success: false, ErrorMessage: msg };
+    }
+  }
+
+  /**
+   * Regenerate an OPEN (Pending) batch in place: unlock its current JEs, re-gather ALL current candidates
+   * (everything unbatched Pending, incl. any added since), and rebuild the netted summary on the same batch.
+   * Only a Pending batch can be regenerated (approval makes the lock permanent).
+   */
+  @Mutation(() => BuildJEBatchResult)
+  async RegenerateJEBatch(
+    @Arg('batchID', () => ID) batchID: string,
+    @Arg('targetSystem', () => String) targetSystem: string,
+    @Ctx() { userPayload }: AppContext,
+  ): Promise<BuildJEBatchResult> {
+    const empty = { Success: false, SummaryLineCount: 0, TotalDebits: 0, TotalCredits: 0, JECount: 0, CompanyCount: 0, NothingToBatch: false };
+    try {
+      const user = this.GetUserFromPayload(userPayload);
+      if (!user) return { ...empty, ErrorMessage: 'No authenticated user.' };
+
+      const result = await regenerateBatch(batchID, targetSystem as BatchTargetSystem, user);
+      return {
+        Success: true,
+        NothingToBatch: result.jeCount === 0,
+        BatchID: result.batchId,
+        SummaryLineCount: result.summaryLineCount,
+        TotalDebits: result.totalDebits,
+        TotalCredits: result.totalCredits,
+        JECount: result.jeCount,
+        CompanyCount: result.companyCount,
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      LogError(`RegenerateJEBatch failed: ${msg}`);
+      return { ...empty, ErrorMessage: msg };
     }
   }
 

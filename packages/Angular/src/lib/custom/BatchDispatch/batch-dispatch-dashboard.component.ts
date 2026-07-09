@@ -137,10 +137,43 @@ export class BatchDispatchDashboardComponent extends BaseDashboard {
     try {
       const res = await this.client().RecordDecision(row.ID, decision);
       if (res.Success) {
-        this.setActionMessage(`Recorded "${decision}" on batch ${row.BatchNumber}.`, false);
-        await this.loadBatches(); // an approval also flips the batch Pending→Approved
+        // A rejection reverses the preliminary lock: the batch is Cancelled and its entries return to the pool.
+        const msg = decision === 'Rejected'
+          ? `Rejected batch ${row.BatchNumber} — cancelled; its journal entries returned to the candidate pool.`
+          : `Recorded "${decision}" on batch ${row.BatchNumber}.`;
+        this.setActionMessage(msg, false);
+        await this.loadBatches(); // an approval flips Pending→Approved; a rejection flips Pending→Cancelled
       } else {
         this.setActionMessage(res.ErrorMessage ?? 'Failed to record decision.', true);
+      }
+    } finally {
+      row.Busy = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  /**
+   * Regenerate an OPEN (Pending) batch: unlock its current entries and re-gather ALL current candidates
+   * (everything unbatched, incl. any added since it was built) into the same batch. Only a Pending batch.
+   */
+  public async OnRegenerate(row: BatchRow): Promise<void> {
+    if (row.Busy) return;
+    row.Busy = true;
+    this.clearActionMessage();
+    this.cdr.markForCheck();
+    try {
+      const res = await this.client().RegenerateBatch(row.ID, row.TargetSystem || this.TargetSystem);
+      if (res.Success && res.NothingToBatch) {
+        this.setActionMessage(`Regenerated batch ${row.BatchNumber}: no candidate journal entries remain.`, false);
+        await this.loadBatches();
+      } else if (res.Success) {
+        this.setActionMessage(
+          `Regenerated batch ${row.BatchNumber}: ${res.JECount} JE(s) across ${res.CompanyCount} company(ies) → ${res.SummaryLineCount} summary line(s); Dr ${res.TotalDebits} / Cr ${res.TotalCredits}.`,
+          false,
+        );
+        await this.loadBatches();
+      } else {
+        this.setActionMessage(res.ErrorMessage ?? 'Regenerate failed.', true);
       }
     } finally {
       row.Busy = false;
@@ -185,6 +218,11 @@ export class BatchDispatchDashboardComponent extends BaseDashboard {
   /** CFO decision controls show only while the batch is still Pending. */
   public canDecide(row: BatchRow): boolean {
     return row.Status === 'Pending' && row.Approved !== true && !row.Busy;
+  }
+
+  /** Regenerate is offered on an OPEN (Pending) batch — it re-gathers candidates in place. */
+  public canRegenerate(row: BatchRow): boolean {
+    return row.Status === 'Pending' && !row.Busy;
   }
 
   /** Map a batch status to a stat-badge variant for the status pill. */

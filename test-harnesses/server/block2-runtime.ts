@@ -41,7 +41,7 @@ import '@mj-biz-apps/common-entities';
 import '@mj-biz-apps/accounting-entities';
 import '@mj-biz-apps/tasks-entities';
 import '@mj-biz-apps/accounting-core-entities-server';
-import { buildBatch, approveBatch, sendBatch, resolveExternalAccount, AutoApproveGate, TasksAppApprovalGate, type BatchApprovalGate } from '@mj-biz-apps/accounting-core-entities-server';
+import { buildBatch, approveBatch, sendBatch, cancelBatch, regenerateBatch, resolveExternalAccount, AutoApproveGate, TasksAppApprovalGate, type BatchApprovalGate } from '@mj-biz-apps/accounting-core-entities-server';
 import type {
   mjBizAppsAccountingAccountingCompanyProfileEntity,
   mjBizAppsAccountingJournalEntryEntity,
@@ -340,11 +340,15 @@ async function main(): Promise<void> {
   // (union — one Task assigned to all CFOs; NO role fallback — hard-fail if any unset).
   const realGate = new TasksAppApprovalGate();
 
-  await test('S1 real gate — no CFO configured → buildBatch hard-fails with a clear "No CFO configured" error', async () => {
+  await test('S1 real gate — no CFO configured → buildBatch hard-fails AND auto-reverses (Q5 atomicity: JE freed to Pending, no orphan locked batch)', async () => {
     await setCompanyCFO(ctx, companyA.id, null); // ensure unset
-    // NOTE: onBatchBuilt is the LAST step of buildBatch — the batch + locked JEs already exist when it throws.
-    await makeJE(ctx, [{ gl: companyA.arGL, debit: 50 }, { gl: companyA.revGL, credit: 50 }]);
+    const orphanJE = await makeJE(ctx, [{ gl: companyA.arGL, debit: 50 }, { gl: companyA.revGL, credit: 50 }]);
     await expectThrow(() => buildBatch('BusinessCentral', user.ID, user, realGate), 'No CFO configured');
+    // Atomicity fix (plan §8 / Q5): the failed approval-task raise reverses the still-preliminary lock, so the
+    // JE returns to the candidate pool instead of being stranded in a task-less locked batch.
+    assert((await jeStatus(ctx, orphanJE)) === 'Pending', 'JE must be freed back to Pending after a gate-failed build');
+    const bid = (await pool.request().query(`SELECT BatchID FROM ${SCHEMA}.JournalEntry WHERE ID='${orphanJE}'`)).recordset[0].BatchID;
+    assert(bid === null, 'freed JE must have its BatchID cleared (no orphan batch reference)');
   });
 
   let approveBatchId = '';
@@ -358,7 +362,7 @@ async function main(): Promise<void> {
     approveBatchId = built!.batchId;
     const task = await batchTask(ctx, approveBatchId);
     assert(task !== null, 'expected an approval Task linked to the batch');
-    assert(/^Approve JE Batch #/.test(task!.name), `expected an "Approve JE Batch #…" Task, got '${task!.name}'`);
+    assert(/^Approve Journal Entry Batch #/.test(task!.name), `expected an "Approve Journal Entry Batch #…" Task, got '${task!.name}'`);
     assert((await assignmentCountForCFO(ctx, task!.id, cfoA)) === 1, 'expected the Task assigned to the CFO Person');
   });
 
@@ -434,6 +438,55 @@ async function main(): Promise<void> {
     catch (e) { threw = true; msg = e instanceof Error ? e.message : String(e); }
     assert(threw, 'expected the Posted-batch DELETE to be rejected');
     assert(/cannot be deleted|REFERENCE constraint|FK_JE_Batch/i.test(msg), `expected rejection by FK or trg 50008, got: ${msg.split('\n')[0]}`);
+  });
+
+  // ─── task #12: LEVELS OF LOCKING — reject-unlock, permanent-after-approve, regenerate ──────────
+  // The reject FLOW in the resolver = recordDecision(Rejected) [audit] + cancelBatch [financial reversal].
+  // These prove the engine's cancelBatch/regenerateBatch and the reworked immutability trigger. Discipline:
+  // each test ENDS with its JEs Batched (locked, not Pending) so buildBatch's global sweep stays deterministic.
+
+  await test('#12 cancelBatch — reject reverses the PRELIMINARY lock: batch→Cancelled, JEs→Pending (candidate pool), summary cleared', async () => {
+    const je1 = await makeJE(ctx, [{ gl: companyA.arGL, debit: 45 }, { gl: companyA.revGL, credit: 45 }]);
+    const je2 = await makeJE(ctx, [{ gl: companyA.arGL, debit: 55 }, { gl: companyA.revGL, credit: 55 }]);
+    const built = await buildBatch('BusinessCentral', user.ID, user);
+    assert(built !== null, 'buildBatch returned null for the cancel scenario');
+    assert((await jeStatus(ctx, je1)) === 'Batched' && (await jeStatus(ctx, je2)) === 'Batched', 'JEs must be Batched (preliminary lock) before cancel');
+    const cancelled = await cancelBatch(built!.batchId, user);
+    assert(cancelled.Status === 'Cancelled', `expected Cancelled, got ${cancelled.Status}`);
+    const st = await batchState(ctx, built!.batchId);
+    assert(st.status === 'Cancelled' && st.lineCount === 0, `batch must be Cancelled with its summary cleared, got status=${st.status} lines=${st.lineCount}`);
+    assert((await jeStatus(ctx, je1)) === 'Pending' && (await jeStatus(ctx, je2)) === 'Pending', 'JEs must return to Pending after cancel');
+    const bidNull = (await pool.request().query(`SELECT COUNT(*) c FROM ${SCHEMA}.JournalEntry WHERE ID IN ('${je1}','${je2}') AND BatchID IS NULL`)).recordset[0].c;
+    assert(Number(bidNull) === 2, `both JEs must have BatchID cleared, got ${bidNull}`);
+    // Prove they're candidates again — a fresh build re-batches them (and leaves them Batched → clean slate).
+    const rebuilt = await buildBatch('BusinessCentral', user.ID, user);
+    assert(rebuilt !== null && rebuilt.jeCount === 2, `freed JEs must be re-batchable, got jeCount=${rebuilt?.jeCount}`);
+  });
+
+  await test('#12 permanent lock — once APPROVED the lock is permanent: cancelBatch refused + a raw Batched→Pending unlock is rejected by the trigger', async () => {
+    const je = await makeJE(ctx, [{ gl: companyA.arGL, debit: 33 }, { gl: companyA.revGL, credit: 33 }]);
+    const built = await buildBatch('BusinessCentral', user.ID, user);
+    assert(built !== null, 'buildBatch returned null for the permanent-lock scenario');
+    await approveBatch(built!.batchId, user.ID, user);
+    await expectThrow(() => cancelBatch(built!.batchId, user), 'only a Pending'); // engine guard
+    // DB guard: the trigger refuses the unlock because the owning batch is Approved (not Pending) → permanent.
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntry SET Status='Pending', BatchID=NULL WHERE ID='${je}'`), 'locked');
+    assert((await jeStatus(ctx, je)) === 'Batched', 'an approved batch\'s JE must stay Batched (permanent lock)');
+  });
+
+  await test('#12 regenerateBatch — unlock current + re-gather ALL candidates (incl. one added after) into the SAME batch', async () => {
+    const jeA = await makeJE(ctx, [{ gl: companyA.arGL, debit: 20 }, { gl: companyA.revGL, credit: 20 }]);
+    const built = await buildBatch('BusinessCentral', user.ID, user);
+    assert(built !== null && built.jeCount === 1, `expected a 1-JE batch, got jeCount=${built?.jeCount}`);
+    const batchId = built!.batchId;
+    const jeB = await makeJE(ctx, [{ gl: companyA.arGL, debit: 25 }, { gl: companyA.revGL, credit: 25 }]); // lands AFTER the build
+    assert((await jeStatus(ctx, jeB)) === 'Pending', 'the new JE must be an unbatched candidate');
+    const regen = await regenerateBatch(batchId, 'BusinessCentral', user);
+    assert(regen.batchId === batchId, 'regenerate must reuse the SAME batch record');
+    assert(regen.jeCount === 2, `regenerate must pick up BOTH JEs, got jeCount=${regen.jeCount}`);
+    assert((await jeStatus(ctx, jeA)) === 'Batched' && (await jeStatus(ctx, jeB)) === 'Batched', 'both JEs must be re-locked into the batch');
+    const st = await batchState(ctx, batchId);
+    assert(st.status === 'Pending' && st.td === st.tc && st.td === st.sumDr && st.td === 45, `regenerated batch must be Pending + footing at 45, got status=${st.status} td=${st.td} sumDr=${st.sumDr}`);
   });
 
   // ─── Teardown ──────────────────────────────────────────────────────────────

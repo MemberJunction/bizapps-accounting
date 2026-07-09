@@ -133,6 +133,12 @@
                     <i class="fa-solid fa-thumbs-down"></i> Reject
                   </button>
                 }
+                @if (canRegenerate(row)) {
+                  <button mjButton variant="secondary" size="sm" [disabled]="row.Busy" (click)="OnRegenerate(row)"
+                          title="Unlock this batch's entries and re-gather all current candidates into it.">
+                    <i class="fa-solid fa-rotate"></i> Regenerate
+                  </button>
+                }
                 @if (row.Busy) {
                   <span class="bd-card__busy"><i class="fa-solid fa-spinner fa-spin"></i> Working…</span>
                 }

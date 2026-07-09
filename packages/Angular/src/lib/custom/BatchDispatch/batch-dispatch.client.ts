@@ -75,6 +75,28 @@ export class BatchDispatchClient {
     }
   }
 
+  /**
+   * Regenerate an OPEN (Pending) batch: unlock its current JEs, re-gather ALL current candidates (everything
+   * unbatched Pending, incl. any added since), and rebuild the summary on the same batch. Only Pending batches.
+   */
+  public async RegenerateBatch(batchID: string, targetSystem: string): Promise<BuildJEBatchResult> {
+    const empty = { Success: false, SummaryLineCount: 0, TotalDebits: 0, TotalCredits: 0, JECount: 0, CompanyCount: 0, NothingToBatch: false };
+    try {
+      const mutation = `
+        mutation RegenerateJEBatch($batchID: ID!, $targetSystem: String!) {
+          RegenerateJEBatch(batchID: $batchID, targetSystem: $targetSystem) {
+            Success BatchID SummaryLineCount TotalDebits TotalCredits JECount CompanyCount NothingToBatch ErrorMessage
+          }
+        }`;
+      const res = await this.dataProvider.ExecuteGQL(mutation, { batchID, targetSystem });
+      return (res?.RegenerateJEBatch as BuildJEBatchResult) ?? { ...empty, ErrorMessage: 'No response from server.' };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      LogError(`BatchDispatchClient.RegenerateBatch failed: ${msg}`);
+      return { ...empty, ErrorMessage: msg };
+    }
+  }
+
   /** Dispatch an Approved batch to the ERP (mock poster for v1). */
   public async DispatchBatch(batchID: string): Promise<DispatchJEBatchResult> {
     try {
