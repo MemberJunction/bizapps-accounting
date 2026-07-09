@@ -90,8 +90,9 @@ committed Tier-5 specs** yet — treat as a coverage gap to fill (Tier-5 `dashbo
 **Batch-lock redesign (#12, 2026-07-08) coverage:** `block2` now **24/24** — adds `#12 cancelBatch` (reject-unlock),
 `#12 permanent lock` (approved → raw unlock rejected by trigger), `#12 regenerateBatch` (re-gathers a since-added JE),
 and upgrades the `no CFO` test to assert auto-reverse. Live end-to-end validated through MJAPI (build→reject→Cancelled+freed;
-build→regenerate→jeCount grows; approve→dispatch→Posted). **Gap:** literal in-browser click of the Reject/Regenerate
-buttons in Explorer (UI compiles + markup present; the exact resolver calls the buttons make are proven live).
+build→regenerate→jeCount grows; approve→dispatch→Posted). **GUI layer:** `specs/batching-reject.spec.ts` (Playwright, system
+Chrome) drives the live Explorer — Build→**Reject** (card flips to Cancelled + banner)→Build→**Regenerate** (rebuild banner),
+0 console errors — **passed 1/1**. Dual-layer complete.
 
 ## Harness inventory + run commands (cwd = instance worktree root)
 
