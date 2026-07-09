@@ -2,7 +2,7 @@
   <mj-page-header
     Title="Batch Status"
     Icon="fa-solid fa-list-check"
-    Subtitle="Journal-entry batches — filter, sort, and expand a batch to see its entries">
+    Subtitle="Journal-entry batches — filter, sort, and expand a batch to see its consolidated posting (debits first, then credits) by company and account">
 
     <div meta>
       <mj-stat-badge Icon="fa-solid fa-layer-group" [Count]="FilteredCount" Label="batches" Variant="info" />
@@ -116,39 +116,35 @@
                     <div class="bs-detail">
                       @if (row.DetailLoading) {
                         <mj-loading text="Loading entries…" size="small"></mj-loading>
-                      } @else if (row.Details.length === 0) {
-                        <div class="bs-detail__empty">This batch has no journal entries.</div>
+                      } @else if (!row.Detail || row.Detail.Lines.length === 0) {
+                        <div class="bs-detail__empty">This batch has no consolidated movements.</div>
                       } @else {
                         <table class="bs-detail-table">
                           <thead>
                             <tr>
-                              <th>Journal Entry</th>
-                              <th>Date</th>
-                              <th>Account</th>
                               <th>Company</th>
+                              <th>Account</th>
                               <th class="bs-num">Debit</th>
                               <th class="bs-num">Credit</th>
                             </tr>
                           </thead>
                           <tbody>
-                            @for (je of row.Details; track je.ID) {
-                              @for (line of je.Lines; track $index; let first = $first) {
-                                <tr class="bs-detail-line" [class.bs-detail-line--je]="first">
-                                  <td class="bs-detail-je">
-                                    @if (first) {
-                                      <span class="bs-detail-je__num">{{ je.EntryNumber }}</span>
-                                      @if (je.Description) { <span class="bs-detail-je__desc">{{ je.Description }}</span> }
-                                    }
-                                  </td>
-                                  <td>{{ first && je.EffectiveDate ? (je.EffectiveDate | date:'yyyy-MM-dd') : '' }}</td>
-                                  <td>{{ line.AccountName }}@if (line.AccountCode) {<span class="bs-detail-code"> · {{ line.AccountCode }}</span>}</td>
-                                  <td>{{ line.CompanyName }}</td>
-                                  <td class="bs-num">{{ line.Debit ? (line.Debit | number:'1.2-2') : '' }}</td>
-                                  <td class="bs-num">{{ line.Credit ? (line.Credit | number:'1.2-2') : '' }}</td>
-                                </tr>
-                              }
+                            @for (line of row.Detail.Lines; track $index) {
+                              <tr class="bs-detail-line" [class.bs-detail-line--credit]="line.Credit > 0">
+                                <td>{{ line.CompanyName }}</td>
+                                <td>{{ line.AccountName }}@if (line.AccountCode) {<span class="bs-detail-code"> · {{ line.AccountCode }}</span>}</td>
+                                <td class="bs-num">{{ line.Debit ? (line.Debit | number:'1.2-2') : '' }}</td>
+                                <td class="bs-num">{{ line.Credit ? (line.Credit | number:'1.2-2') : '' }}</td>
+                              </tr>
                             }
                           </tbody>
+                          <tfoot>
+                            <tr class="bs-detail-total">
+                              <td colspan="2">Totals</td>
+                              <td class="bs-num">{{ row.Detail.TotalDebits | number:'1.2-2' }}</td>
+                              <td class="bs-num">{{ row.Detail.TotalCredits | number:'1.2-2' }}</td>
+                            </tr>
+                          </tfoot>
                         </table>
                       }
                     </div>

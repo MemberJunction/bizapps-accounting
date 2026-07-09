@@ -76,9 +76,12 @@
   font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
   color: var(--mj-text-muted); border-bottom: 1px solid var(--mj-border-default);
 }
-.bs-detail-line td { padding: 5px 10px; color: var(--mj-text-primary); vertical-align: top; }
-.bs-detail-line--je td { border-top: 1px solid var(--mj-border-subtle); }
-.bs-detail-je { min-width: 220px; }
-.bs-detail-je__num { font-weight: 600; }
-.bs-detail-je__desc { display: block; color: var(--mj-text-muted); font-size: 11.5px; }
+.bs-detail-table thead th.bs-num { text-align: right; }
+.bs-detail-line td { padding: 5px 10px; color: var(--mj-text-primary); vertical-align: top; border-top: 1px solid var(--mj-border-subtle); }
+/* Credit-side rows carry a subtle left accent so the debit→credit split reads at a glance. */
+.bs-detail-line--credit td:first-child { box-shadow: inset 2px 0 0 color-mix(in srgb, var(--mj-brand-primary) 45%, transparent); }
+.bs-detail-total td {
+  padding: 6px 10px; font-weight: 700; color: var(--mj-text-primary);
+  border-top: 2px solid var(--mj-border-strong);
+}
 .bs-detail-code { color: var(--mj-text-muted); }

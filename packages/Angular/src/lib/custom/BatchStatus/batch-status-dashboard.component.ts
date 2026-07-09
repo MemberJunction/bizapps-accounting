@@ -26,10 +26,12 @@ const JEBLI_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batch Line Items';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
 const COMPANY_ENTITY = 'MJ: Companies';
 
-/** One netted Dr/Cr line inside an expanded batch's journal entry. */
-export interface JELineDetail { AccountName: string; AccountCode: string; CompanyName: string; Debit: number; Credit: number }
-/** One journal entry inside an expanded batch (its lines + header context). */
-export interface JEDetail { ID: string; EntryNumber: string; EffectiveDate: Date | null; Description: string | null; Lines: JELineDetail[] }
+/** A journal-entry header inside a batch — drives the inferred date range and points at the lines to fetch. */
+interface JEHeader { ID: string; EffectiveDate: Date | null }
+/** One consolidated Dr/Cr movement, netted per (company, GL account) across the whole batch. */
+export interface ConsolidatedLine { CompanyName: string; AccountName: string; AccountCode: string; Debit: number; Credit: number }
+/** A batch's consolidated posting: netted lines (all debits first, then credits) + the column totals. */
+export interface BatchDetail { Lines: ConsolidatedLine[]; TotalDebits: number; TotalCredits: number }
 
 /** One batch row in the table, with its inferred date range + lazily-loaded JE detail. */
 export interface BatchRow {
@@ -50,7 +52,7 @@ export interface BatchRow {
   Expanded: boolean;
   DetailLoaded: boolean;
   DetailLoading: boolean;
-  Details: JEDetail[];
+  Detail: BatchDetail | null;
 }
 
 type SortField = 'Status' | 'TargetSystem' | 'TotalEntries' | 'TotalDebits' | 'TotalCredits' | 'StartDate' | 'EndDate' | 'BatchedAt';
@@ -99,7 +101,7 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
 
   private companyNames = new Map<string, string>();
   private glById = new Map<string, { Name: string; Code: string; CompanyID: string }>();
-  private jesByBatch = new Map<string, JEDetail[]>();
+  private jesByBatch = new Map<string, JEHeader[]>();
   private cdr = inject(ChangeDetectorRef);
 
   async GetResourceDisplayName(_data: ResourceData): Promise<string> { return 'Batch Status'; }
@@ -252,7 +254,7 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
 
   private toRow(
     b: { ID: string; BatchNumber: string; Status: BatchStatus; TargetSystem: TargetSystem; TotalEntries: number; TotalDebits: number; TotalCredits: number; ExternalBatchRef: string | null; BatchedAt: Date | null },
-    jes: JEDetail[], companyIDs: string[],
+    jes: JEHeader[], companyIDs: string[],
   ): BatchRow {
     const dates = jes.map(j => j.EffectiveDate).filter((d): d is Date => d instanceof Date);
     const times = dates.map(d => d.getTime());
@@ -263,7 +265,7 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
       StartDate: times.length ? new Date(Math.min(...times)) : null,
       EndDate: times.length ? new Date(Math.max(...times)) : null,
       CompanyIDs: companyIDs,
-      Expanded: false, DetailLoaded: false, DetailLoading: false, Details: [],
+      Expanded: false, DetailLoaded: false, DetailLoading: false, Detail: null,
     };
   }
 
@@ -286,15 +288,15 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
     }));
   }
 
-  /** JE headers per batch (for the date range + the expand list). Lines load lazily on expand. */
-  private async loadJEHeaders(): Promise<Map<string, JEDetail[]>> {
-    const res = await this.runView().RunView<{ ID: string; BatchID: string | null; EntryNumber: string; EffectiveDate: string | null; Description: string | null }>(
-      { EntityName: JE_ENTITY, ExtraFilter: 'BatchID IS NOT NULL', Fields: ['ID', 'BatchID', 'EntryNumber', 'EffectiveDate', 'Description'], OrderBy: 'EffectiveDate ASC', ResultType: 'simple' }, this.contextUser());
-    const byBatch = new Map<string, JEDetail[]>();
+  /** JE headers per batch (for the inferred date range + to fetch each batch's lines on expand). */
+  private async loadJEHeaders(): Promise<Map<string, JEHeader[]>> {
+    const res = await this.runView().RunView<{ ID: string; BatchID: string | null; EffectiveDate: string | null }>(
+      { EntityName: JE_ENTITY, ExtraFilter: 'BatchID IS NOT NULL', Fields: ['ID', 'BatchID', 'EffectiveDate'], OrderBy: 'EffectiveDate ASC', ResultType: 'simple' }, this.contextUser());
+    const byBatch = new Map<string, JEHeader[]>();
     for (const je of res.Results ?? []) {
       if (!je.BatchID) continue;
       const arr = byBatch.get(je.BatchID) ?? [];
-      arr.push({ ID: je.ID, EntryNumber: je.EntryNumber, EffectiveDate: je.EffectiveDate ? new Date(je.EffectiveDate) : null, Description: je.Description, Lines: [] });
+      arr.push({ ID: je.ID, EffectiveDate: je.EffectiveDate ? new Date(je.EffectiveDate) : null });
       byBatch.set(je.BatchID, arr);
     }
     return byBatch;
@@ -313,19 +315,16 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
     return new Map([...byBatch].map(([k, v]) => [k, [...v]]));
   }
 
-  /** Lazy per-batch detail: load each JE's Dr/Cr lines + resolve GL-account/company names. */
+  /** Lazy per-batch detail: load the batch's JE lines and consolidate them into the netted posting. */
   private async loadDetail(row: BatchRow): Promise<void> {
     row.DetailLoading = true;
     this.cdr.markForCheck();
     try {
       const jes = this.jesByBatch.get(row.ID) ?? [];
-      if (jes.length === 0) { row.Details = []; row.DetailLoaded = true; return; }
+      if (jes.length === 0) { row.Detail = { Lines: [], TotalDebits: 0, TotalCredits: 0 }; row.DetailLoaded = true; return; }
       const lines = await this.loadLines(jes.map(j => j.ID));
       await this.ensureGLNames(lines.map(l => l.GLAccountID));
-      row.Details = jes.map(je => ({
-        ...je,
-        Lines: lines.filter(l => l.JournalEntryID === je.ID).map(l => this.toLineDetail(l)),
-      }));
+      row.Detail = this.consolidate(lines);
       row.DetailLoaded = true;
     } finally {
       row.DetailLoading = false;
@@ -333,15 +332,48 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
     }
   }
 
-  private toLineDetail(l: { GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null }): JELineDetail {
-    const gl = this.glById.get(l.GLAccountID);
-    return {
-      AccountName: gl?.Name ?? l.GLAccountID,
-      AccountCode: gl?.Code ?? '',
-      CompanyName: gl ? (this.companyNames.get(gl.CompanyID) ?? '') : '',
-      Debit: l.DebitAmount ?? 0,
-      Credit: l.CreditAmount ?? 0,
-    };
+  /** One accumulator per (company, GL account) while consolidating a batch's lines. */
+  private groupLines(lines: Array<{ GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null }>):
+    Map<string, { CompanyName: string; AccountName: string; AccountCode: string; debit: number; credit: number }> {
+    const groups = new Map<string, { CompanyName: string; AccountName: string; AccountCode: string; debit: number; credit: number }>();
+    for (const l of lines) {
+      const gl = this.glById.get(l.GLAccountID);
+      const key = `${gl?.CompanyID ?? ''}|${l.GLAccountID}`;
+      const g = groups.get(key) ?? {
+        CompanyName: gl ? (this.companyNames.get(gl.CompanyID) ?? '') : '',
+        AccountName: gl?.Name ?? l.GLAccountID,
+        AccountCode: gl?.Code ?? '',
+        debit: 0, credit: 0,
+      };
+      g.debit += l.DebitAmount ?? 0;
+      g.credit += l.CreditAmount ?? 0;
+      groups.set(key, g);
+    }
+    return groups;
+  }
+
+  /** Net each (company, account) group to a single side, drop fully-offsetting lines, order debits before credits. */
+  private consolidate(lines: Array<{ GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null }>): BatchDetail {
+    const consolidated: ConsolidatedLine[] = [];
+    for (const g of this.groupLines(lines).values()) {
+      const net = Math.round((g.debit - g.credit) * 100) / 100;
+      if (net === 0) continue; // fully offsetting — nothing to post for this account
+      consolidated.push({
+        CompanyName: g.CompanyName, AccountName: g.AccountName, AccountCode: g.AccountCode,
+        Debit: net > 0 ? net : 0, Credit: net < 0 ? -net : 0,
+      });
+    }
+    consolidated.sort((a, b) => this.compareConsolidated(a, b));
+    const TotalDebits = Math.round(consolidated.reduce((s, l) => s + l.Debit, 0) * 100) / 100;
+    const TotalCredits = Math.round(consolidated.reduce((s, l) => s + l.Credit, 0) * 100) / 100;
+    return { Lines: consolidated, TotalDebits, TotalCredits };
+  }
+
+  /** Debits first, then credits; within each side, by company then account code. */
+  private compareConsolidated(a: ConsolidatedLine, b: ConsolidatedLine): number {
+    const aIsDebit = a.Debit > 0, bIsDebit = b.Debit > 0;
+    if (aIsDebit !== bIsDebit) return aIsDebit ? -1 : 1;
+    return (a.CompanyName || '').localeCompare(b.CompanyName || '') || (a.AccountCode || '').localeCompare(b.AccountCode || '');
   }
 
   private async loadLines(jeIds: string[]): Promise<Array<{ JournalEntryID: string; GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null }>> {
