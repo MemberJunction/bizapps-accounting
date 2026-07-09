@@ -77,11 +77,21 @@ committed Tier-5 specs** yet — treat as a coverage gap to fill (Tier-5 `dashbo
   `engine-runtime.ts` E4.
 
 **Open questions for the human → see `instances/accounting-engine-dev/QUESTIONS.md`:**
-- **Batch reject semantics** (Q4) — reject records the decision but the batch stays `Pending` (no visible effect);
-  the natural fix (cancel batch + un-batch entries) is blocked by the JE immutability invariant. Needs Robert.
-- **buildBatch atomicity** (Q5) — batch + entry-lock persist before the approval gate runs → orphaned task-less
-  batches. Reorder/transaction fix pending Robert's OK.
+- ✅ **Batch reject semantics** (Q4) — RESOLVED 2026-07-08 (Robert: levels of locking). Reject now reverses the
+  **preliminary** lock: `cancelBatch` → batch Cancelled + entries back to the candidate pool. Proven in `block2`
+  (`#12 cancelBatch`) + live through MJAPI. Impl: migration `V202607081600` + `BatchingEngine.cancelBatch`.
+- ✅ **buildBatch atomicity** (Q5) — RESOLVED 2026-07-08. A failed approval-task raise now auto-reverses the batch
+  (reversible preliminary lock) instead of stranding a task-less orphan. Proven in `block2` (`no CFO → auto-reverse`).
+- ⏳ **Follow-on GAAP calls (Q12–Q15, high-priority for Robert):** reversal same-period-vs-forward-date, batch cutoff
+  (oldest-forward), out-of-order approval, backdated-order JE date. Provisional answers coded; confirmations shape the
+  deferred filter/backdating work (plan `batch-approval-lock-redesign.md` §13–14). Do NOT block the shipped reject fix.
 - ✅ Due-to/from semantics **confirmed** (Marcelo): Accounting does **no** intercompany netting — Payments owns it.
+
+**Batch-lock redesign (#12, 2026-07-08) coverage:** `block2` now **24/24** — adds `#12 cancelBatch` (reject-unlock),
+`#12 permanent lock` (approved → raw unlock rejected by trigger), `#12 regenerateBatch` (re-gathers a since-added JE),
+and upgrades the `no CFO` test to assert auto-reverse. Live end-to-end validated through MJAPI (build→reject→Cancelled+freed;
+build→regenerate→jeCount grows; approve→dispatch→Posted). **Gap:** literal in-browser click of the Reject/Regenerate
+buttons in Explorer (UI compiles + markup present; the exact resolver calls the buttons make are proven live).
 
 ## Harness inventory + run commands (cwd = instance worktree root)
 
