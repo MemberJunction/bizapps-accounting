@@ -95,6 +95,8 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
   /** Time-span filter (inclusive) over each batch's inferred Start→End date range. `''`/null = unbounded. */
   public FromDate: string | null = null;
   public ToDate: string | null = null;
+  /** Which moving-window preset is active (drives button highlighting); null when the range is custom/unbounded. */
+  public ActiveWindow: 'today' | '7d' | '30d' | null = null;
 
   public SortField: SortField = 'BatchedAt';
   public SortDir: 'asc' | 'desc' = 'desc';
@@ -136,8 +138,29 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
   public OnCompanyChange(companyID: string): void { this.SelectedCompanyID = companyID || null; this.cdr.markForCheck(); }
   public OnTargetChange(target: string): void { this.SelectedTarget = (target as TargetSystem) || null; this.cdr.markForCheck(); }
   public OnBuildTargetChange(target: string): void { this.BuildTarget = target as TargetSystem; this.cdr.markForCheck(); }
-  public OnFromDateChange(v: string): void { this.FromDate = v || null; this.cdr.markForCheck(); }
-  public OnToDateChange(v: string): void { this.ToDate = v || null; this.cdr.markForCheck(); }
+  public OnFromDateChange(v: string): void { this.FromDate = v || null; this.ActiveWindow = null; this.cdr.markForCheck(); }
+  public OnToDateChange(v: string): void { this.ToDate = v || null; this.ActiveWindow = null; this.cdr.markForCheck(); }
+
+  /** Moving-window presets (Robert 2026-07-09: "last day/week/month" windows). Sets the From/To range. */
+  public ApplyWindow(win: 'today' | '7d' | '30d'): void {
+    const to = new Date();
+    const from = new Date();
+    if (win === '7d') from.setDate(from.getDate() - 6);
+    else if (win === '30d') from.setDate(from.getDate() - 29);
+    this.FromDate = this.toDateInput(from);
+    this.ToDate = this.toDateInput(to);
+    this.ActiveWindow = win;
+    this.cdr.markForCheck();
+  }
+  public ClearWindow(): void { this.FromDate = null; this.ToDate = null; this.ActiveWindow = null; this.cdr.markForCheck(); }
+  public IsWindowOn(win: 'today' | '7d' | '30d'): boolean { return this.ActiveWindow === win; }
+
+  /** Local-time yyyy-MM-dd for a native <input type="date"> (matches inSpan's day-granularity parsing). */
+  private toDateInput(d: Date): string {
+    const m = `${d.getMonth() + 1}`.padStart(2, '0');
+    const day = `${d.getDate()}`.padStart(2, '0');
+    return `${d.getFullYear()}-${m}-${day}`;
+  }
 
   public StatusVariant(active: boolean): MjButtonVariant { return active ? 'primary' : 'flat'; }
 

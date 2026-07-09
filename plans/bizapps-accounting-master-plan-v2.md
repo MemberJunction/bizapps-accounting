@@ -1,5 +1,13 @@
 # BizApps Accounting — Design & Build Roadmap (v2)
 
+> **🚦 NEWER DECISIONS (2026-07-09):** **`plans/2026-07-09-robert-meeting-decisions.md`** adds: **permissions via
+> standard MJ roles+RLS with app-seeded roles** (Accounting User/Admin); **batching** defaults oldest-forward but
+> allows **arbitrary batches via the MJ User-View system** (validated unbatched-only); **moving-window filter
+> presets** (shipped); and a **⚠ conflict** — Robert wants **closed-period guards** but the schema **removed
+> `AccountingPeriod`** (2026-07-06, "ERP owns periods") → reconcile before coding period guards (QUESTIONS Q18).
+> Fulfillment ↔ deferred-revenue is **disconnected** (recognition via scheduled transactions, validating AD-11).
+> Jeremy is now the golden-path/exceptions SME (Q19). Read that doc before batching/permissions/period work.
+>
 > **🚦 NEWER DECISIONS (2026-07-08):** **`plans/2026-07-08-robert-meeting-decisions.md`** reworks the **batching
 > lock/approval model** — batches get **levels of locking** (pre-approval = preliminary/reversible; approval =
 > permanent), **reject UNLOCKS** the entries back to the candidate pool, and an open batch can be **regenerated**.

@@ -6,6 +6,7 @@
 
 .bs-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; width: 100%; }
 .bs-toggles { display: flex; flex-wrap: wrap; gap: 6px; }
+.bs-windows { display: flex; flex-wrap: wrap; gap: 6px; }
 
 .bs-field { display: flex; flex-direction: column; gap: 4px; }
 .bs-field__label {
