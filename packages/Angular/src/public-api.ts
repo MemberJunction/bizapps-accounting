@@ -37,13 +37,11 @@ import { LoadIntercompanyFlowResource } from './lib/custom/Intercompany/intercom
 import { JournalEntryConsoleModule } from './lib/custom/JournalEntryConsole/je-console.module';
 import { LoadJournalEntryConsoleResource } from './lib/custom/JournalEntryConsole/je-console-resource.component';
 
-// Chart of Accounts tree, Company Setup hub, and Batch Approvals inbox.
+// Chart of Accounts tree + Company Setup hub. (The Approvals inbox was removed — redundant with Batches.)
 import { ChartOfAccountsModule } from './lib/custom/ChartOfAccounts/chart-of-accounts.module';
 import { LoadChartOfAccountsResource } from './lib/custom/ChartOfAccounts/coa-resource.component';
 import { CompanySetupModule } from './lib/custom/CompanySetup/company-setup.module';
 import { LoadCompanySetupResource } from './lib/custom/CompanySetup/company-setup-resource.component';
-import { BatchApprovalsModule } from './lib/custom/BatchApprovals/batch-approvals.module';
-import { LoadBatchApprovalsResource } from './lib/custom/BatchApprovals/batch-approvals-resource.component';
 
 // Import class registrations manifest
 import { CLASS_REGISTRATIONS } from './lib/generated/class-registrations-manifest';
@@ -84,11 +82,9 @@ export function LoadBizAppsAccountingClient(): void {
     LoadJournalEntryConsoleResource();
     void JournalEntryConsoleModule;
 
-    // Chart of Accounts tree, Company Setup hub, Batch Approvals inbox.
+    // Chart of Accounts tree + Company Setup hub. (Approvals inbox removed — redundant with Batches.)
     LoadChartOfAccountsResource();
     void ChartOfAccountsModule;
     LoadCompanySetupResource();
     void CompanySetupModule;
-    LoadBatchApprovalsResource();
-    void BatchApprovalsModule;
 }

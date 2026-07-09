@@ -15,13 +15,6 @@
         "isDefault": true
       },
       {
-        "Label": "Approvals",
-        "Icon": "fa-solid fa-clipboard-check",
-        "ResourceType": "Custom",
-        "DriverClass": "BatchApprovalsResource",
-        "isDefault": false
-      },
-      {
         "Label": "Trial Balance & AR",
         "Icon": "fa-solid fa-scale-balanced",
         "ResourceType": "Custom",
@@ -88,7 +81,7 @@
     "ID": "08B5D905-6FB3-438B-94E5-2C5FF021B794"
   },
   "sync": {
-    "lastModified": "2026-07-07T21:34:12.954Z",
-    "checksum": "102cdf19d0a7938ee19180de2517eba35d538619fb3fa7022c7a4cdc0ae6daf0"
+    "lastModified": "2026-07-09T03:08:06.150Z",
+    "checksum": "32a56768574315169b87150f3de168dea9807ddfe29387125893182e83f57a45"
   }
 }

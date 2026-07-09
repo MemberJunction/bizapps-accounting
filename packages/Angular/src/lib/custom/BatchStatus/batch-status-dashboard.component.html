@@ -2,71 +2,162 @@
   <mj-page-header
     Title="Batch Status"
     Icon="fa-solid fa-list-check"
-    Subtitle="Read-only roll-up of journal-entry batch lifecycle and control totals">
+    Subtitle="Journal-entry batches — filter, sort, and expand a batch to see its entries">
 
     <div meta>
-      @if (SelectedCompanyID && !IsLoading && TotalBatches > 0) {
-        <mj-stat-badge Icon="fa-solid fa-layer-group" [Count]="TotalBatches" Label="batches" Variant="info" />
+      <mj-stat-badge Icon="fa-solid fa-layer-group" [Count]="FilteredCount" Label="batches" Variant="info" />
+      @for (s of StatusOptions; track s) {
+        @if (statusCount(s) > 0) {
+          <mj-stat-badge [Count]="statusCount(s)" [Label]="s" [Variant]="BadgeVariant(s)" />
+        }
       }
     </div>
 
     <div actions>
       <mj-refresh-button [Loading]="IsLoading" (Clicked)="Reload()"></mj-refresh-button>
+      <span class="bs-build">
+        <select class="mj-input bs-build__target" [value]="BuildTarget"
+                (change)="OnBuildTargetChange($any($event.target).value)">
+          @for (t of TargetOptions; track t) { <option [value]="t">{{ t }}</option> }
+        </select>
+        <button mjButton variant="primary" size="sm" [disabled]="Building" (click)="OnBuildBatch()">
+          @if (Building) { <i class="fa-solid fa-spinner fa-spin"></i> Building… }
+          @else { <i class="fa-solid fa-layer-group"></i> Build Batch }
+        </button>
+      </span>
     </div>
 
     <div toolbar>
-      <label class="rm-field">
-        <span class="rm-field__label">Company</span>
-        <select class="mj-input" [value]="SelectedCompanyID ?? ''"
-                (change)="OnCompanyChange($any($event.target).value)">
-          @for (co of Companies; track co.ID) {
-            <option [value]="co.ID">{{ co.Name }}</option>
+      <div class="bs-filters">
+        <div class="bs-toggles">
+          <button mjButton size="sm" [variant]="StatusVariant(AllStatusesShown)" (click)="ShowAllStatuses()">All</button>
+          @for (s of StatusOptions; track s) {
+            <button mjButton size="sm" [variant]="StatusVariant(IsStatusOn(s))" (click)="ToggleStatus(s)">{{ s }}</button>
           }
-        </select>
-      </label>
+        </div>
+        <label class="bs-field">
+          <span class="bs-field__label">Company</span>
+          <select class="mj-input" [value]="SelectedCompanyID ?? ''" (change)="OnCompanyChange($any($event.target).value)">
+            <option value="">All companies</option>
+            @for (co of Companies; track co.ID) { <option [value]="co.ID">{{ co.Name }}</option> }
+          </select>
+        </label>
+        <label class="bs-field">
+          <span class="bs-field__label">Target ERP</span>
+          <select class="mj-input" [value]="SelectedTarget ?? ''" (change)="OnTargetChange($any($event.target).value)">
+            <option value="">All systems</option>
+            @for (t of TargetOptions; track t) { <option [value]="t">{{ t }}</option> }
+          </select>
+        </label>
+        <label class="bs-field">
+          <span class="bs-field__label">From</span>
+          <input type="date" class="mj-input" [value]="FromDate ?? ''" (change)="OnFromDateChange($any($event.target).value)" />
+        </label>
+        <label class="bs-field">
+          <span class="bs-field__label">To</span>
+          <input type="date" class="mj-input" [value]="ToDate ?? ''" (change)="OnToDateChange($any($event.target).value)" />
+        </label>
+      </div>
     </div>
   </mj-page-header>
 
   <mj-page-body>
+    @if (ActionMessage) {
+      <div class="bs-banner" [class.bs-banner--error]="ActionMessageIsError" [class.bs-banner--success]="!ActionMessageIsError" role="status">
+        <i class="fa-solid" [class.fa-circle-check]="!ActionMessageIsError" [class.fa-triangle-exclamation]="ActionMessageIsError"></i>
+        {{ ActionMessage }}
+      </div>
+    }
+
     @if (IsLoading) {
       <mj-loading text="Loading batch status…"></mj-loading>
     } @else if (LoadError) {
-      <div class="rm-banner rm-banner--error" role="alert">
-        <i class="fa-solid fa-triangle-exclamation"></i> {{ LoadError }}
-      </div>
-    } @else if (!SelectedCompanyID) {
-      <mj-empty-state Icon="fa-solid fa-building"
-        Title="No accounting-enabled companies"
-        Message="No company has an Accounting Company Profile yet.">
-      </mj-empty-state>
-    } @else if (Batches.length === 0) {
+      <div class="bs-banner bs-banner--error" role="alert"><i class="fa-solid fa-triangle-exclamation"></i> {{ LoadError }}</div>
+    } @else if (FilteredBatches.length === 0) {
       <mj-empty-state Icon="fa-solid fa-inbox" Title="No batches"
-        Message="No journal-entry batches have been built for this company yet.">
+        Message="No journal-entry batches match the current filters. Build Batch nets all pending journal entries into a new batch.">
       </mj-empty-state>
     } @else {
-      <div class="rm-summary">
-        <div class="rm-card">
-          <div class="rm-card__label">Pending</div>
-          <div class="rm-card__value">{{ PendingCount }}</div>
-        </div>
-        <div class="rm-card">
-          <div class="rm-card__label">Sent</div>
-          <div class="rm-card__value">{{ SentCount }}</div>
-        </div>
-        <div class="rm-card">
-          <div class="rm-card__label">Posted</div>
-          <div class="rm-card__value">{{ PostedCount }}</div>
-        </div>
-        <div class="rm-card">
-          <div class="rm-card__label">Failed</div>
-          <div class="rm-card__value">{{ FailedCount }}</div>
-        </div>
-      </div>
-
-      <div class="rm-grid-region">
-        <ag-grid-angular class="rm-grid" [theme]="Theme" [columnDefs]="BatchCols"
-          [defaultColDef]="DefaultColDef" [gridOptions]="GridOptions" [rowData]="Batches"
-          (gridReady)="OnGridReady($event)"></ag-grid-angular>
+      <div class="bs-table-region">
+        <table class="bs-table">
+          <thead>
+            <tr>
+              <th class="bs-th--chev"></th>
+              <th class="bs-th--sort" (click)="SortBy('Status')">Status <i [class]="SortIcon('Status')"></i></th>
+              <th class="bs-th--sort" (click)="SortBy('TargetSystem')">Target <i [class]="SortIcon('TargetSystem')"></i></th>
+              <th class="bs-num">Cos.</th>
+              <th class="bs-th--sort bs-num" (click)="SortBy('TotalEntries')">JEs <i [class]="SortIcon('TotalEntries')"></i></th>
+              <th class="bs-th--sort" (click)="SortBy('StartDate')">Start <i [class]="SortIcon('StartDate')"></i></th>
+              <th class="bs-th--sort" (click)="SortBy('EndDate')">End <i [class]="SortIcon('EndDate')"></i></th>
+              <th class="bs-th--sort bs-num" (click)="SortBy('TotalDebits')">Debits <i [class]="SortIcon('TotalDebits')"></i></th>
+              <th class="bs-th--sort bs-num" (click)="SortBy('TotalCredits')">Credits <i [class]="SortIcon('TotalCredits')"></i></th>
+              <th class="bs-th--sort" (click)="SortBy('BatchedAt')">Batched <i [class]="SortIcon('BatchedAt')"></i></th>
+              <th>ERP Ref</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of FilteredBatches; track row.ID) {
+              <tr class="bs-row" [class.bs-row--open]="row.Expanded" (click)="ToggleExpand(row)">
+                <td class="bs-td--chev"><i class="fa-solid" [class.fa-chevron-right]="!row.Expanded" [class.fa-chevron-down]="row.Expanded"></i></td>
+                <td><span class="bs-pill" [attr.data-status]="row.Status">{{ row.Status }}</span></td>
+                <td>{{ row.TargetSystem }}</td>
+                <td class="bs-num">{{ row.CompanyIDs.length }}</td>
+                <td class="bs-num">{{ row.TotalEntries }}</td>
+                <td>{{ row.StartDate ? (row.StartDate | date:'yyyy-MM-dd') : '—' }}</td>
+                <td>{{ row.EndDate ? (row.EndDate | date:'yyyy-MM-dd') : '—' }}</td>
+                <td class="bs-num">{{ row.TotalDebits | number:'1.2-2' }}</td>
+                <td class="bs-num">{{ row.TotalCredits | number:'1.2-2' }}</td>
+                <td>{{ row.BatchedAt ? (row.BatchedAt | date:'yyyy-MM-dd HH:mm') : '—' }}</td>
+                <td class="bs-ref">{{ row.ExternalBatchRef ?? '—' }}</td>
+              </tr>
+              @if (row.Expanded) {
+                <tr class="bs-detail-row">
+                  <td class="bs-detail-cell" colspan="11">
+                    <div class="bs-detail">
+                      @if (row.DetailLoading) {
+                        <mj-loading text="Loading entries…" size="small"></mj-loading>
+                      } @else if (row.Details.length === 0) {
+                        <div class="bs-detail__empty">This batch has no journal entries.</div>
+                      } @else {
+                        <table class="bs-detail-table">
+                          <thead>
+                            <tr>
+                              <th>Journal Entry</th>
+                              <th>Date</th>
+                              <th>Account</th>
+                              <th>Company</th>
+                              <th class="bs-num">Debit</th>
+                              <th class="bs-num">Credit</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            @for (je of row.Details; track je.ID) {
+                              @for (line of je.Lines; track $index; let first = $first) {
+                                <tr class="bs-detail-line" [class.bs-detail-line--je]="first">
+                                  <td class="bs-detail-je">
+                                    @if (first) {
+                                      <span class="bs-detail-je__num">{{ je.EntryNumber }}</span>
+                                      @if (je.Description) { <span class="bs-detail-je__desc">{{ je.Description }}</span> }
+                                    }
+                                  </td>
+                                  <td>{{ first && je.EffectiveDate ? (je.EffectiveDate | date:'yyyy-MM-dd') : '' }}</td>
+                                  <td>{{ line.AccountName }}@if (line.AccountCode) {<span class="bs-detail-code"> · {{ line.AccountCode }}</span>}</td>
+                                  <td>{{ line.CompanyName }}</td>
+                                  <td class="bs-num">{{ line.Debit ? (line.Debit | number:'1.2-2') : '' }}</td>
+                                  <td class="bs-num">{{ line.Credit ? (line.Credit | number:'1.2-2') : '' }}</td>
+                                </tr>
+                              }
+                            }
+                          </tbody>
+                        </table>
+                      }
+                    </div>
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
       </div>
     }
   </mj-page-body>

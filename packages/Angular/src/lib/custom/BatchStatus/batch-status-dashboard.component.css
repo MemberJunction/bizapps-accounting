@@ -1,0 +1,84 @@
+/* Batch Status — filter bar + sortable batch table + expandable, indented JE detail. Tokens only. */
+
+/* ── header: build control + filters ─────────────────────────────────────── */
+.bs-build { display: inline-flex; align-items: center; gap: 6px; }
+.bs-build__target { width: auto; min-width: 130px; }
+
+.bs-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; width: 100%; }
+.bs-toggles { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.bs-field { display: flex; flex-direction: column; gap: 4px; }
+.bs-field__label {
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--mj-text-muted);
+}
+.bs-field .mj-input { min-width: 150px; }
+.bs-field input[type="date"] { min-width: 140px; }
+
+/* ── banners ─────────────────────────────────────────────────────────────── */
+.bs-banner {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; margin-bottom: 12px; border-radius: 6px;
+  border: 1px solid var(--mj-border-default); background: var(--mj-bg-surface-card);
+  color: var(--mj-text-primary); font-size: 13px;
+}
+.bs-banner--success { border-color: var(--mj-status-success-border); background: var(--mj-status-success-bg); color: var(--mj-status-success-text); }
+.bs-banner--error { border-color: var(--mj-status-error-border); background: var(--mj-status-error-bg); color: var(--mj-status-error-text); }
+
+/* ── main table ──────────────────────────────────────────────────────────── */
+.bs-table-region { overflow-x: auto; }
+.bs-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.bs-table thead th {
+  position: sticky; top: 0; z-index: 1;
+  text-align: left; padding: 8px 10px; white-space: nowrap;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  color: var(--mj-text-secondary);
+  background: var(--mj-bg-surface-sunken); border-bottom: 1px solid var(--mj-border-default);
+}
+.bs-th--sort { cursor: pointer; user-select: none; }
+.bs-th--sort:hover { color: var(--mj-text-primary); }
+.bs-th--sort i { margin-left: 4px; opacity: 0.6; font-size: 11px; }
+.bs-th--chev, .bs-td--chev { width: 28px; text-align: center; }
+.bs-num { text-align: right; }
+
+.bs-row { cursor: pointer; border-bottom: 1px solid var(--mj-border-subtle); }
+.bs-row:hover { background: var(--mj-bg-surface-hover); }
+.bs-row--open { background: var(--mj-bg-surface-hover); }
+.bs-row td { padding: 8px 10px; white-space: nowrap; color: var(--mj-text-primary); }
+.bs-td--chev i { color: var(--mj-text-muted); font-size: 11px; }
+.bs-ref { color: var(--mj-text-muted); }
+
+/* status pill */
+.bs-pill {
+  display: inline-block; padding: 2px 8px; border-radius: 999px;
+  font-size: 11px; font-weight: 600;
+  border: 1px solid var(--mj-border-default); background: var(--mj-bg-surface-card); color: var(--mj-text-secondary);
+}
+.bs-pill[data-status="Posted"] { border-color: var(--mj-status-success-border); background: var(--mj-status-success-bg); color: var(--mj-status-success-text); }
+.bs-pill[data-status="Pending"] { border-color: var(--mj-status-warning-border); background: var(--mj-status-warning-bg); color: var(--mj-status-warning-text); }
+.bs-pill[data-status="Failed"] { border-color: var(--mj-status-error-border); background: var(--mj-status-error-bg); color: var(--mj-status-error-text); }
+.bs-pill[data-status="Sent"], .bs-pill[data-status="Approved"] { border-color: var(--mj-status-info-border); background: var(--mj-status-info-bg); color: var(--mj-status-info-text); }
+
+/* ── expanded detail (indented under its batch row) ──────────────────────── */
+.bs-detail-row td { padding: 0; }
+.bs-detail {
+  margin: 0 0 6px 34px;                 /* indent so it reads as part of the batch above */
+  padding: 10px 12px;
+  border-left: 3px solid var(--mj-brand-primary);
+  background: var(--mj-bg-surface-sunken);
+  border-radius: 0 6px 6px 0;
+}
+.bs-detail__empty { color: var(--mj-text-muted); font-size: 13px; font-style: italic; }
+
+.bs-detail-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.bs-detail-table thead th {
+  text-align: left; padding: 5px 10px; white-space: nowrap;
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  color: var(--mj-text-muted); border-bottom: 1px solid var(--mj-border-default);
+}
+.bs-detail-line td { padding: 5px 10px; color: var(--mj-text-primary); vertical-align: top; }
+.bs-detail-line--je td { border-top: 1px solid var(--mj-border-subtle); }
+.bs-detail-je { min-width: 220px; }
+.bs-detail-je__num { font-weight: 600; }
+.bs-detail-je__desc { display: block; color: var(--mj-text-muted); font-size: 11.5px; }
+.bs-detail-code { color: var(--mj-text-muted); }
