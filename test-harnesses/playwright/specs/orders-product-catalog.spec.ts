@@ -1,5 +1,5 @@
 /**
- * Orders → Product Catalog — renders + Product Types come from the front-end OrdersCatalogEngine (cached).
+ * Orders → Product Catalog — renders + Product Types come from the front-end OrdersEngineBase (cached).
  * Non-mutating regression test. (Committed in the accounting harness because the orders app has no Playwright
  * harness of its own yet — standing one up is backlogged; this spec drives the orders app via the shared shell.)
  * Fails on any console/pageerror.
@@ -27,7 +27,7 @@ test('Orders Product Catalog — renders with engine-backed product types', asyn
 
   await expect(page.getByText('Product Catalog').first(), 'page header').toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole('button', { name: /New Product/i }).first(), 'New Product action').toBeVisible();
-  // A "types" stat badge is populated from OrdersCatalogEngine.ProductTypes (cached). The demo has ≥1 type.
+  // A "types" stat badge is populated from OrdersEngineBase.ProductTypes (cached). The demo has ≥1 type.
   await expect(page.getByText(/type/i).first(), 'product-type stat').toBeVisible();
 
   expectNoConsoleErrors(sink, 'Orders Product Catalog (engine-backed types)');
