@@ -1,8 +1,7 @@
 import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@angular/core';
 import { BaseDashboard } from '@memberjunction/ng-shared';
-import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
 import { RegisterClass } from '@memberjunction/global';
-import { CompositeKey, RunView } from '@memberjunction/core';
+import { Metadata, RunView } from '@memberjunction/core';
 import { ResourceData } from '@memberjunction/core-entities';
 import { mjBizAppsAccountingGLAccountEntity } from '@mj-biz-apps/accounting-entities';
 
@@ -38,6 +37,19 @@ interface TreeNode {
   Depth: number;
 }
 
+/** The curated, editable shape shown in the account dialog (a user-friendly subset of the GL Account entity). */
+interface AccountEditModel {
+  ID: string | null; // null = create mode
+  Code: string;
+  Name: string;
+  AccountType: AccountType;
+  CompanyID: string;
+  ParentGLAccountID: string | null;
+  CurrencyCode: string; // '' → stored as NULL (company functional currency)
+  IsActive: boolean;
+  Description: string; // '' → stored as NULL
+}
+
 /**
  * Chart of Accounts — a hierarchical, company-scoped view of the GL account tree.
  *
@@ -56,13 +68,24 @@ interface TreeNode {
 @RegisterClass(BaseDashboard, 'ChartOfAccountsDashboard')
 export class ChartOfAccountsDashboardComponent extends BaseDashboard {
   private cdr = inject(ChangeDetectorRef);
-  private forms = inject(MJFormPresenterService);
+  private md = new Metadata();
 
   public IsBusy = false;
   public LoadError: string | null = null;
 
   public AllAccounts: GLAccountRow[] = [];
   public Companies: CompanyOption[] = [];
+
+  // ─── account view/edit/create dialog ─────────────────────────────────────────
+  public DialogVisible = false;
+  public DialogMode: 'view' | 'edit' | 'create' = 'view';
+  public Saving = false;
+  public DialogError: string | null = null;
+  public Model: AccountEditModel = this.blankModel();
+  /** The valid AccountType values, sourced from entity metadata (rule 2c — not a hand-copied union). */
+  public AccountTypeOptions: AccountType[] = [];
+  /** Snapshot taken when opening an existing account, so Cancel can revert edits back to the view. */
+  private savedModel: AccountEditModel | null = null;
 
   // ─── filters ───────────────────────────────────────────────────────────────
   public AccountTypeFilter: AccountType | 'All' = 'All';
@@ -121,10 +144,28 @@ export class ChartOfAccountsDashboardComponent extends BaseDashboard {
 
     this.AllAccounts = (accountsRes.Results ?? []) as GLAccountRow[];
     this.Companies = (companiesRes.Results ?? []) as CompanyOption[];
+    this.loadAccountTypeOptions();
 
     // Default the company scope to the first company (single, clean chart) — else show all.
     this._selectedCompanyID = this.Companies.length > 0 ? this.Companies[0].ID : 'All';
     this.rebuildTree();
+  }
+
+  /** Valid AccountType values from the entity's field metadata (CHECK-constraint source of truth); fall back to the distinct set present in the data. */
+  private loadAccountTypeOptions(): void {
+    const field = this.md.EntityByName(GL_ACCOUNT_ENTITY)?.Fields?.find(f => f.Name === 'AccountType');
+    const fromMeta = (field?.EntityFieldValues ?? []).map(v => v.Value as AccountType);
+    this.AccountTypeOptions = fromMeta.length ? fromMeta : this.AccountTypes;
+  }
+
+  /** Reload just the GL accounts + rebuild the tree, PRESERVING the current company scope (used after a save). */
+  private async reloadAccounts(): Promise<void> {
+    const res = await new RunView().RunView({
+      EntityName: GL_ACCOUNT_ENTITY,
+      Fields: ['ID', 'Code', 'Name', 'AccountType', 'CompanyID', 'Company', 'ParentGLAccountID', 'CurrencyCode', 'IsActive'],
+      OrderBy: 'Code ASC', MaxRows: 1000, ResultType: 'simple',
+    });
+    if (res.Success) { this.AllAccounts = (res.Results ?? []) as GLAccountRow[]; this.rebuildTree(); }
   }
 
   // ─── company scope ─────────────────────────────────────────────────────────
@@ -234,10 +275,131 @@ export class ChartOfAccountsDashboardComponent extends BaseDashboard {
     }
   }
 
-  // ─── actions ──────────────────────────────────────────────────────────────────
+  // ─── account dialog (view / edit / create) ────────────────────────────────────
 
-  public OpenAccount(row: GLAccountRow): void {
-    this.forms.Open({ EntityName: GL_ACCOUNT_ENTITY, PrimaryKey: CompositeKey.FromID(row.ID), Presentation: 'dialog', Width: '94vw' });
+  /** Open the clean, curated account panel in read-only VIEW mode (loads the full record). */
+  public async OpenAccount(row: GLAccountRow): Promise<void> {
+    this.DialogError = null;
+    const entity = await this.md.GetEntityObject<mjBizAppsAccountingGLAccountEntity>(GL_ACCOUNT_ENTITY);
+    if (!(await entity.Load(row.ID))) {
+      this.DialogError = `Could not load account ${row.Code}.`;
+    }
+    this.Model = this.modelFromEntity(entity);
+    this.savedModel = { ...this.Model };
+    this.DialogMode = 'view';
+    this.DialogVisible = true;
+    this.cdr.markForCheck();
+  }
+
+  /** Open the same panel blank + editable to create a new account (scoped to the current company). */
+  public OnNewAccount(): void {
+    this.DialogError = null;
+    this.Model = this.blankModel();
+    this.savedModel = null;
+    this.DialogMode = 'create';
+    this.DialogVisible = true;
+    this.cdr.markForCheck();
+  }
+
+  public StartEdit(): void { this.DialogMode = 'edit'; this.DialogError = null; this.cdr.markForCheck(); }
+
+  /** Cancel: an edit reverts to the saved view; a create just closes. */
+  public OnDialogCancel(): void {
+    if (this.DialogMode === 'edit' && this.savedModel) {
+      this.Model = { ...this.savedModel };
+      this.DialogMode = 'view';
+      this.DialogError = null;
+      this.cdr.markForCheck();
+    } else {
+      this.CloseDialog();
+    }
+  }
+
+  public CloseDialog(): void { this.DialogVisible = false; this.DialogError = null; this.cdr.markForCheck(); }
+
+  /** Persist the model via the typed entity (create or update), refresh the tree, land on the clean view. */
+  public async SaveAccount(): Promise<void> {
+    if (this.Saving) return;
+    const err = this.validate();
+    if (err) { this.DialogError = err; this.cdr.markForCheck(); return; }
+    this.Saving = true; this.DialogError = null; this.cdr.markForCheck();
+    try {
+      const entity = await this.md.GetEntityObject<mjBizAppsAccountingGLAccountEntity>(GL_ACCOUNT_ENTITY);
+      if (this.Model.ID) {
+        if (!(await entity.Load(this.Model.ID))) throw new Error('Account no longer exists.');
+      } else {
+        entity.NewRecord();
+      }
+      entity.Code = this.Model.Code.trim();
+      entity.Name = this.Model.Name.trim();
+      entity.AccountType = this.Model.AccountType;
+      entity.CompanyID = this.Model.CompanyID;
+      entity.ParentGLAccountID = this.Model.ParentGLAccountID || null;
+      entity.CurrencyCode = this.Model.CurrencyCode.trim() || null;
+      entity.IsActive = this.Model.IsActive;
+      entity.Description = this.Model.Description.trim() || null;
+      if (!(await entity.Save())) throw new Error(entity.LatestResult?.CompleteMessage ?? 'Save failed.');
+
+      await this.reloadAccounts();
+      this.Model = this.modelFromEntity(entity);
+      this.savedModel = { ...this.Model };
+      this.DialogMode = 'view';
+    } catch (e) {
+      this.DialogError = e instanceof Error ? e.message : String(e);
+    } finally {
+      this.Saving = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  private validate(): string | null {
+    if (!this.Model.Code.trim()) return 'Account code is required.';
+    if (!this.Model.Name.trim()) return 'Account name is required.';
+    if (!this.Model.CompanyID) return 'Company is required.';
+    if (!this.Model.AccountType) return 'Account type is required.';
+    return null;
+  }
+
+  private modelFromEntity(e: mjBizAppsAccountingGLAccountEntity): AccountEditModel {
+    return {
+      ID: e.ID, Code: e.Code, Name: e.Name, AccountType: e.AccountType, CompanyID: e.CompanyID,
+      ParentGLAccountID: e.ParentGLAccountID, CurrencyCode: e.CurrencyCode ?? '', IsActive: e.IsActive,
+      Description: e.Description ?? '',
+    };
+  }
+
+  private blankModel(): AccountEditModel {
+    // Null-safe: this runs once as a field initializer BEFORE the other fields are set, and again in OnNewAccount.
+    const sel = this._selectedCompanyID;
+    const companyID = sel && sel !== 'All' ? sel : (this.Companies?.[0]?.ID ?? '');
+    return {
+      ID: null, Code: '', Name: '', AccountType: this.AccountTypeOptions?.[0] ?? ('Asset' as AccountType),
+      CompanyID: companyID, ParentGLAccountID: null, CurrencyCode: '', IsActive: true, Description: '',
+    };
+  }
+
+  // ─── dialog presentation helpers ─────────────────────────────────────────────
+
+  public get DialogTitle(): string {
+    if (this.DialogMode === 'create') return 'New GL Account';
+    return this.Model.Code ? `${this.Model.Code} · ${this.Model.Name}` : 'GL Account';
+  }
+
+  /** Parent-account choices: accounts in the model's company, excluding the account itself. */
+  public get ParentOptions(): GLAccountRow[] {
+    const co = this.Model.CompanyID?.toUpperCase();
+    return this.AllAccounts
+      .filter(a => a.CompanyID.toUpperCase() === co && a.ID !== this.Model.ID)
+      .sort((a, b) => a.Code.localeCompare(b.Code));
+  }
+
+  public get ParentName(): string {
+    const p = this.AllAccounts.find(a => a.ID === this.Model.ParentGLAccountID);
+    return p ? `${p.Code} · ${p.Name}` : '—';
+  }
+
+  public companyName(id: string): string {
+    return this.Companies.find(c => c.ID.toUpperCase() === (id ?? '').toUpperCase())?.Name ?? id;
   }
 }
 

@@ -12,6 +12,8 @@ import {
   MJStatBadgeComponent,
   MJRefreshButtonComponent,
   MJEmptyStateComponent,
+  MJDialogComponent,
+  MJDialogActionsComponent,
 } from '@memberjunction/ng-ui-components';
 
 import { ChartOfAccountsDashboardComponent } from './coa-dashboard.component';
@@ -34,6 +36,8 @@ import { ChartOfAccountsResourceComponent } from './coa-resource.component';
     MJStatBadgeComponent,
     MJRefreshButtonComponent,
     MJEmptyStateComponent,
+    MJDialogComponent,
+    MJDialogActionsComponent,
   ],
   exports: [ChartOfAccountsDashboardComponent, ChartOfAccountsResourceComponent],
 })

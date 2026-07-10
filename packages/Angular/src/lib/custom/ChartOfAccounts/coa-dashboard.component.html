@@ -10,6 +10,7 @@
     </div>
 
     <div actions>
+      <button mjButton variant="primary" size="sm" (click)="OnNewAccount()"><i class="fa-solid fa-plus"></i> New Account</button>
       <mj-refresh-button [Loading]="IsBusy" (Clicked)="loadData()"></mj-refresh-button>
     </div>
 
@@ -73,3 +74,83 @@
     }
   </mj-page-body>
 </mj-page-layout>
+
+<!-- Clean, user-suitable account panel: read-only VIEW with an Edit action, and a create/edit form (replaces the raw generated-form popup). -->
+<mj-dialog [Visible]="DialogVisible" [Title]="DialogTitle" Width="560px" (Close)="CloseDialog()">
+  <div class="coa-dlg">
+    @if (DialogError) {
+      <div class="coa-banner coa-banner--error" role="alert"><i class="fa-solid fa-triangle-exclamation"></i> {{ DialogError }}</div>
+    }
+
+    @if (DialogMode === 'view') {
+      <dl class="coa-view">
+        <div class="coa-view__row"><dt>Code</dt><dd>{{ Model.Code }}</dd></div>
+        <div class="coa-view__row"><dt>Name</dt><dd>{{ Model.Name }}</dd></div>
+        <div class="coa-view__row"><dt>Type</dt><dd><span class="coa-pill" [attr.data-variant]="TypeVariant(Model.AccountType)">{{ Model.AccountType }}</span></dd></div>
+        <div class="coa-view__row"><dt>Company</dt><dd>{{ companyName(Model.CompanyID) }}</dd></div>
+        <div class="coa-view__row"><dt>Parent</dt><dd>{{ ParentName }}</dd></div>
+        <div class="coa-view__row"><dt>Currency</dt><dd>{{ Model.CurrencyCode || 'Company default' }}</dd></div>
+        <div class="coa-view__row"><dt>Status</dt><dd>{{ Model.IsActive ? 'Active' : 'Inactive' }}</dd></div>
+        @if (Model.Description) { <div class="coa-view__row"><dt>Description</dt><dd>{{ Model.Description }}</dd></div> }
+      </dl>
+    } @else {
+      <div class="coa-form">
+        <label class="coa-field">
+          <span class="coa-field__label">Code <span class="coa-req">*</span></span>
+          <input class="mj-input" type="text" [(ngModel)]="Model.Code" placeholder="e.g. 11201" />
+        </label>
+        <label class="coa-field">
+          <span class="coa-field__label">Name <span class="coa-req">*</span></span>
+          <input class="mj-input" type="text" [(ngModel)]="Model.Name" placeholder="e.g. Accounts Receivable" />
+        </label>
+        <label class="coa-field">
+          <span class="coa-field__label">Account type <span class="coa-req">*</span></span>
+          <select class="mj-input" [(ngModel)]="Model.AccountType">
+            @for (t of AccountTypeOptions; track t) { <option [value]="t">{{ t }}</option> }
+          </select>
+        </label>
+        <label class="coa-field">
+          <span class="coa-field__label">Company <span class="coa-req">*</span></span>
+          @if (DialogMode === 'create') {
+            <select class="mj-input" [(ngModel)]="Model.CompanyID">
+              @for (c of Companies; track c.ID) { <option [value]="c.ID">{{ c.Name }} ({{ c.CompanyCode }})</option> }
+            </select>
+          } @else {
+            <input class="mj-input" type="text" [value]="companyName(Model.CompanyID)" disabled />
+          }
+        </label>
+        <label class="coa-field">
+          <span class="coa-field__label">Parent account</span>
+          <select class="mj-input" [(ngModel)]="Model.ParentGLAccountID">
+            <option [ngValue]="null">— none (top level) —</option>
+            @for (p of ParentOptions; track p.ID) { <option [ngValue]="p.ID">{{ p.Code }} · {{ p.Name }}</option> }
+          </select>
+        </label>
+        <label class="coa-field">
+          <span class="coa-field__label">Currency code</span>
+          <input class="mj-input" type="text" maxlength="3" [(ngModel)]="Model.CurrencyCode" placeholder="Company default" />
+        </label>
+        <label class="coa-field coa-field--check">
+          <input type="checkbox" class="mj-checkbox" [(ngModel)]="Model.IsActive" />
+          <span>Active (available for new journal entries)</span>
+        </label>
+        <label class="coa-field coa-field--full">
+          <span class="coa-field__label">Description</span>
+          <textarea class="mj-textarea" rows="2" [(ngModel)]="Model.Description" placeholder="Optional"></textarea>
+        </label>
+      </div>
+    }
+  </div>
+
+  <mj-dialog-actions>
+    @if (DialogMode === 'view') {
+      <button mjButton variant="primary" (click)="StartEdit()"><i class="fa-solid fa-pen"></i> Edit</button>
+      <button mjButton variant="flat" (click)="CloseDialog()">Close</button>
+    } @else {
+      <button mjButton variant="primary" [disabled]="Saving" (click)="SaveAccount()">
+        @if (Saving) { <i class="fa-solid fa-spinner fa-spin"></i> Saving… } @else { <i class="fa-solid fa-check"></i> Save }
+      </button>
+      <button mjButton variant="flat" [disabled]="Saving" (click)="OnDialogCancel()">Cancel</button>
+    }
+  </mj-dialog-actions>
+</mj-dialog>

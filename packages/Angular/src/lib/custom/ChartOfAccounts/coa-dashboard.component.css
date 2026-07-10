@@ -110,3 +110,28 @@
 .coa-ccy { font-size: 0.78rem; color: var(--mj-text-muted); font-variant-numeric: tabular-nums; }
 .coa-open { color: var(--mj-text-disabled); font-size: 0.78rem; }
 .coa-row:hover .coa-open { color: var(--mj-brand-primary); }
+
+/* ── account dialog (view / edit / create) ── */
+.coa-dlg { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.coa-dlg .coa-banner { margin: 0; }
+
+/* read-only view: a clean label/value definition list */
+.coa-view { display: flex; flex-direction: column; gap: 0; margin: 0; }
+.coa-view__row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 12px;
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--mj-border-subtle);
+}
+.coa-view__row:last-child { border-bottom: none; }
+.coa-view__row dt { color: var(--mj-text-muted); font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+.coa-view__row dd { margin: 0; color: var(--mj-text-primary); word-break: break-word; }
+
+/* edit/create form */
+.coa-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; }
+.coa-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.coa-field--full { grid-column: 1 / -1; }
+.coa-field__label { font-size: 0.75rem; font-weight: 600; color: var(--mj-text-secondary); text-transform: uppercase; letter-spacing: 0.02em; }
+.coa-req { color: var(--mj-status-error-text); }
+.coa-field--check { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 8px; color: var(--mj-text-primary); font-size: 0.9rem; }
