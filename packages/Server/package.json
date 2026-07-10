@@ -1,7 +1,8 @@
 {
+  "mjdevManaged": "MJDEV-MANAGED: mjdev owns parts of this file — the \"packages/dev-apps/*\" workspaces glob and any dev-linked open-app dependencies (e.g. \"@mj-biz-apps/*\"). Do not hand-edit those; the tool wires and reverts them (they are hidden via git skip-worktree). See MANAGED-FILES.md; revert with `mjdev git:stage-clean <slug> package.json`.",
   "name": "@mj-biz-apps/accounting-server",
   "type": "module",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "BizApps Accounting server bootstrap - GraphQL resolvers and class registrations for the AR subledger and JE primitives Open App",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -21,9 +22,9 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@mj-biz-apps/accounting-core-entities-server": "0.1.0",
-    "@mj-biz-apps/accounting-entities": "0.1.0",
-    "@mj-biz-apps/accounting-actions": "0.1.0",
+    "@mj-biz-apps/accounting-core-entities-server": "^1.0.0",
+    "@mj-biz-apps/accounting-entities": "^1.0.0",
+    "@mj-biz-apps/accounting-actions": "^1.0.0",
     "class-validator": "^0.14.3"
   },
   "peerDependencies": {
@@ -31,8 +32,8 @@
     "@memberjunction/global": "^5.44.0",
     "@memberjunction/server": "^5.44.0",
     "@memberjunction/sqlserver-dataprovider": "^5.44.0",
-    "@mj-biz-apps/common-server": ">=5.30.0",
-    "@mj-biz-apps/common-entities": ">=5.30.0"
+    "@mj-biz-apps/common-server": "^5.31.3",
+    "@mj-biz-apps/common-entities": "^5.31.3"
   },
   "repository": {
     "type": "git",

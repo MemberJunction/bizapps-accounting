@@ -1,7 +1,8 @@
 {
+  "mjdevManaged": "MJDEV-MANAGED: mjdev owns parts of this file — the \"packages/dev-apps/*\" workspaces glob and any dev-linked open-app dependencies (e.g. \"@mj-biz-apps/*\"). Do not hand-edit those; the tool wires and reverts them (they are hidden via git skip-worktree). See MANAGED-FILES.md; revert with `mjdev git:stage-clean <slug> package.json`.",
   "name": "@mj-biz-apps/accounting-ng",
   "type": "module",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "BizApps Accounting Angular bootstrap - form components and module for the AR subledger and JE primitives Open App",
   "main": "dist/public-api.js",
   "types": "dist/public-api.d.ts",
@@ -18,16 +19,16 @@
   "author": "MemberJunction.com",
   "license": "ISC",
   "dependencies": {
-    "@mj-biz-apps/accounting-engine-base": "0.1.0",
-    "@mj-biz-apps/accounting-entities": "0.1.0",
+    "@mj-biz-apps/accounting-engine-base": "^1.0.0",
+    "@mj-biz-apps/accounting-entities": "^1.0.0",
     "ag-grid-angular": "^35.0.1",
     "ag-grid-community": "^35.0.1"
   },
   "peerDependencies": {
-    "@angular/animations": ">=21.0.0 <22.0.0",
-    "@angular/common": ">=21.0.0 <22.0.0",
-    "@angular/core": ">=21.0.0 <22.0.0",
-    "@angular/forms": ">=21.0.0 <22.0.0",
+    "@angular/animations": "^21.0.0",
+    "@angular/common": "^21.0.0",
+    "@angular/core": "^21.0.0",
+    "@angular/forms": "^21.0.0",
     "@memberjunction/core": "^5.44.0",
     "@memberjunction/core-entities": "^5.44.0",
     "@memberjunction/global": "^5.44.0",
@@ -39,12 +40,12 @@
     "@memberjunction/ng-shared": "^5.44.0",
     "@memberjunction/ng-shared-generic": "^5.44.0",
     "@memberjunction/ng-ui-components": "^5.44.0",
-    "@mj-biz-apps/common-ng": ">=5.30.0",
-    "@mj-biz-apps/common-entities": ">=5.30.0"
+    "@mj-biz-apps/common-ng": "^5.31.3",
+    "@mj-biz-apps/common-entities": "^5.31.3"
   },
   "devDependencies": {
-    "@angular/compiler": "21.1.3",
-    "@angular/compiler-cli": "21.1.3",
+    "@angular/compiler": "^21.1.3",
+    "@angular/compiler-cli": "^21.1.3",
     "typescript": "^5.9.3"
   },
   "repository": {

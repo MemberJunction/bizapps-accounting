@@ -1,8 +1,9 @@
 {
+  "mjdevManaged": "MJDEV-MANAGED: mjdev owns parts of this file — the \"packages/dev-apps/*\" workspaces glob and any dev-linked open-app dependencies (e.g. \"@mj-biz-apps/*\"). Do not hand-edit those; the tool wires and reverts them (they are hidden via git skip-worktree). See MANAGED-FILES.md; revert with `mjdev git:stage-clean <slug> package.json`.",
   "name": "@mj-biz-apps/accounting-core-entities-server",
   "type": "module",
-  "version": "0.1.0",
-  "description": "Server-side entity subclasses for BizApps Accounting \u2014 lifecycle hooks for AccountingCompanyProfile, JournalEntry, AccountingPeriod, etc.",
+  "version": "1.0.0",
+  "description": "Server-side entity subclasses for BizApps Accounting — lifecycle hooks for AccountingCompanyProfile, JournalEntry, AccountingPeriod, etc.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "publishConfig": {
@@ -23,10 +24,10 @@
     "vitest": "^4.0.18"
   },
   "dependencies": {
-    "@mj-biz-apps/accounting-entities": "0.1.0",
-    "@mj-biz-apps/tasks-core": "1.1.1",
-    "@mj-biz-apps/tasks-entities": "1.1.1",
-    "@mj-biz-apps/accounting-engine-base": "0.1.0"
+    "@mj-biz-apps/accounting-entities": "^1.0.0",
+    "@mj-biz-apps/tasks-core": "^1.1.2",
+    "@mj-biz-apps/tasks-entities": "^1.1.2",
+    "@mj-biz-apps/accounting-engine-base": "^1.0.0"
   },
   "peerDependencies": {
     "@memberjunction/core": "^5.44.0",

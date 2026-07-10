@@ -64,16 +64,10 @@ module.exports = {
     { workingDirectory: './packages/Angular',  command: 'npm', args: ['run', 'build'], when: 'after' },
   ],
 
-  /**
-   * Open App installer layout. This distribution puts its server/client apps
-   * under apps/ (not the MJ-repo default of packages/MJAPI + packages/MJExplorer),
-   * so the `mj app install` orchestrator needs these paths to wire dependency
-   * apps (e.g. bizapps-common) into the right workspaces.
-   */
-  openApps: {
-    serverPackagePath: 'apps/MJAPI',
-    clientPackagePath: 'apps/MJExplorer',
-  },
+  // (No `openApps` block: this app no longer bundles apps/MJAPI + apps/MJExplorer.
+  //  It runs only as a dev-linked / installed Open App inside an MJ instance, which
+  //  provides MJAPI + MJExplorer. Restore an `openApps` block only if a standalone
+  //  server/client layout is re-added.)
 
   // ============================================================================
   // OPTIONAL OVERRIDES
@@ -217,6 +211,12 @@ module.exports = {
   // graphqlPort: process.env.GRAPHQL_PORT ?? 4000,
   // mjCoreSchema: process.env.MJ_CORE_SCHEMA ?? '__mj',
 
+  // ==========================================================================
+  // MANAGED SECTION — dynamicPackages (dependency-app bootstrap wiring)
+  // Declares the dependency Open Apps whose server bootstrap MJAPI must load at
+  // startup (here: bizapps-common). This is wiring, not a version knob — it is
+  // convention-managed; don't hand-edit unless you are (un)wiring a dependency app.
+  // ==========================================================================
   dynamicPackages: {
     server: [
       {

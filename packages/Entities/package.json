@@ -1,7 +1,8 @@
 {
+  "mjdevManaged": "MJDEV-MANAGED: mjdev owns parts of this file — the \"packages/dev-apps/*\" workspaces glob and any dev-linked open-app dependencies (e.g. \"@mj-biz-apps/*\"). Do not hand-edit those; the tool wires and reverts them (they are hidden via git skip-worktree). See MANAGED-FILES.md; revert with `mjdev git:stage-clean <slug> package.json`.",
   "name": "@mj-biz-apps/accounting-entities",
   "type": "module",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "MJ BizApps Accounting Entity Subclasses",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -23,12 +24,12 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "zod": "~3.24.4"
+    "zod": "^3.24.4"
   },
   "peerDependencies": {
     "@memberjunction/core": "^5.44.0",
     "@memberjunction/global": "^5.44.0",
-    "@mj-biz-apps/common-entities": ">=5.30.0"
+    "@mj-biz-apps/common-entities": "^5.31.3"
   },
   "repository": {
     "type": "git",
