@@ -1,12 +1,13 @@
 import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@angular/core';
+import { takeUntil } from 'rxjs';
 import { BaseDashboard } from '@memberjunction/ng-shared';
 import { RegisterClass } from '@memberjunction/global';
-import { Metadata, RunView } from '@memberjunction/core';
+import { Metadata } from '@memberjunction/core';
 import { ResourceData } from '@memberjunction/core-entities';
 import { mjBizAppsAccountingGLAccountEntity } from '@mj-biz-apps/accounting-entities';
+import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 
 const GL_ACCOUNT_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
-const COMPANY_PROFILE_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 
 /** AccountType union, derived from the generated entity (rule 2c — never hand-copied). */
 type AccountType = mjBizAppsAccountingGLAccountEntity['AccountType'];
@@ -86,6 +87,8 @@ export class ChartOfAccountsDashboardComponent extends BaseDashboard {
   public AccountTypeOptions: AccountType[] = [];
   /** Snapshot taken when opening an existing account, so Cancel can revert edits back to the view. */
   private savedModel: AccountEditModel | null = null;
+  /** One-time guard for the reactive engine subscription. */
+  private engineSubscribed = false;
 
   // ─── filters ───────────────────────────────────────────────────────────────
   public AccountTypeFilter: AccountType | 'All' = 'All';
@@ -121,34 +124,40 @@ export class ChartOfAccountsDashboardComponent extends BaseDashboard {
   // ─── data loading ────────────────────────────────────────────────────────────
 
   private async loadAll(): Promise<void> {
-    const rv = new RunView();
-    const [accountsRes, companiesRes] = await rv.RunViews([
-      {
-        EntityName: GL_ACCOUNT_ENTITY,
-        Fields: ['ID', 'Code', 'Name', 'AccountType', 'CompanyID', 'Company', 'ParentGLAccountID', 'CurrencyCode', 'IsActive'],
-        OrderBy: 'Code ASC',
-        MaxRows: 1000,
-        ResultType: 'simple',
-      },
-      {
-        EntityName: COMPANY_PROFILE_ENTITY,
-        Fields: ['ID', 'Name', 'CompanyCode'],
-        OrderBy: 'Name ASC',
-        MaxRows: 1000,
-        ResultType: 'simple',
-      },
-    ]);
-
-    if (!accountsRes.Success) throw new Error(accountsRes.ErrorMessage ?? 'Failed to load GL accounts.');
-    if (!companiesRes.Success) throw new Error(companiesRes.ErrorMessage ?? 'Failed to load company profiles.');
-
-    this.AllAccounts = (accountsRes.Results ?? []) as GLAccountRow[];
-    this.Companies = (companiesRes.Results ?? []) as CompanyOption[];
+    // GL Accounts + Company Profiles come from the shared reactive reference engine (AccountingEngineBase),
+    // not a per-page RunView — so every page shares one cache and edits/creates propagate automatically.
+    await AccountingEngineBase.Instance.Config(false, this.ProviderToUse.CurrentUser, this.ProviderToUse);
     this.loadAccountTypeOptions();
-
+    this.hydrateFromEngine();
     // Default the company scope to the first company (single, clean chart) — else show all.
-    this._selectedCompanyID = this.Companies.length > 0 ? this.Companies[0].ID : 'All';
+    if (this._selectedCompanyID === 'All' && this.Companies.length > 0) {
+      this._selectedCompanyID = this.Companies[0].ID;
+      this.rebuildTree();
+    }
+    this.ensureEngineSubscription();
+  }
+
+  /** Project the engine's cached entities into the page's row/option shapes + rebuild the tree (scope preserved). */
+  private hydrateFromEngine(): void {
+    const eng = AccountingEngineBase.Instance;
+    this.AllAccounts = eng.GLAccounts.map(a => ({
+      ID: a.ID, Code: a.Code, Name: a.Name, AccountType: a.AccountType, CompanyID: a.CompanyID,
+      Company: a.Company ?? '', ParentGLAccountID: a.ParentGLAccountID, CurrencyCode: a.CurrencyCode, IsActive: a.IsActive,
+    }));
+    this.Companies = eng.CompanyProfiles
+      .map(c => ({ ID: c.ID, Name: c.Name, CompanyCode: c.CompanyCode }))
+      .sort((x, y) => x.Name.localeCompare(y.Name));
     this.rebuildTree();
+  }
+
+  /** Subscribe once: when the engine's GL-account cache changes (any save/create/delete, from anywhere), re-hydrate. */
+  private ensureEngineSubscription(): void {
+    if (this.engineSubscribed) return;
+    this.engineSubscribed = true;
+    AccountingEngineBase.Instance
+      .ObserveProperty<mjBizAppsAccountingGLAccountEntity>('_glAccounts')
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => { this.hydrateFromEngine(); this.cdr.markForCheck(); });
   }
 
   /** Valid AccountType values from the entity's field metadata (CHECK-constraint source of truth); fall back to the distinct set present in the data. */
@@ -156,16 +165,6 @@ export class ChartOfAccountsDashboardComponent extends BaseDashboard {
     const field = this.md.EntityByName(GL_ACCOUNT_ENTITY)?.Fields?.find(f => f.Name === 'AccountType');
     const fromMeta = (field?.EntityFieldValues ?? []).map(v => v.Value as AccountType);
     this.AccountTypeOptions = fromMeta.length ? fromMeta : this.AccountTypes;
-  }
-
-  /** Reload just the GL accounts + rebuild the tree, PRESERVING the current company scope (used after a save). */
-  private async reloadAccounts(): Promise<void> {
-    const res = await new RunView().RunView({
-      EntityName: GL_ACCOUNT_ENTITY,
-      Fields: ['ID', 'Code', 'Name', 'AccountType', 'CompanyID', 'Company', 'ParentGLAccountID', 'CurrencyCode', 'IsActive'],
-      OrderBy: 'Code ASC', MaxRows: 1000, ResultType: 'simple',
-    });
-    if (res.Success) { this.AllAccounts = (res.Results ?? []) as GLAccountRow[]; this.rebuildTree(); }
   }
 
   // ─── company scope ─────────────────────────────────────────────────────────
@@ -340,7 +339,8 @@ export class ChartOfAccountsDashboardComponent extends BaseDashboard {
       entity.Description = this.Model.Description.trim() || null;
       if (!(await entity.Save())) throw new Error(entity.LatestResult?.CompleteMessage ?? 'Save failed.');
 
-      await this.reloadAccounts();
+      // No manual reload: the save fires a BaseEntity event → the engine updates its GL-account cache →
+      // ObserveProperty emits → the tree re-hydrates automatically (reactive).
       this.Model = this.modelFromEntity(entity);
       this.savedModel = { ...this.Model };
       this.DialogMode = 'view';
