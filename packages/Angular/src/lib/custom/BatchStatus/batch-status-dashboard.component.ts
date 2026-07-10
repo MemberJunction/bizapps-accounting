@@ -2,7 +2,7 @@ import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@
 import { RegisterClass } from '@memberjunction/global';
 import { BaseDashboard } from '@memberjunction/ng-shared';
 import { ResourceData } from '@memberjunction/core-entities';
-import { RunView } from '@memberjunction/core';
+import { Metadata, RunView } from '@memberjunction/core';
 import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
 import { MjButtonVariant } from '@memberjunction/ng-ui-components';
 import {
@@ -13,11 +13,6 @@ import { BatchDispatchClient } from '../BatchDispatch/batch-dispatch.client';
 /** Generated value-list unions (rule 2c: derived from the entity, never hand-copied). */
 type BatchStatus = mjBizAppsAccountingJournalEntryBatchEntity['Status'];
 type TargetSystem = mjBizAppsAccountingJournalEntryBatchEntity['TargetSystem'];
-
-/** The batch statuses the toggle bar exposes, in lifecycle order. */
-const STATUS_ORDER: readonly BatchStatus[] = ['Pending', 'Approved', 'Sent', 'Posted', 'Failed', 'Cancelled'];
-/** The ERP targets a batch can be built for (matches CK_JournalEntryBatch_TargetSystem). */
-const TARGET_SYSTEMS: readonly TargetSystem[] = ['BusinessCentral', 'QuickBooks', 'NetSuite', 'Sage', 'Xero', 'Other'];
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
@@ -93,8 +88,9 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
   public Batches: BatchRow[] = [];
   public Companies: { ID: string; Name: string }[] = [];
 
-  public readonly StatusOptions = STATUS_ORDER;
-  public readonly TargetOptions = TARGET_SYSTEMS;
+  /** Value-lists sourced from entity metadata (the CHECK-constraint values) — never hardcoded. */
+  public StatusOptions: BatchStatus[] = [];
+  public TargetOptions: TargetSystem[] = [];
 
   /** Filters. Empty status set = show all; null company/target = "All". */
   public SelectedStatuses = new Set<BatchStatus>();
@@ -115,10 +111,21 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
   private glById = new Map<string, { Name: string; Code: string; CompanyID: string }>();
   private jesByBatch = new Map<string, JEHeader[]>();
   private cdr = inject(ChangeDetectorRef);
+  private md = new Metadata();
 
   async GetResourceDisplayName(_data: ResourceData): Promise<string> { return 'Batch Status'; }
 
-  protected initDashboard(): void { /* no persisted UI state for v1 */ }
+  protected initDashboard(): void {
+    // Value-lists come from entity metadata (CHECK-constraint values), never hardcoded.
+    this.StatusOptions = this.fieldValues<BatchStatus>(BATCH_ENTITY, 'Status');
+    this.TargetOptions = this.fieldValues<TargetSystem>(BATCH_ENTITY, 'TargetSystem');
+  }
+
+  /** The metadata-defined values for a value-list field — the source of truth for the field's CHECK-constraint union. */
+  private fieldValues<T extends string>(entityName: string, fieldName: string): T[] {
+    const f = this.md.EntityByName(entityName)?.Fields?.find(x => x.Name === fieldName);
+    return (f?.EntityFieldValues ?? []).map(v => v.Value as T);
+  }
 
   protected async loadData(): Promise<void> {
     this.IsLoading = true;
