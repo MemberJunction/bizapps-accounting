@@ -9,6 +9,7 @@ import {
   mjBizAppsAccountingJournalEntryBatchEntity,
 } from '@mj-biz-apps/accounting-entities';
 import { BatchDispatchClient } from '../BatchDispatch/batch-dispatch.client';
+import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 
 /** Generated value-list unions (rule 2c: derived from the entity, never hand-copied). */
 type BatchStatus = mjBizAppsAccountingJournalEntryBatchEntity['Status'];
@@ -19,7 +20,6 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
 const JEBLI_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batch Line Items';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
-const COMPANY_ENTITY = 'MJ: Companies';
 
 /** A journal-entry header inside a batch — drives the inferred date range and points at the lines to fetch. */
 interface JEHeader { ID: string; EffectiveDate: Date | null }
@@ -351,13 +351,14 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
     };
   }
 
+  /** Companies come from the shared reference engine (AccountingEngineBase.CompanyProfiles) — no per-page RunView. */
   private async loadCompanies(): Promise<void> {
-    const rv = this.runView();
-    const acp = await rv.RunView<{ ID: string }>({ EntityName: 'MJ_BizApps_Accounting: Accounting Company Profiles', Fields: ['ID'], ResultType: 'simple' }, this.contextUser());
-    const co = await rv.RunView<{ ID: string; Name: string }>({ EntityName: COMPANY_ENTITY, Fields: ['ID', 'Name'], OrderBy: 'Name ASC', ResultType: 'simple' }, this.contextUser());
-    this.companyNames = new Map((co.Results ?? []).map(c => [c.ID, c.Name]));
-    const acpIds = new Set((acp.Results ?? []).map(r => r.ID));
-    this.Companies = (co.Results ?? []).filter(c => acpIds.has(c.ID)).map(c => ({ ID: c.ID, Name: c.Name }));
+    await AccountingEngineBase.Instance.Config(false, this.contextUser(), this.ProviderToUse);
+    const profiles = AccountingEngineBase.Instance.CompanyProfiles;
+    this.companyNames = new Map(profiles.map(c => [c.ID, c.Name]));
+    this.Companies = profiles
+      .map(c => ({ ID: c.ID, Name: c.Name }))
+      .sort((a, b) => a.Name.localeCompare(b.Name));
   }
 
   private async loadBatches(): Promise<Array<{ ID: string; BatchNumber: string; Status: BatchStatus; TargetSystem: TargetSystem; TotalEntries: number; TotalDebits: number; TotalCredits: number; ExternalBatchRef: string | null; BatchedAt: Date | null }>> {
