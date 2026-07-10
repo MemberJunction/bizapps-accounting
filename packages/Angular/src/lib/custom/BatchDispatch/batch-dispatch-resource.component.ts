@@ -26,7 +26,7 @@ export class BatchDispatchResourceComponent extends BaseResourceComponent implem
   }
 
   async GetResourceDisplayName(_data: ResourceData): Promise<string> {
-    return 'Batch Dispatch';
+    return 'Batch Approvals';
   }
 
   async GetResourceIconClass(_data: ResourceData): Promise<string> {

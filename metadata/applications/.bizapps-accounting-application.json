@@ -8,10 +8,10 @@
     "DefaultSequence": 2010,
     "DefaultNavItems": [
       {
-        "Label": "Batches",
-        "Icon": "fa-solid fa-paper-plane",
+        "Label": "Batch Status",
+        "Icon": "fa-solid fa-list-check",
         "ResourceType": "Custom",
-        "DriverClass": "BatchDispatchResource",
+        "DriverClass": "BatchStatusResource",
         "isDefault": true
       },
       {
@@ -29,10 +29,10 @@
         "isDefault": false
       },
       {
-        "Label": "Batch Status",
-        "Icon": "fa-solid fa-list-check",
+        "Label": "Batch Approvals",
+        "Icon": "fa-solid fa-paper-plane",
         "ResourceType": "Custom",
-        "DriverClass": "BatchStatusResource",
+        "DriverClass": "BatchDispatchResource",
         "isDefault": false
       },
       {
@@ -81,7 +81,7 @@
     "ID": "08B5D905-6FB3-438B-94E5-2C5FF021B794"
   },
   "sync": {
-    "lastModified": "2026-07-09T03:08:06.150Z",
-    "checksum": "32a56768574315169b87150f3de168dea9807ddfe29387125893182e83f57a45"
+    "lastModified": "2026-07-10T01:40:42.268Z",
+    "checksum": "3a3779cafec58d38e26cfa9526955db75437fa14d36a5f6f434b7d44da58fdb6"
   }
 }

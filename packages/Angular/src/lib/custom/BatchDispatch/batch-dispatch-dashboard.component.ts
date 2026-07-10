@@ -61,11 +61,9 @@ export class BatchDispatchDashboardComponent extends BaseDashboard {
 
   public Batches: BatchRow[] = [];
 
-  /** Target ERP for newly-built batches. BC is the headline target; mock poster dispatches it. */
+  /** Fallback target ERP for a Regenerate when a batch has no TargetSystem of its own. */
   public TargetSystem = 'BusinessCentral';
 
-  /** In-flight flag for the Build action (separate from per-row Busy). */
-  public Building = false;
   /** Transient status banner shown after an action (success or error). */
   public ActionMessage: string | null = null;
   public ActionMessageIsError = false;
@@ -73,7 +71,7 @@ export class BatchDispatchDashboardComponent extends BaseDashboard {
   private cdr = inject(ChangeDetectorRef);
 
   async GetResourceDisplayName(_data: ResourceData): Promise<string> {
-    return 'Batch Dispatch';
+    return 'Batch Approvals';
   }
 
   protected initDashboard(): void {
@@ -94,39 +92,7 @@ export class BatchDispatchDashboardComponent extends BaseDashboard {
     // BaseDashboard.ngOnInit() calls NotifyLoadComplete() after loadData() resolves.
   }
 
-  // ─── selection handlers ──────────────────────────────────────────────────
-
-  public OnTargetSystemChange(target: string): void {
-    this.TargetSystem = target;
-    this.cdr.markForCheck();
-  }
-
   // ─── actions ───────────────────────────────────────────────────────────────
-
-  /** Build ONE multi-company batch from ALL pending JEs. */
-  public async OnBuildBatch(): Promise<void> {
-    if (this.Building) return;
-    this.Building = true;
-    this.clearActionMessage();
-    this.cdr.markForCheck();
-    try {
-      const res = await this.client().BuildBatch(this.TargetSystem);
-      if (res.Success && res.NothingToBatch) {
-        this.setActionMessage('No pending journal entries to batch.', false);
-      } else if (res.Success) {
-        this.setActionMessage(
-          `Built batch with ${res.JECount} JE(s) across ${res.CompanyCount} company(ies) → ${res.SummaryLineCount} summary line(s); Dr ${res.TotalDebits} / Cr ${res.TotalCredits}. Awaiting CFO approval.`,
-          false,
-        );
-        await this.loadBatches();
-      } else {
-        this.setActionMessage(res.ErrorMessage ?? 'Build failed.', true);
-      }
-    } finally {
-      this.Building = false;
-      this.cdr.markForCheck();
-    }
-  }
 
   /** Record an in-app CFO Approve / Reject decision on a batch, then refresh its approval state. */
   public async OnRecordDecision(row: BatchRow, decision: BatchDecision): Promise<void> {
@@ -205,10 +171,6 @@ export class BatchDispatchDashboardComponent extends BaseDashboard {
   }
 
   // ─── view helpers (template-facing) ──────────────────────────────────────
-
-  public get CanBuild(): boolean {
-    return !this.Building;
-  }
 
   /** An Approved batch (status flip happens with the CFO decision) can dispatch. */
   public canDispatch(row: BatchRow): boolean {
