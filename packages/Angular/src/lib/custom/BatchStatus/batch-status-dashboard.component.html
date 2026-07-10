@@ -15,16 +15,9 @@
 
     <div actions>
       <mj-refresh-button [Loading]="IsLoading" (Clicked)="Reload()"></mj-refresh-button>
-      <span class="bs-build">
-        <select class="mj-input bs-build__target" [value]="BuildTarget"
-                (change)="OnBuildTargetChange($any($event.target).value)">
-          @for (t of TargetOptions; track t) { <option [value]="t">{{ t }}</option> }
-        </select>
-        <button mjButton variant="primary" size="sm" [disabled]="Building" (click)="OnBuildBatch()">
-          @if (Building) { <i class="fa-solid fa-spinner fa-spin"></i> Building… }
-          @else { <i class="fa-solid fa-layer-group"></i> Build Batch }
-        </button>
-      </span>
+      <button mjButton variant="primary" size="sm" [disabled]="Building" (click)="OpenBuildPreview()">
+        <i class="fa-solid fa-layer-group"></i> Build Batch
+      </button>
     </div>
 
     <div toolbar>
@@ -167,3 +160,62 @@
     }
   </mj-page-body>
 </mj-page-layout>
+
+<!-- Build-Batch preview: shows the time span + the journal entries a build will include, then confirms. -->
+<mj-dialog [Visible]="BuildPreviewVisible" Title="Build Batch — preview" [Width]="640" (Close)="CloseBuildPreview()">
+  <div class="bs-preview">
+    @if (PreviewLoading) {
+      <mj-loading text="Gathering candidate journal entries…" size="small"></mj-loading>
+    } @else {
+      <div class="bs-preview__head">
+        <label class="bs-field">
+          <span class="bs-field__label">Target ERP</span>
+          <select class="mj-input" [value]="BuildTarget" (change)="OnBuildTargetChange($any($event.target).value)">
+            @for (t of TargetOptions; track t) { <option [value]="t">{{ t }}</option> }
+          </select>
+        </label>
+        <div class="bs-preview__facts">
+          <div><span class="bs-field__label">Covers</span>
+            <strong>{{ PreviewStart ? (PreviewStart | date:'yyyy-MM-dd') : '—' }}</strong>
+            <span class="bs-preview__arrow">→</span>
+            <strong>{{ PreviewEnd ? (PreviewEnd | date:'yyyy-MM-dd') : '—' }}</strong>
+          </div>
+          <div><span class="bs-field__label">Entries</span> <strong>{{ PreviewCount }}</strong></div>
+        </div>
+      </div>
+
+      @if (PreviewCount === 0) {
+        <div class="bs-detail__empty">No pending journal entries to batch right now.</div>
+      } @else {
+        <div class="bs-preview__tablewrap">
+          <table class="bs-detail-table">
+            <thead>
+              <tr><th>Entry</th><th>Date</th><th>Type</th><th class="bs-num">Amount</th></tr>
+            </thead>
+            <tbody>
+              @for (e of PreviewEntries; track e.ID) {
+                <tr class="bs-detail-line">
+                  <td>{{ e.EntryNumber }}@if (e.Description) {<span class="bs-detail-code"> · {{ e.Description }}</span>}</td>
+                  <td>{{ e.EffectiveDate ? (e.EffectiveDate | date:'yyyy-MM-dd') : '—' }}</td>
+                  <td>{{ e.EntryType }}</td>
+                  <td class="bs-num">{{ e.Amount | number:'1.2-2' }}</td>
+                </tr>
+              }
+            </tbody>
+            <tfoot>
+              <tr class="bs-detail-total"><td colspan="3">Total</td><td class="bs-num">{{ PreviewTotal | number:'1.2-2' }}</td></tr>
+            </tfoot>
+          </table>
+        </div>
+      }
+    }
+  </div>
+
+  <mj-dialog-actions>
+    <button mjButton variant="primary" size="sm" [disabled]="Building || PreviewLoading || PreviewCount === 0" (click)="OnBuildBatch()">
+      @if (Building) { <i class="fa-solid fa-spinner fa-spin"></i> Building… }
+      @else { <i class="fa-solid fa-layer-group"></i> Build batch ({{ PreviewCount }}) }
+    </button>
+    <button mjButton variant="flat" size="sm" [disabled]="Building" (click)="CloseBuildPreview()">Cancel</button>
+  </mj-dialog-actions>
+</mj-dialog>

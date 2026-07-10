@@ -15,6 +15,8 @@ import {
   MJStatBadgeComponent,
   MJRefreshButtonComponent,
   MJEmptyStateComponent,
+  MJDialogComponent,
+  MJDialogActionsComponent,
 } from '@memberjunction/ng-ui-components';
 
 import { TrialBalanceARDashboardComponent } from '../TrialBalanceAR/trial-balance-ar-dashboard.component';
@@ -50,6 +52,8 @@ import { IntercompanyFlowResourceComponent } from '../Intercompany/intercompany-
     MJStatBadgeComponent,
     MJRefreshButtonComponent,
     MJEmptyStateComponent,
+    MJDialogComponent,
+    MJDialogActionsComponent,
   ],
   exports: [
     TrialBalanceARDashboardComponent, TrialBalanceARResourceComponent,

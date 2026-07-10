@@ -33,6 +33,9 @@ export interface ConsolidatedLine { CompanyName: string; AccountName: string; Ac
 /** A batch's consolidated posting: netted lines (all debits first, then credits) + the column totals. */
 export interface BatchDetail { Lines: ConsolidatedLine[]; TotalDebits: number; TotalCredits: number }
 
+/** One candidate journal entry shown in the Build-Batch preview (what a build would include). */
+export interface PreviewEntry { ID: string; EntryNumber: string; EffectiveDate: Date | null; EntryType: string; Description: string | null; Amount: number }
+
 /** One batch row in the table, with its inferred date range + lazily-loaded JE detail. */
 export interface BatchRow {
   ID: string;
@@ -79,6 +82,13 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
   public ActionMessage: string | null = null;
   public ActionMessageIsError = false;
   public Building = false;
+
+  // ─── Build-Batch preview dialog ──────────────────────────────────────────────
+  public BuildPreviewVisible = false;
+  public PreviewLoading = false;
+  public PreviewEntries: PreviewEntry[] = [];
+  public PreviewStart: Date | null = null;
+  public PreviewEnd: Date | null = null;
 
   public Batches: BatchRow[] = [];
   public Companies: { ID: string; Name: string }[] = [];
@@ -231,7 +241,47 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
     this.cdr.markForCheck();
   }
 
-  // ─── actions ────────────────────────────────────────────────────────────────
+  // ─── build-batch preview → build ─────────────────────────────────────────────
+
+  /** Open the preview: gather the journal entries a build would include + the span they cover. */
+  public async OpenBuildPreview(): Promise<void> {
+    this.BuildPreviewVisible = true;
+    this.PreviewLoading = true;
+    this.clearActionMessage();
+    this.cdr.markForCheck();
+    try {
+      await this.loadBuildCandidates();
+    } catch (e) {
+      this.setActionMessage(e instanceof Error ? e.message : String(e), true);
+    } finally {
+      this.PreviewLoading = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  public CloseBuildPreview(): void { this.BuildPreviewVisible = false; this.cdr.markForCheck(); }
+
+  public get PreviewCount(): number { return this.PreviewEntries.length; }
+  public get PreviewTotal(): number { return Math.round(this.PreviewEntries.reduce((s, e) => s + e.Amount, 0) * 100) / 100; }
+
+  /** Candidate = every unbatched (Pending) journal entry — exactly what buildBatch nets. */
+  private async loadBuildCandidates(): Promise<void> {
+    const res = await this.runView().RunView<{ ID: string; EntryNumber: string; EffectiveDate: string | null; EntryType: string; Description: string | null }>(
+      { EntityName: JE_ENTITY, ExtraFilter: `Status='Pending'`, Fields: ['ID', 'EntryNumber', 'EffectiveDate', 'EntryType', 'Description'], OrderBy: 'EffectiveDate ASC', ResultType: 'simple' }, this.contextUser());
+    const jes = res.Results ?? [];
+    const lines = jes.length ? await this.loadLines(jes.map(j => j.ID)) : [];
+    const totalByJe = new Map<string, number>();
+    for (const l of lines) totalByJe.set(l.JournalEntryID, (totalByJe.get(l.JournalEntryID) ?? 0) + (l.DebitAmount ?? 0));
+    this.PreviewEntries = jes.map(j => ({
+      ID: j.ID, EntryNumber: j.EntryNumber,
+      EffectiveDate: j.EffectiveDate ? new Date(j.EffectiveDate) : null,
+      EntryType: j.EntryType, Description: j.Description,
+      Amount: Math.round((totalByJe.get(j.ID) ?? 0) * 100) / 100,
+    }));
+    const times = this.PreviewEntries.map(e => e.EffectiveDate).filter((d): d is Date => d instanceof Date).map(d => d.getTime());
+    this.PreviewStart = times.length ? new Date(Math.min(...times)) : null;
+    this.PreviewEnd = times.length ? new Date(Math.max(...times)) : null;
+  }
 
   public async OnBuildBatch(): Promise<void> {
     if (this.Building) return;
@@ -242,8 +292,10 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
       const res = await new BatchDispatchClient(this.ProviderToUse as GraphQLDataProvider).BuildBatch(this.BuildTarget);
       if (res.Success && res.NothingToBatch) {
         this.setActionMessage('No pending journal entries to batch.', false);
+        this.BuildPreviewVisible = false;
       } else if (res.Success) {
         this.setActionMessage(`Built a ${this.BuildTarget} batch with ${res.JECount} journal entr${res.JECount === 1 ? 'y' : 'ies'} across ${res.CompanyCount} company(ies). Awaiting CFO approval.`, false);
+        this.BuildPreviewVisible = false;
         await this.loadAll();
       } else {
         this.setActionMessage(res.ErrorMessage ?? 'Build failed.', true);

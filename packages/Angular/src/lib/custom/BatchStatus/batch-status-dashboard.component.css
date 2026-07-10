@@ -86,3 +86,11 @@
   border-top: 2px solid var(--mj-border-strong);
 }
 .bs-detail-code { color: var(--mj-text-muted); }
+
+/* ── Build-Batch preview dialog ── */
+.bs-preview { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.bs-preview__head { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: flex-end; }
+.bs-preview__facts { display: flex; gap: 24px; align-items: flex-end; font-size: 0.95rem; color: var(--mj-text-primary); }
+.bs-preview__facts .bs-field__label { display: block; margin-bottom: 2px; }
+.bs-preview__arrow { color: var(--mj-text-muted); margin: 0 4px; }
+.bs-preview__tablewrap { max-height: 46vh; overflow-y: auto; border: 1px solid var(--mj-border-subtle); border-radius: 8px; }
