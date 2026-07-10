@@ -229,7 +229,12 @@ export class JournalEntryConsoleDashboardComponent extends BaseDashboard {
   }
 
   public CanReverse(row: JERow): boolean {
-    return !row.ReversedByJournalEntryID && this.ReversingID !== row.ID;
+    // Reversible only when: not already reversed, NOT itself a reversal entry (no reversing a reversal),
+    // and not currently mid-reversal. Matches the server guard in JournalEntryEntityServer.generateReversal.
+    return !row.ReversedByJournalEntryID
+        && !row.ReversesJournalEntryID
+        && row.EntryType !== 'Reversal'
+        && this.ReversingID !== row.ID;
   }
 
   public async ReverseEntry(row: JERow): Promise<void> {

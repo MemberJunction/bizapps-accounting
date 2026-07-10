@@ -275,6 +275,32 @@ async function main(): Promise<void> {
     assert(!!arLine && arLine.CreditAmount === 100 && (arLine.DebitAmount ?? null) === null, `AR line should be swapped to a 100 credit, got Dr=${arLine?.DebitAmount} Cr=${arLine?.CreditAmount}`);
   });
 
+  await test('W6 guard — a Reversal entry cannot be reversed, and an entry cannot be reversed twice', async () => {
+    const orig = await makeJE(ctx, companyA, 100, 100) as JournalEntryEntityServer;
+    const reversal = await orig.generateReversal('block1 guard: first reversal', user) as JournalEntryEntityServer;
+    createdJEIds.push(reversal.ID);
+
+    // (a) reversing the reversal entry itself must throw (no reverse-the-reversal chains).
+    let threwOnReversal = false;
+    try { await reversal.generateReversal('block1 guard: reverse-the-reversal', user); }
+    catch { threwOnReversal = true; }
+    assert(threwOnReversal, 'generateReversal on a Reversal entry must throw');
+
+    // (b) reversing the already-reversed original again must throw (no double reversal).
+    const reread = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
+    await reread.Load(orig.ID);
+    let threwOnAlready = false;
+    try { await (reread as JournalEntryEntityServer).generateReversal('block1 guard: double reverse', user); }
+    catch { threwOnAlready = true; }
+    assert(threwOnAlready, 'generateReversal on an already-reversed entry must throw');
+
+    // and neither rejected attempt created a stray reversal — exactly one reversal exists for the original.
+    const rvGuard = new RunView();
+    const cnt = await rvGuard.RunView<{ ID: string }>(
+      { EntityName: JE_ENTITY, ExtraFilter: `ReversesJournalEntryID='${orig.ID}'`, Fields: ['ID'], ResultType: 'simple' }, user);
+    assert((cnt.Results ?? []).length === 1, `exactly one reversal should exist for the original, got ${(cnt.Results ?? []).length}`);
+  });
+
   // ─── F1 — validateJournalEntry ────────────────────────────────────────────
   await test('F1 validateJournalEntry — balanced/active JE is valid', async () => {
     const je = await makeJE(ctx, companyA, 100, 100);

@@ -70,6 +70,15 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
     if (!this.IsSaved) {
       throw new Error('generateReversal: the JournalEntry must be saved before it can be reversed.');
     }
+    // Guard (defense-in-depth; the JE Console also hides the button): a reversal entry cannot itself be
+    // reversed, and an entry that has already been reversed cannot be reversed again. Reversing a reversal
+    // would create an ever-growing reverse-the-reverse chain; double-reversing would orphan the back-pointer.
+    if (this.EntryType === 'Reversal' || this.ReversesJournalEntryID) {
+      throw new Error('generateReversal: a reversal entry cannot itself be reversed.');
+    }
+    if (this.ReversedByJournalEntryID) {
+      throw new Error(`generateReversal: ${this.EntryNumber} has already been reversed (by JE ${this.ReversedByJournalEntryID}).`);
+    }
     const user = contextUser ?? this.ContextCurrentUser;
     const reversal = await this.buildReversalHeader(reason, user);
     await this.copySwappedLines(reversal.ID, user);
