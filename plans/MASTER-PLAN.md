@@ -10,7 +10,8 @@
 > planning system (`~/MJDev/shared-plans/repo-planning-system.md`). It is **write-forward-only**: original
 > sections are CLOSED and never edited or deleted. Changes to closed text live in
 > **`MASTER-PLAN-MODIFICATIONS.md`** (MOD-*), each with a reciprocal ⚠ inline marker at the superseded
-> section below. New scope is appended as labeled Extensions. **Precedence: Modification > Extension >
+> section below. Small intent-preserving refinements live in **`MASTER-PLAN-UPDATES.md`** (UPD-*, ➕
+> markers). New scope is appended as labeled Extensions. **Precedence: Modification > Update > Extension >
 > original text.** Meetings (in `meetings/`) are inputs, never authority. Work is executed only from
 > `action-plans/`.
 
