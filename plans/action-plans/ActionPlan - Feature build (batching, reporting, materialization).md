@@ -1,0 +1,100 @@
+# Plan — Feature build: batching UX-model, reporting pack, scheduled-JE seam
+
+> **Status:** Draft (awaiting Marcelo review) · **Created:** 2026-07-11
+> **Implements:** MOD-8 (view-driven batching + oldest-forward default), the BACKLOG "Jeremy reporting pack"
+> + "Batch dimension strategy", MASTER-PLAN §10 as overlaid, and the CA-2-gated materialization seam (§4.9 /
+> BA-D25 as overlaid by MOD-1). Also the orders-side bridge counterpart:
+> the `Accounting.CreateScheduledJournalEntries` remote operation (orders MOD-5 pattern).
+> **Sources:** meetings/2026-07-09-robert-meeting-decisions.md (D2), meetings/2026-07-10-decisions.md (§I
+> reporting is cutover-gating), MASTER-PLAN §8.4/§10, baseline views, gap analysis §3/§4 row 6–7,
+> `ActionPlan - Batch approval lock redesign.md` (completed groundwork this builds on).
+> **Depends on:** A1/A2 from the schema plan where noted; orders S3/F4 for the bridge's producer side.
+
+## B1 — Batch building per MOD-8 (view-driven + oldest-forward)
+
+Extends the completed lock-redesign work (reject-unlock + regenerate are DONE — this adds the selection
+model):
+
+1. **Oldest-forward default:** "build batch up to <date-time>" — candidates = every unbatched entry with
+   `EffectiveDate <= cutoff`. The existing buildBatch gains the cutoff parameter; UI exposes it.
+2. **Batch-from-View:** accept an MJ User View (of Journal Entries) as the candidate source; engine
+   re-resolves the view server-side and **validates every resolved entry is unbatched — reject LOUDLY
+   otherwise** (name the offending JEs; no silent filtering). Out-of-order batching is allowed while open;
+   the reversal workflow remains regenerate-the-open-batch (MOD-8).
+3. **No hard batch-by-type restriction** — grouping via the view's own filters.
+4. **Netted summaries** (MOD-4) — verify the existing summary builder nets per (Company × GLAccount ×
+   Dimension-combo) with null-dimension aggregation; add the golden tests if missing.
+5. **Batch dimensions for customer detail (Q-C, Jeremy):** when Jeremy's definitive list lands, this is seed
+   data (`Dimension`/`DimensionValue` rows, e.g. Customer / Product / Renewal-vs-New / Event) + upstream
+   tagging (orders booking draft populates line dimensions) + the summary's dimension-combo grouping already
+   handling the rest. **Design note:** Customer-as-dimension is the current lean for AR detail reaching BC
+   without per-customer JE splitting — confirm with Jeremy + Robert before seeding.
+
+**Tests:** unbatched-only validation harness (view containing a batched JE → loud reject); cutoff boundary;
+regenerate-after-view-edit; netting goldens.
+
+## B2 — Jeremy reporting pack (cutover-gating)
+
+Target: reproduce the reports Jeremy runs off Power BI/SQL today, from our read models — **AR Aging** and
+**DefRev Rollforward** FIRST (his two anchors), then the rest of §10.2.
+
+1. **View audit vs §10.1:** baseline ships 12 views but not an exact §10.1 match — e.g. `vw_GLDetail_Subledger`
+   absent (nearest: `vw_JEAuditTrail`), `vw_SalesTaxLiabilityByAuthority` → built as `vw_SalesTaxLiability`.
+   Deliverable: reconcile list, add/rename-by-new-view where a report needs it (views are additive-safe).
+2. **Report surfaces:** MJ Explorer dashboards/reports over the views (house patterns; Skip-generated
+   interactive reports where useful per §10.2): AR Aging Detail (by customer, buckets, drill to orders),
+   DefRev Rollforward (beginning + additions + recognitions + ending), AR-to-GL Recon, Subledger Trial
+   Balance, Revenue by Dimension, JE Audit Trail, FX Exposure (dormant until FX activates). Period-close
+   status report: **NOT built** (CA-1).
+3. **Reproducibility requirement (Jeremy's hard constraint):** every report parameterized by as-of date and
+   deterministic — re-running yesterday's report yields yesterday's numbers (views are JE-sourced, so this
+   holds by construction once data is immutable-after-lock; document it).
+4. **Data reality check:** the views are starving until orders S1/S2 feed them (gap analysis headline). The
+   pack's *acceptance* test uses the orders F3 harness data (payment applied → aging bucket moves).
+
+**Tests:** golden-dataset fixtures per view (known JE set → known aging buckets/rollforward rows); parity
+spot-check against Jeremy's Power BI numbers on real data at cutover rehearsal.
+
+## B3 — Scheduled-JE bridge + materialization seam (CA-2-aware)
+
+Producer side lives in orders F4; accounting owns:
+
+1. **`Accounting.CreateScheduledJournalEntries` remote operation** (mirrors `CreateJournalEntry` — MOD-5's
+   stated pattern): atomic persist of a schedule's SJE rows + line items, validation (balanced pairs, company
+   resolvable, amounts sum to schedule total), supersede support (`Status='Superseded'` +
+   `SupersededByScheduledJournalEntryID` on recompute — §4.9 semantics).
+2. **Materialization engine:** `MaterializeDueScheduledEntries(asOf)` — SJE → Pending JE + freeze, idempotent,
+   already-shaped by the baseline's SJE trio. **The TRIGGER (when it fires) stays undefined until CA-1/CA-2
+   resolve** — build the engine callable + an admin/manual action + a DISABLED scheduled-action stub, so the
+   decision (calendar cron vs period-close vs continuous) is a one-line enablement, not a build.
+3. **Cadence note:** Amith's batch-vs-continuous decision (orders BACKLOG) parameterizes the producer's
+   period granularity; materialization here is cadence-agnostic (materialize whatever is due as-of).
+
+**Tests:** remote-op round trip from orders (the F4 bridge harness); materialize idempotency (run twice →
+one JE per SJE); supersede path (recompute → old SJE superseded, materialized ones untouched).
+
+## B4 — Intercompany provisioning polish (with A1)
+
+The A1 hook is schema-plan scope; feature-side: an admin action "Provision intercompany pairs" (backfill/
+repair), and validation that leg-posting (when Payments builds it, orders-side) resolves accounts via
+`IntercompanyRelationship` — a contract test that reads the pair row and asserts the four accounts resolve.
+Leg generation itself remains UNOWNED-until-Payments (ISSUES).
+
+## Execution order
+
+B1 (extends fresh lock-redesign context) → B3.1 remote op (unblocks orders F4 in parallel) → B2 (as orders
+data starts flowing; view audit can start immediately) → B3.2 engine → B4.
+
+## Questions for Marcelo
+
+1. **B1.2 view resolution semantics:** snapshot the view's result set at build time (my lean — deterministic,
+   auditable) or re-resolve at approve time (fresher but the batch can mutate under review)?
+2. **B2 report tech:** MJ dashboards hand-built vs Skip-generated interactive reports (§10.2's stated
+   direction) — which do you want for the first two (AR Aging, DefRev Rollforward)? I lean hand-built
+   dashboards for the cutover-gating pair (deterministic, reviewable), Skip for the long tail.
+3. **B3.2 manual materialization action** exposed to Accounting Admin in the UI now (pre-CA-2), or keep it
+   dev/CLI-only until the trigger decision lands? I lean Admin-visible with a confirm dialog — Jeremy can
+   run month-end manually, which is literally his current mental model, and it derisks CA-2 by making the
+   decision observable.
+4. **B2.1:** where §10.1 names a view the baseline lacks, add the missing view under the §10.1 name, or fold
+   into the nearest existing view? I lean add-under-plan-name (reports cite plan names).

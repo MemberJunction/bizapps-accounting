@@ -7,19 +7,17 @@ Convention: `~/MJDev/shared-plans/repo-planning-system.md` §5.1. (The instance-
 
 ## Tasks
 
-- [ ] **`IntercompanyRelationship` migration** — the Amith-specified per-pair Due-To/Due-From wiring table
-      (MOD-5; schema in `supporting-documents/bizapps-accounting-master-plan-v2.md` Preface OQ-A). Eager
-      provisioning hook + account-ownership trigger.
-- [ ] **View-driven batch builder** — arbitrary batches from an MJ User View, validated unbatched-only
-      (MOD-8; Robert 2026-07-09 D2).
-- [ ] **Role seeding + RLS** — Accounting User/Admin roles seeded in migrations, entity permissions + RLS
-      by company, setup/settings screen + install doc (MOD-9; Robert 2026-07-09 D1; co-design role tree
-      with Marcelo).
-- [ ] **Jeremy reporting pack** — the §10 read-model reports (AR aging, DefRev rollforward first) toward
-      Power BI parity; reporting is cutover-gating (meetings/2026-07-10-decisions.md §I).
+- [x] ~~**`IntercompanyRelationship` migration**~~ — PROMOTED 2026-07-11 →
+      `action-plans/ActionPlan - Schema alignment (IntercompanyRelationship, roles, RLS).md` A1.
+- [x] ~~**View-driven batch builder** (MOD-8)~~ — PROMOTED 2026-07-11 →
+      `action-plans/ActionPlan - Feature build (batching, reporting, materialization).md` B1.
+- [x] ~~**Role seeding + RLS** (MOD-9)~~ — PROMOTED 2026-07-11 → Schema action plan A2 (co-design
+      checkpoint with Marcelo before executing).
+- [x] ~~**Jeremy reporting pack**~~ — PROMOTED 2026-07-11 → Feature action plan B2.
 - [ ] **Batch dimension strategy for customer detail to BC** — which dimensions batches split by
       (customer, product, renewal-vs-new, event); ask Jeremy for his definitive list
-      (2026-07-10 Jeremy meeting). `[decision needed: Jeremy]`
+      (2026-07-10 Jeremy meeting). `[decision needed: Jeremy]` (Execution slot reserved: feature action
+      plan B1.5 — seeds + upstream tagging once decided.)
 
 ## Decisions needed
 
