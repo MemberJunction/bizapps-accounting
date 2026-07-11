@@ -1,6 +1,11 @@
 # Accounting Engine Plan — engine pair + `Accounting.CreateJournalEntry`
 **bizapps-accounting · v1.2 (RECREATED 2026-07-06)**
 
+> **Status:** Active (core engine + remote op implemented and proven; remaining items live)
+> **Created:** 2026-07-02 (v1.2 re-authored 2026-07-06)
+> **Implements:** MASTER-PLAN-MODIFICATIONS MOD-10 (this repo) / orders MOD-5; MASTER-PLAN §11 intent
+> **Sources:** 07-02 engine meeting + Amith 07-03 response (see Recreation notice below)
+
 > ## ⚠ Recreation notice
 > v1.1 was lost with the deleted `accounting-engine-work` instance (never committed). This v1.2 is a
 > faithful re-authoring from the surviving change ledger

@@ -6,6 +6,22 @@
 > **Sibling plans**: `plans/aidp-master-plan.md` (the overarching context), eventual `bizapps-orders-master.md` and `bizapps-contracts-master.md` follow-ups
 > **Positioning**: **Accounts receivable subsidiary ledger of record + supporting JE primitives. Not a general ledger.**
 
+> 📐 **PLANNING SYSTEM (anointed 2026-07-10):** this file is the repo's central source of truth under the
+> planning system (`~/MJDev/shared-plans/repo-planning-system.md`). It is **write-forward-only**: original
+> sections are CLOSED and never edited or deleted. Changes to closed text live in
+> **`MASTER-PLAN-MODIFICATIONS.md`** (MOD-*), each with a reciprocal ⚠ inline marker at the superseded
+> section below. New scope is appended as labeled Extensions. **Precedence: Modification > Extension >
+> original text.** Meetings (in `meetings/`) are inputs, never authority. Work is executed only from
+> `action-plans/`.
+
+## Contradictions & Ambiguities
+
+| # | Issue (sections involved) | Resolution | Resolved by / date |
+|---|---|---|---|
+| CA-1 | MOD-1 removed `AccountingPeriod` from the schema ("the ERP owns periods"), but Robert (2026-07-09 D4) requires a **closed-period posting guard** at both the order and JE layers. With no local period notion, there is nothing to guard against. Options: (a) ERP rejects the batch post-hoc, (b) lightweight per-company close-date, (c) guard fed by ERP period state. | **OPEN** (QUESTIONS Q18 / D-Q2) — do NOT build period guards until reconciled | — |
+| CA-2 | §4.9 defines `ScheduledJournalEntry` materialization as a **period-close** action (BA-D25), but with periods removed (MOD-1) the materialization trigger is undefined — needs a calendar/schedule-driven trigger or the CA-1 resolution. | **OPEN** (same reconciliation as CA-1) | — |
+| CA-3 | §4.10 / BA-D22 materialize closed-period balances, and §10 views assume them — but MOD-2 defers all balance materialization; views compute on demand. Resolved: views-on-demand for v1; revisit only if read performance demands. | Amith 2026-06-05 ("might kill this for the first version") / v2 C3 | ✅ |
+
 ---
 
 ## 0. Table of contents
@@ -67,6 +83,14 @@ BizAppsAccounting provides the **journal entry primitives and AR subsidiary ledg
 ---
 
 ## 2. Decisions (BA-D1 through BA-D27)
+
+> ⚠ **MODIFIED — several decision rows below are superseded; see `MASTER-PLAN-MODIFICATIONS.md`:**
+> BA-D7/BA-D16 batch-lock permanence → **MOD-3** (levels of locking; reject unlocks) · BA-D10 engine-emitted
+> realized FX → **MOD-6** (FX upstream in Orders/Payments) · BA-D12/13/14 AccountingPeriod + hard close →
+> **MOD-1** (periods removed; ⚠ CA-1 open) · BA-D17 intercompany refined → **MOD-5** (per-company-pair
+> accounts; Payments generates legs) · BA-D22 balance materialization → **MOD-2** (deferred) · BA-D26 batch
+> summary granularity → **MOD-4** (netted per Company × GLAccount × Dimension-combo). The table text below
+> is the ORIGINAL design, retained for history.
 
 These are accounting-layer decisions. References to `M*` decisions point to `plans/aidp-master-plan.md`.
 
@@ -299,6 +323,11 @@ Reports can group/filter by any dimension. The default ERP reports (TB, P&L) con
 Dimensions are tagged at **every** stage of a line's life via parallel tagging tables, so the analytical breakdown survives end to end: `JournalEntryLineDimension` (the posted JE line), `ScheduledJournalEntryLineDimension` (the not-yet-materialized rev-rec line — §4.9), and `JournalEntryBatchLineDimension` (the consolidated batch summary line that ships to the ERP — §4.5/BA-D26).
 
 ### 4.4 AccountingPeriod
+
+> ⚠ **MODIFIED by MOD-1 (2026-07-06):** `AccountingPeriod` was REMOVED from the schema — the ERP owns
+> periods. This section is the ORIGINAL design, retained for history. ⚠ CA-1/CA-2 are OPEN: Robert's
+> closed-period guard requirement and the ScheduledJournalEntry materialization trigger both depend on
+> reconciling this — see `MASTER-PLAN-MODIFICATIONS.md`.
 
 Per `AccountingCompanyProfile`. Locks JE posting once closed.
 
@@ -584,6 +613,9 @@ __mj_BizAppsAccounting.ScheduledJournalEntryLineDimension -- analytical tags car
 
 ### 4.10 Account balance materialization
 
+> ⚠ **MODIFIED by MOD-2:** balance materialization is DEFERRED (Amith) — the `AccountBalance*` tables are
+> not in the schema; all balances compute on demand via the §10 views. Original design below, for history.
+
 For closed-period balances only. Open period balances are computed on demand by summing relevant JournalEntryLines.
 
 ```sql
@@ -763,6 +795,10 @@ JournalEntryLine record:
 
 GL trial balance always tots in functional currency. Drill-into-line shows both.
 
+> ⚠ **MODIFIED by MOD-6 (2026-06-30, Amith):** BOTH realized and unrealized FX are computed + posted
+> UPSTREAM (Orders/Payments). Accounting holds only the GL-account refs and validates balance — no
+> Accounting-side FX generation. §6.3/§6.4 below are the ORIGINAL design, retained for history.
+
 ### 6.3 Realized FX gain/loss
 
 When an AR booked at rate X is paid at rate Y, the difference is realized FX gain/loss. Auto-emitted by the engine on payment receipt:
@@ -799,6 +835,9 @@ Translation lives in `aidp` analytics layer, not in Accounting itself. Accountin
 ---
 
 ## 7. Period close workflow
+
+> ⚠ **MODIFIED by MOD-1 (2026-07-06):** periods were removed from the schema — this whole workflow
+> (and §5.4's trigger) is inoperative pending the CA-1 reconciliation. ORIGINAL design retained below.
 
 ### 7.1 Lifecycle
 
@@ -841,6 +880,12 @@ Post-close JEs that adjust a previously-closed period don't actually post to the
 ---
 
 ## 8. JE lifecycle: Pending → Batched → GLPosted
+
+> ⚠ **MODIFIED by MOD-3 (2026-07-08, Robert):** batches now have LEVELS of locking — pre-approval =
+> preliminary/REVERSIBLE lock; approval = permanent; **reject UNLOCKS entries back to the candidate pool**;
+> an open batch can be regenerated. "Batched = permanent immutable lock" below is superseded.
+> Also **MOD-4:** batch summary lines are NETTED per (Company × GLAccount × Dimension-combo), one net side —
+> not separate Dr/Cr per side (§8.4). ORIGINAL design retained below; see `MASTER-PLAN-MODIFICATIONS.md`.
 
 ### 8.1 States
 

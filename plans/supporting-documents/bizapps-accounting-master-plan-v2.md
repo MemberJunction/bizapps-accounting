@@ -1,5 +1,10 @@
 # BizApps Accounting — Design & Build Roadmap (v2)
 
+> 📐 **RECLASSIFIED as a SUPPORTING DOCUMENT (2026-07-10, planning-system adoption).** This doc is no
+> longer a design authority. Its still-live decisions were formalized into `../MASTER-PLAN-MODIFICATIONS.md`
+> (MOD-1..10) — that ledger + `../MASTER-PLAN.md` are now the source of truth; where this doc disagrees
+> with the ledger, the ledger wins. Its roadmap/block content is historical context for action plans.
+
 > **🚦 NEWER DECISIONS (2026-07-09):** **`plans/2026-07-09-robert-meeting-decisions.md`** adds: **permissions via
 > standard MJ roles+RLS with app-seeded roles** (Accounting User/Admin); **batching** defaults oldest-forward but
 > allows **arbitrary batches via the MJ User-View system** (validated unbatched-only); **moving-window filter

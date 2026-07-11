@@ -1,5 +1,9 @@
 # Plan — Batch approval lock redesign (reject-unlock + regenerate)
 
+> **Status:** Active · **Created:** 2026-07-08
+> **Implements:** MASTER-PLAN-MODIFICATIONS MOD-3 (supersedes MASTER-PLAN §8 / BA-D7 / BA-D16)
+> **Sources:** meetings/2026-07-08-robert-meeting-decisions.md (D1/D2/D4) + the 07-08 transcript
+
 > **Status:** APPROVED — implementing (Marcelo greenlit 2026-07-08). Scope of THIS build = fix the reject issue (#12)
 > via the lock redesign below. Cherry-pick/filters/PG/out-of-order/backdating are explicitly deferred (§13); the four
 > GAAP confirmations are logged as high-priority QUESTIONS (Q12–Q15) for Robert but do NOT block this build.
