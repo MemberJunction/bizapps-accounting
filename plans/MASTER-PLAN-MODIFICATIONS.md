@@ -195,6 +195,8 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
   global sequence = open design point for the same action-plan item.
 - **Why / source:** Marcelo ruling 2026-07-13 — locks are JE-grained, so per-company close requires
   per-company JEs; accounting must see separate per-company movements; Robert's model concurs
-  (meetings/2026-07-13-robert-meeting-decisions.md D3 + postscript). ⚠ Reverses Amith's CH-2 —
-  sanity-check with Amith (residual). Orders counterpart: orders MOD-11.
-- **Status:** Accepted — schema + engine work added to the schema-alignment action plan (A4).
+  (meetings/2026-07-13-robert-meeting-decisions.md D3 + postscripts). Reverses Amith's CH-2 —
+  **LOCKED (Marcelo 2026-07-13): a logical requirement** (per-company close independence). We build on
+  it now rather than wait for Amith (out of town); only a later Amith-ordered BROAD restructure would
+  revisit it (considered unlikely — we'd adapt then). Orders counterpart: orders MOD-11.
+- **Status:** Accepted + **LOCKED** — schema + engine work in the schema-alignment action plan (A4).

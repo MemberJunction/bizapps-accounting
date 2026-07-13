@@ -171,7 +171,9 @@ Booking now emits one JE per company (orders MOD-11), reversing CH-2. Accounting
 4. **Numbering decision:** keep the GLOBAL JE sequence vs per-company `JE-{CompanyCode}-{FY}-{seq}`
    (the v2/AD-4 shape). `[decision needed: Marcelo]` — global is less churn; per-company reads better
    for per-company close. Batch building may now filter per company (feature plan B1 note).
-5. **Residual:** ⚠ sanity-check the CH-2 reversal with Amith (rides with the Q20-residual batch).
+5. **Decision LOCKED (Marcelo 2026-07-13):** no Amith gate on executing A4 — single-company JEs are a
+   logical requirement (per-company close independence). Only a later Amith-ordered broad restructure
+   would revisit; build now.
 
 ## Execution order
 
