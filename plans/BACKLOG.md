@@ -24,10 +24,11 @@ Convention: `~/MJDev/shared-plans/repo-planning-system.md` §5.1. (The instance-
 
 ## Decisions needed
 
-- [ ] **Periods reconciliation (CA-1 only — CA-2 resolved 2026-07-13 by MOD-11)** — closed-period guard
-      vs periods-removed. Robert is researching Amith's CH-1 rationale (change ledger provided in
-      meetings/); his position so far: batches must NOT be the period lock; the close is an explicit
-      accounting-team event. `[decision needed: Amith/Robert + Jeremy exception rules]` (Q18/D-Q2)
+- [x] ~~**Periods reconciliation**~~ — **RESOLVED-for-now 2026-07-13 (Marcelo, Amith-doc confirmation):
+      follow the removal — NO local period guard/machinery; batches land in the ERP's active period**
+      (full verbatim in MOD-1; CA-1 resolved-for-now; CA-2 resolved by MOD-11). Robert is still
+      researching his guard requirement — reopens ONLY if he overturns. Jeremy's correcting-entry
+      exception rules still collect via Q19.
 - [ ] **Tax first iteration: order-line-type vs separate tables** — pick one (Robert offered the quick
       path; accounting tax tables exist either way). `[decision needed: Robert]`
 - [x] ~~**IntercompanyRelationship wiring ownership**~~ — **RESOLVED 2026-07-13 (verified from the

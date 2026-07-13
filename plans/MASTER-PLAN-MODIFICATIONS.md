@@ -31,11 +31,16 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
   adjusting-entry routing, and period seeding. Sources: change ledger
   `~/MJDev/reports/accounting-engine-meeting-changes/CHANGES.md` CH-1 (transcript ¶5-7, ¶14-21, ¶65-67);
   baseline `B202605281200` revision header 2026-07-06 (AM-1..7 + 07-02 transcript).
-- **Status:** Implemented (schema) — ⚠ **CA-1 and CA-2 are OPEN**: Robert's closed-period guard
-  (2026-07-09 D4) and the ScheduledJournalEntry materialization trigger both need this reconciled
-  (QUESTIONS Q18 / D-Q2). Do not build period guards until resolved. *Framing for the Robert
-  conversation (2026-07-13): per Amith's rationale, any closed-period guard must reference ERP period
-  state or a lightweight per-company posted-through date — not a local period table.*
+- **CONFIRMED 2026-07-13 (Marcelo, from the Amith doc — the definitive fuller verbatim):** *"But the
+  concept of accounting period is just irrelevant to us largely because it's going to get settled out
+  when the accounting system says it settles out. So when we send a batch over, it's going to go into
+  whatever the active accounting period is in the accounting system. That's not our job to worry about.
+  We just have to keep track of that. We just don't care. Yeah, just kill that [statement]."* — i.e.
+  the ERP's ACTIVE period absorbs whatever we dispatch; period discipline is entirely the ERP's.
+- **Status:** Implemented (schema) + **ruling followed-for-now (Marcelo 2026-07-13):** the removal
+  stands and **no local period guard is built** — CA-1 is PARKED on this ruling ("there may be changes
+  later" — Robert is still researching; revisit only if he overturns it). CA-2 was resolved separately
+  by MOD-11 (date-driven scheduled entries).
 
 ## MOD-2 — Account-balance materialization deferred; balances compute on demand (2026-06)
 - **Supersedes:** MASTER-PLAN.md §4.10, BA-D22 (partially — the account-scope philosophy stands; the

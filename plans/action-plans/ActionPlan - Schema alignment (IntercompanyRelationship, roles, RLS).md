@@ -127,7 +127,7 @@ Audit the built DB enforcement against MASTER-PLAN §5 **as overlaid** and recor
 | 5.1 CHECKs | as-built | verify list vs plan; no change expected |
 | 5.2 balanced-JE (deferrable) | built (`trg_JournalEntry_BalancedOnLock` + `trg_JEL_RecheckParentBalance`) | verify semantics vs MOD-3's lock levels — the V202607081600 rework already re-based these; confirm test matrix still green |
 | 5.3 immutability triggers | built (JE/JEL/Batch/BLI/BLDim/SJE/SJELI) + MOD-3 reversible-preliminary rework | verify reject-unlock path covered by tests |
-| 5.4 period-close trigger | **MUST NOT EXIST** (MOD-1; CA-1 open) | verify absent; add a CA-1 note to the ERD doc so nobody "helpfully" rebuilds it |
+| 5.4 period-close trigger | **MUST NOT EXIST** (MOD-1; CA-1 resolved-for-now 2026-07-13 — follow Amith's removal, no period machinery) | verify absent; ERD note so nobody "helpfully" rebuilds it |
 | 5.5 CoA-mapping enforcement | check what baseline shipped | verify; gap → small follow-up only if a consumer needs it |
 | intercompany wiring (`IntercompanyRelationship`) | **MUST NOT EXIST accounting-side** (2026-07-06 baseline ruling; MOD-5(c)) | verify absent + ERD "deliberately absent" note (A1) |
 | §4.9 SJE materialization trigger | **undefined by design** (CA-2 open — ISSUES) | no schema action; the engine seam is the feature plan's |
