@@ -37,6 +37,10 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
   whatever the active accounting period is in the accounting system. That's not our job to worry about.
   We just have to keep track of that. We just don't care. Yeah, just kill that [statement]."* — i.e.
   the ERP's ACTIVE period absorbs whatever we dispatch; period discipline is entirely the ERP's.
+- **Consistency note (2026-07-13):** MOD-12 later reversed CH-2 (JEs are single-company again). That
+  removes the multi-company-JE *premise* from the rationale above, but the removal ruling **stands on
+  its own core rationale** — the fuller verbatim: the ERP settles periods, batches land in its ACTIVE
+  period, "not our job to worry about" — which is company-split-agnostic.
 - **Status:** Implemented (schema) + **ruling followed-for-now (Marcelo 2026-07-13):** the removal
   stands and **no local period guard is built** — CA-1 is PARKED on this ruling ("there may be changes
   later" — Robert is still researching; revisit only if he overturns it). CA-2 was resolved separately
@@ -174,3 +178,23 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
   to him — none known (CH-1 removed the period trigger; this fills the gap consistently).
 - **Status:** Accepted — engine work in the feature action plan B3 (now un-gated on CA-2; CA-1/periods
   remains open and does NOT block this).
+
+## MOD-12 — JournalEntry is SINGLE-COMPANY again (CH-2 reversed; restores master §4.5) (2026-07-13)
+- **Supersedes:** the 2026-07-06 baseline revision's "JournalEntry … [is] MULTI-COMPANY: no header
+  CompanyID; company is per line" (Amith's 2026-07-02 CH-2 ruling). **Restores the master plan's
+  `JournalEntry.CompanyID NOT NULL`** design intent (§4.5) — upstream (orders MOD-11) now books one JE
+  per company, so every JE's lines resolve to exactly one company.
+- **Change:** (a) `CreateJournalEntry` **validates single-company** (every line's `GLAccount.CompanyID`
+  identical) → new typed error `MULTI_COMPANY_DRAFT`; the per-company balance rule (AM-4) collapses to
+  plain whole-entry balance. (b) **Schema decision (action-plan item):** reintroduce a
+  `JournalEntry.CompanyID` header column (natural home for per-company locks/close + batch splitting +
+  numbering) vs keep it derived from lines — lean **reintroduce** (a migration + codegen). (c) Batching
+  may now filter/lock **per company** — the enabler for one company closing before another (Marcelo's
+  lock-fidelity rationale) and for Robert's future close model; batch summaries/netting (MOD-4)
+  unchanged. (d) Per-company JE numbering (`JE-{CompanyCode}-…`, the v2/AD-4 shape) vs the current
+  global sequence = open design point for the same action-plan item.
+- **Why / source:** Marcelo ruling 2026-07-13 — locks are JE-grained, so per-company close requires
+  per-company JEs; accounting must see separate per-company movements; Robert's model concurs
+  (meetings/2026-07-13-robert-meeting-decisions.md D3 + postscript). ⚠ Reverses Amith's CH-2 —
+  sanity-check with Amith (residual). Orders counterpart: orders MOD-11.
+- **Status:** Accepted — schema + engine work added to the schema-alignment action plan (A4).

@@ -359,6 +359,12 @@ Period generation is automated for the standard calendar but can be manually adj
 
 ### 4.5 JournalEntry, JournalEntryLine, JournalEntryBatch, JournalEntryBatchLineItem
 
+> ✅ **`JournalEntry.CompanyID` RESTORED by MOD-12 (2026-07-13):** the as-built baseline (Amith 07-02
+> CH-2) had dropped the header CompanyID and made JEs multi-company; MOD-12 reverses that — JEs are
+> single-company again (one JE per company at booking, orders MOD-11), lean reintroduce the column
+> (action-plan A4). Note the section's `AccountingPeriodID` remains REMOVED (MOD-1), and batch statuses
+> follow the as-built list (CH-3) + MOD-3 lock levels.
+
 ```sql
 __mj_BizAppsAccounting.JournalEntry
   ID UUID PK,

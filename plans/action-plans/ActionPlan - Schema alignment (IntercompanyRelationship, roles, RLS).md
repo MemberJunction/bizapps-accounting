@@ -16,13 +16,14 @@
 
 ## 0. Scope
 
-The accounting schema is broadly plan-aligned (28 tables, invariant triggers, read-model views). Three
-targeted work items — **no broad rework, and (post-correction) NO new accounting migration**:
+The accounting schema is broadly plan-aligned (28 tables, invariant triggers, read-model views). Four
+targeted work items — no broad rework; A4 is (post-MOD-12) the one new accounting migration:
 
 - **A1** — intercompany wiring **disposition** (verified OUT of accounting; document + carry forward).
 - **A2** — roles + entity permissions + RLS seeding (MOD-9; master plan was silent on permissions).
 - **A3** — enforcement/trigger alignment audit (verify what's built matches the overlaid plan; explicitly
-  build NOTHING period-related while CA-1 is open).
+  build NOTHING period-related — CA-1 resolved-for-now, no period machinery).
+- **A4** — single-company JE restoration (MOD-12): `JournalEntry.CompanyID` + validation + numbering.
 
 Ground rules identical to the orders schema plan (new V* file if one is ever needed, T-SQL source of
 truth + PG conversion, no CodeGen-owned artifacts, extended properties, migrate → codegen → build →
@@ -152,10 +153,31 @@ verdict above + any micro-migrations the audit surfaces (expected: none).
 
 ---
 
+## A4 — Single-company JE restoration (MOD-12, 2026-07-13)
+
+Booking now emits one JE per company (orders MOD-11), reversing CH-2. Accounting-side work:
+
+1. **Migration `V<TS>__v1.0.x__JournalEntry_CompanyID.sql`:** reintroduce `JournalEntry.CompanyID`
+   (`UNIQUEIDENTIFIER NULL` initially → backfill from lines → flip NOT NULL in the same migration if the
+   data allows; FK → `__mj.Company` mirroring GLAccount's pattern). Extended property; codegen after.
+   Existing multi-company JEs in dev data: split or annotate during backfill (dev-only concern — check
+   whether any real multi-company JE exists before choosing; the demo/harness data is regenerable).
+2. **Engine validation:** `CreateJournalEntry` gains the `MULTI_COMPANY_DRAFT` typed error (every line's
+   `GLAccount.CompanyID` identical + equal to header CompanyID); AM-4's per-company balance collapses to
+   whole-entry balance. Existing harness suites updated (multi-company draft cases become split-draft
+   cases — coordinate with orders F1's split work; the 5/5 order-to-je harness reworks to N-JEs-per-order).
+3. **Trigger check:** immutability/balance triggers are company-agnostic — verify none assumes
+   multi-company; add CompanyID to the immutability-frozen column set.
+4. **Numbering decision:** keep the GLOBAL JE sequence vs per-company `JE-{CompanyCode}-{FY}-{seq}`
+   (the v2/AD-4 shape). `[decision needed: Marcelo]` — global is less churn; per-company reads better
+   for per-company close. Batch building may now filter per company (feature plan B1 note).
+5. **Residual:** ⚠ sanity-check the CH-2 reversal with Amith (rides with the Q20-residual batch).
+
 ## Execution order
 
-A3 audit first (cheap, and it just proved its worth) → A1 documentation rides the A3 ERD update →
-A2 (needs the Marcelo co-design session).
+A3 audit first (cheap, and it just proved its worth) → A4 (the MOD-12 migration — schema-critical,
+orchestrator executes) → A1 documentation rides the A3 ERD update → A2 (needs the Marcelo co-design
+session).
 
 ## Questions for Marcelo — all resolved 2026-07-13 (review session)
 
