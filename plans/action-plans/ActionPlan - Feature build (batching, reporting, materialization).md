@@ -62,7 +62,10 @@ Producer side lives in orders F4; accounting owns:
 1. **`Accounting.CreateScheduledJournalEntries` remote operation** (mirrors `CreateJournalEntry` — MOD-5's
    stated pattern): atomic persist of a schedule's SJE rows + line items, validation (balanced pairs, company
    resolvable, amounts sum to schedule total), supersede support (`Status='Superseded'` +
-   `SupersededByScheduledJournalEntryID` on recompute — §4.9 semantics).
+   `SupersededByScheduledJournalEntryID` on recompute — §4.9 semantics). **Amith 2026-07-11 (demo
+   feedback):** entry + line items MUST be created through a singular engine call for a proper transaction
+   wrapper — the same requirement he confirmed for `CreateJournalEntry` applies to this op, and larger
+   units of logical work use Remotable Operations generally.
 2. **Materialization engine:** `MaterializeDueScheduledEntries(asOf)` — SJE → Pending JE + freeze, idempotent,
    already-shaped by the baseline's SJE trio. **The TRIGGER (when it fires) stays undefined until CA-1/CA-2
    resolve** — build the engine callable + an admin/manual action + a DISABLED scheduled-action stub, so the
@@ -73,17 +76,18 @@ Producer side lives in orders F4; accounting owns:
 **Tests:** remote-op round trip from orders (the F4 bridge harness); materialize idempotency (run twice →
 one JE per SJE); supersede path (recompute → old SJE superseded, materialized ones untouched).
 
-## B4 — Intercompany provisioning polish (with A1)
+## B4 — Intercompany receiving-side contract (re-scoped 2026-07-13)
 
-The A1 hook is schema-plan scope; feature-side: an admin action "Provision intercompany pairs" (backfill/
-repair), and validation that leg-posting (when Payments builds it, orders-side) resolves accounts via
-`IntercompanyRelationship` — a contract test that reads the pair row and asserts the four accounts resolve.
-Leg generation itself remains UNOWNED-until-Payments (ISSUES).
+~~Provisioning hook/admin action~~ — **struck**: the wiring table does NOT live in accounting (2026-07-06
+baseline ruling; MOD-5(c) corrected — Payments owns due-to/due-from end-to-end, wiring included). What
+remains accounting-side is the RECEIVING contract only: when Payments (orders O2) starts posting
+intercompany legs, add a contract test that the already-balanced per-company JEs batch/net correctly per
+MOD-4 and reassemble by source-entity linkage. Nothing to build until Payments exists (ISSUES: UNOWNED).
 
 ## Execution order
 
 B1 (extends fresh lock-redesign context) → B3.1 remote op (unblocks orders F4 in parallel) → B2 (as orders
-data starts flowing; view audit can start immediately) → B3.2 engine → B4.
+data starts flowing; view audit can start immediately) → B3.2 engine → B4 (dormant until Payments/O2).
 
 ## Questions for Marcelo
 

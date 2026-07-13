@@ -10,6 +10,11 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
 > from the decision documents cited in each entry (which remain in `meetings/` and
 > `supporting-documents/` as sources). BA-D11 (Currency ownership) and BA-D18 (Recurring* → Scheduled)
 > need no MOD — they were revised in-place in the master plan before it was anointed.
+> **Retirement note (2026-07-11):** the parallel "master plan v2" doc was DELETED (Marcelo directive —
+> it never aligned with, and was never meant to override, MASTER-PLAN.md). Its Amith/Robert source
+> rulings are preserved in **`meetings/2026-06 - Amith rescope rulings (extracted from retired v2
+> plan).md`** — cited below as "2026-06 rescope rulings". Roadmap content superseded by `action-plans/`;
+> full text in git history.
 
 ---
 
@@ -18,19 +23,27 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
   workflow), decisions BA-D12 / BA-D13 / BA-D14; also §4.9's period-close materialization trigger (see CA-2).
 - **Change:** the schema baseline (`migrations/B202605281200`) ships **no** `AccountingPeriod` table and no
   `AccountingPeriodID` on JournalEntry. Period discipline (close, adjusting-entry routing) is the ERP's job.
-- **Why / source:** schema decision 2026-07-06 recorded in the baseline migration header ("REMOVED:
-  AccountingPeriod, AccountBalance… the ERP owns periods").
+- **Why / source (enriched 2026-07-13 per Marcelo's ask):** this is **Amith's ruling from the 2026-07-02
+  engine meeting** (CH-1) — *"The concept of accounting period is just irrelevant to us… kill that."*
+  His reasoning: our JEs are **multi-company** (CH-2), while a period is a **per-company** concept — it
+  only becomes real when the batch splits per company and posts to the ERP, so **period assignment
+  happens in the ERP at batch-post time**. Killing the table retired the period-close trigger, W4
+  adjusting-entry routing, and period seeding. Sources: change ledger
+  `~/MJDev/reports/accounting-engine-meeting-changes/CHANGES.md` CH-1 (transcript ¶5-7, ¶14-21, ¶65-67);
+  baseline `B202605281200` revision header 2026-07-06 (AM-1..7 + 07-02 transcript).
 - **Status:** Implemented (schema) — ⚠ **CA-1 and CA-2 are OPEN**: Robert's closed-period guard
   (2026-07-09 D4) and the ScheduledJournalEntry materialization trigger both need this reconciled
-  (QUESTIONS Q18 / D-Q2). Do not build period guards until resolved.
+  (QUESTIONS Q18 / D-Q2). Do not build period guards until resolved. *Framing for the Robert
+  conversation (2026-07-13): per Amith's rationale, any closed-period guard must reference ERP period
+  state or a lightweight per-company posted-through date — not a local period table.*
 
 ## MOD-2 — Account-balance materialization deferred; balances compute on demand (2026-06)
 - **Supersedes:** MASTER-PLAN.md §4.10, BA-D22 (partially — the account-scope philosophy stands; the
   materialization mechanism is deferred).
 - **Change:** no `AccountBalance` / `AccountBalanceByDimension` tables; §10 read-model views compute
   balances on demand. Revisit only if read performance demands.
-- **Why / source:** Amith 2026-06-05 ("I might kill this for the first version"); v2 plan C3 / AD-12
-  (`supporting-documents/bizapps-accounting-master-plan-v2.md`).
+- **Why / source:** Amith 2026-06-05 ("I might kill this for the first version"); 2026-06 rescope
+  rulings C3.
 - **Status:** Implemented (schema omits the tables).
 
 ## MOD-3 — Batch locking has LEVELS; reject UNLOCKS; open batches regenerate (2026-07-08)
@@ -39,7 +52,11 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
   be freed); **approval = permanent** lock (through Sent/GLPosted); **reject unlocks** the entries back to
   the unbatched candidate pool; an open/unapproved batch can be **regenerated** (re-gather candidates,
   rebuild summaries — same batch record). Candidate set = every entry not in a batch.
-- **Why / source:** Robert 2026-07-08 (meetings/2026-07-08-robert-meeting-decisions.md D1/D2/D4).
+- **Approval mechanism (Amith, 2026-06-28):** the batch approval that makes the lock permanent runs
+  **via a task in the `bizapps-tasks` app** — the batch cannot move to `Sent`/dispatch to BC until the
+  approval task completes (CFO-level approval requirement).
+- **Why / source:** Robert 2026-07-08 (meetings/2026-07-08-robert-meeting-decisions.md D1/D2/D4);
+  approval-via-Tasks requirement: 2026-06 rescope rulings ("CFO batch approval").
 - **Status:** Implemented — migration `V202607081600__…JEBatch_Reversible_Preliminary_Lock.sql`;
   Implemented-by: `action-plans/ActionPlan - Batch approval lock redesign.md`.
 
@@ -48,7 +65,7 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
 - **Change:** one `JournalEntryBatchLineItem` per (Company × GLAccount × Dimension-combo) carrying the **net**
   amount on a single side (e.g. $2,000 Dr + $1,500 Cr same group → one $500 Dr line). Null-dimension entries
   aggregate together within their Company × Account group.
-- **Why / source:** Amith 2026-06-28; v2 plan C5.
+- **Why / source:** Amith 2026-06-28; 2026-06 rescope rulings C5.
 - **Status:** Accepted (engine behavior spec).
 
 ## MOD-5 — Intercompany: per-company-pair Due-To/Due-From accounts; Payments generates ALL legs (2026-06-28/30)
@@ -56,12 +73,38 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
 - **Change:** (a) NO centralized Due-To/Due-From accounts — **per-company-pair** accounts, 4 per pair
   (Amith veto of centralized). (b) **Payments** generates the intercompany balancing legs (Orders posts each
   company's initial JE); Accounting does NOT generate and does NOT net the intercompany position — it
-  receives, batches (per MOD-4), locks, posts. (c) Account wiring lives in a planned
-  `IntercompanyRelationship` table joining two AccountingCompanyProfiles with all four accounts,
-  eagerly provisioned per pair (Amith-specified schema in the v2 plan Preface OQ-A) — **not yet migrated**.
-- **Why / source:** Amith 2026-06-28 + 2026-06-30; v2 plan C1 / OQ-A.
-- **Status:** Accepted — schema work (IntercompanyRelationship) pending; generator lands with the
-  Payments subsystem (orders side).
+  receives, batches (per MOD-4), locks, posts. Upstream stamps source-entity IDs as the linking key for
+  reassembling a logical multi-company transaction. (c) **The `IntercompanyRelationship` wiring table
+  does NOT live in accounting** — it was created then DROPPED (net-zero) and deliberately omitted from
+  the squashed baseline (2026-07-06 fold header: "Accounting does no intercompany balancing; the
+  Payments component owns due-to/due-from"). Payments owns the wiring end-to-end when it's built; the
+  per-pair GL accounts themselves will still be `GLAccount` rows (accounting owns COA *storage*), but
+  Payments defines/drives them. Amith's OQ-A reference shape for wherever the wiring lands (2026-06-28):
+
+  ```sql
+  __mj_BizAppsAccounting.IntercompanyRelationship
+    ID UNIQUEIDENTIFIER NOT NULL DEFAULT NEWSEQUENTIALID(),
+    CompanyAID UNIQUEIDENTIFIER NOT NULL,   -- FK → AccountingCompanyProfile; ONE row per UNORDERED pair
+    CompanyBID UNIQUEIDENTIFIER NOT NULL,   -- FK → AccountingCompanyProfile
+    ADueToBGLAccountID   UNIQUEIDENTIFIER NOT NULL,  -- A's Liability "Due To B"   (GLAccount.CompanyID = CompanyAID)
+    ADueFromBGLAccountID UNIQUEIDENTIFIER NOT NULL,  -- A's Asset    "Due From B"  (CompanyAID)
+    BDueToAGLAccountID   UNIQUEIDENTIFIER NOT NULL,  -- B's Liability "Due To A"   (CompanyBID)
+    BDueFromAGLAccountID UNIQUEIDENTIFIER NOT NULL,  -- B's Asset    "Due From A"  (CompanyBID)
+    IsActive BIT NOT NULL DEFAULT 1,
+    PK(ID); FKs to ACP + GLAccount; CHECK (CompanyAID <> CompanyBID); UNIQUE (CompanyAID, CompanyBID)
+  ```
+  Reference-design notes for the Payments-side build: canonical unordered-pair order = **direct UUID
+  comparison** (`CompanyAID < CompanyBID` as UUIDs — Marcelo 2026-07-13: robust to renames; readability
+  is not a criterion); provisioning is **EAGER per pair** (Amith said eager, eager stands).
+- **Ownership sub-question RESOLVED (verified 2026-07-13):** the 2026-06-30 open question ("does
+  Accounting still own the wiring?") was answered by the 2026-07-06 baseline squash — **NO** (see (c)
+  above; ruling recorded in the migration fold header, lines ~2377/2385). Residual item for Payments/O2
+  design time: where the wiring table lives + how per-pair accounts provision into the COA (QUESTIONS
+  Q20 residual).
+- **Why / source:** Amith 2026-06-28 + 2026-06-30 (2026-06 rescope rulings C1 / OQ-A); baseline
+  `B202605281200` fold header 2026-07-06 (the wiring-drop ruling).
+- **Status:** Accepted + implemented on the accounting side (nothing to build here); wiring + generator
+  land with the Payments subsystem (orders repo, phase O2).
 
 ## MOD-6 — All FX (realized + unrealized) computed and posted UPSTREAM (2026-06-29/30)
 - **Supersedes:** BA-D10's "realized FX gain/loss auto-emitted by engine", §6.3/§6.4 engine behavior,
@@ -70,7 +113,7 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
   GL-account refs (`AccountingCompanyProfile.RealizedFXGainLossGLAccountID`), balance validation, and the
   reporting view (`vw_FxExposure`). ⚠ Note: until the Payments subsystem exists, this responsibility is
   **unowned** — tracked in the schema-alignment action plan.
-- **Why / source:** Amith 2026-06-30 ("FX is handled in Orders/Payments"); v2 plan C1b.
+- **Why / source:** Amith 2026-06-30 ("FX is handled in Orders/Payments"); 2026-06 rescope rulings C1b.
 - **Status:** Accepted.
 
 ## MOD-7 — Seeded COA trimmed to a minimal AR-subledger set (~10-12 accounts) (2026-06-28)
@@ -78,7 +121,7 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
 - **Change:** seed only essential subledger accounts (Cash, AR, Sales Tax Payable, Deferred Revenue,
   Commission Payable, Partner Rev Share Payable, Sales/Subscription Revenue, FX gain/loss); the rest sync
   from BC. Centralized intercompany rows removed per MOD-5.
-- **Why / source:** Amith ("radical simplification… lean on dimensions"); v2 plan AD-8 / C2.
+- **Why / source:** Amith ("radical simplification… lean on dimensions"); 2026-06 rescope rulings C2.
 - **Status:** Implemented (SeedData).
 
 ## MOD-8 — Batching UX/model: oldest-forward default; arbitrary batches via MJ User Views (2026-07-09)

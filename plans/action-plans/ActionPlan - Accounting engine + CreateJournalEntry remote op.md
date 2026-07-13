@@ -18,8 +18,9 @@
 
 **Authority chain (highest first):** Amith 07-03 response (AM-1..7) → 07-02 meeting transcript (¶) →
 07-01 first meeting (`plans/Meeting with Amith.pdf`, committed) → this plan → orders amendment
-(`bizapps-orders/plans/2026-07-02-engine-meeting-amendment.md`) → `bizapps-accounting-master-plan-v2.md` →
-master plan/README. Target-schema diagram: `erd-accounting-target.md` (same folder).
+(`bizapps-orders/plans/2026-07-02-engine-meeting-amendment.md`) → the June-2026 rescope rulings
+(`meetings/2026-06 - Amith rescope rulings (extracted from retired v2 plan).md`; the v2 doc itself was
+retired 2026-07-11) → master plan/README. Target-schema diagram: `erd-accounting-target.md` (same folder).
 
 ---
 

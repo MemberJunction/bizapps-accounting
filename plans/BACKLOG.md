@@ -7,8 +7,11 @@ Convention: `~/MJDev/shared-plans/repo-planning-system.md` §5.1. (The instance-
 
 ## Tasks
 
-- [x] ~~**`IntercompanyRelationship` migration**~~ — PROMOTED 2026-07-11 →
-      `action-plans/ActionPlan - Schema alignment (IntercompanyRelationship, roles, RLS).md` A1.
+- [x] ~~**`IntercompanyRelationship` migration**~~ — **STRUCK 2026-07-13 (mis-promoted):** verification
+      (Marcelo's catch) found the table was created-then-DROPPED and deliberately omitted from the
+      baseline (2026-07-06 fold ruling: Payments owns due-to/due-from). Not accounting work — wiring
+      lands with Payments/O2 (orders repo); reference schema kept in MOD-5. Action plan A1 re-scoped to
+      disposition/documentation only.
 - [x] ~~**View-driven batch builder** (MOD-8)~~ — PROMOTED 2026-07-11 →
       `action-plans/ActionPlan - Feature build (batching, reporting, materialization).md` B1.
 - [x] ~~**Role seeding + RLS** (MOD-9)~~ — PROMOTED 2026-07-11 → Schema action plan A2 (co-design
@@ -25,3 +28,13 @@ Convention: `~/MJDev/shared-plans/repo-planning-system.md` §5.1. (The instance-
       materialization trigger (CA-2). `[decision needed: Amith/Robert + Jeremy exception rules]` (Q18/D-Q2)
 - [ ] **Tax first iteration: order-line-type vs separate tables** — pick one (Robert offered the quick
       path; accounting tax tables exist either way). `[decision needed: Robert]`
+- [x] ~~**IntercompanyRelationship wiring ownership**~~ — **RESOLVED 2026-07-13 (verified from the
+      baseline):** the 2026-07-06 squash ruling already answered it — wiring is Payments-side; Accounting
+      does no intercompany balancing. Residual (Q20): at O2 design, sanity-check with Amith where the
+      wiring table lives + how per-pair accounts provision into the COA. `[residual: Amith, at O2]`
+- [ ] **Open-AR cutover** — import open BC invoices pre-go-live (payments apply in the new system) vs
+      let pre-cutover AR close out in BC. Matters for the ≥2026-08-17 cutover.
+      `[decision needed: Robert/Jeremy]` — 2026-06 rescope rulings §12.
+- [ ] **Manual-JE approval gate** — require approval before a `Manual` JE can be batched? Folds into the
+      MOD-9 role/status-rule design (action-plan A2). `[decision needed: Robert]` — 2026-06 rescope
+      rulings §12.

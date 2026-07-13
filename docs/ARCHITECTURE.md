@@ -1,9 +1,12 @@
 # BizApps Accounting — Architecture
 
-> **Status:** living document, seeded in Block 0. Each section is filled in as its block
-> lands (see `plans/bizapps-accounting-master-plan-v2.md` §9). This is the single place that
-> explains the system to someone who wasn't in the build. **Decisions live in the v2 plan's
-> AD-\* table + Conflict-Resolution preface; this doc explains the _shape_ and the _why_.**
+> **Status:** living document. This is the single place that explains the system to someone
+> who wasn't in the build. **Decisions live in `plans/MASTER-PLAN.md` as overlaid by
+> `plans/MASTER-PLAN-MODIFICATIONS.md` (MOD-*) + `plans/MASTER-PLAN-UPDATES.md` (UPD-*)** —
+> this doc explains the _shape_ and the _why_. (The former "master plan v2" doc was retired
+> 2026-07-11; its Amith/Robert rulings live in `plans/meetings/2026-06 - Amith rescope rulings
+> (extracted from retired v2 plan).md`, and its AD-* labels referenced below map to those
+> rulings + the MOD ledger.)
 
 ## 1. System overview & boundaries
 BizApps Accounting is the **AR subledger (subsidiary ledger of record)** for the MJ stack —
@@ -59,10 +62,11 @@ the ERP **by account number, split per company** (AM-4). Periods/close live in t
 - _(More as blocks land.)_
 
 ## 4. Key decisions
-See `plans/bizapps-accounting-master-plan-v2.md` — the **AD-1..AD-17 table** (the build's
-decision record) and the **Conflict-Resolution preface** (C1–C5 + open questions OQ-A/OQ-B).
-Master `BA-D1..BA-D27` is the older source; where the v2 plan/transcript supersede it, the v2
-plan is authoritative.
+See **`plans/MASTER-PLAN.md`** (BA-D1..BA-D27) as overlaid by **`plans/MASTER-PLAN-MODIFICATIONS.md`
+(MOD-1..10)** and **`plans/MASTER-PLAN-UPDATES.md`** — the ledgers are authoritative
+(precedence: MOD > UPD > original). The June-2026 rescope rulings (C1–C5, OQ-A) behind
+MOD-2/4/5/6/7 are preserved in `plans/meetings/2026-06 - Amith rescope rulings (extracted
+from retired v2 plan).md`.
 
 ## 5. Key code sections (capability → where to look)
 | To change… | Look at |

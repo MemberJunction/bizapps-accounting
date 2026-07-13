@@ -57,6 +57,10 @@
 
 ## 1. Context and positioning
 
+> ➕ **UPDATED by UPD-1 (2026-07-11):** Amith's guiding principle made explicit — mirror real-world
+> accounting practice (pen-not-pencil corrections, trigger-enforced DB controls, subledger-of-record
+> framing) — see MASTER-PLAN-UPDATES.md.
+
 BizAppsAccounting provides the **journal entry primitives and AR subsidiary ledger** for the MJ ecosystem. It is **not a general ledger**.
 
 ### What we ARE

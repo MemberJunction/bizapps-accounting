@@ -13,11 +13,11 @@ This folder follows the repo planning system (`~/MJDev/shared-plans/repo-plannin
 | `action-plans/` | `ActionPlan - <Summary of Actions>.md` — the ONLY docs work is executed from. Header cites the §/MOD/EXT they implement. Move to `completed/` when done. |
 | `completed/` | Finished (or abandoned) action plans. |
 | `meetings/` | Transcripts + distilled per-meeting decision notes. **Meetings are inputs, never authority** — a decision only becomes the plan as a MOD, Update, or Extension. |
-| `supporting-documents/` | Reference material that is neither plan nor meeting (ERDs, the legacy v2 roadmap, external-system schema exports, analyses). |
+| `supporting-documents/` | Reference material that is neither plan nor meeting (ERDs, external-system schema exports, analyses). |
 
 **Migration map (2026-07-10)** — old paths → new, for stale references in older docs:
 - `plans/bizapps-accounting-master.md` → `plans/MASTER-PLAN.md`
-- `plans/bizapps-accounting-master-plan-v2.md` → `plans/supporting-documents/…` (reclassified; live decisions = MOD-1..10)
+- `plans/bizapps-accounting-master-plan-v2.md` → **DELETED 2026-07-11** (a parallel plan, never meant to override the master; live decisions = MOD-1..10 + UPD-1; source rulings preserved in `meetings/2026-06 - Amith rescope rulings (extracted from retired v2 plan).md`; full text in git history)
 - `plans/accounting-engine-plan.md` → `plans/action-plans/ActionPlan - Accounting engine + CreateJournalEntry remote op.md`
 - `plans/batch-approval-lock-redesign.md` → `plans/action-plans/ActionPlan - Batch approval lock redesign.md`
 - `plans/erd-accounting-target.md`, `plans/handoff-next-steps.md` → `plans/supporting-documents/…`
