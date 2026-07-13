@@ -43,8 +43,9 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
   period, "not our job to worry about" — which is company-split-agnostic.
 - **Status:** Implemented (schema) + **ruling followed-for-now (Marcelo 2026-07-13):** the removal
   stands and **no local period guard is built** — CA-1 is PARKED on this ruling ("there may be changes
-  later" — Robert is still researching; revisit only if he overturns it). CA-2 was resolved separately
-  by MOD-11 (date-driven scheduled entries).
+  later" — Robert is still researching; revisit only if he overturns it). **Validation queued (Robert
+  2026-07-13): ask Jeremy — "we don't lock anything in the AR subledger and leave it up to the GL; any
+  concerns?" (QUESTIONS Q19f).** CA-2 was resolved separately by MOD-11 (date-driven scheduled entries).
 
 ## MOD-2 — Account-balance materialization deferred; balances compute on demand (2026-06)
 - **Supersedes:** MASTER-PLAN.md §4.10, BA-D22 (partially — the account-scope philosophy stands; the
@@ -147,8 +148,10 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
 - **Supersedes:** none (additive — the master plan was silent on permissions).
 - **Change:** no bespoke permission system. Seed **Accounting User** + **Accounting Admin** (optionally
   Manager) roles in migrations; entity CRUD permissions + RLS scoping by company; field/status rules layer
-  on top (batch-approver, status transitions). CFO-approver is a designated-approver link
-  (Employee-vs-User open, D-Q1). Deliverables include a setup/settings screen + install doc.
+  on top (batch-approver, status transitions). CFO-approver is a designated-approver link **to
+  `__mj.User`** (D-Q1/Q17 RESOLVED, Marcelo 2026-07-13 — no Employee entity exists; the approver is a
+  security identity; as-built `ApprovalCFOPersonID` (Person) migrates to `ApprovalCFOUserID` in the A4
+  wave). Deliverables include a setup/settings screen + install doc.
 - **Why / source:** Robert 2026-07-09 D1.
 - **Status:** Accepted — not built (plan + backlog; co-design the role tree with Marcelo).
 

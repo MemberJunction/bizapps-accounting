@@ -85,9 +85,10 @@ Deliverables (post-research):
 1. **Roles** (seeded via metadata folder, not SQL INSERTs — MJ convention): **Accounting User** (JE browse,
    create Pending JEs, view batches/reports), **Accounting Admin** (COA, company profiles, dimensions,
    GLAccountLink mapping, batch build/regenerate, remittance, role assignment), **Accounting Approver**
-   (**RESOLVED — Marcelo 2026-07-13: approver IS a role**, and **only Admin may assign it**). The as-built
-   `AccountingCompanyProfile.ApprovalCFOPersonID` + bizapps-tasks gate stay as the designated-approver
-   point pending R3.
+   (**RESOLVED — Marcelo 2026-07-13: approver IS a role**, and **only Admin may assign it**). The
+   designated-approver LINK is **RESOLVED too (Q17): `__mj.User`** — the as-built `ApprovalCFOPersonID`
+   (FK Person) migrates to `ApprovalCFOUserID` (A4.6) and the bizapps-tasks gate drops its
+   Person→LinkedUserID indirection. R3 still governs the company-scoping half of approver security.
    **Order-creator coverage (Marcelo):** the orders app is effectively invoice management — its users
    need, on the accounting side, only (a) **permission to create journal entries** (satisfied through the
    `Accounting.CreateJournalEntry` remote op their order Confirm invokes) and (b) **browse accounting
@@ -174,6 +175,10 @@ Booking now emits one JE per company (orders MOD-11), reversing CH-2. Accounting
 5. **Decision LOCKED (Marcelo 2026-07-13):** no Amith gate on executing A4 — single-company JEs are a
    logical requirement (per-company close independence). Only a later Amith-ordered broad restructure
    would revisit; build now.
+6. **Approver-link migration (Q17, same wave):** add `AccountingCompanyProfile.ApprovalCFOUserID`
+   (FK `__mj.User`), backfill from `ApprovalCFOPersonID` via `Person.LinkedUserID`, deprecate/drop the
+   Person column (it's unpublished-app internal — check the no-break policy stance at execution), and
+   simplify `TasksAppApprovalGate` to gate on the User directly.
 
 ## Execution order
 
@@ -201,9 +206,10 @@ session).
   Payments-side wiring interpretation of the 2026-07-06 ruling + where the wiring table lives + how
   per-pair accounts provision into accounting's COA.
 - **Robert (D-Q1/Q-F) — direction from Marcelo 2026-07-13:** approver gating is **by company AND by
-  role**; whether the company half can move off the DB-designated link (`ApprovalCFOPersonID`) depends
-  on **R3** (is person→company linkage securable, or informational-only?). Do NOT change the approver
-  mechanism before R3 answers that. Employee-vs-User (Q17) still with Robert.
+  role**; whether the company half can move off the DB-designated link depends on **R3** (is
+  person→company linkage securable, or informational-only?). Do NOT change the approver mechanism
+  before R3 answers that. ~~Employee-vs-User (Q17)~~ **RESOLVED: `__mj.User`** (Marcelo 2026-07-13;
+  A4.6 migration).
 - **Amith/Robert (CA-1/Q18):** periods — *Marcelo is talking to Robert TODAY (2026-07-13); answer +
   plan updates to follow.* A3 deliberately builds nothing period-shaped meanwhile. MOD-1 now carries
   Amith's original removal rationale as framing for that conversation.
