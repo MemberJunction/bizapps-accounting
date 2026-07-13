@@ -16,6 +16,8 @@ Entry: `### [OPEN|RESOLVED] <title> — <date>` with source + status. Convention
   OQ-A reference schema kept in MOD-5). Source: 2026-06 rescope rulings C1/C1b + the baseline fold
   header + the 2026-07-10 gap analysis.
 
-### [OPEN] ScheduledJournalEntry materialization trigger undefined after periods removal — 2026-07-10
-- BA-D25 defined materialization as a period-close action; MOD-1 removed periods. Needs a
-  calendar/schedule-driven trigger or the CA-1 resolution. (= CA-2 in MASTER-PLAN.md.)
+### [RESOLVED] ScheduledJournalEntry materialization trigger undefined after periods removal — 2026-07-10 → 2026-07-13
+- BA-D25 defined materialization as a period-close action; MOD-1 removed periods. **RESOLVED by MOD-11
+  (Robert 2026-07-13): DATE-driven** — scheduled entries created up-front at booking with their own
+  recognition dates; materialize when due; batches pick up by date window. CA-2 closed; CA-1 (periods
+  guard) remains open independently.

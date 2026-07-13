@@ -18,3 +18,11 @@ Accounting-side impact (full triage in the orders copy's _PROCESSED.md — the f
   plan B3.1 updated with the Amith citation.
 - Engine-base/server split: accounting already HAS it (`accounting-engine-base` + `AccountingEngine`) —
   Amith's pattern confirmed as-built here; the refactor lands orders-side (orders UPD-5 / F0).
+
+### 2026-07-13 - Marcelo & Robert accounting meeting.md — ✅ PROCESSED 2026-07-13
+Distilled → `2026-07-13-robert-meeting-decisions.md`. Landings: **MOD-11** (scheduled JEs DATE-driven,
+created up-front at booking — resolves CA-2; CA table + §4.9 marker + ISSUES + BACKLOG + feature plan B3
+updated); Q18 progressed (Robert researching CH-1; batch-as-lock rejected; change ledger imported as
+`2026-07-02 - engine meeting change ledger (recreated) [CH+AM].md`); D3 tension flagged (company-owns-order
+vs CH-2 multi-company JE → orders Q2 escalated); D4 process (public-repo transcripts OK'd; 24h-intent notes
+to Robert; demo ~Tue). Transcript renamed from "2026-13-2026 - …".

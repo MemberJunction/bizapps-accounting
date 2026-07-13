@@ -20,7 +20,7 @@
 | # | Issue (sections involved) | Resolution | Resolved by / date |
 |---|---|---|---|
 | CA-1 | MOD-1 removed `AccountingPeriod` from the schema ("the ERP owns periods"), but Robert (2026-07-09 D4) requires a **closed-period posting guard** at both the order and JE layers. With no local period notion, there is nothing to guard against. Options: (a) ERP rejects the batch post-hoc, (b) lightweight per-company close-date, (c) guard fed by ERP period state. | **OPEN** (QUESTIONS Q18 / D-Q2) — do NOT build period guards until reconciled | — |
-| CA-2 | §4.9 defines `ScheduledJournalEntry` materialization as a **period-close** action (BA-D25), but with periods removed (MOD-1) the materialization trigger is undefined — needs a calendar/schedule-driven trigger or the CA-1 resolution. | **OPEN** (same reconciliation as CA-1) | — |
+| CA-2 | §4.9 defines `ScheduledJournalEntry` materialization as a **period-close** action (BA-D25), but with periods removed (MOD-1) the materialization trigger is undefined — needs a calendar/schedule-driven trigger or the CA-1 resolution. | **Resolved: DATE-driven** — every scheduled entry bears its own recognition date, created up-front at booking; materialize when due; batches pick up by date window. See **MOD-11**. (Independent of CA-1, which stays open.) | Robert 2026-07-13 (+ Amith's prior direction) ✅ |
 | CA-3 | §4.10 / BA-D22 materialize closed-period balances, and §10 views assume them — but MOD-2 defers all balance materialization; views compute on demand. Resolved: views-on-demand for v1; revisit only if read performance demands. | Amith 2026-06-05 ("might kill this for the first version") / v2 C3 | ✅ |
 
 ---
@@ -576,6 +576,11 @@ Tax rates can be populated by:
 The tax engine itself (calculation logic at order time) lives in BizAppsOrders, calling `TaxCalculationProvider` (interface in BizAppsAccounting, implementations registered via `RegisterClass`).
 
 ### 4.9 Scheduled journal entries (revenue-recognition waterfall) — BA-D25
+
+> ⚠ **MODIFIED by MOD-1 + MOD-11:** the "period-close engine materializes" mechanism below is superseded —
+> periods are removed (MOD-1), and recognition is **DATE-driven** (MOD-11, Robert 2026-07-13): all
+> scheduled entries are created up-front at booking, each with its own recognition date; batches pick
+> them up by date window. Original text retained below.
 
 > **REVISED 2026-06:** the cron-driven `Recurring*` trio (BA-D18) is **removed**. Deferred-revenue recognition — the dominant in-scope need — is modeled as a finite, origin-linked, known-amount waterfall of **scheduled** future entries. FX revaluation moves to a programmatic action (§6.4 / BA-D27).
 

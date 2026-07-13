@@ -55,7 +55,7 @@ Target: reproduce the reports Jeremy runs off Power BI/SQL today, from our read 
 **Tests:** golden-dataset fixtures per view (known JE set → known aging buckets/rollforward rows); parity
 spot-check against Jeremy's Power BI numbers on real data at cutover rehearsal.
 
-## B3 — Scheduled-JE bridge + materialization seam (CA-2-aware)
+## B3 — Scheduled-JE bridge + DATE-driven materialization (CA-2 RESOLVED by MOD-11, 2026-07-13)
 
 Producer side lives in orders F4; accounting owns:
 
@@ -65,13 +65,19 @@ Producer side lives in orders F4; accounting owns:
    `SupersededByScheduledJournalEntryID` on recompute — §4.9 semantics). **Amith 2026-07-11 (demo
    feedback):** entry + line items MUST be created through a singular engine call for a proper transaction
    wrapper — the same requirement he confirmed for `CreateJournalEntry` applies to this op, and larger
-   units of logical work use Remotable Operations generally.
-2. **Materialization engine:** `MaterializeDueScheduledEntries(asOf)` — SJE → Pending JE + freeze, idempotent,
-   already-shaped by the baseline's SJE trio. **The TRIGGER (when it fires) stays undefined until CA-1/CA-2
-   resolve** — build the engine callable + an admin/manual action + a DISABLED scheduled-action stub, so the
-   decision (calendar cron vs period-close vs continuous) is a one-line enablement, not a build.
-3. **Cadence note:** Amith's batch-vs-continuous decision (orders BACKLOG) parameterizes the producer's
-   period granularity; materialization here is cadence-agnostic (materialize whatever is due as-of).
+   units of logical work use Remotable Operations generally. Per MOD-11, the producer calls this **at
+   booking-lock time** with every entry carrying its recognition DATE (12 dated entries for an annual
+   sub; one dated entry for an event).
+2. **Materialization engine — now fully specified (MOD-11):** `MaterializeDueScheduledEntries(asOf)` —
+   every SJE whose recognition date ≤ asOf → Pending JE + freeze, idempotent (already shaped by the
+   baseline's SJE trio). **Trigger = a daily scheduled action** (MJ Scheduled Actions) + the manual
+   admin action ("Materialize due through [date]", B-Q3) as the operator override. Batches then pick
+   the materialized JEs up by their date window like any other Pending entry — no period-close coupling.
+   CA-1 (periods guard) does not block any of this.
+3. **Cadence note:** Robert's dated-entry model effectively answers the batch-monthly-vs-continuous
+   question for the LEDGER side (continuous dated entries; batching windows them). Amith's cadence
+   decision (orders BACKLOG) now only shapes the PRODUCER's date granularity (monthly anniversary dates
+   per Robert's 7/13-8/13-… example) — confirm with Amith at F4 build, low stakes.
 
 **Tests:** remote-op round trip from orders (the F4 bridge harness); materialize idempotency (run twice →
 one JE per SJE); supersede path (recompute → old SJE superseded, materialized ones untouched).

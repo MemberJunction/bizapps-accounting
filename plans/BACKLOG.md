@@ -24,8 +24,10 @@ Convention: `~/MJDev/shared-plans/repo-planning-system.md` §5.1. (The instance-
 
 ## Decisions needed
 
-- [ ] **Periods reconciliation** — closed-period guard vs periods-removed (CA-1) + ScheduledJournalEntry
-      materialization trigger (CA-2). `[decision needed: Amith/Robert + Jeremy exception rules]` (Q18/D-Q2)
+- [ ] **Periods reconciliation (CA-1 only — CA-2 resolved 2026-07-13 by MOD-11)** — closed-period guard
+      vs periods-removed. Robert is researching Amith's CH-1 rationale (change ledger provided in
+      meetings/); his position so far: batches must NOT be the period lock; the close is an explicit
+      accounting-team event. `[decision needed: Amith/Robert + Jeremy exception rules]` (Q18/D-Q2)
 - [ ] **Tax first iteration: order-line-type vs separate tables** — pick one (Robert offered the quick
       path; accounting tax tables exist either way). `[decision needed: Robert]`
 - [x] ~~**IntercompanyRelationship wiring ownership**~~ — **RESOLVED 2026-07-13 (verified from the

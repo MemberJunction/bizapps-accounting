@@ -152,3 +152,20 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
 - **Why / source:** 2026-07-02 engine meeting rulings (see `action-plans/ActionPlan - Accounting engine +
   CreateJournalEntry remote op.md` + the orders repo's `meetings/2026-07-02-engine-meeting-amendment.md`).
 - **Status:** Implemented (schema + engine).
+
+## MOD-11 — Scheduled-JE recognition is DATE-driven; entries created up-front at booking (2026-07-13)
+- **Supersedes:** §4.9's "the period-close engine materializes [each ScheduledJournalEntry] on its target
+  period" (BA-D25's period-close trigger), already orphaned by MOD-1. **Resolves CA-2.**
+- **Change:** when an order's JEs are booked and locked, **ALL scheduled journal entries are created
+  immediately, each bearing its own recognition DATE** (a 12-month $1,200 sub sold 7/13 → 12 × $100
+  Dr DefRev / Cr Revenue entries dated 7/13, 8/13, … 6/13; an event product → ONE entry, 100% on the
+  event date — the UPD-2/orders two-shape model). Recognition fires **by date, not by period close**:
+  the materializer turns due entries (date reached) into Pending JEs, and **batches pick them up by
+  their date window** ("batch the July transactions… only the ones in July"). The orders-side
+  `RevenueRecognitionSchedule` envelope plays the historical "scheduled transaction group" role.
+- **Why / source:** Robert 2026-07-13 (`meetings/2026-07-13-robert-meeting-decisions.md` D1 + the
+  transcript), matching Amith's later direction ("create a journal entry at a specific time" — Marcelo).
+  Robert's caveat noted: his model is historical practice; flag any collision with Amith rulings back
+  to him — none known (CH-1 removed the period trigger; this fills the gap consistently).
+- **Status:** Accepted — engine work in the feature action plan B3 (now un-gated on CA-2; CA-1/periods
+  remains open and does NOT block this).
