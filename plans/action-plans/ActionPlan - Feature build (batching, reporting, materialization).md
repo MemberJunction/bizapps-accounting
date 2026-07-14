@@ -22,11 +22,9 @@ model):
    otherwise** (name the offending JEs; no silent filtering). Out-of-order batching is allowed while open;
    the reversal workflow remains regenerate-the-open-batch (MOD-8).
 3. **No hard batch-by-type restriction** — grouping via the view's own filters.
-4. **Close interplay (MOD-13):** batch cutoff suggests the close boundary; building a batch does NOT
-   close (Robert: batches must not be the lock) — the close is the explicit A5 action afterward.
-5. **Netted summaries** (MOD-4) — verify the existing summary builder nets per (Company × GLAccount ×
+4. **Netted summaries** (MOD-4) — verify the existing summary builder nets per (Company × GLAccount ×
    Dimension-combo) with null-dimension aggregation; add the golden tests if missing.
-6. **Batch dimensions for customer detail (Q-C, Jeremy):** when Jeremy's definitive list lands, this is seed
+5. **Batch dimensions for customer detail (Q-C, Jeremy):** when Jeremy's definitive list lands, this is seed
    data (`Dimension`/`DimensionValue` rows, e.g. Customer / Product / Renewal-vs-New / Event) + upstream
    tagging (orders booking draft populates line dimensions) + the summary's dimension-combo grouping already
    handling the rest. **Design note:** Customer-as-dimension is the current lean for AR detail reaching BC

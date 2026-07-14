@@ -41,11 +41,12 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
   removes the multi-company-JE *premise* from the rationale above, but the removal ruling **stands on
   its own core rationale** — the fuller verbatim: the ERP settles periods, batches land in its ACTIVE
   period, "not our job to worry about" — which is company-split-agnostic.
-- **Status:** Implemented (schema); **guard stance REVISED by MOD-13 (Marcelo 2026-07-14):** the
-  removal of ERP-period BOOKKEEPING stands (no period-driven materialization — MOD-11 is date-driven;
-  batches land in the ERP's active period), but a **lightweight manual close guard is reinstated**
-  (race-condition rationale in MOD-13; resolves CA-1). Jeremy validation reframed accordingly (Q19f).
-  CA-2 was resolved separately by MOD-11.
+- **Status:** Implemented (schema) + **FINAL (Marcelo 2026-07-14, after a same-day MOD-13 detour,
+  withdrawn):** the removal stands in full — **no local period guard, no close machinery**. Added
+  rationale: batching consolidates entries into summaries that lose date information anyway; the app is
+  an AR subledger and the ACCOUNTANTS are responsible for batching entries into the right periods.
+  Future timing complexities will be handled when they arise. Jeremy validation stays queued (Q19f:
+  "we don't lock anything in the AR subledger — concerns?"). CA-2 was resolved separately by MOD-11.
 
 ## MOD-2 — Account-balance materialization deferred; balances compute on demand (2026-06)
 - **Supersedes:** MASTER-PLAN.md §4.10, BA-D22 (partially — the account-scope philosophy stands; the
@@ -204,30 +205,16 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
   revisit it (considered unlikely — we'd adapt then). Orders counterpart: orders MOD-11.
 - **Status:** Accepted + **LOCKED** — schema + engine work in the schema-alignment action plan (A4).
 
-## MOD-13 — Manual period close REINSTATED (lightweight AccountingPeriod; revises MOD-1's guard stance) (2026-07-14)
-- **Supersedes/revises:** the "no local period guard" stance recorded in MOD-1's status (the 2026-07-13
-  follow-for-now ruling) and the CA-1 parking. **MOD-1's core removal STANDS**: we do NOT bookkeep the
-  ERP's periods, do NOT couple recognition/materialization to period close (MOD-11 stays date-driven),
-  and dispatched batches still land in the ERP's active period. What returns is ONLY the **close guard**.
-- **Change:** reintroduce an **AccountingPeriod-class entity for CLOSE CONTROL** — an accountant can
-  **manually close a period (or an arbitrary time span) per company**; once closed, **no new journal
-  entries may be created/dated into that span for that company** (DB trigger — the un-bypassable floor,
-  per the triggers doctrine). Single-company JEs (MOD-12) make this clean: one company closes without
-  touching another (the lock-fidelity requirement). Batches inform the natural closed-through boundary
-  (close typically follows the last batch's cutoff — Robert's model + Marcelo's CA-3 note), but the
-  close itself is an explicit accountant action, Admin/Approver-gated.
-- **Why / source (Marcelo 2026-07-14, decision):** without a local close there is a **race condition**
-  between the accounting app and Business Central — even if we checked BC for closed periods, the gap
-  between the last batch and BC's period close lets someone create an entry dated into the closing
-  period and break the system's constraints. "A manual closing of the accounting period or an arbitrary
-  time period on the accounting app side allows accountants to be sure that no new entries are coming
-  in. It is a required feature." Robert's 2026-07-13 position concurs (batches must not be the lock; the
-  close is an explicit accounting-team event). Jeremy validation still queued (Q19f, reframed: any
-  concerns with the manual-close design?).
-- **Design constraint (Marcelo 2026-07-14):** journal entries do **NOT reference the period** — no
-  `AccountingPeriodID` FK returns. A JE carries only its **posted/effective date**; the system DETECTS
-  closability by time (the trigger/validation checks `EffectiveDate` against the company's closed
-  spans). Periods are a **checking structure**, not a linkage.
-- **Status:** Accepted — schema + trigger + close/reopen actions in the schema-alignment action plan
-  **A5** (design lean: per-company close ledger with closed-through semantics supporting arbitrary
-  spans; full fiscal-calendar generation NOT rebuilt — see A5 for the options).
+## MOD-13 — ~~Manual period close reinstated~~ — **WITHDRAWN (same day, 2026-07-14)**
+- **Status: WITHDRAWN by Marcelo, 2026-07-14** (hours after acceptance; ID retained, never reused).
+- **What it was:** a lightweight manual period-close guard (close table + closed-span trigger + actions),
+  motivated by a batch-then-BC-close race-condition argument.
+- **Why withdrawn (Marcelo):** periods stay REMOVED — *"when someone creates a batch, it creates
+  consolidated entries that lose the date information anyway, so having closed periods doesn't really
+  make sense. The accounting app is just an AR subledger — it's not meant to worry about which period is
+  open or closed. The accountants that use it are responsible for batching the entries into the right
+  periods."* No closed periods for now; other timing complexities may come later and will be handled then.
+- **Net effect:** MOD-1 stands in full (the 2026-07-13 follow-Amith's-removal ruling is final); CA-1 is
+  Resolved on the removal; the A5 action-plan item, the closed-span trigger, the close UI, and the orders
+  Confirm closed-span check are all struck. The design constraint stated here survives as a general
+  principle: **JEs carry only their posted date — any future timing rule detects by time, never a period FK.**

@@ -16,15 +16,14 @@
 
 ## 0. Scope
 
-The accounting schema is broadly plan-aligned (28 tables, invariant triggers, read-model views). Four
-targeted work items — no broad rework; A4 is (post-MOD-12) the one new accounting migration:
+The accounting schema is broadly plan-aligned (28 tables, invariant triggers, read-model views). Targeted work items — no broad rework; A4 is (post-MOD-12) the one new accounting migration:
 
 - **A1** — intercompany wiring **disposition** (verified OUT of accounting; document + carry forward).
 - **A2** — roles + entity permissions + RLS seeding (MOD-9; master plan was silent on permissions).
 - **A3** — enforcement/trigger alignment audit (verify what's built matches the overlaid plan; explicitly
   build NOTHING period-related — CA-1 resolved-for-now, no period machinery).
 - **A4** — single-company JE restoration (MOD-12): `JournalEntry.CompanyID` + validation + numbering.
-- **A5** — manual period close (MOD-13): close table + date-check trigger + close/reopen actions.
+- ~~**A5** — manual period close~~ — **WITHDRAWN 2026-07-14** with MOD-13 (periods stay removed; no close machinery).
 
 Ground rules identical to the orders schema plan — **including the 2026-07-14 COLLAPSE-INTO-BASELINE
 strategy (Marcelo):** we are not versioning yet, so A4/A5/A4.6 DDL edits fold **into the baseline
@@ -134,7 +133,7 @@ Audit the built DB enforcement against MASTER-PLAN §5 **as overlaid** and recor
 | 5.1 CHECKs | as-built | verify list vs plan; no change expected |
 | 5.2 balanced-JE (deferrable) | built (`trg_JournalEntry_BalancedOnLock` + `trg_JEL_RecheckParentBalance`) | verify semantics vs MOD-3's lock levels — the V202607081600 rework already re-based these; confirm test matrix still green |
 | 5.3 immutability triggers | built (JE/JEL/Batch/BLI/BLDim/SJE/SJELI) + MOD-3 reversible-preliminary rework | verify reject-unlock path covered by tests |
-| 5.4 period-close trigger | **MUST NOT EXIST** (MOD-1; CA-1 resolved-for-now 2026-07-13 — follow Amith's removal, no period machinery) | verify absent; ERD note so nobody "helpfully" rebuilds it |
+| 5.4 period-close trigger | **MUST NOT EXIST** (MOD-1 FINAL; CA-1 resolved — no period machinery; MOD-13 withdrawn) | verify absent; ERD note so nobody "helpfully" rebuilds it |
 | 5.5 CoA-mapping enforcement | check what baseline shipped | verify; gap → small follow-up only if a consumer needs it |
 | intercompany wiring (`IntercompanyRelationship`) | **MUST NOT EXIST accounting-side** (2026-07-06 baseline ruling; MOD-5(c)) | verify absent + ERD "deliberately absent" note (A1) |
 | §4.9 SJE materialization trigger | **undefined by design** (CA-2 open — ISSUES) | no schema action; the engine seam is the feature plan's |
@@ -185,37 +184,17 @@ Booking now emits one JE per company (orders MOD-11), reversing CH-2. Accounting
    Person column (it's unpublished-app internal — check the no-break policy stance at execution), and
    simplify `TasksAppApprovalGate` to gate on the User directly.
 
-## A5 — Manual period close (MOD-13, 2026-07-14)
+## A5 — ~~Manual period close~~ — WITHDRAWN 2026-07-14 (MOD-13 withdrawn)
 
-Reinstates ONLY the close guard (MOD-1's removal of period bookkeeping stands; MOD-11 recognition stays
-date-driven). **Design constraint (Marcelo): JEs carry NO period FK — only their posted/effective date;
-closability is DETECTED by time.**
-
-1. **Migration `V<TS>__v1.0.x__AccountingPeriod_Close.sql`** — design lean (options for the co-design
-   pass): **`AccountingPeriod` as a per-company CLOSE ledger** — `ID, CompanyID FK → __mj.Company,
-   PeriodStart DATE, PeriodEnd DATE, Status ('Closed'|'Reopened'), ClosedAt, ClosedByUserID FK,
-   ReopenedAt NULL, ReopenedByUserID NULL, Reason NVARCHAR` — rows are explicit accountant actions
-   (arbitrary spans supported: close "through June 30" = one row; no fiscal-calendar generation, no
-   Open-period rows, no month scaffolding). Effective closed test = date falls inside any row with
-   `Status='Closed'` for that company. NO new columns on JournalEntry.
-2. **Trigger `trg_JournalEntry_ClosedSpan`** (the un-bypassable floor): reject INSERT (and
-   EffectiveDate-UPDATE) of a JE whose `EffectiveDate` falls in a closed span for its `CompanyID`
-   (per-company JEs, MOD-12, make this exact). Reject = loud error; the correction path is dating the
-   entry forward (Robert's model: corrections post to the next period). AD-17 three-case tests.
-3. **Close/reopen actions:** engine methods + Remote Ops, role-gated (Admin/Approver per A2); close
-   dialog suggests the natural boundary = last approved batch's cutoff (batch-informed default —
-   Marcelo's CA-3 note). Reopen requires Admin + reason (audited via RecordChanges as usual).
-4. **Downstream checks:** orders' Confirm guard (orders F1.7) calls the same closed-span check per
-   resolved company BEFORE booking, so backdated orders fail fast with a clear error instead of a
-   trigger bounce. Scheduled-JE materialization (B3) skips/flags due entries dating into closed spans
-   (they must forward-date — surface loudly, never silently re-date).
-5. **UI:** period-close surface in the settings/admin area (UI plan §5) + close status on dashboards.
+Struck with MOD-13's same-day withdrawal: no close table, no `trg_JournalEntry_ClosedSpan`, no
+close/reopen actions, no orders-side closed-span check. Periods stay removed (MOD-1 final). The surviving
+principle: JEs carry only their date; any FUTURE timing rule detects by time, never a period FK.
 
 ## Execution order
 
 A3 audit first (cheap, and it just proved its worth) → A4 (the MOD-12 migration — schema-critical,
-orchestrator executes) → **A5 (MOD-13 close mechanism — rides the same migration wave as A4)** →
-A1 documentation rides the A3 ERD update → A2 (needs the Marcelo co-design session).
+orchestrator executes) → A1 documentation rides the A3 ERD update → A2 (needs the Marcelo co-design
+session). (A5 withdrawn.)
 
 ## Questions for Marcelo — all resolved 2026-07-13 (review session)
 
@@ -258,7 +237,7 @@ A1 documentation rides the A3 ERD update → A2 (needs the Marcelo co-design ses
 |---|---|
 | GLAccount + minimal COA seed (MOD-7) | BUILT |
 | AccountingCompanyProfile (IsA Company) + ApprovalCFO link | BUILT; link → User migration = **A4.6** |
-| Manual period close (MOD-13 — replaces §4.4's full period bookkeeping) | **A5** (table + trigger + actions + UI §5) |
+| §4.4 AccountingPeriod + close (as overlaid) | **deliberately ABSENT** — MOD-1 final (MOD-13 withdrawn); accountants batch into the right periods |
 | JournalEntry/Line/LineDimension + balanced/immutability triggers | BUILT; single-company restoration = **A4**; closed-span trigger = **A5** |
 | JournalEntryBatch + lock levels + netted summaries (MOD-3/4) | BUILT (lock redesign done); view-driven builder = **B1** |
 | Batch approval via bizapps-tasks (MOD-3) | BUILT (TasksAppApprovalGate) — verify in A3 |
