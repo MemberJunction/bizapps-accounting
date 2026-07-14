@@ -1,6 +1,6 @@
 # Plan — Schema alignment: intercompany disposition, roles/RLS, trigger audit
 
-> **Status:** Draft (awaiting Marcelo review) · **Created:** 2026-07-11 · **Revised:** 2026-07-13
+> **Status:** ACTIVE (approved for execution — Marcelo review completed 2026-07-14) · **Created:** 2026-07-11 · **Revised:** 2026-07-13
 > (A1 re-scoped — see the ⚠ correction note in A1)
 > **Implements:** MASTER-PLAN-MODIFICATIONS MOD-5(c) (intercompany wiring is OUT of accounting — verify +
 > document), MOD-9 (roles + RLS), and a trigger/enforcement alignment audit against MASTER-PLAN §5 as

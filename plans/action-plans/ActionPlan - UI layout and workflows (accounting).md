@@ -1,6 +1,6 @@
 # Plan — UI layout & workflows (accounting)
 
-> **Status:** Draft (awaiting Marcelo review) · **Created:** 2026-07-11
+> **Status:** ACTIVE (approved for execution — Marcelo review completed 2026-07-14) · **Created:** 2026-07-11
 > **Implements:** the UI consequences of MOD-8 (batch building), MOD-9 (settings/setup screen deliverable),
 > B2 (reporting surfaces); the 2026-07-10 GUI-review direction.
 > **Sources:** meetings (orders repo) `07102026 - Matt & Marcelo GUI Review.md` + `2026-07-10-decisions.md`

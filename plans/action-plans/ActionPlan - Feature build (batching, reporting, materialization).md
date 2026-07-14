@@ -1,6 +1,6 @@
 # Plan — Feature build: batching UX-model, reporting pack, scheduled-JE seam
 
-> **Status:** Draft (awaiting Marcelo review) · **Created:** 2026-07-11
+> **Status:** ACTIVE (approved for execution — Marcelo review completed 2026-07-14) · **Created:** 2026-07-11
 > **Implements:** MOD-8 (view-driven batching + oldest-forward default), the BACKLOG "Jeremy reporting pack"
 > + "Batch dimension strategy", MASTER-PLAN §10 as overlaid, and the CA-2-gated materialization seam (§4.9 /
 > BA-D25 as overlaid by MOD-1). Also the orders-side bridge counterpart:

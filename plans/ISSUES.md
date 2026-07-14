@@ -21,3 +21,10 @@ Entry: `### [OPEN|RESOLVED] <title> — <date>` with source + status. Convention
   (Robert 2026-07-13): DATE-driven** — scheduled entries created up-front at booking with their own
   recognition dates; materialize when due; batches pick up by date window. CA-2 closed; CA-1 (periods
   guard) remains open independently.
+
+### [ACCEPTED] Timing/period restrictions unreconciled — accepted for the baseline build — 2026-07-14
+- Periods are removed (MOD-1 final; MOD-13 withdrawn). Marcelo: we ACCEPT the unreconciled timing story
+  while building the basic model — period-like restrictions are only needed for RESTRICTION features,
+  and the first test sets run with no restrictions. Something timing-related may be added later
+  (detect-by-date, never a period FK). Executor: do NOT build period/close machinery; do not treat this
+  as a gap.
