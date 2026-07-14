@@ -26,9 +26,13 @@ targeted work items — no broad rework; A4 is (post-MOD-12) the one new account
 - **A4** — single-company JE restoration (MOD-12): `JournalEntry.CompanyID` + validation + numbering.
 - **A5** — manual period close (MOD-13): close table + date-check trigger + close/reopen actions.
 
-Ground rules identical to the orders schema plan (new V* file if one is ever needed, T-SQL source of
-truth + PG conversion, no CodeGen-owned artifacts, extended properties, migrate → codegen → build →
-commit together, **update `docs/bizapps-accounting-erd.md` in the same change** — repo convention).
+Ground rules identical to the orders schema plan — **including the 2026-07-14 COLLAPSE-INTO-BASELINE
+strategy (Marcelo):** we are not versioning yet, so A4/A5/A4.6 DDL edits fold **into the baseline
+`B202605281200`** (and `V202607081600`'s lock rework folds in too); dev loop = drop-schema → migrate →
+codegen → build; commits per stage; at the end, **recapture the codegen block + the metadata-sync
+migration fresh** (delete the stale ones interim if they block migrates). Additive-V*/publish-no-break
+resumes once the app versions. Plus: T-SQL source of truth + PG conversion at recapture, no CodeGen-owned
+artifacts, extended properties, **update `docs/bizapps-accounting-erd.md` in the same change**.
 
 ---
 
