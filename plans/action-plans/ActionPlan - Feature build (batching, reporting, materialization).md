@@ -17,10 +17,13 @@ model):
 
 1. **Oldest-forward default:** "build batch up to <date-time>" — candidates = every unbatched entry with
    `EffectiveDate <= cutoff`. The existing buildBatch gains the cutoff parameter; UI exposes it.
-2. **Batch-from-View:** accept an MJ User View (of Journal Entries) as the candidate source; engine
-   re-resolves the view server-side and **validates every resolved entry is unbatched — reject LOUDLY
-   otherwise** (name the offending JEs; no silent filtering). Out-of-order batching is allowed while open;
-   the reversal workflow remains regenerate-the-open-batch (MOD-8).
+2. **Batch-from-View (Robert's preferred working model — SEQUENCED as the FIRST post-wave-1 batching
+   item, Marcelo 2026-07-14):** accept an MJ User View (of Journal Entries) as the candidate source;
+   engine re-resolves the view server-side and **validates every resolved entry is unbatched — reject
+   LOUDLY otherwise** (name the offending JEs; no silent filtering). Out-of-order batching is allowed
+   while open; the reversal workflow remains regenerate-the-open-batch (MOD-8). Deliberately NOT built
+   during wave 1: the per-company JE rework (MOD-12/A4) churns the batching substrate, baseline tests
+   only need the B1.1 cutoff flow, and B-Q1 (snapshot vs re-resolve) needs Marcelo's answer first.
 3. **No hard batch-by-type restriction** — grouping via the view's own filters.
 4. **Netted summaries** (MOD-4) — verify the existing summary builder nets per (Company × GLAccount ×
    Dimension-combo) with null-dimension aggregation; add the golden tests if missing.
