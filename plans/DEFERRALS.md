@@ -6,6 +6,7 @@ revisit trigger.
 
 | Deferred item | Source | Rationale | Revisit trigger |
 |---|---|---|---|
+| **Timing/period restriction system** (close guard or equivalent — the successor to the removed AccountingPeriod / withdrawn MOD-13) | MOD-1 (final) + MOD-13 (withdrawn) + Marcelo 2026-07-14 | a real gap, deferred: restrictions aren't needed for baseline testing (first test sets run unrestricted); batch summaries lose date info; accountants batch entries into the right periods manually for now | restriction requirements emerge — Robert's periods research, Jeremy's Q19f answer, or cutover operations. Design constraint locked: detect by DATE, never a period FK |
 | `AccountBalance` / `AccountBalanceByDimension` materialization (§4.10, BA-D22) | MOD-2 (Amith: "might kill for v1") | §10 views compute balances on demand | read-model performance demands it |
 | Tax CALCULATION provider + adapters — Avalara/TaxJar/Local (§9) | master Block-7 sequencing + open Robert tax-shape decision | tax DATA tables are built; the quick path (tax-as-order-line) may serve v0 | Robert's tax decision + a calculating consumer |
 | Unrealized-FX revaluation + reporting-currency translation (§6.4/§6.5) | MOD-6 (all FX upstream) | FX itself is deferred (orders MOD-4); accounting keeps only refs + vw_FxExposure | multi-currency activates |

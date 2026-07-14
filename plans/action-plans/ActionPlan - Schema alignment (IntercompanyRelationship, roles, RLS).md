@@ -237,7 +237,7 @@ session). (A5 withdrawn.)
 |---|---|
 | GLAccount + minimal COA seed (MOD-7) | BUILT |
 | AccountingCompanyProfile (IsA Company) + ApprovalCFO link | BUILT; link → User migration = **A4.6** |
-| §4.4 AccountingPeriod + close (as overlaid) | **deliberately ABSENT** — MOD-1 final (MOD-13 withdrawn); accountants batch into the right periods |
+| §4.4 AccountingPeriod + close (as overlaid) | **DEFERRED** — `plans/DEFERRALS.md` (timing/period restriction system; MOD-1 final, MOD-13 withdrawn; baseline tests unrestricted) |
 | JournalEntry/Line/LineDimension + balanced/immutability triggers | BUILT; single-company restoration = **A4**; closed-span trigger = **A5** |
 | JournalEntryBatch + lock levels + netted summaries (MOD-3/4) | BUILT (lock redesign done); view-driven builder = **B1** |
 | Batch approval via bizapps-tasks (MOD-3) | BUILT (TasksAppApprovalGate) — verify in A3 |
