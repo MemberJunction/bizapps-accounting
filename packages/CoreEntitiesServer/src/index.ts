@@ -96,3 +96,5 @@ export type { DemoSeedReport } from './AssociationDemoSeedData.js';
 // The contract + pure pipeline types live in @mj-biz-apps/accounting-engine-base — import them from there.
 export { AccountingEngine } from './AccountingEngine.js';
 export { CreateJournalEntryOperation, LoadCreateJournalEntryOperation } from './CreateJournalEntryOperation.js';
+// Accounting.CreateJournalEntries — the SET form: every draft's rows in ONE TransactionGroup (all or none).
+export { CreateJournalEntriesOperation, LoadCreateJournalEntriesOperation } from './CreateJournalEntriesOperation.js';

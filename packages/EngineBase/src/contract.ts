@@ -62,6 +62,8 @@ export interface JEValidationError {
   Code: JEErrorCode;
   /** 0-based index into `draft.Lines` when the error is line-scoped. */
   LineIndex?: number;
+  /** 0-based index into a SET's `Drafts` when the error is draft-scoped ('Accounting.CreateJournalEntries'). */
+  DraftIndex?: number;
   Message: string;
 }
 
@@ -76,3 +78,25 @@ export interface CreateJournalEntryResult {
 /** Remote-operation I/O aliases ('Accounting.CreateJournalEntry'). */
 export type CreateJournalEntryInput = JournalEntryDraft;
 export type CreateJournalEntryOutput = CreateJournalEntryResult;
+
+// ─── The SET operation ('Accounting.CreateJournalEntries') ───────────────────
+// Amith's transaction rule: JEs + lines must be created through a single engine call so the
+// write has a proper transaction wrapper. The set form extends that to a MULTI-JE unit of work
+// (e.g. an order Confirm booking one JE per company, MOD-11/MOD-12): ALL drafts validate first,
+// then ALL rows (every header + line + dimension across every draft) write in ONE TransactionGroup —
+// all entries or none. There is no partial-booking state and no compensation path.
+
+/** The full set request: one draft per (single-company) journal entry. */
+export interface CreateJournalEntriesInput {
+  Drafts: JournalEntryDraft[];
+}
+
+export interface CreateJournalEntriesResult {
+  Success: boolean;
+  /** Per-draft results, same order as `Drafts` — present only when Success (all-or-nothing). */
+  Results?: CreateJournalEntryResult[];
+  /** Validation/write errors; draft-scoped entries carry `DraftIndex`. */
+  Errors?: JEValidationError[];
+}
+
+export type CreateJournalEntriesOutput = CreateJournalEntriesResult;

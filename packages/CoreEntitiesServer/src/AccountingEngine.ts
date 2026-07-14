@@ -23,7 +23,10 @@ import { BaseSingleton } from '@memberjunction/global';
 import {
   AccountingEngineBase,
   runDraftPipeline,
+  type CreateJournalEntriesInput,
+  type CreateJournalEntriesResult,
   type CreateJournalEntryResult,
+  type JEValidationError,
   type JournalEntryDraft,
   type NormalizedLine,
 } from '@mj-biz-apps/accounting-engine-base';
@@ -91,6 +94,64 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
     }
   }
 
+  /**
+   * The SET pipeline ('Accounting.CreateJournalEntries') — Amith's transaction rule extended to a
+   * MULTI-JE unit of work (an order Confirm booking one JE per company, MOD-11/12): validate EVERY
+   * draft first (set-scoped errors carry DraftIndex), then queue every header + line + dimension of
+   * every draft into ONE TransactionGroup and submit once — all entries or none.
+   */
+  public async CreateJournalEntries(
+    input: CreateJournalEntriesInput,
+    contextUser: UserInfo,
+    provider: IMetadataProvider,
+  ): Promise<CreateJournalEntriesResult> {
+    try {
+      const drafts = input?.Drafts ?? [];
+      if (drafts.length === 0) {
+        return { Success: false, Errors: [{ Code: 'MALFORMED_DRAFT', Message: 'Drafts must contain at least one journal-entry draft.' }] };
+      }
+      await this.Config(false, contextUser, provider);
+
+      // Validate ALL drafts up front (one bounded staleness refresh across the whole set).
+      let outcomes = drafts.map(d => runDraftPipeline(d, this.Base.CreatePipelineLookups()));
+      const stalenessCodes = new Set(['ACCOUNT_UNKNOWN', 'ACCOUNT_INACTIVE', 'DIMENSION_UNKNOWN', 'DIMENSION_VALUE_UNKNOWN']);
+      if (outcomes.some(o => o.errors.some(e => stalenessCodes.has(e.Code)))) {
+        await this.Config(true, contextUser, provider);
+        outcomes = drafts.map(d => runDraftPipeline(d, this.Base.CreatePipelineLookups()));
+      }
+      const setErrors: JEValidationError[] = outcomes.flatMap((o, i) => o.errors.map(e => ({ ...e, DraftIndex: i })));
+      if (setErrors.length > 0) {
+        return { Success: false, Errors: setErrors };
+      }
+
+      // Queue every draft's rows into ONE TransactionGroup; submit once.
+      const tg = await provider.CreateTransactionGroup();
+      const queued: Array<{ je: mjBizAppsAccountingJournalEntryEntity; lineCount: number }> = [];
+      for (let i = 0; i < drafts.length; i++) {
+        const q = await this.queueDraftRows(drafts[i], outcomes[i].normalized, outcomes[i].companyID, tg, contextUser, provider);
+        if ('failure' in q) {
+          // Nothing has committed — the TG is never submitted on a queue failure.
+          return { Success: false, Errors: [{ ...q.failure, DraftIndex: i }] };
+        }
+        queued.push(q);
+      }
+      const committed = await tg.Submit();
+      if (!committed) {
+        const detail = queued[0]?.je.LatestResult?.CompleteMessage ?? 'transaction group rolled back';
+        LogError(`AccountingEngine.CreateJournalEntries: atomic set write rolled back: ${detail}`);
+        return { Success: false, Errors: [{ Code: 'INTERNAL_ERROR', Message: `atomic set write rolled back: ${detail}` }] };
+      }
+      return {
+        Success: true,
+        Results: queued.map(q => ({ Success: true, JournalEntryID: q.je.ID, EntryNumber: q.je.EntryNumber, LineCount: q.lineCount })),
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      LogError(`AccountingEngine.CreateJournalEntries failed: ${msg}`);
+      return { Success: false, Errors: [{ Code: 'INTERNAL_ERROR', Message: msg }] };
+    }
+  }
+
   // ─── stage 6 ───────────────────────────────────────────────────────────────
 
   private async writeJournalEntry(
@@ -101,9 +162,42 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
     provider: IMetadataProvider,
   ): Promise<CreateJournalEntryResult> {
     const tg = await provider.CreateTransactionGroup();
+    const q = await this.queueDraftRows(draft, normalized, companyID, tg, contextUser, provider);
+    if ('failure' in q) {
+      return { Success: false, Errors: [q.failure] };
+    }
+    const committed = await tg.Submit();
+    if (!committed) {
+      // Full rollback happened inside the transaction — surface the first per-entity message.
+      const detail = q.je.LatestResult?.CompleteMessage ?? 'transaction group rolled back';
+      return this.writeFailure('atomic write rolled back', detail);
+    }
+    return {
+      Success: true,
+      JournalEntryID: q.je.ID,
+      EntryNumber: q.je.EntryNumber,
+      LineCount: normalized.length,
+    };
+  }
 
-    // Header. NewRecord mints the UUID client-side, so lines/dimensions can reference it pre-submit.
-    // The W2 numbering hook (JournalEntryEntityServer.Save) assigns EntryNumber before the queued save.
+  /**
+   * Queue ONE draft's header + lines + dimensions onto the given TransactionGroup (shared by the
+   * single and SET paths — the caller owns Submit). NewRecord mints UUIDs client-side so children
+   * reference parents pre-submit; the W2 numbering hook assigns EntryNumber before the queued save.
+   */
+  private async queueDraftRows(
+    draft: JournalEntryDraft,
+    normalized: NormalizedLine[],
+    companyID: string,
+    tg: Awaited<ReturnType<IMetadataProvider['CreateTransactionGroup']>>,
+    contextUser: UserInfo,
+    provider: IMetadataProvider,
+  ): Promise<{ je: mjBizAppsAccountingJournalEntryEntity; lineCount: number } | { failure: JEValidationError }> {
+    const fail = (stage: string, detail: string | undefined): { failure: JEValidationError } => {
+      const message = `${stage}: ${detail ?? 'unknown error'}`;
+      LogError(`AccountingEngine.queueDraftRows: ${message}`);
+      return { failure: { Code: 'INTERNAL_ERROR', Message: message } };
+    };
     const je = await provider.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
     je.NewRecord();
     je.CompanyID = companyID; // MOD-12: the single company every line resolved to (pipeline-verified)
@@ -114,7 +208,7 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
     if (draft.OrderID) je.OrderID = draft.OrderID;
     je.TransactionGroup = tg;
     if (!(await je.Save())) {
-      return this.writeFailure('journal-entry header failed to queue', je.LatestResult?.CompleteMessage);
+      return fail('journal-entry header failed to queue', je.LatestResult?.CompleteMessage);
     }
 
     for (const line of normalized) {
@@ -129,7 +223,7 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
       if (line.OrderLineID) l.OrderLineID = line.OrderLineID;
       l.TransactionGroup = tg;
       if (!(await l.Save())) {
-        return this.writeFailure(`line ${line.LineNumber} failed to queue`, l.LatestResult?.CompleteMessage);
+        return fail(`line ${line.LineNumber} failed to queue`, l.LatestResult?.CompleteMessage);
       }
       for (const dim of line.Dimensions) {
         const d = await provider.GetEntityObject<mjBizAppsAccountingJournalEntryLineDimensionEntity>(JELD_ENTITY, contextUser);
@@ -139,24 +233,11 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
         d.DimensionValueID = dim.DimensionValueID;
         d.TransactionGroup = tg;
         if (!(await d.Save())) {
-          return this.writeFailure(`line ${line.LineNumber} dimension failed to queue`, d.LatestResult?.CompleteMessage);
+          return fail(`line ${line.LineNumber} dimension failed to queue`, d.LatestResult?.CompleteMessage);
         }
       }
     }
-
-    const committed = await tg.Submit();
-    if (!committed) {
-      // Full rollback happened inside the transaction — surface the first per-entity message.
-      const detail = je.LatestResult?.CompleteMessage ?? 'transaction group rolled back';
-      return this.writeFailure('atomic write rolled back', detail);
-    }
-
-    return {
-      Success: true,
-      JournalEntryID: je.ID,
-      EntryNumber: je.EntryNumber,
-      LineCount: normalized.length,
-    };
+    return { je, lineCount: normalized.length };
   }
 
   private writeFailure(stage: string, detail: string | undefined): CreateJournalEntryResult {

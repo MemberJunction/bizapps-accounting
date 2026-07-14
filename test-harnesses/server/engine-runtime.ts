@@ -34,9 +34,10 @@ import '@memberjunction/server-bootstrap-lite';
 import '@mj-biz-apps/common-entities';
 import '@mj-biz-apps/accounting-entities';
 import '@mj-biz-apps/accounting-core-entities-server';
-import { CreateJournalEntryOperation } from '@mj-biz-apps/accounting-core-entities-server';
+import { CreateJournalEntriesOperation, CreateJournalEntryOperation } from '@mj-biz-apps/accounting-core-entities-server';
 import {
   AccountingEngineBase,
+  type CreateJournalEntriesOutput,
   type CreateJournalEntryOutput,
   type JournalEntryDraft,
 } from '@mj-biz-apps/accounting-engine-base';
@@ -126,6 +127,16 @@ async function bootstrap(): Promise<Ctx> {
   await pool.request().query(`INSERT INTO ${SCHEMA}.DimensionValue (ID, DimensionID, Code, Name) VALUES ('${dimValSales}','${dimId}','SALES','Sales'),('${dimValMktg}','${dimId}','MKTG','Marketing'),('${dimVal2}','${dimId2}','WEST','West')`);
 
   return { pool, teardownPool, user: ctxUser, companyA, companyB, dimId, dimValSales, dimValMktg, dimId2, dimVal2 };
+}
+
+/** The SET op ('Accounting.CreateJournalEntries') — every draft's rows in ONE TransactionGroup. */
+async function runOpSet(ctx: Ctx, drafts: JournalEntryDraft[]): Promise<CreateJournalEntriesOutput> {
+  const op = new CreateJournalEntriesOperation();
+  const result = await op.Execute({ Drafts: drafts }, { user: ctx.user });
+  assert(result.Output != null, `set op returned no Output (ResultCode=${result.ResultCode}, ${result.ErrorMessage ?? ''})`);
+  const out = result.Output!;
+  for (const r of out.Results ?? []) if (r.JournalEntryID) createdJEIds.push(r.JournalEntryID);
+  return out;
 }
 
 /** The one call site orders-server will use: op.Execute over the in-process provider. */
@@ -292,6 +303,70 @@ async function main(): Promise<void> {
       assert(partials === 0, `atomicity broken: ${partials} partial JE header(s) survived the rollback`);
       const orphanLines = Number(await scalar(pool, `SELECT COUNT(*) c FROM ${SCHEMA}.JournalEntryLine l WHERE NOT EXISTS (SELECT 1 FROM ${SCHEMA}.JournalEntry j WHERE j.ID=l.JournalEntryID)`));
       assert(orphanLines === 0, `atomicity broken: ${orphanLines} orphan line(s) survived`);
+      await AccountingEngineBase.Instance.Config(true, user); // re-sync the cache with reality
+    } finally {
+      process.removeListener('uncaughtException', swallowTGCrash);
+    }
+  });
+
+  // ─── E5 — the SET op: 'Accounting.CreateJournalEntries' (atomic multi-JE unit of work) ──
+  await test('E5 SET success — 2 drafts (2 companies) book in ONE call: 2 JEs, per-draft results, distinct company numbers', async () => {
+    const out = await runOpSet(ctx, [
+      { EffectiveDate: '2026-07-06', EntryType: 'OrderBooking', Description: `${RUN_TAG} E5-A`, Lines: [
+        { GLAccountID: companyA.arGL, DebitAmount: 120 }, { GLAccountID: companyA.revGL, CreditAmount: 120 } ] },
+      { EffectiveDate: '2026-07-06', EntryType: 'OrderBooking', Description: `${RUN_TAG} E5-B`, Lines: [
+        { GLAccountID: companyB.arGL, DebitAmount: 45 }, { GLAccountID: companyB.revGL, CreditAmount: 45 } ] },
+    ]);
+    assert(out.Success === true, `expected set success, got ${JSON.stringify(out.Errors)}`);
+    assert((out.Results ?? []).length === 2, `expected 2 per-draft results, got ${(out.Results ?? []).length}`);
+    const [ra, rb] = out.Results!;
+    assert(!!ra.JournalEntryID && !!rb.JournalEntryID && ra.JournalEntryID !== rb.JournalEntryID, 'two distinct JEs');
+    const codeA = (ra.EntryNumber ?? '').split('-')[1], codeB = (rb.EntryNumber ?? '').split('-')[1];
+    assert(codeA !== codeB, `expected different company codes in the numbers, got ${ra.EntryNumber} / ${rb.EntryNumber}`);
+    const n = Number(await scalar(pool, `SELECT COUNT(*) c FROM ${SCHEMA}.JournalEntry WHERE ID IN ('${ra.JournalEntryID}','${rb.JournalEntryID}')`));
+    assert(n === 2, `expected both JE rows persisted, got ${n}`);
+  });
+
+  await test('E5 SET validation — one bad draft rejects the WHOLE set with DraftIndex; NOTHING written', async () => {
+    const before = Number(await scalar(pool, `SELECT COUNT(*) c FROM ${SCHEMA}.JournalEntry`));
+    const out = await runOpSet(ctx, [
+      { EffectiveDate: '2026-07-06', EntryType: 'Manual', Lines: [
+        { GLAccountID: companyA.arGL, DebitAmount: 10 }, { GLAccountID: companyA.revGL, CreditAmount: 10 } ] },
+      { EffectiveDate: '2026-07-06', EntryType: 'Manual', Lines: [
+        { GLAccountID: randomUUID(), DebitAmount: 10 }, { GLAccountID: companyB.revGL, CreditAmount: 10 } ] },
+    ]);
+    assert(out.Success === false, 'set must fail when any draft fails validation');
+    assert((out.Errors ?? []).some(e => e.Code === 'ACCOUNT_UNKNOWN' && e.DraftIndex === 1), `expected ACCOUNT_UNKNOWN with DraftIndex=1, got ${JSON.stringify(out.Errors)}`);
+    const after = Number(await scalar(pool, `SELECT COUNT(*) c FROM ${SCHEMA}.JournalEntry`));
+    assert(after === before, `nothing may be written on a set validation failure (${before} → ${after})`);
+  });
+
+  await test('E5 SET ATOMIC ROLLBACK — mid-write failure in draft 2 rolls back draft 1 as well (raw-SQL proven)', async () => {
+    // The cross-draft atomicity proof (replaces the orders-side compensation half-test): a stale-cache
+    // dimension value in DRAFT 2 passes validation but FK-fails inside the ONE TransactionGroup —
+    // so DRAFT 1's already-queued header/lines must roll back too. Same MJ-core TG-crash guard as E3.
+    const sacrificialVal = randomUUID();
+    await pool.request().query(`INSERT INTO ${SCHEMA}.DimensionValue (ID, DimensionID, Code, Name) VALUES ('${sacrificialVal}','${ctx.dimId}','E5SET','E5 set sacrificial')`);
+    await AccountingEngineBase.Instance.Config(true, user); // engine sees the new value
+    await pool.request().query(`DELETE FROM ${SCHEMA}.DimensionValue WHERE ID='${sacrificialVal}'`); // now stale
+    const swallowTGCrash = (e: Error): void => {
+      if (/Transaction rolled back due to operation failure/.test(e?.message ?? '')) return; // known MJ-core bug (BUGS.md)
+      throw e;
+    };
+    process.on('uncaughtException', swallowTGCrash);
+    try {
+      const markerA = `${RUN_TAG} E5-atomic-A`, markerB = `${RUN_TAG} E5-atomic-B`;
+      const out = await runOpSet(ctx, [
+        { EffectiveDate: '2026-07-06', EntryType: 'Manual', Description: markerA, Lines: [
+          { GLAccountID: companyA.arGL, DebitAmount: 77 }, { GLAccountID: companyA.revGL, CreditAmount: 77 } ] },
+        { EffectiveDate: '2026-07-06', EntryType: 'Manual', Description: markerB, Lines: [
+          { GLAccountID: companyA.arGL, DebitAmount: 33 },
+          { GLAccountID: companyA.revGL, CreditAmount: 33, Dimensions: [{ DimensionID: ctx.dimId, DimensionValueID: sacrificialVal }] } ] },
+      ]);
+      assert(out.Success === false, 'set must fail on the mid-write FK failure');
+      await new Promise(res => setTimeout(res, 100)); // let the deferred rxjs re-throw fire under the guard
+      const survivors = Number(await scalar(pool, `SELECT COUNT(*) c FROM ${SCHEMA}.JournalEntry WHERE Description IN ('${markerA}','${markerB}')`));
+      assert(survivors === 0, `cross-draft atomicity broken: ${survivors} JE(s) from the failed set survived — draft 1 must roll back with draft 2`);
       await AccountingEngineBase.Instance.Config(true, user); // re-sync the cache with reality
     } finally {
       process.removeListener('uncaughtException', swallowTGCrash);

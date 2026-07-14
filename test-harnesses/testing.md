@@ -223,10 +223,17 @@ Person-keyed per the tasks-app FK).
 - Teardown hardening (all suites): per-company `JournalEntrySequence` rows deleted before company
   rows (new FK); block0 W2.3 companies tracked + swept.
 
+**2026-07-14 (later) — atomic SET op (`Accounting.CreateJournalEntries`):** per Amith's transaction
+rule, a new set-form remote op validates EVERY draft (set errors carry `DraftIndex`) then writes all
+drafts' rows in ONE TransactionGroup. Orders' Confirm books through it (compensation path deleted).
+engine-runtime grew to **16/16** with E5: set success (2 companies, distinct numbers) · set
+validation (one bad draft rejects all, nothing written) · **SET ATOMIC ROLLBACK** (stale-cache FK
+failure in draft 2 rolls back draft 1 — raw-SQL proven). order-to-je re-run **6/6** through the new
+path; demo reseeded through it.
+
 **Known gaps / labels:**
-- Orders' booking-set compensation (partial multi-company failure → delete created Pending JEs) is
-  NOT live-proven (needs mid-set fault injection) — half-test: code-reviewed + tier-1 all-or-nothing
-  resolution case only.
+- ~~Orders' booking-set compensation not live-proven~~ — RETIRED 2026-07-14: the compensation path
+  no longer exists; cross-draft atomicity is live-proven (E5).
 - Playwright (tier 5) specs incl. the batching fixtures were updated for ApprovalCFOUserID but NOT
   re-run this session (the UI workstream owns their next run); batching fixtures now assign the
   running user as CFO.
