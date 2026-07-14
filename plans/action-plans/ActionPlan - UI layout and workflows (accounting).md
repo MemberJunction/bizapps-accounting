@@ -62,6 +62,9 @@ read, GUI review): lean INTO the grid, don't invent dropdown-card hybrids.
   ("Product X resolves: Revenue → 4000 via category Software").
 - Manual materialization action (B3 Q3, if approved): "Materialize scheduled entries due through [date]"
   with preview + confirm.
+- **Period close (MOD-13/A5):** per-company close surface — closed-through state, "Close period…" dialog
+  (span picker defaulting to the last approved batch's cutoff, preview of would-be-blocked pending
+  entries), reopen (Admin + reason). Close status chip on the batching workspace.
 
 ## 6. Consistency migration sweep
 
