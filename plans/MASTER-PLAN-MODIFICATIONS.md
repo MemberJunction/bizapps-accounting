@@ -142,6 +142,10 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
   view resolves ONLY unbatched entries (reject loudly otherwise). Out-of-order batching allowed while
   open. No hard batch-by-type restriction (group via filters/views). Reversal workflow = regenerate the
   open batch, not mid-stream cherry-picking.
+- **Standard filter semantics (Robert 2026-07-14):** the canonical batch filter is an **EMPTY start
+  date + a populated end date/time** — pulling ALL unbatched entries from earlier dates, **sorted by
+  date ascending**. A date-only end value is **inclusive of that whole date** (i.e. `< end date + 1 day`
+  when no time component is given).
 - **Why / source:** Robert 2026-07-09 (meetings/2026-07-09-robert-meeting-decisions.md D2), Aptify model.
 - **Status:** Accepted — View-driven batch builder not yet built.
 

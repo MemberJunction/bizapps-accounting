@@ -15,8 +15,12 @@
 Extends the completed lock-redesign work (reject-unlock + regenerate are DONE — this adds the selection
 model):
 
-1. **Oldest-forward default:** "build batch up to <date-time>" — candidates = every unbatched entry with
-   `EffectiveDate <= cutoff`. The existing buildBatch gains the cutoff parameter; UI exposes it.
+1. **Oldest-forward default (semantics per Robert 2026-07-14):** the standard filter is **NO start date
+   + a populated end date/time** — candidates = EVERY unbatched entry with `EffectiveDate` ≤ cutoff,
+   **sorted date ascending**. **Inclusive end date:** a date-only cutoff means `EffectiveDate < cutoff
+   + 1 day` (picks up everything ON that date); a datetime cutoff is exact. The existing buildBatch
+   gains the cutoff parameter; UI exposes it (date picker defaults date-only/inclusive; boundary test:
+   entry stamped 23:59:59 on the cutoff date IS included).
 2. **Batch-from-View (Robert's preferred working model — SEQUENCED as the FIRST post-wave-1 batching
    item, Marcelo 2026-07-14):** accept an MJ User View (of Journal Entries) as the candidate source;
    engine re-resolves the view server-side and **validates every resolved entry is unbatched — reject
