@@ -80,11 +80,59 @@ Inventory of every person↔company-ish link that exists (verified in schema/sou
   `UserCompanyAccess` (the securable axis), with `Person.LinkedUserID` used only to *display* the
   person behind a user.
 
+## Marcelo's rulings on R1 (2026-07-14 review) — now DESIGN INPUTS, not open questions
+
+1. **Multi-company batches are allowed ONLY when the user has access to EVERY company in the batch.**
+2. **A user may only batch JEs they have access to** (the candidate pool is company-scoped per user).
+3. **A user may only SEE JEs of companies they have access to** (Read scoping confirmed required).
+4. Marcelo is **routing the visibility-mechanism question to Robert** (concern: a DB access-table
+   feels complex) → QUESTIONS.md **Q22**. Until Robert weighs in, `UserCompanyAccess` remains the
+   recommended candidate, with role-per-company as the no-new-table alternative.
+
+## Security analysis (Marcelo's spoofing / direct-SQL question — source-verified 2026-07-14)
+
+**Q: are filters robust to spoofing or direct SQL access?** Three distinct surfaces, three answers:
+
+1. **Identity spoofing over the API: NO viable path.** The `{{UserID}}` token is substituted
+   server-side from the AUTHENTICATED request identity (`ResolverBase.getRowLevelSecurityWhereClause`
+   uses the session payload user — "the authoritative per-request identity"; `MJServer:960`), never
+   from client input. A client cannot supply a different user. Client-supplied `ExtraFilter` is ANDed
+   with the separately-appended RLS clause — a malicious filter cannot OR itself around the scope.
+2. **READ scoping is robust across MJ paths.** The Read RLS clause is applied in the generated
+   single-record GET resolvers, list resolvers, related-entity traversals, AND the RunView pipeline —
+   and is folded into the server cache fingerprint (no stale-cache leak). Verified in
+   `graphql_server_codegen.ts:409/422/650/699` + `providerBase.ts:1898`.
+3. **⚠ WRITE-path RLS is a REAL GAP in MJ core today.** `UpdateRLSFilterID`/`DeleteRLSFilterID`
+   exist in the metadata model, but I found **no enforcement site**: `CheckPermissions(Update/Delete)`
+   checks only the CanUpdate/CanDelete booleans (`baseEntity.ts:2706+`); the mutation flow
+   (`ResolverBase.UpdateRecord` → `InnerLoad(pk)` → `Save()` → spUpdate) never applies an RLS
+   predicate; every generated RLS call site uses `EntityPermissionType.Read`. Consequence: a user
+   whose role grants JE-Update (Read-scoped only) could, if they learn a foreign row's ID, mutate it.
+   **Exactly Marcelo's scenario — and it means READ-RLS alone does not satisfy his requirement.**
+   → Filed as an MJ-UPSTREAM question (design-intent vs bug) AND, independently of MJ's answer, A2
+   enforces writes **app-side**: entity-server `Save()/Delete()` overrides on the JE family (+ batch
+   ops in `BatchingEngine`) that verify the acting user's company access against `CompanyID` — this
+   runs on EVERY MJ path (in-process and GraphQL both resolve the registered entity-server class),
+   and it is where rulings 1–2 (batch membership/candidate scoping) get enforced regardless of the
+   RLS mechanism chosen for reads.
+4. **Direct SQL access: MJ RLS does not apply — by architecture, nobody has it.** App users never
+   hold DB credentials; the only SQL principals are the MJAPI service login and admin logins, and a
+   user's identity exists only in the app layer (the DB cannot even tell users apart). So
+   "direct-SQL spoofing" requires infrastructure-credential compromise, not an app privilege. The
+   un-bypassable raw-SQL floor remains the FINANCIAL-invariant trigger set (50001–50025), which is
+   deliberately user-agnostic. If per-user enforcement at the DB layer is ever demanded (defense in
+   depth against a stolen service credential), that is native SQL Server Row-Level Security +
+   SESSION_CONTEXT user plumbing — real work, flagged as an option for Robert's review, not assumed.
+
+## R2 (Marcelo 2026-07-14): deferred to the UI-updates wave — role-management screens fold into it.
+
 ## Recommended co-design agenda (30 min)
 
 1. Bless `UserCompanyAccess` (columns above) as A2's schema deliverable vs. role-per-company.
 2. Role tree (Accounting User / Admin / Approver) × which entities get which RLS filter IDs, per CRUD.
-3. Batch visibility semantics under multi-company batches (CH-4).
+3. ~~Batch visibility semantics~~ — RULED (Marcelo 2026-07-14): multi-company batch requires access
+   to ALL its companies; batching restricted to accessible JEs; visibility company-scoped. Remaining:
+   mechanism only (Q22, Robert).
 4. Line-level enforcement: needed, or header-scoping sufficient?
 5. Rollout: filters authored but detached → single flip (off-then-on, already ruled).
 6. Ethan (LXP) input: what the integrating user's service identity needs to READ (their poll path) —
