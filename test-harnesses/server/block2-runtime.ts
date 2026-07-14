@@ -359,6 +359,24 @@ async function main(): Promise<void> {
   // (union — one Task assigned to all CFOs; NO role fallback — hard-fail if any unset).
   const realGate = new TasksAppApprovalGate();
 
+  await test('A4.6 ApprovalCFOUserID — DB-level FK to __mj.User enforced; entity-path set/clear round-trips', async () => {
+    // DB level: a bogus user id must violate FK_ACP_ApprovalCFOUser (raw SQL, bypassing the app).
+    let fkRejected = false;
+    try {
+      await pool.request().query(`UPDATE ${SCHEMA}.AccountingCompanyProfile SET ApprovalCFOUserID='00000000-0000-0000-0000-00000000DEAD' WHERE ID='${companyA.id}'`);
+    } catch (e) {
+      fkRejected = /FK_ACP_ApprovalCFOUser|FOREIGN KEY/i.test(e instanceof Error ? e.message : String(e));
+    }
+    assert(fkRejected, 'a non-existent user id must be rejected by FK_ACP_ApprovalCFOUser');
+    // Entity path: set to a real user, verify persisted + view exposes the User name, then clear.
+    await setCompanyCFO(ctx, companyA.id, user.ID);
+    const row = (await pool.request().query(`SELECT ApprovalCFOUserID FROM ${SCHEMA}.AccountingCompanyProfile WHERE ID='${companyA.id}'`)).recordset[0];
+    assert((row.ApprovalCFOUserID as string)?.toLowerCase() === user.ID.toLowerCase(), 'ApprovalCFOUserID persisted');
+    const view = (await pool.request().query(`SELECT ApprovalCFOUser FROM ${SCHEMA}.vwAccountingCompanyProfiles WHERE ID='${companyA.id}'`)).recordset[0];
+    assert(!!view?.ApprovalCFOUser, 'vwAccountingCompanyProfiles exposes the ApprovalCFOUser (User name) virtual field');
+    await setCompanyCFO(ctx, companyA.id, null);
+  });
+
   await test('S1 real gate — no CFO configured → buildBatch hard-fails AND auto-reverses (Q5 atomicity: JE freed to Pending, no orphan locked batch)', async () => {
     await setCompanyCFO(ctx, companyA.id, null); // ensure unset
     const orphanJE = await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 50 }, { gl: companyA.revGL, credit: 50 }]);
