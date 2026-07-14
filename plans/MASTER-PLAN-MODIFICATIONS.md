@@ -195,8 +195,8 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
   numbering) vs keep it derived from lines — lean **reintroduce** (a migration + codegen). (c) Batching
   may now filter/lock **per company** — the enabler for one company closing before another (Marcelo's
   lock-fidelity rationale) and for Robert's future close model; batch summaries/netting (MOD-4)
-  unchanged. (d) Per-company JE numbering (`JE-{CompanyCode}-…`, the v2/AD-4 shape) vs the current
-  global sequence = open design point for the same action-plan item.
+  unchanged. (d) **JE numbering: per-company `JE-{CompanyCode}-{FY}-{seq}` per the master (RESOLVED, Marcelo
+  2026-07-14)** — the global sequence existed only for the multi-company-JE era; re-keyed in A4.4.
 - **Why / source:** Marcelo ruling 2026-07-13 — locks are JE-grained, so per-company close requires
   per-company JEs; accounting must see separate per-company movements; Robert's model concurs
   (meetings/2026-07-13-robert-meeting-decisions.md D3 + postscripts). Reverses Amith's CH-2 —

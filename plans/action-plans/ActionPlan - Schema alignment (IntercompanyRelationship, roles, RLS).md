@@ -173,9 +173,13 @@ Booking now emits one JE per company (orders MOD-11), reversing CH-2. Accounting
    cases — coordinate with orders F1's split work; the 5/5 order-to-je harness reworks to N-JEs-per-order).
 3. **Trigger check:** immutability/balance triggers are company-agnostic — verify none assumes
    multi-company; add CompanyID to the immutability-frozen column set.
-4. **Numbering decision:** keep the GLOBAL JE sequence vs per-company `JE-{CompanyCode}-{FY}-{seq}`
-   (the v2/AD-4 shape). `[decision needed: Marcelo]` — global is less churn; per-company reads better
-   for per-company close. Batch building may now filter per company (feature plan B1 note).
+4. **Numbering — RESOLVED (Marcelo 2026-07-14): per-company `JE-{CompanyCode}-{FY}-{seq}` per the
+   master.** The global sequence (D-SEQ) existed only because JEs were multi-company (CH-2, reversed by
+   MOD-12). Implementation: re-key `JournalEntrySequence` to `(CompanyID, FiscalYear)`; update the
+   numbering sproc to assign gap-free PER COMPANY (concurrent-assignment test per AD-17); fiscal year
+   from the company's ACP settings. Existing dev JE numbers regenerate via the drop-schema loop. The
+   batch sequence stays GLOBAL for now (batches may span companies until/unless a later ruling splits
+   them — flag if that changes).
 5. **Decision LOCKED (Marcelo 2026-07-13):** no Amith gate on executing A4 — single-company JEs are a
    logical requirement (per-company close independence). Only a later Amith-ordered broad restructure
    would revisit; build now.
