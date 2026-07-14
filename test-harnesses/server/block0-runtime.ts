@@ -162,8 +162,10 @@ async function main(): Promise<void> {
 
   const md = new Metadata();
   let acpId = '';
+  let acpCompanyCode = '';
   let seededGLIds: string[] = [];
   const createdJEIds: string[] = [];
+  const createdACPIds: string[] = [];
   const createdBatchIds: string[] = [];
 
   // ─── R1 — GL account role reference data (metadata-sync seed) ─────────────
@@ -187,7 +189,8 @@ async function main(): Promise<void> {
     acp.NewRecord();
     acp.Name = `${RUN_TAG} Co`;
     acp.Description = 'Block 0 runtime test';
-    acp.CompanyCode = companyCode();
+    acpCompanyCode = companyCode();
+    acp.CompanyCode = acpCompanyCode;
     acp.FunctionalCurrencyCode = currencyCode;
     acp.EntityType = 'Subsidiary';
     acpId = acp.ID;
@@ -249,10 +252,11 @@ async function main(): Promise<void> {
     assert(acpChanges >= 1, `expected >=1 RecordChange row for the ACP, got ${acpChanges}`);
   });
 
-  // ─── W2 — JE numbering (GLOBAL per fiscal year — D-SEQ) ───────────────────
+  // ─── W2 — JE numbering (PER-COMPANY per fiscal year — MOD-12) ──────────────
   const makeJE = async (label: string): Promise<mjBizAppsAccountingJournalEntryEntity> => {
     const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
     je.NewRecord();
+    je.CompanyID = acpId; // MOD-12: single-company JEs
     je.EffectiveDate = new Date();
     je.EntryType = 'Manual';
     je.Status = 'Pending';
@@ -264,19 +268,54 @@ async function main(): Promise<void> {
   };
 
   let firstEntrySeq = 0;
-  await test('W2.1 JournalEntry gets EntryNumber JE-{FY}-{seq:000000} (global — no company segment)', async () => {
+  await test('W2.1 JournalEntry gets EntryNumber JE-{CompanyCode}-{FY}-{seq:000000} (per company — MOD-12)', async () => {
     const fy = new Date().getUTCFullYear();
     const je = await makeJE('W2.1 numbering test');
     const num = je.EntryNumber;
-    const re = new RegExp(`^JE-${fy}-\\d{6}$`);
+    const re = new RegExp(`^JE-${acpCompanyCode}-${fy}-\\d{6}$`);
     assert(re.test(num), `EntryNumber '${num}' does not match ${re}`);
     firstEntrySeq = sequencePart(num);
   });
 
-  await test('W2.2 second JE in the same fiscal year gets a strictly higher global sequence', async () => {
+  await test('W2.2 second JE in the same company + fiscal year gets a strictly higher sequence', async () => {
     const je = await makeJE('W2.2 numbering test');
     const seq = sequencePart(je.EntryNumber);
     assert(seq > firstEntrySeq, `expected sequence > ${firstEntrySeq}, got ${seq} ('${je.EntryNumber}')`);
+  });
+
+  await test('W2.3 a SECOND company starts its own sequence at 000001 (per-company independence)', async () => {
+    const acp2 = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, user);
+    acp2.NewRecord();
+    acp2.Name = `${RUN_TAG} Co2`;
+    acp2.Description = 'Block 0 W2.3 second company';
+    const code2 = companyCode();
+    acp2.CompanyCode = code2;
+    acp2.FunctionalCurrencyCode = currencyCode;
+    acp2.EntityType = 'Subsidiary';
+    const acp2Id = acp2.ID;
+    assert(await acp2.Save(), `second ACP save failed: ${acp2.LatestResult?.CompleteMessage}`);
+    createdACPIds.push(acp2Id);
+    const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
+    je.NewRecord();
+    je.CompanyID = acp2Id;
+    je.EffectiveDate = new Date();
+    je.EntryType = 'Manual';
+    je.Status = 'Pending';
+    je.Description = `${RUN_TAG} W2.3 second-company numbering`;
+    assert(await je.Save(), `JE save failed: ${je.LatestResult?.CompleteMessage}`);
+    createdJEIds.push(je.ID);
+    const fy = new Date().getUTCFullYear();
+    assert(je.EntryNumber === `JE-${code2}-${fy}-000001`,
+      `expected the second company's first number to be JE-${code2}-${fy}-000001, got '${je.EntryNumber}'`);
+  });
+
+  await test('W2.4 concurrent assignment (AD-17) — 5 simultaneous JEs get 5 UNIQUE gap-free sequences', async () => {
+    const before = firstEntrySeq; // sequences continue from the company's counter
+    const results = await Promise.all([1, 2, 3, 4, 5].map(i => makeJE(`W2.4 concurrent ${i}`)));
+    const seqs = results.map(je => sequencePart(je.EntryNumber)).sort((a, b) => a - b);
+    assert(new Set(seqs).size === 5, `expected 5 unique sequences, got ${seqs.join(',')}`);
+    assert(seqs[4] - seqs[0] === 4, `expected a contiguous gap-free run, got ${seqs.join(',')}`);
+    assert(seqs[0] > before, `expected sequences beyond ${before}, got ${seqs.join(',')}`);
   });
 
   // ─── W3 — batch numbering (GLOBAL singleton sequence — D-SEQ) ─────────────
@@ -312,7 +351,8 @@ async function main(): Promise<void> {
   });
 
   // ─── Teardown — best-effort, FK-aware order ───────────────────────────────
-  // JEs/batches are GLOBAL now (no CompanyID) → delete by tracked ID. ACP references the
+  // JEs carry CompanyID again (MOD-12) but are deleted by tracked ID. Extra W2.3 companies
+  // (createdACPIds) clean up like the main ACP + their sequence rows. ACP references the
   // 5 GLAccounts (so ACP goes BEFORE GLAccount); GLAccount references Company; Company
   // (the IS-A parent) goes LAST. The global sequence tables are shared state — not touched.
   const byId = (table: string, id: string) =>
@@ -323,8 +363,19 @@ async function main(): Promise<void> {
     ...createdBatchIds.map(id => () => byId(BATCH_TABLE, id)),
     ...createdJEIds.map(id => () => byId(JE_TABLE, id)),
   ];
+  const byCompanyId = (table: string, companyId: string, col = 'CompanyID') =>
+    pool.request().input('id', sql.UniqueIdentifier, companyId).query(`DELETE FROM ${table} WHERE ${col}=@id`);
+  for (const extraAcp of createdACPIds) {
+    steps.push(
+      () => byCompanyId(`${SCHEMA}.JournalEntrySequence`, extraAcp),
+      () => byId(ACP_TABLE, extraAcp),
+      () => byCompanyId(GL_TABLE, extraAcp),
+      () => byId(COMPANY_TABLE, extraAcp),
+    );
+  }
   if (acpId) {
     steps.push(
+      () => byCompanyId(`${SCHEMA}.JournalEntrySequence`, acpId),
       () => byId(ACP_TABLE, acpId),
       () => byCompany(GL_TABLE),
       () => byId(COMPANY_TABLE, acpId),

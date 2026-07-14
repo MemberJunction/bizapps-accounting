@@ -155,12 +155,12 @@ export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
         * * SQL Data Type: bit
         * * Default Value: 1
         * * Description: Whether this profile is currently active. Inactive companies cannot have new JEs.`),
-    ApprovalCFOPersonID: z.string().nullable().describe(`
-        * * Field Name: ApprovalCFOPersonID
-        * * Display Name: Approval CFO Person ID
+    ApprovalCFOUserID: z.string().nullable().describe(`
+        * * Field Name: ApprovalCFOUserID
+        * * Display Name: Approval CFO User ID
         * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Common: People (vwPeople.ID)
-        * * Description: The CFO (a bizapps-common Person) who must approve a Journal Entry Batch for this company before it dispatches to the ERP. Resolved by the bizapps-tasks approval gate. Nullable: companies without a configured CFO fall back to the role-based resolver.`),
+        * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+        * * Description: The CFO (an MJ User — Q17 2026-07-13 ruling) who must approve a Journal Entry Batch for this company before it dispatches to the ERP. Resolved by the bizapps-tasks approval gate. Nullable: companies without a configured CFO fall back to the role-based resolver.`),
     __mj_CreatedAt: z.date().describe(`
         * * Field Name: __mj_CreatedAt
         * * Display Name: Created At
@@ -219,10 +219,10 @@ export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
         * * Field Name: UnrealizedFXGainLossGLAccount
         * * Display Name: Unrealized FX Gain Loss GL Account
         * * SQL Data Type: nvarchar(200)`),
-    ApprovalCFOPerson: z.string().nullable().describe(`
-        * * Field Name: ApprovalCFOPerson
-        * * Display Name: Approval CFO Person
-        * * SQL Data Type: nvarchar(201)`),
+    ApprovalCFOUser: z.string().nullable().describe(`
+        * * Field Name: ApprovalCFOUser
+        * * Display Name: Approval CFO User
+        * * SQL Data Type: nvarchar(100)`),
     RootParentAccountingCompanyID: z.string().nullable().describe(`
         * * Field Name: RootParentAccountingCompanyID
         * * Display Name: Root Parent Accounting Company ID
@@ -924,6 +924,12 @@ export const mjBizAppsAccountingJournalEntrySchema = z.object({
         * * Display Name: Entry Number
         * * SQL Data Type: nvarchar(40)
         * * Description: Gap-free entry number 'JE-{CompanyCode}-{FY}-{seq:000000}' assigned by spAssignNextJournalEntryNumber (BA-D15).`),
+    CompanyID: z.string().describe(`
+        * * Field Name: CompanyID
+        * * Display Name: Company ID
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
+        * * Description: The single company this entry belongs to (MOD-12: every JE is single-company; mixed-company drafts are rejected with MULTI_COMPANY_DRAFT). Must equal every line's GLAccount.CompanyID.`),
     EffectiveDate: z.date().describe(`
         * * Field Name: EffectiveDate
         * * Display Name: Effective Date
@@ -1059,6 +1065,10 @@ export const mjBizAppsAccountingJournalEntrySchema = z.object({
         * * Display Name: Updated At
         * * SQL Data Type: datetimeoffset
         * * Default Value: getutcdate()`),
+    Company: z.string().describe(`
+        * * Field Name: Company
+        * * Display Name: Company
+        * * SQL Data Type: nvarchar(50)`),
     File: z.string().nullable().describe(`
         * * Field Name: File
         * * Display Name: File
@@ -1321,7 +1331,7 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * Display Name: Approved By User ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
-        * * Description: The user who approved the batch (see AccountingCompanyProfile.ApprovalCFOPersonID / the bizapps-tasks approval gate).`),
+        * * Description: The user who approved the batch (see AccountingCompanyProfile.ApprovalCFOUserID / the bizapps-tasks approval gate).`),
     SentAt: z.date().nullable().describe(`
         * * Field Name: SentAt
         * * Display Name: Sent At
@@ -1562,6 +1572,11 @@ export type mjBizAppsAccountingJournalEntryLinkEntityType = z.infer<typeof mjBiz
  * zod schema definition for the entity MJ_BizApps_Accounting: Journal Entry Sequences
  */
 export const mjBizAppsAccountingJournalEntrySequenceSchema = z.object({
+    CompanyID: z.string().describe(`
+        * * Field Name: CompanyID
+        * * Display Name: Company ID
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)`),
     FiscalYear: z.number().describe(`
         * * Field Name: FiscalYear
         * * Display Name: Fiscal Year
@@ -1581,6 +1596,10 @@ export const mjBizAppsAccountingJournalEntrySequenceSchema = z.object({
         * * Display Name: Updated At
         * * SQL Data Type: datetimeoffset
         * * Default Value: getutcdate()`),
+    Company: z.string().describe(`
+        * * Field Name: Company
+        * * Display Name: Company
+        * * SQL Data Type: nvarchar(50)`),
 });
 
 export type mjBizAppsAccountingJournalEntrySequenceEntityType = z.infer<typeof mjBizAppsAccountingJournalEntrySequenceSchema>;
@@ -2542,17 +2561,17 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
     }
 
     /**
-    * * Field Name: ApprovalCFOPersonID
-    * * Display Name: Approval CFO Person ID
+    * * Field Name: ApprovalCFOUserID
+    * * Display Name: Approval CFO User ID
     * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Common: People (vwPeople.ID)
-    * * Description: The CFO (a bizapps-common Person) who must approve a Journal Entry Batch for this company before it dispatches to the ERP. Resolved by the bizapps-tasks approval gate. Nullable: companies without a configured CFO fall back to the role-based resolver.
+    * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+    * * Description: The CFO (an MJ User — Q17 2026-07-13 ruling) who must approve a Journal Entry Batch for this company before it dispatches to the ERP. Resolved by the bizapps-tasks approval gate. Nullable: companies without a configured CFO fall back to the role-based resolver.
     */
-    get ApprovalCFOPersonID(): string | null {
-        return this.Get('ApprovalCFOPersonID');
+    get ApprovalCFOUserID(): string | null {
+        return this.Get('ApprovalCFOUserID');
     }
-    set ApprovalCFOPersonID(value: string | null) {
-        this.Set('ApprovalCFOPersonID', value);
+    set ApprovalCFOUserID(value: string | null) {
+        this.Set('ApprovalCFOUserID', value);
     }
 
     /**
@@ -2704,12 +2723,12 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
     }
 
     /**
-    * * Field Name: ApprovalCFOPerson
-    * * Display Name: Approval CFO Person
-    * * SQL Data Type: nvarchar(201)
+    * * Field Name: ApprovalCFOUser
+    * * Display Name: Approval CFO User
+    * * SQL Data Type: nvarchar(100)
     */
-    get ApprovalCFOPerson(): string | null {
-        return this.Get('ApprovalCFOPerson');
+    get ApprovalCFOUser(): string | null {
+        return this.Get('ApprovalCFOUser');
     }
 
     /**
@@ -4505,6 +4524,20 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     }
 
     /**
+    * * Field Name: CompanyID
+    * * Display Name: Company ID
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
+    * * Description: The single company this entry belongs to (MOD-12: every JE is single-company; mixed-company drafts are rejected with MULTI_COMPANY_DRAFT). Must equal every line's GLAccount.CompanyID.
+    */
+    get CompanyID(): string {
+        return this.Get('CompanyID');
+    }
+    set CompanyID(value: string) {
+        this.Set('CompanyID', value);
+    }
+
+    /**
     * * Field Name: EffectiveDate
     * * Display Name: Effective Date
     * * SQL Data Type: date
@@ -4799,6 +4832,15 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     */
     get __mj_UpdatedAt(): Date {
         return this.Get('__mj_UpdatedAt');
+    }
+
+    /**
+    * * Field Name: Company
+    * * Display Name: Company
+    * * SQL Data Type: nvarchar(50)
+    */
+    get Company(): string {
+        return this.Get('Company');
     }
 
     /**
@@ -5440,7 +5482,7 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     * * Display Name: Approved By User ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
-    * * Description: The user who approved the batch (see AccountingCompanyProfile.ApprovalCFOPersonID / the bizapps-tasks approval gate).
+    * * Description: The user who approved the batch (see AccountingCompanyProfile.ApprovalCFOUserID / the bizapps-tasks approval gate).
     */
     get ApprovedByUserID(): string | null {
         return this.Get('ApprovedByUserID');
@@ -6048,8 +6090,8 @@ export class mjBizAppsAccountingJournalEntryLinkEntity extends BaseEntity<mjBizA
  * * Schema: __mj_BizAppsAccounting
  * * Base Table: JournalEntrySequence
  * * Base View: vwJournalEntrySequences
- * * @description GLOBAL per-fiscal-year counter backing gap-free JournalEntry numbering (D-SEQ 2026-07-06: JEs are multi-company, so numbering is not company-scoped). Consumed only by spAssignNextJournalEntryNumber.
- * * Primary Key: FiscalYear
+ * * @description PER-COMPANY per-fiscal-year counter backing gap-free JournalEntry numbering JE-{CompanyCode}-{FY}-{seq} (MOD-12; supersedes the D-SEQ global shape). Consumed only by spAssignNextJournalEntryNumber.
+ * * Primary Keys: CompanyID, FiscalYear
  * @extends {BaseEntity}
  * @class
  * @public
@@ -6058,6 +6100,7 @@ export class mjBizAppsAccountingJournalEntryLinkEntity extends BaseEntity<mjBizA
 export class mjBizAppsAccountingJournalEntrySequenceEntity extends BaseEntity<mjBizAppsAccountingJournalEntrySequenceEntityType> {
     /**
     * Loads the MJ_BizApps_Accounting: Journal Entry Sequences record from the database
+    * @param CompanyID: string - primary key value to load the MJ_BizApps_Accounting: Journal Entry Sequences record.
     * @param FiscalYear: number - primary key value to load the MJ_BizApps_Accounting: Journal Entry Sequences record.
     * @param EntityRelationshipsToLoad - (optional) the relationships to load
     * @returns {Promise<boolean>} - true if successful, false otherwise
@@ -6067,10 +6110,24 @@ export class mjBizAppsAccountingJournalEntrySequenceEntity extends BaseEntity<mj
     * @method
     * @override
     */
-    public async Load(FiscalYear: number, EntityRelationshipsToLoad?: string[]) : Promise<boolean> {
+    public async Load(CompanyID: string, FiscalYear: number, EntityRelationshipsToLoad?: string[]) : Promise<boolean> {
         const compositeKey: CompositeKey = new CompositeKey();
+        compositeKey.KeyValuePairs.push({ FieldName: 'CompanyID', Value: CompanyID });
         compositeKey.KeyValuePairs.push({ FieldName: 'FiscalYear', Value: FiscalYear });
         return await super.InnerLoad(compositeKey, EntityRelationshipsToLoad);
+    }
+
+    /**
+    * * Field Name: CompanyID
+    * * Display Name: Company ID
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
+    */
+    get CompanyID(): string {
+        return this.Get('CompanyID');
+    }
+    set CompanyID(value: string) {
+        this.Set('CompanyID', value);
     }
 
     /**
@@ -6116,6 +6173,15 @@ export class mjBizAppsAccountingJournalEntrySequenceEntity extends BaseEntity<mj
     */
     get __mj_UpdatedAt(): Date {
         return this.Get('__mj_UpdatedAt');
+    }
+
+    /**
+    * * Field Name: Company
+    * * Display Name: Company
+    * * SQL Data Type: nvarchar(50)
+    */
+    get Company(): string {
+        return this.Get('Company');
     }
 }
 

@@ -116,3 +116,9 @@ identical op over GraphQL `ExecuteRemoteOperation`.
 - 🧪 **Live-proven (2026-07-06):** T1 76/76 · T2 76/76 blocks + engine 12/12 + seed 6/6 · T3 64/64 + engine-op
   8/8 · T5 10/10 — see `test-harnesses/testing.md` for the coverage matrix.
 - 🚫 **Retired:** W4/W7/W8 (periods — CH-1), W5 (FX generation is Payments'), the S3 materializer (AM-6).
+
+
+## 2026-07-14 — A4 (MOD-12) numbering hook change
+
+- `JournalEntryEntityServer.assignEntryNumber` (W2) now requires `CompanyID` (throws when unset) and derives the fiscal year from the company's ACP `FiscalYearStartMonth/Day` (UTC; labeled by start year). Numbers format `JE-{CompanyCode}-{FY}-{seq:000000}` via the per-company sequence sproc.
+- `generateReversal` (W6) stamps the reversal's `CompanyID` from the original entry.

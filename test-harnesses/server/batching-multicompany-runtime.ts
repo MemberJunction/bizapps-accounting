@@ -104,6 +104,7 @@ async function provision(p: Pools, suffix: string, currency: string, jeSpecs: JE
     const spec = jeSpecs[i];
     const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
     je.NewRecord();
+    je.CompanyID = companyId; // MOD-12: single-company JEs
     je.EffectiveDate = new Date();
     je.EntryType = spec.entryType;
     je.Status = 'Pending'; je.Description = `${RUN_TAG} Co${suffix} JE ${i + 1}`;
@@ -159,6 +160,7 @@ async function teardown(p: Pools, companies: Co[], counterpartyId: string): Prom
     await exec(`DELETE FROM ${SCHEMA}.ChartOfAccountsMapping WHERE CompanyID='${co.companyId}'`);
     await exec(`DELETE FROM ${SCHEMA}.AccountingCompanyProfile WHERE ID='${co.companyId}'`);
     await exec(`DELETE FROM ${SCHEMA}.GLAccount WHERE CompanyID='${co.companyId}'`);
+    await exec(`DELETE FROM __mj_BizAppsAccounting.JournalEntrySequence WHERE CompanyID='${co.companyId}'`); // per-company JE sequence rows (MOD-12)
     await exec(`DELETE FROM __mj.Company WHERE ID='${co.companyId}'`);
   }
   await exec(`DELETE FROM __mj_BizAppsCommon.Organization WHERE ID='${counterpartyId}'`);

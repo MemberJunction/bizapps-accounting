@@ -38,7 +38,7 @@
  *   PLAN:     §Block 4 (MH: AssociationDemoSeedData)
  */
 
-import { Metadata, RunView, UserInfo } from '@memberjunction/core';
+import { CompositeKey, Metadata, RunView, UserInfo } from '@memberjunction/core';
 import {
   mjBizAppsAccountingAccountingCompanyProfileEntity,
   mjBizAppsAccountingGLAccountEntity,
@@ -209,6 +209,21 @@ async function ensureCompany(
   const exists = await acp.Load(companyId);
 
   if (!exists) {
+    // A prior `app drop-schema` removes the ACP but leaves the __mj.Company (IsA parent) behind;
+    // re-creating the ACP would then PK-collide on the deterministic ID. Sweep the orphan first.
+    const rv = new RunView();
+    const orphan = await rv.RunView<{ ID: string }>(
+      { EntityName: 'MJ: Companies', ExtraFilter: `ID='${companyId}'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true },
+      contextUser,
+    );
+    if ((orphan.Results ?? []).length > 0) {
+      const co = await md.GetEntityObject('MJ: Companies', contextUser);
+      if (await co.InnerLoad(CompositeKey.FromID(companyId))) {
+        if (!(await co.Delete())) {
+          throw new Error(`ensureCompany: orphan __mj.Company ${companyId} exists (schema-drop residue) and could not be deleted: ${co.LatestResult?.CompleteMessage ?? 'unknown'}`);
+        }
+      }
+    }
     acp.NewRecord();
     acp.ID = companyId; // deterministic PK (== __mj.Company.ID via IsA)
     acp.Name = name;
@@ -304,6 +319,7 @@ async function makeJE(
   const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
   je.NewRecord();
   je.ID = jeId;
+  je.CompanyID = ctx.companyId; // MOD-12: single-company JEs
   je.EffectiveDate = opts.effectiveDate ?? new Date();
   je.EntryType = entryType;
   je.Status = 'Pending';

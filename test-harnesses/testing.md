@@ -49,9 +49,16 @@ WITH their features; new rows cover the new invariants._
 | **Engine: ResolveLinkedAccount (role links, date windows, ordered dims)** | ✓ | ✓ | — | — |
 | **Engine: op over GraphQL ExecuteRemoteOperation (A5 "runs on local")** | — | — | ✓ | — |
 | GUI dashboards (Batch Dispatch + 4 read-model) + forms + nav | — | — | — | ✓ |
-| GUI dashboards NEW (JE Console · Chart of Accounts · Company Setup · Approvals) | — | — | — | ✗ (ad-hoc headed walks only, 0 errors — no committed Tier-5 specs; see Ledger) |
+| GUI dashboards NEW (JE Console · Chart of Accounts · Company Setup · Approvals) | — | — | — | ✓ (committed Tier-5 specs, all green 2026-07-10: `accounting-je-console` 3/3, `accounting-chart-of-accounts` 3/3, `accounting-company-setup` 3/3, `accounting-batch-approvals` 1/1) |
 
 **No open ✗.** Every cell is covered or a justified ⚠ below.
+
+_2026-07-10 rollout (Task 36) — full re-baseline on the lived-in `accounting-engine-dev` instance:_
+- _T1 86/86 · T2 all blocks green · T3 accounting core 43/43 · T3 orders (NEW `order-to-je-api` 35/35) · T5 new dashboards 10/10 + stable existing 6/6._
+- _**block6 hardened:** `vw_ARtoGLRecon` check rewritten from a fixed "2 GLPosted this month" absolute to a **base-table reconciliation** — isolation-proof against accumulated demo/test data (13/13)._
+- _**readmodels-api 22/29:** the 7 reds are the shared Association demo company `CO1` carrying extra data (all drift-proof invariants pass → resolvers correct). Fixed a real null-CustomerName crash. Design decision (isolate vs. drift-proof vs. clean+reseed) logged in the instance `QUESTIONS.md`._
+- _**T5 spec-drift fixes:** FontAwesome icon glyphs pollute button accessible names → use substring/regex name matches (not `exact`). Batch Approvals card needs a manual Refresh to reflect Approved post-approve (low-sev reactivity gap, logged in `BUGS.md`; spec drives Refresh)._
+- _**Stale existing specs (NOT yet reconciled):** `batching`, `batching-reject`, `dashboards` pre-date the Batch UI refactor (nav "Batches" removed → "Batch Approvals"; Build moved to a Batch Status preview dialog). Reconciliation scoped (feeds Task 40/51)._
 
 ## Intentional-⚠ register (coverage placed at a cheaper/other tier on purpose — NOT shortcuts)
 
@@ -159,3 +166,67 @@ then start MJAPI + Explorer, then run the demo seed. Run tsx harnesses from the 
 
 **Expectation:** the squashed v1.0 baseline yields the SAME net schema as the old create-then-drop set,
 so a fully green run here IS the equivalence proof that the consolidation didn't break anything.
+
+_2026-07-10 (session 2) — batch-approval reactivity fix + stale-spec reconciliation:_
+- _**FIX (product):** `BatchDispatch/loadBatches()` now uses `RunView({ BypassCache: true })`. The batch status
+  transitions run through server resolvers (buildBatch/approveBatch/sendBatch/recordDecision), not a client
+  BaseEntity.Save(), so MJ's read cache wasn't invalidated → the inbox card showed a stale "Pending" after
+  Approve until a manual Refresh. GUI-verified: `accounting-batch-approvals` now flips Pending→Approved→Posted
+  reactively (no refresh)._
+- _**Spec reconciliation (post Batch-UI-refactor, Tasks 23/38/39/46):** `batching.spec` DELETED (its
+  Dispatch→Posted step folded into `accounting-batch-approvals`, which now covers the full Build→Approve→
+  Dispatch→Posted spine). `batching-reject.spec` REWRITTEN to the current flow (Build on Batch Status → Reject
+  on Batch Approvals) — scoped to the awaiting-approval card (shared-demo-data safe); asserts the #12 core
+  (Reject→Cancelled + entries-freed). `dashboards.spec` TRIMMED from 9→4 tests: removed GL-Accounts grid/form +
+  JE grid-form (now covered by `accounting-chart-of-accounts` + `accounting-je-console`) and Batch Approvals/
+  Batch Status cards (redundant with the dedicated specs); kept the read-model dashboards + nav smoke._
+- _**Raised (BUGS.md):** (1) Batch Approvals card needed manual Refresh after Approve — FIXED. (2) rebuild-after-
+  Reject produced no new Pending batch despite the "entries returned to candidate pool" banner — under
+  investigation; batching-reject asserts the verified #12 core only, not forced green._
+- _T5 green after this round: `accounting-batch-approvals` (full spine, reactive) · `batching-reject` (#12) ·
+  `dashboards` 4/4 · plus the earlier-green je-console/chart-of-accounts/company-setup/orders specs + stable set._
+
+---
+### 2026-07-14 — A4 single-company JE restoration (MOD-12) — full re-baseline
+Schema plan A3 (audit — see `docs/bizapps-accounting-erd.md` appendix) + A4 executed; baseline
+`B202605281200` edited in place (collapse-into-baseline; `V202607081600` folded in + deleted).
+
+**What changed under test:** `JournalEntry.CompanyID NOT NULL` + FK + immutability-frozen +
+lock-time company-coherence trigger (THROW **50025**); pipeline stage 5 = whole-entry balance +
+**MULTI_COMPANY_DRAFT** (AM-4 per-company balance collapsed); numbering per company
+`JE-{CompanyCode}-{FY}-{seq}` (`JournalEntrySequence` re-keyed `(CompanyID, FiscalYear)`; sproc
+THROW **50024** on missing ACP; FY from ACP FiscalYearStartMonth/Day); `ApprovalCFOUserID`
+replaces `ApprovalCFOPersonID` (A4.6 — gate assigns tasks to **Users**; decisions stay
+Person-keyed per the tasks-app FK).
+
+**Suite results (all re-run this session):**
+- T1 EngineBase vitest **39/39** ✓ (stage-5 rework: MULTI_COMPANY_DRAFT cases incl. balanced-per-
+  company rejection + combined MULTI+UNBALANCED; companyID surfaced in the pipeline outcome).
+- T1 CoreEntitiesServer vitest **39/39** ✓.
+- T2 block0 **12/12** ✓ — numbering re-baselined: W2.1 `JE-{CompanyCode}-{FY}-{seq}`, W2.2 per-
+  company monotonic, **NEW W2.3** second company starts at 000001 (per-company independence),
+  **NEW W2.4** 5 concurrent JEs → unique gap-free run (AD-17). Batch numbering stays GLOBAL (W3).
+- T2 block1 **13/13** ✓ — 50019 cross-company-unbalanced kept; **INVERTED** old "multi-company
+  balanced locks" → now REJECTED (50025); **NEW** CompanyID-frozen-once-locked (50004/50025,
+  either trigger may fire first — order undefined); raw-INSERT paths carry CompanyID.
+- T2 block2 **24/24** ✓ — approval gate on CFO **Users** (assignment entity = MJ: Users); reject-
+  unlock + regenerate + netting + multi-company batch sweep intact; makeJE company-scoped.
+- T2 block4 **7/7** ✓ · block6 **13/13** ✓ · batching-multicompany **9/9** ✓ (batches still span
+  companies — CH-4 unchanged; only the JE is single-company).
+- T2 engine-runtime **13/13** ✓ — E1 asserts JE.CompanyID stamped + new number format; E2 gained
+  the two MULTI_COMPANY_DRAFT cases.
+- T3 engine-op-api **8/8** ✓ over live GraphQL (MJAPI :4030) — numbering assert updated.
+- Cross-app: orders order-to-je **6/6** ✓ (N-single-company-JEs + O6 numbering) ·
+  order-to-glposted full cycle ✓ (order → per-company JE → batch → approve → send → GLPosted).
+- Demo: `seed-demo.ts` **6/6 views** ✓ (ensureCompany now sweeps orphan __mj.Company rows left by
+  `app drop-schema` — same hardening in orders' seed-demo-catalog).
+- Teardown hardening (all suites): per-company `JournalEntrySequence` rows deleted before company
+  rows (new FK); block0 W2.3 companies tracked + swept.
+
+**Known gaps / labels:**
+- Orders' booking-set compensation (partial multi-company failure → delete created Pending JEs) is
+  NOT live-proven (needs mid-set fault injection) — half-test: code-reviewed + tier-1 all-or-nothing
+  resolution case only.
+- Playwright (tier 5) specs incl. the batching fixtures were updated for ApprovalCFOUserID but NOT
+  re-run this session (the UI workstream owns their next run); batching fixtures now assign the
+  running user as CFO.

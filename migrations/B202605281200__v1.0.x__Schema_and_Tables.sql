@@ -333,13 +333,17 @@ CREATE TABLE __mj_BizAppsAccounting.JournalEntryBatchLineDimension (
 GO
 
 ---------------------------------------------------------------------------
--- 2.13 JournalEntry — top-level entity; the ledger row. MULTI-COMPANY (CH-2):
---      no CompanyID and no period — company is per LINE via GLAccount.CompanyID;
---      the ERP assigns periods at posting.
+-- 2.13 JournalEntry — top-level entity; the ledger row. SINGLE-COMPANY
+--      (MOD-12, 2026-07-13 — supersedes CH-2): every JE belongs to exactly ONE
+--      company (CompanyID NOT NULL; the engine rejects mixed-company drafts with
+--      MULTI_COMPANY_DRAFT — booking splits per company upstream, orders MOD-11).
+--      Lock fidelity is JE-grained, so per-company close independence requires
+--      per-company JEs. Still NO period — the ERP assigns periods at posting (MOD-1).
 ---------------------------------------------------------------------------
 CREATE TABLE __mj_BizAppsAccounting.JournalEntry (
     ID UNIQUEIDENTIFIER NOT NULL DEFAULT NEWSEQUENTIALID(),
     EntryNumber NVARCHAR(40) NOT NULL,
+    CompanyID UNIQUEIDENTIFIER NOT NULL,
     EffectiveDate DATE NOT NULL,
     EntryType NVARCHAR(40) NOT NULL,
     Status NVARCHAR(20) NOT NULL DEFAULT 'Pending',
@@ -513,14 +517,16 @@ CREATE TABLE __mj_BizAppsAccounting.CustomerTaxProfile (
 GO
 
 ---------------------------------------------------------------------------
--- 2.22 JournalEntrySequence — GLOBAL per-FY counter for gap-free JE numbers
---      (D-SEQ 2026-07-06: JEs are multi-company, so numbering is no longer
---      company-scoped. Derived decision — flag to Amith.)
+-- 2.22 JournalEntrySequence — PER-COMPANY per-FY counter for gap-free JE
+--      numbers 'JE-{CompanyCode}-{FY}-{seq}' (MOD-12 + Marcelo 2026-07-14:
+--      follow the master's per-company numbering; re-keyed from the D-SEQ
+--      global shape when JEs went single-company again).
 ---------------------------------------------------------------------------
 CREATE TABLE __mj_BizAppsAccounting.JournalEntrySequence (
+    CompanyID UNIQUEIDENTIFIER NOT NULL,
     FiscalYear INT NOT NULL,
     NextSequenceNumber INT NOT NULL DEFAULT 1,
-    CONSTRAINT PK_JournalEntrySequence PRIMARY KEY (FiscalYear),
+    CONSTRAINT PK_JournalEntrySequence PRIMARY KEY (CompanyID, FiscalYear),
     CONSTRAINT CK_JournalEntrySequence_NextSeq CHECK (NextSequenceNumber > 0)
 );
 GO
@@ -850,6 +856,11 @@ GO
 -- 3.12 JournalEntry — all internal FKs (polymorphic soft refs intentionally omitted)
 ---------------------------------------------------------------------------
 ALTER TABLE __mj_BizAppsAccounting.JournalEntry
+    ADD CONSTRAINT FK_JE_Company
+    FOREIGN KEY (CompanyID) REFERENCES __mj.Company(ID);
+GO
+
+ALTER TABLE __mj_BizAppsAccounting.JournalEntry
     ADD CONSTRAINT FK_JE_Batch
     FOREIGN KEY (BatchID) REFERENCES __mj_BizAppsAccounting.JournalEntryBatch(ID);
 GO
@@ -983,8 +994,14 @@ ALTER TABLE __mj_BizAppsAccounting.CustomerTaxProfile
 GO
 
 ---------------------------------------------------------------------------
--- 3.21 JournalEntrySequence / JournalEntryBatchSequence → Company
+-- 3.21 JournalEntrySequence → Company (batch sequence stays GLOBAL — batches
+--      may span companies until/unless a later ruling splits them)
 ---------------------------------------------------------------------------
+ALTER TABLE __mj_BizAppsAccounting.JournalEntrySequence
+    ADD CONSTRAINT FK_JournalEntrySequence_Company
+    FOREIGN KEY (CompanyID) REFERENCES __mj.Company(ID);
+GO
+
 ---------------------------------------------------------------------------
 -- 3.22 CurrencySpotRate → Currency (from/to)
 ---------------------------------------------------------------------------
@@ -1170,7 +1187,8 @@ BEGIN
         THROW 50001, 'JournalEntry cannot transition to Batched/GLPosted unless Sum(Debits) = Sum(Credits). See plan §5.2 / BA-D5.', 1;
     END;
 
-    -- AM-4: the entry must ALSO balance WITHIN EACH company (a line's company = its GLAccount.CompanyID)
+    -- AM-4 (now trivially satisfied by MOD-12 single-company JEs; kept as belt-and-suspenders):
+    -- the entry must ALSO balance WITHIN EACH company (a line's company = its GLAccount.CompanyID)
     IF EXISTS (
         SELECT 1
         FROM inserted i
@@ -1183,6 +1201,21 @@ BEGIN
     BEGIN
         ROLLBACK TRANSACTION;
         THROW 50019, 'JournalEntry cannot transition to Batched/GLPosted unless debits equal credits WITHIN EACH company (AM-4 multi-company rule).', 1;
+    END;
+
+    -- MOD-12: single-company coherence — at lock, every line's account company must equal the
+    -- header CompanyID (the engine rejects mixed drafts earlier; this is the un-bypassable floor).
+    IF EXISTS (
+        SELECT 1
+        FROM inserted i
+        JOIN __mj_BizAppsAccounting.JournalEntryLine jel ON jel.JournalEntryID = i.ID
+        JOIN __mj_BizAppsAccounting.GLAccount gl ON gl.ID = jel.GLAccountID
+        WHERE i.Status IN ('Batched','GLPosted')
+          AND gl.CompanyID <> i.CompanyID
+    )
+    BEGIN
+        ROLLBACK TRANSACTION;
+        THROW 50025, 'JournalEntry cannot transition to Batched/GLPosted with lines whose GLAccount.CompanyID differs from the entry''s CompanyID (MOD-12: journal entries are single-company).', 1;
     END;
 END;
 GO
@@ -1239,10 +1272,12 @@ END;
 GO
 
 ---------------------------------------------------------------------------
--- 4.3 trg_JournalEntry_Immutability
---     Locks JE once Status is Batched or GLPosted. Only Status / GLPostedAt /
---     GLReferenceID may transition. DELETE is blocked entirely. Reversals
---     happen via NEW Pending JEs, not by modifying historical ones (plan §8).
+-- 4.3 trg_JournalEntry_Immutability — LEVELS OF LOCKING (Option A; folded from
+--     V202607081600, Robert 2026-07-08 / plan batch-approval-lock-redesign).
+--     Batched-in-a-PENDING-batch = preliminary lock (reversible: Batched→Pending
+--     + BatchID→NULL and nothing else); batch Approved+ (or GLPosted) = permanent.
+--     CompanyID is in the frozen set (MOD-12). DELETE blocked once locked;
+--     reversals happen via NEW Pending JEs.
 ---------------------------------------------------------------------------
 CREATE TRIGGER __mj_BizAppsAccounting.trg_JournalEntry_Immutability
 ON __mj_BizAppsAccounting.JournalEntry
@@ -1251,7 +1286,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- DELETE: block if any deleted row was locked
+    -- DELETE: block if any deleted row was locked (unchanged from baseline).
     IF NOT EXISTS (SELECT 1 FROM inserted) AND EXISTS (SELECT 1 FROM deleted WHERE Status IN ('Batched','GLPosted'))
     BEGIN
         ROLLBACK TRANSACTION;
@@ -1259,15 +1294,19 @@ BEGIN
     END;
 
     -- UPDATE: block changes to frozen fields when previous Status was locked.
-    -- The only allowed transitions on a locked row are GLPostedAt, GLReferenceID,
-    -- and Status moving from Batched → GLPosted.
+    -- Allowed on a locked row: GLPostedAt, GLReferenceID, ReversedByJournalEntryID, and Status moving
+    -- Batched→GLPosted. NEW (levels of locking): the reversible PRELIMINARY unlock — Status Batched→Pending
+    -- with BatchID→NULL, while the owning batch is still Pending — is also allowed, but it may change ONLY
+    -- Status + BatchID (any other frozen field changing in the same update is still blocked).
     IF EXISTS (
         SELECT 1
         FROM deleted d
         JOIN inserted i ON i.ID = d.ID
         WHERE d.Status IN ('Batched','GLPosted')
           AND (
+            -- (A) any frozen field OTHER THAN BatchID changed → never allowed on a locked row
             i.EntryNumber                 <> d.EntryNumber                 OR
+            i.CompanyID                   <> d.CompanyID                   OR
             i.EffectiveDate               <> d.EffectiveDate               OR
             i.EntryType                   <> d.EntryType                   OR
             ISNULL(CAST(i.Description AS NVARCHAR(MAX)),N'') <> ISNULL(CAST(d.Description AS NVARCHAR(MAX)),N'') OR
@@ -1281,26 +1320,42 @@ BEGIN
             ISNULL(i.ScheduledJournalEntryID,  '00000000-0000-0000-0000-000000000000') <> ISNULL(d.ScheduledJournalEntryID,  '00000000-0000-0000-0000-000000000000') OR
             ISNULL(i.TaxRemittanceID,          '00000000-0000-0000-0000-000000000000') <> ISNULL(d.TaxRemittanceID,          '00000000-0000-0000-0000-000000000000') OR
             ISNULL(i.ReversesJournalEntryID,   '00000000-0000-0000-0000-000000000000') <> ISNULL(d.ReversesJournalEntryID,   '00000000-0000-0000-0000-000000000000') OR
-            ISNULL(i.BatchID,                  '00000000-0000-0000-0000-000000000000') <> ISNULL(d.BatchID,                  '00000000-0000-0000-0000-000000000000') OR
-            ISNULL(i.FileID,                   '00000000-0000-0000-0000-000000000000') <> ISNULL(d.FileID,                   '00000000-0000-0000-0000-000000000000')
+            ISNULL(i.FileID,                   '00000000-0000-0000-0000-000000000000') <> ISNULL(d.FileID,                   '00000000-0000-0000-0000-000000000000') OR
+            -- (B) BatchID changed, and this is NOT the sanctioned reversible preliminary unlock
+            (
+                ISNULL(i.BatchID, '00000000-0000-0000-0000-000000000000') <> ISNULL(d.BatchID, '00000000-0000-0000-0000-000000000000')
+                AND NOT (
+                    d.Status = 'Batched'
+                    AND i.Status = 'Pending'
+                    AND i.BatchID IS NULL
+                    AND EXISTS (SELECT 1 FROM __mj_BizAppsAccounting.JournalEntryBatch b WHERE b.ID = d.BatchID AND b.Status = 'Pending')
+                )
+            )
           )
     )
     BEGIN
         ROLLBACK TRANSACTION;
-        THROW 50004, 'JournalEntry is locked (Status=Batched/GLPosted). Only GLPostedAt, GLReferenceID, ReversedByJournalEntryID, and Status (Batched→GLPosted) may change.', 1;
+        THROW 50004, 'JournalEntry is locked (Status=Batched/GLPosted). Only GLPostedAt, GLReferenceID, ReversedByJournalEntryID, Status (Batched→GLPosted), and the reversible unlock (Batched→Pending + BatchID→NULL while the batch is still Pending) may change.', 1;
     END;
 
-    -- Disallow regressing Status backwards (GLPosted → Batched → Pending) on a locked row
+    -- Disallow regressing Status backwards on a locked row. Batched→Pending is permitted ONLY as the
+    -- reversible preliminary unlock (BatchID cleared, owning batch still Pending); GLPosted never regresses.
     IF EXISTS (
         SELECT 1
         FROM deleted d
         JOIN inserted i ON i.ID = d.ID
         WHERE (d.Status = 'GLPosted' AND i.Status IN ('Pending','Batched'))
-           OR (d.Status = 'Batched'  AND i.Status = 'Pending')
+           OR (
+               d.Status = 'Batched' AND i.Status = 'Pending'
+               AND NOT (
+                   i.BatchID IS NULL
+                   AND EXISTS (SELECT 1 FROM __mj_BizAppsAccounting.JournalEntryBatch b WHERE b.ID = d.BatchID AND b.Status = 'Pending')
+               )
+           )
     )
     BEGIN
         ROLLBACK TRANSACTION;
-        THROW 50005, 'JournalEntry Status cannot regress (only Pending→Batched and Batched→GLPosted transitions are allowed).', 1;
+        THROW 50005, 'JournalEntry Status cannot regress (only Pending→Batched, Batched→GLPosted, and the reversible Batched→Pending unlock of an unapproved batch are allowed).', 1;
     END;
 END;
 GO
@@ -1601,40 +1656,51 @@ GO
 
 ---------------------------------------------------------------------------
 -- 5.1 spAssignNextJournalEntryNumber
---     Atomically increments the GLOBAL per-FiscalYear sequence and returns
---     the formatted EntryNumber 'JE-{FY}-{seq:000000}'. (D-SEQ 2026-07-06:
---     JEs are multi-company, so numbering lost its company scope.)
+--     Atomically increments the PER-COMPANY per-FiscalYear sequence and
+--     returns 'JE-{CompanyCode}-{FY}-{seq:000000}' (MOD-12 + master
+--     numbering, Marcelo 2026-07-14; supersedes the D-SEQ global shape).
 --     Uses HOLDLOCK + UPDLOCK for serializable read-modify-write under
---     concurrency. Gap-free per BA-D15.
+--     concurrency. Gap-free per BA-D15, per company.
 ---------------------------------------------------------------------------
 CREATE PROCEDURE __mj_BizAppsAccounting.spAssignNextJournalEntryNumber
+    @CompanyID UNIQUEIDENTIFIER,
     @FiscalYear INT,
     @EntryNumber NVARCHAR(40) OUTPUT
 AS
 BEGIN
     SET NOCOUNT ON;
     DECLARE @NextSeq INT;
+    DECLARE @CompanyCode NVARCHAR(20);
+
+    -- The company code prefixes the number (master: JE-{CompanyCode}-{FY}-{seq}).
+    SELECT @CompanyCode = CompanyCode
+      FROM __mj_BizAppsAccounting.AccountingCompanyProfile
+     WHERE ID = @CompanyID;
+    IF @CompanyCode IS NULL
+    BEGIN
+        THROW 50024, 'spAssignNextJournalEntryNumber: no AccountingCompanyProfile (CompanyCode) found for @CompanyID — every JE company must have an accounting profile.', 1;
+    END;
 
     BEGIN TRANSACTION;
-        -- Upsert the seq row (HOLDLOCK for serializable read-modify-write under contention)
+        -- Upsert the per-(company, FY) seq row (HOLDLOCK for serializable read-modify-write)
         IF NOT EXISTS (
             SELECT 1 FROM __mj_BizAppsAccounting.JournalEntrySequence WITH (HOLDLOCK, UPDLOCK)
-             WHERE FiscalYear = @FiscalYear
+             WHERE CompanyID = @CompanyID AND FiscalYear = @FiscalYear
         )
         BEGIN
-            INSERT INTO __mj_BizAppsAccounting.JournalEntrySequence (FiscalYear, NextSequenceNumber)
-            VALUES (@FiscalYear, 2);
+            INSERT INTO __mj_BizAppsAccounting.JournalEntrySequence (CompanyID, FiscalYear, NextSequenceNumber)
+            VALUES (@CompanyID, @FiscalYear, 2);
             SET @NextSeq = 1;
         END
         ELSE
         BEGIN
             UPDATE __mj_BizAppsAccounting.JournalEntrySequence WITH (HOLDLOCK, UPDLOCK)
                SET @NextSeq = NextSequenceNumber, NextSequenceNumber = NextSequenceNumber + 1
-             WHERE FiscalYear = @FiscalYear;
+             WHERE CompanyID = @CompanyID AND FiscalYear = @FiscalYear;
         END;
     COMMIT TRANSACTION;
 
-    SET @EntryNumber = N'JE-' + CAST(@FiscalYear AS NVARCHAR(4)) + N'-' + RIGHT(N'000000' + CAST(@NextSeq AS NVARCHAR(6)), 6);
+    SET @EntryNumber = N'JE-' + @CompanyCode + N'-' + CAST(@FiscalYear AS NVARCHAR(4)) + N'-' + RIGHT(N'000000' + CAST(@NextSeq AS NVARCHAR(6)), 6);
 END;
 GO
 
@@ -2080,6 +2146,8 @@ EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'Unique identif
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntry', @level2type = N'COLUMN', @level2name = N'ID';
 EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'Gap-free entry number ''JE-{CompanyCode}-{FY}-{seq:000000}'' assigned by spAssignNextJournalEntryNumber (BA-D15).',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntry', @level2type = N'COLUMN', @level2name = N'EntryNumber';
+EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'The single company this entry belongs to (MOD-12: every JE is single-company; mixed-company drafts are rejected with MULTI_COMPANY_DRAFT). Must equal every line''s GLAccount.CompanyID.',
+    @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntry', @level2type = N'COLUMN', @level2name = N'CompanyID';
 EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'Accounting date for the entry (the ERP assigns its own period at posting).',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntry', @level2type = N'COLUMN', @level2name = N'EffectiveDate';
 EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'OrderBooking | PaymentReceipt | RevenueRecognition | CommissionAccrual | PartnerRevShare | IntercompanyFlow | WaterfallDistribution | Refund | Writeoff | Reversal | Manual | TaxRemittance | PeriodEndAccrual | FXRevaluation | OpeningBalance | Adjustment.',
@@ -2322,11 +2390,11 @@ GO
 ---------------------------------------------------------------------------
 EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'When a human approved the batch for dispatch (locks its content; the new Approved status).',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'ApprovedAt';
-EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'The user who approved the batch (see AccountingCompanyProfile.ApprovalCFOPersonID / the bizapps-tasks approval gate).',
+EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'The user who approved the batch (see AccountingCompanyProfile.ApprovalCFOUserID / the bizapps-tasks approval gate).',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'ApprovedByUserID';
 EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'When the ERP confirmed it posted the batch (Status=Posted; renames the old AcknowledgedAt).',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'PostedAt';
-EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'GLOBAL per-fiscal-year counter backing gap-free JournalEntry numbering (D-SEQ 2026-07-06: JEs are multi-company, so numbering is not company-scoped). Consumed only by spAssignNextJournalEntryNumber.',
+EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'PER-COMPANY per-fiscal-year counter backing gap-free JournalEntry numbering JE-{CompanyCode}-{FY}-{seq} (MOD-12; supersedes the D-SEQ global shape). Consumed only by spAssignNextJournalEntryNumber.',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntrySequence';
 EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'GLOBAL singleton counter backing gap-free JournalEntryBatch numbering (D-SEQ 2026-07-06: batches are multi-company). One row, ID = 1. Consumed only by spAssignNextBatchNumber.',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatchSequence';
@@ -2372,14 +2440,14 @@ GO
 
 -- =============================================================================
 -- CONSOLIDATED INTO THE v1.0 BASELINE (squash of former v1.1.x-v1.5.x migrations):
---   * AccountingCompanyProfile.ApprovalCFOPersonID (was Intercompany_And_CFOApproval)
+--   * AccountingCompanyProfile.ApprovalCFOUserID (was Intercompany_And_CFOApproval)
 --   * Read-model views (were the three ReadModel_* migrations)
 -- IntercompanyRelationship (created then dropped = net-zero) is OMITTED: Accounting
 -- does no intercompany balancing; the Payments component owns due-to/due-from.
 -- =============================================================================
 
 ---------------------------------------------------------------------------
--- AccountingCompanyProfile.ApprovalCFOPersonID — per-company CFO approver.
+-- AccountingCompanyProfile.ApprovalCFOUserID — per-company CFO approver.
 -- (Consolidated into the v1.0 baseline from the former Intercompany_And_CFOApproval
 --  migration; that migration's IntercompanyRelationship table was net-zero — created
 --  then dropped — so it is omitted. Accounting does NO intercompany balancing; the
@@ -2387,17 +2455,17 @@ GO
 --  bizapps-tasks approval gate resolves the approver from here.)
 ---------------------------------------------------------------------------
 ALTER TABLE __mj_BizAppsAccounting.AccountingCompanyProfile
-    ADD ApprovalCFOPersonID UNIQUEIDENTIFIER NULL;
+    ADD ApprovalCFOUserID UNIQUEIDENTIFIER NULL;
 GO
 
 ALTER TABLE __mj_BizAppsAccounting.AccountingCompanyProfile
-    ADD CONSTRAINT FK_ACP_ApprovalCFOPerson
-    FOREIGN KEY (ApprovalCFOPersonID) REFERENCES __mj_BizAppsCommon.Person(ID);
+    ADD CONSTRAINT FK_ACP_ApprovalCFOUser
+    FOREIGN KEY (ApprovalCFOUserID) REFERENCES __mj.[User](ID);
 GO
 
 EXEC sp_addextendedproperty @name = N'MS_Description',
-    @value = N'The CFO (a bizapps-common Person) who must approve a Journal Entry Batch for this company before it dispatches to the ERP. Resolved by the bizapps-tasks approval gate. Nullable: companies without a configured CFO fall back to the role-based resolver.',
-    @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'AccountingCompanyProfile', @level2type = N'COLUMN', @level2name = N'ApprovalCFOPersonID';
+    @value = N'The CFO (an MJ User — Q17 2026-07-13 ruling) who must approve a Journal Entry Batch for this company before it dispatches to the ERP. Resolved by the bizapps-tasks approval gate. Nullable: companies without a configured CFO fall back to the role-based resolver.',
+    @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'AccountingCompanyProfile', @level2type = N'COLUMN', @level2name = N'ApprovalCFOUserID';
 GO
 
 
@@ -2869,21 +2937,27 @@ GO
          , GETUTCDATE()
       );
 
-/* SQL generated to create new application ${flyway:defaultSchema} */
+/* SQL generated to create new application ${flyway:defaultSchema} — idempotent: the Application/
+   ApplicationRole rows survive `app drop-schema` (its cleanup removes entities/permissions, not the
+   application), so guard for the collapse-into-baseline re-migrate loop (2026-07-14). */
+IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[Application] WHERE ID = 'adbd3d1c-4076-422b-b6d4-fa67eeccdc16')
 INSERT INTO [${mjSchema}].[Application] (ID, Name, Description, SchemaAutoAddNewEntities, Path, AutoUpdatePath)
                        VALUES ('adbd3d1c-4076-422b-b6d4-fa67eeccdc16', '${flyway:defaultSchema}', 'Generated for schema', '${flyway:defaultSchema}', 'mjbizappsaccounting', 1);
 
 /* Adding role UI to application ${flyway:defaultSchema} */
+IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[ApplicationRole] WHERE ApplicationID = 'adbd3d1c-4076-422b-b6d4-fa67eeccdc16' AND RoleID = 'E0AFCCEC-6A37-EF11-86D4-000D3A4E707E')
 INSERT INTO [${mjSchema}].[ApplicationRole]
                                  ([ApplicationID], [RoleID], [CanAccess], [CanAdmin]) VALUES
                                  ('adbd3d1c-4076-422b-b6d4-fa67eeccdc16', 'E0AFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 0);
 
 /* Adding role Developer to application ${flyway:defaultSchema} */
+IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[ApplicationRole] WHERE ApplicationID = 'adbd3d1c-4076-422b-b6d4-fa67eeccdc16' AND RoleID = 'DEAFCCEC-6A37-EF11-86D4-000D3A4E707E')
 INSERT INTO [${mjSchema}].[ApplicationRole]
                                  ([ApplicationID], [RoleID], [CanAccess], [CanAdmin]) VALUES
                                  ('adbd3d1c-4076-422b-b6d4-fa67eeccdc16', 'DEAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1);
 
 /* Adding role Integration to application ${flyway:defaultSchema} */
+IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[ApplicationRole] WHERE ApplicationID = 'adbd3d1c-4076-422b-b6d4-fa67eeccdc16' AND RoleID = 'DFAFCCEC-6A37-EF11-86D4-000D3A4E707E')
 INSERT INTO [${mjSchema}].[ApplicationRole]
                                  ([ApplicationID], [RoleID], [CanAccess], [CanAdmin]) VALUES
                                  ('adbd3d1c-4076-422b-b6d4-fa67eeccdc16', 'DFAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 0);
@@ -7297,7 +7371,7 @@ GO
 
 /* SQL text to insert new entity field */
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '2aa0724f-d01a-444f-8041-bc01d6e8ecbb' OR (EntityID = '4843AB04-63BE-4331-83D2-0C38C62E1276' AND Name = 'ApprovalCFOPersonID')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '2aa0724f-d01a-444f-8041-bc01d6e8ecbb' OR (EntityID = '4843AB04-63BE-4331-83D2-0C38C62E1276' AND Name = 'ApprovalCFOUserID')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -7333,9 +7407,9 @@ GO
             '2aa0724f-d01a-444f-8041-bc01d6e8ecbb',
             '4843AB04-63BE-4331-83D2-0C38C62E1276', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
             100022,
-            'ApprovalCFOPersonID',
-            'Approval CFO Person ID',
-            'The CFO (a bizapps-common Person) who must approve a Journal Entry Batch for this company before it dispatches to the ERP. Resolved by the bizapps-tasks approval gate. Nullable: companies without a configured CFO fall back to the role-based resolver.',
+            'ApprovalCFOUserID',
+            'Approval CFO User ID',
+            'The CFO (an MJ User — Q17 2026-07-13 ruling) who must approve a Journal Entry Batch for this company before it dispatches to the ERP. Resolved by the bizapps-tasks approval gate. Nullable: companies without a configured CFO fall back to the role-based resolver.',
             'uniqueidentifier',
             16,
             0,
@@ -7346,7 +7420,7 @@ GO
             1,
             0,
             0,
-            '7A94ADA9-7880-4FAE-97D8-DB0E934C3F5F',
+            'E1238F34-2837-EF11-86D4-6045BDEE16E6',
             'ID',
             0,
             0,
@@ -15720,7 +15794,7 @@ GO
             100012,
             'ApprovedByUserID',
             'Approved By User ID',
-            'The user who approved the batch (see AccountingCompanyProfile.ApprovalCFOPersonID / the bizapps-tasks approval gate).',
+            'The user who approved the batch (see AccountingCompanyProfile.ApprovalCFOUserID / the bizapps-tasks approval gate).',
             'uniqueidentifier',
             16,
             0,
@@ -26417,13 +26491,13 @@ UPDATE [${mjSchema}].[EntityField] SET ValueListType='List' WHERE ID='54DDA77A-5
                     VALUES ('897f8ea4-6f69-47f1-85a6-b32990b96cab', 'CF757492-AB01-4115-BB37-AEC95CF214A5', 'C0EB9B5A-259C-4318-94B3-1D41D2E62850', 'GLAccountRoleID', 'One To Many', 1, 1, 1, GETUTCDATE(), GETUTCDATE())
    END;
                     
-/* Create Entity Relationship: MJ_BizApps_Common: People -> MJ_BizApps_Accounting: Accounting Company Profiles (One To Many via ApprovalCFOPersonID) */
+/* Create Entity Relationship: MJ: Users -> MJ_BizApps_Accounting: Accounting Company Profiles (One To Many via ApprovalCFOUserID) */
    IF NOT EXISTS (
       SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '96929003-cb67-4749-a790-9da5e4bfd70f'
    )
    BEGIN
       INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
-                    VALUES ('96929003-cb67-4749-a790-9da5e4bfd70f', '7A94ADA9-7880-4FAE-97D8-DB0E934C3F5F', '4843AB04-63BE-4331-83D2-0C38C62E1276', 'ApprovalCFOPersonID', 'One To Many', 1, 1, 9, GETUTCDATE(), GETUTCDATE())
+                    VALUES ('96929003-cb67-4749-a790-9da5e4bfd70f', 'E1238F34-2837-EF11-86D4-6045BDEE16E6', '4843AB04-63BE-4331-83D2-0C38C62E1276', 'ApprovalCFOUserID', 'One To Many', 1, 1, 9, GETUTCDATE(), GETUTCDATE())
    END;
                     
 /* Create Entity Relationship: MJ_BizApps_Accounting: Scheduled Journal Entry Line Items -> MJ_BizApps_Accounting: Scheduled Journal Entry Line Dimensions (One To Many via ScheduledJournalEntryLineItemID) */
@@ -26534,14 +26608,14 @@ IF NOT EXISTS (
 )
 CREATE INDEX IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_UnrealizedFXGainLossGLAccountID ON [${flyway:defaultSchema}].[AccountingCompanyProfile] ([UnrealizedFXGainLossGLAccountID]);
 
--- Index for foreign key ApprovalCFOPersonID in table AccountingCompanyProfile
+-- Index for foreign key ApprovalCFOUserID in table AccountingCompanyProfile
 IF NOT EXISTS (
     SELECT 1
     FROM sys.indexes
-    WHERE name = 'IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_ApprovalCFOPersonID' 
+    WHERE name = 'IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_ApprovalCFOUserID' 
     AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[AccountingCompanyProfile]')
 )
-CREATE INDEX IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_ApprovalCFOPersonID ON [${flyway:defaultSchema}].[AccountingCompanyProfile] ([ApprovalCFOPersonID]);
+CREATE INDEX IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_ApprovalCFOUserID ON [${flyway:defaultSchema}].[AccountingCompanyProfile] ([ApprovalCFOUserID]);
 
 /* SQL text to update entity field related entity name field map for entity field ID 10C4997C-37DF-4CB5-9582-65B3F824BE88 */
 EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='10C4997C-37DF-4CB5-9582-65B3F824BE88', @RelatedEntityNameFieldMap='FunctionalCurrencyCode_Virtual';
@@ -27909,7 +27983,7 @@ SELECT
     mjBizAppsAccountingGLAccount_SalesTaxPayableGLAccountID.[Name] AS [SalesTaxPayableGLAccount],
     mjBizAppsAccountingGLAccount_RealizedFXGainLossGLAccountID.[Name] AS [RealizedFXGainLossGLAccount],
     mjBizAppsAccountingGLAccount_UnrealizedFXGainLossGLAccountID.[Name] AS [UnrealizedFXGainLossGLAccount],
-    mjBizAppsCommonPerson_ApprovalCFOPersonID.[DisplayName] AS [ApprovalCFOPerson],
+    mjUser_ApprovalCFOUserID.[Name] AS [ApprovalCFOUser],
     root_ParentAccountingCompanyID.RootID AS [RootParentAccountingCompanyID]
 FROM
     [${flyway:defaultSchema}].[AccountingCompanyProfile] AS a
@@ -27946,9 +28020,9 @@ LEFT OUTER JOIN
   ON
     [a].[UnrealizedFXGainLossGLAccountID] = mjBizAppsAccountingGLAccount_UnrealizedFXGainLossGLAccountID.[ID]
 LEFT OUTER JOIN
-    [${mjSchema}_BizAppsCommon].[Person] AS mjBizAppsCommonPerson_ApprovalCFOPersonID
+    [${mjSchema}].[User] AS mjUser_ApprovalCFOUserID
   ON
-    [a].[ApprovalCFOPersonID] = mjBizAppsCommonPerson_ApprovalCFOPersonID.[ID]
+    [a].[ApprovalCFOUserID] = mjUser_ApprovalCFOUserID.[ID]
 OUTER APPLY
     [${flyway:defaultSchema}].[fnAccountingCompanyProfileParentAccountingCompanyID_GetRootID]([a].[ID], [a].[ParentAccountingCompanyID]) AS root_ParentAccountingCompanyID
 GO
@@ -28019,8 +28093,8 @@ CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateAccountingCompanyProfile]
     @UnrealizedFXGainLossGLAccountID_Clear bit = 0,
     @UnrealizedFXGainLossGLAccountID uniqueidentifier = NULL,
     @IsActive bit = NULL,
-    @ApprovalCFOPersonID_Clear bit = 0,
-    @ApprovalCFOPersonID uniqueidentifier = NULL
+    @ApprovalCFOUserID_Clear bit = 0,
+    @ApprovalCFOUserID uniqueidentifier = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -28048,7 +28122,7 @@ BEGIN
                 [RealizedFXGainLossGLAccountID],
                 [UnrealizedFXGainLossGLAccountID],
                 [IsActive],
-                [ApprovalCFOPersonID],
+                [ApprovalCFOUserID],
                 [ID]
         )
     VALUES
@@ -28073,7 +28147,7 @@ BEGIN
                 CASE WHEN @RealizedFXGainLossGLAccountID_Clear = 1 THEN NULL ELSE ISNULL(@RealizedFXGainLossGLAccountID, NULL) END,
                 CASE WHEN @UnrealizedFXGainLossGLAccountID_Clear = 1 THEN NULL ELSE ISNULL(@UnrealizedFXGainLossGLAccountID, NULL) END,
                 ISNULL(@IsActive, 1),
-                CASE WHEN @ApprovalCFOPersonID_Clear = 1 THEN NULL ELSE ISNULL(@ApprovalCFOPersonID, NULL) END,
+                CASE WHEN @ApprovalCFOUserID_Clear = 1 THEN NULL ELSE ISNULL(@ApprovalCFOUserID, NULL) END,
                 @ActualID
         )
     -- return the new record from the base view, which might have some calculated fields
@@ -28139,8 +28213,8 @@ CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateAccountingCompanyProfile]
     @UnrealizedFXGainLossGLAccountID_Clear bit = 0,
     @UnrealizedFXGainLossGLAccountID uniqueidentifier = NULL,
     @IsActive bit = NULL,
-    @ApprovalCFOPersonID_Clear bit = 0,
-    @ApprovalCFOPersonID uniqueidentifier = NULL
+    @ApprovalCFOUserID_Clear bit = 0,
+    @ApprovalCFOUserID uniqueidentifier = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -28167,7 +28241,7 @@ BEGIN
         [RealizedFXGainLossGLAccountID] = CASE WHEN @RealizedFXGainLossGLAccountID_Clear = 1 THEN NULL ELSE ISNULL(@RealizedFXGainLossGLAccountID, [RealizedFXGainLossGLAccountID]) END,
         [UnrealizedFXGainLossGLAccountID] = CASE WHEN @UnrealizedFXGainLossGLAccountID_Clear = 1 THEN NULL ELSE ISNULL(@UnrealizedFXGainLossGLAccountID, [UnrealizedFXGainLossGLAccountID]) END,
         [IsActive] = ISNULL(@IsActive, [IsActive]),
-        [ApprovalCFOPersonID] = CASE WHEN @ApprovalCFOPersonID_Clear = 1 THEN NULL ELSE ISNULL(@ApprovalCFOPersonID, [ApprovalCFOPersonID]) END
+        [ApprovalCFOUserID] = CASE WHEN @ApprovalCFOUserID_Clear = 1 THEN NULL ELSE ISNULL(@ApprovalCFOUserID, [ApprovalCFOUserID]) END
     WHERE
         [ID] = @ID
 

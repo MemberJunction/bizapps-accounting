@@ -130,6 +130,7 @@ async function makeJE(ctx: Ctx, entryType: mjBizAppsAccountingJournalEntryEntity
   const md = new Metadata();
   const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, ctx.user);
   je.NewRecord();
+  je.CompanyID = ctx.companyId; // MOD-12: single-company JEs
   je.EffectiveDate = opts.effectiveDate ?? new Date();
   je.EntryType = entryType; je.Status = 'Pending'; je.Description = `${RUN_TAG}`;
   if (opts.intercompanyFlowId) je.IntercompanyFlowID = opts.intercompanyFlowId;
@@ -219,14 +220,36 @@ async function main(): Promise<void> {
     assert(rows.every((r: { BatchNumber: string | null }) => !!r.BatchNumber), 'every row should carry its BatchNumber');
   });
 
-  await test('vw_ARtoGLRecon — month-grain status counts for the current month (2 GLPosted, 0 Pending)', async () => {
-    // The view is GLOBAL by (year, month) now — periods are gone. At this point in the run the
-    // current month holds exactly the 2 seed JEs (the DB was verified Pending-clean at bootstrap).
+  await test('vw_ARtoGLRecon — month-grain status counts reconcile with the base table (0 Pending after dispatch)', async () => {
+    // The view is GLOBAL by (year, month) over ALL JournalEntry rows — no company/AR filter. On a
+    // shared, lived-in dev DB the current month also holds unrelated demo/test entries, so asserting a
+    // fixed absolute ("2 GLPosted") tests the DATA, not the VIEW. Instead we assert the view is CORRECT:
+    // its per-status counts must equal the base-table truth for the same (year, month). Plus the one
+    // real invariant this block establishes — after its global dispatch, nothing is left Pending — and
+    // that its own seeded entries landed GLPosted. This is isolation-proof against accumulated debris.
     const now = new Date();
-    const rows = await q(`SELECT PendingEntries, BatchedEntries, GLPostedEntries, TotalEntries FROM ${SCHEMA}.vw_ARtoGLRecon WHERE EffectiveYear=${now.getUTCFullYear()} AND EffectiveMonth=${now.getUTCMonth() + 1}`);
-    assert(rows.length === 1, `expected 1 recon row for the current month, got ${rows.length}`);
-    assert(Number(rows[0].GLPostedEntries) === 2 && Number(rows[0].PendingEntries) === 0, `expected 2 GLPosted / 0 Pending, got ${rows[0].GLPostedEntries}/${rows[0].PendingEntries}`);
-    assert(Number(rows[0].TotalEntries) === 2, `expected 2 total entries this month, got ${rows[0].TotalEntries}`);
+    const y = now.getUTCFullYear(), m = now.getUTCMonth() + 1;
+    const viewRows = await q(`SELECT PendingEntries, BatchedEntries, GLPostedEntries, TotalEntries FROM ${SCHEMA}.vw_ARtoGLRecon WHERE EffectiveYear=${y} AND EffectiveMonth=${m}`);
+    assert(viewRows.length === 1, `expected 1 recon row for ${y}-${m}, got ${viewRows.length}`);
+    const view = viewRows[0];
+    const [base] = await q(`SELECT
+        SUM(CASE WHEN Status='Pending'  THEN 1 ELSE 0 END) AS Pending,
+        SUM(CASE WHEN Status='Batched'  THEN 1 ELSE 0 END) AS Batched,
+        SUM(CASE WHEN Status='GLPosted' THEN 1 ELSE 0 END) AS GLPosted,
+        COUNT(*) AS Total
+      FROM ${SCHEMA}.JournalEntry WHERE YEAR(EffectiveDate)=${y} AND MONTH(EffectiveDate)=${m}`);
+    assert(Number(view.PendingEntries) === Number(base.Pending), `Pending mismatch: view ${view.PendingEntries} vs base ${base.Pending}`);
+    assert(Number(view.BatchedEntries) === Number(base.Batched), `Batched mismatch: view ${view.BatchedEntries} vs base ${base.Batched}`);
+    assert(Number(view.GLPostedEntries) === Number(base.GLPosted), `GLPosted mismatch: view ${view.GLPostedEntries} vs base ${base.GLPosted}`);
+    assert(Number(view.TotalEntries) === Number(base.Total), `Total mismatch: view ${view.TotalEntries} vs base ${base.Total}`);
+    // Post-dispatch invariant: this block swept every Pending JE this month (buildBatch is global).
+    assert(Number(view.PendingEntries) === 0, `expected 0 Pending this month after dispatch, got ${view.PendingEntries}`);
+    // This block's own seeded entries must be GLPosted (and thus counted in the view's GLPosted tally).
+    assert(createdJEIds.length > 0, 'expected this block to have created at least one JE by now');
+    const idList = createdJEIds.map(id => `'${id}'`).join(',');
+    const [mine] = await q(`SELECT COUNT(*) AS n FROM ${SCHEMA}.JournalEntry WHERE ID IN (${idList}) AND Status='GLPosted'`);
+    assert(Number(mine.n) === createdJEIds.length, `expected this block's ${createdJEIds.length} JEs all GLPosted, got ${mine.n}`);
+    assert(Number(view.GLPostedEntries) >= createdJEIds.length, `view GLPosted (${view.GLPostedEntries}) must include this block's ${createdJEIds.length}`);
   });
 
   await test('vw_DimensionPL — revenue netted by the tagged Sales dimension value', async () => {
@@ -428,6 +451,7 @@ async function main(): Promise<void> {
   await exec(`DELETE FROM ${SCHEMA}.ChartOfAccountsMapping WHERE CompanyID='${companyId}'`);
   await exec(`DELETE FROM ${SCHEMA}.AccountingCompanyProfile WHERE ID='${companyId}'`);
   await exec(`DELETE FROM ${SCHEMA}.GLAccount WHERE CompanyID='${companyId}'`);
+  await exec(`DELETE FROM __mj_BizAppsAccounting.JournalEntrySequence WHERE CompanyID='${companyId}'`); // per-company JE sequence rows (MOD-12)
   await exec(`DELETE FROM __mj.Company WHERE ID='${companyId}'`);
   // Customer Organizations created in __mj_BizAppsCommon (AR-by-customer, aging, intercompany).
   if (createdOrgIds.length > 0) {

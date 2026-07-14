@@ -1,6 +1,7 @@
 import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@angular/core';
 import { BaseDashboard } from '@memberjunction/ng-shared';
 import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
+import { openBizDetail } from '../shared/biz-detail-form';
 import { RegisterClass } from '@memberjunction/global';
 import { CompositeKey, Metadata, RunView, UserInfo } from '@memberjunction/core';
 import { ResourceData } from '@memberjunction/core-entities';
@@ -41,9 +42,10 @@ interface CompanyProfileRow {
   RealizedFXGainLossGLAccount: string | null;
   UnrealizedFXGainLossGLAccountID: string | null;
   UnrealizedFXGainLossGLAccount: string | null;
-  // CFO approver (the bizapps-tasks approval gate assigns batch-approval Tasks to this Person).
-  ApprovalCFOPersonID: string | null;
-  ApprovalCFOPerson: string | null;
+  // CFO approver (A4.6/Q17: an MJ USER — the bizapps-tasks approval gate assigns batch-approval
+  // Tasks to this User; the Person picker resolves via Person.LinkedUserID).
+  ApprovalCFOUserID: string | null;
+  ApprovalCFOUser: string | null;
 }
 
 /** A selectable Person for the CFO picker. */
@@ -147,7 +149,7 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
           'SalesTaxPayableGLAccountID', 'SalesTaxPayableGLAccount',
           'RealizedFXGainLossGLAccountID', 'RealizedFXGainLossGLAccount',
           'UnrealizedFXGainLossGLAccountID', 'UnrealizedFXGainLossGLAccount',
-          'ApprovalCFOPersonID', 'ApprovalCFOPerson',
+          'ApprovalCFOUserID', 'ApprovalCFOUser',
         ],
         OrderBy: 'Name ASC',
         MaxRows: 1000,
@@ -270,14 +272,14 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
   public OpenProfile(): void {
     const c = this.Selected;
     if (!c) return;
-    this.forms.Open({ EntityName: COMPANY_PROFILE_ENTITY, PrimaryKey: CompositeKey.FromID(c.ID), Presentation: 'dialog', Width: '94vw' });
+    openBizDetail(this.forms, { entityName: COMPANY_PROFILE_ENTITY, primaryKey: CompositeKey.FromID(c.ID), title: 'Company Profile', mode: 'dialog', editMode: true });
   }
 
   // ─── CFO assignment ─────────────────────────────────────────────────────────
 
-  /** The selected company's current CFO approver name, or null when unassigned. */
+  /** The selected company's current CFO approver (User name), or null when unassigned. */
   public get CurrentCFO(): string | null {
-    return this.Selected?.ApprovalCFOPerson ?? null;
+    return this.Selected?.ApprovalCFOUser ?? null;
   }
 
   public get CanAssignSelected(): boolean {
@@ -297,9 +299,10 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
     try {
       const user = this.ProviderToUse.CurrentUser;
       if (!user) { this.setError('No current user is available.'); return; }
-      const personId = await this.findOrCreateSelfPerson(user);
-      if (!personId) return;
-      await this.setCompanyCFO(company.ID, personId, `You are now the CFO approver for ${company.Name}.`);
+      // A4.6: the approver IS the user — assign directly (the Person record remains useful for
+      // decision attribution, so keep it in sync when absent).
+      await this.findOrCreateSelfPerson(user);
+      await this.setCompanyCFO(company.ID, user.ID, `You are now the CFO approver for ${company.Name}.`);
     } catch (e) {
       this.setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -314,7 +317,12 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
     this.beginSave();
     try {
       const person = this.People.find(p => p.ID === this.SelectedPersonID);
-      await this.setCompanyCFO(company.ID, this.SelectedPersonID, `CFO approver set to ${person?.Name ?? 'the selected person'} for ${company.Name}.`);
+      // A4.6: the ACP stores a USER — a person must carry a linked user to be an approver.
+      if (!person?.LinkedUserID) {
+        this.setError(`${person?.Name ?? 'The selected person'} has no linked MJ user, so they cannot receive approval tasks. Link a user to the person first.`);
+        return;
+      }
+      await this.setCompanyCFO(company.ID, person.LinkedUserID, `CFO approver set to ${person.Name} for ${company.Name}.`);
       this.SelectedPersonID = '';
     } catch (e) {
       this.setError(e instanceof Error ? e.message : String(e));
@@ -356,12 +364,12 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
     return person.ID;
   }
 
-  /** Set (or clear) a company's ApprovalCFOPersonID, then reload so the detail reflects it. */
-  private async setCompanyCFO(companyID: string, personID: string | null, successMessage: string): Promise<void> {
+  /** Set (or clear) a company's ApprovalCFOUserID, then reload so the detail reflects it. */
+  private async setCompanyCFO(companyID: string, userID: string | null, successMessage: string): Promise<void> {
     const md = new Metadata();
     const acp = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(COMPANY_PROFILE_ENTITY);
     if (!(await acp.Load(companyID))) { this.setError('Could not load the company profile.'); return; }
-    acp.ApprovalCFOPersonID = personID;
+    acp.ApprovalCFOUserID = userID;
     if (!(await acp.Save())) {
       this.setError(`Could not save the CFO: ${acp.LatestResult?.CompleteMessage ?? 'unknown error'}`);
       return;

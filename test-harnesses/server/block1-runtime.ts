@@ -78,7 +78,7 @@ interface Ctx {
   user: UserInfo; companyA: Company; companyB: Company; batchId: string;
 }
 
-/** Tracked created rows for the FK-aware teardown (JEs are global now — no CompanyID to sweep by). */
+/** Tracked created rows for the FK-aware teardown. */
 const createdJEIds: string[] = [];
 
 async function createCompany(user: UserInfo, currencyCode: string, label: string): Promise<Company> {
@@ -144,6 +144,7 @@ async function makeJE(ctx: Ctx, co: Company, debit: number, credit: number): Pro
   const md = new Metadata();
   const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, ctx.user);
   je.NewRecord();
+  je.CompanyID = co.id; // MOD-12: single-company JEs
   je.EffectiveDate = new Date();
   je.EntryType = 'Manual'; je.Status = 'Pending'; je.Description = `${RUN_TAG} test`;
   if (!(await je.Save())) throw new Error(`JE save failed: ${je.LatestResult?.CompleteMessage}`);
@@ -186,7 +187,7 @@ async function main(): Promise<void> {
   await test('INV balanced-on-lock — DB-bypass raw UPDATE to Batched on an unbalanced JE → rejected (50001)', async () => {
     const jeId = randomUUID();
     createdJEIds.push(jeId);
-    await pool.request().query(`INSERT INTO ${SCHEMA}.JournalEntry (ID, EntryNumber, EffectiveDate, EntryType, Status) VALUES ('${jeId}','RAW-${RUN_TAG}-1', GETUTCDATE(), 'Manual','Pending')`);
+    await pool.request().query(`INSERT INTO ${SCHEMA}.JournalEntry (ID, EntryNumber, CompanyID, EffectiveDate, EntryType, Status) VALUES ('${jeId}','RAW-${RUN_TAG}-1', '${companyA.id}', GETUTCDATE(), 'Manual','Pending')`);
     await pool.request().query(`INSERT INTO ${SCHEMA}.JournalEntryLine (ID, JournalEntryID, LineNumber, GLAccountID, DebitAmount) VALUES (NEWID(), '${jeId}', 1, '${companyA.arGL}', 100.00)`);
     await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntry SET Status='Batched', BatchID='${ctx.batchId}' WHERE ID='${jeId}'`), 'Sum(Debits)');
   });
@@ -196,12 +197,12 @@ async function main(): Promise<void> {
     assert(await setStatus(ctx, je.ID, 'Batched'), 'balanced JE should lock to Batched');
   });
 
-  // ─── INV: balanced-on-lock PER COMPANY (trg 50019 — AM-4) ─────────────────
+  // ─── INV: per-company balance (50019) + MOD-12 single-company coherence (50025) ───
   await test('INV per-company balance — overall-balanced but cross-company-unbalanced JE locks → rejected (50019, AM-4)', async () => {
     // Dr 100 in company A, Cr 100 in company B: Sum(Dr)=Sum(Cr) overall (passes 50001),
-    // but each company is one-sided — must be rejected by the per-company rule.
+    // but each company is one-sided — the per-company rule fires (MOD-12's 50025 would too).
     const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
-    je.NewRecord(); je.EffectiveDate = new Date();
+    je.NewRecord(); je.CompanyID = companyA.id; je.EffectiveDate = new Date();
     je.EntryType = 'Manual'; je.Status = 'Pending'; je.Description = `${RUN_TAG} cross-company unbalanced`;
     assert(await je.Save(), `JE save failed: ${je.LatestResult?.CompleteMessage}`);
     createdJEIds.push(je.ID);
@@ -210,18 +211,35 @@ async function main(): Promise<void> {
     await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntry SET Status='Batched', BatchID='${ctx.batchId}' WHERE ID='${je.ID}'`), 'WITHIN EACH company');
   });
 
-  await test('INV per-company balance — allowed: a multi-company JE balanced within EACH company locks', async () => {
-    // Two balanced pairs, one per company — balanced overall AND within each company.
+  await test('INV single-company coherence (MOD-12) — a multi-company JE, even balanced per company, is REJECTED at lock (50025)', async () => {
+    // Under CH-2 this locked fine; MOD-12 reverses that: every line's account company must equal
+    // the header CompanyID. Two balanced pairs across two companies → blocked.
     const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
-    je.NewRecord(); je.EffectiveDate = new Date();
-    je.EntryType = 'Manual'; je.Status = 'Pending'; je.Description = `${RUN_TAG} multi-company balanced`;
+    je.NewRecord(); je.CompanyID = companyA.id; je.EffectiveDate = new Date();
+    je.EntryType = 'Manual'; je.Status = 'Pending'; je.Description = `${RUN_TAG} multi-company balanced (must reject)`;
     assert(await je.Save(), `JE save failed: ${je.LatestResult?.CompleteMessage}`);
     createdJEIds.push(je.ID);
     await addLine(ctx, je.ID, 1, companyA.arGL, 100, null);
     await addLine(ctx, je.ID, 2, companyA.revGL, null, 100);
     await addLine(ctx, je.ID, 3, companyB.arGL, 40, null);
     await addLine(ctx, je.ID, 4, companyB.revGL, null, 40);
-    assert(await setStatus(ctx, je.ID, 'Batched'), 'per-company-balanced multi-company JE should lock to Batched');
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntry SET Status='Batched', BatchID='${ctx.batchId}' WHERE ID='${je.ID}'`), 'single-company');
+  });
+
+  await test('INV CompanyID frozen once locked (MOD-12) — DB-bypass UPDATE of CompanyID on a Batched JE → rejected (50004 or 50025)', async () => {
+    const je = await makeJE(ctx, companyA, 60, 60);
+    assert(await setStatus(ctx, je.ID, 'Batched'), 'lock failed');
+    // Two triggers both guard this (immutability 50004; company-coherence 50025 re-fires on any
+    // UPDATE of a Batched row) — SQL Server trigger order is undefined, so accept either rejection.
+    try {
+      await pool.request().query(`UPDATE ${SCHEMA}.JournalEntry SET CompanyID='${companyB.id}' WHERE ID='${je.ID}'`);
+      throw new Error('expected the CompanyID change to be rejected, but it succeeded');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      assert(/locked|single-company/i.test(msg), `expected a 50004/50025 rejection, got: ${msg.split('\n')[0]}`);
+    }
+    const still = (await pool.request().query(`SELECT CompanyID FROM ${SCHEMA}.JournalEntry WHERE ID='${je.ID}'`)).recordset[0];
+    assert((still.CompanyID as string).toLowerCase() === companyA.id.toLowerCase(), 'CompanyID must be unchanged after the rejected update');
   });
 
   // ─── INV: JE immutability (trg 50003 delete / 50004 update) ───────────────
@@ -234,7 +252,7 @@ async function main(): Promise<void> {
   await test('INV JE immutability — DB-bypass DELETE of a Batched JE → rejected (50003)', async () => {
     // Use a LINE-LESS JE so the FK (JEL→JE) doesn't pre-empt the trigger; 0 lines balances (0=0).
     const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
-    je.NewRecord(); je.EffectiveDate = new Date();
+    je.NewRecord(); je.CompanyID = companyA.id; je.EffectiveDate = new Date();
     je.EntryType = 'Manual'; je.Status = 'Pending'; je.Description = `${RUN_TAG} delete-test`;
     assert(await je.Save(), `je save failed: ${je.LatestResult?.CompleteMessage}`);
     createdJEIds.push(je.ID);
@@ -334,6 +352,7 @@ async function main(): Promise<void> {
   for (const co of [companyA, companyB]) {
     await exec(`DELETE FROM ${SCHEMA}.AccountingCompanyProfile WHERE ID='${co.id}'`);
     await exec(`DELETE FROM ${SCHEMA}.GLAccount WHERE CompanyID='${co.id}'`);
+    await exec(`DELETE FROM __mj_BizAppsAccounting.JournalEntrySequence WHERE CompanyID='${co.id}'`); // per-company JE sequence rows (MOD-12)
     await exec(`DELETE FROM __mj.Company WHERE ID='${co.id}'`);
   }
   const leftover = (await pool.request().query(`SELECT COUNT(*) n FROM __mj.Company WHERE ID IN ('${companyA.id}','${companyB.id}')`)).recordset[0].n;

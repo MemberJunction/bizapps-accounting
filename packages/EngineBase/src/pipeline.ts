@@ -207,28 +207,29 @@ export function normalizeLines(draft: JournalEntryDraft, lookups: PipelineLookup
   return ordered;
 }
 
-// ─── Stage 5 — balance (overall + per company — AM-4) ────────────────────────
+// ─── Stage 5 — balance + single-company (MOD-12) ─────────────────────────────
+// MOD-12 (2026-07-13) supersedes CH-2/AM-4: a JournalEntry belongs to exactly ONE
+// company, so the per-company balance rule collapses into the whole-entry balance,
+// and a draft whose lines resolve to MORE than one company is rejected with
+// MULTI_COMPANY_DRAFT (callers split per company upstream — orders MOD-11/F1.2).
 
 export function checkDraftBalance(normalized: NormalizedLine[]): JEValidationError[] {
   const errors: JEValidationError[] = [];
   const overall = { debits: 0, credits: 0 };
-  const byCompany = new Map<string, { debits: number; credits: number }>();
+  const companies = new Set<string>();
   for (const line of normalized) {
-    const companyKey = uuidKey(line.CompanyID);
-    const acc = byCompany.get(companyKey) ?? { debits: 0, credits: 0 };
-    acc.debits += line.DebitAmount ?? 0;
-    acc.credits += line.CreditAmount ?? 0;
-    byCompany.set(companyKey, acc);
+    companies.add(uuidKey(line.CompanyID));
     overall.debits += line.DebitAmount ?? 0;
     overall.credits += line.CreditAmount ?? 0;
   }
+  if (companies.size > 1) {
+    errors.push({
+      Code: 'MULTI_COMPANY_DRAFT',
+      Message: `draft spans ${companies.size} companies — a JournalEntry is single-company (MOD-12); split the draft per company (one JE per company) before submitting.`,
+    });
+  }
   if (Math.abs(overall.debits - overall.credits) > BALANCE_TOLERANCE) {
     errors.push({ Code: 'UNBALANCED', Message: `entry is unbalanced: Sum(Debits)=${overall.debits.toFixed(2)} != Sum(Credits)=${overall.credits.toFixed(2)}` });
-  }
-  for (const [companyId, sums] of byCompany) {
-    if (Math.abs(sums.debits - sums.credits) > BALANCE_TOLERANCE) {
-      errors.push({ Code: 'UNBALANCED', Message: `entry is unbalanced within company ${companyId}: Sum(Debits)=${sums.debits.toFixed(2)} != Sum(Credits)=${sums.credits.toFixed(2)} (AM-4)` });
-    }
   }
   return errors;
 }
@@ -239,6 +240,8 @@ export interface DraftPipelineOutcome {
   errors: JEValidationError[];
   /** Present (and non-empty) only when errors is empty. */
   normalized: NormalizedLine[];
+  /** The single company every line resolved to (MOD-12) — the JE header CompanyID. Empty on failure. */
+  companyID: string;
 }
 
 /**
@@ -247,13 +250,13 @@ export interface DraftPipelineOutcome {
  */
 export function runDraftPipeline(draft: JournalEntryDraft, lookups: PipelineLookups): DraftPipelineOutcome {
   const shape = validateDraftShape(draft);
-  if (shape.length > 0) return { errors: shape, normalized: [] };
+  if (shape.length > 0) return { errors: shape, normalized: [], companyID: '' };
   const accounts = validateAccounts(draft, lookups);
-  if (accounts.length > 0) return { errors: accounts, normalized: [] };
+  if (accounts.length > 0) return { errors: accounts, normalized: [], companyID: '' };
   const dims = validateDimensions(draft, lookups);
-  if (dims.length > 0) return { errors: dims, normalized: [] };
+  if (dims.length > 0) return { errors: dims, normalized: [], companyID: '' };
   const normalized = normalizeLines(draft, lookups);
   const balance = checkDraftBalance(normalized);
-  if (balance.length > 0) return { errors: balance, normalized: [] };
-  return { errors: [], normalized };
+  if (balance.length > 0) return { errors: balance, normalized: [], companyID: '' };
+  return { errors: [], normalized, companyID: normalized[0]?.CompanyID ?? '' };
 }

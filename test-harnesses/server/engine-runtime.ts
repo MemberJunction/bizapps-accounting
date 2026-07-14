@@ -5,10 +5,10 @@
  * in-process call site orders-server will use (`op.Execute(input, { user })`).
  *
  *   E1  success — a draft with mergeable duplicate lines + a dimension tag books atomically:
- *       typed result (EntryNumber JE-{FY}-{seq}, LineCount), raw-SQL cross-check of the JE header,
+ *       typed result (EntryNumber JE-{CompanyCode}-{FY}-{seq}, LineCount), raw-SQL cross-check of the JE header (incl. CompanyID, MOD-12),
  *       merged/ordered/numbered lines, per-line company, and the dimension row.
  *   E2  typed failures, live — ACCOUNT_UNKNOWN · ACCOUNT_INACTIVE · DIMENSION_UNKNOWN ·
- *       DIMENSION_VALUE_UNKNOWN · UNBALANCED (overall) · UNBALANCED per company (AM-4) ·
+ *       DIMENSION_VALUE_UNKNOWN · UNBALANCED (overall) · MULTI_COMPANY_DRAFT (MOD-12) ·
  *       MALFORMED_DRAFT — each returns Success:false with the right code and writes NOTHING.
  *   E3  ATOMIC ROLLBACK — a stale-cache dimension value (row deleted underneath the engine by raw
  *       SQL, so validation passes but the FK fails mid-write) rolls back the WHOLE TransactionGroup:
@@ -173,11 +173,12 @@ async function main(): Promise<void> {
       ],
     });
     assert(out.Success === true, `expected success, got ${JSON.stringify(out.Errors)}`);
-    assert(/^JE-\d{4}-\d{6}$/.test(out.EntryNumber ?? ''), `EntryNumber '${out.EntryNumber}' should be JE-{FY}-{seq:000000}`);
+    assert(/^JE-[A-Z0-9_-]{2,20}-\d{4}-\d{6}$/.test(out.EntryNumber ?? ''), `EntryNumber '${out.EntryNumber}' should be JE-{CompanyCode}-{FY}-{seq:000000} (A4.4)`);
     assert(out.LineCount === 3, `expected 3 normalized lines (AR merged; Rev split by dims), got ${out.LineCount}`);
     // Raw-SQL cross-checks — the truth, not the code under test.
-    const je = (await pool.request().query(`SELECT Status, EntryType FROM ${SCHEMA}.JournalEntry WHERE ID='${out.JournalEntryID}'`)).recordset[0];
+    const je = (await pool.request().query(`SELECT Status, EntryType, CompanyID FROM ${SCHEMA}.JournalEntry WHERE ID='${out.JournalEntryID}'`)).recordset[0];
     assert(!!je && je.Status === 'Pending' && je.EntryType === 'OrderBooking', `JE row wrong: ${JSON.stringify(je)}`);
+    assert((je.CompanyID as string).toLowerCase() === companyA.id.toLowerCase(), `JE.CompanyID should be the lines' company (MOD-12), got ${je.CompanyID}`);
     const lines = (await pool.request().query(`SELECT LineNumber, GLAccountID, DebitAmount, CreditAmount FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID='${out.JournalEntryID}' ORDER BY LineNumber`)).recordset;
     assert(lines.length === 3, `expected 3 line rows, got ${lines.length}`);
     assert(Number(lines[0].DebitAmount) === 100 && lines[0].GLAccountID.toLowerCase() === companyA.arGL.toLowerCase(), `line 1 should be the merged Dr AR 100, got ${JSON.stringify(lines[0])}`);
@@ -231,13 +232,22 @@ async function main(): Promise<void> {
     expectError(out, 'UNBALANCED');
   });
 
-  await test('E2 UNBALANCED per company — overall-balanced but cross-company-unbalanced refused (AM-4)', async () => {
+  await test('E2 MULTI_COMPANY_DRAFT — a draft spanning two companies is refused (MOD-12)', async () => {
     const out = await runOp(ctx, { EffectiveDate: '2026-07-06', EntryType: 'Manual', Lines: [
       { GLAccountID: companyA.arGL, DebitAmount: 100 },
       { GLAccountID: companyB.revGL, CreditAmount: 100 },
     ] });
-    expectError(out, 'UNBALANCED');
-    assert((out.Errors ?? []).some(e => /AM-4/.test(e.Message)), `expected the per-company AM-4 message, got ${JSON.stringify(out.Errors)}`);
+    expectError(out, 'MULTI_COMPANY_DRAFT');
+  });
+
+  await test('E2 MULTI_COMPANY_DRAFT — even balanced-within-each-company drafts are refused (MOD-12)', async () => {
+    const out = await runOp(ctx, { EffectiveDate: '2026-07-06', EntryType: 'Manual', Lines: [
+      { GLAccountID: companyA.arGL, DebitAmount: 100 },
+      { GLAccountID: companyA.revGL, CreditAmount: 100 },
+      { GLAccountID: companyB.arGL, DebitAmount: 40 },
+      { GLAccountID: companyB.revGL, CreditAmount: 40 },
+    ] });
+    expectError(out, 'MULTI_COMPANY_DRAFT');
   });
 
   await test('E2 MALFORMED_DRAFT — single-line draft refused', async () => {
@@ -358,6 +368,7 @@ async function main(): Promise<void> {
   for (const co of [companyA, companyB]) {
     await exec(`DELETE FROM ${SCHEMA}.AccountingCompanyProfile WHERE ID='${co.id}'`);
     await exec(`DELETE FROM ${SCHEMA}.GLAccount WHERE CompanyID='${co.id}'`);
+    await exec(`DELETE FROM __mj_BizAppsAccounting.JournalEntrySequence WHERE CompanyID='${co.id}'`); // per-company JE sequence rows (MOD-12)
     await exec(`DELETE FROM __mj.Company WHERE ID='${co.id}'`);
   }
 

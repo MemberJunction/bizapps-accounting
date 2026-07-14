@@ -150,3 +150,47 @@ overall (**50014**) and **per company (50023)**; immutability once Approved+ (**
 | `AccountBalance` / `AccountBalanceByDimension` | balance tracking is the ERP's job (AM-1) |
 | `JournalEntry.CompanyID` / `JournalEntryBatch.CompanyID` | entries + batches span companies (CH-2/CH-4) |
 | W4 routing · period-close triggers · the SJE materializer | all period-dependent (CH-1/AM-6) |
+
+## A3 enforcement/implementation audit — 2026-07-14 (schema action plan A3)
+
+Verified against the live dev DB (`MJ_accounting_engine_dev`) + code, with the MOD/UPD overlays applied:
+
+| §5 item (as overlaid) | Verdict |
+|---|---|
+| 5.1 CHECK constraints | as-built, unchanged; covered by `trigger-preflight.ts` |
+| 5.2 balanced-JE triggers | PRESENT (`trg_JournalEntry_BalancedOnLock`, `trg_JEL_RecheckParentBalance`) incl. the V202607081600 reversible-preliminary-lock rework |
+| 5.3 immutability triggers | PRESENT — full set: JE / JEL / JEBatch / JEBLI / JEBLDimension / SJE / SJELI + `trg_ACP_NoChains`, `trg_JE_ReversalConsistency`, `trg_JEBatch_SummaryReconciles` |
+| 5.4 period-close trigger | **ABSENT — CORRECT and deliberate.** Periods are removed (MOD-1 FINAL; the 2026-07-14 MOD-13 manual-close detour was withdrawn same-day). Do NOT rebuild period machinery; any future timing rule detects by DATE, never a period FK (`plans/DEFERRALS.md`). |
+| 5.5 CoA-mapping enforcement | **retired by design** — dispatch account resolution is total (`ChartOfAccountsMapping` override → `GLAccount.ExternalAccountID` → `Code` fallback; `BatchingEngine.ts` §resolution), so the unmapped-GL hard-fail is unnecessary |
+| Intercompany wiring (`IntercompanyRelationship`) | **ABSENT accounting-side — CORRECT** (2026-07-06 baseline ruling; MOD-5(c)). The per-pair Due-To/Due-From wiring is the Payments component's (orders O2+); Amith's OQ-A shape is preserved in MOD-5 as the reference. Do not re-add here. |
+| §4.9 SJE materialization | schema built; date-driven engine (MOD-11) = feature plan B3 |
+| Sequences | intact (JournalEntrySequence per-FY row + BatchSequence singleton). A4 re-keys JE numbering to (CompanyID, FiscalYear) per MOD-12. |
+| `ACP.DefaultPaymentTermsTypeID` | soft ref, unchanged — its target now EXISTS (orders S1 shipped `PaymentTermsType` 2026-07-14); stays soft (no cross-app FK) |
+
+**Implementation-status verdicts (Marcelo's "mostly implemented, but not sure"):**
+- **MOD-1..10 vs built:** MOD-1 (no periods) ✓ · MOD-2 (BC dispatch stub path) ✓ · MOD-3 (two-level batch lock + tasks-app approval gate: `TasksAppApprovalGate.ts`, V202607081600) ✓ · MOD-4 (netted summaries: `trg_JEBatch_SummaryReconciles` + BatchingEngine netting) ✓ · MOD-5 (intercompany dropped accounting-side) ✓ · MOD-6 (FX upstream; Currency tables dormant) ✓ · MOD-7 (minimal COA seed) ✓ · MOD-8 (oldest-forward batch filter) = feature plan B1.1, NOT yet built (correct — feature wave) · MOD-9 (roles/RLS) = A2, NOT yet built (correct — gated on R1-R3 + co-design) · MOD-10 (GLAccountLink role mapping) ✓.
+- **Batch-lock plan (`ActionPlan - Batch approval lock redesign.md`):** phases 1–2 BUILT (`BatchingEngine.cancelBatch`/`regenerateBatch`/atomic `buildBatch`; V202607081600 trigger rework); phase 3 UI + phase 4 demo-state seeds are IN FLIGHT (batch-approvals UI/playwright work active in this instance, uncommitted). Plan stays **Active** — not moved to completed. Test matrix not re-run in this audit (the harness files are mid-edit by the active UI workstream); last recorded run green per `testing.md`.
+- **JE-side MOD-12 gap (expected):** `JournalEntry.CompanyID` does not exist yet — that is **A4**, executing next with orders F1.2's per-company split (the two must land together or the order-to-je harness breaks).
+
+## A4 — single-company JE restoration (MOD-12) — executed 2026-07-14
+
+Baseline (`B202605281200`) edited in place (collapse-into-baseline strategy; `V202607081600`'s
+reversible-preliminary-lock trigger rework FOLDED into §4.3 and the V-file deleted):
+
+- **`JournalEntry.CompanyID`** reintroduced (`NOT NULL`, FK → `__mj.Company`) — every JE belongs to
+  exactly ONE company. The engine pipeline rejects mixed drafts with **`MULTI_COMPANY_DRAFT`**
+  (stage 5; the AM-4 per-company balance rule collapsed into whole-entry balance); trigger **50025**
+  (in `trg_JournalEntry_BalancedOnLock`) is the un-bypassable floor: at lock, every line's
+  `GLAccount.CompanyID` must equal the header CompanyID. CompanyID is in the immutability-frozen set.
+- **Numbering** re-keyed per company: `JournalEntrySequence (CompanyID, FiscalYear)` PK + FK;
+  `spAssignNextJournalEntryNumber(@CompanyID, @FiscalYear)` resolves `ACP.CompanyCode` (THROW 50024
+  when missing) and formats **`JE-{CompanyCode}-{FY}-{seq:000000}`**. Fiscal year derives from the
+  company's ACP `FiscalYearStartMonth/Day` (labeled by START year; Jan-1 default = calendar year).
+  The batch sequence stays GLOBAL (batches may span companies).
+- **`AccountingCompanyProfile.ApprovalCFOUserID`** replaces `ApprovalCFOPersonID` (A4.6 / Q17: the
+  approver links `__mj.User`; FK retargeted, folded view/sproc/metadata renamed).
+  `TasksAppApprovalGate` assigns approval tasks to CFO **Users**; decisions stay Person-keyed
+  (the tasks app's `TaskDecision.DecidedByPersonID` FK).
+- **Orders counterpart (F1.2, same wave):** booking emits one single-company draft per company
+  (all-or-nothing set with compensation); `Order.JournalEntryID` is stamped only when exactly one JE
+  books; the order-level booked guard is `ConfirmedAt` + JE existence via `JournalEntry.OrderID`.

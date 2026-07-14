@@ -8,7 +8,7 @@
  *
  *   setup  → create a tagged Company + AccountingCompanyProfile (W1 auto-seeds the COA),
  *            map its GL accounts to BusinessCentral, create a CFO Person, set
- *            AccountingCompanyProfile.ApprovalCFOPersonID to that Person, and create THREE balanced
+ *            AccountingCompanyProfile.ApprovalCFOUserID to the running user (A4.6), and create THREE balanced
  *            Pending JEs (netting-with-canceling shape). 2026-07-06: periods are GONE and
  *            buildBatch is GLOBAL — setup fails fast if any stray Pending JE exists.
  *            Prints: { companyId, companyName, runTag, cfoPersonId, jeId, expected }
@@ -140,6 +140,7 @@ async function setup(p: Pools): Promise<void> {
   for (let i = 0; i < jeSpecs.length; i++) {
     const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
     je.NewRecord();
+    je.CompanyID = companyId; // MOD-12: single-company JEs
     je.EffectiveDate = new Date();
     je.EntryType = 'Manual'; je.Status = 'Pending'; je.Description = `${RUN_TAG} pending JE ${i + 1} for GUI batching`;
     if (!(await je.Save())) throw new Error(`JE ${i + 1} save failed: ${je.LatestResult?.CompleteMessage}`);
@@ -166,7 +167,9 @@ async function setup(p: Pools): Promise<void> {
 
   const acp2 = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, user);
   if (!(await acp2.Load(companyId))) throw new Error(`could not reload ACP ${companyId}`);
-  acp2.ApprovalCFOPersonID = cfoPersonId;
+  // A4.6: the approver is a USER; assign the running persona so the approval task lands in
+  // the test user's inbox. The Person row above remains the DECISION recorder (tasks-app FK).
+  acp2.ApprovalCFOUserID = user.ID;
   if (!(await acp2.Save())) throw new Error(`set CFO failed: ${acp2.LatestResult?.CompleteMessage}`);
 
   // Machine-readable descriptor on the LAST stdout line for the spec/harness to parse.

@@ -3,7 +3,7 @@ Don't say "You're absolutely right" each time I correct you. Mix it up, that's s
 
 # BizApps Accounting Development Guide
 
-This is a **MemberJunction Open App** built on top of the [MemberJunction](https://github.com/MemberJunction/MJ) platform. It provides the AR subsidiary ledger of record and journal-entry primitives (GL accounts, accounting periods, balanced JEs with multi-currency, dimensions, tax) for the MJ ecosystem. It is **not a general ledger** — entries are batched to the ERP (Business Central, QuickBooks, NetSuite, etc.).
+This is a **MemberJunction Open App** built on top of the [MemberJunction](https://github.com/MemberJunction/MJ) platform. It provides the AR subsidiary ledger of record and journal-entry primitives (GL accounts, balanced JEs, dimensions, tax; NO accounting periods — removed per MOD-1, final) for the MJ ecosystem. It is **not a general ledger** — entries are batched to the ERP (Business Central, QuickBooks, NetSuite, etc.).
 
 This repo depends on [bizapps-common](https://github.com/MemberJunction/bizapps-common) for shared entities (Currency, Organization, Address) and extends `__mj.Company` with an `AccountingCompanyProfile` (IsA Disjoint child).
 
@@ -335,7 +335,7 @@ This repo uses MemberJunction's CodeGen system to generate entity and action sub
 ### Accounting-specific schema invariants (see `plans/bizapps-accounting-master.md` §5)
 - Balanced-JE invariant enforced via DEFERRABLE constraint trigger — never UPDATE/DELETE around it.
 - JE immutability after `Status ∈ {Batched, GLPosted}` enforced by trigger — only `GLPostedAt`/`GLReferenceID`/`Status` may change after lock.
-- Period-close trigger blocks JE inserts into a closed `AccountingPeriod` unless `OriginalAccountingPeriodID` is set (adjusting entry pattern).
+- **NO period machinery** — `AccountingPeriod` and the period-close trigger were REMOVED (MOD-1, FINAL 2026-07-14; the brief MOD-13 manual-close reinstatement was withdrawn same-day). JEs carry only dates; accountants batch entries into the right periods. Any future timing rule detects by DATE, never a period FK (`plans/DEFERRALS.md`). Do not rebuild period-shaped anything.
 - `AccountingCompanyProfile` is an IsA Disjoint child of `__mj.Company` — same UUID as the parent row, never INSERT a Profile without a matching Company.
 
 ### Time is ALWAYS stored in UTC (convention)
@@ -389,13 +389,13 @@ This repository provides the **AR subsidiary ledger of record + journal-entry pr
 **What lives here** (per `plans/bizapps-accounting-master.md`):
 1. `GLAccount` + seeded default chart of accounts
 2. `AccountingCompanyProfile` — IsA Disjoint child of `__mj.Company` (functional currency, fiscal year, default GL accounts, business-profile fields)
-3. `AccountingPeriod` with hard-close semantics
+3. ~~`AccountingPeriod` with hard-close semantics~~ — REMOVED (MOD-1 final; timing system deferred, `plans/DEFERRALS.md`)
 4. `JournalEntry` / `JournalEntryLine` / `JournalEntryBatch` with balanced-JE + immutability invariants enforced at the DB level
 5. `Dimension` / `DimensionValue` / `JournalEntryLineDimension` for analytical tagging
 6. `ChartOfAccountsMapping` for ERP roundtrip
 7. Tax entities (`TaxAuthority`, `TaxJurisdiction`, `TaxRate`, `TaxLiability`, `TaxRemittance`, `CustomerTaxProfile`) + pluggable `TaxCalculationProvider`
 8. Recurring JE templates (FX revaluation, depreciation, prepaid amortization, sales-tax snapshot)
-9. Account balance materialization for closed periods
+9. ~~Account balance materialization for closed periods~~ — REMOVED with periods (AM-1; deferred, `plans/DEFERRALS.md`)
 10. Read-model views (`vw_TrialBalance_AR`, `vw_AROpenByCustomer`, `vw_DefRevRollforward`, etc.) for Skip-generated reports
 
 **What does NOT live here**: trial balance / P&L / balance sheet generation, year-end closing, statistical accounts, fixed-asset depreciation as first-class, inventory/COGS, expense management. Those stay in the ERP or future BizApps* siblings.

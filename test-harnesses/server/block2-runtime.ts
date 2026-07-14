@@ -33,6 +33,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import { Metadata, RunView, UserInfo } from '@memberjunction/core';
+import type { UserEntity } from '@memberjunction/core-entities';
 import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
 import { assertInvariantTriggers } from './trigger-preflight.js';
 import { finishAndExit } from './harness-exit.js';
@@ -51,6 +52,7 @@ import type { mjBizAppsCommonPersonEntity } from '@mj-biz-apps/common-entities';
 
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 const PERSON_ENTITY = 'MJ_BizApps_Common: People';
+const USERS_ENTITY = 'MJ: Users';
 const TASK_SCHEMA = '__mj_BizAppsTasks';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
@@ -90,6 +92,8 @@ interface Ctx {
   dimId: string; dimValSales: string; dimValMktg: string;
   /** Person rows the real-gate scenarios created (CFOs) — cleaned up in teardown. */
   personIds: string[];
+  /** __mj User rows the real-gate scenarios created (CFO assignees, A4.6) — cleaned up in teardown. */
+  userIds: string[];
 }
 
 /** Every JE this run created (buildBatch is global, so teardown sweeps by tracked ID, not company). */
@@ -149,15 +153,16 @@ async function bootstrap(): Promise<Ctx> {
   await pool.request().query(`INSERT INTO ${SCHEMA}.Dimension (ID, Code, Name) VALUES ('${dimId}','DEPT-${RUN_TAG}','Department ${RUN_TAG}')`);
   await pool.request().query(`INSERT INTO ${SCHEMA}.DimensionValue (ID, DimensionID, Code, Name) VALUES ('${dimValSales}','${dimId}','SALES','Sales'),('${dimValMktg}','${dimId}','MKTG','Marketing')`);
 
-  return { pool, teardownPool, user: ctxUser, companyA, companyB, dimId, dimValSales, dimValMktg, personIds: [] };
+  return { pool, teardownPool, user: ctxUser, companyA, companyB, dimId, dimValSales, dimValMktg, personIds: [], userIds: [] };
 }
 
 interface LineSpec { gl: string; debit?: number; credit?: number; dimValueId?: string }
 /** App-path: create a Pending JE with the given lines (optionally dimension-tagged). Returns the JE id. */
-async function makeJE(ctx: Ctx, lines: LineSpec[]): Promise<string> {
+async function makeJE(ctx: Ctx, companyId: string, lines: LineSpec[]): Promise<string> {
   const md = new Metadata();
   const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, ctx.user);
   je.NewRecord();
+  je.CompanyID = companyId; // MOD-12: single-company JEs
   je.EffectiveDate = new Date();
   je.EntryType = 'Manual'; je.Status = 'Pending'; je.Description = `${RUN_TAG} test`;
   if (!(await je.Save())) throw new Error(`JE save failed: ${je.LatestResult?.CompleteMessage}`);
@@ -188,7 +193,21 @@ async function jeStatus(ctx: Ctx, jeId: string): Promise<string> {
 
 // ─── real-gate scenario helpers ──────────────────────────────────────────────
 
-/** App-path: create a CFO Person in MJ_BizApps_Common.People. Tracks the id for teardown. Returns it. */
+/** App-path: create a CFO __mj User (A4.6: approver assignments target Users). Tracks for teardown. */
+async function makeCFOUser(ctx: Ctx, label: string): Promise<string> {
+  const md = new Metadata();
+  const user = await md.GetEntityObject<UserEntity>(USERS_ENTITY, ctx.user);
+  user.NewRecord();
+  user.Name = `cfo-${label.toLowerCase()}-${RUN_TAG}@mjdev.local`;
+  user.Email = `cfo-${label.toLowerCase()}-${RUN_TAG}@mjdev.local`;
+  user.Type = 'User';
+  user.IsActive = true;
+  if (!(await user.Save())) throw new Error(`CFO User save failed: ${user.LatestResult?.CompleteMessage ?? 'unknown'}`);
+  ctx.userIds.push(user.ID);
+  return user.ID;
+}
+
+/** App-path: create a Person (the DECISION recorder — TaskDecision.DecidedByPersonID FKs Person). */
 async function makeCFOPerson(ctx: Ctx, label: string): Promise<string> {
   const md = new Metadata();
   const person = await md.GetEntityObject<mjBizAppsCommonPersonEntity>(PERSON_ENTITY, ctx.user);
@@ -201,12 +220,12 @@ async function makeCFOPerson(ctx: Ctx, label: string): Promise<string> {
   return person.ID;
 }
 
-/** Set AccountingCompanyProfile.ApprovalCFOPersonID on a test company (app path). */
-async function setCompanyCFO(ctx: Ctx, companyId: string, cfoPersonId: string | null): Promise<void> {
+/** Set AccountingCompanyProfile.ApprovalCFOUserID on a test company (app path — A4.6). */
+async function setCompanyCFO(ctx: Ctx, companyId: string, cfoUserId: string | null): Promise<void> {
   const md = new Metadata();
   const acp = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, ctx.user);
   if (!(await acp.Load(companyId))) throw new Error(`could not load ACP for ${companyId}`);
-  acp.ApprovalCFOPersonID = cfoPersonId;
+  acp.ApprovalCFOUserID = cfoUserId;
   if (!(await acp.Save())) throw new Error(`ACP CFO update failed: ${acp.LatestResult?.CompleteMessage ?? 'unknown'}`);
 }
 
@@ -218,10 +237,10 @@ async function batchTask(ctx: Ctx, batchId: string): Promise<{ id: string; name:
   return row ? { id: row.id, name: row.name } : null;
 }
 
-/** How many TaskAssignments name `cfoPersonId` (in the People entity) for `taskId`. */
-async function assignmentCountForCFO(ctx: Ctx, taskId: string, cfoPersonId: string): Promise<number> {
+/** How many TaskAssignments name `cfoUserId` (in the core Users entity — A4.6) for `taskId`. */
+async function assignmentCountForCFO(ctx: Ctx, taskId: string, cfoUserId: string): Promise<number> {
   const r = await ctx.pool.request().query(
-    `SELECT COUNT(*) c FROM ${TASK_SCHEMA}.TaskAssignment a JOIN __mj.Entity e ON e.ID=a.AssigneeEntityID WHERE a.TaskID='${taskId}' AND e.Name='${PERSON_ENTITY}' AND a.AssigneeRecordID='${cfoPersonId}'`);
+    `SELECT COUNT(*) c FROM ${TASK_SCHEMA}.TaskAssignment a JOIN __mj.Entity e ON e.ID=a.AssigneeEntityID WHERE a.TaskID='${taskId}' AND e.Name='${USERS_ENTITY}' AND a.AssigneeRecordID='${cfoUserId}'`);
   return Number(r.recordset[0].c);
 }
 
@@ -252,7 +271,7 @@ async function main(): Promise<void> {
   let happyBatchId = '';
   const happyJEs: string[] = [];
   await test('S1 buildBatch — 3 balanced JEs net into a footing Pending batch; JEs lock to Batched', async () => {
-    for (let i = 0; i < 3; i++) happyJEs.push(await makeJE(ctx, [{ gl: companyA.arGL, debit: 100 }, { gl: companyA.revGL, credit: 100 }]));
+    for (let i = 0; i < 3; i++) happyJEs.push(await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 100 }, { gl: companyA.revGL, credit: 100 }]));
     const res = await buildBatch('BusinessCentral', user.ID, user);
     assert(res !== null, 'buildBatch returned null (expected a batch)');
     happyBatchId = res!.batchId;
@@ -268,8 +287,8 @@ async function main(): Promise<void> {
 
   let multiCoBatchId = '';
   await test('S1 buildBatch — MULTI-COMPANY sweep: JEs across 2 companies → one batch, companyCount 2, per-company summary lines, Code on unmapped wire (AM-4)', async () => {
-    await makeJE(ctx, [{ gl: companyA.arGL, debit: 100 }, { gl: companyA.revGL, credit: 100 }]);
-    await makeJE(ctx, [{ gl: companyB.arGL, debit: 40 }, { gl: companyB.unmappedGL, credit: 40 }]);
+    await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 100 }, { gl: companyA.revGL, credit: 100 }]);
+    await makeJE(ctx, companyB.id, [{ gl: companyB.arGL, debit: 40 }, { gl: companyB.unmappedGL, credit: 40 }]);
     const res = await buildBatch('BusinessCentral', user.ID, user);
     assert(res !== null, 'buildBatch returned null (expected a batch)');
     multiCoBatchId = res!.batchId;
@@ -288,8 +307,8 @@ async function main(): Promise<void> {
   // ─── B5 dimension-through-batch ────────────────────────────────────────────
   let dimBatchId = '';
   await test('B5 dimension-through-batch — same account, different dimension values → separate summary lines, tagged', async () => {
-    await makeJE(ctx, [{ gl: companyA.revGL, credit: 100, dimValueId: ctx.dimValSales }, { gl: companyA.arGL, debit: 100 }]);
-    await makeJE(ctx, [{ gl: companyA.revGL, credit: 60, dimValueId: ctx.dimValMktg }, { gl: companyA.arGL, debit: 60 }]);
+    await makeJE(ctx, companyA.id, [{ gl: companyA.revGL, credit: 100, dimValueId: ctx.dimValSales }, { gl: companyA.arGL, debit: 100 }]);
+    await makeJE(ctx, companyA.id, [{ gl: companyA.revGL, credit: 60, dimValueId: ctx.dimValMktg }, { gl: companyA.arGL, debit: 60 }]);
     const res = await buildBatch('BusinessCentral', user.ID, user);
     assert(res !== null, 'buildBatch returned null');
     dimBatchId = res!.batchId;
@@ -336,13 +355,13 @@ async function main(): Promise<void> {
 
   // ─── S1 REAL gate: TasksAppApprovalGate backed by bizapps-tasks ────────────
   // Replaces AutoApproveGate in production. CFOs resolved per-company via
-  // AccountingCompanyProfile.ApprovalCFOPersonID for EVERY company in the batch
+  // AccountingCompanyProfile.ApprovalCFOUserID for EVERY company in the batch
   // (union — one Task assigned to all CFOs; NO role fallback — hard-fail if any unset).
   const realGate = new TasksAppApprovalGate();
 
   await test('S1 real gate — no CFO configured → buildBatch hard-fails AND auto-reverses (Q5 atomicity: JE freed to Pending, no orphan locked batch)', async () => {
     await setCompanyCFO(ctx, companyA.id, null); // ensure unset
-    const orphanJE = await makeJE(ctx, [{ gl: companyA.arGL, debit: 50 }, { gl: companyA.revGL, credit: 50 }]);
+    const orphanJE = await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 50 }, { gl: companyA.revGL, credit: 50 }]);
     await expectThrow(() => buildBatch('BusinessCentral', user.ID, user, realGate), 'No CFO configured');
     // Atomicity fix (plan §8 / Q5): the failed approval-task raise reverses the still-preliminary lock, so the
     // JE returns to the candidate pool instead of being stranded in a task-less locked batch.
@@ -353,24 +372,26 @@ async function main(): Promise<void> {
 
   let approveBatchId = '';
   let cfoA = '';
+  let decisionPersonA = '';
   await test('S1 real gate — CFO set → buildBatch creates an "Approve JE Batch" Task + Task Link, assigned to the CFO', async () => {
-    cfoA = await makeCFOPerson(ctx, 'ApproveA');
+    cfoA = await makeCFOUser(ctx, 'ApproveA');
+    decisionPersonA = await makeCFOPerson(ctx, 'DeciderA');
     await setCompanyCFO(ctx, companyA.id, cfoA);
-    await makeJE(ctx, [{ gl: companyA.arGL, debit: 50 }, { gl: companyA.revGL, credit: 50 }]);
+    await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 50 }, { gl: companyA.revGL, credit: 50 }]);
     const built = await buildBatch('BusinessCentral', user.ID, user, realGate);
     assert(built !== null, 'buildBatch returned null (expected a batch)');
     approveBatchId = built!.batchId;
     const task = await batchTask(ctx, approveBatchId);
     assert(task !== null, 'expected an approval Task linked to the batch');
     assert(/^Approve Journal Entry Batch #/.test(task!.name), `expected an "Approve Journal Entry Batch #…" Task, got '${task!.name}'`);
-    assert((await assignmentCountForCFO(ctx, task!.id, cfoA)) === 1, 'expected the Task assigned to the CFO Person');
+    assert((await assignmentCountForCFO(ctx, task!.id, cfoA)) === 1, 'expected the Task assigned to the CFO User');
   });
 
   await test('S1 real gate — MULTI-COMPANY batch → ONE approval Task assigned to BOTH companies\' CFOs (union)', async () => {
-    const cfoB = await makeCFOPerson(ctx, 'ApproveB');
+    const cfoB = await makeCFOUser(ctx, 'ApproveB');
     await setCompanyCFO(ctx, companyB.id, cfoB);
-    await makeJE(ctx, [{ gl: companyA.arGL, debit: 20 }, { gl: companyA.revGL, credit: 20 }]);
-    await makeJE(ctx, [{ gl: companyB.arGL, debit: 30 }, { gl: companyB.revGL, credit: 30 }]);
+    await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 20 }, { gl: companyA.revGL, credit: 20 }]);
+    await makeJE(ctx, companyB.id, [{ gl: companyB.arGL, debit: 30 }, { gl: companyB.revGL, credit: 30 }]);
     const built = await buildBatch('BusinessCentral', user.ID, user, realGate);
     assert(built !== null && built.companyCount === 2, `expected a 2-company batch, got ${built?.companyCount}`);
     const task = await batchTask(ctx, built!.batchId);
@@ -386,17 +407,17 @@ async function main(): Promise<void> {
   });
 
   await test('S1 real gate — recordDecision(Approved) → sendBatch succeeds → Posted (JEs GLPosted)', async () => {
-    await realGate.recordDecision(approveBatchId, 'Approved', cfoA, 'Looks good — approved.', user);
+    await realGate.recordDecision(approveBatchId, 'Approved', decisionPersonA, 'Looks good — approved.', user);
     const batch = await sendBatch(approveBatchId, user, { gate: realGate });
     assert(batch.Status === 'Posted', `expected Posted after approval, got ${batch.Status}`);
     assert((batch.ExternalBatchRef ?? '').startsWith('MOCK-'), `expected a MOCK- ExternalBatchRef, got ${batch.ExternalBatchRef}`);
   });
 
   await test('S1 real gate — recordDecision(Rejected) → dispatch refused at BOTH layers; batch stays Pending', async () => {
-    await makeJE(ctx, [{ gl: companyA.arGL, debit: 30 }, { gl: companyA.revGL, credit: 30 }]);
+    await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 30 }, { gl: companyA.revGL, credit: 30 }]);
     const built = await buildBatch('BusinessCentral', user.ID, user, realGate);
     assert(built !== null, 'buildBatch returned null for the reject scenario');
-    await realGate.recordDecision(built!.batchId, 'Rejected', cfoA, 'Numbers off — rejected.', user);
+    await realGate.recordDecision(built!.batchId, 'Rejected', decisionPersonA, 'Numbers off — rejected.', user);
     // Layer 1 (engine status): never approved → sendBatch refuses on status.
     await expectThrow(() => sendBatch(built!.batchId, user, { gate: realGate }), 'only an Approved batch can be sent');
     // Layer 2 (CFO gate): the recorded Rejected decision blocks assertApproved directly.
@@ -406,7 +427,7 @@ async function main(): Promise<void> {
 
   // ─── INV summary-foots (trg 50014 overall / 50023 per company) — RAW-SQL bypass ──
   await test('INV summary-foots — DB-bypass: tamper control total then raw UPDATE Status=Sent → rejected (50014)', async () => {
-    await makeJE(ctx, [{ gl: companyA.arGL, debit: 75 }, { gl: companyA.revGL, credit: 75 }]);
+    await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 75 }, { gl: companyA.revGL, credit: 75 }]);
     const built = await buildBatch('BusinessCentral', user.ID, user);
     // Break the foot at the DB level (TotalDebits no longer equals the summary sum), while still Pending.
     await pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET TotalDebits = TotalDebits + 100 WHERE ID='${built!.batchId}'`);
@@ -414,8 +435,8 @@ async function main(): Promise<void> {
   });
 
   await test('INV per-company foot — DB-bypass: shift a summary amount ACROSS companies then raw Sent → rejected (50023, AM-4)', async () => {
-    await makeJE(ctx, [{ gl: companyA.arGL, debit: 100 }, { gl: companyA.revGL, credit: 100 }]);
-    await makeJE(ctx, [{ gl: companyB.arGL, debit: 40 }, { gl: companyB.revGL, credit: 40 }]);
+    await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 100 }, { gl: companyA.revGL, credit: 100 }]);
+    await makeJE(ctx, companyB.id, [{ gl: companyB.arGL, debit: 40 }, { gl: companyB.revGL, credit: 40 }]);
     const built = await buildBatch('BusinessCentral', user.ID, user);
     // Tamper: shift 30 of debit from company B's AR line onto company A's AR line (amounts stay
     // strictly positive — CK_JEBLI_OneSide forbids 0). Overall totals still foot (140/140 —
@@ -446,8 +467,8 @@ async function main(): Promise<void> {
   // each test ENDS with its JEs Batched (locked, not Pending) so buildBatch's global sweep stays deterministic.
 
   await test('#12 cancelBatch — reject reverses the PRELIMINARY lock: batch→Cancelled, JEs→Pending (candidate pool), summary cleared', async () => {
-    const je1 = await makeJE(ctx, [{ gl: companyA.arGL, debit: 45 }, { gl: companyA.revGL, credit: 45 }]);
-    const je2 = await makeJE(ctx, [{ gl: companyA.arGL, debit: 55 }, { gl: companyA.revGL, credit: 55 }]);
+    const je1 = await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 45 }, { gl: companyA.revGL, credit: 45 }]);
+    const je2 = await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 55 }, { gl: companyA.revGL, credit: 55 }]);
     const built = await buildBatch('BusinessCentral', user.ID, user);
     assert(built !== null, 'buildBatch returned null for the cancel scenario');
     assert((await jeStatus(ctx, je1)) === 'Batched' && (await jeStatus(ctx, je2)) === 'Batched', 'JEs must be Batched (preliminary lock) before cancel');
@@ -464,7 +485,7 @@ async function main(): Promise<void> {
   });
 
   await test('#12 permanent lock — once APPROVED the lock is permanent: cancelBatch refused + a raw Batched→Pending unlock is rejected by the trigger', async () => {
-    const je = await makeJE(ctx, [{ gl: companyA.arGL, debit: 33 }, { gl: companyA.revGL, credit: 33 }]);
+    const je = await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 33 }, { gl: companyA.revGL, credit: 33 }]);
     const built = await buildBatch('BusinessCentral', user.ID, user);
     assert(built !== null, 'buildBatch returned null for the permanent-lock scenario');
     await approveBatch(built!.batchId, user.ID, user);
@@ -475,11 +496,11 @@ async function main(): Promise<void> {
   });
 
   await test('#12 regenerateBatch — unlock current + re-gather ALL candidates (incl. one added after) into the SAME batch', async () => {
-    const jeA = await makeJE(ctx, [{ gl: companyA.arGL, debit: 20 }, { gl: companyA.revGL, credit: 20 }]);
+    const jeA = await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 20 }, { gl: companyA.revGL, credit: 20 }]);
     const built = await buildBatch('BusinessCentral', user.ID, user);
     assert(built !== null && built.jeCount === 1, `expected a 1-JE batch, got jeCount=${built?.jeCount}`);
     const batchId = built!.batchId;
-    const jeB = await makeJE(ctx, [{ gl: companyA.arGL, debit: 25 }, { gl: companyA.revGL, credit: 25 }]); // lands AFTER the build
+    const jeB = await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 25 }, { gl: companyA.revGL, credit: 25 }]); // lands AFTER the build
     assert((await jeStatus(ctx, jeB)) === 'Pending', 'the new JE must be an unbatched candidate');
     const regen = await regenerateBatch(batchId, 'BusinessCentral', user);
     assert(regen.batchId === batchId, 'regenerate must reuse the SAME batch record');
@@ -541,13 +562,15 @@ async function main(): Promise<void> {
     await exec(`DELETE FROM ${SCHEMA}.ChartOfAccountsMapping WHERE CompanyID='${co.id}'`);
     await exec(`DELETE FROM ${SCHEMA}.AccountingCompanyProfile WHERE ID='${co.id}'`);
     await exec(`DELETE FROM ${SCHEMA}.GLAccount WHERE CompanyID='${co.id}'`);
+    await exec(`DELETE FROM __mj_BizAppsAccounting.JournalEntrySequence WHERE CompanyID='${co.id}'`); // per-company JE sequence rows (MOD-12)
     await exec(`DELETE FROM __mj.Company WHERE ID='${co.id}'`);
   }
   await exec(`DELETE FROM ${SCHEMA}.DimensionValue WHERE DimensionID='${ctx.dimId}'`);
   await exec(`DELETE FROM ${SCHEMA}.Dimension WHERE ID='${ctx.dimId}'`);
 
-  // 3. CFO Person rows.
+  // 3. CFO Person + User rows.
   for (const pid of ctx.personIds) await exec(`DELETE FROM __mj_BizAppsCommon.Person WHERE ID='${pid}'`);
+  for (const uid of ctx.userIds) await exec(`DELETE FROM __mj.[User] WHERE ID='${uid}'`);
 
   const failed = outcomes.filter(o => !o.Passed);
   // NEVER `await pool.close()` before exit — the MJ provider pool can hang on close. Non-blocking close + force-exit.

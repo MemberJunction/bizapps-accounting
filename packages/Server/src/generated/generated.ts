@@ -105,9 +105,9 @@ export class mjBizAppsAccountingAccountingCompanyProfile_ {
     @Field(() => Boolean, {description: `Whether this profile is currently active. Inactive companies cannot have new JEs.`}) 
     IsActive: boolean;
         
-    @Field({nullable: true, description: `The CFO (a bizapps-common Person) who must approve a Journal Entry Batch for this company before it dispatches to the ERP. Resolved by the bizapps-tasks approval gate. Nullable: companies without a configured CFO fall back to the role-based resolver.`}) 
+    @Field({nullable: true, description: `The CFO (an MJ User — Q17 2026-07-13 ruling) who must approve a Journal Entry Batch for this company before it dispatches to the ERP. Resolved by the bizapps-tasks approval gate. Nullable: companies without a configured CFO fall back to the role-based resolver.`}) 
     @MaxLength(36)
-    ApprovalCFOPersonID?: string;
+    ApprovalCFOUserID?: string;
         
     @Field() 
     _mj__CreatedAt: Date;
@@ -164,8 +164,8 @@ export class mjBizAppsAccountingAccountingCompanyProfile_ {
     UnrealizedFXGainLossGLAccount?: string;
         
     @Field({nullable: true}) 
-    @MaxLength(201)
-    ApprovalCFOPerson?: string;
+    @MaxLength(100)
+    ApprovalCFOUser?: string;
         
     @Field({nullable: true}) 
     @MaxLength(36)
@@ -245,7 +245,7 @@ export class CreatemjBizAppsAccountingAccountingCompanyProfileInput {
     IsActive?: boolean;
 
     @Field({ nullable: true })
-    ApprovalCFOPersonID: string | null;
+    ApprovalCFOUserID: string | null;
 
     @Field({ nullable: true })
     Name?: string;
@@ -336,7 +336,7 @@ export class UpdatemjBizAppsAccountingAccountingCompanyProfileInput {
     IsActive?: boolean;
 
     @Field({ nullable: true })
-    ApprovalCFOPersonID?: string | null;
+    ApprovalCFOUserID?: string | null;
 
     @Field({ nullable: true })
     Name?: string;
@@ -2870,6 +2870,10 @@ export class mjBizAppsAccountingJournalEntry_ {
     @MaxLength(40)
     EntryNumber: string;
         
+    @Field({description: `The single company this entry belongs to (MOD-12: every JE is single-company; mixed-company drafts are rejected with MULTI_COMPANY_DRAFT). Must equal every line's GLAccount.CompanyID.`}) 
+    @MaxLength(36)
+    CompanyID: string;
+        
     @Field({description: `Accounting date for the entry (the ERP assigns its own period at posting).`}) 
     EffectiveDate: Date;
         
@@ -2949,6 +2953,10 @@ export class mjBizAppsAccountingJournalEntry_ {
     @Field() 
     _mj__UpdatedAt: Date;
         
+    @Field() 
+    @MaxLength(50)
+    Company: string;
+        
     @Field({nullable: true}) 
     @MaxLength(500)
     File?: string;
@@ -2991,6 +2999,9 @@ export class CreatemjBizAppsAccountingJournalEntryInput {
 
     @Field({ nullable: true })
     EntryNumber?: string;
+
+    @Field({ nullable: true })
+    CompanyID?: string;
 
     @Field({ nullable: true })
     EffectiveDate?: Date;
@@ -3064,6 +3075,9 @@ export class UpdatemjBizAppsAccountingJournalEntryInput {
 
     @Field({ nullable: true })
     EntryNumber?: string;
+
+    @Field({ nullable: true })
+    CompanyID?: string;
 
     @Field({ nullable: true })
     EffectiveDate?: Date;
@@ -3864,7 +3878,7 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @Field({nullable: true, description: `When a human approved the batch for dispatch (locks its content; the new Approved status).`}) 
     ApprovedAt?: Date;
         
-    @Field({nullable: true, description: `The user who approved the batch (see AccountingCompanyProfile.ApprovalCFOPersonID / the bizapps-tasks approval gate).`}) 
+    @Field({nullable: true, description: `The user who approved the batch (see AccountingCompanyProfile.ApprovalCFOUserID / the bizapps-tasks approval gate).`}) 
     @MaxLength(36)
     ApprovedByUserID?: string;
         
@@ -4742,8 +4756,12 @@ export class mjBizAppsAccountingJournalEntryLinkResolver extends ResolverBase {
 //****************************************************************************
 // ENTITY CLASS for MJ_BizApps_Accounting: Journal Entry Sequences
 //****************************************************************************
-@ObjectType({ description: `GLOBAL per-fiscal-year counter backing gap-free JournalEntry numbering (D-SEQ 2026-07-06: JEs are multi-company, so numbering is not company-scoped). Consumed only by spAssignNextJournalEntryNumber.` })
+@ObjectType({ description: `PER-COMPANY per-fiscal-year counter backing gap-free JournalEntry numbering JE-{CompanyCode}-{FY}-{seq} (MOD-12; supersedes the D-SEQ global shape). Consumed only by spAssignNextJournalEntryNumber.` })
 export class mjBizAppsAccountingJournalEntrySequence_ {
+    @Field() 
+    @MaxLength(36)
+    CompanyID: string;
+        
     @Field(() => Int) 
     FiscalYear: number;
         
@@ -4756,6 +4774,10 @@ export class mjBizAppsAccountingJournalEntrySequence_ {
     @Field() 
     _mj__UpdatedAt: Date;
         
+    @Field() 
+    @MaxLength(50)
+    Company: string;
+        
 }
 
 //****************************************************************************
@@ -4763,6 +4785,9 @@ export class mjBizAppsAccountingJournalEntrySequence_ {
 //****************************************************************************
 @InputType()
 export class CreatemjBizAppsAccountingJournalEntrySequenceInput {
+    @Field({ nullable: true })
+    CompanyID?: string;
+
     @Field(() => Int, { nullable: true })
     FiscalYear?: number;
 
@@ -4779,6 +4804,9 @@ export class CreatemjBizAppsAccountingJournalEntrySequenceInput {
 //****************************************************************************
 @InputType()
 export class UpdatemjBizAppsAccountingJournalEntrySequenceInput {
+    @Field()
+    CompanyID: string;
+
     @Field(() => Int)
     FiscalYear: number;
 
@@ -4840,11 +4868,11 @@ export class mjBizAppsAccountingJournalEntrySequenceResolver extends ResolverBas
         return super.RunDynamicViewGeneric(input, provider, userPayload, pubSub);
     }
     @Query(() => mjBizAppsAccountingJournalEntrySequence_, { nullable: true })
-    async mjBizAppsAccountingJournalEntrySequence(@Arg('FiscalYear', () => Int) FiscalYear: number, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine): Promise<mjBizAppsAccountingJournalEntrySequence_ | null> {
+    async mjBizAppsAccountingJournalEntrySequence(@Arg('CompanyID', () => String) CompanyID: string, @Arg('FiscalYear', () => Int) FiscalYear: number, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine): Promise<mjBizAppsAccountingJournalEntrySequence_ | null> {
         this.CheckUserReadPermissions('MJ_BizApps_Accounting: Journal Entry Sequences', userPayload);
         const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
-        const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwJournalEntrySequences')} WHERE ${provider.QuoteIdentifier('FiscalYear')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: Journal Entry Sequences', userPayload, EntityPermissionType.Read, 'AND');
-        const rows = await provider.ExecuteSQL(sSQL, [FiscalYear], undefined, this.GetUserFromPayload(userPayload));
+        const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwJournalEntrySequences')} WHERE ${provider.QuoteIdentifier('CompanyID')}=${provider.BuildParameterPlaceholder(0)} AND ${provider.QuoteIdentifier('FiscalYear')}=${provider.BuildParameterPlaceholder(1)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: Journal Entry Sequences', userPayload, EntityPermissionType.Read, 'AND');
+        const rows = await provider.ExecuteSQL(sSQL, [CompanyID, FiscalYear], undefined, this.GetUserFromPayload(userPayload));
         const result = await this.MapFieldNamesToCodeNames('MJ_BizApps_Accounting: Journal Entry Sequences', rows && rows.length > 0 ? rows[0] : null, this.GetUserFromPayload(userPayload));
         return result;
     }
@@ -4870,9 +4898,9 @@ export class mjBizAppsAccountingJournalEntrySequenceResolver extends ResolverBas
     }
     
     @Mutation(() => mjBizAppsAccountingJournalEntrySequence_)
-    async DeletemjBizAppsAccountingJournalEntrySequence(@Arg('FiscalYear', () => Int) FiscalYear: number, @Arg('options___', () => DeleteOptionsInput) options: DeleteOptionsInput, @Ctx() { providers, userPayload }: AppContext, @PubSub() pubSub: PubSubEngine) {
+    async DeletemjBizAppsAccountingJournalEntrySequence(@Arg('CompanyID', () => String) CompanyID: string, @Arg('FiscalYear', () => Int) FiscalYear: number, @Arg('options___', () => DeleteOptionsInput) options: DeleteOptionsInput, @Ctx() { providers, userPayload }: AppContext, @PubSub() pubSub: PubSubEngine) {
         const provider = GetReadWriteProvider(providers);
-        const key = new CompositeKey([{FieldName: 'FiscalYear', Value: FiscalYear}]);
+        const key = new CompositeKey([{FieldName: 'CompanyID', Value: CompanyID}, {FieldName: 'FiscalYear', Value: FiscalYear}]);
         return this.DeleteRecord('MJ_BizApps_Accounting: Journal Entry Sequences', key, options, provider, userPayload, pubSub);
     }
     

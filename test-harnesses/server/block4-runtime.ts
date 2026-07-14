@@ -152,6 +152,7 @@ async function main(): Promise<void> {
     // scheduled row comes due: create the real Pending JE, then mark the SJE Generated with the back-ref.
     const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
     je.NewRecord();
+    je.CompanyID = companyId; // MOD-12: single-company JEs
     je.EffectiveDate = new Date();
     je.EntryType = 'RevenueRecognition';
     je.Status = 'Pending';
@@ -212,6 +213,7 @@ async function main(): Promise<void> {
   }
   await exec(`DELETE FROM ${SCHEMA}.AccountingCompanyProfile WHERE ID='${companyId}'`);
   await exec(`DELETE FROM ${SCHEMA}.GLAccount WHERE CompanyID='${companyId}'`);
+  await exec(`DELETE FROM __mj_BizAppsAccounting.JournalEntrySequence WHERE CompanyID='${companyId}'`); // per-company JE sequence rows (MOD-12)
   await exec(`DELETE FROM __mj.Company WHERE ID='${companyId}'`);
 
   const failed = outcomes.filter(o => !o.Passed);

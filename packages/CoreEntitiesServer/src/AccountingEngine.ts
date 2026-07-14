@@ -3,13 +3,13 @@
  * the browser-safe AccountingEngineBase cache).
  *
  * `CreateJournalEntry(draft, user, provider)` runs the 7-stage pipeline:
- *   stages 1-5 (shape → accounts → dimensions → normalize → balance overall + per company) are the
+ *   stages 1-5 (shape → accounts → dimensions → normalize → balance + single-company MOD-12) are the
  *   PURE pipeline from @mj-biz-apps/accounting-engine-base, fed by the engine caches;
  *   stage 6 writes the JE header + lines + line-dimensions in ONE TransactionGroup (all rows or
  *   none); stage 7 shapes the typed result. Logical failures NEVER throw (remote-op convention) —
  *   inspect `Success` / `Errors`.
  *
- * Numbering rides the existing JournalEntryEntityServer W2 hook (global per-FY sequence, D-SEQ);
+ * Numbering rides the existing JournalEntryEntityServer W2 hook (per-company per-FY, MOD-12);
  * the DB triggers (50001/50019 balanced-on-lock) remain the un-bypassable floor at lock time.
  *
  * CONNECTS TO:
@@ -83,7 +83,7 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
       }
 
       // Stage 6 — atomic write (one TransactionGroup: all rows or none).
-      return await this.writeJournalEntry(draft, outcome.normalized, contextUser, provider);
+      return await this.writeJournalEntry(draft, outcome.normalized, outcome.companyID, contextUser, provider);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       LogError(`AccountingEngine.CreateJournalEntry failed: ${msg}`);
@@ -96,6 +96,7 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
   private async writeJournalEntry(
     draft: JournalEntryDraft,
     normalized: NormalizedLine[],
+    companyID: string,
     contextUser: UserInfo,
     provider: IMetadataProvider,
   ): Promise<CreateJournalEntryResult> {
@@ -105,6 +106,7 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
     // The W2 numbering hook (JournalEntryEntityServer.Save) assigns EntryNumber before the queued save.
     const je = await provider.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
     je.NewRecord();
+    je.CompanyID = companyID; // MOD-12: the single company every line resolved to (pipeline-verified)
     je.EffectiveDate = new Date(draft.EffectiveDate);
     je.EntryType = draft.EntryType;
     je.Status = 'Pending';

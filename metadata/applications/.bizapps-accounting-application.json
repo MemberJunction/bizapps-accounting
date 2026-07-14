@@ -8,24 +8,17 @@
     "DefaultSequence": 2010,
     "DefaultNavItems": [
       {
+        "Label": "Journal Entries",
+        "Icon": "fa-solid fa-book-open",
+        "ResourceType": "Custom",
+        "DriverClass": "JournalEntryConsoleResource",
+        "isDefault": true
+      },
+      {
         "Label": "Batch Status",
         "Icon": "fa-solid fa-list-check",
         "ResourceType": "Custom",
         "DriverClass": "BatchStatusResource",
-        "isDefault": true
-      },
-      {
-        "Label": "Trial Balance & AR",
-        "Icon": "fa-solid fa-scale-balanced",
-        "ResourceType": "Custom",
-        "DriverClass": "TrialBalanceARResource",
-        "isDefault": false
-      },
-      {
-        "Label": "Revenue & Tax",
-        "Icon": "fa-solid fa-receipt",
-        "ResourceType": "Custom",
-        "DriverClass": "RevenueTaxResource",
         "isDefault": false
       },
       {
@@ -33,13 +26,6 @@
         "Icon": "fa-solid fa-paper-plane",
         "ResourceType": "Custom",
         "DriverClass": "BatchDispatchResource",
-        "isDefault": false
-      },
-      {
-        "Label": "Intercompany Flow",
-        "Icon": "fa-solid fa-arrows-turn-to-dots",
-        "ResourceType": "Custom",
-        "DriverClass": "IntercompanyFlowResource",
         "isDefault": false
       },
       {
@@ -57,19 +43,33 @@
         "isDefault": false
       },
       {
-        "Label": "Journal Entries",
-        "Icon": "fa-solid fa-book-open",
-        "ResourceType": "Custom",
-        "DriverClass": "JournalEntryConsoleResource",
-        "isDefault": false
-      },
-      {
         "Label": "Dimensions",
         "Icon": "fa-solid fa-tags",
         "ResourceType": "User Views",
         "Configuration": {
           "Entity": "MJ_BizApps_Accounting: Dimensions"
         },
+        "isDefault": false
+      },
+      {
+        "Label": "Trial Balance & AR",
+        "Icon": "fa-solid fa-scale-balanced",
+        "ResourceType": "Custom",
+        "DriverClass": "TrialBalanceARResource",
+        "isDefault": false
+      },
+      {
+        "Label": "Revenue & Tax",
+        "Icon": "fa-solid fa-receipt",
+        "ResourceType": "Custom",
+        "DriverClass": "RevenueTaxResource",
+        "isDefault": false
+      },
+      {
+        "Label": "Intercompany Flow",
+        "Icon": "fa-solid fa-arrows-turn-to-dots",
+        "ResourceType": "Custom",
+        "DriverClass": "IntercompanyFlowResource",
         "isDefault": false
       }
     ]
@@ -81,7 +81,7 @@
     "ID": "08B5D905-6FB3-438B-94E5-2C5FF021B794"
   },
   "sync": {
-    "lastModified": "2026-07-10T01:40:42.268Z",
-    "checksum": "3a3779cafec58d38e26cfa9526955db75437fa14d36a5f6f434b7d44da58fdb6"
+    "lastModified": "2026-07-14T08:05:12.329Z",
+    "checksum": "ed2a36ccd17c4ec51033eea03ecc22ab6719951c8e7d204ba6b94ffa33362653"
   }
 }

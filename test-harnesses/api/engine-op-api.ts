@@ -5,7 +5,7 @@
  * with the typed contract intact on the wire.
  *
  *   1. success — a mergeable draft books; outputJSON carries {Success, JournalEntryID,
- *      EntryNumber JE-{FY}-{seq}, LineCount} (exact values).
+ *      EntryNumber JE-{CompanyCode}-{FY}-{seq} (A4.4/MOD-12), LineCount} (exact values).
  *   2. typed failure ON THE WIRE — an unbalanced draft returns transport success=true with
  *      Output.Success=false + UNBALANCED (logical failures live INSIDE the output).
  *   3. unknown operation key → UNKNOWN_OPERATION (the registry gate works over the wire).
@@ -129,7 +129,7 @@ async function main(): Promise<void> {
     check('transport success', ok.success === true, `${ok.resultCode} ${ok.errorMessage ?? ''}`);
     const out = JSON.parse(ok.outputJSON ?? '{}') as CreateJournalEntryOutput;
     check('Output.Success === true', out.Success === true, JSON.stringify(out.Errors));
-    check('EntryNumber matches JE-{FY}-{seq:000000}', /^JE-\d{4}-\d{6}$/.test(out.EntryNumber ?? ''), `got '${out.EntryNumber}'`);
+    check('EntryNumber matches JE-{CompanyCode}-{FY}-{seq:000000} (A4.4)', /^JE-[A-Z0-9_-]{2,20}-\d{4}-\d{6}$/.test(out.EntryNumber ?? ''), `got '${out.EntryNumber}'`);
     check('LineCount === 2 (duplicate debit lines merged on the wire path too)', out.LineCount === 2, `got ${out.LineCount}`);
     check('a JournalEntryID came back', !!out.JournalEntryID, JSON.stringify(out));
 

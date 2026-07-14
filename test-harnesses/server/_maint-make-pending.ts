@@ -19,7 +19,7 @@ async function main() {
   const md = new Metadata(); const ids: string[] = [];
   for (let i = 0; i < N; i++) {
     const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>('MJ_BizApps_Accounting: Journal Entries', user);
-    je.NewRecord(); je.EffectiveDate = new Date(); je.EntryType = 'Manual'; je.Status = 'Pending'; je.Description = `REJECT-DEMO ${i + 1}`;
+    je.NewRecord(); je.CompanyID = gl.cid; je.EffectiveDate = new Date(); je.EntryType = 'Manual'; je.Status = 'Pending'; je.Description = `REJECT-DEMO ${i + 1}`;
     if (!(await je.Save())) throw new Error(`JE save failed: ${je.LatestResult?.CompleteMessage}`);
     for (const [gid, dr, cr] of [[gl.arID, 100, null], [gl.revID, null, 100]] as [string, number|null, number|null][]) {
       const l = await md.GetEntityObject<mjBizAppsAccountingJournalEntryLineEntity>('MJ_BizApps_Accounting: Journal Entry Lines', user);

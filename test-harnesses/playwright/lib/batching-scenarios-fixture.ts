@@ -125,7 +125,9 @@ async function provisionCompany(p: Pools, suffix: string, currency: string, with
     cfoPersonId = person.ID;
     const acp2 = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, user);
     if (!(await acp2.Load(companyId))) throw new Error(`reload ACP ${suffix} failed`);
-    acp2.ApprovalCFOPersonID = cfoPersonId;
+    // A4.6: the approver is a USER; assign the running persona so the approval task lands in
+  // the test user's inbox. The Person row above remains the DECISION recorder (tasks-app FK).
+  acp2.ApprovalCFOUserID = user.ID;
     if (!(await acp2.Save())) throw new Error(`Co${suffix} set CFO failed: ${acp2.LatestResult?.CompleteMessage}`);
   }
   return { companyId, cfoPersonId };
@@ -140,6 +142,7 @@ async function makeJEs(p: Pools, companyId: string, label: string, jeSpecs: JESp
     const spec = jeSpecs[i];
     const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, p.user);
     je.NewRecord();
+    je.CompanyID = companyId; // MOD-12: single-company JEs
     je.EffectiveDate = new Date();
     je.EntryType = spec.entryType;
     je.Status = 'Pending'; je.Description = `${RUN_TAG} ${label} JE ${i + 1}`;

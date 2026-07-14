@@ -1,8 +1,9 @@
 /**
  * Server-side subclass of JournalEntry — Block 0 + Block 1 lifecycle hooks.
  *
- *   W2 (Block 0) numbering: assign EntryNumber on a new record via the atomic sproc
- *       (GLOBAL per-fiscal-year sequence — D-SEQ 2026-07-06: JEs are multi-company).
+ *   W2 (Block 0) numbering: assign EntryNumber on a new record via the atomic sproc —
+ *       PER-COMPANY per-fiscal-year 'JE-{CompanyCode}-{FY}-{seq}' (MOD-12; fiscal year
+ *       derived from the company's ACP FiscalYearStartMonth/Day, labeled by START year).
  *   W6 (Block 1) generateReversal: create a new Pending JE (EntryType='Reversal', per
  *       trg_JE_ReversalConsistency 50012) with Dr/Cr swapped on every line, back-referenced both ways.
  *   W9 (Block 1) attachment validation: a non-null FileID must reference an existing __mj.File.
@@ -25,6 +26,7 @@ import {
   mjBizAppsAccountingJournalEntryLineEntity,
 } from '@mj-biz-apps/accounting-entities';
 
+import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import { getNextJournalEntryNumber } from './SequenceService.js';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
@@ -93,6 +95,7 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
     const md = new Metadata();
     const reversal = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
     reversal.NewRecord();
+    reversal.CompanyID = this.CompanyID; // MOD-12: a reversal stays in the original's company
     reversal.EffectiveDate = new Date();
     reversal.EntryType = 'Reversal'; // required by trg_JE_ReversalConsistency (50012)
     reversal.Status = 'Pending';
@@ -144,15 +147,23 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
   // ─── W2: numbering (Block 0) ──────────────────────────────────────────────
 
   private async assignEntryNumber(): Promise<void> {
-    const fiscalYear = this.deriveFiscalYear();
     if (!this.ContextCurrentUser) {
       throw new Error('JournalEntryEntityServer.assignEntryNumber: ContextCurrentUser is required');
     }
-    const entryNumber = await getNextJournalEntryNumber(fiscalYear, this.ContextCurrentUser);
+    if (!this.CompanyID) {
+      throw new Error('JournalEntryEntityServer.assignEntryNumber: CompanyID must be set before save (MOD-12: journal entries are single-company)');
+    }
+    const fiscalYear = await this.deriveFiscalYear();
+    const entryNumber = await getNextJournalEntryNumber(this.CompanyID, fiscalYear, this.ContextCurrentUser);
     this.EntryNumber = entryNumber;
   }
 
-  private deriveFiscalYear(): number {
+  /**
+   * Fiscal year from the company's ACP settings (A4.4): the FY containing EffectiveDate,
+   * labeled by the calendar year the fiscal year STARTS in. For the default Jan-1 start this
+   * equals the calendar year. All date-part math in UTC (repo convention).
+   */
+  private async deriveFiscalYear(): Promise<number> {
     const effectiveDate = this.EffectiveDate;
     if (!effectiveDate) {
       throw new Error('JournalEntryEntityServer.deriveFiscalYear: EffectiveDate must be set before save (NOT NULL constraint)');
@@ -162,6 +173,15 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
     if (Number.isNaN(d.getTime())) {
       throw new Error(`JournalEntryEntityServer.deriveFiscalYear: invalid EffectiveDate value: ${String(effectiveDate)}`);
     }
-    return d.getUTCFullYear();
+    await AccountingEngineBase.Instance.Config(false, this.ContextCurrentUser);
+    const acp = AccountingEngineBase.Instance.CompanyProfiles.find(
+      p => p.ID?.toLowerCase() === this.CompanyID?.toLowerCase()
+    );
+    const startMonth = acp?.FiscalYearStartMonth ?? 1;
+    const startDay = acp?.FiscalYearStartDay ?? 1;
+    const beforeFYStart =
+      d.getUTCMonth() + 1 < startMonth ||
+      (d.getUTCMonth() + 1 === startMonth && d.getUTCDate() < startDay);
+    return beforeFYStart ? d.getUTCFullYear() - 1 : d.getUTCFullYear();
   }
 }

@@ -6,8 +6,10 @@
  * ZERO server dependencies. The server engine (`AccountingEngine` in
  * `@mj-biz-apps/accounting-core-entities-server`) and the remotable op both use these exact types.
  *
- * Notes (plan §3): NO CompanyID anywhere (multi-company — company derives per line from
- * GLAccount.CompanyID, CH-2); NO period fields (CH-1); NO FX fields in v1 (deferred).
+ * Notes: the draft carries NO CompanyID field — the engine derives the (single) company from the
+ * lines' GLAccount.CompanyID and stamps JournalEntry.CompanyID. A draft spanning more than one
+ * company is rejected with MULTI_COMPANY_DRAFT (MOD-12: JEs are single-company; callers split per
+ * company upstream — orders MOD-11). NO period fields (MOD-1); NO FX fields in v1 (deferred).
  *
  * CONNECTS TO:
  *   PIPELINE:  ./pipeline.ts (the pure validation/normalization stages over this contract)
@@ -53,6 +55,7 @@ export type JEErrorCode =
   | 'DIMENSION_UNKNOWN'
   | 'DIMENSION_VALUE_UNKNOWN'
   | 'UNBALANCED'
+  | 'MULTI_COMPANY_DRAFT'
   | 'INTERNAL_ERROR';
 
 export interface JEValidationError {
