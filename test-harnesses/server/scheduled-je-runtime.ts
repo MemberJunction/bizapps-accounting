@@ -152,17 +152,19 @@ async function main(): Promise<void> {
 async function teardown(): Promise<void> {
   const exec = async (q: string) => { try { await teardownPool.request().query(q); } catch (e) { console.log(`      teardown warn: ${(e instanceof Error ? e.message : String(e)).split('\n')[0]}`); } };
   const jeList = createdJEIds.map(i => `'${i}'`).join(',');
-  for (const t of ['JournalEntryLine', 'JournalEntry']) await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
-  if (jeList) {
-    await exec(`DELETE FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID IN (${jeList})`);
-    await exec(`DELETE FROM ${SCHEMA}.JournalEntry WHERE ID IN (${jeList})`);
-  }
-  for (const t of ['JournalEntryLine', 'JournalEntry']) await exec(`ENABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
   const sjeList = createdSJEIds.map(i => `'${i}'`).join(',');
+  // SJEs FIRST — GeneratedJournalEntryID FKs the JE; disable their lock triggers.
+  const allTriggers = ['ScheduledJournalEntryLineItem', 'ScheduledJournalEntry', 'JournalEntryLine', 'JournalEntry'];
+  for (const t of allTriggers) await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
   if (sjeList) {
     await exec(`DELETE FROM ${SCHEMA}.ScheduledJournalEntryLineItem WHERE ScheduledJournalEntryID IN (${sjeList})`);
     await exec(`DELETE FROM ${SCHEMA}.ScheduledJournalEntry WHERE ID IN (${sjeList})`);
   }
+  if (jeList) {
+    await exec(`DELETE FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID IN (${jeList})`);
+    await exec(`DELETE FROM ${SCHEMA}.JournalEntry WHERE ID IN (${jeList})`);
+  }
+  for (const t of allTriggers) await exec(`ENABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
   if (companyId) {
     await exec(`DELETE FROM ${SCHEMA}.AccountingCompanyProfile WHERE ID='${companyId}'`);
     await exec(`DELETE FROM ${SCHEMA}.GLAccount WHERE CompanyID='${companyId}'`);
