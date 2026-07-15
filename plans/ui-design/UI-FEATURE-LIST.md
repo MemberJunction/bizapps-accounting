@@ -12,22 +12,26 @@
 > `action-plans/ActionPlan - UI layout and workflows (accounting).md` (§1–§6) is the current cycle's
 > selected design; ◇ = claimed from working tree / plans, pending the Task 65b sign-off review.
 > ws5's uncommitted Angular WIP (JE console, batch dispatch, Playwright specs) is part of that review.
+> `wave §x` = `~/MJDev/shared-plans/ui-wave-plan.md` (the cross-app UI wave plan + gap-fill specs,
+> 2026-07-15 gap analysis).
 
 | ID | Feature | UI status | Surface | Mockup | Action plan |
 |---|---|---|---|---|---|
 | A.1–A.2 | Chart of accounts browsing/admin | In build ◇ | ChartOfAccounts + GLAccount dashboards | — | UI plan §6 sweep |
 | A.3–A.4 | Company setup (ACP, fiscal year, default accounts, CFO approver) | In build ◇ | CompanySetup dashboard | — | UI plan §5 (with A2 settings) |
-| B.1–B.2 | GL account mapping admin (roles/links) | Not started | generated forms only | — | — |
-| B.3 | CoA↔ERP mapping approval flow | Not started | — | — | — |
+| B.1–B.2 | GL account mapping admin (roles/links) | Not started | Settings screen — GLAccountLink manager | — | UI plan §5 |
+| B.3 | CoA↔ERP mapping approval flow | Not started | Settings screen — mapping approval grid | — | wave §5.1 |
 | C.1–C.7 | JE browsing, detail, lines+dimensions, reversal affordance | In build ◇ | JournalEntry + JournalEntryConsole dashboards | — | UI plan §3 |
-| C.8 | Manual-JE approval surfacing | Not started (feature Planned) | tasks approval widgets | — | — |
+| C.8 | Manual-JE approval surfacing | Not started (feature Planned) | approval inbox (shared S1) + JE detail affordances | — | wave §5.2 |
+| C.9 | Pending-JE void affordance | Not started — decision-gated (§14 Q1); detail slot reserved | JE detail | — | wave §5.4 |
+| C.10 | JE attachments panel | Not started — decision-gated (§14 Q9); detail slot reserved | JE detail slide-in | — | wave §5.4 |
 | D.1–D.4, D.6–D.7 | Batch build/dispatch/status workflow | In build ◇ | BatchDispatch + BatchStatus dashboards | — | UI plan §1/§2 |
 | D.3 | Batch approvals page (rebuild to house style — "I'm not a lover") | In build ◇ | Batch approvals page (reuses tasks approval-inbox pattern) | — | UI plan §1 |
 | D.5 | View-driven batch builder UI | Not started (feature Planned) | Batch builder | — | UI plan §2 |
-| E.1–E.5 | Scheduled-JE schedule visibility + materialization ops | Not started | schedules view / admin op | — | — |
+| E.1–E.5 | Scheduled-JE schedule visibility + materialization ops | Not started | Scheduled-JE browser + materialize action | — | UI plan §5 (op) · wave §5.3 (browser) |
 | F.1–F.2 | Currency display (ISO set, original-currency line fields) | In build ◇ | generated forms + JE detail | — | — |
 | F.3–F.4 | FX surfaces | N/A — no UI (deferred features) | — | — | — |
-| G.1 | Tax data admin (authorities/jurisdictions/rates) | In build ◇ | RevenueTax dashboard | — | — |
+| G.1 | Tax data admin (authorities/jurisdictions/rates) | In build ◇ (no plan § — house-style true-up owed) | RevenueTax dashboard | — | UI plan §6 sweep |
 | G.2 | Tax provider config | N/A — no UI (deferred feature) | — | — | — |
 | H.1, H.3 | Read-model reporting surfaces (trial balance AR, aging, rollforward, recon) | In build ◇ | TrialBalanceAR dashboard (+ B2 reporting wave) | — | UI plan §4 |
 | H.2 | Skip report gallery | N/A — no UI here (deferred, separate app) | — | — | — |
