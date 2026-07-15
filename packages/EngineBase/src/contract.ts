@@ -27,6 +27,9 @@ export interface JournalEntryLineDraft {
   Description?: string;
   /** Lineage soft ref to the originating order line (nullable FK on JournalEntryLine). */
   OrderLineID?: string;
+  /** The customer/counterparty this line's receivable-or-payable belongs to (AR-by-customer,
+   *  vw_AROpenByCustomer). Set on the AR line by order booking + payment capture. Soft ref. */
+  CounterpartyOrganizationID?: string;
   /** Pre-existing dimension/value pairs — validate-only, NEVER auto-created (CH-12). */
   Dimensions?: JournalEntryLineDimensionDraft[];
 }

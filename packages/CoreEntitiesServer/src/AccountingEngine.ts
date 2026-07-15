@@ -277,6 +277,7 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
       l.CreditAmount = line.CreditAmount;
       l.Description = line.Description;
       if (line.OrderLineID) l.OrderLineID = line.OrderLineID;
+      if (line.CounterpartyOrganizationID) l.CounterpartyOrganizationID = line.CounterpartyOrganizationID;
       l.TransactionGroup = tg;
       if (!(await l.Save())) {
         return fail(`line ${line.LineNumber} failed to queue`, l.LatestResult?.CompleteMessage);
