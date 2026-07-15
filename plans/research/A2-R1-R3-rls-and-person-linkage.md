@@ -102,19 +102,24 @@ Inventory of every person↔company-ish link that exists (verified in schema/sou
    single-record GET resolvers, list resolvers, related-entity traversals, AND the RunView pipeline —
    and is folded into the server cache fingerprint (no stale-cache leak). Verified in
    `graphql_server_codegen.ts:409/422/650/699` + `providerBase.ts:1898`.
-3. **⚠ WRITE-path RLS is a REAL GAP in MJ core today.** `UpdateRLSFilterID`/`DeleteRLSFilterID`
-   exist in the metadata model, but I found **no enforcement site**: `CheckPermissions(Update/Delete)`
-   checks only the CanUpdate/CanDelete booleans (`baseEntity.ts:2706+`); the mutation flow
-   (`ResolverBase.UpdateRecord` → `InnerLoad(pk)` → `Save()` → spUpdate) never applies an RLS
-   predicate; every generated RLS call site uses `EntityPermissionType.Read`. Consequence: a user
-   whose role grants JE-Update (Read-scoped only) could, if they learn a foreign row's ID, mutate it.
-   **Exactly Marcelo's scenario — and it means READ-RLS alone does not satisfy his requirement.**
-   → Filed as an MJ-UPSTREAM question (design-intent vs bug) AND, independently of MJ's answer, A2
-   enforces writes **app-side**: entity-server `Save()/Delete()` overrides on the JE family (+ batch
-   ops in `BatchingEngine`) that verify the acting user's company access against `CompanyID` — this
-   runs on EVERY MJ path (in-process and GraphQL both resolve the registered entity-server class),
-   and it is where rulings 1–2 (batch membership/candidate scoping) get enforced regardless of the
-   RLS mechanism chosen for reads.
+3. **WRITE-path RLS — originally reported as a gap, REFUTED 2026-07-14 (enforced in MJ core).**
+   My static pass found no enforcement site because it inspected the resolver + `CheckPermissions`
+   layers only; the bug-fix agent traced the **provider** layer, where write-path RLS actually runs.
+   It landed 2026-03-06 (`c90d5f881f`, on `origin/next`): `DatabaseProviderBase.Save` calls
+   `CheckCreateRLS` on new records and `CheckRecordRLS(Update)` on updates, and `Delete` calls
+   `CheckRecordRLS(Delete)` — each **throws "Record not found or access denied"** on an out-of-scope
+   row. `CheckRecordRLS` re-queries the DB against the per-type filter (so a client-hydrated entity
+   can't bypass it), and even the PK `Load` is Read-scoped. Full evidence chain:
+   `~/MJDev/MJ-UPSTREAM.md` → "[NOT-A-BUG] `UpdateRLSFilterID` / `DeleteRLSFilterID` write-path RLS".
+   **Design consequence (Marcelo, 2026-07-15): the planned app-side entity-server `Save()/Delete()`
+   company-ACCESS checks are DROPPED from the A2 design** — the app leverages core RLS instead of
+   recreating it. What stays app-side is NOT access control: the MOD-12 consistency rules
+   (single-company JE, per-company numbering, reversal same-company — already shipped) and the batch
+   rulings 1–2, which are CROSS-RECORD rules a per-row predicate can't express directly; whether
+   those live in the batch entities' RLS filter SQL (a subquery over member JEs is legal filter SQL)
+   or in a targeted `ValidateAsync` business rule is an A2 design detail, decided when the Q22
+   mechanism lands. Residual: the core enforcement is static-verified — run the recommended live
+   repro (out-of-scope Update/Delete → expect throws) when A2 wires real filters.
 4. **Direct SQL access: MJ RLS does not apply — by architecture, nobody has it.** App users never
    hold DB credentials; the only SQL principals are the MJAPI service login and admin logins, and a
    user's identity exists only in the app layer (the DB cannot even tell users apart). So
@@ -126,9 +131,11 @@ Inventory of every person↔company-ish link that exists (verified in schema/sou
 
 ### Marcelo's follow-on review (2026-07-14, second pass)
 
-- **Write-path RLS gap:** handed to the bug-fix agent (MJ-side). Interim posture: testing proceeds on
-  READ visibility; A2 assumes write-RLS works by the time it lands (the app-side entity-server checks
-  stay in the design as belt-and-suspenders + the home of the batch rulings).
+- **Write-path RLS gap:** handed to the bug-fix agent (MJ-side) — **outcome: REFUTED, NOT-A-BUG
+  (2026-07-14)**; write RLS is enforced at the provider layer (finding 3 above, updated in place).
+  Design change (Marcelo 2026-07-15): the app-side entity-server company-access checks are removed
+  from the A2 design — core RLS is the write gate; only the cross-record batch rulings still need an
+  app-side (or filter-SQL) home.
 - **Blast radius** (surface 4, the service credential): briefly elevated to a Robert question (Q23),
   then **WITHDRAWN (Marcelo, 2026-07-14)** — see the design note below.
 - **R3 corollary:** the membership-grant source must itself be securable — **Q24** for Robert
@@ -141,8 +148,9 @@ The blast-radius question was withdrawn from Robert's queue: omitting a native S
 SESSION_CONTEXT layer is accepted as the design decision (consistent with MJ's own architecture,
 which places per-user enforcement in the API layer). This section stands as the durable record:
 
-- **Stolen USER credential** → bounded by the Q22/Q24 grant model (roles + RLS + app-side write
-  checks); Admin stays the crown-jewel role (small + audited).
+- **Stolen USER credential** → bounded by the Q22/Q24 grant model (roles + RLS, read AND write —
+  write-path RLS verified enforced in MJ core, 2026-07-14); Admin stays the crown-jewel role
+  (small + audited).
 - **Stolen SERVICE credential** → full app-data reach is architectural (one shared login serves all
   users; the DB cannot distinguish them). The operative mitigations are operational, already adopted:
   DB reachable only from API hosts; the runtime login holds CRUD/execute but **no DDL** (the
