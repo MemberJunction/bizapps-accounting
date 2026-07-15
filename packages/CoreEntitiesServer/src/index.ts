@@ -103,3 +103,12 @@ export { AccountingEngine } from './AccountingEngine.js';
 export { CreateJournalEntryOperation, LoadCreateJournalEntryOperation } from './CreateJournalEntryOperation.js';
 // Accounting.CreateJournalEntries — the SET form: every draft's rows in ONE TransactionGroup (all or none).
 export { CreateJournalEntriesOperation, LoadCreateJournalEntriesOperation } from './CreateJournalEntriesOperation.js';
+// Accounting.CreateScheduledJournalEntries (B3.1) — atomic rev-rec/amortization schedule persist.
+export { CreateScheduledJournalEntriesOperation, LoadCreateScheduledJournalEntriesOperation } from './CreateScheduledJournalEntriesOperation.js';
+export { createScheduledJournalEntriesAtomic } from './ScheduledJournalEntryService.js';
+export type { ScheduledJournalEntriesInput, ScheduledJournalEntriesResult, ScheduleValidationError } from './ScheduledJournalEntryService.js';
+// Accounting.MaterializeDueScheduledEntries (B3.2) — DATE-driven materialization of due scheduled JEs.
+export { MaterializeScheduledEntriesOperation, LoadMaterializeScheduledEntriesOperation } from './MaterializeScheduledEntriesOperation.js';
+export type { MaterializeScheduledEntriesInput } from './MaterializeScheduledEntriesOperation.js';
+export { materializeDueScheduledEntries } from './MaterializationService.js';
+export type { MaterializeResult } from './MaterializationService.js';
