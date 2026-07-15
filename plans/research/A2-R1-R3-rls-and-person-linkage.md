@@ -120,22 +120,37 @@ Inventory of every person↔company-ish link that exists (verified in schema/sou
    user's identity exists only in the app layer (the DB cannot even tell users apart). So
    "direct-SQL spoofing" requires infrastructure-credential compromise, not an app privilege. The
    un-bypassable raw-SQL floor remains the FINANCIAL-invariant trigger set (50001–50025), which is
-   deliberately user-agnostic. If per-user enforcement at the DB layer is ever demanded (defense in
-   depth against a stolen service credential), that is native SQL Server Row-Level Security +
-   SESSION_CONTEXT user plumbing — real work, flagged as an option for Robert's review, not assumed.
+   deliberately user-agnostic. Per-user enforcement at the DB layer (native SQL Server RLS +
+   SESSION_CONTEXT) was considered and deliberately NOT pursued — see the design note below
+   (Q23 withdrawn).
 
 ### Marcelo's follow-on review (2026-07-14, second pass)
 
 - **Write-path RLS gap:** handed to the bug-fix agent (MJ-side). Interim posture: testing proceeds on
   READ visibility; A2 assumes write-RLS works by the time it lands (the app-side entity-server checks
   stay in the design as belt-and-suspenders + the home of the batch rulings).
-- **Blast radius** (surface 4, the service credential): elevated to a Robert question — **Q23** —
-  "a stolen credential with the JE-creation role must not reach every accounting record" as a
-  security-principles goal; options (accept app-layer / native DB RLS + SESSION_CONTEXT / intermediate
-  hardening) enumerated there.
+- **Blast radius** (surface 4, the service credential): briefly elevated to a Robert question (Q23),
+  then **WITHDRAWN (Marcelo, 2026-07-14)** — see the design note below.
 - **R3 corollary:** the membership-grant source must itself be securable — **Q24** for Robert
   (explicit admin-managed grants, never derived from informational person→company data; HR-driven
   membership, if ever wanted, syncs INTO the grant table under governance).
+
+### Design note — native DB-level RLS deliberately NOT pursued (Q23 withdrawn, Marcelo 2026-07-14)
+
+The blast-radius question was withdrawn from Robert's queue: omitting a native SQL Server RLS /
+SESSION_CONTEXT layer is accepted as the design decision (consistent with MJ's own architecture,
+which places per-user enforcement in the API layer). This section stands as the durable record:
+
+- **Stolen USER credential** → bounded by the Q22/Q24 grant model (roles + RLS + app-side write
+  checks); Admin stays the crown-jewel role (small + audited).
+- **Stolen SERVICE credential** → full app-data reach is architectural (one shared login serves all
+  users; the DB cannot distinguish them). The operative mitigations are operational, already adopted:
+  DB reachable only from API hosts; the runtime login holds CRUD/execute but **no DDL** (the
+  financial-invariant triggers 50001–50025 cannot be disabled by a credential thief); rotation +
+  out-of-pattern detection.
+- **Native DB RLS + SESSION_CONTEXT** would harden only against application-layer bugs — never
+  against credential theft (the connection holder sets its own context). If defense-in-depth demand
+  ever changes (e.g. a compliance requirement), this is the section to reopen.
 
 ## R2 (Marcelo 2026-07-14): deferred to the UI-updates wave — role-management screens fold into it.
 
