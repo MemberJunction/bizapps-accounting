@@ -124,6 +124,19 @@ Inventory of every person↔company-ish link that exists (verified in schema/sou
    depth against a stolen service credential), that is native SQL Server Row-Level Security +
    SESSION_CONTEXT user plumbing — real work, flagged as an option for Robert's review, not assumed.
 
+### Marcelo's follow-on review (2026-07-14, second pass)
+
+- **Write-path RLS gap:** handed to the bug-fix agent (MJ-side). Interim posture: testing proceeds on
+  READ visibility; A2 assumes write-RLS works by the time it lands (the app-side entity-server checks
+  stay in the design as belt-and-suspenders + the home of the batch rulings).
+- **Blast radius** (surface 4, the service credential): elevated to a Robert question — **Q23** —
+  "a stolen credential with the JE-creation role must not reach every accounting record" as a
+  security-principles goal; options (accept app-layer / native DB RLS + SESSION_CONTEXT / intermediate
+  hardening) enumerated there.
+- **R3 corollary:** the membership-grant source must itself be securable — **Q24** for Robert
+  (explicit admin-managed grants, never derived from informational person→company data; HR-driven
+  membership, if ever wanted, syncs INTO the grant table under governance).
+
 ## R2 (Marcelo 2026-07-14): deferred to the UI-updates wave — role-management screens fold into it.
 
 ## Recommended co-design agenda (30 min)
