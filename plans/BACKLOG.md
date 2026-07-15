@@ -22,6 +22,13 @@ Convention: `~/MJDev/shared-plans/repo-planning-system.md` §5.1. (The instance-
       (2026-07-10 Jeremy meeting). `[decision needed: Jeremy]` (Execution slot reserved: feature action
       plan B1.5 — seeds + upstream tagging once decided.)
 
+- [ ] **Consolidate hand-authored docs/ into design-docs/** — move `docs/ARCHITECTURE.md`,
+      `docs/bizapps-accounting-erd.md`, `docs/lifecycle-hooks.md` → `design-docs/` and update the
+      CLAUDE.md path references in the same change, completing the 2026-07-15 ruling (`design-docs/`
+      = hand-authored home; `docs/` reserved for generated output per the MJ template). Do at the
+      Task 65b window (feature agent's WIP committed first — these files are DoD-coupled to schema
+      work). (2026-07-15 UI-planning session, Marcelo + orchestrator.)
+
 ## Decisions needed
 
 - [x] ~~**Periods reconciliation**~~ — **RESOLVED-for-now 2026-07-13 (Marcelo, Amith-doc confirmation):

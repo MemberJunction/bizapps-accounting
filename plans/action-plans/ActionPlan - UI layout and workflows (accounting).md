@@ -16,11 +16,17 @@ detail · time-window defaults on every list · keyset pagination + LiveDashboar
 Page System plan · laptop-width tolerance · design tokens only. Accountants live in tables (Marcelo's own
 read, GUI review): lean INTO the grid, don't invent dropdown-card hybrids.
 
-**Shared components (cross-app — 2026-07-15 gap analysis, Marcelo-approved):** this plan consumes a set
-also consumed by the orders UI plan §0 — approval inbox (tasks-backed) · list-screen scaffold (grid +
-time window + keyset + slide-in) · schedule/waterfall viewer · GL-resolution preview widget · cross-app
-deep-link service · status stepper/lifecycle chips · money strip · role-gating seam. Build each ONCE.
-**Open ruling: physical home for shared UI code — bizapps-common's Angular package? (Marcelo.)**
+**Shared components (placements ruled 2026-07-15):** accounting OWNS the domain trio — schedule/
+waterfall viewer · GL-resolution preview · Customer A/R base view (read-only core; orders wraps it
+with its verbs) — orders imports them (dependency direction: common → accounting → orders). The
+framework-clean set — approval inbox (target: bizapps-tasks) · list-screen scaffold (design ON the
+Live Page System plan's LiveDashboardBase, not fresh; target: common → MJ base) · role-gating
+directive (target: MJ base) · cross-app deep-link helper (target: MJ base) — is **PARKED in this
+app** for iteration speed (no extra dev-linked apps/feature branches during the wave) and tracked
+in `plans/TRANSFER-BACKLOG.md` (target + trigger per row). **Parking discipline: framework-clean
+components live in a bounded folder and import NO accounting entities** — extraction must stay a
+file move, never a refactor. Status stepper + money strip are orders-local (single consumer today;
+no premature abstraction). Build each shared thing ONCE.
 
 ## 1. Batch approvals page (Marcelo: "I'm not a lover" — rebuild to house style)
 
