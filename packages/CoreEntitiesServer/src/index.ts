@@ -36,6 +36,9 @@ export type { JournalEntryValidationResult } from './JournalEntryValidation.js';
 // line items, AM-4), resolve ERP accounts, lock + dispatch (CFO-approval gate + ERP-post seam).
 export {
   buildBatch,
+  buildBatchFromView,
+  classifyViewEntries,
+  BatchFromViewError,
   approveBatch,
   sendBatch,
   cancelBatch,
@@ -47,6 +50,8 @@ export {
 } from './BatchingEngine.js';
 export type {
   BatchTargetSystem,
+  BuildBatchOptions,
+  BuildBatchFromViewOptions,
   DimRef,
   NettableLine,
   NetGroup,

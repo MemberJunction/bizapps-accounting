@@ -148,10 +148,25 @@ export async function buildBatch(
   batchedByUserId: string,
   contextUser: UserInfo,
   gate: BatchApprovalGate = AutoApproveGate,
+  options: BuildBatchOptions = {},
 ): Promise<BuildBatchResult | null> {
-  const jeIds = await loadPendingJEIds(contextUser);
-  if (jeIds.length === 0) return null;
+  const jeIds = await loadPendingJEIds(contextUser, options);
+  return buildBatchFromIds(jeIds, targetSystem, batchedByUserId, contextUser, gate);
+}
 
+/**
+ * Build a batch from a SPECIFIC (already-vetted) set of Pending JE IDs — the shared core of the
+ * oldest-forward buildBatch (B1.1) and the view-driven buildBatchFromView (B1.2). Returns null when
+ * the set is empty or nets to zero.
+ */
+async function buildBatchFromIds(
+  jeIds: string[],
+  targetSystem: BatchTargetSystem,
+  batchedByUserId: string,
+  contextUser: UserInfo,
+  gate: BatchApprovalGate,
+): Promise<BuildBatchResult | null> {
+  if (jeIds.length === 0) return null;
   const groups = netLines(await loadNettableLines(jeIds, contextUser));
   if (groups.length === 0) return null; // everything netted to zero
 
@@ -163,6 +178,96 @@ export async function buildBatch(
 
   const companyCount = new Set(groups.map(g => g.companyId)).size;
   return { batchId: batch.ID, summaryLineCount: groups.length, totalDebits, totalCredits, jeCount: jeIds.length, companyCount };
+}
+
+/** Raised by buildBatchFromView when the view contains entries that cannot be batched (loud reject). */
+export class BatchFromViewError extends Error {
+  public constructor(message: string) {
+    super(message);
+    this.name = 'BatchFromViewError';
+  }
+}
+
+export interface BuildBatchFromViewOptions extends BuildBatchOptions {
+  /** Default TRUE — a GLPosted entry in the view is excluded (overlap-safe). When false, it's a loud reject. */
+  excludePosted?: boolean;
+  /** Default TRUE — an already-Batched/locked entry in the view is excluded. When false, it's a loud reject. */
+  excludeLocked?: boolean;
+}
+
+/**
+ * Batch-from-VIEW (B1.2, MOD-8 · Marcelo Q-d, SNAPSHOT model): resolve an MJ User View of Journal
+ * Entries to a concrete JE-ID snapshot, then classify each. Pending entries are batchable; GLPosted
+ * ("posted") and Batched ("locked") entries are EXCLUDED by default (the default-on toggles let an
+ * accountant deliberately allow time-frame overlap without re-grabbing settled entries). Toggling a
+ * filter OFF turns a matching entry into a LOUD REJECT (BatchFromViewError names the offenders) —
+ * never a silent drop; excluded entries are logged. The snapshot is fixed at build time (re-resolve
+ * is a separate, permissioned action, never automatic).
+ */
+export async function buildBatchFromView(
+  viewId: string,
+  targetSystem: BatchTargetSystem,
+  batchedByUserId: string,
+  contextUser: UserInfo,
+  gate: BatchApprovalGate = AutoApproveGate,
+  options: BuildBatchFromViewOptions = {},
+): Promise<BuildBatchResult | null> {
+  const rows = await resolveViewJEStatuses(viewId, contextUser);
+  const { pending, rejected, excluded } = classifyViewEntries(rows, options);
+  if (rejected.length > 0) {
+    throw new BatchFromViewError(
+      `Batch-from-view: ${rejected.length} entr${rejected.length === 1 ? 'y is' : 'ies are'} not batchable: ${rejected.join(', ')}. ` +
+        `Adjust the view or enable the exclude-posted/exclude-locked filters to allow overlap.`,
+    );
+  }
+  if (excluded.length > 0) {
+    console.warn(`buildBatchFromView: excluded ${excluded.length} non-Pending entr${excluded.length === 1 ? 'y' : 'ies'} (overlap-safe): ${excluded.join(', ')}`);
+  }
+  const inWindow = options.cutoff || options.startDate ? await filterIdsByWindow(pending, options, contextUser) : pending;
+  return buildBatchFromIds(inWindow, targetSystem, batchedByUserId, contextUser, gate);
+}
+
+/**
+ * PURE classification of a view's JE rows (B1.2 · Marcelo Q-d): Pending → batchable; GLPosted/Batched
+ * → excluded when the (default-on) filter allows overlap, else a loud reject; any other status → always
+ * reject. Deterministic + no I/O so it is unit-testable without a live view.
+ */
+export function classifyViewEntries(
+  rows: Array<{ ID: string; Status: string }>,
+  options: { excludePosted?: boolean; excludeLocked?: boolean } = {},
+): { pending: string[]; rejected: string[]; excluded: string[] } {
+  const excludePosted = options.excludePosted ?? true;
+  const excludeLocked = options.excludeLocked ?? true;
+  const pending: string[] = [];
+  const rejected: string[] = [];
+  const excluded: string[] = [];
+  for (const r of rows) {
+    if (r.Status === 'Pending') pending.push(r.ID);
+    else if (r.Status === 'GLPosted') (excludePosted ? excluded : rejected).push(`${r.ID} (posted)`);
+    else if (r.Status === 'Batched') (excludeLocked ? excluded : rejected).push(`${r.ID} (locked)`);
+    else rejected.push(`${r.ID} (${r.Status})`);
+  }
+  return { pending, rejected, excluded };
+}
+
+/** Resolve a saved User View to its JE rows (ID + Status snapshot). */
+async function resolveViewJEStatuses(viewId: string, contextUser: UserInfo): Promise<Array<{ ID: string; Status: string }>> {
+  const rv = new RunView();
+  const res = await rv.RunView<{ ID: string; Status: string }>({ ViewID: viewId, Fields: ['ID', 'Status'], ResultType: 'simple', BypassCache: true }, contextUser);
+  if (!res.Success) throw new BatchFromViewError(`Batch-from-view: could not resolve view ${viewId}: ${res.ErrorMessage ?? 'unknown'}`);
+  return res.Results ?? [];
+}
+
+/** Narrow a snapshot of Pending IDs to the date window (shares the B1.1 cutoff semantics). */
+async function filterIdsByWindow(jeIds: string[], options: BuildBatchOptions, contextUser: UserInfo): Promise<string[]> {
+  if (jeIds.length === 0) return jeIds;
+  const inList = jeIds.map(id => `'${id}'`).join(',');
+  const rv = new RunView();
+  const res = await rv.RunView<{ ID: string }>(
+    { EntityName: JE_ENTITY, ExtraFilter: `ID IN (${inList}) AND ${pendingCandidateFilter(options)}`, Fields: ['ID'], ResultType: 'simple', BypassCache: true },
+    contextUser,
+  );
+  return (res.Results ?? []).map(r => r.ID);
 }
 
 /**
@@ -180,14 +285,60 @@ async function raiseApprovalTaskOrReverse(batchId: string, gate: BatchApprovalGa
   }
 }
 
-async function loadPendingJEIds(contextUser: UserInfo): Promise<string[]> {
+/**
+ * Options for the OLDEST-FORWARD cutoff batching (B1.1, MOD-8). The candidate pool is always
+ * Status='Pending' (which inherently excludes GLPosted + already-Batched/locked entries), gathered
+ * oldest-first; `cutoff` restricts to entries on/before a date so an operator can batch "everything
+ * up to the end of the month". Overlapping windows are safe because a batched entry leaves the
+ * Pending pool. See B1.2 (buildBatchFromView) for the view-driven variant.
+ */
+export interface BuildBatchOptions {
+  /** Upper bound. A DATE-only cutoff (midnight UTC) is INCLUSIVE of that whole day
+   *  (EffectiveDate < cutoff + 1 day); a datetime cutoff is exact (EffectiveDate <= cutoff). */
+  cutoff?: Date | null;
+  /** Optional lower bound (EffectiveDate >= startDate); omit for the standard oldest-forward flow. */
+  startDate?: Date | null;
+}
+
+/** Candidate = every unbatched Pending JE within the date window, oldest-first (B1.1). */
+async function loadPendingJEIds(contextUser: UserInfo, options: BuildBatchOptions = {}): Promise<string[]> {
   const rv = new RunView();
   const res = await rv.RunView<{ ID: string }>(
-    { EntityName: JE_ENTITY, ExtraFilter: `Status='Pending'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true },
+    {
+      EntityName: JE_ENTITY,
+      ExtraFilter: pendingCandidateFilter(options),
+      OrderBy: 'EffectiveDate ASC, EntryNumber ASC',
+      Fields: ['ID'],
+      ResultType: 'simple',
+      BypassCache: true,
+    },
     contextUser,
   );
   return (res.Results ?? []).map(r => r.ID);
 }
+
+/** Build the `Status='Pending'` + date-window ExtraFilter (inclusive date-only cutoff per MOD-8). */
+export function pendingCandidateFilter(options: BuildBatchOptions): string {
+  const clauses = [`Status='Pending'`];
+  if (options.startDate) clauses.push(`EffectiveDate >= '${isoDate(options.startDate)}'`);
+  if (options.cutoff) {
+    if (isMidnightUTC(options.cutoff)) {
+      clauses.push(`EffectiveDate < '${isoDate(addDaysUTC(options.cutoff, 1))}'`); // inclusive whole day
+    } else {
+      clauses.push(`EffectiveDate <= '${options.cutoff.toISOString()}'`); // exact datetime
+    }
+  }
+  return clauses.join(' AND ');
+}
+
+const isMidnightUTC = (d: Date): boolean =>
+  d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0 && d.getUTCMilliseconds() === 0;
+const isoDate = (d: Date): string => new Date(d).toISOString().slice(0, 10);
+const addDaysUTC = (d: Date, n: number): Date => {
+  const r = new Date(d);
+  r.setUTCDate(r.getUTCDate() + n);
+  return r;
+};
 
 async function loadNettableLines(jeIds: string[], contextUser: UserInfo): Promise<NettableLine[]> {
   const rv = new RunView();
