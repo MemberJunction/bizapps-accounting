@@ -12,6 +12,20 @@ from `plans/action-plans/` (`ActionPlan - UI …`), keyed to `plans/FEATURE-LIST
 | `shell/` | The ONE standing reference mockup: the app frame every new mockup clones (into `mockups/`). Kit-derived; to be grounded against live Explorer screenshots at the first mockup session (banner in the file). |
 | `mockups/` | Ephemeral working area for mockup cycles. **Empty (or absent) between cycles** — that is the health check. A selected mockup is superseded by its action plan and deleted; frame improvements fold into `shell/` first. |
 
+## Component inventory (sharing / MJ-base tracking)
+
+Every deliberate UI component this app adds (beyond generated forms) gets a row, so sharing and
+MJ-base candidacy are decided on record, not memory — updated at each ui-dev-loop close.
+Homes: this app · `bizapps-common` (genuinely cross-app UI) · `bizapps-tasks` (approval substrate)
+· **MJ base** = flag for Matt (components any MJ app would want — surface flagged rows to him).
+
+| Component | Home | Status | Consumers | MJ-base candidate? |
+|---|---|---|---|---|
+| Schedule/waterfall viewer (dated lines, materialized-vs-due, supersede chain) | this app (proposed 2026-07-15) | Planned | ACC §7 browser · ORD subscriptions + line affordance | no (accounting-domain) |
+| GL-resolution preview ("Revenue → 4000 via category Software") | this app (proposed) | Planned | ACC settings · ORD product panel + confirm-failure UX | no (accounting-domain) |
+| Customer A/R base view (identity + balances + aging; read-only — orders wraps it with its verbs) | this app (proposed) | Planned | ORD §5 · ACC links/embeds | no (accounting-domain) |
+| Approval inbox (tasks-backed approve/reject + context slide-in) | bizapps-tasks or common (pending ruling) | Planned | ACC batch + manual-JE approvals · ORD sales rules | not yet (tasks-substrate-bound) |
+
 ## Standing design record
 
 Screen inventory, navigation map, and app-specific chrome decisions get recorded in this file as
