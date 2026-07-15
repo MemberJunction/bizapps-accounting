@@ -29,6 +29,7 @@ import {
   type JEValidationError,
   type JournalEntryDraft,
   type NormalizedLine,
+  type QueueJournalEntriesResult,
 } from '@mj-biz-apps/accounting-engine-base';
 import type {
   mjBizAppsAccountingJournalEntryEntity,
@@ -106,50 +107,105 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
     provider: IMetadataProvider,
   ): Promise<CreateJournalEntriesResult> {
     try {
-      const drafts = input?.Drafts ?? [];
-      if (drafts.length === 0) {
-        return { Success: false, Errors: [{ Code: 'MALFORMED_DRAFT', Message: 'Drafts must contain at least one journal-entry draft.' }] };
-      }
-      await this.Config(false, contextUser, provider);
+      const validated = await this.validateDraftSet(input?.Drafts ?? [], contextUser, provider);
+      if ('errors' in validated) return { Success: false, Errors: validated.errors };
 
-      // Validate ALL drafts up front (one bounded staleness refresh across the whole set).
-      let outcomes = drafts.map(d => runDraftPipeline(d, this.Base.CreatePipelineLookups()));
-      const stalenessCodes = new Set(['ACCOUNT_UNKNOWN', 'ACCOUNT_INACTIVE', 'DIMENSION_UNKNOWN', 'DIMENSION_VALUE_UNKNOWN']);
-      if (outcomes.some(o => o.errors.some(e => stalenessCodes.has(e.Code)))) {
-        await this.Config(true, contextUser, provider);
-        outcomes = drafts.map(d => runDraftPipeline(d, this.Base.CreatePipelineLookups()));
-      }
-      const setErrors: JEValidationError[] = outcomes.flatMap((o, i) => o.errors.map(e => ({ ...e, DraftIndex: i })));
-      if (setErrors.length > 0) {
-        return { Success: false, Errors: setErrors };
-      }
-
-      // Queue every draft's rows into ONE TransactionGroup; submit once.
+      // Queue every draft's rows into ONE TransactionGroup we own; submit once.
       const tg = await provider.CreateTransactionGroup();
-      const queued: Array<{ je: mjBizAppsAccountingJournalEntryEntity; lineCount: number }> = [];
-      for (let i = 0; i < drafts.length; i++) {
-        const q = await this.queueDraftRows(drafts[i], outcomes[i].normalized, outcomes[i].companyID, tg, contextUser, provider);
-        if ('failure' in q) {
-          // Nothing has committed — the TG is never submitted on a queue failure.
-          return { Success: false, Errors: [{ ...q.failure, DraftIndex: i }] };
-        }
-        queued.push(q);
-      }
+      const set = await this.queueDraftSet(validated.drafts, validated.outcomes, tg, contextUser, provider);
+      if ('failure' in set) return { Success: false, Errors: [set.failure] };
+
       const committed = await tg.Submit();
       if (!committed) {
-        const detail = queued[0]?.je.LatestResult?.CompleteMessage ?? 'transaction group rolled back';
+        const detail = set.queued[0]?.je.LatestResult?.CompleteMessage ?? 'transaction group rolled back';
         LogError(`AccountingEngine.CreateJournalEntries: atomic set write rolled back: ${detail}`);
         return { Success: false, Errors: [{ Code: 'INTERNAL_ERROR', Message: `atomic set write rolled back: ${detail}` }] };
       }
       return {
         Success: true,
-        Results: queued.map(q => ({ Success: true, JournalEntryID: q.je.ID, EntryNumber: q.je.EntryNumber, LineCount: q.lineCount })),
+        Results: set.queued.map(q => ({ Success: true, JournalEntryID: q.je.ID, EntryNumber: q.je.EntryNumber, LineCount: q.lineCount })),
       };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       LogError(`AccountingEngine.CreateJournalEntries failed: ${msg}`);
       return { Success: false, Errors: [{ Code: 'INTERNAL_ERROR', Message: msg }] };
     }
+  }
+
+  /**
+   * The QUEUE-ONTO-CALLER'S-TG seam (orders F1.2b — Confirm unit of work): validate the whole draft
+   * set exactly as `CreateJournalEntries`, then queue every header + line + dimension onto the
+   * CALLER'S TransactionGroup — WITHOUT submitting. The caller (orders `Orders.ConfirmOrder`) also
+   * queues the order-row save onto the same `tg` and submits ONCE, so order + JE set commit
+   * atomically or not at all. Never throws for logical failures — returns the typed result.
+   */
+  public async QueueJournalEntries(
+    input: CreateJournalEntriesInput,
+    tg: Awaited<ReturnType<IMetadataProvider['CreateTransactionGroup']>>,
+    contextUser: UserInfo,
+    provider: IMetadataProvider,
+  ): Promise<QueueJournalEntriesResult> {
+    try {
+      const validated = await this.validateDraftSet(input?.Drafts ?? [], contextUser, provider);
+      if ('errors' in validated) return { Success: false, Errors: validated.errors };
+
+      const set = await this.queueDraftSet(validated.drafts, validated.outcomes, tg, contextUser, provider);
+      if ('failure' in set) return { Success: false, Errors: [set.failure] };
+
+      return {
+        Success: true,
+        Queued: set.queued.map(q => ({ JournalEntryID: q.je.ID, EntryNumber: q.je.EntryNumber, LineCount: q.lineCount })),
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      LogError(`AccountingEngine.QueueJournalEntries failed: ${msg}`);
+      return { Success: false, Errors: [{ Code: 'INTERNAL_ERROR', Message: msg }] };
+    }
+  }
+
+  /**
+   * Validate a whole draft SET against the caches (shared by CreateJournalEntries + QueueJournalEntries).
+   * Runs the pure pipeline on every draft with ONE bounded staleness refresh; returns the per-draft
+   * outcomes, or the draft-indexed error set when any draft is invalid. Nothing is written here.
+   */
+  private async validateDraftSet(
+    drafts: JournalEntryDraft[],
+    contextUser: UserInfo,
+    provider: IMetadataProvider,
+  ): Promise<{ drafts: JournalEntryDraft[]; outcomes: ReturnType<typeof runDraftPipeline>[] } | { errors: JEValidationError[] }> {
+    if (drafts.length === 0) {
+      return { errors: [{ Code: 'MALFORMED_DRAFT', Message: 'Drafts must contain at least one journal-entry draft.' }] };
+    }
+    await this.Config(false, contextUser, provider);
+    let outcomes = drafts.map(d => runDraftPipeline(d, this.Base.CreatePipelineLookups()));
+    const stalenessCodes = new Set(['ACCOUNT_UNKNOWN', 'ACCOUNT_INACTIVE', 'DIMENSION_UNKNOWN', 'DIMENSION_VALUE_UNKNOWN']);
+    if (outcomes.some(o => o.errors.some(e => stalenessCodes.has(e.Code)))) {
+      await this.Config(true, contextUser, provider);
+      outcomes = drafts.map(d => runDraftPipeline(d, this.Base.CreatePipelineLookups()));
+    }
+    const setErrors: JEValidationError[] = outcomes.flatMap((o, i) => o.errors.map(e => ({ ...e, DraftIndex: i })));
+    return setErrors.length > 0 ? { errors: setErrors } : { drafts, outcomes };
+  }
+
+  /**
+   * Queue every validated draft's rows onto `tg` (shared by CreateJournalEntries + QueueJournalEntries).
+   * The caller owns Submit. On a queue failure nothing has committed (the TG is never submitted) — the
+   * failure carries its DraftIndex.
+   */
+  private async queueDraftSet(
+    drafts: JournalEntryDraft[],
+    outcomes: ReturnType<typeof runDraftPipeline>[],
+    tg: Awaited<ReturnType<IMetadataProvider['CreateTransactionGroup']>>,
+    contextUser: UserInfo,
+    provider: IMetadataProvider,
+  ): Promise<{ queued: Array<{ je: mjBizAppsAccountingJournalEntryEntity; lineCount: number }> } | { failure: JEValidationError }> {
+    const queued: Array<{ je: mjBizAppsAccountingJournalEntryEntity; lineCount: number }> = [];
+    for (let i = 0; i < drafts.length; i++) {
+      const q = await this.queueDraftRows(drafts[i], outcomes[i].normalized, outcomes[i].companyID, tg, contextUser, provider);
+      if ('failure' in q) return { failure: { ...q.failure, DraftIndex: i } };
+      queued.push(q);
+    }
+    return { queued };
   }
 
   // ─── stage 6 ───────────────────────────────────────────────────────────────

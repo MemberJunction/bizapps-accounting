@@ -100,3 +100,27 @@ export interface CreateJournalEntriesResult {
 }
 
 export type CreateJournalEntriesOutput = CreateJournalEntriesResult;
+
+// ─── The QUEUE-ONTO-CALLER'S-TG seam (orders F1.2b — Confirm UNIT OF WORK) ─────
+// `AccountingEngine.QueueJournalEntries(input, tg, ...)` validates the whole draft set and queues
+// every header + line + dimension onto a TransactionGroup the CALLER owns — WITHOUT submitting.
+// This lets a caller (orders `Orders.ConfirmOrder`) compose the order-row save + the JE set into
+// ONE unit of work: one Submit commits order + all JEs, or nothing. Same validation as the set op;
+// the difference is purely who owns Submit. Server-only (the TG is a live server object) — the
+// method signature lives on `AccountingEngine`; only this plain result shape is contract-level.
+
+/** One JE queued (not yet committed) by `QueueJournalEntries`. Its ID is minted at NewRecord, so
+ *  it is available to the caller pre-Submit for lineage; EntryNumber is set by the W2 hook. */
+export interface QueuedJournalEntry {
+  JournalEntryID: string;
+  EntryNumber?: string;
+  LineCount: number;
+}
+
+export interface QueueJournalEntriesResult {
+  Success: boolean;
+  /** Queued entries, same order as `Drafts` — present only when Success (validation passed + queued). */
+  Queued?: QueuedJournalEntry[];
+  /** Validation/queue errors; draft-scoped entries carry `DraftIndex`. */
+  Errors?: JEValidationError[];
+}
