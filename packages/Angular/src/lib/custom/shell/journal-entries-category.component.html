@@ -14,6 +14,9 @@
 
     <mj-left-nav-content>
       @switch (ActivePageId) {
+        @case ('dashboard') {
+          <mj-je-dashboard-page></mj-je-dashboard-page>
+        }
         @case ('all-entries') {
           <mj-all-journal-entries-page></mj-all-journal-entries-page>
         }

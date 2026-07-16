@@ -1,0 +1,81 @@
+<mj-page-header-interior Title="Dispatch status" Subtitle="Did each batch reach the ERP — and if not, why">
+  <div meta>
+    <mj-stat-badge [Count]="Rows.length" Label="batches" Variant="default"></mj-stat-badge>
+    @if (FailedCount > 0) {
+      <mj-stat-badge [Count]="FailedCount" Label="failed" Icon="fa-solid fa-triangle-exclamation" Variant="error"></mj-stat-badge>
+    }
+  </div>
+  <div actions>
+    <mj-refresh-button [Loading]="IsLoading" (Clicked)="Refresh()"></mj-refresh-button>
+  </div>
+  <div toolbar>
+    <label class="ds-field">
+      <span class="ds-field__label">Status</span>
+      <select class="mj-input" [(ngModel)]="StatusFilter" aria-label="Dispatch status">
+        <option value="All">All</option>
+        <option value="Failed">Failed</option>
+        <option value="Sent">Sent</option>
+        <option value="Posted">Posted</option>
+      </select>
+    </label>
+  </div>
+</mj-page-header-interior>
+
+@if (ActionMessage) {
+  <mj-alert [Variant]="ActionIsError ? 'error' : 'success'" [Message]="ActionMessage"></mj-alert>
+}
+@if (LoadError) {
+  <mj-alert Variant="error" [Message]="LoadError"></mj-alert>
+}
+
+<div class="ds-wrap">
+  @if (IsLoading) {
+    <mj-loading text="Loading dispatch status…"></mj-loading>
+  } @else {
+    <table class="ds-grid">
+      <thead>
+        <tr>
+          <th>Batch №</th>
+          <th>Dispatched</th>
+          <th>Target</th>
+          <th class="ds-num">Summary lines</th>
+          <th class="ds-num">Entries</th>
+          <th>Status</th>
+          <th>ERP reference</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (r of Filtered; track r.BatchID) {
+          <tr>
+            <td class="ds-mono">{{ r.BatchNumber }}</td>
+            <td>{{ r.SentAt ? (r.SentAt | date: 'yyyy-MM-dd HH:mm') : '—' }}</td>
+            <td>{{ r.TargetSystem }}</td>
+            <td class="ds-num">{{ r.SummaryLineCount }}</td>
+            <td class="ds-num">{{ r.TotalEntries }}</td>
+            <td><mj-stat-badge [Label]="r.Status" [Variant]="StatusVariant(r.Status)"></mj-stat-badge></td>
+            <td class="ds-mono">{{ r.ExternalBatchRef || '—' }}</td>
+            <td>
+              <button
+                type="button"
+                mjButton
+                Variant="outline"
+                Size="sm"
+                [disabled]="!CanRetry(r)"
+                [title]="RetryBlockedReason(r) ?? 'Re-attempt the ERP dispatch'"
+                (click)="Retry(r)">
+                @if (RetryingBatchID === r.BatchID) {
+                  <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Retrying…
+                } @else {
+                  <i class="fa-solid fa-rotate-right" aria-hidden="true"></i> Retry dispatch
+                }
+              </button>
+            </td>
+          </tr>
+        } @empty {
+          <tr><td colspan="8" class="ds-empty">No batches match this filter.</td></tr>
+        }
+      </tbody>
+    </table>
+  }
+</div>

@@ -12,6 +12,9 @@
 
     <mj-left-nav-content>
       @switch (ActivePageId) {
+        @case ('dashboard') {
+          <mj-batches-dashboard-page></mj-batches-dashboard-page>
+        }
         @case ('all-batches') {
           <mj-batch-status-dashboard></mj-batch-status-dashboard>
         }
@@ -20,6 +23,9 @@
         }
         @case ('workspace') {
           <mj-batch-workspace-page></mj-batch-workspace-page>
+        }
+        @case ('dispatch') {
+          <mj-dispatch-status-page></mj-dispatch-status-page>
         }
         @default {
           <mj-shell-page-pending [PageName]="PendingPageName(ActivePageId)"></mj-shell-page-pending>

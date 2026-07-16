@@ -38,6 +38,9 @@ import { JournalEntriesCategoryComponent } from './journal-entries-category.comp
 import { JournalEntriesCategoryResourceComponent } from './journal-entries-category-resource.component';
 import { AllJournalEntriesPageComponent } from './pages/all-journal-entries.page';
 import { BatchWorkspacePageComponent } from './pages/batch-workspace.page';
+import { DispatchStatusPageComponent } from './pages/dispatch-status.page';
+import { JeDashboardPageComponent } from './pages/je-dashboard.page';
+import { BatchesDashboardPageComponent } from './pages/batches-dashboard.page';
 import { JournalEntryDetailPanelComponent } from './pages/journal-entry-detail-panel.component';
 import { ShellPagePendingComponent } from './pages/shell-page-pending.component';
 
@@ -62,6 +65,9 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
     JournalEntriesCategoryResourceComponent,
     AllJournalEntriesPageComponent,
     BatchWorkspacePageComponent,
+    DispatchStatusPageComponent,
+    JeDashboardPageComponent,
+    BatchesDashboardPageComponent,
     JournalEntryDetailPanelComponent,
     ShellPagePendingComponent,
   ],
@@ -102,6 +108,9 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
     JournalEntriesCategoryResourceComponent,
     AllJournalEntriesPageComponent,
     BatchWorkspacePageComponent,
+    DispatchStatusPageComponent,
+    JeDashboardPageComponent,
+    BatchesDashboardPageComponent,
     JournalEntryDetailPanelComponent,
   ],
 })
