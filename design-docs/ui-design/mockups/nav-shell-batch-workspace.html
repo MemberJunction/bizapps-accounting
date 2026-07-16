@@ -1,0 +1,198 @@
+<!doctype html>
+<!-- ============================================================================
+  MOCKUP (ephemeral) · cycle 2026-07-15 · Accounting — BATCH WORKSPACE (round 2)
+  Marcelo round-1 feedback, encoded:
+  · Batches are too big for modals → a DEDICATED management page with full depth.
+  · SESSION-SCOPED TABS at the top: each in-progress batch keeps its state until
+    the tab is closed — v1 keeps drafts in the user session, NOT the database.
+  · Build criteria (the filters) are ALWAYS VISIBLE — approvers must see exactly
+    what a batch was built from.
+  · Full sortable/scrollable JE table with include/exclude checkboxes; excluded
+    rows dim; out-of-order (MOD-8) skips get a visible warning chip.
+  · Creation entry points (dashboard New-batch modal) pop OVER to this page via
+    "Open in batch workspace" — modal is the approachable baseline, this page is
+    the full-depth home.
+  INTERACTIVE: hamburger collapses the rail; checkboxes toggle row dimming.
+============================================================================ -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup — Accounting · Batch workspace</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link rel="stylesheet" href="../style-kit/mj-mock.css">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:var(--mj-bg-page);color:var(--mj-text-primary)}
+.x-app{display:flex;flex-direction:column;height:100vh}
+.x-topnav{display:flex;align-items:center;gap:6px;height:52px;padding:0 16px;background:var(--mj-bg-surface);border-bottom:1px solid var(--mj-border-default);flex:none}
+.x-brand{display:flex;align-items:center;gap:9px;font-weight:700;margin-right:22px;white-space:nowrap;font-size:14.5px}
+.x-brand i{color:var(--mj-brand-primary);font-size:17px}
+.x-brand .app{color:var(--mj-text-muted);font-weight:500}
+.x-tabs{display:flex;gap:2px;height:100%}
+.x-tab{display:flex;align-items:center;gap:7px;padding:0 15px;color:var(--mj-text-secondary);text-decoration:none;font-weight:500;font-size:13.5px;border-bottom:3px solid transparent;border-top:3px solid transparent}
+.x-tab:hover{color:var(--mj-text-primary);background:var(--mj-bg-surface-hover)}
+.x-tab.active{color:var(--mj-brand-primary);border-bottom-color:var(--mj-brand-primary);font-weight:600}
+.x-topnav .right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.x-iconbtn{border:none;background:none;color:var(--mj-text-secondary);font-size:15px;cursor:pointer;padding:7px;border-radius:7px}
+.x-iconbtn:hover{background:var(--mj-bg-surface-hover);color:var(--mj-text-primary)}
+.x-avatar{width:30px;height:30px;border-radius:50%;background:var(--mj-brand-primary);color:var(--mj-text-inverse,#fff);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600}
+.x-body{display:flex;flex:1;min-height:0}
+.x-rail{width:230px;flex:none;background:var(--mj-bg-surface);border-right:1px solid var(--mj-border-default);display:flex;flex-direction:column;padding:8px;gap:2px;transition:width .18s ease;overflow-x:hidden;overflow-y:auto}
+.x-rail.collapsed{width:56px}
+.x-rail-group{margin:14px 0 4px;font-size:10.5px;font-weight:700;letter-spacing:.08em;color:var(--mj-text-muted);padding:0 10px;white-space:nowrap}
+.x-rail.collapsed .x-rail-group{visibility:hidden;height:8px;margin:8px 0 0}
+.x-rail a{display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:8px;color:var(--mj-text-secondary);text-decoration:none;font-size:13.5px;white-space:nowrap}
+.x-rail a i{width:18px;text-align:center;font-size:14px;flex:none}
+.x-rail a:hover{background:var(--mj-bg-surface-hover);color:var(--mj-text-primary)}
+.x-rail a.active{background:color-mix(in srgb,var(--mj-brand-primary) 10%,transparent);color:var(--mj-brand-primary);font-weight:600}
+.x-rail.collapsed a .lbl,.x-rail.collapsed .x-badge{display:none}
+.x-badge{margin-left:auto;background:var(--mj-status-error);color:#fff;border-radius:999px;font-size:10.5px;padding:1px 7px;font-weight:700}
+.x-scopechip{display:flex;align-items:center;gap:9px;margin:4px 2px 0;padding:8px 10px;border:1px solid var(--mj-border-default);border-radius:8px;background:var(--mj-bg-surface-card);font-size:12.5px;cursor:pointer;white-space:nowrap}
+.x-scopechip i{color:var(--mj-brand-primary)}
+.x-rail.collapsed .x-scopechip .lbl{display:none}
+.x-content{flex:1;min-width:0;overflow:auto;padding:16px 24px 20px;display:flex;flex-direction:column}
+.x-pagehead{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.x-pagehead h1{font-size:19px;margin:0}
+.x-pagehead .actions{margin-left:auto;display:flex;gap:8px}
+/* session tabs */
+.x-wstabs{display:flex;gap:6px;align-items:flex-end;border-bottom:1px solid var(--mj-border-default);margin-bottom:14px}
+.x-wstab{display:flex;align-items:center;gap:8px;padding:8px 14px;border:1px solid var(--mj-border-default);border-bottom:none;border-radius:9px 9px 0 0;background:var(--mj-bg-surface-card);font-size:12.5px;color:var(--mj-text-secondary);cursor:pointer}
+.x-wstab.active{background:var(--mj-bg-surface);color:var(--mj-text-primary);font-weight:600;border-color:var(--mj-border-strong,var(--mj-border-default));position:relative;top:1px}
+.x-wstab .x{color:var(--mj-text-disabled);font-size:11px}
+.x-wstab .x:hover{color:var(--mj-status-error)}
+.x-wstab.add{border-style:dashed;color:var(--mj-text-muted)}
+.x-sessionnote{font-size:11px;color:var(--mj-text-muted);margin-left:auto;align-self:center}
+.x-cols{display:grid;grid-template-columns:290px 1fr;gap:14px;align-items:start;flex:1;min-height:0}
+.x-card-title{font-size:13px;font-weight:700;margin:0 0 10px;display:flex;align-items:center;gap:8px}
+.x-crit label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mj-text-secondary);margin-bottom:12px}
+.x-chips{display:flex;flex-wrap:wrap;gap:6px}
+.x-warn{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:8px;background:color-mix(in srgb,var(--mj-status-warning) 10%,var(--mj-bg-surface));border:1px solid color-mix(in srgb,var(--mj-status-warning) 40%,transparent);font-size:12.5px;margin-bottom:12px}
+.x-sumstrip{display:flex;gap:18px;align-items:center;padding:10px 14px;border:1px solid var(--mj-border-default);border-radius:10px;background:var(--mj-bg-surface-card);margin-bottom:12px;font-size:12.5px;flex-wrap:wrap}
+.x-sumstrip b{font-size:14px}
+.x-tablewrap{overflow:auto;max-height:46vh;border:1px solid var(--mj-border-default);border-radius:10px}
+.x-tablewrap table{margin:0;width:100%}
+tr.excl td{opacity:.42;text-decoration:line-through}
+tr.ooo td{background:color-mix(in srgb,var(--mj-status-warning) 7%,transparent)}
+.x-footer{display:flex;gap:8px;align-items:center;padding-top:14px}
+</style>
+</head>
+<body>
+<div class="x-app">
+
+  <nav class="x-topnav">
+    <span class="x-brand"><i class="fa-solid fa-cubes"></i> MJ <span class="app">/ Accounting</span></span>
+    <div class="x-tabs">
+      <a class="x-tab" href="nav-shell-je-dashboard.html"><i class="fa-solid fa-book"></i> Journal Entries</a>
+      <a class="x-tab active" href="nav-shell-batches-dashboard.html"><i class="fa-solid fa-boxes-stacked"></i> Batches</a>
+      <a class="x-tab" href="#"><i class="fa-solid fa-sitemap"></i> Accounts</a>
+      <a class="x-tab" href="#"><i class="fa-solid fa-chart-column"></i> Reports</a>
+      <a class="x-tab" href="#"><i class="fa-solid fa-gear"></i> Configuration</a>
+    </div>
+    <div class="right">
+      <button class="x-iconbtn" title="Search"><i class="fa-solid fa-magnifying-glass"></i></button>
+      <button class="x-iconbtn" title="Notifications"><i class="fa-regular fa-bell"></i></button>
+      <span class="x-avatar">MT</span>
+    </div>
+  </nav>
+
+  <div class="x-body">
+    <aside class="x-rail" id="rail">
+      <button class="x-iconbtn" onclick="rail()" title="Collapse / expand" style="align-self:flex-start"><i class="fa-solid fa-bars"></i></button>
+      <div class="x-scopechip" title="App-wide company scope (persisted per user) — interim home while an Explorer header-widget slot is proposed upstream"><i class="fa-solid fa-building"></i><span class="lbl">Scope: <b>Demo Co. +2</b></span></div>
+      <div class="x-rail-group">MAIN</div>
+      <a href="nav-shell-batches-dashboard.html"><i class="fa-solid fa-gauge-high"></i><span class="lbl">Dashboard</span></a>
+      <a href="#"><i class="fa-solid fa-table-list"></i><span class="lbl">All batches</span></a>
+      <a class="active" href="#"><i class="fa-solid fa-diagram-project"></i><span class="lbl">Batch workspace</span></a>
+      <div class="x-rail-group">WORK</div>
+      <a href="#"><i class="fa-solid fa-inbox"></i><span class="lbl">My approval inbox</span><span class="x-badge">3</span></a>
+      <a href="#"><i class="fa-solid fa-truck-fast"></i><span class="lbl">Dispatch status</span></a>
+    </aside>
+
+    <main class="x-content">
+      <div class="x-pagehead">
+        <h1>Batch workspace</h1>
+        <span class="mjm-chip mjm-chip--neutral">Draft — not built</span>
+        <span class="actions">
+          <button class="mjm-btn mjm-btn--outline"><i class="fa-solid fa-filter"></i> Filters</button>
+        </span>
+      </div>
+
+      <div class="x-wstabs">
+        <span class="x-wstab active"><i class="fa-solid fa-pen-ruler"></i> New batch (draft) <i class="fa-solid fa-xmark x"></i></span>
+        <span class="x-wstab"><i class="fa-solid fa-boxes-stacked"></i> BAT-00042 <i class="fa-solid fa-xmark x"></i></span>
+        <span class="x-wstab"><i class="fa-solid fa-boxes-stacked"></i> BAT-00037 (rejected) <i class="fa-solid fa-xmark x"></i></span>
+        <span class="x-wstab add"><i class="fa-solid fa-plus"></i> New</span>
+        <span class="x-sessionnote"><i class="fa-solid fa-circle-info"></i> Tabs keep your progress for this session — drafts are not saved to the database (v1).</span>
+      </div>
+
+      <div class="x-cols">
+        <div class="mjm-card x-crit">
+          <p class="x-card-title"><i class="fa-solid fa-sliders"></i> Build criteria <span class="mjm-muted" style="margin-left:auto;font-size:11px">always visible — approvers see these too</span></p>
+          <label>Include unbatched through
+            <input class="mjm-input" type="datetime-local" value="2026-07-15T17:00">
+          </label>
+          <label>Companies
+            <select class="mjm-select" multiple size="3"><option selected>Demo Co.</option><option selected>Cheese Co.</option><option>Umbrella Ltd.</option></select>
+          </label>
+          <label>Entry types
+            <select class="mjm-select"><option>All (system + manual, approved only)</option><option>System only</option><option>Manual only</option></select>
+          </label>
+          <label>Source
+            <select class="mjm-select"><option>Standard (oldest-forward)</option><option>From a saved view…</option></select>
+          </label>
+          <div class="x-chips">
+            <span class="mjm-chip mjm-chip--info">through 07-15 17:00</span>
+            <span class="mjm-chip mjm-chip--info">Demo + Cheese</span>
+            <span class="mjm-chip mjm-chip--neutral">approved only</span>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;min-height:0">
+          <div class="x-warn"><i class="fa-solid fa-triangle-exclamation" style="color:var(--mj-status-warning)"></i>
+            Your exclusions skip <b>&nbsp;2 older entries&nbsp;</b> — later entries will batch ahead of them (allowed, but visible · MOD-8).</div>
+
+          <div class="x-sumstrip">
+            <span>Included <b>243</b> / 245</span>
+            <span>Excluded <b>2</b></span>
+            <span>Dr <b>$83,890.00</b> = Cr <b>$83,890.00</b> ✓</span>
+            <span class="mjm-muted">Demo Co. 181 · $61,020 &nbsp;|&nbsp; Cheese Co. 62 · $22,870</span>
+          </div>
+
+          <div class="x-tablewrap">
+            <table class="mjm-grid">
+              <thead><tr><th style="width:34px"><input type="checkbox" checked></th><th>Entry #</th><th>Date</th><th>Memo</th><th>Company</th><th class="num">Amount</th><th>Status</th></tr></thead>
+              <tbody>
+                <tr class="ooo excl"><td><input type="checkbox" onchange="tgl(this)"></td><td class="mjm-mono">JE-DEMO-2026-00791</td><td>2026-07-08</td><td>Manual accrual — review with Jeremy</td><td>Demo Co.</td><td class="num">$210.00</td><td><span class="mjm-chip mjm-chip--neutral">Pending</span></td></tr>
+                <tr class="ooo excl"><td><input type="checkbox" onchange="tgl(this)"></td><td class="mjm-mono">JE-CHZ-2026-00188</td><td>2026-07-09</td><td>Retail adjustment (disputed)</td><td>Cheese Co.</td><td class="num">$220.00</td><td><span class="mjm-chip mjm-chip--neutral">Pending</span></td></tr>
+                <tr><td><input type="checkbox" checked onchange="tgl(this)"></td><td class="mjm-mono">JE-DEMO-2026-00812</td><td>2026-07-10</td><td>Order ORD-1031 revenue</td><td>Demo Co.</td><td class="num">$4,300.00</td><td><span class="mjm-chip mjm-chip--neutral">Pending</span></td></tr>
+                <tr><td><input type="checkbox" checked onchange="tgl(this)"></td><td class="mjm-mono">JE-DEMO-2026-00815</td><td>2026-07-10</td><td>Payment PMT-3290 capture</td><td>Demo Co.</td><td class="num">$4,300.00</td><td><span class="mjm-chip mjm-chip--neutral">Pending</span></td></tr>
+                <tr><td><input type="checkbox" checked onchange="tgl(this)"></td><td class="mjm-mono">JE-CHZ-2026-00190</td><td>2026-07-11</td><td>Membership rev-rec (Jul)</td><td>Cheese Co.</td><td class="num">$2,400.00</td><td><span class="mjm-chip mjm-chip--neutral">Pending</span></td></tr>
+                <tr><td><input type="checkbox" checked onchange="tgl(this)"></td><td class="mjm-mono">JE-DEMO-2026-00823</td><td>2026-07-11</td><td>Order ORD-1035 revenue</td><td>Demo Co.</td><td class="num">$9,850.00</td><td><span class="mjm-chip mjm-chip--neutral">Pending</span></td></tr>
+                <tr><td><input type="checkbox" checked onchange="tgl(this)"></td><td class="mjm-mono">JE-DEMO-2026-00831</td><td>2026-07-12</td><td>Event deposit recognition</td><td>Demo Co.</td><td class="num">$1,120.00</td><td><span class="mjm-chip mjm-chip--neutral">Pending</span></td></tr>
+                <tr><td><input type="checkbox" checked onchange="tgl(this)"></td><td class="mjm-mono">JE-CHZ-2026-00196</td><td>2026-07-12</td><td>Retail daily summary</td><td>Cheese Co.</td><td class="num">$3,940.00</td><td><span class="mjm-chip mjm-chip--neutral">Pending</span></td></tr>
+                <tr><td><input type="checkbox" checked onchange="tgl(this)"></td><td class="mjm-mono">JE-DEMO-2026-00846</td><td>2026-07-13</td><td>Order ORD-1039 reversal</td><td>Demo Co.</td><td class="num">$12,000.00</td><td><span class="mjm-chip mjm-chip--neutral">Pending</span></td></tr>
+                <tr><td><input type="checkbox" checked onchange="tgl(this)"></td><td class="mjm-mono">JE-DEMO-2026-00858</td><td>2026-07-14</td><td>Order ORD-1041 revenue</td><td>Demo Co.</td><td class="num">$2,400.00</td><td><span class="mjm-chip mjm-chip--neutral">Pending</span></td></tr>
+                <tr><td><input type="checkbox" checked onchange="tgl(this)"></td><td class="mjm-mono">JE-CHZ-2026-00201</td><td>2026-07-14</td><td>Wholesale invoice batch</td><td>Cheese Co.</td><td class="num">$8,310.00</td><td><span class="mjm-chip mjm-chip--neutral">Pending</span></td></tr>
+                <tr><td><input type="checkbox" checked onchange="tgl(this)"></td><td class="mjm-mono">JE-DEMO-2026-00871</td><td>2026-07-15</td><td>Order ORD-1042 revenue</td><td>Demo Co.</td><td class="num">$15,099.00</td><td><span class="mjm-chip mjm-chip--neutral">Pending</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="x-footer">
+            <button class="mjm-btn mjm-btn--primary"><i class="fa-solid fa-boxes-stacked"></i> Build batch</button>
+            <button class="mjm-btn mjm-btn--outline"><i class="fa-regular fa-floppy-disk"></i> Keep as draft tab</button>
+            <button class="mjm-btn mjm-btn--flat">Discard</button>
+            <span class="mjm-muted" style="margin-left:auto;font-size:12px">Every JE row anywhere offers “Open in workspace” — this page is the full-depth home.</span>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+<script>
+function rail(){document.getElementById('rail').classList.toggle('collapsed')}
+function tgl(cb){cb.closest('tr').classList.toggle('excl',!cb.checked)}
+</script>
+</body>
+</html>

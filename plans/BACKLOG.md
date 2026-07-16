@@ -29,6 +29,11 @@ Convention: `~/MJDev/shared-plans/repo-planning-system.md` §5.1. (The instance-
       Task 65b window (feature agent's WIP committed first — these files are DoD-coupled to schema
       work). (2026-07-15 UI-planning session, Marcelo + orchestrator.)
 
+- [ ] **Scheduled-entry approval-before-materialization (idea)** — extend the C.8 manual-JE
+      approval gate to optionally cover scheduled entries before they materialize. Not in the
+      current plan chain; parked as an idea from the 2026-07-15 mockup review (Marcelo). Revisit
+      when C.8 builds.
+
 ## Decisions needed
 
 - [x] ~~**Periods reconciliation**~~ — **RESOLVED-for-now 2026-07-13 (Marcelo, Amith-doc confirmation):

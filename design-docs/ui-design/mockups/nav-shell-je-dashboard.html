@@ -45,6 +45,17 @@ body{margin:0;background:var(--mj-bg-page);color:var(--mj-text-primary)}
 .x-rail a.active{background:color-mix(in srgb,var(--mj-brand-primary) 10%,transparent);color:var(--mj-brand-primary);font-weight:600}
 .x-rail.collapsed a .lbl,.x-rail.collapsed .x-badge{display:none}
 .x-badge{margin-left:auto;background:var(--mj-status-error);color:#fff;border-radius:999px;font-size:10.5px;padding:1px 7px;font-weight:700}
+.x-scopechip{display:flex;align-items:center;gap:9px;margin:4px 2px 0;padding:8px 10px;border:1px solid var(--mj-border-default);border-radius:8px;background:var(--mj-bg-surface-card);font-size:12.5px;cursor:pointer;white-space:nowrap}
+.x-scopechip i{color:var(--mj-brand-primary)}
+.x-rail.collapsed .x-scopechip .lbl{display:none}
+.x-dlgback{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:80}
+.x-dlgback.show{display:flex}
+.x-dlg{width:640px;max-width:94vw;background:var(--mj-bg-surface-elevated,var(--mj-bg-surface));border-radius:12px;box-shadow:0 24px 64px rgba(0,0,0,.28);display:flex;flex-direction:column;max-height:88vh}
+.x-dlg header{display:flex;align-items:center;gap:10px;padding:14px 20px;border-bottom:1px solid var(--mj-border-default);font-weight:700;font-size:14.5px}
+.x-dlg .dbody{padding:16px 20px;overflow:auto;display:flex;flex-direction:column;gap:12px}
+.x-dlg footer{display:flex;gap:8px;padding:14px 20px;border-top:1px solid var(--mj-border-default)}
+.x-kv{display:grid;grid-template-columns:130px 1fr;row-gap:6px;font-size:13px;margin:0}
+.x-kv dt{color:var(--mj-text-muted)} .x-kv dd{margin:0}
 .x-content{flex:1;min-width:0;overflow:auto;padding:20px 24px}
 .x-pagehead{display:flex;align-items:center;gap:12px;margin-bottom:16px}
 .x-pagehead h1{font-size:19px;margin:0}
@@ -75,7 +86,6 @@ body{margin:0;background:var(--mj-bg-page);color:var(--mj-text-primary)}
       <a class="x-tab" href="#"><i class="fa-solid fa-gear"></i> Configuration</a>
     </div>
     <div class="right">
-      <span class="x-scope" title="App-wide company scope — follows the user across every screen (open question: per-screen override?)"><i class="fa-solid fa-building"></i> Scope: <b>Demo Co. +2</b> <i class="fa-solid fa-chevron-down" style="font-size:10px"></i></span>
       <button class="x-iconbtn" title="Search"><i class="fa-solid fa-magnifying-glass"></i></button>
       <button class="x-iconbtn" title="Notifications"><i class="fa-regular fa-bell"></i></button>
       <span class="x-avatar">MT</span>
@@ -85,10 +95,11 @@ body{margin:0;background:var(--mj-bg-page);color:var(--mj-text-primary)}
   <div class="x-body">
     <aside class="x-rail" id="rail">
       <button class="x-iconbtn" onclick="rail()" title="Collapse / expand" style="align-self:flex-start"><i class="fa-solid fa-bars"></i></button>
+      <div class="x-scopechip" title="App-wide company scope (persisted per user). Interim home: app rail — Explorer's header has no app-widget slot today (flagged upstream)."><i class="fa-solid fa-building"></i><span class="lbl">Scope: <b>Demo Co. +2</b></span></div>
       <div class="x-rail-group">MAIN</div>
       <a class="active" href="#"><i class="fa-solid fa-gauge-high"></i><span class="lbl">Dashboard</span></a>
       <a href="#"><i class="fa-solid fa-table-list"></i><span class="lbl">All journal entries</span></a>
-      <a href="#"><i class="fa-solid fa-plus"></i><span class="lbl">New journal entry</span></a>
+      <a href="#"><i class="fa-solid fa-diagram-project"></i><span class="lbl">JE workspace</span></a>
       <div class="x-rail-group">VIEWS</div>
       <a href="#"><i class="fa-regular fa-calendar-days"></i><span class="lbl">Scheduled entries</span></a>
       <a href="#"><i class="fa-solid fa-user-check"></i><span class="lbl">Awaiting approval</span><span class="x-badge">3</span></a>
@@ -128,14 +139,14 @@ body{margin:0;background:var(--mj-bg-page);color:var(--mj-text-primary)}
 
         <div style="display:flex;flex-direction:column;gap:14px">
           <div class="mjm-card">
-            <p class="x-card-title"><i class="fa-solid fa-triangle-exclamation" style="color:var(--mj-status-warning)"></i> Needs attention</p>
+            <p class="x-card-title"><i class="fa-solid fa-triangle-exclamation" style="color:var(--mj-status-warning)"></i> Needs attention <a class="more" href="#">See all pending approvals →</a></p>
             <div class="x-attn">
-              <div class="item"><i class="fa-solid fa-user-check" style="color:var(--mj-status-warning)"></i><span><span class="t">3 manual entries await CFO approval</span><br><span class="s">oldest 2026-07-13 · blocks batching</span></span><button class="mjm-btn mjm-btn--sm mjm-btn--outline">Review</button></div>
+              <div class="item"><i class="fa-solid fa-user-check" style="color:var(--mj-status-warning)"></i><span><span class="t">3 manual entries await CFO approval</span><br><span class="s">oldest 2026-07-13 · blocks batching</span></span><button class="mjm-btn mjm-btn--sm mjm-btn--outline" onclick="dlg(true)">Review</button></div>
               <div class="item"><i class="fa-regular fa-calendar-days" style="color:var(--mj-brand-primary)"></i><span><span class="t">12 scheduled entries due this week</span><br><span class="s">next materialization: tonight</span></span><button class="mjm-btn mjm-btn--sm mjm-btn--outline">View</button></div>
             </div>
           </div>
           <div class="mjm-card">
-            <p class="x-card-title"><i class="fa-solid fa-chart-simple"></i> Entries per day <span class="mjm-muted" style="margin-left:auto;font-size:11.5px">last 14 days</span></p>
+            <p class="x-card-title"><i class="fa-solid fa-chart-simple"></i> Entries per day <span class="mjm-muted" style="margin-left:auto;font-size:11.5px" title="Design note: precomputed on a schedule and stored — never aggregated on demand">last 14 days · nightly stat</span></p>
             <div class="x-bars">
               <span style="height:34%"></span><span style="height:52%"></span><span style="height:28%"></span><span style="height:64%"></span><span style="height:47%"></span><span style="height:12%"></span><span style="height:8%"></span><span style="height:58%"></span><span style="height:72%"></span><span style="height:41%"></span><span style="height:88%"></span><span style="height:66%"></span><span style="height:30%"></span><span style="height:76%"></span>
             </div>
@@ -145,6 +156,39 @@ body{margin:0;background:var(--mj-bg-page);color:var(--mj-text-primary)}
     </main>
   </div>
 </div>
-<script>function rail(){document.getElementById('rail').classList.toggle('collapsed')}</script>
+<div class="x-dlgback" id="dlgback">
+  <div class="x-dlg">
+    <header><i class="fa-solid fa-user-check" style="color:var(--mj-status-warning)"></i> Quick review — manual JE approval
+      <span class="mjm-chip mjm-chip--warning">Awaiting approval</span>
+      <button class="x-iconbtn" style="margin-left:auto" title="Open in JE workspace (full depth)"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>
+      <button class="x-iconbtn" onclick="dlg(false)"><i class="fa-solid fa-xmark"></i></button>
+    </header>
+    <div class="dbody">
+      <dl class="x-kv">
+        <dt>Entry</dt><dd class="mjm-mono">JE-CHZ-2026-00214</dd>
+        <dt>Created</dt><dd>2026-07-14 by J. Ramirez (manual)</dd>
+        <dt>Memo</dt><dd>Membership rev-rec correction (Jul)</dd>
+        <dt>Company</dt><dd>Cheese Co.</dd>
+      </dl>
+      <table class="mjm-grid">
+        <thead><tr><th>Account</th><th>Dimension</th><th class="num">Dr</th><th class="num">Cr</th></tr></thead>
+        <tbody>
+          <tr><td class="mjm-mono">2400 · Deferred revenue</td><td>Membership</td><td class="num">2,400.00</td><td class="num">—</td></tr>
+          <tr><td class="mjm-mono">4000 · Sales</td><td>Membership</td><td class="num">—</td><td class="num">2,400.00</td></tr>
+        </tbody>
+      </table>
+      <p class="mjm-muted" style="font-size:12px;margin:0"><i class="fa-solid fa-circle-info"></i> Quick work happens here; the pop-out (↗) opens the JE workspace for full depth.</p>
+    </div>
+    <footer>
+      <button class="mjm-btn mjm-btn--primary"><i class="fa-solid fa-check"></i> Approve</button>
+      <button class="mjm-btn mjm-btn--danger">Reject…</button>
+      <button class="mjm-btn mjm-btn--flat" style="margin-left:auto" onclick="dlg(false)">Close</button>
+    </footer>
+  </div>
+</div>
+<script>
+function rail(){document.getElementById('rail').classList.toggle('collapsed')}
+function dlg(o){document.getElementById('dlgback').classList.toggle('show',o)}
+</script>
 </body>
 </html>

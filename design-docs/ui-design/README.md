@@ -31,6 +31,8 @@ Homes: this app · `bizapps-common` (genuinely cross-app UI) · `bizapps-tasks` 
 | List-screen scaffold (grid + time window + keyset + slide-in + live refresh; design ON LiveDashboardBase) | this app — PARKED (target common → MJ base; TRANSFER-BACKLOG) | Planned | every list screen, both apps | **YES — flag Matt** (check overlap w/ list-detail-grid / simple-record-list + Live Page System plan) |
 | Role-gating directive/guard (over MJ Unified Permissions) | this app — PARKED (target MJ base; TRANSFER-BACKLOG) | Planned | both apps | **YES — flag Matt** |
 | Cross-app deep-link helper (navigate to another open app's resource) | this app — PARKED (target MJ base; TRANSFER-BACKLOG) | Planned | ORD §8 ↔ ACC §3 | **YES — flag Matt** |
+| Explorer header widget slot (FEATURE ASK, not a component we build): app-contributed control in the shell header — e.g. our company-scope chip | MJ base (Explorer shell) | Ask filed | any app needing a scope/context selector | **YES — flag Matt** (verified 2026-07-15: `mj-app-nav` renders label/icon/badge only; `header-actions` is Explorer-owned) |
+| Nav rail (collapsible, config-driven; scope chip slot; MAIN + secondary groups) | this app — PARKED (target common → possibly MJ base; TRANSFER-BACKLOG set) | Mockups-in-review | every category page, both apps | **YES — flag Matt** (pairs with the categories-as-nav-items pattern) |
 
 ## Standing design record
 

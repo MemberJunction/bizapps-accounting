@@ -45,6 +45,11 @@ body{margin:0;background:var(--mj-bg-page);color:var(--mj-text-primary)}
 .x-rail a.active{background:color-mix(in srgb,var(--mj-brand-primary) 10%,transparent);color:var(--mj-brand-primary);font-weight:600}
 .x-rail.collapsed a .lbl,.x-rail.collapsed .x-badge{display:none}
 .x-badge{margin-left:auto;background:var(--mj-status-error);color:#fff;border-radius:999px;font-size:10.5px;padding:1px 7px;font-weight:700}
+.x-scopechip{display:flex;align-items:center;gap:9px;margin:4px 2px 0;padding:8px 10px;border:1px solid var(--mj-border-default);border-radius:8px;background:var(--mj-bg-surface-card);font-size:12.5px;cursor:pointer;white-space:nowrap}
+.x-scopechip i{color:var(--mj-brand-primary)}
+.x-rail.collapsed .x-scopechip .lbl{display:none}
+.x-scrollmini{overflow:auto;max-height:150px;border:1px solid var(--mj-border-default);border-radius:8px}
+.x-scrollmini table{margin:0}
 .x-content{flex:1;min-width:0;overflow:auto;padding:20px 24px}
 .x-pagehead{display:flex;align-items:center;gap:12px;margin-bottom:16px}
 .x-pagehead h1{font-size:19px;margin:0}
@@ -93,7 +98,6 @@ tr.clickable:hover td{background:var(--mj-bg-surface-hover)}
       <a class="x-tab" href="#"><i class="fa-solid fa-gear"></i> Configuration</a>
     </div>
     <div class="right">
-      <span class="x-scope"><i class="fa-solid fa-building"></i> Scope: <b>Demo Co. +2</b> <i class="fa-solid fa-chevron-down" style="font-size:10px"></i></span>
       <button class="x-iconbtn" title="Search"><i class="fa-solid fa-magnifying-glass"></i></button>
       <button class="x-iconbtn" title="Notifications"><i class="fa-regular fa-bell"></i></button>
       <span class="x-avatar">MT</span>
@@ -103,10 +107,11 @@ tr.clickable:hover td{background:var(--mj-bg-surface-hover)}
   <div class="x-body">
     <aside class="x-rail" id="rail">
       <button class="x-iconbtn" onclick="rail()" title="Collapse / expand" style="align-self:flex-start"><i class="fa-solid fa-bars"></i></button>
+      <div class="x-scopechip" title="App-wide company scope (persisted per user); interim home while an Explorer header-widget slot is proposed upstream"><i class="fa-solid fa-building"></i><span class="lbl">Scope: <b>Demo Co. +2</b></span></div>
       <div class="x-rail-group">MAIN</div>
       <a class="active" href="#"><i class="fa-solid fa-gauge-high"></i><span class="lbl">Dashboard</span></a>
       <a href="#"><i class="fa-solid fa-table-list"></i><span class="lbl">All batches</span></a>
-      <a href="#" onclick="dlg(true);return false"><i class="fa-solid fa-plus"></i><span class="lbl">New batch</span></a>
+      <a href="nav-shell-batch-workspace.html"><i class="fa-solid fa-diagram-project"></i><span class="lbl">Batch workspace</span></a>
       <div class="x-rail-group">WORK</div>
       <a href="#"><i class="fa-solid fa-inbox"></i><span class="lbl">My approval inbox</span><span class="x-badge">3</span></a>
       <a href="#"><i class="fa-solid fa-truck-fast"></i><span class="lbl">Dispatch status</span></a>
@@ -160,17 +165,23 @@ tr.clickable:hover td{background:var(--mj-bg-surface-hover)}
   <header>
     <h2 class="mjm-mono">BAT-00042</h2>
     <span class="mjm-chip mjm-chip--warning">Pending approval</span>
-    <button class="x-iconbtn" style="margin-left:auto" onclick="slide(false)"><i class="fa-solid fa-xmark"></i></button>
+    <a class="x-iconbtn" style="margin-left:auto" href="nav-shell-batch-workspace.html" title="Open in batch workspace (full depth)"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+    <button class="x-iconbtn" onclick="slide(false)"><i class="fa-solid fa-xmark"></i></button>
   </header>
   <div class="sbody">
     <dl class="x-kv">
       <dt>Built</dt><dd>2026-07-15 08:12 by M. Torres</dd>
-      <dt>Cutoff</dt><dd>2026-07-14 23:59 (oldest-forward)</dd>
-      <dt>Member entries</dt><dd>245 journal entries <a href="#" style="color:var(--mj-brand-primary)">view →</a></dd>
       <dt>Control totals</dt><dd><b>$84,320.00</b> Dr = <b>$84,320.00</b> Cr ✓</dd>
       <dt>Lock level</dt><dd>Preliminary (reversible until approval)</dd>
       <dt>Dispatch</dt><dd>— not dispatched</dd>
     </dl>
+    <p class="x-sect">BUILD CRITERIA <span style="font-weight:400;letter-spacing:0;text-transform:none">— the approver always sees what this batch was built from</span></p>
+    <div style="display:flex;flex-wrap:wrap;gap:6px">
+      <span class="mjm-chip mjm-chip--info">unbatched through 2026-07-14 23:59</span>
+      <span class="mjm-chip mjm-chip--info">Demo Co. + Cheese Co.</span>
+      <span class="mjm-chip mjm-chip--neutral">standard (oldest-forward)</span>
+      <span class="mjm-chip mjm-chip--neutral">approved entries only</span>
+    </div>
     <p class="x-sect">NETTED SUMMARY LINES (Company × Account × Dimension)</p>
     <table class="mjm-grid">
       <thead><tr><th>Company</th><th>Account</th><th>Dimension</th><th class="num">Dr</th><th class="num">Cr</th></tr></thead>
@@ -182,7 +193,23 @@ tr.clickable:hover td{background:var(--mj-bg-surface-hover)}
         <tr><td>Cheese Co.</td><td class="mjm-mono">4000 · Sales</td><td>Retail</td><td class="num">—</td><td class="num">22,200.00</td></tr>
       </tbody>
     </table>
-    <p class="mjm-muted" style="font-size:12px;margin:0"><i class="fa-solid fa-circle-info"></i> Reject UNLOCKS the batch — member entries return to the unbatched pool.</p>
+    <p class="x-sect">MEMBER ENTRIES (245)</p>
+    <div class="x-scrollmini">
+      <table class="mjm-grid">
+        <thead><tr><th>Entry #</th><th>Date</th><th>Company</th><th class="num">Amount</th></tr></thead>
+        <tbody>
+          <tr><td class="mjm-mono">JE-DEMO-2026-00812</td><td>07-10</td><td>Demo Co.</td><td class="num">4,300.00</td></tr>
+          <tr><td class="mjm-mono">JE-DEMO-2026-00815</td><td>07-10</td><td>Demo Co.</td><td class="num">4,300.00</td></tr>
+          <tr><td class="mjm-mono">JE-CHZ-2026-00190</td><td>07-11</td><td>Cheese Co.</td><td class="num">2,400.00</td></tr>
+          <tr><td class="mjm-mono">JE-DEMO-2026-00823</td><td>07-11</td><td>Demo Co.</td><td class="num">9,850.00</td></tr>
+          <tr><td class="mjm-mono">JE-DEMO-2026-00831</td><td>07-12</td><td>Demo Co.</td><td class="num">1,120.00</td></tr>
+          <tr><td class="mjm-mono">JE-CHZ-2026-00196</td><td>07-12</td><td>Cheese Co.</td><td class="num">3,940.00</td></tr>
+          <tr><td class="mjm-mono">JE-DEMO-2026-00846</td><td>07-13</td><td>Demo Co.</td><td class="num">12,000.00</td></tr>
+          <tr><td class="mjm-mono">JE-DEMO-2026-00858</td><td>07-14</td><td>Demo Co.</td><td class="num">2,400.00</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="mjm-muted" style="font-size:12px;margin:0"><i class="fa-solid fa-circle-info"></i> Reject UNLOCKS the batch — member entries return to the unbatched pool. Deeper drilling → the workspace (↗).</p>
   </div>
   <footer>
     <button class="mjm-btn mjm-btn--primary"><i class="fa-solid fa-check"></i> Approve batch</button>
@@ -211,6 +238,7 @@ tr.clickable:hover td{background:var(--mj-bg-surface-hover)}
     </div>
     <footer>
       <button class="mjm-btn mjm-btn--primary"><i class="fa-solid fa-boxes-stacked"></i> Build batch</button>
+      <a class="mjm-btn mjm-btn--outline" href="nav-shell-batch-workspace.html"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open in batch workspace</a>
       <button class="mjm-btn mjm-btn--flat" style="margin-left:auto" onclick="dlg(false)">Cancel</button>
     </footer>
   </div>

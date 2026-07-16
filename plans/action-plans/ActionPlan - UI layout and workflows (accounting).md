@@ -28,6 +28,26 @@ components live in a bounded folder and import NO accounting entities** — extr
 file move, never a refactor. Status stepper + money strip are orders-local (single consumer today;
 no premature abstraction). Build each shared thing ONCE.
 
+**Mockup round 1 rulings (Marcelo, 2026-07-15 — bind the build):**
+- **Nav shape approved:** top-nav CATEGORIES (= Explorer app nav items — metadata-configured,
+  badges supported natively) + collapsible **nav rail** (standard term) per category, dedicated
+  single-purpose pages, MAIN + secondary groups. No FAB (MJ chat button owns the corner).
+- **Page pattern:** every page gets Filters (top-left of actions) + a consistent top-right create
+  button where creation makes sense.
+- **Creation/detail pattern:** modal = the approachable baseline for quick ops; EVERY modal and
+  slide-in carries a pop-out (↗) to the full-depth home. **Batches are page-scale, not
+  modal-scale** → dedicated **Batch workspace** (and a JE workspace): tabbed, in-progress items
+  keep state **session-scoped in v1 (NOT the database)**, closable tabs.
+- **Approver visibility:** build criteria (the filters a batch was built from) are ALWAYS shown —
+  on the workspace and in the review slide-in.
+- **Slide-in = quick VIEW** (glance-and-go); modal = focused quick ACTION; page = full depth.
+- **Dashboard stats:** no on-demand aggregates — anything expensive (e.g. entries-per-day) is
+  precomputed on a schedule and stored, or it doesn't ship.
+- **Company scope chip:** app-owned, top of the rail (persisted per user via UserInfoEngine).
+  Explorer's header has NO app-widget slot today — an "Explorer header widget slot" is flagged
+  upstream (component inventory / Matt); if it lands, the chip moves up.
+- Rail does NOT hold creation items ("New X" removed) — creation = page button + workspace tab.
+
 ## 1. Batch approvals page (Marcelo: "I'm not a lover" — rebuild to house style)
 
 - Replace the hand-rolled table with the standard AG grid: sortable/filterable columns (batch №, status,
