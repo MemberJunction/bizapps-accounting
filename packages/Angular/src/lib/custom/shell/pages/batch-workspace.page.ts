@@ -57,9 +57,15 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
   public ActionMessage: string | null = null;
   public ActionIsError = false;
 
-  /** The mockup's 3-way entry-type control — NOT the entity's 16-value EntryType union. */
+  /**
+   * The mockup's 3-way entry-type control — NOT the entity's 16-value EntryType union.
+   *
+   * The mockup labelled 'All' as "approved only". It is NOT: the C.8 manual-JE approval gate does
+   * not exist server-side (see je-rules.awaitsApproval / QUESTIONS.md#q6), so 'All' really does mean
+   * every Pending entry, manual ones included. Label says what the build does.
+   */
   public readonly EntryTypeScopes: ReadonlyArray<{ Id: EntryTypeScope; Label: string }> = [
-    { Id: 'All', Label: 'All (system + manual, approved only)' },
+    { Id: 'All', Label: 'All (system + manual)' },
     { Id: 'System', Label: 'System only' },
     { Id: 'Manual', Label: 'Manual only' },
   ];

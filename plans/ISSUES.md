@@ -70,3 +70,36 @@ plan rather than being improvised inside a UI wave.
 **Do NOT** wire the missing criteria to a client-side filter over the preview: `buildBatch` would
 still sweep the whole Pending pool server-side, so the batch would silently NOT match what the panel
 showed. That is a correctness trap, not a shortcut.
+
+### [OPEN] App-wide money + date FORMATTING is wrong by default (`currency` → USD, `date` → local) — 2026-07-16
+- **Found:** during §8.1 JE-workspace live verification. Created a manual entry in a company whose
+  functional currency is **AED**, dated **2026-07-16**. The UI rendered it as **"$860.00"** and
+  **"effective Jul 15, 2026"** — wrong currency symbol, and the date off by one day.
+- **Cause (two distinct bugs, same blast radius — every screen that shows money or a date):**
+  1. **`| currency` defaults to USD.** Angular's pipe falls back to the locale's default when no
+     code is passed. Every `| currency` in this app passed nothing, so an AED/EUR/GBP company's
+     amounts print with a `$`. Not cosmetic: it misstates the money.
+  2. **`| date` formats in the BROWSER's zone.** This repo stores UTC by convention. For a true
+     INSTANT (`SentAt`, `BatchedAt`, `__mj_CreatedAt`) local rendering is CORRECT and must stay.
+     But a **DATE column has no zone** (`EffectiveDate`, `EffectiveFrom/To`, `StartDate/EndDate`):
+     rendering UTC-midnight in a negative-offset zone shows the PREVIOUS day. An accountant reading
+     an entry's effective date one day early is a real, silent error.
+- **Fixed so far (the §8 pages this session touched):** `je-approvals` (currency per row from the
+  company's functional currency + `EffectiveDate` in UTC), `je-workspace` (balance strip in the
+  company's functional currency), `journal-entry-detail-panel` + `batch-workspace` (`EffectiveDate`
+  in UTC).
+- **STILL WRONG (not fixed — pre-existing dashboards):** `BatchStatus` (`StartDate`/`EndDate`),
+  `JournalEntryConsole` (`EffectiveDate`), `erp-mapping` (`EffectiveFrom`/`EffectiveTo`),
+  `account-links` (`StartedAt`/`EndedAt` — verify whether DATE or instant before changing).
+- **The real fix (proposed):** don't sprinkle `: 'UTC'` and a currency code across every template —
+  that is 4 places today and every future one silently regresses. Add a shared formatting seam (an
+  `mjAcctDate` / `mjAcctMoney` pipe pair in `custom/shared/`) that encodes BOTH rules once: DATE ⇒
+  UTC, money ⇒ the owning company's functional currency. Then the default is right and a new screen
+  cannot get it wrong by omission.
+- **⚠ Related, and BIGGER — raise before the fix:** the batch workspace sums **Dr/Cr totals across
+  companies** (batches are multi-company, CH-4). If two companies in one batch have **different
+  functional currencies**, that sum is meaningless in ANY single currency — this is not a display
+  bug, it is an arithmetic one, and no pipe fixes it. Needs a ruling: are multi-currency batches
+  possible, and if so what do the control totals mean? (Today every seeded company profile would
+  need checking; the AED company above shows the currencies do differ in practice.)
+

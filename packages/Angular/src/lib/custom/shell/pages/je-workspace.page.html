@@ -1,0 +1,217 @@
+<mj-page-header-interior Title="JE workspace" Subtitle="Create a manual journal entry. Drafts live in tabs for this session.">
+  <div meta>
+    @if (IsCreated) {
+      <mj-stat-badge [Label]="'Created ' + Draft?.CreatedEntryNumber" Icon="fa-solid fa-check" Variant="success"></mj-stat-badge>
+    } @else {
+      <mj-stat-badge Label="Draft — manual entry" Variant="default"></mj-stat-badge>
+    }
+    @if (FunctionalCurrency) {
+      <mj-stat-badge [Label]="FunctionalCurrency + ' (functional)'" Icon="fa-solid fa-coins" Variant="default"></mj-stat-badge>
+    }
+  </div>
+  <div actions>
+    <button class="mj-btn mj-btn--outline" (click)="openNewDraft()">
+      <i class="fa-solid fa-plus" aria-hidden="true"></i> New entry
+    </button>
+  </div>
+</mj-page-header-interior>
+
+<mj-page-body [Flex]="true" [Padding]="true">
+  <div class="jew">
+    <!-- Session tabs. -->
+    <mj-workspace-tab-strip
+      [Tabs]="Tabs"
+      [ActiveId]="ActiveTabId"
+      (TabSelected)="SelectTab($event)"
+      (TabClosed)="CloseTab($event)"
+      (NewRequested)="openNewDraft()">
+    </mj-workspace-tab-strip>
+    <p class="jew__session">
+      <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+      Tabs keep your progress for this session — drafts are not saved to the database (v1).
+    </p>
+
+    @if (Draft; as d) {
+      <fieldset class="jew__form" [disabled]="IsCreated">
+        <label class="jew__field">
+          <span>Company</span>
+          <!-- Scopes the account picker only. The engine derives the entry's company from the
+               lines' accounts (MOD-12), so this is never sent. -->
+          <select class="mj-input" [(ngModel)]="d.CompanyID" (ngModelChange)="OnCompanyChanged()">
+            <option [ngValue]="null">Pick a company…</option>
+            @for (c of Companies; track c.ID) {
+              <option [ngValue]="c.ID">{{ c.Name }}</option>
+            }
+          </select>
+        </label>
+
+        <label class="jew__field">
+          <span>Entry date</span>
+          <input class="mj-input" type="date" [(ngModel)]="d.EffectiveDate" (ngModelChange)="touch()" />
+        </label>
+
+        <label class="jew__field">
+          <span>Entry type</span>
+          <!-- Fixed: this workspace is the manual-entry home. A one-option select would be a
+               control that cannot be operated. -->
+          <output class="jew__readonly">Manual</output>
+        </label>
+
+        <label class="jew__field">
+          <span>Currency</span>
+          <output class="jew__readonly">{{ FunctionalCurrency ?? '—' }}</output>
+        </label>
+
+        <label class="jew__field jew__field--wide">
+          <span>Memo</span>
+          <input
+            class="mj-input"
+            [(ngModel)]="d.Description"
+            (ngModelChange)="touch()"
+            placeholder="What is this entry for?" />
+        </label>
+      </fieldset>
+
+      @if (!d.CompanyID) {
+        <p class="jew__hint">
+          <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+          Pick a company to choose accounts from — an entry's lines must all belong to one company.
+        </p>
+      }
+
+      <!-- Line editor. -->
+      <div class="jew__gridwrap">
+        <table class="jew__grid">
+          <thead>
+            <tr>
+              <th>Account</th>
+              @for (dim of DimensionColumns; track dim.ID) {
+                <th>{{ dim.Name }}</th>
+              }
+              <th class="num">Dr</th>
+              <th class="num">Cr</th>
+              <th class="jew__rowact"></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (line of d.Lines; track line.Key; let i = $index) {
+              <tr [class.jew__row--bad]="LineIssue(line) || EngineLineError(i)">
+                <td>
+                  <select
+                    class="mj-input"
+                    [(ngModel)]="line.GLAccountID"
+                    (ngModelChange)="touch()"
+                    [disabled]="IsCreated || !d.CompanyID">
+                    <option [ngValue]="null">Pick an account…</option>
+                    @for (a of AccountOptions; track a.ID) {
+                      <option [ngValue]="a.ID">{{ a.Label }}</option>
+                    }
+                  </select>
+                </td>
+                @for (dim of DimensionColumns; track dim.ID) {
+                  <td>
+                    <select
+                      class="mj-input"
+                      [ngModel]="DimensionValueFor(line, dim.ID)"
+                      (ngModelChange)="SetDimensionValue(line, dim.ID, $event)"
+                      [disabled]="IsCreated">
+                      <option [ngValue]="null">—</option>
+                      @for (v of dim.Values; track v.ID) {
+                        <option [ngValue]="v.ID">{{ v.Label }}</option>
+                      }
+                    </select>
+                  </td>
+                }
+                <td class="num">
+                  <input class="mj-input num" [(ngModel)]="line.Debit" (ngModelChange)="touch()" [disabled]="IsCreated" inputmode="decimal" />
+                </td>
+                <td class="num">
+                  <input class="mj-input num" [(ngModel)]="line.Credit" (ngModelChange)="touch()" [disabled]="IsCreated" inputmode="decimal" />
+                </td>
+                <td class="jew__rowact">
+                  <button
+                    class="mj-btn mj-btn--flat"
+                    (click)="RemoveLine(line.Key)"
+                    [disabled]="IsCreated"
+                    title="Remove this line"
+                    aria-label="Remove this line">
+                    <i class="fa-regular fa-trash-can" aria-hidden="true"></i>
+                  </button>
+                </td>
+              </tr>
+              @if (LineIssue(line) || EngineLineError(i)) {
+                <tr class="jew__issuerow">
+                  <td [attr.colspan]="4 + DimensionColumns.length">
+                    <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+                    {{ EngineLineError(i) ?? LineIssue(line) }}
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+
+      @if (!IsCreated) {
+        <button class="mj-btn mj-btn--flat jew__addline" (click)="AddLine()">
+          <i class="fa-solid fa-plus" aria-hidden="true"></i> Add line
+        </button>
+      }
+
+      <!-- Live balance strip. -->
+      <div class="jew__balance">
+        <!-- Format in the COMPANY's functional currency — the pipe's default is USD, which would
+             print "$" on an AED entry. -->
+        <span>Dr <b>{{ Totals.Debits | currency: (FunctionalCurrency ?? 'USD') }}</b></span>
+        <span>Cr <b>{{ Totals.Credits | currency: (FunctionalCurrency ?? 'USD') }}</b></span>
+        @if (IsBalanced) {
+          <mj-stat-badge Label="Balanced" Icon="fa-solid fa-scale-balanced" Variant="success"></mj-stat-badge>
+        } @else {
+          <mj-stat-badge Label="Not balanced" Icon="fa-solid fa-scale-unbalanced" Variant="warning"></mj-stat-badge>
+        }
+        <span class="jew__balancenote">
+          The balanced-entry rule is enforced at the database — this strip mirrors it live.
+        </span>
+      </div>
+
+      @if (DraftErrors.length) {
+        <div class="jew__errors" role="alert">
+          @for (e of DraftErrors; track e) {
+            <p><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i> {{ e }}</p>
+          }
+        </div>
+      }
+
+      <!-- Verbs. -->
+      <div class="jew__footer">
+        <button class="mj-btn mj-btn--primary" (click)="Submit()" [disabled]="!CanSubmit" [title]="SubmitBlockedReason ?? 'Create this entry'">
+          @if (IsSubmitting) {
+            <i class="fa-solid fa-circle-notch fa-spin" aria-hidden="true"></i> Creating…
+          } @else {
+            <i class="fa-solid fa-check" aria-hidden="true"></i> Create entry
+          }
+        </button>
+        <button class="mj-btn mj-btn--outline" (click)="KeepAsDraft()" [disabled]="IsCreated">
+          <i class="fa-regular fa-floppy-disk" aria-hidden="true"></i> Keep as draft tab
+        </button>
+        <button class="mj-btn mj-btn--flat" (click)="Discard()">Discard</button>
+
+        <!-- Honest statement of the C.8 gap: the mockup promised approval routing; it does not exist. -->
+        <span class="jew__footnote">
+          Manual entries are intended to route to CFO approval before batching (C.8). That gate is not
+          yet in force — a created entry is Pending and can be picked up by the next batch build.
+        </span>
+      </div>
+
+      @if (SubmitBlockedReason && !IsCreated) {
+        <p class="jew__hint">
+          <i class="fa-solid fa-circle-info" aria-hidden="true"></i> {{ SubmitBlockedReason }}
+        </p>
+      }
+    }
+
+    @if (ActionMessage) {
+      <p class="jew__msg" [class.jew__msg--error]="ActionIsError" role="status">{{ ActionMessage }}</p>
+    }
+  </div>
+</mj-page-body>

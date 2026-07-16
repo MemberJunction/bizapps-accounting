@@ -20,6 +20,12 @@
         @case ('all-entries') {
           <mj-all-journal-entries-page></mj-all-journal-entries-page>
         }
+        @case ('workspace') {
+          <mj-je-workspace-page></mj-je-workspace-page>
+        }
+        @case ('approvals') {
+          <mj-je-approvals-page></mj-je-approvals-page>
+        }
         @default {
           <mj-shell-page-pending [PageName]="PendingPageName(ActivePageId)"></mj-shell-page-pending>
         }

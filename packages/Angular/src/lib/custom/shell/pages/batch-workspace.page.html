@@ -183,7 +183,8 @@
                     [attr.aria-label]="'Include ' + e.EntryNumber" />
                 </td>
                 <td class="bw-mono">{{ e.EntryNumber }}</td>
-                <td>{{ e.EffectiveDate | date: 'yyyy-MM-dd' }}</td>
+                <!-- DATE column (no zone) — render UTC or it shifts a day for any user west of UTC. -->
+                <td>{{ e.EffectiveDate | date: 'yyyy-MM-dd' : 'UTC' }}</td>
                 <td>{{ e.Description || '—' }}</td>
                 <td>{{ CompanyName(e.CompanyID) }}</td>
                 <td class="bw-num">{{ e.Amount | currency }}</td>

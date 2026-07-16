@@ -48,9 +48,17 @@ export function reversalBlockedReason(entry: ReversalCandidate): string | null {
 }
 
 /**
- * Manual entries await the CFO gate while Pending (C.8). Batching deliberately skips them until
- * approved, which is why the browser surfaces the state — an entry silently missing from a batch
- * is the confusing case this chip exists to prevent.
+ * The set of entries C.8 is DESIGNED to hold behind the CFO gate: a Manual entry still Pending.
+ *
+ * ⚠ The gate is NOT ENFORCED TODAY — do not let the UI claim otherwise. `JournalEntry.Status` has
+ * only three values (`Pending | Batched | GLPosted`); there is no `Approved` state, and the server's
+ * candidate filter (`pendingCandidateFilter`, BatchingEngine.ts) selects on `Status='Pending'` with
+ * no entry-type exclusion. So a Manual Pending entry IS batchable right now, and any copy saying
+ * "cannot be batched until approved" is false.
+ *
+ * C.8's shape is still open — held as "lean yes" pending Robert (plans/QUESTIONS.md#q6 (3)) — which
+ * is why this predicate identifies the set without asserting a control over it. Callers should
+ * surface it as "awaiting review, gate not yet in force", not as a block.
  */
 export function awaitsApproval(entry: { Status: JEStatus; EntryType: JEType }): boolean {
   return entry.EntryType === 'Manual' && entry.Status === 'Pending';

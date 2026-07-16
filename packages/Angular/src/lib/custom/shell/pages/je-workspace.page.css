@@ -1,0 +1,186 @@
+/* JE workspace (§8.1). Adapted from the approved mockup's .x-* stand-ins — design tokens only.
+   Height chain: this page is switched into <mj-left-nav-content>, so it declares its own
+   flex-column host (see all-journal-entries.page.css for why that is load-bearing). */
+
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.jew {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+.jew__session {
+  margin: 0;
+  font-size: 12px;
+  color: var(--mj-text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Header form. */
+.jew__form {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+/* Laptop-width tolerance (§0). */
+@media (max-width: 1100px) {
+  .jew__form {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.jew__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--mj-text-secondary);
+  min-width: 0;
+}
+.jew__field--wide {
+  grid-column: span 2;
+}
+/* A derived value the operator cannot set (entry type, functional currency) — styled to read as
+   settled fact, deliberately NOT as a disabled input the user might try to fight. */
+.jew__readonly {
+  padding: 7px 0;
+  font-size: 13px;
+  color: var(--mj-text-primary);
+  font-weight: 600;
+}
+
+/* Line editor. */
+.jew__gridwrap {
+  overflow-x: auto;
+  border: 1px solid var(--mj-border-default);
+  border-radius: 10px;
+}
+.jew__grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.jew__grid th {
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mj-text-muted);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--mj-border-default);
+  white-space: nowrap;
+}
+.jew__grid td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--mj-border-subtle);
+  vertical-align: middle;
+}
+.jew__grid th.num,
+.jew__grid td.num {
+  text-align: right;
+  width: 150px;
+}
+.jew__grid input.num {
+  text-align: right;
+}
+.jew__grid .mj-input {
+  width: 100%;
+}
+.jew__rowact {
+  width: 44px;
+  text-align: center;
+}
+.jew__row--bad td {
+  background: color-mix(in srgb, var(--mj-status-warning) 7%, transparent);
+}
+.jew__issuerow td {
+  padding: 4px 10px 8px;
+  font-size: 12px;
+  color: var(--mj-status-warning-text);
+  background: color-mix(in srgb, var(--mj-status-warning) 7%, transparent);
+  border-bottom: 1px solid var(--mj-border-subtle);
+}
+.jew__addline {
+  align-self: flex-start;
+}
+
+/* Balance strip. */
+.jew__balance {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border: 1px solid var(--mj-border-default);
+  border-radius: 10px;
+  background: var(--mj-bg-surface-card);
+  font-size: 12.5px;
+}
+.jew__balance b {
+  font-size: 14px;
+  color: var(--mj-text-primary);
+}
+.jew__balancenote {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--mj-text-muted);
+}
+
+.jew__errors {
+  border: 1px solid var(--mj-status-error-border);
+  background: var(--mj-status-error-bg);
+  color: var(--mj-status-error-text);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+}
+.jew__errors p {
+  margin: 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+/* Verbs. */
+.jew__footer {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.jew__footnote {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--mj-text-muted);
+  max-width: 46ch;
+}
+
+.jew__hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--mj-text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.jew__msg {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--mj-text-secondary);
+}
+.jew__msg--error {
+  color: var(--mj-status-error-text);
+}

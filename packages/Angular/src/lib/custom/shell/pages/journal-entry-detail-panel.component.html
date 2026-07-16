@@ -10,12 +10,13 @@
         <mj-stat-badge [Label]="Header.Status" [Variant]="StatusVariant"></mj-stat-badge>
         <mj-stat-badge [Label]="Header.EntryType" Variant="default"></mj-stat-badge>
         @if (AwaitsApproval) {
-          <!-- C.8: explains why this entry is NOT being picked up by batching. -->
+          <!-- C.8 is designed but NOT enforced server-side (see je-rules.awaitsApproval). The chip
+               reports the state; it must not imply a block that does not exist. -->
           <mj-stat-badge
-            Label="Awaiting CFO approval"
+            Label="Manual — awaiting review"
             Icon="fa-solid fa-user-check"
             Variant="warning"
-            title="Manual entries need CFO approval before they can be batched.">
+            title="Manual entries are intended to need CFO approval before batching (C.8). That gate is not yet in force, so this entry can still be picked up by a batch build.">
           </mj-stat-badge>
         }
         @if (IsBalanced) {
@@ -58,7 +59,8 @@
       <!-- Facts -->
       <dl class="jed__facts">
         <dt>Effective</dt>
-        <dd>{{ Header.EffectiveDate ? (Header.EffectiveDate | date: 'yyyy-MM-dd') : '—' }}</dd>
+        <!-- DATE column (no zone) — render UTC or it shifts a day for any user west of UTC. -->
+        <dd>{{ Header.EffectiveDate ? (Header.EffectiveDate | date: 'yyyy-MM-dd' : 'UTC') : '—' }}</dd>
         <dt>Description</dt>
         <dd>{{ Header.Description || '—' }}</dd>
         <dt>Batch</dt>
