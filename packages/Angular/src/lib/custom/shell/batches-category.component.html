@@ -18,6 +18,9 @@
         @case ('approvals') {
           <mj-batch-dispatch-dashboard></mj-batch-dispatch-dashboard>
         }
+        @case ('workspace') {
+          <mj-batch-workspace-page></mj-batch-workspace-page>
+        }
         @default {
           <mj-shell-page-pending [PageName]="PendingPageName(ActivePageId)"></mj-shell-page-pending>
         }

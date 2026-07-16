@@ -1,0 +1,216 @@
+<!-- Batch workspace (§8.2). Mockup: nav-shell-batch-workspace.html — directionally binding.
+     NOTE there is deliberately NO Filters control here: the build-criteria panel is the ONLY
+     filter surface on this page (round-2 ruling — never two filter systems, never view-filters
+     that don't match the batch contents). -->
+<mj-page-header-interior Title="Batch workspace" Subtitle="Build a batch — the criteria below are the only filter on this page">
+  <ng-container meta>
+    @if (IsBuilt) {
+      <mj-stat-badge [Label]="'Built — ' + Draft?.BuiltBatchNumber" Icon="fa-solid fa-check" Variant="success"></mj-stat-badge>
+    } @else {
+      <mj-stat-badge Label="Draft — not built" Variant="default"></mj-stat-badge>
+    }
+    <mj-stat-badge
+      [Label]="'Target: ' + (Draft?.Criteria?.TargetSystem ?? '')"
+      Icon="fa-solid fa-plug"
+      Variant="info"
+      title="The ERP this batch dispatches to.">
+    </mj-stat-badge>
+  </ng-container>
+  <ng-container actions>
+    <mj-refresh-button [Loading]="IsPreviewing" (Clicked)="Refresh()"></mj-refresh-button>
+  </ng-container>
+</mj-page-header-interior>
+
+<!-- Session tabs. v1 is deliberately session-scoped — the note says so rather than letting a user
+     assume their draft is saved. -->
+<div class="bw-tabs">
+  <mj-workspace-tab-strip
+    [Tabs]="Tabs"
+    [ActiveId]="ActiveTabId"
+    NewTabLabel="New"
+    (TabSelected)="SelectTab($event)"
+    (TabClosed)="CloseTab($event)"
+    (NewTabRequested)="openNewDraft()">
+  </mj-workspace-tab-strip>
+  <span class="bw-sessionnote">
+    <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+    Tabs keep your progress for this session — drafts are not saved to the database (v1).
+  </span>
+</div>
+
+@if (ActionMessage) {
+  <mj-alert [Variant]="ActionIsError ? 'error' : 'success'" [Message]="ActionMessage"></mj-alert>
+}
+
+<div class="bw-cols">
+  <!-- ── Build criteria: ALWAYS visible, because approvers see these too (§0) ── -->
+  <section class="bw-crit" aria-label="Build criteria">
+    <p class="bw-card-title">
+      <i class="fa-solid fa-sliders" aria-hidden="true"></i> Build criteria
+      <span class="bw-muted">always visible — approvers see these too</span>
+    </p>
+
+    @if (Draft) {
+      <label class="bw-field">
+        <span>Include unbatched through</span>
+        <input
+          type="datetime-local"
+          class="mj-input"
+          [(ngModel)]="Draft.Criteria.Cutoff"
+          (ngModelChange)="OnCriteriaChanged()"
+          [disabled]="IsBuilt" />
+      </label>
+
+      <label class="bw-field">
+        <span>Companies</span>
+        <select
+          class="mj-input"
+          multiple
+          size="3"
+          [(ngModel)]="Draft.Criteria.CompanyIDs"
+          (ngModelChange)="OnCriteriaChanged()"
+          [disabled]="IsBuilt">
+          @for (c of Scope.Companies; track c.ID) {
+            <option [value]="c.ID">{{ c.Name }}</option>
+          }
+        </select>
+        <span class="bw-hint">None selected = all companies</span>
+      </label>
+
+      <label class="bw-field">
+        <span>Entry types</span>
+        <select class="mj-input" [(ngModel)]="Draft.Criteria.EntryTypeScope" (ngModelChange)="OnCriteriaChanged()" [disabled]="IsBuilt">
+          @for (s of EntryTypeScopes; track s.Id) {
+            <option [value]="s.Id">{{ s.Label }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="bw-field">
+        <span>Source</span>
+        <select class="mj-input" [(ngModel)]="Draft.Criteria.Source" (ngModelChange)="OnCriteriaChanged()" [disabled]="IsBuilt">
+          <option value="Standard">Standard (oldest-forward)</option>
+          <option value="View">From a saved view…</option>
+        </select>
+      </label>
+
+      <label class="bw-field">
+        <span>Target system</span>
+        <select class="mj-input" [(ngModel)]="Draft.Criteria.TargetSystem" (ngModelChange)="OnCriteriaChanged()" [disabled]="IsBuilt">
+          @for (t of TargetSystems; track t) {
+            <option [value]="t">{{ t }}</option>
+          }
+        </select>
+      </label>
+
+      <div class="bw-chips">
+        @for (chip of CriteriaChips; track chip) {
+          <span class="bw-chip">{{ chip }}</span>
+        }
+      </div>
+    }
+
+    <!-- Affected accounts lives INSIDE the criteria card (mockup) — it is a property of the
+         selection, so it belongs beside what selects it. -->
+    <p class="bw-card-title bw-card-title--sub">
+      <i class="fa-solid fa-sitemap" aria-hidden="true"></i> Affected accounts ({{ Preview?.AffectedAccounts?.length ?? 0 }})
+    </p>
+    <div class="bw-accounts" title="Every GL account the current selection touches — it changes as the selection changes">
+      @for (a of Preview?.AffectedAccounts ?? []; track a.GLAccountID) {
+        <span class="bw-account">
+          <span class="bw-mono">{{ a.Code }}</span> {{ a.Name }}
+          <span class="bw-muted">({{ a.CompanyIDs.length }} {{ a.CompanyIDs.length === 1 ? 'company' : 'companies' }})</span>
+        </span>
+      } @empty {
+        <span class="bw-muted">No accounts — nothing is selected.</span>
+      }
+    </div>
+  </section>
+
+  <!-- ── Preview ─────────────────────────────────────────────────────────────── -->
+  <section class="bw-preview" aria-label="Matched entries">
+    @if (HasOutOfOrder) {
+      <!-- MOD-8: allowed, but VISIBLE. Computed server-side from the same pool the build uses. -->
+      <div class="bw-warn">
+        <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+        Your exclusions skip <b>&nbsp;{{ Preview?.OutOfOrderSkipCount }} older entr{{ Preview?.OutOfOrderSkipCount === 1 ? 'y' : 'ies' }}&nbsp;</b>
+        — later entries will batch ahead of them (allowed, but visible · MOD-8).
+      </div>
+    }
+
+    <div class="bw-sumstrip">
+      <span>Included <b>{{ IncludedCount }}</b> / {{ Preview?.Candidates?.length ?? 0 }}</span>
+      <span>Excluded <b>{{ ExcludedCount }}</b></span>
+      <span [class.bw-unbalanced]="!IsBalanced">
+        Dr <b>{{ Preview?.TotalDebits ?? 0 | currency }}</b>
+        {{ IsBalanced ? '=' : '≠' }}
+        Cr <b>{{ Preview?.TotalCredits ?? 0 | currency }}</b>
+        {{ IsBalanced ? '✓' : '✗' }}
+      </span>
+      <span class="bw-muted">
+        @for (c of Preview?.PerCompany ?? []; track c.CompanyID) {
+          {{ CompanyName(c.CompanyID) }} · {{ c.Debit | currency }}&nbsp;&nbsp;
+        }
+      </span>
+    </div>
+
+    <div class="bw-tablewrap">
+      @if (IsPreviewing) {
+        <mj-loading text="Matching entries…"></mj-loading>
+      } @else {
+        <table class="bw-grid">
+          <thead>
+            <tr>
+              <th class="bw-tick"><span class="bw-sr">Include</span></th>
+              <th>Entry №</th>
+              <th>Date</th>
+              <th>Memo</th>
+              <th>Company</th>
+              <th class="bw-num">Amount</th>
+              <th>Type</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (e of Preview?.Candidates ?? []; track e.ID) {
+              <tr [class.bw-excl]="IsExcluded(e.ID)">
+                <td class="bw-tick">
+                  <input
+                    type="checkbox"
+                    class="mj-checkbox"
+                    [checked]="!IsExcluded(e.ID)"
+                    [disabled]="IsBuilt"
+                    (change)="ToggleEntry(e.ID)"
+                    [attr.aria-label]="'Include ' + e.EntryNumber" />
+                </td>
+                <td class="bw-mono">{{ e.EntryNumber }}</td>
+                <td>{{ e.EffectiveDate | date: 'yyyy-MM-dd' }}</td>
+                <td>{{ e.Description || '—' }}</td>
+                <td>{{ CompanyName(e.CompanyID) }}</td>
+                <td class="bw-num">{{ e.Amount | currency }}</td>
+                <td>{{ e.EntryType }}</td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="7" class="bw-empty">Nothing matches these criteria.</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    </div>
+
+    <div class="bw-footer">
+      <button type="button" mjButton Variant="primary" [disabled]="!CanBuild" [title]="BuildBlockedReason ?? 'Build the batch'" (click)="Build()">
+        @if (IsBuilding) {
+          <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Building…
+        } @else {
+          <i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i> Build batch
+        }
+      </button>
+      <button type="button" mjButton Variant="outline" [disabled]="IsBuilt" (click)="KeepAsDraft()">
+        <i class="fa-regular fa-floppy-disk" aria-hidden="true"></i> Keep as draft tab
+      </button>
+      <button type="button" mjButton Variant="flat" (click)="Discard()">Discard</button>
+    </div>
+  </section>
+</div>

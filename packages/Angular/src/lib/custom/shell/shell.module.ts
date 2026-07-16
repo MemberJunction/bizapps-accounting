@@ -29,6 +29,7 @@ import { BatchesCategoryResourceComponent } from './batches-category-resource.co
 import { JournalEntriesCategoryComponent } from './journal-entries-category.component';
 import { JournalEntriesCategoryResourceComponent } from './journal-entries-category-resource.component';
 import { AllJournalEntriesPageComponent } from './pages/all-journal-entries.page';
+import { BatchWorkspacePageComponent } from './pages/batch-workspace.page';
 import { JournalEntryDetailPanelComponent } from './pages/journal-entry-detail-panel.component';
 import { ShellPagePendingComponent } from './pages/shell-page-pending.component';
 
@@ -46,6 +47,7 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
     JournalEntriesCategoryComponent,
     JournalEntriesCategoryResourceComponent,
     AllJournalEntriesPageComponent,
+    BatchWorkspacePageComponent,
     JournalEntryDetailPanelComponent,
     ShellPagePendingComponent,
   ],
@@ -77,6 +79,7 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
     JournalEntriesCategoryComponent,
     JournalEntriesCategoryResourceComponent,
     AllJournalEntriesPageComponent,
+    BatchWorkspacePageComponent,
     JournalEntryDetailPanelComponent,
   ],
 })
