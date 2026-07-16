@@ -14,7 +14,8 @@
   ],
   "scripts": {
     "build": "ngc",
-    "test": "echo \"No tests configured yet\""
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "author": "MemberJunction.com",
   "license": "ISC",

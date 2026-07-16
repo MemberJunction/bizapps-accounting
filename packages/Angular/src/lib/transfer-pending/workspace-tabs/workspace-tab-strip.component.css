@@ -1,0 +1,114 @@
+/* Workspace tab strip. Design tokens only — see nav-rail.component.css for the same rationale. */
+
+.ws-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  border-bottom: 1px solid var(--mj-border-default);
+  padding: 0 4px;
+  overflow-x: auto;
+  min-height: 38px;
+}
+
+.ws-tab {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--mj-border-default);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  background: var(--mj-bg-surface-card);
+  margin-bottom: -1px;
+  max-width: 240px;
+}
+.ws-tab--active {
+  background: var(--mj-bg-surface);
+  border-color: var(--mj-border-default);
+  /* Sit the active tab on top of the strip's bottom border so it reads as connected to the body. */
+  box-shadow: 0 1px 0 0 var(--mj-bg-surface);
+}
+.ws-tab--rejected {
+  border-color: var(--mj-status-warning-border, var(--mj-status-warning));
+  background: color-mix(in srgb, var(--mj-status-warning) 8%, var(--mj-bg-surface-card));
+}
+.ws-tab--complete {
+  border-color: color-mix(in srgb, var(--mj-status-success) 40%, var(--mj-border-default));
+}
+
+.ws-tab__select {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 4px 8px 11px;
+  border: none;
+  background: transparent;
+  color: var(--mj-text-secondary);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  min-width: 0;
+}
+.ws-tab--active .ws-tab__select {
+  color: var(--mj-text-primary);
+  font-weight: 600;
+}
+.ws-tab__select:focus-visible,
+.ws-tab__close:focus-visible,
+.ws-tabs__new:focus-visible {
+  outline: 2px solid var(--mj-border-focus);
+  outline-offset: -2px;
+}
+
+.ws-tab__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-tab__reject-icon {
+  color: var(--mj-status-warning);
+  font-size: 12px;
+}
+
+.ws-tab__dirty {
+  color: var(--mj-brand-primary);
+  font-size: 18px;
+  line-height: 0;
+}
+
+.ws-tab__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-right: 6px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--mj-text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  flex: none;
+}
+.ws-tab__close:hover {
+  background: var(--mj-bg-surface-hover);
+  color: var(--mj-text-primary);
+}
+
+.ws-tabs__new {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--mj-text-link);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  border-radius: 6px;
+}
+.ws-tabs__new:hover {
+  background: var(--mj-bg-surface-hover);
+}

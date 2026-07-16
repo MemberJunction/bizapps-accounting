@@ -21,7 +21,8 @@
 | 7 | [Q3](#q3) | Robert — JE-draft account contract (bless-as-built) | OPEN |
 | 8 | [Q9](#q9) | Amith — GLAccountLink role FK (bless-as-built) | OPEN |
 | 9 | [Q26](#q26) | Matt — Explorer header widget slot (feature ask) | OPEN |
-| 10 | [T36](#t36) | Marcelo — deterministic test data (internal) | OPEN |
+| 10 | [Q27](#q27) | Matt — `mj-left-nav` desktop icons-only collapse (feature ask) | OPEN |
+| 11 | [T36](#t36) | Marcelo — deterministic test data (internal) | OPEN |
 
 ## Index — by feature
 
@@ -39,7 +40,7 @@
 | M intercompany | [Q20](#q20)✓ |
 | A.3 CFO approver link | [Q17](#q17)✓ |
 | N.2 test substrate | [T36](#t36) |
-| (cross-cutting) | [Q25](#q25), [Q26](#q26) |
+| (cross-cutting) | [Q25](#q25), [Q26](#q26), [Q27](#q27) |
 
 ✓ = answered (frozen record) · ✗ = withdrawn
 
@@ -298,6 +299,36 @@
 - **Context to share:** the mockups (scope chip at rail-top with the interim-home tooltip).
 - **Additional context (for a verifying agent):** `explorer-core/src/lib/shell/` (app-nav renders
   NavItems; header-actions Explorer-owned); design-docs component inventory row.
+- **Answer:** _(pending)_
+
+<a id="q27"></a>
+### Q27 · `mj-left-nav` — desktop icons-only collapse — ask Matt — added 2026-07-16 (feature ask)
+- **Status:** OPEN
+- **Who to ask:** Matt (MJ Angular / ng-ui-components)
+- **Features:** cross-cutting (MJ base; component-inventory row — pairs with [Q26](#q26))
+- **Background (self-contained):** The approved mockup set drew a bespoke, **collapsible** nav rail
+  (hamburger → icons-only, 230px → 56px) for each category shell. During the build we found MJ
+  **already ships the idiom**: `<mj-left-nav>` (`@memberjunction/ng-ui-components`) — the canonical
+  left rail for Explorer dashboards with an internal section-nav. It already covers labelled
+  sections, badges, active state, `[header]`/`[footer]` slots, tree items, and a responsive
+  ≤700px off-canvas drawer. Per the UI plan §8 **MJ-wins rule** we adopted it and **deleted** the
+  bespoke rail rather than shipping a duplicate (which also retires a TRANSFER-BACKLOG row — the
+  parked rail no longer needs a home, because MJ already owns one).
+- **The delta (the only thing we gave up):** `<mj-left-nav>` has **no desktop icons-only collapse**.
+  Its narrow-viewport answer is the mobile drawer; on a laptop the rail is always its full width.
+  The mockup's hamburger therefore does not ship. Not a blocker — the rail is 240px and the
+  laptop-width tolerance holds — but it is a real deviation from the approved mockup.
+- **The question for Matt:** would MJ accept a `[Collapsible]` / `[Collapsed]` input on
+  `<mj-left-nav>` (hamburger → icons-only, labels/badges hidden, tooltips carry the label,
+  state persisted by the consumer via `UserInfoEngine`)? If yes we contribute it upstream; if no,
+  the always-expanded rail becomes the permanent accounting/orders answer and the mockup's
+  hamburger is struck from the design record.
+- **Context to share:** the mockup rail (`design-docs/ui-design/mockups/nav-shell-je-dashboard.html`
+  — the `.x-rail`/`.collapsed` CSS is the exact intended behavior) + `<mj-left-nav>` as-is.
+- **Additional context (for a verifying agent):**
+  `packages/Angular/Generic/ui-components/src/lib/left-nav/left-nav.component.ts` (Inputs today:
+  `Sections`, `ActiveId`, `Width`, `MobileTitle`, `ExpandedIds`; no collapse). Our consumers:
+  `packages/Angular/src/lib/custom/shell/*-category.component.ts`.
 - **Answer:** _(pending)_
 
 <a id="q23"></a>

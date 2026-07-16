@@ -1,0 +1,129 @@
+/* Rail-top company scope chip. Design tokens only. */
+
+.scope-chip {
+  position: relative;
+  margin: 4px 2px 0;
+}
+
+.scope-chip__btn {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--mj-border-default);
+  border-radius: 8px;
+  background: var(--mj-bg-surface-card);
+  color: var(--mj-text-primary);
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  text-align: left;
+}
+.scope-chip__btn:hover {
+  background: var(--mj-bg-surface-hover);
+}
+.scope-chip__btn:focus-visible {
+  outline: 2px solid var(--mj-border-focus);
+  outline-offset: 1px;
+}
+.scope-chip__btn i {
+  color: var(--mj-brand-primary);
+  flex: none;
+}
+
+.scope-chip__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scope-chip__caret {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--mj-text-muted);
+}
+
+/* Collapsed rail: the chip shrinks to its icon. The rail sets this class on itself, so we reach
+   through it rather than duplicating collapse state on the chip. */
+:host-context(.nav-rail--collapsed) .scope-chip__label,
+:host-context(.nav-rail--collapsed) .scope-chip__caret {
+  display: none;
+}
+
+.scope-chip__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 250px;
+  max-height: 340px;
+  overflow-y: auto;
+  z-index: 30;
+  padding: 6px;
+  border: 1px solid var(--mj-border-default);
+  border-radius: 8px;
+  background: var(--mj-bg-surface-elevated, var(--mj-bg-surface));
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--mj-text-primary) 18%, transparent);
+}
+
+.scope-chip__all {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 9px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mj-text-primary);
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.scope-chip__all:hover {
+  background: var(--mj-bg-surface-hover);
+}
+.scope-chip__all--on {
+  color: var(--mj-brand-primary);
+  font-weight: 600;
+}
+
+.scope-chip__sep {
+  height: 1px;
+  margin: 5px 2px;
+  background: var(--mj-border-subtle, var(--mj-border-default));
+}
+
+.scope-chip__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  color: var(--mj-text-primary);
+  cursor: pointer;
+}
+.scope-chip__item:hover {
+  background: var(--mj-bg-surface-hover);
+}
+
+.scope-chip__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scope-chip__code {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--mj-text-muted);
+  flex: none;
+}
+
+.scope-chip__empty {
+  padding: 10px;
+  font-size: 12px;
+  color: var(--mj-text-muted);
+}
