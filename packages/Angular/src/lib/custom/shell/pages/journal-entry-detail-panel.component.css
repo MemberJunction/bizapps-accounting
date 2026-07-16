@@ -1,0 +1,97 @@
+/* Journal-entry detail slide-in. Design tokens only. */
+
+.jed {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 2px;
+}
+
+.jed__chips,
+.jed__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.jed__facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 14px;
+  margin: 0;
+  font-size: 13px;
+}
+.jed__facts dt {
+  color: var(--mj-text-muted);
+  font-weight: 600;
+}
+.jed__facts dd {
+  margin: 0;
+  color: var(--mj-text-primary);
+}
+
+.jed__h {
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--mj-text-secondary);
+}
+
+.jed__lines {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.jed__lines th,
+.jed__lines td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--mj-border-subtle, var(--mj-border-default));
+  text-align: left;
+  vertical-align: top;
+}
+.jed__lines thead th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--mj-text-muted);
+}
+.jed__num {
+  text-align: right;
+  /* Tabular figures so the Dr/Cr columns align on the decimal — accountants scan these vertically. */
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.jed__lines tfoot td {
+  font-weight: 700;
+  border-top: 2px solid var(--mj-border-default);
+  border-bottom: none;
+  color: var(--mj-text-primary);
+}
+.jed__unbalanced td {
+  color: var(--mj-status-error-text, var(--mj-status-error));
+}
+
+.jed__linedesc {
+  font-size: 12px;
+  color: var(--mj-text-muted);
+}
+
+.jed__dims {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.jed__dim {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--mj-bg-surface-sunken);
+  color: var(--mj-text-secondary);
+}
+
+.jed__empty {
+  color: var(--mj-text-muted);
+  font-style: italic;
+}

@@ -262,3 +262,23 @@ path; demo reseeded through it.
 - Playwright (tier 5) specs incl. the batching fixtures were updated for ApprovalCFOUserID but NOT
   re-run this session (the UI workstream owns their next run); batching fixtures now assign the
   running user as CFO.
+
+## Tier-5 spec debt created by the UI wave (recorded 2026-07-16 — MUST fix in the tier-5 pass)
+
+Marcelo's sequencing (2026-07-16): **UI first, tiers 1–3 as we go, tiers 4–5 after the UI is
+complete.** That means the UI wave is knowingly invalidating committed tier-5 specs as it retires
+old screens. They are listed here so the tier-5 pass is a checklist, not an archaeology exercise.
+**Do not delete these specs — repoint them.**
+
+| Spec | What broke it | Fix |
+|---|---|---|
+| `playwright/specs/accounting-je-console.spec.ts` | The flat **"Journal Entries" → `JournalEntryConsoleResource`** nav item was REPLACED by the category shell (`JournalEntriesCategoryResource`) once All-journal-entries reached parity (§6 sweep). The spec navigates by the nav label and then asserts JE-Console selectors, so it will now land on the category and fail. | Repoint at the category: nav label "Journal Entries" → rail item **"All journal entries"** → the `mj-entity-data-grid` + the `mj-journal-entry-detail-panel` slide-in (`.jed__*`). The BEHAVIOURS to keep proving are the same: reversal, source-order drill-through, lines + totals, status filter. |
+| `playwright/lib/env.ts` `NAV.journalEntries` | Still correct as a LABEL, but it now resolves to the category shell, not the console. | Keep the label; add rail-item constants for the pages inside a category. |
+
+**Not yet covered at tier 5 at all (new surface):** the nav rail renders the approved sections; the
+company scope chip persists across reload (UserInfoEngine, not localStorage); filters drive the grid
+server-side; row → detail slide-in shows lines/lineage/reversal chain/C.8 chip.
+
+**The JE Console component is deliberately NOT deleted** — only un-navigated. It stays as the
+behavioural reference until the tier-5 pass proves the new page covers it, then it goes at sweep
+close. Deleting it before its replacement is proven would destroy the only working reference.

@@ -75,3 +75,10 @@
     (AfterRowClick)="OnRowClicked($event.rowKey)">
   </mj-entity-data-grid>
 </div>
+
+<!-- Row detail: lines + lineage + reversal chain + batch membership + the C.8 chip. -->
+<mj-journal-entry-detail-panel
+  [JournalEntryID]="SelectedID"
+  (Closed)="OnDetailClosed()"
+  (Changed)="OnDetailChanged()">
+</mj-journal-entry-detail-panel>

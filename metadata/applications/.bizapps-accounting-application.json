@@ -8,18 +8,11 @@
     "DefaultSequence": 2010,
     "DefaultNavItems": [
       {
-        "_comment": "UI wave §8.0 — the first of the five approved CATEGORY nav items (each hosts mj-left-nav + its pages). Added ALONGSIDE the existing flat items rather than replacing them: its 'All journal entries' page does not yet carry the JE Console's reversal / source-order drill-through / expandable lines, so swapping now would be a feature regression. The flat items retire into their categories as each reaches parity — that migration IS the UI plan §6 consistency sweep.",
-        "Label": "Journal Entries (new)",
-        "Icon": "fa-solid fa-book-open",
-        "ResourceType": "Custom",
-        "DriverClass": "JournalEntriesCategoryResource",
-        "isDefault": false
-      },
-      {
+        "_comment": "UI wave §8.0 — the first of the five approved CATEGORY nav items (each hosts mj-left-nav + its pages). This REPLACED the flat JournalEntryConsoleResource item once its 'All journal entries' page reached parity (reversal, source-order drill-through, lines, balance, C.8 chip). Retiring the flat item into its category IS the UI plan §6 consistency sweep for this screen.",
         "Label": "Journal Entries",
         "Icon": "fa-solid fa-book-open",
         "ResourceType": "Custom",
-        "DriverClass": "JournalEntryConsoleResource",
+        "DriverClass": "JournalEntriesCategoryResource",
         "isDefault": true
       },
       {

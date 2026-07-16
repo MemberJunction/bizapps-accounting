@@ -13,6 +13,8 @@ import {
   MJStatBadgeComponent,
   MJRefreshButtonComponent,
   MJEmptyStateComponent,
+  MjSlidePanelComponent,
+  MJAlertComponent,
 } from '@memberjunction/ng-ui-components';
 
 import { CompanyScopeChipComponent } from '../shared/company-scope-chip.component';
@@ -21,6 +23,7 @@ import { WorkspaceTabStripComponent } from '../../transfer-pending/workspace-tab
 import { JournalEntriesCategoryComponent } from './journal-entries-category.component';
 import { JournalEntriesCategoryResourceComponent } from './journal-entries-category-resource.component';
 import { AllJournalEntriesPageComponent } from './pages/all-journal-entries.page';
+import { JournalEntryDetailPanelComponent } from './pages/journal-entry-detail-panel.component';
 import { ShellPagePendingComponent } from './pages/shell-page-pending.component';
 
 /**
@@ -35,6 +38,7 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
     JournalEntriesCategoryComponent,
     JournalEntriesCategoryResourceComponent,
     AllJournalEntriesPageComponent,
+    JournalEntryDetailPanelComponent,
     ShellPagePendingComponent,
   ],
   imports: [
@@ -50,6 +54,8 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
     MJStatBadgeComponent,
     MJRefreshButtonComponent,
     MJEmptyStateComponent,
+    MjSlidePanelComponent,
+    MJAlertComponent,
     CompanyScopeChipComponent,
     WorkspaceTabStripComponent,
   ],
@@ -57,6 +63,7 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
     JournalEntriesCategoryComponent,
     JournalEntriesCategoryResourceComponent,
     AllJournalEntriesPageComponent,
+    JournalEntryDetailPanelComponent,
   ],
 })
 export class AccountingShellModule {}

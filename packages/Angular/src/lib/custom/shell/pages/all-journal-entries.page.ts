@@ -74,6 +74,9 @@ export class AllJournalEntriesPageComponent implements OnInit {
 
   public GridParams: RunViewParams = { EntityName: JE_ENTITY };
 
+  /** The row whose detail slide-in is open, if any. */
+  public SelectedID: string | null = null;
+
   /** Bumped to force the grid to refetch (the header refresh control + post-mutation refetch). */
   public RefreshToken = 0;
 
@@ -138,17 +141,27 @@ export class AllJournalEntriesPageComponent implements OnInit {
   }
 
   /**
-   * Row click → the standard bizapps slide-in (element doctrine: slide-in = quick VIEW).
+   * Row click → the JE detail slide-in (element doctrine: slide-in = quick VIEW).
    * `rowKey` is the grid's KeyField value — the JE's ID.
+   *
+   * The purpose-built panel, not the generic form host: this screen's detail must carry the lines,
+   * origin lineage, reversal chain, batch membership and the C.8 chip — none of which the generic
+   * host knows about.
    */
   public OnRowClicked(rowKey: string | null | undefined): void {
     if (!rowKey) return;
-    openBizDetail(this.forms, {
-      entityName: JE_ENTITY,
-      primaryKey: CompositeKey.FromID(rowKey),
-      title: 'Journal entry',
-      mode: 'slide-in',
-    });
+    this.SelectedID = rowKey;
+    this.cdr.markForCheck();
+  }
+
+  public OnDetailClosed(): void {
+    this.SelectedID = null;
+    this.cdr.markForCheck();
+  }
+
+  /** A mutating action inside the panel (reversal) must refetch the list — §8 refresh policy. */
+  public OnDetailChanged(): void {
+    this.Refresh();
   }
 
   public get ScopeLabel(): string {

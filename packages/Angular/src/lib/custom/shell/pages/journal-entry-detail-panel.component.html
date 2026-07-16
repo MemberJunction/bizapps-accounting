@@ -1,0 +1,124 @@
+<mj-slide-panel [Visible]="Visible" [Title]="Title" (Closed)="Close()">
+  @if (IsLoading) {
+    <mj-loading text="Loading entry…"></mj-loading>
+  } @else if (LoadError) {
+    <mj-alert Variant="error" [Message]="LoadError"></mj-alert>
+  } @else if (Header) {
+    <div class="jed">
+      <!-- State strip: status, approval gate, balance. -->
+      <div class="jed__chips">
+        <mj-stat-badge [Label]="Header.Status" [Variant]="StatusVariant"></mj-stat-badge>
+        <mj-stat-badge [Label]="Header.EntryType" Variant="default"></mj-stat-badge>
+        @if (AwaitsApproval) {
+          <!-- C.8: explains why this entry is NOT being picked up by batching. -->
+          <mj-stat-badge
+            Label="Awaiting CFO approval"
+            Icon="fa-solid fa-user-check"
+            Variant="warning"
+            title="Manual entries need CFO approval before they can be batched.">
+          </mj-stat-badge>
+        }
+        @if (IsBalanced) {
+          <mj-stat-badge Label="Balanced" Icon="fa-solid fa-scale-balanced" Variant="success"></mj-stat-badge>
+        } @else {
+          <mj-stat-badge Label="Out of balance" Icon="fa-solid fa-triangle-exclamation" Variant="error"></mj-stat-badge>
+        }
+      </div>
+
+      <!-- Header verbs. Pop-out (↗) is required on every slide-in by the element doctrine. -->
+      <div class="jed__actions">
+        <button type="button" mjButton Variant="outline" Size="sm" (click)="PopOut()" title="Open the full entry">
+          <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i> Open full
+        </button>
+        @if (Header.OrderID) {
+          <button type="button" mjButton Variant="outline" Size="sm" (click)="OpenSourceOrder()" title="Open the order that booked this entry">
+            <i class="fa-solid fa-cart-shopping" aria-hidden="true"></i> Open source order
+          </button>
+        }
+        <button
+          type="button"
+          mjButton
+          Variant="outline"
+          Size="sm"
+          [disabled]="!CanReverse"
+          [title]="ReverseBlockedReason ?? 'Generate a balanced reversing entry'"
+          (click)="Reverse()">
+          @if (IsReversing) {
+            <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Reversing…
+          } @else {
+            <i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Reverse
+          }
+        </button>
+      </div>
+
+      @if (ActionMessage) {
+        <mj-alert [Variant]="ActionIsError ? 'error' : 'success'" [Message]="ActionMessage"></mj-alert>
+      }
+
+      <!-- Facts -->
+      <dl class="jed__facts">
+        <dt>Effective</dt>
+        <dd>{{ Header.EffectiveDate ? (Header.EffectiveDate | date: 'yyyy-MM-dd') : '—' }}</dd>
+        <dt>Description</dt>
+        <dd>{{ Header.Description || '—' }}</dd>
+        <dt>Batch</dt>
+        <dd>{{ BatchNumber ?? (Header.BatchID ? 'in a batch' : 'Not batched') }}</dd>
+        @if (ReversalEntryNumber) {
+          <dt>Reversed by</dt>
+          <dd>{{ ReversalEntryNumber }}</dd>
+        }
+        @if (ReversesEntryNumber) {
+          <dt>Reverses</dt>
+          <dd>{{ ReversesEntryNumber }}</dd>
+        }
+      </dl>
+
+      <!-- Lines. (§8.1 asks for these inline in the grid; AG Grid Community has no master/detail,
+           so they live here — see the component doc comment.) -->
+      <h4 class="jed__h">Lines</h4>
+      <table class="jed__lines">
+        <thead>
+          <tr>
+            <th scope="col">#</th>
+            <th scope="col">Account</th>
+            <th scope="col" class="jed__num">Debit</th>
+            <th scope="col" class="jed__num">Credit</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (l of Lines; track l.LineNumber) {
+            <tr>
+              <td>{{ l.LineNumber }}</td>
+              <td>
+                <div>{{ l.Account }}</div>
+                @if (l.Description) {
+                  <div class="jed__linedesc">{{ l.Description }}</div>
+                }
+                @if (l.Dimensions.length > 0) {
+                  <div class="jed__dims">
+                    @for (d of l.Dimensions; track d) {
+                      <span class="jed__dim">{{ d }}</span>
+                    }
+                  </div>
+                }
+              </td>
+              <td class="jed__num">{{ l.Debit ? (l.Debit | number: '1.2-2') : '' }}</td>
+              <td class="jed__num">{{ l.Credit ? (l.Credit | number: '1.2-2') : '' }}</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="4" class="jed__empty">This entry has no lines.</td>
+            </tr>
+          }
+        </tbody>
+        <tfoot>
+          <tr [class.jed__unbalanced]="!IsBalanced">
+            <td colspan="2">Totals</td>
+            <td class="jed__num">{{ TotalDebits | number: '1.2-2' }}</td>
+            <td class="jed__num">{{ TotalCredits | number: '1.2-2' }}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  }
+</mj-slide-panel>
