@@ -151,6 +151,25 @@ receive-only posture) is decided at the Task 65b review.
 > **Element doctrine + navigation map** are recorded present-tense in
 > `design-docs/ui-design/README.md` (standing design record) — read that first.
 
+### Dispatch rulings (Marcelo, 2026-07-16 — bind the build)
+
+- **65b gate WAIVED for this build** (feature-wave sign-off review returns later — output now;
+  the review stays HIGH in the instance BACKLOG).
+- **Build on the EXISTING grid system** (AG grid + keyset) — LiveDashboardBase is NOT a
+  precondition; no rewrite-before-seeing-it-perform. **Interim refresh policy (scaffold-level,
+  never per-button wiring):** (a) every action that mutates visible state refetches the affected
+  list/stats on completion — correctness, not optional; (b) ONE standard refresh control in the
+  page-header actions slot of every list/dashboard — a single seam to delete when live push lands;
+  (c) no polling/timers. LiveDashboardBase swaps in behind the scaffold seam when the Live Page
+  System spike lands.
+- **Users & roles + Approvals settings (8.4) build LAST** — A2 roles/RLS (Marcelo co-design) and
+  C.8 policy shape gate them; stubs acceptable until then. Everything else proceeds.
+- Approval inbox: build generically against task entities under parking discipline
+  (`transfer-pending/`, zero accounting-entity imports) — the bizapps-tasks answer (Ian, ~07-21)
+  may move it; that's priced in.
+- **Commit authority is NOT delegated through this plan or the handoff brief** — the build agent
+  commits only on Marcelo's explicit, directly-given approval. Never push.
+
 ### 8.0 App shell (build FIRST — every page hangs off it)
 
 - **Top-nav categories = Explorer app nav items** (`DefaultNavItems` metadata; badges supported
