@@ -23,6 +23,7 @@
 | 9 | [Q26](#q26) | Matt — Explorer header widget slot (feature ask) | OPEN |
 | 10 | [Q27](#q27) | Matt — `mj-left-nav` desktop icons-only collapse (feature ask) | OPEN |
 | 4b | [Q28](#q28) | Marcelo — batch/task transaction split + batch task pointer (MOD-14) | OPEN ★HIGH |
+| 4c | [Q29](#q29) | Marcelo — approvals must not outlive content changes; the orphaned old task | OPEN (principle ruled) |
 | 11 | [T36](#t36) | Marcelo — deterministic test data (internal) | OPEN |
 
 ## Index — by feature
@@ -33,7 +34,7 @@
 | C.5 reversals / C.8 manual-JE gate | [Q12](#q12) (via Q19), [Q6](#q6) |
 | C.6 backdating dates | [Q15](#q15) (via Q19) |
 | D batching (defaults, cutoff, ordering, reject) | [Q28](#q28), [Q19](#q19), [Q13](#q13)✓, [Q14](#q14)✓, [Q4](#q4)✓, [Q5](#q5)✓ |
-| D.3 batch approvals | [Q6](#q6), [Q7](#q7) |
+| D.3 batch approvals | [Q29](#q29), [Q6](#q6), [Q7](#q7) |
 | H reporting / cutover | [Q19](#q19) ★ |
 | I periods/timing | [Q18](#q18)✓, [Q8](#q8)✓ |
 | K.1/K.2 roles + RLS (A2) | [Q22](#q22), [Q24](#q24), [Q23](#q23)✗, [Q7](#q7) |
@@ -301,6 +302,44 @@
 - **Additional context (for a verifying agent):** `explorer-core/src/lib/shell/` (app-nav renders
   NavItems; header-actions Explorer-owned); design-docs component inventory row.
 - **Answer:** _(pending)_
+
+<a id="q29"></a>
+### Q29 · An approval must not survive a change to what it approved — the re-stamp rule + the orphaned old task — ask Marcelo — added 2026-07-16
+- **Status:** OPEN — **the working approach is RULED and built; the open part is the old task's fate.**
+- **Who to ask:** Marcelo (principle already given) · Robert/Jeremy may care about the CFO-facing half
+- **Features:** D.3 batch approvals · C.8 manual-JE gate (the same principle may apply)
+- **The principle (Marcelo, 2026-07-16):** *"we probably don't want approvals to last past task
+  changes."* An approval is consent to a SPECIFIC set of numbers. If the numbers change, the consent
+  is void — it must be re-sought, never silently carried over.
+- **Current working approach (BUILT — MOD-14):** `regenerateBatch` re-gathers the candidate pool and
+  rebuilds the summary on the SAME batch record, so its CONTENTS change. It therefore **re-raises the
+  approval Task and re-stamps `ApprovalTaskID` / `ApprovalTaskRaisedAt`** in the separate
+  accounting-owned task transaction. The stamp is what makes the *current* task unambiguous.
+- **Context — why this is narrower than it first looks:** `regenerateBatch` already **refuses unless
+  `Status='Pending'`**, and approval flips Pending→Approved (after which `trg_JEBatch_Immutability`
+  freezes content, 50008/50009). So an APPROVED batch cannot be regenerated at all — the principle is
+  already enforced structurally for that path. The live case is narrower: a batch that is *awaiting*
+  approval gets regenerated while the CFO is looking at it.
+- **The open questions:**
+  1. **What happens to the OLD task?** Today it is left as-is: a new Task is raised and the pointer
+     moves, but the previous Task still exists and is still linked to the batch. Two risks: (a) the
+     CFO can still act on a stale task showing numbers that no longer exist; (b) orphaned approval
+     tasks accumulate. Options: cancel/close the old task as part of the same transaction (our lean);
+     leave it and rely on the pointer; or reuse the task and reset its decision.
+  2. **Does an existing APPROVED decision on the old task leak?** `assertApproved` historically found
+     the batch's task by Task-Link lookup — with two linked tasks that is ambiguous. The new
+     `ApprovalTaskID` pointer resolves it (it names the authoritative task), but `assertApproved`
+     should be switched to read the POINTER rather than the link for that to actually hold. **Not yet
+     done — this is the concrete follow-up.**
+  3. **Does the same principle apply to C.8 manual-JE approvals?** If an approved manual JE is edited
+     before batching, is its approval void too? We assume yes, by the same logic.
+- **Additional context (for a verifying agent):** `BatchingEngine.regenerateBatch` (the re-raise),
+  `raiseApprovalTaskAndStamp` (the stamp transaction), `TasksAppApprovalGate.assertApproved` +
+  `resolveBatchTask` (the Task-Link lookup that Q29.2 would replace with the pointer),
+  `migrations/V202607161700__v1.0.x__Batch_ApprovalTask_Pointer.sql`. Related: [Q28](#q28) (the
+  transaction split itself), [Q6](#q6) (approval workflow shape).
+- **Answer:** _(the principle is answered — Marcelo 2026-07-16: approvals must not outlive content
+  changes; regenerate re-stamps. Q29.1/29.2/29.3 remain open.)_
 
 <a id="q28"></a>
 ### Q28 · Batch build / approval-task split + the batch task pointer (MOD-14) — ask Marcelo — added 2026-07-16
