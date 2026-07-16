@@ -1,0 +1,150 @@
+<!doctype html>
+<!-- ============================================================================
+  MOCKUP (ephemeral) · cycle 2026-07-15 · Accounting — Journal Entries DASHBOARD
+  Demonstrates the proposed nav shell (Xero/QBO-inspired, Marcelo direction):
+  top nav = CATEGORIES (Journal Entries · Batches · Accounts · Reports ·
+  Configuration) · collapsible icon rail = sub-pages (MAIN + secondary groups,
+  one dedicated purpose per page) · app-wide company scope chip (top right,
+  stored per user — open question) · no FAB (MJ chat button owns that corner).
+  INTERACTIVE: click the hamburger to collapse/expand the rail.
+  Max-clicks rule: any page = category click + rail click (2); action on it = 3.
+============================================================================ -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup — Accounting · Journal Entries dashboard</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link rel="stylesheet" href="../style-kit/mj-mock.css">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:var(--mj-bg-page);color:var(--mj-text-primary)}
+.x-app{display:flex;flex-direction:column;height:100vh}
+.x-topnav{display:flex;align-items:center;gap:6px;height:52px;padding:0 16px;background:var(--mj-bg-surface);border-bottom:1px solid var(--mj-border-default);flex:none}
+.x-brand{display:flex;align-items:center;gap:9px;font-weight:700;margin-right:22px;white-space:nowrap;font-size:14.5px}
+.x-brand i{color:var(--mj-brand-primary);font-size:17px}
+.x-brand .app{color:var(--mj-text-muted);font-weight:500}
+.x-tabs{display:flex;gap:2px;height:100%}
+.x-tab{display:flex;align-items:center;gap:7px;padding:0 15px;color:var(--mj-text-secondary);text-decoration:none;font-weight:500;font-size:13.5px;border-bottom:3px solid transparent;border-top:3px solid transparent}
+.x-tab:hover{color:var(--mj-text-primary);background:var(--mj-bg-surface-hover)}
+.x-tab.active{color:var(--mj-brand-primary);border-bottom-color:var(--mj-brand-primary);font-weight:600}
+.x-topnav .right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.x-scope{display:flex;align-items:center;gap:7px;padding:5px 11px;border:1px solid var(--mj-border-default);border-radius:999px;background:var(--mj-bg-surface-card);font-size:12.5px;color:var(--mj-text-secondary);cursor:pointer}
+.x-scope b{color:var(--mj-text-primary)}
+.x-iconbtn{border:none;background:none;color:var(--mj-text-secondary);font-size:15px;cursor:pointer;padding:7px;border-radius:7px}
+.x-iconbtn:hover{background:var(--mj-bg-surface-hover);color:var(--mj-text-primary)}
+.x-avatar{width:30px;height:30px;border-radius:50%;background:var(--mj-brand-primary);color:var(--mj-text-inverse,#fff);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600}
+.x-body{display:flex;flex:1;min-height:0}
+.x-rail{width:230px;flex:none;background:var(--mj-bg-surface);border-right:1px solid var(--mj-border-default);display:flex;flex-direction:column;padding:8px;gap:2px;transition:width .18s ease;overflow-x:hidden;overflow-y:auto}
+.x-rail.collapsed{width:56px}
+.x-rail-group{margin:14px 0 4px;font-size:10.5px;font-weight:700;letter-spacing:.08em;color:var(--mj-text-muted);padding:0 10px;white-space:nowrap}
+.x-rail.collapsed .x-rail-group{visibility:hidden;height:8px;margin:8px 0 0}
+.x-rail a{display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:8px;color:var(--mj-text-secondary);text-decoration:none;font-size:13.5px;white-space:nowrap}
+.x-rail a i{width:18px;text-align:center;font-size:14px;flex:none}
+.x-rail a:hover{background:var(--mj-bg-surface-hover);color:var(--mj-text-primary)}
+.x-rail a.active{background:color-mix(in srgb,var(--mj-brand-primary) 10%,transparent);color:var(--mj-brand-primary);font-weight:600}
+.x-rail.collapsed a .lbl,.x-rail.collapsed .x-badge{display:none}
+.x-badge{margin-left:auto;background:var(--mj-status-error);color:#fff;border-radius:999px;font-size:10.5px;padding:1px 7px;font-weight:700}
+.x-content{flex:1;min-width:0;overflow:auto;padding:20px 24px}
+.x-pagehead{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.x-pagehead h1{font-size:19px;margin:0}
+.x-pagehead .actions{margin-left:auto;display:flex;gap:8px}
+.x-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}
+.x-cols{display:grid;grid-template-columns:1.65fr 1fr;gap:14px;align-items:start}
+.x-card-title{font-size:13px;font-weight:700;margin:0 0 10px;display:flex;align-items:center;gap:8px}
+.x-card-title .more{margin-left:auto;font-size:12px;font-weight:500;color:var(--mj-brand-primary);text-decoration:none}
+.x-bars{display:flex;align-items:flex-end;gap:4px;height:62px;margin-top:6px}
+.x-bars span{flex:1;background:color-mix(in srgb,var(--mj-brand-primary) 72%,transparent);border-radius:3px 3px 0 0}
+.x-attn{display:flex;flex-direction:column;gap:10px}
+.x-attn .item{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--mj-border-default);border-radius:9px;background:var(--mj-bg-surface-card)}
+.x-attn .item .t{font-size:13px}
+.x-attn .item .s{font-size:11.5px;color:var(--mj-text-muted)}
+.x-attn .item .mjm-btn{margin-left:auto}
+</style>
+</head>
+<body>
+<div class="x-app">
+
+  <nav class="x-topnav">
+    <span class="x-brand"><i class="fa-solid fa-cubes"></i> MJ <span class="app">/ Accounting</span></span>
+    <div class="x-tabs">
+      <a class="x-tab active" href="#"><i class="fa-solid fa-book"></i> Journal Entries</a>
+      <a class="x-tab" href="#"><i class="fa-solid fa-boxes-stacked"></i> Batches</a>
+      <a class="x-tab" href="#"><i class="fa-solid fa-sitemap"></i> Accounts</a>
+      <a class="x-tab" href="#"><i class="fa-solid fa-chart-column"></i> Reports</a>
+      <a class="x-tab" href="#"><i class="fa-solid fa-gear"></i> Configuration</a>
+    </div>
+    <div class="right">
+      <span class="x-scope" title="App-wide company scope — follows the user across every screen (open question: per-screen override?)"><i class="fa-solid fa-building"></i> Scope: <b>Demo Co. +2</b> <i class="fa-solid fa-chevron-down" style="font-size:10px"></i></span>
+      <button class="x-iconbtn" title="Search"><i class="fa-solid fa-magnifying-glass"></i></button>
+      <button class="x-iconbtn" title="Notifications"><i class="fa-regular fa-bell"></i></button>
+      <span class="x-avatar">MT</span>
+    </div>
+  </nav>
+
+  <div class="x-body">
+    <aside class="x-rail" id="rail">
+      <button class="x-iconbtn" onclick="rail()" title="Collapse / expand" style="align-self:flex-start"><i class="fa-solid fa-bars"></i></button>
+      <div class="x-rail-group">MAIN</div>
+      <a class="active" href="#"><i class="fa-solid fa-gauge-high"></i><span class="lbl">Dashboard</span></a>
+      <a href="#"><i class="fa-solid fa-table-list"></i><span class="lbl">All journal entries</span></a>
+      <a href="#"><i class="fa-solid fa-plus"></i><span class="lbl">New journal entry</span></a>
+      <div class="x-rail-group">VIEWS</div>
+      <a href="#"><i class="fa-regular fa-calendar-days"></i><span class="lbl">Scheduled entries</span></a>
+      <a href="#"><i class="fa-solid fa-user-check"></i><span class="lbl">Awaiting approval</span><span class="x-badge">3</span></a>
+    </aside>
+
+    <main class="x-content">
+      <div class="x-pagehead">
+        <h1>Journal Entries</h1>
+        <span class="mjm-chip mjm-chip--info">FY2026</span>
+        <span class="actions">
+          <button class="mjm-btn mjm-btn--outline"><i class="fa-solid fa-filter"></i> Filters</button>
+          <button class="mjm-btn mjm-btn--primary"><i class="fa-solid fa-plus"></i> New journal entry</button>
+        </span>
+      </div>
+
+      <div class="x-stats">
+        <div class="mjm-card mjm-stat"><span class="value">128</span><span class="label">Pending entries</span></div>
+        <div class="mjm-card mjm-stat"><span class="value">6</span><span class="label">My drafts</span></div>
+        <div class="mjm-card mjm-stat"><span class="value">3</span><span class="label">Awaiting CFO approval</span></div>
+        <div class="mjm-card mjm-stat"><span class="value">245</span><span class="label">Unbatched</span></div>
+      </div>
+
+      <div class="x-cols">
+        <div class="mjm-card">
+          <p class="x-card-title"><i class="fa-solid fa-clock-rotate-left"></i> My recent journal entries <a class="more" href="#">See all journal entries →</a></p>
+          <table class="mjm-grid">
+            <thead><tr><th>Entry #</th><th>Date</th><th>Memo</th><th>Company</th><th class="num">Amount</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr><td class="mjm-mono">JE-DEMO-2026-00871</td><td>2026-07-15</td><td>Order ORD-1042 revenue</td><td>Demo Co.</td><td class="num">$15,099.00</td><td><span class="mjm-chip mjm-chip--neutral">Pending</span></td></tr>
+              <tr><td class="mjm-mono">JE-DEMO-2026-00870</td><td>2026-07-15</td><td>Payment PMT-3311 capture</td><td>Demo Co.</td><td class="num">$10,000.00</td><td><span class="mjm-chip mjm-chip--neutral">Pending</span></td></tr>
+              <tr><td class="mjm-mono">JE-CHZ-2026-00214</td><td>2026-07-14</td><td>Membership rev-rec (Jul)</td><td>Cheese Co.</td><td class="num">$2,400.00</td><td><span class="mjm-chip mjm-chip--warning">Awaiting approval</span></td></tr>
+              <tr><td class="mjm-mono">JE-DEMO-2026-00863</td><td>2026-07-14</td><td>Manual accrual — event deposit</td><td>Demo Co.</td><td class="num">$860.00</td><td><span class="mjm-chip mjm-chip--info">Batched</span></td></tr>
+              <tr><td class="mjm-mono">JE-DEMO-2026-00858</td><td>2026-07-13</td><td>Order ORD-1039 reversal</td><td>Demo Co.</td><td class="num">$12,000.00</td><td><span class="mjm-chip mjm-chip--success">GL Posted</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div class="mjm-card">
+            <p class="x-card-title"><i class="fa-solid fa-triangle-exclamation" style="color:var(--mj-status-warning)"></i> Needs attention</p>
+            <div class="x-attn">
+              <div class="item"><i class="fa-solid fa-user-check" style="color:var(--mj-status-warning)"></i><span><span class="t">3 manual entries await CFO approval</span><br><span class="s">oldest 2026-07-13 · blocks batching</span></span><button class="mjm-btn mjm-btn--sm mjm-btn--outline">Review</button></div>
+              <div class="item"><i class="fa-regular fa-calendar-days" style="color:var(--mj-brand-primary)"></i><span><span class="t">12 scheduled entries due this week</span><br><span class="s">next materialization: tonight</span></span><button class="mjm-btn mjm-btn--sm mjm-btn--outline">View</button></div>
+            </div>
+          </div>
+          <div class="mjm-card">
+            <p class="x-card-title"><i class="fa-solid fa-chart-simple"></i> Entries per day <span class="mjm-muted" style="margin-left:auto;font-size:11.5px">last 14 days</span></p>
+            <div class="x-bars">
+              <span style="height:34%"></span><span style="height:52%"></span><span style="height:28%"></span><span style="height:64%"></span><span style="height:47%"></span><span style="height:12%"></span><span style="height:8%"></span><span style="height:58%"></span><span style="height:72%"></span><span style="height:41%"></span><span style="height:88%"></span><span style="height:66%"></span><span style="height:30%"></span><span style="height:76%"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+<script>function rail(){document.getElementById('rail').classList.toggle('collapsed')}</script>
+</body>
+</html>

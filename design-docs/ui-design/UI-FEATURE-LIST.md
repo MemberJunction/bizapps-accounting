@@ -21,12 +21,12 @@
 | A.3–A.4 | Company setup (ACP, fiscal year, default accounts, CFO approver) | In build ◇ | CompanySetup dashboard | — | UI plan §5 (with A2 settings) |
 | B.1–B.2 | GL account mapping admin (roles/links) | Not started | Settings screen — GLAccountLink manager | — | UI plan §5 |
 | B.3 | CoA↔ERP mapping approval flow | Not started | Settings screen — mapping approval grid | — | UI plan §5 |
-| C.1–C.7 | JE browsing, detail, lines+dimensions, reversal affordance | In build ◇ | JournalEntry + JournalEntryConsole dashboards | — | UI plan §3 |
+| C.1–C.7 | JE browsing, detail, lines+dimensions, reversal affordance | In build ◇ · nav-shell redesign: Mockups-in-review | JournalEntry + JournalEntryConsole dashboards | mockups/nav-shell-je-dashboard.html | UI plan §3 |
 | C.8 | Manual-JE approval surfacing | Not started (feature Planned) | approval inbox (shared) + JE detail affordances | — | UI plan §1 |
 | C.9 | Pending-JE void affordance | Not started — decision-gated (§14 Q1); detail slot reserved | JE detail | — | UI plan §3 |
 | C.10 | JE attachments panel | Not started — decision-gated (§14 Q9); detail slot reserved | JE detail slide-in | — | UI plan §3 |
-| D.1–D.4, D.6–D.7 | Batch build/dispatch/status workflow | In build ◇ | BatchDispatch + BatchStatus dashboards | — | UI plan §1/§2 |
-| D.3 | Batch approvals page (rebuild to house style — "I'm not a lover") | In build ◇ | Batch approvals page (reuses tasks approval-inbox pattern) | — | UI plan §1 |
+| D.1–D.4, D.6–D.7 | Batch build/dispatch/status workflow | In build ◇ · nav-shell redesign: Mockups-in-review | BatchDispatch + BatchStatus dashboards | mockups/nav-shell-batches-dashboard.html | UI plan §1/§2 |
+| D.3 | Batch approvals page (rebuild to house style — "I'm not a lover") | In build ◇ · nav-shell redesign: Mockups-in-review | Batch approvals page (reuses tasks approval-inbox pattern) | mockups/nav-shell-batches-dashboard.html | UI plan §1 |
 | D.5 | View-driven batch builder UI | Not started (feature Planned) | Batch builder | — | UI plan §2 |
 | E.1–E.5 | Scheduled-JE schedule visibility + materialization ops | Not started | Scheduled-JE browser + materialize action | — | UI plan §5 (op) · §7 (browser) |
 | F.1–F.2 | Currency display (ISO set, original-currency line fields) | In build ◇ | generated forms + JE detail | — | — |
