@@ -19,6 +19,7 @@ import {
 } from '@memberjunction/ng-ui-components';
 
 import { CompanyScopeChipComponent } from '../shared/company-scope-chip.component';
+import { GlResolutionPreviewComponent } from '../shared/gl-resolution-preview.component';
 import { WorkspaceTabStripComponent } from '../../transfer-pending/workspace-tabs/workspace-tab-strip.component';
 
 import { BatchDispatchModule } from '../BatchDispatch/batch-dispatch.module';
@@ -43,6 +44,7 @@ import { JeDashboardPageComponent } from './pages/je-dashboard.page';
 import { BatchesDashboardPageComponent } from './pages/batches-dashboard.page';
 import { DimensionsPageComponent } from './pages/dimensions.page';
 import { ErpMappingPageComponent } from './pages/erp-mapping.page';
+import { AccountLinksPageComponent } from './pages/account-links.page';
 import { JournalEntryDetailPanelComponent } from './pages/journal-entry-detail-panel.component';
 import { ShellPagePendingComponent } from './pages/shell-page-pending.component';
 
@@ -72,6 +74,7 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
     BatchesDashboardPageComponent,
     DimensionsPageComponent,
     ErpMappingPageComponent,
+    AccountLinksPageComponent,
     JournalEntryDetailPanelComponent,
     ShellPagePendingComponent,
   ],
@@ -97,6 +100,7 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
     MjSlidePanelComponent,
     MJAlertComponent,
     CompanyScopeChipComponent,
+    GlResolutionPreviewComponent,
     WorkspaceTabStripComponent,
   ],
   exports: [
@@ -117,6 +121,7 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
     BatchesDashboardPageComponent,
     DimensionsPageComponent,
     ErpMappingPageComponent,
+    AccountLinksPageComponent,
     JournalEntryDetailPanelComponent,
   ],
 })

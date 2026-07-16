@@ -71,6 +71,9 @@ export { openBizDetail, type BizDetailMode, type BizDetailOptions } from './lib/
 export { AccountingShellModule } from './lib/custom/shell/shell.module';
 // App-wide company scope (rail-top chip). Exported so orders can share the same scope surface.
 export { CompanyScopeService, type ScopeCompany } from './lib/custom/shared/company-scope.service';
+// GL-resolution preview — accounting-domain, SHARED with orders (its product panel + Confirm-failure
+// UX). Presentation only: orders resolves with its own fallback chain and hands the result in.
+export { GlResolutionPreviewComponent, type GlResolutionResult, type GlResolutionStep } from './lib/custom/shared/gl-resolution-preview.component';
 
 /**
  * Bootstrap function called during MJExplorer initialization.

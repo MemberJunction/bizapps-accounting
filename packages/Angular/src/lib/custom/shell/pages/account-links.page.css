@@ -1,0 +1,11 @@
+/* Account links (§8.3). Design tokens only; own flex host (height chain). */
+:host { display: flex; flex-direction: column; height: 100%; min-height: 0; gap: 12px; }
+.al-field { display: flex; flex-direction: column; gap: 4px; }
+.al-field__label { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--mj-text-muted); }
+.al-wrap { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--mj-border-default); border-radius: 10px; background: var(--mj-bg-surface); }
+.al-grid { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.al-grid th, .al-grid td { padding: 8px 10px; border-bottom: 1px solid var(--mj-border-subtle, var(--mj-border-default)); text-align: left; white-space: nowrap; }
+.al-grid thead th { position: sticky; top: 0; background: var(--mj-bg-surface-card); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--mj-text-muted); z-index: 1; }
+.al-row--active { background: color-mix(in srgb, var(--mj-brand-primary) 6%, transparent); }
+.al-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.al-empty { padding: 20px; text-align: center; color: var(--mj-text-muted); font-style: italic; }
