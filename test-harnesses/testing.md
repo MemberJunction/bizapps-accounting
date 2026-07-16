@@ -11,7 +11,32 @@ Three sections: the **coverage matrix** (drive every ✗ to zero), the **intenti
 create + open questions for the human, recorded so dev can roll through and circle back).
 
 Tiers: **1** Vitest (unit) · **2** server (tsx, in-process direct SQL) · **3** API (GraphQL→MJAPI) ·
-**4** GUI/DOM (no-browser — parked, mjdev overlay) · **5** Playwright (browser e2e, pre-PR only).
+**4** GUI/DOM (no-browser — **LIVE since 2026-07-16**, see below) · **5** Playwright (browser e2e, pre-PR only).
+
+### Tier 4 is no longer parked (2026-07-16, UI wave §8.0)
+
+Tier 4 now exists at `packages/Angular/vitest.dom.config.ts` (+ `vitest.dom.setup.ts`,
+`tsconfig.spec.json`); specs live BESIDE their components as `*.dom.test.ts`.
+Run: `cd packages/Angular && npm run test:dom`.
+
+- **Real Angular, headless** — `@analogjs/vite-plugin-angular` + jsdom + a **zoneless** TestBed.
+  No browser, no MJAPI, no HTTP.
+- **The keystone is wired and PROVEN:** any `console.error`, Angular `ErrorHandler` hit, or
+  unhandled rejection during a render **fails the test**. Mutation-checked — a probe spec whose
+  body passed still failed the run purely on a console error, so the keystone is not decorative.
+- **Why it is self-contained (not MJ's preset):** MJ ships an equivalent, but neither half is
+  reachable from an open app — `vitest.dom.shared.ts` is a ROOT-level file (exported from no
+  package) and `@memberjunction/ng-test-utils` is `"private": true`. Inside a dev-linked instance
+  we could reach both, but bizapps-accounting is a **standalone repo**: a harness that only runs
+  when dev-linked silently stops running in the app's own CI. So the (small) preset is replicated
+  here against public packages only. Filed upstream in `~/MJDev/MJDEV-REQUESTS.md` — if MJ
+  publishes the kit, delete our copy and extend theirs.
+- **Honest scope today:** the DOM contract over the UI layer (render, gating, bindings, real values
+  reaching the DOM, click→behaviour). The doctrine's **in-process real-DB binding**
+  (`setupSQLServerClient`, the tier-2 path) is **NOT yet wired** — the first tier-4 spec covers a
+  component whose data comes from an injected service, so it did not need it. That binding is the
+  next tier-4 step and is tracked in the ledger below; until then, do not read tier-4 green as
+  proof of the data path (tier 2/3 own that).
 
 ## Coverage matrix (✓ = real-value/exact · ⚠ = intentional, see register · ✗ = GAP, fill it)
 

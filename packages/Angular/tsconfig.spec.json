@@ -1,0 +1,10 @@
+{
+  // Tier 4: re-include the specs the build tsconfig excludes, so Angular's compiler can
+  // type-check the templates under test (strictTemplates still applies).
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["vitest/globals", "node"]
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules"]
+}
