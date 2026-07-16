@@ -1,11 +1,16 @@
 # QUESTIONS — bizapps-accounting (plans-level question stock)
 
 > Structured per the questions convention (`~/MJDev/shared-plans/questions-convention.md`): stable
-> append-only body + two derived indexes; entry template modeled on Q22/Q24 (ratified 2026-07-16).
-> **Migrated 2026-07-16 from the instance stock** (`instances/accounting-engine-dev/QUESTIONS.md`)
-> so questions are COMMITTED and survive instance deletion — original IDs + anchors preserved
-> (never renumber). New questions append with the next free Qn. Body order: OPEN (priority) then
-> frozen records. OPEN entries are freely editable; ANSWERED/WITHDRAWN/CLOSED are frozen.
+> append-only body + ONE derived priority index. **ANSWER-FIRST (restructured 2026-07-16, Marcelo
+> ruling):** new entries LEAD with a **Proposed solution** (the action we are implementing) and
+> PROCEED with it by default — the question is supporting info for the **Requested reviewer**;
+> mark **⏸ HOLD** only where proceeding is expensive to reverse. Field order for NEW entries:
+> Status · Requested reviewer · Features · Proposed solution · The question · Context to share ·
+> What motivates this now (opt) · Fixed constraints (opt) · Additional context · Answer. Existing
+> OPEN entries adopt the new shape when next touched; frozen entries are never edited. Trivially
+> reversible micro-decisions do NOT get entries — they go in the active action plan's "Decisions
+> taken" list. **Migrated 2026-07-16 from the instance stock** — original IDs + anchors preserved
+> (never renumber); new questions append with the next free Qn.
 > Distribution copies for the team: `~/MJDev/reports/team-questions-2026-07-16/`.
 
 ## Index — by priority (open only)
@@ -26,25 +31,8 @@
 | 4c | [Q29](#q29) | Marcelo/Ian — regenerate: reset the existing task vs void+replace (principle ruled) | OPEN |
 | 11 | [T36](#t36) | Marcelo — deterministic test data (internal) | OPEN |
 
-## Index — by feature
-
-| Feature | Questions |
-|---|---|
-| B.1 GL account mapping | [Q9](#q9) |
-| C.5 reversals / C.8 manual-JE gate | [Q12](#q12) (via Q19), [Q6](#q6) |
-| C.6 backdating dates | [Q15](#q15) (via Q19) |
-| D batching (defaults, cutoff, ordering, reject) | [Q28](#q28), [Q19](#q19), [Q13](#q13)✓, [Q14](#q14)✓, [Q4](#q4)✓, [Q5](#q5)✓ |
-| D.3 batch approvals | [Q29](#q29), [Q6](#q6), [Q7](#q7) |
-| H reporting / cutover | [Q19](#q19) ★ |
-| I periods/timing | [Q18](#q18)✓, [Q8](#q8)✓ |
-| K.1/K.2 roles + RLS (A2) | [Q22](#q22), [Q24](#q24), [Q23](#q23)✗, [Q7](#q7) |
-| L.2 JE draft contract | [Q3](#q3) |
-| M intercompany | [Q20](#q20)✓ |
-| A.3 CFO approver link | [Q17](#q17)✓ |
-| N.2 test substrate | [T36](#t36) |
-| (cross-cutting) | [Q25](#q25), [Q26](#q26), [Q27](#q27) |
-
-✓ = answered (frozen record) · ✗ = withdrawn
+*(Feature index removed 2026-07-16 per convention — each entry's **Features** field is the
+queryable surface for "which questions touch feature X".)*
 
 ## Questions (append-only body)
 
