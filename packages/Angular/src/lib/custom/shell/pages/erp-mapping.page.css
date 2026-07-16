@@ -1,0 +1,10 @@
+/* ERP mapping (§8.3). Design tokens only; own flex host (height chain). */
+:host { display: flex; flex-direction: column; height: 100%; min-height: 0; gap: 12px; }
+.erp-field { display: flex; flex-direction: column; gap: 4px; }
+.erp-field__label { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--mj-text-muted); }
+.erp-wrap { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--mj-border-default); border-radius: 10px; background: var(--mj-bg-surface); }
+.erp-grid { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.erp-grid th, .erp-grid td { padding: 8px 10px; border-bottom: 1px solid var(--mj-border-subtle, var(--mj-border-default)); text-align: left; white-space: nowrap; }
+.erp-grid thead th { position: sticky; top: 0; background: var(--mj-bg-surface-card); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--mj-text-muted); z-index: 1; }
+.erp-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.erp-empty { padding: 20px; text-align: center; color: var(--mj-text-muted); font-style: italic; }

@@ -15,6 +15,12 @@
         @case ('coa') {
           <mj-chart-of-accounts-dashboard></mj-chart-of-accounts-dashboard>
         }
+        @case ('erp') {
+          <mj-erp-mapping-page></mj-erp-mapping-page>
+        }
+        @case ('dimensions') {
+          <mj-dimensions-page></mj-dimensions-page>
+        }
         @default {
           <mj-shell-page-pending [PageName]="PendingPageName(ActivePageId)"></mj-shell-page-pending>
         }

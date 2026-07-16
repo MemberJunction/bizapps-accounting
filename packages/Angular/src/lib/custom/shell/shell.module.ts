@@ -41,6 +41,8 @@ import { BatchWorkspacePageComponent } from './pages/batch-workspace.page';
 import { DispatchStatusPageComponent } from './pages/dispatch-status.page';
 import { JeDashboardPageComponent } from './pages/je-dashboard.page';
 import { BatchesDashboardPageComponent } from './pages/batches-dashboard.page';
+import { DimensionsPageComponent } from './pages/dimensions.page';
+import { ErpMappingPageComponent } from './pages/erp-mapping.page';
 import { JournalEntryDetailPanelComponent } from './pages/journal-entry-detail-panel.component';
 import { ShellPagePendingComponent } from './pages/shell-page-pending.component';
 
@@ -68,6 +70,8 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
     DispatchStatusPageComponent,
     JeDashboardPageComponent,
     BatchesDashboardPageComponent,
+    DimensionsPageComponent,
+    ErpMappingPageComponent,
     JournalEntryDetailPanelComponent,
     ShellPagePendingComponent,
   ],
@@ -111,6 +115,8 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
     DispatchStatusPageComponent,
     JeDashboardPageComponent,
     BatchesDashboardPageComponent,
+    DimensionsPageComponent,
+    ErpMappingPageComponent,
     JournalEntryDetailPanelComponent,
   ],
 })

@@ -1,0 +1,52 @@
+<mj-page-header-interior Title="Dimensions" Subtitle="Analytical tags — a dimension and its values">
+  <div meta>
+    <mj-stat-badge [Count]="Dimensions.length" Label="dimensions" Variant="default"></mj-stat-badge>
+  </div>
+  <div actions>
+    <mj-refresh-button [Loading]="IsLoading" (Clicked)="Refresh()"></mj-refresh-button>
+  </div>
+</mj-page-header-interior>
+
+@if (LoadError) {
+  <mj-alert Variant="error" [Message]="LoadError"></mj-alert>
+}
+
+<div class="dim-cols">
+  <aside class="dim-master" aria-label="Dimensions">
+    @for (d of Dimensions; track d.ID) {
+      <button type="button" class="dim-item" [class.dim-item--active]="d.ID === SelectedID" (click)="Select(d.ID)">
+        <span class="dim-item__code">{{ d.Code }}</span>
+        <span class="dim-item__name">{{ d.Name }}</span>
+        @if (!d.IsActive) {
+          <span class="dim-item__inactive">inactive</span>
+        }
+      </button>
+    } @empty {
+      @if (!IsLoading) {
+        <p class="dim-empty">No dimensions defined.</p>
+      }
+    }
+  </aside>
+
+  <section class="dim-values" aria-label="Dimension values">
+    @if (Selected) {
+      <p class="dim-values__title">{{ Selected.Name }} values</p>
+      <div class="dim-grid">
+        <mj-entity-data-grid
+          [Params]="ValueParams"
+          [Columns]="ValueColumns"
+          PaginationMode="client"
+          [ShowPager]="true"
+          [ShowToolbar]="false"
+          [AllowSorting]="true"
+          KeyField="ID"
+          StateKey="mj.bizappsacct.grid.dimensionValues.v1"
+          [AutoPersistState]="true"
+          Height="auto">
+        </mj-entity-data-grid>
+      </div>
+    } @else if (!IsLoading) {
+      <mj-empty-state Icon="fa-solid fa-tags" Title="Select a dimension" Message="Pick a dimension on the left to see its values."></mj-empty-state>
+    }
+  </section>
+</div>

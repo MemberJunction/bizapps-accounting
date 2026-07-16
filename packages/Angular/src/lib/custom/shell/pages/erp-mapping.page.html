@@ -1,0 +1,96 @@
+<mj-page-header-interior Title="ERP mapping" Subtitle="Chart of accounts ↔ ERP account mappings — approve what the ERP receives">
+  <div meta>
+    @if (NeedsApprovalCount > 0) {
+      <mj-stat-badge [Count]="NeedsApprovalCount" Label="need approval" Icon="fa-solid fa-user-check" Variant="warning"></mj-stat-badge>
+    }
+    @if (UnmappedAccountCount > 0) {
+      <mj-stat-badge
+        [Count]="UnmappedAccountCount"
+        Label="unmapped accounts"
+        Icon="fa-solid fa-triangle-exclamation"
+        Variant="warning"
+        title="Active GL accounts with no approved mapping. Not an error — the ERP receives the account Code as a fallback (AM-4) — but it is not curated.">
+      </mj-stat-badge>
+    }
+  </div>
+  <div actions>
+    <mj-refresh-button [Loading]="IsLoading" (Clicked)="Refresh()"></mj-refresh-button>
+  </div>
+  <div toolbar>
+    <label class="erp-field">
+      <span class="erp-field__label">Show</span>
+      <select class="mj-input" [(ngModel)]="Filter" (ngModelChange)="OnFilterChanged()" aria-label="Mapping filter">
+        <option value="NeedsApproval">Needs approval</option>
+        <option value="Approved">Approved</option>
+        <option value="All">All</option>
+      </select>
+    </label>
+  </div>
+</mj-page-header-interior>
+
+@if (ActionMessage) {
+  <mj-alert [Variant]="ActionIsError ? 'error' : 'success'" [Message]="ActionMessage"></mj-alert>
+}
+@if (LoadError) {
+  <mj-alert Variant="error" [Message]="LoadError"></mj-alert>
+}
+
+<div class="erp-wrap">
+  @if (IsLoading) {
+    <mj-loading text="Loading mappings…"></mj-loading>
+  } @else {
+    <table class="erp-grid">
+      <thead>
+        <tr>
+          <th>GL account</th>
+          <th>ERP account</th>
+          <th>ERP name</th>
+          <th>System</th>
+          <th>Company</th>
+          <th>Effective</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (r of Rows; track r.ID) {
+          <tr>
+            <td>{{ r.InternalGLAccount || r.InternalGLAccountID }}</td>
+            <td class="erp-mono">{{ r.ExternalAccountID }}</td>
+            <td>{{ r.ExternalAccountName || '—' }}</td>
+            <td>{{ r.ExternalSystem }}</td>
+            <td>{{ r.Company || '—' }}</td>
+            <td>{{ (r.EffectiveFrom | date: 'yyyy-MM-dd') || '—' }}{{ r.EffectiveTo ? ' → ' + (r.EffectiveTo | date: 'yyyy-MM-dd') : '' }}</td>
+            <td>
+              @if (IsApproved(r)) {
+                <mj-stat-badge Label="Approved" Variant="success"></mj-stat-badge>
+              } @else {
+                <mj-stat-badge Label="Needs approval" Variant="warning"></mj-stat-badge>
+              }
+            </td>
+            <td>
+              @if (!IsApproved(r)) {
+                <button
+                  type="button"
+                  mjButton
+                  Variant="outline"
+                  Size="sm"
+                  [disabled]="!!ApprovingID"
+                  title="Approve this mapping. Strict 1:1 — it supersedes any other approved mapping for this account."
+                  (click)="Approve(r)">
+                  @if (ApprovingID === r.ID) {
+                    <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Approving…
+                  } @else {
+                    <i class="fa-solid fa-check" aria-hidden="true"></i> Approve
+                  }
+                </button>
+              }
+            </td>
+          </tr>
+        } @empty {
+          <tr><td colspan="8" class="erp-empty">Nothing to show for this filter.</td></tr>
+        }
+      </tbody>
+    </table>
+  }
+</div>
