@@ -92,6 +92,15 @@ export { WorkspaceTabStripComponent } from './lib/transfer-pending/workspace-tab
 export { WorkspaceTabStore } from './lib/transfer-pending/workspace-tabs/workspace-tab-store';
 export type { WorkspaceTab, WorkspaceTabState } from './lib/transfer-pending/workspace-tabs/workspace-tabs.types';
 
+// The list-scaffold helpers (parked, framework-clean). Every list in BOTH apps needs the same
+// time-window default (§0) and the same SQL-escaping discipline — RunView.ExtraFilter is a string
+// with no parameter binding, so a second copy of `sqlLiteral` is a second chance to get escaping
+// wrong. Shared deliberately.
+export { TIME_WINDOWS, timeWindowRange, timeWindowFilter, andFilters } from './lib/transfer-pending/list-scaffold/time-window';
+export type { TimeWindowId } from './lib/transfer-pending/list-scaffold/time-window';
+export { sqlLiteral, sqlLikePattern, likeContains } from './lib/transfer-pending/list-scaffold/sql-filter';
+export { rowKeyToId } from './lib/transfer-pending/list-scaffold/grid-row-key';
+
 /**
  * Bootstrap function called during MJExplorer initialization.
  * Static imports above handle most registration; the explicit Load* calls below

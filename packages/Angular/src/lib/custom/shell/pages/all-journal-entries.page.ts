@@ -7,6 +7,7 @@ import { CompanyScopeService } from '../../shared/company-scope.service';
 import { openBizDetail } from '../../shared/biz-detail-form';
 import { TIME_WINDOWS, TimeWindowId, timeWindowFilter, andFilters } from '../../../transfer-pending/list-scaffold/time-window';
 import { sqlLiteral, likeContains } from '../../../transfer-pending/list-scaffold/sql-filter';
+import { rowKeyToId } from '../../../transfer-pending/list-scaffold/grid-row-key';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 
@@ -142,15 +143,19 @@ export class AllJournalEntriesPageComponent implements OnInit {
 
   /**
    * Row click → the JE detail slide-in (element doctrine: slide-in = quick VIEW).
-   * `rowKey` is the grid's KeyField value — the JE's ID.
+   *
+   * `rowKey` is NOT the JE's ID — it is CompositeKey's concatenated form ("ID|<guid>"), so it must
+   * be parsed (see rowKeyToId). Passing it through unparsed is what made this panel silently fail
+   * to load for every row.
    *
    * The purpose-built panel, not the generic form host: this screen's detail must carry the lines,
    * origin lineage, reversal chain, batch membership and the C.8 chip — none of which the generic
    * host knows about.
    */
   public OnRowClicked(rowKey: string | null | undefined): void {
-    if (!rowKey) return;
-    this.SelectedID = rowKey;
+    const id = rowKeyToId(rowKey);
+    if (!id) return;
+    this.SelectedID = id;
     this.cdr.markForCheck();
   }
 
