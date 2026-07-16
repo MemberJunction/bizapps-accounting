@@ -114,16 +114,18 @@ async function fetchRows<T>(apiKey: string, field: string, companyID: string, se
 
 // ─── row types ────────────────────────────────────────────────────────────────
 interface TrialBalanceRow { GLAccountCode: string; AccountType: string; TotalDebits: number; TotalCredits: number; NetBalance: number; }
-interface AROpenRow { CustomerName: string; OpenBalance: number; }
-interface AgingRow { CustomerName: string; Current_0_30: number; Days_31_60: number; Days_61_90: number; Days_Over_90: number; TotalOpen: number; }
+interface AROpenRow { CustomerName: string | null; OpenBalance: number; }
+interface AgingRow { CustomerName: string | null; Current_0_30: number; Days_31_60: number; Days_61_90: number; Days_Over_90: number; TotalOpen: number; }
 interface DefRevRow { Additions: number; Releases: number; ClosingBalance: number; }
 interface TaxRow { AccruedAmount: number; RemittedAmount: number; OutstandingLiability: number; Status: string; }
 interface BatchRow { Status: string; CompanyCount: number; }
 interface ICRow { EntryType: string; GLAccountCode: string; }
 
-// helper: find a customer's value by name fragment
-const byName = <T extends { CustomerName: string }>(rows: T[], frag: string): T | undefined =>
-  rows.find((r) => r.CustomerName.includes(frag));
+// helper: find a customer's value by name fragment. Null-safe: a read model may legitimately return
+// a row with a null CustomerName (e.g. an AR entry whose customer org has no name) — that must not
+// crash the lookup, it simply can't match a name fragment.
+const byName = <T extends { CustomerName: string | null }>(rows: T[], frag: string): T | undefined =>
+  rows.find((r) => (r.CustomerName ?? '').includes(frag));
 
 // ─── the seven read-model queries, asserted on REAL expected values ─────────────
 async function run(apiKey: string): Promise<void> {

@@ -94,4 +94,9 @@ export const NAV = {
   journalEntries: 'Journal Entries',
   periods: 'Periods',
   dimensions: 'Dimensions',
+  // The 4 newer management dashboards' nav labels (from metadata/applications/.bizapps-accounting-application.json).
+  // `journalEntries` above now resolves to the JE Console dashboard; `batchStatus` to the Batch Status roll-up.
+  batchApprovals: 'Batch Approvals', // → BatchDispatchResource (the CFO approve/dispatch inbox)
+  chartOfAccounts: 'Chart of Accounts', // → ChartOfAccountsResource
+  companies: 'Companies', // → CompanySetupResource
 } as const;
