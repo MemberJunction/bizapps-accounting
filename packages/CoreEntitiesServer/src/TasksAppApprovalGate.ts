@@ -123,6 +123,22 @@ export class TasksAppApprovalGate implements BatchApprovalGate {
   }
 
   /**
+   * PRECONDITION check, run BEFORE any write (MOD-14 + Q5 reconciliation, Marcelo 2026-07-16).
+   *
+   * A missing CFO is a CONFIGURATION error, not a transient task failure: a batch with no possible
+   * approver is dead on arrival — it could never be dispatched. So it must fail FAST, before a batch
+   * exists, rather than be swallowed by MOD-14's "never destroy a built batch" rule (which is about
+   * the task-RAISE) or handled the old way (build the batch, then cancel it — a write plus a
+   * compensating write, i.e. exactly the half-state MOD-14 exists to kill).
+   *
+   * Working default per Marcelo; a more graceful solution (e.g. surfacing which companies lack a CFO
+   * in the workspace before the operator even clicks Build) is backlogged — see Q28.
+   */
+  async assertCanRaise(companyIds: string[], contextUser: UserInfo): Promise<void> {
+    await this.resolveCFOUserIdsForCompanies(companyIds, contextUser);
+  }
+
+  /**
    * The CFO Users of EVERY company present in the batch (via the summary line items' CompanyID — the
    * batch header is company-less, CH-4). Hard-fail when any involved company lacks a configured CFO.
    */
@@ -134,6 +150,15 @@ export class TasksAppApprovalGate implements BatchApprovalGate {
     );
     const companyIds = [...new Set((res.Results ?? []).map(r => r.CompanyID))];
     if (companyIds.length === 0) throw new Error(`TasksAppApprovalGate: batch ${batchId} has no summary line items to resolve companies from`);
+    return this.resolveCFOUserIdsForCompanies(companyIds, contextUser);
+  }
+
+  /**
+   * company ids → their CFO Users. Split out from resolveCFOUserIds so the SAME rule serves both the
+   * pre-build precondition (assertCanRaise — no batch exists yet) and the post-build task raise.
+   * One rule, two callers: they cannot drift.
+   */
+  private async resolveCFOUserIdsForCompanies(companyIds: string[], contextUser: UserInfo): Promise<string[]> {
     const md = new Metadata();
     const cfos = new Set<string>();
     for (const companyId of companyIds) {

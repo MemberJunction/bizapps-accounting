@@ -87,3 +87,21 @@ order, with the notes a next agent needs:
 **Testing debt (be honest about it):** tier 1 (64) + tier 4 (14) are green for what was built. Tier
 4's **real-DB binding is not wired yet** and there is **no tier-2/3/5 coverage for any new UI**.
 See test-harnesses/testing.md and the instance TASKS.md.
+
+## Batch build — a graceful no-CFO experience (not just a hard-fail)
+
+- **Source:** Marcelo, 2026-07-16 — *"lets add the precheck as our working default... I think a more
+  graceful solution can be built later."* Working default is BUILT (Q28 / MOD-14).
+- **Today:** a missing CFO is a **precondition** — `BatchApprovalGate.assertCanRaise(companyIds)`
+  throws BEFORE the transaction opens, so nothing is written (strictly better than the old
+  build-then-cancel). But the operator only learns at the moment they hit **Build**, as an error.
+- **The graceful version:** surface it in the §8.2 Batch workspace BEFORE the click —
+  - the preview already resolves the candidates' companies, so it can flag *"2 of the 3 companies in
+    this selection have no CFO configured"* as a warning chip on the criteria panel;
+  - name the offending companies and deep-link to Configuration → Companies to set the approver
+    (the same deep-link pattern as orders' Confirm-failure → Account links);
+  - disable **Build** with that reason as its tooltip, rather than letting it throw.
+- **Why not now:** it needs `previewBatch` to return per-company approver readiness (a small
+  additive field) and the Configuration → Companies screen to exist as a deep-link target
+  (§8.4 — currently gated/last). Cheap once both land.
+- **Trigger:** when §8.4 Companies ships, or the first time someone hits the hard-fail in real use.

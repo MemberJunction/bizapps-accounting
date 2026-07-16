@@ -120,6 +120,17 @@ export interface BatchApprovalGate {
    * then. A throw is logged and leaves ApprovalTaskID NULL (retryable).
    */
   onBatchBuilt?(batchId: string, contextUser: UserInfo): Promise<string | null>;
+  /**
+   * PRECONDITION, checked BEFORE any write: can a batch spanning these companies ever be approved?
+   * Throw if not (e.g. a company has no CFO configured). Optional — a gate without it (e.g.
+   * AutoApproveGate) simply has no precondition.
+   *
+   * Why this exists (MOD-14 + Q5 reconciliation): a missing CFO is a CONFIGURATION error, not a
+   * transient task failure. MOD-14's "never destroy a built batch" is about the task RAISE; a batch
+   * that could never be approved should never be BUILT. Fail fast — nothing written, nothing to
+   * reverse.
+   */
+  assertCanRaise?(companyIds: string[], contextUser: UserInfo): Promise<void>;
   assertApproved(batchId: string, contextUser: UserInfo): Promise<void>;
 }
 
@@ -232,6 +243,11 @@ async function buildBatchFromIds(
   // the transaction open across N round-trips for no reason. Totals are pure — computing them here
   // is what lets the header carry its control totals on the FIRST write (the old code saved the
   // header, wrote lines, then saved the header AGAIN just to set totals).
+  // PRECONDITION (Q5 + MOD-14): a batch nobody could ever approve must not be built at all. The
+  // companies come from the netted groups — exactly what the batch will contain — so this is
+  // checkable before a single row is written. Throws; nothing to reverse because nothing exists.
+  if (gate.assertCanRaise) await gate.assertCanRaise([...new Set(groups.map(g => g.companyId))], contextUser);
+
   const externalAccounts = await resolveExternalAccounts(groups, targetSystem, contextUser);
   const { totalDebits, totalCredits } = computeControlTotals(groups);
 

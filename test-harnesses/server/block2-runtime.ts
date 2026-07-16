@@ -377,15 +377,28 @@ async function main(): Promise<void> {
     await setCompanyCFO(ctx, companyA.id, null);
   });
 
-  await test('S1 real gate — no CFO configured → buildBatch hard-fails AND auto-reverses (Q5 atomicity: JE freed to Pending, no orphan locked batch)', async () => {
+  await test('S1/Q5 real gate — no CFO configured → buildBatch hard-fails as a PRECONDITION: nothing is written at all (MOD-14 reconciliation)', async () => {
+    // Q5's ruling (no CFO → hard-fail) still holds; MOD-14 changed HOW. Previously the batch was
+    // BUILT and then cancelled — a write plus a compensating write, i.e. the very half-state MOD-14
+    // exists to kill, and it depended on the reversal itself never failing. Now a missing CFO is a
+    // PRECONDITION (gate.assertCanRaise) checked BEFORE the transaction opens: nothing is created,
+    // so there is nothing to reverse. A missing CFO is a CONFIGURATION error (the batch could never
+    // be approved), which is categorically different from the transient task failure MOD-14 protects
+    // the batch from. Working default per Marcelo 2026-07-16; see Q28.
     await setCompanyCFO(ctx, companyA.id, null); // ensure unset
+    const batchesBefore = Number((await pool.request().query(`SELECT COUNT(*) n FROM ${SCHEMA}.JournalEntryBatch`)).recordset[0].n);
     const orphanJE = await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 50 }, { gl: companyA.revGL, credit: 50 }]);
+
     await expectThrow(() => buildBatch('BusinessCentral', user.ID, user, realGate), 'No CFO configured');
-    // Atomicity fix (plan §8 / Q5): the failed approval-task raise reverses the still-preliminary lock, so the
-    // JE returns to the candidate pool instead of being stranded in a task-less locked batch.
-    assert((await jeStatus(ctx, orphanJE)) === 'Pending', 'JE must be freed back to Pending after a gate-failed build');
+
+    // The JE never left the candidate pool — it was never locked in the first place.
+    assert((await jeStatus(ctx, orphanJE)) === 'Pending', 'JE must still be Pending (it should never have been locked)');
     const bid = (await pool.request().query(`SELECT BatchID FROM ${SCHEMA}.JournalEntry WHERE ID='${orphanJE}'`)).recordset[0].BatchID;
-    assert(bid === null, 'freed JE must have its BatchID cleared (no orphan batch reference)');
+    assert(bid === null, 'JE must carry no BatchID');
+    // The stronger claim, and the point of moving the check earlier: NO batch row was created —
+    // not "created then cancelled". A cancelled row would still count here.
+    const batchesAfter = Number((await pool.request().query(`SELECT COUNT(*) n FROM ${SCHEMA}.JournalEntryBatch`)).recordset[0].n);
+    assert(batchesAfter === batchesBefore, `no batch row may be created at all — count went ${batchesBefore} -> ${batchesAfter}`);
   });
 
   let approveBatchId = '';

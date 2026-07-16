@@ -27,7 +27,7 @@
 | 8 | [Q9](#q9) | Amith — GLAccountLink role FK (bless-as-built) | OPEN |
 | 9 | [Q26](#q26) | Matt — Explorer header widget slot (feature ask) | OPEN |
 | 10 | [Q27](#q27) | Matt — `mj-left-nav` desktop icons-only collapse (feature ask) | OPEN |
-| 4b | [Q28](#q28) | Marcelo — batch/task transaction split + batch task pointer (MOD-14) | OPEN ★HIGH |
+| 4b | [Q28](#q28) | Marcelo — batch/task transaction split + batch task pointer (MOD-14) | OPEN (no-CFO precheck RULED+built) |
 | 4c | [Q29](#q29) | Marcelo/Ian — regenerate: reset the existing task vs void+replace (principle ruled) | OPEN |
 | 11 | [T36](#t36) | Marcelo — deterministic test data (internal) | OPEN |
 
