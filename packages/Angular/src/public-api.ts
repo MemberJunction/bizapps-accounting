@@ -92,6 +92,12 @@ export type { AROpenByCustomerRow, ARAgingRow } from './lib/custom/shared/read-m
 // (the GL-resolution preview above, and the Customer A/R base view). CategoryShellBase's only
 // app-specific binding is CompanyScopeService, which orders shares.
 export { CategoryShellBase } from './lib/custom/shell/category-shell.base';
+// The category-dashboard base (cheap filtered COUNTS only — the §0 no-heavy-aggregates ruling).
+// Its `count()` helper + stat shape are app-agnostic despite the historical name; orders' dashboards
+// extend it so the "MaxRows 1 + TotalRowCount" discipline exists once. Their ~25-line stat-grid
+// TEMPLATE is duplicated rather than shared: it is pure presentation, and refactoring two working
+// dashboards mid-wave to save it would cost more than the drift risk it removes.
+export { AccountingDashboardBase, type DashboardStat } from './lib/custom/shell/pages/accounting-dashboard.base';
 export { ShellPagePendingComponent } from './lib/custom/shell/pages/shell-page-pending.component';
 
 // The workspace-tab framework (parked, framework-clean — TRANSFER-BACKLOG target: common -> MJ
