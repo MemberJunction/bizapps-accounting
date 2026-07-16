@@ -20,6 +20,11 @@ import {
 import { CompanyScopeChipComponent } from '../shared/company-scope-chip.component';
 import { WorkspaceTabStripComponent } from '../../transfer-pending/workspace-tabs/workspace-tab-strip.component';
 
+import { BatchDispatchModule } from '../BatchDispatch/batch-dispatch.module';
+import { ReadModelsModule } from '../shared/read-models.module';
+
+import { BatchesCategoryComponent } from './batches-category.component';
+import { BatchesCategoryResourceComponent } from './batches-category-resource.component';
 import { JournalEntriesCategoryComponent } from './journal-entries-category.component';
 import { JournalEntriesCategoryResourceComponent } from './journal-entries-category-resource.component';
 import { AllJournalEntriesPageComponent } from './pages/all-journal-entries.page';
@@ -35,6 +40,8 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
  */
 @NgModule({
   declarations: [
+    BatchesCategoryComponent,
+    BatchesCategoryResourceComponent,
     JournalEntriesCategoryComponent,
     JournalEntriesCategoryResourceComponent,
     AllJournalEntriesPageComponent,
@@ -46,6 +53,9 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
     FormsModule,
     SharedGenericModule,
     EntityViewerModule, // <mj-entity-data-grid> — the house grid
+    // The Batches category HOSTS these existing dashboards (now on interior chrome, §6 sweep).
+    BatchDispatchModule, // <mj-batch-dispatch-dashboard> — Batch approvals
+    ReadModelsModule, // <mj-batch-status-dashboard> — All batches
     MJButtonDirective,
     MJPageLayoutComponent,
     MJPageBodyComponent,
@@ -60,6 +70,8 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
     WorkspaceTabStripComponent,
   ],
   exports: [
+    BatchesCategoryComponent,
+    BatchesCategoryResourceComponent,
     JournalEntriesCategoryComponent,
     JournalEntriesCategoryResourceComponent,
     AllJournalEntriesPageComponent,

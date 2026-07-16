@@ -1,0 +1,27 @@
+<mj-page-layout>
+  <mj-page-body Direction="row">
+    <mj-left-nav
+      [Sections]="RailSections"
+      [ActiveId]="ActivePageId"
+      [MobileTitle]="CategoryTitle"
+      (ItemClicked)="OnRailItemClicked($event)">
+      <div header>
+        <mj-company-scope-chip></mj-company-scope-chip>
+      </div>
+    </mj-left-nav>
+
+    <div class="cat-content">
+      @switch (ActivePageId) {
+        @case ('all-batches') {
+          <mj-batch-status-dashboard></mj-batch-status-dashboard>
+        }
+        @case ('approvals') {
+          <mj-batch-dispatch-dashboard></mj-batch-dispatch-dashboard>
+        }
+        @default {
+          <mj-shell-page-pending [PageName]="PendingPageName(ActivePageId)"></mj-shell-page-pending>
+        }
+      }
+    </div>
+  </mj-page-body>
+</mj-page-layout>

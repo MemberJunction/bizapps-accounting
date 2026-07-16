@@ -45,6 +45,8 @@ import { LoadCompanySetupResource } from './lib/custom/CompanySetup/company-setu
 
 // App shell (UI plan §8.0) — the category shells hosting MJ's mj-left-nav + their pages.
 import { AccountingShellModule } from './lib/custom/shell/shell.module';
+import { LoadBatchesCategory } from './lib/custom/shell/batches-category.component';
+import { LoadBatchesCategoryResource } from './lib/custom/shell/batches-category-resource.component';
 import { LoadJournalEntriesCategory } from './lib/custom/shell/journal-entries-category.component';
 import { LoadJournalEntriesCategoryResource } from './lib/custom/shell/journal-entries-category-resource.component';
 
@@ -102,5 +104,7 @@ export function LoadBizAppsAccountingClient(): void {
     // UI wave §8.0 — category shells (Explorer app nav items -> mj-left-nav + pages).
     LoadJournalEntriesCategory();
     LoadJournalEntriesCategoryResource();
+    LoadBatchesCategory();
+    LoadBatchesCategoryResource();
     void AccountingShellModule;
 }

@@ -16,17 +16,11 @@
         "isDefault": true
       },
       {
-        "Label": "Batch Status",
-        "Icon": "fa-solid fa-list-check",
+        "_comment": "UI wave §8.2 — the Batches CATEGORY replaces the flat 'Batch Status' + 'Batch Approvals' items, which now live as pages on its rail (All batches / Batch approvals). Their dashboards were migrated to interior chrome so they nest without a doubled header — that migration IS the §6 consistency sweep for those screens. Their engines and tests are unchanged.",
+        "Label": "Batches",
+        "Icon": "fa-solid fa-layer-group",
         "ResourceType": "Custom",
-        "DriverClass": "BatchStatusResource",
-        "isDefault": false
-      },
-      {
-        "Label": "Batch Approvals",
-        "Icon": "fa-solid fa-paper-plane",
-        "ResourceType": "Custom",
-        "DriverClass": "BatchDispatchResource",
+        "DriverClass": "BatchesCategoryResource",
         "isDefault": false
       },
       {

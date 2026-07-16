@@ -1,7 +1,5 @@
-<mj-page-layout>
-  <mj-page-header
+  <mj-page-header-interior
     Title="Batch Approvals"
-    Icon="fa-solid fa-paper-plane"
     Subtitle="Review, approve, and dispatch journal-entry batches to the ERP">
 
     <div meta>
@@ -11,9 +9,9 @@
     <div actions>
       <mj-refresh-button [Loading]="IsLoading" (Clicked)="loadData()"></mj-refresh-button>
     </div>
-  </mj-page-header>
+  </mj-page-header-interior>
 
-  <mj-page-body>
+  <div class="cat-page">
     @if (IsLoading) {
       <mj-loading text="Loading batches…"></mj-loading>
     } @else {
@@ -125,5 +123,4 @@
         </div>
       }
     }
-  </mj-page-body>
-</mj-page-layout>
+  </div>
