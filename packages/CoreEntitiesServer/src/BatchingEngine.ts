@@ -36,7 +36,7 @@
  *   ENTITY:       'MJ_BizApps_Accounting: Journal Entry Batches'
  *   DOC:          docs/ARCHITECTURE.md (batching) · plan §C5 (netting) · accounting-engine-plan.md §4.7
  */
-import { Metadata, RunView, UserInfo } from '@memberjunction/core';
+import { Metadata, RunView, UserInfo, LogError, type IMetadataProvider } from '@memberjunction/core';
 import type {
   mjBizAppsAccountingJournalEntryBatchEntity,
   mjBizAppsAccountingJournalEntryBatchLineItemEntity,
@@ -83,6 +83,12 @@ export interface BuildBatchResult {
   totalCredits: number;
   jeCount: number;
   companyCount: number;
+  /**
+   * MOD-14: did the SEPARATE approval-task transaction succeed? The batch is committed and valid
+   * either way — `false` means the batch carries no ApprovalTaskID yet and needs a retry, NOT that
+   * the build failed. Callers surface it; they must not treat it as an error.
+   */
+  approvalTaskRaised: boolean;
 }
 
 export interface ErpPostResult { success: boolean; externalBatchRef?: string; error?: string }
@@ -103,7 +109,17 @@ export const mockErpPoster: ErpPoster = async (batch) => ({
 
 /** CFO-approval workflow gate. `assertApproved` throws when the batch hasn't been approved to send. */
 export interface BatchApprovalGate {
-  onBatchBuilt?(batchId: string, contextUser: UserInfo): Promise<void>;
+  /**
+   * Raise the approval task for a freshly-built batch and RETURN ITS ID.
+   *
+   * MOD-14: the id is what the accounting-owned task transaction stamps onto
+   * `JournalEntryBatch.ApprovalTaskID`, so "does this batch have a task?" is a column check rather
+   * than a cross-schema join through Task Links. Return null if the gate raises no task.
+   *
+   * Contract note: throwing here NO LONGER cancels the batch — the batch is already committed by
+   * then. A throw is logged and leaves ApprovalTaskID NULL (retryable).
+   */
+  onBatchBuilt?(batchId: string, contextUser: UserInfo): Promise<string | null>;
   assertApproved(batchId: string, contextUser: UserInfo): Promise<void>;
 }
 
@@ -149,9 +165,49 @@ export async function buildBatch(
   contextUser: UserInfo,
   gate: BatchApprovalGate = AutoApproveGate,
   options: BuildBatchOptions = {},
+  provider: IMetadataProvider = Metadata.Provider,
 ): Promise<BuildBatchResult | null> {
   const jeIds = await loadPendingJEIds(contextUser, options);
-  return buildBatchFromIds(jeIds, targetSystem, batchedByUserId, contextUser, gate);
+  return buildBatchFromIds(jeIds, targetSystem, batchedByUserId, contextUser, gate, provider);
+}
+
+/**
+ * Build from an EXPLICIT, caller-vetted set of JE ids — the §8.2 Batch-workspace include/exclude
+ * path (the operator un-ticks entries in the preview and builds exactly what is left).
+ *
+ * The ids are re-validated as Pending here rather than trusted: the preview is a snapshot, and an
+ * entry can be batched by someone else between preview and build. Anything no longer Pending is a
+ * LOUD reject — never a silent drop — mirroring buildBatchFromView's posture (B1.2).
+ */
+export async function buildBatchFromExplicitIds(
+  jeIds: string[],
+  targetSystem: BatchTargetSystem,
+  batchedByUserId: string,
+  contextUser: UserInfo,
+  gate: BatchApprovalGate = AutoApproveGate,
+  provider: IMetadataProvider = Metadata.Provider,
+): Promise<BuildBatchResult | null> {
+  if (jeIds.length === 0) return null;
+  const stale = await findNonPending(jeIds, contextUser);
+  if (stale.length > 0) {
+    throw new BatchFromViewError(
+      `buildBatchFromExplicitIds: ${stale.length} selected entr${stale.length === 1 ? 'y is' : 'ies are'} no longer Pending ` +
+      `(batched or posted since the preview): ${stale.join(', ')}. Refresh the preview and rebuild.`,
+    );
+  }
+  return buildBatchFromIds(jeIds, targetSystem, batchedByUserId, contextUser, gate, provider);
+}
+
+/** The subset of `jeIds` that is no longer Pending (or no longer exists). */
+async function findNonPending(jeIds: string[], contextUser: UserInfo): Promise<string[]> {
+  const rv = new RunView();
+  const res = await rv.RunView<{ ID: string; Status: string }>(
+    { EntityName: JE_ENTITY, ExtraFilter: `ID IN (${jeIds.map(sqlGuid).join(',')})`, Fields: ['ID', 'Status'], ResultType: 'simple', BypassCache: true },
+    contextUser,
+  );
+  if (!res.Success) throw new Error(`buildBatchFromExplicitIds: could not validate the selection: ${res.ErrorMessage ?? 'unknown'}`);
+  const byId = new Map((res.Results ?? []).map(r => [r.ID.toLowerCase(), r.Status]));
+  return jeIds.filter(id => byId.get(id.toLowerCase()) !== 'Pending');
 }
 
 /**
@@ -165,19 +221,69 @@ async function buildBatchFromIds(
   batchedByUserId: string,
   contextUser: UserInfo,
   gate: BatchApprovalGate,
+  provider: IMetadataProvider = Metadata.Provider,
 ): Promise<BuildBatchResult | null> {
   if (jeIds.length === 0) return null;
   const groups = netLines(await loadNettableLines(jeIds, contextUser));
   if (groups.length === 0) return null; // everything netted to zero
 
-  const batch = await createBatchHeader(targetSystem, batchedByUserId, jeIds.length, contextUser);
-  const { totalDebits, totalCredits } = await writeSummaryLines(batch.ID, targetSystem, groups, contextUser);
-  await setControlTotals(batch, totalDebits, totalCredits);
-  await lockJournalEntries(jeIds, batch.ID, contextUser);
-  await raiseApprovalTaskOrReverse(batch.ID, gate, contextUser);
+  // ── Reads + pure work FIRST, outside the transaction ───────────────────────
+  // resolveExternalAccount hits the DB per group; doing it inside the TransactionGroup would hold
+  // the transaction open across N round-trips for no reason. Totals are pure — computing them here
+  // is what lets the header carry its control totals on the FIRST write (the old code saved the
+  // header, wrote lines, then saved the header AGAIN just to set totals).
+  const externalAccounts = await resolveExternalAccounts(groups, targetSystem, contextUser);
+  const { totalDebits, totalCredits } = computeControlTotals(groups);
+
+  // ── ONE transaction: header + summary lines + dimensions + JE locks ────────
+  // MOD-14 (Marcelo 2026-07-16). Previously these were ~12 sequential Save()s with no transaction:
+  // a failure partway left a batch header, summary lines, control totals, and only SOME of the JEs
+  // locked to it — a half-built batch. Now it is all-or-none.
+  const tg = await provider.CreateTransactionGroup();
+
+  const batch = await queueBatchHeader(
+    { targetSystem, batchedByUserId, jeCount: jeIds.length, totalDebits, totalCredits },
+    tg, contextUser, provider,
+  );
+  await queueSummaryLines(batch.ID, groups, externalAccounts, tg, contextUser, provider);
+  await queueJournalEntryLocks(jeIds, batch.ID, tg, contextUser, provider);
+
+  if (!(await tg.Submit())) {
+    const detail = batch.LatestResult?.CompleteMessage ?? 'transaction group rolled back';
+    LogError(`buildBatch: atomic batch write rolled back: ${detail}`);
+    throw new Error(`buildBatch: atomic batch write rolled back: ${detail}`);
+  }
+
+  // ── SEPARATE transaction: raise the approval task + stamp the pointer ──────
+  // MOD-14: batch creation is NOT gated on task success. A failure here leaves a VALID, committed
+  // batch with ApprovalTaskID = NULL — a detectable, retryable state — instead of destroying it
+  // (the old raiseApprovalTaskOrReverse cancelled the whole batch). See Q28.
+  const approvalTaskRaised = await raiseApprovalTaskAndStamp(batch.ID, gate, contextUser, provider);
 
   const companyCount = new Set(groups.map(g => g.companyId)).size;
-  return { batchId: batch.ID, summaryLineCount: groups.length, totalDebits, totalCredits, jeCount: jeIds.length, companyCount };
+  return {
+    batchId: batch.ID, summaryLineCount: groups.length, totalDebits, totalCredits,
+    jeCount: jeIds.length, companyCount, approvalTaskRaised,
+  };
+}
+
+/** Net debits/credits across the groups — pure, so the header can carry totals on its first write. */
+export function computeControlTotals(groups: NetGroup[]): { totalDebits: number; totalCredits: number } {
+  let totalDebits = 0, totalCredits = 0;
+  for (const g of groups) {
+    if (g.side === 'Debit') totalDebits += g.net;
+    else totalCredits += -g.net;
+  }
+  return { totalDebits: Math.round(totalDebits * 100) / 100, totalCredits: Math.round(totalCredits * 100) / 100 };
+}
+
+/** Resolve every group's ERP account up front (reads), keyed by group index. */
+async function resolveExternalAccounts(
+  groups: NetGroup[], targetSystem: BatchTargetSystem, contextUser: UserInfo,
+): Promise<string[]> {
+  const out: string[] = [];
+  for (const g of groups) out.push(await resolveExternalAccount(g.glAccountId, g.companyId, targetSystem, contextUser));
+  return out;
 }
 
 /** Raised by buildBatchFromView when the view contains entries that cannot be batched (loud reject). */
@@ -271,17 +377,52 @@ async function filterIdsByWindow(jeIds: string[], options: BuildBatchOptions, co
 }
 
 /**
- * Raise the approval task; if the gate throws (e.g. a company has no CFO) do NOT leave a locked, task-less
- * batch stranded — with reversible preliminary locks we cancel it (unlock JEs + Cancelled) and rethrow, so
- * the caller sees the real failure and the candidate pool is intact. (Fixes the Q5 orphan-batch atomicity gap.)
+ * TRANSACTION 2 (MOD-14) — raise the CFO approval Task AND stamp the batch pointer, together.
+ *
+ * Marcelo's ruling (2026-07-16): the task-raise is a SEPARATE action in its OWN transaction, and
+ * **batch creation is NOT gated on it**. The old `raiseApprovalTaskOrReverse` did the opposite — it
+ * called `cancelBatch()` and rethrew, destroying a perfectly valid batch because a downstream tasks
+ * app hiccuped.
+ *
+ * The stamp and the Task commit atomically WITH EACH OTHER, so `ApprovalTaskID` can never point at a
+ * Task that does not exist, nor a Task exist unpointed. When this fails, the batch stands and
+ * `ApprovalTaskID IS NULL` — the detectable, retryable state the column exists for (Q28.1: retry is
+ * manual + visible for now).
+ *
+ * Accounting owns this transaction because bizapps-tasks is a dependency OF accounting.
+ *
+ * @returns true when a task was raised + stamped; false when it failed (batch still valid) or when
+ *          the gate raises no task at all (e.g. AutoApproveGate in tests/seeds).
  */
-async function raiseApprovalTaskOrReverse(batchId: string, gate: BatchApprovalGate, contextUser: UserInfo): Promise<void> {
-  if (!gate.onBatchBuilt) return;
+async function raiseApprovalTaskAndStamp(
+  batchId: string,
+  gate: BatchApprovalGate,
+  contextUser: UserInfo,
+  provider: IMetadataProvider,
+): Promise<boolean> {
+  if (!gate.onBatchBuilt) return false; // no task to raise (AutoApproveGate) — not a failure
+
   try {
-    await gate.onBatchBuilt(batchId, contextUser);
+    const taskId = await gate.onBatchBuilt(batchId, contextUser);
+    // A gate that raises a task but cannot tell us its id leaves nothing to stamp. Report rather
+    // than throw: the batch is valid, and this is exactly the retryable state.
+    if (!taskId) {
+      LogError(`buildBatch: approval task raised for batch ${batchId} but the gate returned no task id — batch left unstamped (retryable).`);
+      return false;
+    }
+
+    const batch = await provider.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
+    if (!(await batch.Load(batchId))) throw new Error(`batch ${batchId} not found while stamping the approval task`);
+    batch.ApprovalTaskID = taskId;
+    batch.ApprovalTaskRaisedAt = new Date();
+    if (!(await batch.Save())) throw new Error(batch.LatestResult?.CompleteMessage ?? 'stamp save failed');
+    return true;
   } catch (e) {
-    await cancelBatch(batchId, contextUser);
-    throw e;
+    // Deliberately swallowed: MOD-14 — the batch is committed and valid; a task failure must not
+    // fail the build. Loud in the log, visible as ApprovalTaskID IS NULL, retryable.
+    const detail = e instanceof Error ? e.message : String(e);
+    LogError(`buildBatch: approval-task transaction failed for batch ${batchId} (batch is VALID and committed; ApprovalTaskID left NULL for retry): ${detail}`);
+    return false;
   }
 }
 
@@ -298,6 +439,20 @@ export interface BuildBatchOptions {
   cutoff?: Date | null;
   /** Optional lower bound (EffectiveDate >= startDate); omit for the standard oldest-forward flow. */
   startDate?: Date | null;
+  /**
+   * Restrict the candidate pool to these companies. Omit/empty = ALL companies (the GLOBAL sweep of
+   * CH-4 — batches are multi-company by design). Added for the §8.2 Batch-workspace criteria panel.
+   *
+   * NOTE this narrows the CANDIDATE POOL only; it does not change the per-company netting or the
+   * per-company balance invariant (50019/50023), which still apply to whatever is selected.
+   */
+  companyIds?: string[] | null;
+  /**
+   * Restrict the candidate pool to these `JournalEntry.EntryType` values. Omit/empty = all types.
+   * Typed as `string[]` rather than the generated union because the caller is a UI filter fed from
+   * entity metadata (the CHECK-derived value list), not a compile-time literal.
+   */
+  entryTypes?: string[] | null;
 }
 
 /** Candidate = every unbatched Pending JE within the date window, oldest-first (B1.1). */
@@ -317,7 +472,7 @@ async function loadPendingJEIds(contextUser: UserInfo, options: BuildBatchOption
   return (res.Results ?? []).map(r => r.ID);
 }
 
-/** Build the `Status='Pending'` + date-window ExtraFilter (inclusive date-only cutoff per MOD-8). */
+/** Build the `Status='Pending'` + date-window + scope ExtraFilter (inclusive date-only cutoff per MOD-8). */
 export function pendingCandidateFilter(options: BuildBatchOptions): string {
   const clauses = [`Status='Pending'`];
   if (options.startDate) clauses.push(`EffectiveDate >= '${isoDate(options.startDate)}'`);
@@ -328,7 +483,30 @@ export function pendingCandidateFilter(options: BuildBatchOptions): string {
       clauses.push(`EffectiveDate <= '${options.cutoff.toISOString()}'`); // exact datetime
     }
   }
+  // Scope narrowing (§8.2 criteria panel). Empty/omitted means NO clause — i.e. all companies /
+  // all types — never `IN ()`, which is a SQL syntax error AND would silently mean "nothing".
+  if (options.companyIds?.length) {
+    clauses.push(`CompanyID IN (${options.companyIds.map(sqlGuid).join(',')})`);
+  }
+  if (options.entryTypes?.length) {
+    clauses.push(`EntryType IN (${options.entryTypes.map(sqlText).join(',')})`);
+  }
   return clauses.join(' AND ');
+}
+
+/**
+ * A GUID literal, validated rather than escaped: these ids reach us from a UI filter, and this string
+ * is concatenated into a SQL predicate. Anything that is not a plain UUID is rejected outright —
+ * there is no legitimate value that needs escaping here, so refusing is safer than quoting.
+ */
+function sqlGuid(id: string): string {
+  if (!/^[0-9a-fA-F-]{36}$/.test(id)) throw new Error(`buildBatch: invalid company id in criteria: ${id}`);
+  return `'${id}'`;
+}
+
+/** A quoted T-SQL string literal (single quotes doubled) for value-list members like EntryType. */
+function sqlText(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
 }
 
 const isMidnightUTC = (d: Date): boolean =>
@@ -359,18 +537,31 @@ async function loadNettableLines(jeIds: string[], contextUser: UserInfo): Promis
   });
 }
 
-/** A line's company is implicit via its GLAccount.CompanyID (CH-2 — JEs have no header company). */
-async function loadCompanyByGLAccount(glAccountIds: string[], contextUser: UserInfo): Promise<Map<string, string>> {
-  const byGL = new Map<string, string>();
-  if (glAccountIds.length === 0) return byGL;
-  const rv = new RunView();
-  const inList = glAccountIds.map(id => `'${id}'`).join(',');
-  const res = await rv.RunView<{ ID: string; CompanyID: string }>(
-    { EntityName: GL_ENTITY, ExtraFilter: `ID IN (${inList})`, Fields: ['ID', 'CompanyID'], ResultType: 'simple', BypassCache: true },
-    contextUser,
-  );
-  for (const g of res.Results ?? []) byGL.set(g.ID, g.CompanyID);
-  return byGL;
+/**
+ * Queue the batch header onto the transaction group. Carries its control totals on the FIRST write —
+ * the old code saved the header, wrote the lines, then saved the header a SECOND time just to set
+ * totals. Totals are pure (computeControlTotals), so that round-trip was never necessary.
+ */
+async function queueBatchHeader(
+  h: { targetSystem: BatchTargetSystem; batchedByUserId: string; jeCount: number; totalDebits: number; totalCredits: number },
+  tg: Awaited<ReturnType<IMetadataProvider['CreateTransactionGroup']>>,
+  contextUser: UserInfo,
+  provider: IMetadataProvider,
+): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
+  const batch = await provider.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
+  batch.NewRecord();
+  batch.TargetSystem = h.targetSystem;
+  batch.BatchedAt = new Date();
+  batch.BatchedByUserID = h.batchedByUserId;
+  batch.Status = 'Pending';
+  batch.TotalEntries = h.jeCount;
+  batch.TotalDebits = h.totalDebits;
+  batch.TotalCredits = h.totalCredits;
+  batch.TransactionGroup = tg;
+  // With a TransactionGroup, Save() QUEUES the row (it does not commit) and batch.ID is available
+  // immediately — which is what lets the summary lines + JE locks below chain their FKs to it.
+  if (!(await batch.Save())) throw new Error(`buildBatch: batch header failed to queue: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
+  return batch;
 }
 
 async function loadDimensionsByLine(lineIds: string[], contextUser: UserInfo): Promise<Map<string, DimRef[]>> {
@@ -390,57 +581,62 @@ async function loadDimensionsByLine(lineIds: string[], contextUser: UserInfo): P
   return byLine;
 }
 
-async function createBatchHeader(
-  targetSystem: BatchTargetSystem, batchedByUserId: string, jeCount: number, contextUser: UserInfo,
-): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
-  const md = new Metadata();
-  const batch = await md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
-  batch.NewRecord();
-  batch.TargetSystem = targetSystem;
-  batch.BatchedAt = new Date();
-  batch.BatchedByUserID = batchedByUserId;
-  batch.Status = 'Pending';
-  batch.TotalEntries = jeCount;
-  batch.TotalDebits = 0;
-  batch.TotalCredits = 0;
-  if (!(await batch.Save())) throw new Error(`buildBatch: batch header save failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
-  return batch;
+/** A line's company is implicit via its GLAccount.CompanyID (CH-2 — JEs have no header company). */
+async function loadCompanyByGLAccount(glAccountIds: string[], contextUser: UserInfo): Promise<Map<string, string>> {
+  const byGL = new Map<string, string>();
+  if (glAccountIds.length === 0) return byGL;
+  const rv = new RunView();
+  const inList = glAccountIds.map(id => `'${id}'`).join(',');
+  const res = await rv.RunView<{ ID: string; CompanyID: string }>(
+    { EntityName: GL_ENTITY, ExtraFilter: `ID IN (${inList})`, Fields: ['ID', 'CompanyID'], ResultType: 'simple', BypassCache: true },
+    contextUser,
+  );
+  for (const g of res.Results ?? []) byGL.set(g.ID, g.CompanyID);
+  return byGL;
 }
 
-/** Write one netted JournalEntryBatchLineItem (+ dimension tags) per group; resolve the ERP account number. */
-async function writeSummaryLines(
-  batchId: string, targetSystem: BatchTargetSystem, groups: NetGroup[], contextUser: UserInfo,
-): Promise<{ totalDebits: number; totalCredits: number }> {
-  const md = new Metadata();
-  let totalDebits = 0, totalCredits = 0, lineNo = 0;
-  for (const g of groups) {
-    const externalAccountId = await resolveExternalAccount(g.glAccountId, g.companyId, targetSystem, contextUser);
-    lineNo += 1;
-    const li = await md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchLineItemEntity>(JEBLI_ENTITY, contextUser);
+/** Queue one netted JournalEntryBatchLineItem (+ its dimension tags) per group onto the transaction. */
+async function queueSummaryLines(
+  batchId: string,
+  groups: NetGroup[],
+  externalAccounts: string[],
+  tg: Awaited<ReturnType<IMetadataProvider['CreateTransactionGroup']>>,
+  contextUser: UserInfo,
+  provider: IMetadataProvider,
+): Promise<void> {
+  for (let i = 0; i < groups.length; i++) {
+    const g = groups[i];
+    const li = await provider.GetEntityObject<mjBizAppsAccountingJournalEntryBatchLineItemEntity>(JEBLI_ENTITY, contextUser);
     li.NewRecord();
     li.BatchID = batchId;
     li.CompanyID = g.companyId;
     li.GLAccountID = g.glAccountId;
-    li.LineNumber = lineNo;
+    li.LineNumber = i + 1;
     li.SourceLineCount = g.sourceLineCount;
-    li.ExternalAccountID = externalAccountId;
-    if (g.side === 'Debit') { li.DebitAmount = g.net; totalDebits += g.net; }
-    else { li.CreditAmount = -g.net; totalCredits += -g.net; }
-    if (!(await li.Save())) throw new Error(`buildBatch: summary line save failed: ${li.LatestResult?.CompleteMessage ?? 'unknown'}`);
-    await writeSummaryDimensions(li.ID, g.dims, contextUser);
+    li.ExternalAccountID = externalAccounts[i];
+    if (g.side === 'Debit') li.DebitAmount = g.net;
+    else li.CreditAmount = -g.net;
+    li.TransactionGroup = tg;
+    if (!(await li.Save())) throw new Error(`buildBatch: summary line failed to queue: ${li.LatestResult?.CompleteMessage ?? 'unknown'}`);
+    await queueSummaryDimensions(li.ID, g.dims, tg, contextUser, provider);
   }
-  return { totalDebits: Math.round(totalDebits * 100) / 100, totalCredits: Math.round(totalCredits * 100) / 100 };
 }
 
-async function writeSummaryDimensions(batchLineItemId: string, dims: DimRef[], contextUser: UserInfo): Promise<void> {
-  const md = new Metadata();
+async function queueSummaryDimensions(
+  batchLineItemId: string,
+  dims: DimRef[],
+  tg: Awaited<ReturnType<IMetadataProvider['CreateTransactionGroup']>>,
+  contextUser: UserInfo,
+  provider: IMetadataProvider,
+): Promise<void> {
   for (const d of dims) {
-    const dim = await md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchLineDimensionEntity>(JEBLD_ENTITY, contextUser);
+    const dim = await provider.GetEntityObject<mjBizAppsAccountingJournalEntryBatchLineDimensionEntity>(JEBLD_ENTITY, contextUser);
     dim.NewRecord();
     dim.JournalEntryBatchLineItemID = batchLineItemId;
     dim.DimensionID = d.DimensionID;
     dim.DimensionValueID = d.DimensionValueID;
-    if (!(await dim.Save())) throw new Error(`buildBatch: summary dimension save failed: ${dim.LatestResult?.CompleteMessage ?? 'unknown'}`);
+    dim.TransactionGroup = tg;
+    if (!(await dim.Save())) throw new Error(`buildBatch: summary dimension failed to queue: ${dim.LatestResult?.CompleteMessage ?? 'unknown'}`);
   }
 }
 
@@ -474,21 +670,31 @@ export async function resolveExternalAccount(
   return gl.Code; // AM-4: the account number IS the wire identity
 }
 
-async function setControlTotals(batch: mjBizAppsAccountingJournalEntryBatchEntity, totalDebits: number, totalCredits: number): Promise<void> {
-  batch.TotalDebits = totalDebits;
-  batch.TotalCredits = totalCredits;
-  if (!(await batch.Save())) throw new Error(`buildBatch: control-totals save failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
-}
 
-/** Lock the JEs: Status → Batched with BatchID (CK_JournalEntry_BatchedHasBatch + the immutability triggers). */
-async function lockJournalEntries(jeIds: string[], batchId: string, contextUser: UserInfo): Promise<void> {
-  const md = new Metadata();
+/**
+ * Queue the JE locks (Status → Batched + BatchID) onto the transaction.
+ *
+ * This is the step that most needed a transaction: it is one Save PER JE, so a 20-entry batch was 20
+ * independent commits. A failure at entry 7 previously left 6 JEs locked to a batch and 14 loose —
+ * the half-built batch MOD-14 exists to make impossible.
+ *
+ * The Load() per JE is a read (the trigger set requires the full row to validate the transition);
+ * only the Save queues.
+ */
+async function queueJournalEntryLocks(
+  jeIds: string[],
+  batchId: string,
+  tg: Awaited<ReturnType<IMetadataProvider['CreateTransactionGroup']>>,
+  contextUser: UserInfo,
+  provider: IMetadataProvider,
+): Promise<void> {
   for (const jeId of jeIds) {
-    const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
-    await je.Load(jeId);
+    const je = await provider.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
+    if (!(await je.Load(jeId))) throw new Error(`buildBatch: JE ${jeId} not found while locking`);
     je.BatchID = batchId;
     je.Status = 'Batched';
-    if (!(await je.Save())) throw new Error(`buildBatch: failed to lock JE ${jeId}: ${je.LatestResult?.CompleteMessage ?? 'unknown'}`);
+    je.TransactionGroup = tg;
+    if (!(await je.Save())) throw new Error(`buildBatch: failed to queue lock for JE ${jeId}: ${je.LatestResult?.CompleteMessage ?? 'unknown'}`);
   }
 }
 
@@ -523,27 +729,55 @@ export async function cancelBatch(
  * SAME batch record. Candidate FILTERS are a future enhancement (plan §13) — for now it takes everything pending.
  */
 export async function regenerateBatch(
-  batchId: string, targetSystem: BatchTargetSystem, contextUser: UserInfo,
+  batchId: string,
+  targetSystem: BatchTargetSystem,
+  contextUser: UserInfo,
+  options: BuildBatchOptions = {},
+  gate: BatchApprovalGate = AutoApproveGate,
+  provider: IMetadataProvider = Metadata.Provider,
 ): Promise<BuildBatchResult> {
-  const md = new Metadata();
-  const batch = await md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
+  const batch = await provider.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
   if (!(await batch.Load(batchId))) throw new Error(`regenerateBatch: batch ${batchId} not found`);
   if (batch.Status !== 'Pending') {
     throw new Error(`regenerateBatch: batch ${batchId} is ${batch.Status}; only a Pending batch can be regenerated`);
   }
+
+  // The teardown (unlock + clear summary) stays OUTSIDE the rebuild transaction on purpose: it must
+  // be visible to the re-gather below, which re-reads the candidate pool those unlocked JEs return to.
   await unlockJournalEntries(batchId, contextUser);
   await clearSummaryLines(batchId, contextUser);
 
-  const jeIds = await loadPendingJEIds(contextUser);
+  const jeIds = await loadPendingJEIds(contextUser, options);
   const groups = netLines(await loadNettableLines(jeIds, contextUser));
-  const { totalDebits, totalCredits } = await writeSummaryLines(batch.ID, targetSystem, groups, contextUser);
+  const externalAccounts = await resolveExternalAccounts(groups, targetSystem, contextUser);
+  const { totalDebits, totalCredits } = computeControlTotals(groups);
+
+  // ONE transaction for the rebuild (MOD-14) — same posture as buildBatchFromIds.
+  const tg = await provider.CreateTransactionGroup();
   batch.TargetSystem = targetSystem;
   batch.TotalEntries = jeIds.length;
-  await setControlTotals(batch, totalDebits, totalCredits);
-  await lockJournalEntries(jeIds, batch.ID, contextUser);
+  batch.TotalDebits = totalDebits;
+  batch.TotalCredits = totalCredits;
+  batch.TransactionGroup = tg;
+  if (!(await batch.Save())) throw new Error(`regenerateBatch: header failed to queue: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
+  await queueSummaryLines(batch.ID, groups, externalAccounts, tg, contextUser, provider);
+  await queueJournalEntryLocks(jeIds, batch.ID, tg, contextUser, provider);
+  if (!(await tg.Submit())) {
+    const detail = batch.LatestResult?.CompleteMessage ?? 'transaction group rolled back';
+    LogError(`regenerateBatch: atomic rebuild rolled back: ${detail}`);
+    throw new Error(`regenerateBatch: atomic rebuild rolled back: ${detail}`);
+  }
+
+  // Q28.3 — WORKING ASSUMPTION: regenerate re-raises the task and re-stamps. Rationale: the batch's
+  // CONTENT changed, so a CFO who already saw the old contents should be asked again rather than have
+  // an old approval silently carry over to different numbers. Flip this if Marcelo rules otherwise.
+  const approvalTaskRaised = await raiseApprovalTaskAndStamp(batch.ID, gate, contextUser, provider);
 
   const companyCount = new Set(groups.map(g => g.companyId)).size;
-  return { batchId: batch.ID, summaryLineCount: groups.length, totalDebits, totalCredits, jeCount: jeIds.length, companyCount };
+  return {
+    batchId: batch.ID, summaryLineCount: groups.length, totalDebits, totalCredits,
+    jeCount: jeIds.length, companyCount, approvalTaskRaised,
+  };
 }
 
 /**

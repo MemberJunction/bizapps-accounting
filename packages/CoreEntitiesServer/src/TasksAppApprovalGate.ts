@@ -65,7 +65,7 @@ export class TasksAppApprovalGate implements BatchApprovalGate {
   private readonly orchestration = new TaskOrchestrationService();
 
   /** Build the approval Task when a batch is built. Throws if any involved company lacks a CFO. */
-  async onBatchBuilt(batchId: string, contextUser: UserInfo): Promise<void> {
+  async onBatchBuilt(batchId: string, contextUser: UserInfo): Promise<string | null> {
     const batch = await this.loadBatch(batchId, contextUser);
     const cfoUserIds = await this.resolveCFOUserIds(batchId, contextUser);
     const typeId = await this.resolveApprovalTaskTypeId(contextUser);
@@ -84,9 +84,15 @@ export class TasksAppApprovalGate implements BatchApprovalGate {
     }, contextUser);
     // CreateApprovalRequest logs (not throws) on a failed link — verify the link actually persisted,
     // else assertApproved would block the send forever with no recoverable signal.
-    if (!(await this.resolveBatchTask(batchId, contextUser))) {
+    const task = await this.resolveBatchTask(batchId, contextUser);
+    if (!task) {
       throw new Error(`Approval Task for batch ${batchId} was created but its Task Link did not persist — check tasks-app schema/permissions.`);
     }
+    // MOD-14: hand the id back so the caller's task transaction can stamp
+    // JournalEntryBatch.ApprovalTaskID. We already had to resolve the task to verify the link, so
+    // this costs nothing — and it is what turns "does this batch have a task?" from this very
+    // Task-Link round-trip into a column read.
+    return task.ID;
   }
 
   /** Block the send unless the batch's Task carries a terminal Approved/ApprovedWithConditions decision. */

@@ -3897,6 +3897,13 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @Field() 
     _mj__UpdatedAt: Date;
         
+    @Field({nullable: true, description: `Soft reference to the MJ_BizApps_Tasks Task that carries this batch's CFO approval. Written by the accounting-owned task transaction, which raises the Task and stamps this column together (all-or-none), so the two can never disagree. NULL on a built batch means the task-raise did not complete — a detectable, retryable state, NOT a gate on batch creation (the batch itself is already committed and valid). Intentionally NOT a foreign key: bizapps-tasks is a separate OpenApp schema and a cross-app FK would couple accounting's DDL to it.`}) 
+    @MaxLength(36)
+    ApprovalTaskID?: string;
+        
+    @Field({nullable: true, description: `When the approval Task was raised and stamped (UTC). Set in the same transaction as ApprovalTaskID; both are NULL together or set together.`}) 
+    ApprovalTaskRaisedAt?: Date;
+        
     @Field() 
     @MaxLength(100)
     BatchedByUser: string;
@@ -3963,6 +3970,12 @@ export class CreatemjBizAppsAccountingJournalEntryBatchInput {
     @Field({ nullable: true })
     ErrorMessage: string | null;
 
+    @Field({ nullable: true })
+    ApprovalTaskID: string | null;
+
+    @Field({ nullable: true })
+    ApprovalTaskRaisedAt: Date | null;
+
     @Field(() => RestoreContextInput, { nullable: true })
     RestoreContext___?: RestoreContextInput;
 }
@@ -4017,6 +4030,12 @@ export class UpdatemjBizAppsAccountingJournalEntryBatchInput {
 
     @Field({ nullable: true })
     ErrorMessage?: string | null;
+
+    @Field({ nullable: true })
+    ApprovalTaskID?: string | null;
+
+    @Field({ nullable: true })
+    ApprovalTaskRaisedAt?: Date | null;
 
     @Field(() => [KeyValuePairInput], { nullable: true })
     OldValues___?: KeyValuePairInput[];
