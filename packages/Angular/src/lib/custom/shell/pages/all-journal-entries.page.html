@@ -1,17 +1,17 @@
 <!-- Sub-page of a left-nav shell → mj-page-header-interior, NOT mj-page-header (which would double
      the header). Slot conventions: [meta] = state, [actions] = verbs, [toolbar] = filters. -->
 <mj-page-header-interior Title="All journal entries" Subtitle="The ledger — every entry, newest first">
-  <ng-container meta>
+  <div meta>
     <mj-stat-badge [Label]="ScopeLabel" Icon="fa-solid fa-building" Variant="info"></mj-stat-badge>
-  </ng-container>
+  </div>
 
-  <ng-container actions>
+  <div actions>
     <!-- The ONE refresh control per list (§8 dispatch refresh policy). Deleting this seam is how
          live push lands later — there is deliberately no polling and no per-button wiring. -->
     <mj-refresh-button (Clicked)="Refresh()"></mj-refresh-button>
-  </ng-container>
+  </div>
 
-  <ng-container toolbar>
+  <div toolbar>
     <div class="aje-filters">
       <label class="aje-field">
         <span class="aje-field__label">Window</span>
@@ -53,25 +53,33 @@
           aria-label="Search entries" />
       </label>
     </div>
-  </ng-container>
+  </div>
 </mj-page-header-interior>
 
-<!-- MJ's house grid (§8 MJ-wins): AG Grid + RunView loading + infinite server-side paging (the
-     plan's keyset "Load more" in MJ's idiom) + server sorting + export + per-user state. -->
+<!-- MJ's house grid (§8 MJ-wins): AG Grid + RunView loading + server sorting + export + per-user
+     grid state.
+
+     PaginationMode="client" is an INTERIM choice, not the target. The plan wants server-side
+     paging ("keyset / Load more") for the thousands-of-JEs case, which is MJ's `infinite` mode —
+     but infinite mode currently renders a permanent "No data to display" overlay OVER a populated
+     grid, because the grid's empty state is gated on `rowData.length === 0` while infinite mode
+     feeds rows through AG's IDatasource and never fills `rowData`. Logged in MJ-UPSTREAM.md.
+     Switch back to infinite (with ShowPager off) the moment that lands. Our JE volume is small, so
+     client mode is honest and correct today. -->
 <div class="aje-grid">
   <mj-entity-data-grid
     [Params]="GridParams"
     [Columns]="Columns"
-    PaginationMode="infinite"
+    PaginationMode="client"
     [PageSize]="100"
-    [ServerSideSorting]="true"
+    [ShowPager]="true"
     [AllowSorting]="true"
     [ShowToolbar]="false"
     [SelectionMode]="'single'"
     KeyField="ID"
     StateKey="mj.bizappsacct.grid.allJournalEntries.v1"
     [AutoPersistState]="true"
-    Height="fit-content"
+    Height="auto"
     (AfterRowClick)="OnRowClicked($event.rowKey)">
   </mj-entity-data-grid>
 </div>

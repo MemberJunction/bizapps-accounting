@@ -1,5 +1,5 @@
 <mj-page-layout>
-  <mj-page-body Direction="row">
+  <mj-page-body [Flex]="true" [Padding]="false" Direction="row">
     <mj-left-nav
       [Sections]="RailSections"
       [ActiveId]="ActivePageId"
@@ -10,7 +10,7 @@
       </div>
     </mj-left-nav>
 
-    <div class="cat-content">
+    <mj-left-nav-content>
       @switch (ActivePageId) {
         @case ('all-batches') {
           <mj-batch-status-dashboard></mj-batch-status-dashboard>
@@ -22,6 +22,6 @@
           <mj-shell-page-pending [PageName]="PendingPageName(ActivePageId)"></mj-shell-page-pending>
         }
       }
-    </div>
+    </mj-left-nav-content>
   </mj-page-body>
 </mj-page-layout>
