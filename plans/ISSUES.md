@@ -28,3 +28,45 @@ Entry: `### [OPEN|RESOLVED] <title> — <date>` with source + status. Convention
   sets (which run unrestricted), so the basic model builds first and the timing system is added later.
   Canonical entry + revisit trigger: `plans/DEFERRALS.md`. Executor: build no period/close machinery now;
   any future timing rule detects by DATE, never a period FK.
+
+## ISSUE — Batch workspace (§8.2) criteria panel exceeds current server capability
+- **Raised:** 2026-07-16 by the UI-build agent, at the start of the §8.2 Batch workspace build.
+- **Status:** OPEN — **needs Marcelo's scope call before the workspace can be built as specced.**
+- **Why it matters:** §8.2 specs the Batch workspace's **criteria panel as the ONLY filter surface**
+  on the page, and the whole screen is built around it. Three of its five criteria have no server
+  behind them, so the panel cannot be honestly wired — a control that silently doesn't filter is
+  worse than no control.
+
+### What actually exists (verified in the code, not assumed)
+
+| §8.2 criterion | Engine (`BatchingEngine.ts`) | GraphQL resolver | Verdict |
+|---|---|---|---|
+| **Include-unbatched-through datetime** (cutoff, default now) | ✅ `BuildBatchOptions.cutoff` (+ `startDate`), MOD-8 inclusive-date semantics, tier-2 tested (B1.1) | ❌ `BuildJEBatch(targetSystem)` drops it | **Thin resolver add** |
+| **Source: from a saved MJ User View** | ✅ `buildBatchFromView(viewId, …)` with `excludePosted`/`excludeLocked`, loud-reject semantics, tier-2 tested (B1.2) | ❌ **no mutation exists at all** | **Thin resolver add** |
+| **Target system select** | ✅ | ✅ | Done |
+| **Companies multi-select** | ❌ not in `BuildBatchOptions` | ❌ | **Engine work** |
+| **Entry types** (All approved-only / System / Manual) | ❌ not in `BuildBatchOptions` | ❌ | **Engine work** |
+| **Per-entry include/exclude checkboxes** + the MOD-8 out-of-order warning they trigger | ❌ `buildBatch` sweeps the whole Pending pool via `loadPendingJEIds`; there is no exclude-set param. `buildBatchFromIds` exists as the shared core and takes an explicit ID list — **that is the natural seam** for an include/exclude preview. | ❌ | **Engine work** (small — `buildBatchFromIds` already takes IDs) |
+
+### The scope call for Marcelo (pick one)
+
+1. **Build the server side first** — extend `BuildJEBatch` with `cutoff`, add `BuildJEBatchFromView`,
+   add company/entryType options + an explicit-ID build over the existing `buildBatchFromIds` seam.
+   Full §8.2 workspace, with tier 2/3 covering the new surface. Biggest scope; matches the approved
+   mockup exactly.
+2. **Descope the panel to what the engine has today** — cutoff + source(standard/from-view) + target
+   system, still needing the two thin resolver adds. Drop companies/entry-types/include-exclude (and
+   with them the MOD-8 out-of-order warning, which only has meaning if exclusions exist). Ships the
+   workspace shape; the panel is smaller than the mockup.
+3. **Defer the workspace**, keep building the rest of the UI (JE workspace, Accounts, dashboards,
+   Configuration), return when the server side is planned.
+
+**Recommendation: (2) then (1).** It gets a real, honest workspace in front of you fastest — and the
+two resolver adds are thin wrappers over engine functions that are already written AND tier-2 tested,
+so they are cheap and low-risk. The company/entry-type/exclusion work is genuine new engine behaviour
+with invariant implications (the balanced-JE + per-company netting rules), which deserves its own
+plan rather than being improvised inside a UI wave.
+
+**Do NOT** wire the missing criteria to a client-side filter over the preview: `buildBatch` would
+still sweep the whole Pending pool server-side, so the batch would silently NOT match what the panel
+showed. That is a correctness trap, not a shortcut.
