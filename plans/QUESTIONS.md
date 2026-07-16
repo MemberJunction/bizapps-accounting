@@ -370,6 +370,23 @@
 - **What we built to it (MOD-14):** `ApprovalTaskID` + `ApprovalTaskRaisedAt` on JournalEntryBatch
   (CHECK: both-null or both-set; filtered index; **no FK** — cross-app coupling), transaction 1 =
   batch atomic, transaction 2 = task-raise + stamp atomic together, exposed as a Remote Operation.
+- **⚠ CONFLICT WITH A PRIOR RULING — needs your call (found by tier 2, 2026-07-16):** MOD-14 as built
+  **broke a committed test that encodes the Q5 ruling** `S1 real gate — no CFO configured →
+  buildBatch hard-fails AND auto-reverses (Q5 atomicity)`. That ruling says a build with **no CFO
+  configured** must HARD-FAIL. MOD-14 says a build must never be gated on the task-raise. As
+  implemented, MOD-14 swallows BOTH cases, so no-CFO now builds a batch nobody can ever approve.
+  **These are arguably different failures and deserve different answers:**
+  - a **transient tasks-app outage** → the batch must stand (MOD-14's case — correct as built);
+  - **no CFO configured** → a *configuration precondition*, not a task failure. A batch that can
+    never be approved is dead on arrival; it should fail FAST.
+  **Proposed reconciliation (satisfies both rulings, and is better than the old behaviour):** check
+  the precondition BEFORE building — resolve the candidate JEs' companies and assert each has a CFO
+  — and if it fails, **build nothing at all**. Then MOD-14's "never destroy a built batch" applies
+  only to the task-raise. This is strictly better than the old code, which BUILT the batch and then
+  cancelled it (a write + a compensating write, i.e. the half-state MOD-14 exists to kill). Needs a
+  gate method (e.g. `assertCanRaise(companyIds)`); the CFO set is already resolvable from the
+  candidates before any write. **NOT YET IMPLEMENTED — the tier-2 test is RED and left red on
+  purpose, not quietly re-baselined.**
 - **The questions (details, not shape):**
   1. **Retry:** a batch with `ApprovalTaskID IS NULL` is the detectable failed-raise state. Should
      retry be **automatic** (a scheduled sweep re-raising missing tasks) or **manual** (an admin

@@ -528,6 +528,85 @@ async function main(): Promise<void> {
     assert(st.status === 'Pending' && st.td === st.tc && st.td === st.sumDr && st.td === 45, `regenerated batch must be Pending + footing at 45, got status=${st.status} td=${st.td} sumDr=${st.sumDr}`);
   });
 
+  // ─── MOD-14: batch build is ONE transaction; the task-raise is a SEPARATE one ───
+  // The behaviour Marcelo asked for (2026-07-16): batch creation must NOT be gated on the approval
+  // task, and the batch must carry a pointer to its task so "has a task?" is a column check.
+
+  await test('MOD-14 — a FAILING approval gate does NOT destroy the batch (build is not gated on task success)', async () => {
+    // THE headline of MOD-14. The OLD code called cancelBatch() and rethrew here, annihilating a
+    // perfectly valid batch because a downstream tasks app hiccuped.
+    const jeIds: string[] = [];
+    for (let i = 0; i < 2; i++) jeIds.push(await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 70 }, { gl: companyA.revGL, credit: 70 }]));
+
+    const explodingGate: BatchApprovalGate = {
+      async onBatchBuilt() { throw new Error('simulated tasks-app outage'); },
+      async assertApproved() { /* not reached */ },
+    };
+
+    const res = await buildBatch('BusinessCentral', user.ID, user, explodingGate);
+    assert(res !== null, 'the batch must still be built when the task gate throws');
+    assert(res!.approvalTaskRaised === false, 'approvalTaskRaised must report false, not throw');
+
+    // The batch is COMMITTED and VALID...
+    const b = await pool.request().query(`SELECT Status, TotalDebits, TotalCredits, ApprovalTaskID, ApprovalTaskRaisedAt FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${res!.batchId}'`);
+    assert(b.recordset.length === 1, 'the batch row must exist (it must NOT have been cancelled)');
+    assert(b.recordset[0].Status === 'Pending', `expected a Pending batch, got '${b.recordset[0].Status}'`);
+    assert(Number(b.recordset[0].TotalDebits) === 140, `expected TotalDebits 140, got ${b.recordset[0].TotalDebits}`);
+    assert(Number(b.recordset[0].TotalCredits) === 140, `expected TotalCredits 140, got ${b.recordset[0].TotalCredits}`);
+
+    // ...and it is in exactly the detectable, retryable state the column exists for.
+    assert(b.recordset[0].ApprovalTaskID === null, 'ApprovalTaskID must be NULL — the retryable signal');
+    assert(b.recordset[0].ApprovalTaskRaisedAt === null, 'ApprovalTaskRaisedAt must be NULL alongside it');
+
+    // The JE locks still committed — TX 1 succeeded independently of TX 2.
+    const locked = await pool.request().query(`SELECT COUNT(*) AS n FROM ${SCHEMA}.JournalEntry WHERE BatchID='${res!.batchId}' AND Status='Batched'`);
+    assert(Number(locked.recordset[0].n) === 2, `expected both JEs locked to the batch, got ${locked.recordset[0].n}`);
+  });
+
+  await test('MOD-14 — the REAL tasks gate stamps ApprovalTaskID + RaisedAt, and the id resolves to a live Task', async () => {
+    const cfoUserId = await makeCFOUser(ctx, 'mod14');
+    const acp = await new Metadata().GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, user);
+    await acp.Load(companyA.id);
+    acp.ApprovalCFOPersonID = await makeCFOPerson(ctx, 'mod14');
+    await acp.Save();
+
+    await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 33 }, { gl: companyA.revGL, credit: 33 }]);
+    const res = await buildBatch('BusinessCentral', user.ID, user, new TasksAppApprovalGate());
+    assert(res !== null, 'expected a batch');
+    assert(res!.approvalTaskRaised === true, 'the real gate must report the task as raised');
+
+    const b = await pool.request().query(`SELECT ApprovalTaskID, ApprovalTaskRaisedAt FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${res!.batchId}'`);
+    const taskId = b.recordset[0].ApprovalTaskID;
+    assert(taskId !== null, 'ApprovalTaskID must be stamped');
+    assert(b.recordset[0].ApprovalTaskRaisedAt !== null, 'ApprovalTaskRaisedAt must be stamped with it');
+
+    // The pointer must name a REAL task — the whole point is that validation stops needing the join.
+    const t = await pool.request().query(`SELECT COUNT(*) AS n FROM ${TASK_SCHEMA}.Task WHERE ID='${taskId}'`);
+    assert(Number(t.recordset[0].n) === 1, 'ApprovalTaskID must resolve to an existing Task row');
+    void cfoUserId;
+  });
+
+  await test('MOD-14 — the half-stamped state is UNREPRESENTABLE (CHECK, raw-SQL bypass-proven)', async () => {
+    // The engine writes both columns together — but "the engine is careful" is not an invariant.
+    // Prove the DB itself refuses the half-stamp, the same posture as 50001/50014.
+    await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 12 }, { gl: companyA.revGL, credit: 12 }]);
+    const res = await buildBatch('BusinessCentral', user.ID, user);
+    assert(res !== null, 'expected a batch');
+
+    let rejected = false;
+    try {
+      // RAW SQL — bypassing the engine entirely. The CHECK must still refuse.
+      await pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET ApprovalTaskID='${randomUUID()}' WHERE ID='${res!.batchId}'`);
+    } catch { rejected = true; }
+    assert(rejected, 'a raw-SQL half-stamp (id without RaisedAt) must be rejected by CK_JournalEntryBatch_ApprovalTaskStamp');
+
+    let rejected2 = false;
+    try {
+      await pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET ApprovalTaskRaisedAt=GETUTCDATE() WHERE ID='${res!.batchId}'`);
+    } catch { rejected2 = true; }
+    assert(rejected2, 'a raw-SQL half-stamp (RaisedAt without id) must be rejected too');
+  });
+
   // ─── Teardown ──────────────────────────────────────────────────────────────
   // db_owner pool (MJ_CodeGen): the app user can't DISABLE TRIGGER (no ALTER) nor delete locked
   // JEs/Posted batches. Batches are global — sweep every batch the tracked JEs reference.

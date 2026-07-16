@@ -317,6 +317,7 @@ export async function buildBatchFromView(
   contextUser: UserInfo,
   gate: BatchApprovalGate = AutoApproveGate,
   options: BuildBatchFromViewOptions = {},
+  provider: IMetadataProvider = Metadata.Provider,
 ): Promise<BuildBatchResult | null> {
   const rows = await resolveViewJEStatuses(viewId, contextUser);
   const { pending, rejected, excluded } = classifyViewEntries(rows, options);
@@ -330,7 +331,7 @@ export async function buildBatchFromView(
     console.warn(`buildBatchFromView: excluded ${excluded.length} non-Pending entr${excluded.length === 1 ? 'y' : 'ies'} (overlap-safe): ${excluded.join(', ')}`);
   }
   const inWindow = options.cutoff || options.startDate ? await filterIdsByWindow(pending, options, contextUser) : pending;
-  return buildBatchFromIds(inWindow, targetSystem, batchedByUserId, contextUser, gate);
+  return buildBatchFromIds(inWindow, targetSystem, batchedByUserId, contextUser, gate, provider);
 }
 
 /**

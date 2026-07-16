@@ -284,3 +284,26 @@ server-side; row → detail slide-in shows lines/lineage/reversal chain/C.8 chip
 **The JE Console component is deliberately NOT deleted** — only un-navigated. It stays as the
 behavioural reference until the tier-5 pass proves the new page covers it, then it goes at sweep
 close. Deleting it before its replacement is proven would destroy the only working reference.
+
+
+## KNOWN RED — MOD-14 vs the Q5 no-CFO ruling (2026-07-16, deliberate)
+
+`block2-runtime` → **27/28**. The one red is **not** a broken test and **not** a bug to squash:
+
+`S1 real gate — no CFO configured → buildBatch hard-fails AND auto-reverses (Q5 atomicity)`
+> `Error: expected an error containing "No CFO configured" but none was thrown`
+
+It encodes the **Q5 ruling** (no CFO → build hard-fails). **MOD-14** (Marcelo, 2026-07-16) says a
+build must never be gated on the approval-task raise — and as implemented it swallows the no-CFO
+case too, so the build now succeeds and leaves a batch nobody can approve.
+
+**Left red on purpose.** Re-baselining it would silently retire a ruling Marcelo made, which is
+exactly the "green because we changed the test" failure mode. The reconciliation is proposed in
+[Q28](../plans/QUESTIONS.md#q28): treat *no CFO configured* as a **precondition** checked BEFORE any
+write (build nothing), and keep MOD-14's never-destroy-a-built-batch rule for the task-raise itself.
+That satisfies both rulings and is better than the old behaviour, which built the batch and then
+cancelled it. **Fix the test when Marcelo rules — not before.**
+
+The three new MOD-14 tests are green: failing-gate-does-not-destroy-the-batch, real-gate-stamps-the-
+pointer (and the id resolves to a live Task), and the half-stamp being unrepresentable (raw-SQL
+bypass-proven).

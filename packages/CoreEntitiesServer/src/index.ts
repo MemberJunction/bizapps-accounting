@@ -112,3 +112,5 @@ export { MaterializeScheduledEntriesOperation, LoadMaterializeScheduledEntriesOp
 export type { MaterializeScheduledEntriesInput } from './MaterializeScheduledEntriesOperation.js';
 export { materializeDueScheduledEntries } from './MaterializationService.js';
 export type { MaterializeResult } from './MaterializationService.js';
+
+export * from './BuildBatchOperation.js';
