@@ -1,17 +1,13 @@
 <!doctype html>
 <!-- ============================================================================
-  MOCKUP (ephemeral) · cycle 2026-07-15 · Accounting — REPORTS category
-  Rail = the report pack (one dedicated page per report — no launcher-gallery
-  app, per plan §4/§10.3). Page = AR Aging, parameterized: as-of date +
-  company + customer filter, Run + Export; the AS-OF is stamped on the output
-  (Jeremy's deterministic-rerun requirement made visible). Buckets drill
-  through to the orders/JEs behind them.
+  MOCKUP (ephemeral) · cycle 2026-07-15 · Accounting — Dimension P&amp;L
+  Generated as part of the fully-fleshed shareable set (every nav link works).
 ============================================================================ -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mockup — Accounting · Reports (AR Aging)</title>
+<title>Mockup — Accounting · Dimension P&amp;L</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <link rel="stylesheet" href="../style-kit/mj-mock.css">
 <style>
@@ -39,7 +35,8 @@ body{margin:0;background:var(--mj-bg-page);color:var(--mj-text-primary)}
 .x-rail a i{width:18px;text-align:center;font-size:14px;flex:none}
 .x-rail a:hover{background:var(--mj-bg-surface-hover);color:var(--mj-text-primary)}
 .x-rail a.active{background:color-mix(in srgb,var(--mj-brand-primary) 10%,transparent);color:var(--mj-brand-primary);font-weight:600}
-.x-rail.collapsed a .lbl{display:none}
+.x-rail.collapsed a .lbl,.x-rail.collapsed .x-badge{display:none}
+.x-badge{margin-left:auto;background:var(--mj-status-error);color:#fff;border-radius:999px;font-size:10.5px;padding:1px 7px;font-weight:700}
 .x-scopechip{display:flex;align-items:center;gap:9px;margin:4px 2px 0;padding:8px 10px;border:1px solid var(--mj-border-default);border-radius:8px;background:var(--mj-bg-surface-card);font-size:12.5px;cursor:pointer;white-space:nowrap}
 .x-scopechip i{color:var(--mj-brand-primary)}
 .x-rail.collapsed .x-scopechip .lbl{display:none}
@@ -47,11 +44,28 @@ body{margin:0;background:var(--mj-bg-page);color:var(--mj-text-primary)}
 .x-pagehead{display:flex;align-items:center;gap:12px;margin-bottom:12px}
 .x-pagehead h1{font-size:19px;margin:0}
 .x-pagehead .actions{margin-left:auto;display:flex;gap:8px}
-.x-params{display:flex;align-items:flex-end;gap:12px;margin-bottom:14px;flex-wrap:wrap}
-.x-params label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mj-text-secondary)}
-tr:hover td{background:var(--mj-bg-surface-hover)}
-td.bucket{cursor:pointer;color:var(--mj-brand-primary)}
+.x-filterbar{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.x-filterbar .count{margin-left:auto;font-size:12.5px;color:var(--mj-text-muted)}
+.x-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}
+.x-card-title{font-size:13px;font-weight:700;margin:0 0 10px;display:flex;align-items:center;gap:8px}
+.x-card-title .more{margin-left:auto;font-size:12px;font-weight:500;color:var(--mj-brand-primary);text-decoration:none}
+.x-kv{display:grid;grid-template-columns:150px 1fr;row-gap:6px;font-size:13px;margin:0}
+.x-kv dt{color:var(--mj-text-muted)}
+.x-kv dd{margin:0}
+.x-sect{font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--mj-text-muted);margin:0 0 6px}
+.x-note{font-size:12px;color:var(--mj-text-muted);margin-top:12px}
+tr.hoverable:hover td,tbody tr:hover td{background:var(--mj-bg-surface-hover)}
 tfoot td{font-weight:700;border-top:2px solid var(--mj-border-strong,var(--mj-border-default))}
+.x-inboxitem{display:flex;align-items:center;gap:12px;padding:11px 14px;border:1px solid var(--mj-border-default);border-left:3px solid var(--mj-status-warning);border-radius:9px;background:var(--mj-bg-surface-card);margin-bottom:10px}
+.x-inboxitem .t{font-size:13px;font-weight:600}
+.x-inboxitem .s{font-size:11.5px;color:var(--mj-text-muted)}
+.x-inboxitem .mjm-btn{margin-left:auto}
+.x-money{display:grid;grid-template-columns:1fr 1fr 1fr auto;border:1px solid var(--mj-border-default);border-radius:10px;overflow:hidden;margin:0 0 14px}
+.x-money>div{padding:9px 14px;border-right:1px solid var(--mj-border-default)}
+.x-money>div:last-child{border-right:none;display:flex;align-items:center}
+.x-money .l{font-size:10.5px;font-weight:700;letter-spacing:.06em;color:var(--mj-text-muted)}
+.x-money .v{font-size:15px;font-weight:700}
+.x-cols2{display:grid;grid-template-columns:1.5fr 1fr;gap:14px;align-items:start}
 </style>
 </head>
 <body>
@@ -62,57 +76,43 @@ tfoot td{font-weight:700;border-top:2px solid var(--mj-border-strong,var(--mj-bo
       <a class="x-tab" href="nav-shell-je-dashboard.html"><i class="fa-solid fa-book"></i> Journal Entries</a>
       <a class="x-tab" href="nav-shell-batches-dashboard.html"><i class="fa-solid fa-boxes-stacked"></i> Batches</a>
       <a class="x-tab" href="nav-shell-accounts.html"><i class="fa-solid fa-sitemap"></i> Accounts</a>
-      <a class="x-tab active" href="#"><i class="fa-solid fa-chart-column"></i> Reports</a>
+      <a class="x-tab active" href="nav-shell-reports.html"><i class="fa-solid fa-chart-column"></i> Reports</a>
       <a class="x-tab" href="nav-shell-configuration.html"><i class="fa-solid fa-gear"></i> Configuration</a>
     </div>
     <div class="right">
-      <button class="x-iconbtn"><i class="fa-solid fa-magnifying-glass"></i></button>
-      <button class="x-iconbtn"><i class="fa-regular fa-bell"></i></button>
+      <button class="x-iconbtn" title="Search"><i class="fa-solid fa-magnifying-glass"></i></button>
+      <button class="x-iconbtn" title="Notifications"><i class="fa-regular fa-bell"></i></button>
       <span class="x-avatar">MT</span>
     </div>
   </nav>
-
   <div class="x-body">
     <aside class="x-rail" id="rail">
       <button class="x-iconbtn" onclick="rail()" title="Collapse / expand" style="align-self:flex-start"><i class="fa-solid fa-bars"></i></button>
       <div class="x-scopechip" title="App-wide company scope (persisted per user); interim home while an Explorer header-widget slot is proposed upstream"><i class="fa-solid fa-building"></i><span class="lbl">Scope: <b>Demo Co. +2</b></span></div>
       <div class="x-rail-group">REPORTS</div>
-      <a class="active" href="#"><i class="fa-solid fa-hourglass-half"></i><span class="lbl">AR Aging</span></a>
+      <a href="nav-shell-reports.html"><i class="fa-solid fa-hourglass-half"></i><span class="lbl">AR Aging</span></a>
       <a href="nav-shell-reports-defrev.html"><i class="fa-solid fa-water"></i><span class="lbl">DefRev Rollforward</span></a>
       <a href="nav-shell-reports-trial-balance.html"><i class="fa-solid fa-scale-balanced"></i><span class="lbl">Trial balance (AR)</span></a>
       <a href="nav-shell-reports-recon.html"><i class="fa-solid fa-code-compare"></i><span class="lbl">AR &harr; GL reconciliation</span></a>
       <a href="nav-shell-reports-gl-detail.html"><i class="fa-solid fa-list"></i><span class="lbl">GL detail (subledger)</span></a>
-      <a href="nav-shell-reports-dimension-pl.html"><i class="fa-solid fa-chart-pie"></i><span class="lbl">Dimension P&amp;L</span></a>
+      <a class="active" href="#"><i class="fa-solid fa-chart-pie"></i><span class="lbl">Dimension P&amp;L</span></a>
       <a href="nav-shell-reports-sales-tax.html"><i class="fa-solid fa-file-invoice-dollar"></i><span class="lbl">Sales tax liability</span></a>
     </aside>
-
     <main class="x-content">
       <div class="x-pagehead">
-        <h1>AR Aging</h1>
-        <span class="mjm-chip mjm-chip--info" title="Deterministic: the same as-of always reproduces the same report">As of 2026-07-15</span>
-        <span class="actions">
-          <button class="mjm-btn mjm-btn--outline"><i class="fa-solid fa-download"></i> Export</button>
-          <button class="mjm-btn mjm-btn--primary"><i class="fa-solid fa-play"></i> Run</button>
-        </span>
+        <h1>Dimension P&amp;L</h1><span class="mjm-chip mjm-chip--info">As of 2026-07-15</span><span class="actions"><button class="mjm-btn mjm-btn--outline"><i class="fa-solid fa-download"></i> Export</button><button class="mjm-btn mjm-btn--primary"><i class="fa-solid fa-play"></i> Run</button></span>
       </div>
-
-      <div class="x-params">
-        <label>As-of date <input class="mjm-input" type="date" value="2026-07-15"></label>
-        <label>Company <select class="mjm-select"><option>All (in scope)</option><option>Demo Co.</option><option>Cheese Co.</option></select></label>
-        <label>Customer <input class="mjm-input" placeholder="All customers"></label>
-      </div>
-
+      <div class="x-filterbar"><label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mj-text-secondary)">As-of date <input class="mjm-input" type="date" value="2026-07-15"></label><label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mj-text-secondary)">Company <select class="mjm-select"><option>All (in scope)</option><option>Demo Co.</option><option>Cheese Co.</option></select></label></div>
       <table class="mjm-grid">
-        <thead><tr><th>Customer</th><th>Company</th><th class="num">Current</th><th class="num">1–30</th><th class="num">31–60</th><th class="num">61–90</th><th class="num">90+</th><th class="num">Total</th></tr></thead>
+        <thead><tr><th>Account</th><th class="num">Events</th><th class="num">Membership</th><th class="num">Retail</th><th class="num">Total</th></tr></thead>
         <tbody>
-          <tr><td>Acme Corp</td><td>Demo Co.</td><td class="num bucket">5,099.00</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">5,099.00</td></tr>
-          <tr><td>Globex</td><td>Demo Co.</td><td class="num bucket">2,400.00</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">2,400.00</td></tr>
-          <tr><td>Umbrella</td><td>Demo Co.</td><td class="num">—</td><td class="num bucket">12,000.00</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">12,000.00</td></tr>
-          <tr><td>Wayne Enterprises</td><td>Cheese Co.</td><td class="num">—</td><td class="num">—</td><td class="num bucket">7,150.00</td><td class="num">—</td><td class="num bucket">1,800.00</td><td class="num">8,950.00</td></tr>
+          <tr><td class="mjm-mono">4000 · Sales</td><td class="num">15,099.00</td><td class="num">4,800.00</td><td class="num">—</td><td class="num">19,899.00</td></tr>
+          <tr><td class="mjm-mono">4100 · Retail sales</td><td class="num">—</td><td class="num">—</td><td class="num">5,000.00</td><td class="num">5,000.00</td></tr>
+          <tr><td class="mjm-mono">6100 · Processing fees</td><td class="num">(120.00)</td><td class="num">(80.00)</td><td class="num">(45.00)</td><td class="num">(245.00)</td></tr>
         </tbody>
-        <tfoot><tr><td colspan="2">Total</td><td class="num">7,499.00</td><td class="num">12,000.00</td><td class="num">7,150.00</td><td class="num">—</td><td class="num">1,800.00</td><td class="num">28,449.00</td></tr></tfoot>
+        <tfoot><tr><td>Net (subledger scope)</td><td class="num">14,979.00</td><td class="num">4,720.00</td><td class="num">4,955.00</td><td class="num">24,654.00</td></tr></tfoot>
       </table>
-      <p class="mjm-muted" style="font-size:12px"><i class="fa-solid fa-circle-info"></i> Bucket amounts drill through to the orders behind them (v1 depth — order list; deeper JE-line drill is the open §4 question). Backed by <span class="mjm-mono">vw_ARAging</span> — computed on demand, deterministic by as-of.</p>
+      <p class="x-note"><i class="fa-solid fa-circle-info"></i> Revenue/expense activity pivoted by dimension (<span class="mjm-mono">vw_DimensionPL</span>) — the payoff of tagging JE lines.</p>
     </main>
   </div>
 </div>

@@ -1,18 +1,13 @@
 <!doctype html>
 <!-- ============================================================================
-  MOCKUP (ephemeral) · cycle 2026-07-15 · Accounting — JE WORKSPACE
-  The full-depth journal-entry home (same tabbed-workspace pattern as the
-  batch workspace): session-scoped tabs for in-progress entries (v1: NOT
-  persisted), full entry form + line editor with live Dr=Cr balance strip,
-  submit-for-approval path for manual entries (C.8). Every JE occurrence
-  elsewhere (grids, modals) pops out (↗) to here.
-  INTERACTIVE: hamburger collapses the rail; line inputs are illustrative.
+  MOCKUP (ephemeral) · cycle 2026-07-15 · Accounting — Scheduled entries browser
+  Generated as part of the fully-fleshed shareable set (every nav link works).
 ============================================================================ -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mockup — Accounting · JE workspace</title>
+<title>Mockup — Accounting · Scheduled entries browser</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <link rel="stylesheet" href="../style-kit/mj-mock.css">
 <style>
@@ -45,22 +40,32 @@ body{margin:0;background:var(--mj-bg-page);color:var(--mj-text-primary)}
 .x-scopechip{display:flex;align-items:center;gap:9px;margin:4px 2px 0;padding:8px 10px;border:1px solid var(--mj-border-default);border-radius:8px;background:var(--mj-bg-surface-card);font-size:12.5px;cursor:pointer;white-space:nowrap}
 .x-scopechip i{color:var(--mj-brand-primary)}
 .x-rail.collapsed .x-scopechip .lbl{display:none}
-.x-content{flex:1;min-width:0;overflow:auto;padding:16px 24px 20px;display:flex;flex-direction:column}
-.x-pagehead{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.x-content{flex:1;min-width:0;overflow:auto;padding:20px 24px}
+.x-pagehead{display:flex;align-items:center;gap:12px;margin-bottom:12px}
 .x-pagehead h1{font-size:19px;margin:0}
-.x-wstabs{display:flex;gap:6px;align-items:flex-end;border-bottom:1px solid var(--mj-border-default);margin-bottom:14px}
-.x-wstab{display:flex;align-items:center;gap:8px;padding:8px 14px;border:1px solid var(--mj-border-default);border-bottom:none;border-radius:9px 9px 0 0;background:var(--mj-bg-surface-card);font-size:12.5px;color:var(--mj-text-secondary);cursor:pointer}
-.x-wstab.active{background:var(--mj-bg-surface);color:var(--mj-text-primary);font-weight:600;position:relative;top:1px}
-.x-wstab .x{color:var(--mj-text-disabled);font-size:11px}
-.x-wstab.add{border-style:dashed;color:var(--mj-text-muted)}
-.x-sessionnote{font-size:11px;color:var(--mj-text-muted);margin-left:auto;align-self:center}
-.x-form{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
-.x-form label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mj-text-secondary)}
-.x-form .wide{grid-column:span 2}
-.x-balance{display:flex;gap:18px;align-items:center;padding:10px 14px;border:1px solid var(--mj-border-default);border-radius:10px;background:var(--mj-bg-surface-card);margin:12px 0;font-size:12.5px}
-.x-balance b{font-size:14px}
-.x-footer{display:flex;gap:8px;align-items:center;padding-top:12px}
-.addline{color:var(--mj-brand-primary);font-size:12.5px;cursor:pointer}
+.x-pagehead .actions{margin-left:auto;display:flex;gap:8px}
+.x-filterbar{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.x-filterbar .count{margin-left:auto;font-size:12.5px;color:var(--mj-text-muted)}
+.x-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}
+.x-card-title{font-size:13px;font-weight:700;margin:0 0 10px;display:flex;align-items:center;gap:8px}
+.x-card-title .more{margin-left:auto;font-size:12px;font-weight:500;color:var(--mj-brand-primary);text-decoration:none}
+.x-kv{display:grid;grid-template-columns:150px 1fr;row-gap:6px;font-size:13px;margin:0}
+.x-kv dt{color:var(--mj-text-muted)}
+.x-kv dd{margin:0}
+.x-sect{font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--mj-text-muted);margin:0 0 6px}
+.x-note{font-size:12px;color:var(--mj-text-muted);margin-top:12px}
+tr.hoverable:hover td,tbody tr:hover td{background:var(--mj-bg-surface-hover)}
+tfoot td{font-weight:700;border-top:2px solid var(--mj-border-strong,var(--mj-border-default))}
+.x-inboxitem{display:flex;align-items:center;gap:12px;padding:11px 14px;border:1px solid var(--mj-border-default);border-left:3px solid var(--mj-status-warning);border-radius:9px;background:var(--mj-bg-surface-card);margin-bottom:10px}
+.x-inboxitem .t{font-size:13px;font-weight:600}
+.x-inboxitem .s{font-size:11.5px;color:var(--mj-text-muted)}
+.x-inboxitem .mjm-btn{margin-left:auto}
+.x-money{display:grid;grid-template-columns:1fr 1fr 1fr auto;border:1px solid var(--mj-border-default);border-radius:10px;overflow:hidden;margin:0 0 14px}
+.x-money>div{padding:9px 14px;border-right:1px solid var(--mj-border-default)}
+.x-money>div:last-child{border-right:none;display:flex;align-items:center}
+.x-money .l{font-size:10.5px;font-weight:700;letter-spacing:.06em;color:var(--mj-text-muted)}
+.x-money .v{font-size:15px;font-weight:700}
+.x-cols2{display:grid;grid-template-columns:1.5fr 1fr;gap:14px;align-items:start}
 </style>
 </head>
 <body>
@@ -80,7 +85,6 @@ body{margin:0;background:var(--mj-bg-page);color:var(--mj-text-primary)}
       <span class="x-avatar">MT</span>
     </div>
   </nav>
-
   <div class="x-body">
     <aside class="x-rail" id="rail">
       <button class="x-iconbtn" onclick="rail()" title="Collapse / expand" style="align-self:flex-start"><i class="fa-solid fa-bars"></i></button>
@@ -88,56 +92,25 @@ body{margin:0;background:var(--mj-bg-page);color:var(--mj-text-primary)}
       <div class="x-rail-group">MAIN</div>
       <a href="nav-shell-je-dashboard.html"><i class="fa-solid fa-gauge-high"></i><span class="lbl">Dashboard</span></a>
       <a href="nav-shell-all-journal-entries.html"><i class="fa-solid fa-table-list"></i><span class="lbl">All journal entries</span></a>
-      <a class="active" href="#"><i class="fa-solid fa-diagram-project"></i><span class="lbl">JE workspace</span></a>
+      <a href="nav-shell-je-workspace.html"><i class="fa-solid fa-diagram-project"></i><span class="lbl">JE workspace</span></a>
       <div class="x-rail-group">VIEWS</div>
-      <a href="nav-shell-scheduled-entries.html"><i class="fa-regular fa-calendar-days"></i><span class="lbl">Scheduled entries</span></a>
+      <a class="active" href="#"><i class="fa-regular fa-calendar-days"></i><span class="lbl">Scheduled entries</span></a>
       <a href="nav-shell-approval-inbox.html"><i class="fa-solid fa-user-check"></i><span class="lbl">Awaiting approval</span><span class="x-badge">3</span></a>
     </aside>
-
     <main class="x-content">
       <div class="x-pagehead">
-        <h1>JE workspace</h1>
-        <span class="mjm-chip mjm-chip--neutral">Draft — manual entry</span>
+        <h1>Scheduled entries</h1><span class="mjm-chip mjm-chip--info">Trailing 30 + forward 90 days</span><span class="actions"><button class="mjm-btn mjm-btn--outline"><i class="fa-solid fa-filter"></i> Filters</button><button class="mjm-btn mjm-btn--primary"><i class="fa-solid fa-play"></i> Materialize due through…</button></span>
       </div>
-
-      <div class="x-wstabs">
-        <span class="x-wstab active"><i class="fa-solid fa-pen-ruler"></i> New entry (draft) <i class="fa-solid fa-xmark x"></i></span>
-        <span class="x-wstab"><i class="fa-solid fa-book"></i> JE-DEMO-2026-00871 <i class="fa-solid fa-xmark x"></i></span>
-        <span class="x-wstab add"><i class="fa-solid fa-plus"></i> New</span>
-        <span class="x-sessionnote"><i class="fa-solid fa-circle-info"></i> Tabs keep your progress for this session — drafts are not saved to the database (v1).</span>
-      </div>
-
-      <div class="x-form">
-        <label>Company <select class="mjm-select"><option>Demo Co.</option><option>Cheese Co.</option></select></label>
-        <label>Entry date <input class="mjm-input" type="date" value="2026-07-15"></label>
-        <label>Entry type <select class="mjm-select"><option>Manual (requires CFO approval)</option></select></label>
-        <label>Currency <select class="mjm-select"><option>USD (functional)</option></select></label>
-        <label class="wide">Memo <input class="mjm-input" placeholder="What is this entry for?" value="Event deposit accrual — July"></label>
-        <label class="wide">Attachments <span class="mjm-muted" style="font-size:12px;padding:8px 0">— slot reserved (C.10, decision-gated §14 Q9)</span></label>
-      </div>
-
       <table class="mjm-grid">
-        <thead><tr><th>Account</th><th>Dimension</th><th class="num" style="width:140px">Dr</th><th class="num" style="width:140px">Cr</th><th style="width:34px"></th></tr></thead>
+        <thead><tr><th>Origin</th><th>Due</th><th>Memo</th><th>Company</th><th class="num">Amount</th><th>Status</th><th>Materialized as</th></tr></thead>
         <tbody>
-          <tr><td><input class="mjm-input" value="1000 · Cash" style="width:100%"></td><td><input class="mjm-input" value="Events" style="width:100%"></td><td><input class="mjm-input" value="860.00" style="width:100%;text-align:right"></td><td><input class="mjm-input" style="width:100%;text-align:right"></td><td><button class="x-iconbtn"><i class="fa-regular fa-trash-can"></i></button></td></tr>
-          <tr><td><input class="mjm-input" value="2300 · Customer deposits" style="width:100%"></td><td><input class="mjm-input" value="Events" style="width:100%"></td><td><input class="mjm-input" style="width:100%;text-align:right"></td><td><input class="mjm-input" value="860.00" style="width:100%;text-align:right"></td><td><button class="x-iconbtn"><i class="fa-regular fa-trash-can"></i></button></td></tr>
+          <tr><td class="mjm-mono">ORD-1042 · line 1</td><td>2026-08-01</td><td>Membership rev-rec (Aug)</td><td>Demo Co.</td><td class="num">$1,000.00</td><td><span class="mjm-chip mjm-chip--neutral">Pending</span></td><td>—</td></tr>
+          <tr><td class="mjm-mono">ORD-1042 · line 1</td><td>2026-09-01</td><td>Membership rev-rec (Sep)</td><td>Demo Co.</td><td class="num">$1,000.00</td><td><span class="mjm-chip mjm-chip--neutral">Pending</span></td><td>—</td></tr>
+          <tr><td class="mjm-mono">ORD-1041 · line 1</td><td>2026-07-14</td><td>Membership rev-rec (Jul)</td><td>Cheese Co.</td><td class="num">$200.00</td><td><span class="mjm-chip mjm-chip--success">Materialized</span></td><td class="mjm-mono">JE-CHZ-2026-00190</td></tr>
+          <tr><td class="mjm-mono">ORD-1031 · line 2</td><td>2026-07-01</td><td>Event deposit recognition</td><td>Demo Co.</td><td class="num">$1,120.00</td><td><span class="mjm-chip mjm-chip--warning">Superseded</span></td><td class="mjm-mono">→ schedule v2 (recomputed)</td></tr>
         </tbody>
       </table>
-      <p class="addline" style="margin:8px 0 0"><i class="fa-solid fa-plus"></i> Add line</p>
-
-      <div class="x-balance">
-        <span>Dr <b>$860.00</b></span>
-        <span>Cr <b>$860.00</b></span>
-        <span class="mjm-chip mjm-chip--success"><i class="fa-solid fa-check"></i> Balanced</span>
-        <span class="mjm-muted" style="margin-left:auto;font-size:12px">Balanced-JE invariant enforced at the DB — the UI mirrors it live</span>
-      </div>
-
-      <div class="x-footer">
-        <button class="mjm-btn mjm-btn--primary"><i class="fa-solid fa-user-check"></i> Submit for approval</button>
-        <button class="mjm-btn mjm-btn--outline"><i class="fa-regular fa-floppy-disk"></i> Keep as draft tab</button>
-        <button class="mjm-btn mjm-btn--flat">Discard</button>
-        <span class="mjm-muted" style="margin-left:auto;font-size:12px">Manual entries route to the CFO (C.8) and can't batch until approved.</span>
-      </div>
+      <p class="x-note"><i class="fa-solid fa-circle-info"></i> Date-driven recognition (MOD-11): all scheduled entries are created up-front at booking, each with its own date — no period machinery. "Materialize due through [date]" runs the same op the Settings page exposes, with preview + confirm. Superseded rows keep the chain visible.</p>
     </main>
   </div>
 </div>
