@@ -23,7 +23,7 @@
 | 9 | [Q26](#q26) | Matt — Explorer header widget slot (feature ask) | OPEN |
 | 10 | [Q27](#q27) | Matt — `mj-left-nav` desktop icons-only collapse (feature ask) | OPEN |
 | 4b | [Q28](#q28) | Marcelo — batch/task transaction split + batch task pointer (MOD-14) | OPEN ★HIGH |
-| 4c | [Q29](#q29) | Marcelo — approvals must not outlive content changes; the orphaned old task | OPEN (principle ruled) |
+| 4c | [Q29](#q29) | Marcelo/Ian — regenerate: reset the existing task vs void+replace (principle ruled) | OPEN |
 | 11 | [T36](#t36) | Marcelo — deterministic test data (internal) | OPEN |
 
 ## Index — by feature
@@ -304,42 +304,55 @@
 - **Answer:** _(pending)_
 
 <a id="q29"></a>
-### Q29 · An approval must not survive a change to what it approved — the re-stamp rule + the orphaned old task — ask Marcelo — added 2026-07-16
-- **Status:** OPEN — **the working approach is RULED and built; the open part is the old task's fate.**
-- **Who to ask:** Marcelo (principle already given) · Robert/Jeremy may care about the CFO-facing half
-- **Features:** D.3 batch approvals · C.8 manual-JE gate (the same principle may apply)
-- **The principle (Marcelo, 2026-07-16):** *"we probably don't want approvals to last past task
-  changes."* An approval is consent to a SPECIFIC set of numbers. If the numbers change, the consent
-  is void — it must be re-sought, never silently carried over.
-- **Current working approach (BUILT — MOD-14):** `regenerateBatch` re-gathers the candidate pool and
-  rebuilds the summary on the SAME batch record, so its CONTENTS change. It therefore **re-raises the
-  approval Task and re-stamps `ApprovalTaskID` / `ApprovalTaskRaisedAt`** in the separate
-  accounting-owned task transaction. The stamp is what makes the *current* task unambiguous.
-- **Context — why this is narrower than it first looks:** `regenerateBatch` already **refuses unless
-  `Status='Pending'`**, and approval flips Pending→Approved (after which `trg_JEBatch_Immutability`
-  freezes content, 50008/50009). So an APPROVED batch cannot be regenerated at all — the principle is
-  already enforced structurally for that path. The live case is narrower: a batch that is *awaiting*
-  approval gets regenerated while the CFO is looking at it.
-- **The open questions:**
-  1. **What happens to the OLD task?** Today it is left as-is: a new Task is raised and the pointer
-     moves, but the previous Task still exists and is still linked to the batch. Two risks: (a) the
-     CFO can still act on a stale task showing numbers that no longer exist; (b) orphaned approval
-     tasks accumulate. Options: cancel/close the old task as part of the same transaction (our lean);
-     leave it and rely on the pointer; or reuse the task and reset its decision.
-  2. **Does an existing APPROVED decision on the old task leak?** `assertApproved` historically found
-     the batch's task by Task-Link lookup — with two linked tasks that is ambiguous. The new
-     `ApprovalTaskID` pointer resolves it (it names the authoritative task), but `assertApproved`
-     should be switched to read the POINTER rather than the link for that to actually hold. **Not yet
-     done — this is the concrete follow-up.**
-  3. **Does the same principle apply to C.8 manual-JE approvals?** If an approved manual JE is edited
-     before batching, is its approval void too? We assume yes, by the same logic.
-- **Additional context (for a verifying agent):** `BatchingEngine.regenerateBatch` (the re-raise),
-  `raiseApprovalTaskAndStamp` (the stamp transaction), `TasksAppApprovalGate.assertApproved` +
-  `resolveBatchTask` (the Task-Link lookup that Q29.2 would replace with the pointer),
+### Q29 · Regenerate must invalidate the approval — but HOW: reset the existing task, or void + replace? — ask Marcelo — added 2026-07-16
+- **Status:** OPEN — **the principle is RULED; the mechanism is deferred by Marcelo ("raise it as a
+  question for later"). The code currently does the WRONG-LEANING option — see "Built today".**
+- **Who to ask:** Marcelo (mechanism) · Ian (owns the tasks app / whether a Task supports re-opening)
+- **Features:** D.3 batch approvals · C.8 manual-JE gate (same principle likely applies)
+
+- **The principle (RULED — Marcelo, 2026-07-16):** *"we probably don't want approvals to last past
+  task changes."* An approval is consent to a SPECIFIC set of numbers. `regenerateBatch` re-gathers
+  the candidate pool and rebuilds the summary on the SAME batch record, so its contents change and
+  any prior approval is void. Not in dispute.
+
+- **The open question (Marcelo, 2026-07-16):** *"regenerate should not create a new task, it should
+  just mark the existing one as incomplete and maybe update info if needed... unless we void the last
+  task and replace it, maybe that makes sense too."* So — which mechanism?
+  - **(A) Reuse + reset (Marcelo's lean, "seems straightforward"):** keep the same Task, clear/void
+    its decision so it is incomplete again, refresh its Description/amounts to the new contents.
+    One Task per batch for its whole life; `ApprovalTaskID` never moves; no orphans; the CFO sees the
+    request they already know, updated. Open sub-question: does the tasks app support re-opening a
+    decided Task, or is a decision terminal? (**Ian**) — that may decide this outright.
+  - **(B) Void + replace:** terminally void the old Task, raise a new one, re-stamp the pointer.
+    Cleaner audit trail (each Task is immutable and records exactly one set of numbers), at the cost
+    of a Task per regenerate. Marcelo: *"maybe that makes sense too."*
+  - **(C) What we must NOT do:** raise a new Task and leave the old one live — two open approval
+    requests against one batch, the CFO able to act on stale numbers.
+
+- **Built today (honest status):** `regenerateBatch` calls `raiseApprovalTaskAndStamp`, and
+  `TasksAppApprovalGate.onBatchBuilt` → `CreateApprovalRequest` **creates a NEW Task**. The pointer
+  re-stamps to it, so the authoritative task is unambiguous — but the OLD task is left live, which is
+  option (C), the one we do not want. This is deliberate and deferred, not overlooked: regenerate
+  only works on a **Pending** batch (approval flips it to Approved and
+  `trg_JEBatch_Immutability` freezes content, 50008/50009), so the blast radius is a batch that is
+  awaiting approval while someone regenerates it. Fix with (A) or (B) once ruled.
+
+- **Concrete follow-up regardless of A/B:** `TasksAppApprovalGate.assertApproved` still finds the
+  batch's task by **Task-Link lookup**, which is ambiguous the moment more than one Task is linked.
+  It should read `JournalEntryBatch.ApprovalTaskID` — the pointer that now names the authoritative
+  task. Under (A) this is belt-and-braces; under (B) it is required for correctness.
+
+- **Does the same principle apply to C.8 manual-JE approvals?** If an approved manual JE is edited
+  before batching, its approval should presumably be void too. Assumed yes; not yet built.
+
+- **Additional context (for a verifying agent):** `BatchingEngine.regenerateBatch` +
+  `raiseApprovalTaskAndStamp`; `TasksAppApprovalGate.onBatchBuilt` (`CreateApprovalRequest`) +
+  `assertApproved` + `resolveBatchTask` (the Task-Link lookup); `hasApprovedDecision` (whether a
+  decision is terminal — the crux of option A);
   `migrations/V202607161700__v1.0.x__Batch_ApprovalTask_Pointer.sql`. Related: [Q28](#q28) (the
-  transaction split itself), [Q6](#q6) (approval workflow shape).
-- **Answer:** _(the principle is answered — Marcelo 2026-07-16: approvals must not outlive content
-  changes; regenerate re-stamps. Q29.1/29.2/29.3 remain open.)_
+  transaction split), [Q6](#q6) (approval workflow shape).
+- **Answer:** _(principle answered 2026-07-16 — approvals must not outlive content changes. Mechanism
+  A vs B deferred by Marcelo; do not create-and-orphan.)_
 
 <a id="q28"></a>
 ### Q28 · Batch build / approval-task split + the batch task pointer (MOD-14) — ask Marcelo — added 2026-07-16

@@ -768,9 +768,15 @@ export async function regenerateBatch(
     throw new Error(`regenerateBatch: atomic rebuild rolled back: ${detail}`);
   }
 
-  // Q28.3 — WORKING ASSUMPTION: regenerate re-raises the task and re-stamps. Rationale: the batch's
-  // CONTENT changed, so a CFO who already saw the old contents should be asked again rather than have
-  // an old approval silently carry over to different numbers. Flip this if Marcelo rules otherwise.
+  // Regenerate changes the batch's CONTENT, so any prior approval is void — RULED (Marcelo
+  // 2026-07-16): "we probably don't want approvals to last past task changes."
+  //
+  // ⚠ The MECHANISM is deferred (Q29). This currently RAISES A NEW TASK and re-stamps the pointer,
+  // which leaves the OLD task live — the one option Marcelo explicitly did not want. His lean is to
+  // REUSE the existing task and mark it incomplete (or void+replace it); that may hinge on whether
+  // the tasks app can re-open a decided Task (Ian). The pointer keeps the authoritative task
+  // unambiguous meanwhile, and regenerate only runs on a still-Pending batch, so the blast radius is
+  // bounded. Do not read this line as settled — see Q29.
   const approvalTaskRaised = await raiseApprovalTaskAndStamp(batch.ID, gate, contextUser, provider);
 
   const companyCount = new Set(groups.map(g => g.companyId)).size;
@@ -917,4 +923,201 @@ async function failBatch(batch: mjBizAppsAccountingJournalEntryBatchEntity, erro
   batch.ErrorMessage = error;
   await batch.Save();
   return batch;
+}
+
+// ─── Batch preview (§8.2 workspace) ──────────────────────────────────────────
+
+/** One candidate journal entry in the Batch-workspace preview. */
+export interface BatchPreviewEntry {
+  ID: string;
+  EntryNumber: string;
+  EffectiveDate: Date;
+  EntryType: string;
+  CompanyID: string;
+  Description: string | null;
+  /** Σ debits on the entry — the money column the preview grid shows. */
+  Amount: number;
+}
+
+/** One row of the preview's "affected accounts" summary (account × the companies it appears for). */
+export interface AffectedAccount {
+  GLAccountID: string;
+  Code: string;
+  Name: string;
+  CompanyIDs: string[];
+  Debit: number;
+  Credit: number;
+}
+
+export interface BatchPreviewResult {
+  /** Candidates matching the criteria, OLDEST-FIRST (the B1.1 order a build would take them in). */
+  Candidates: BatchPreviewEntry[];
+  /** The netted summary the included selection would produce. */
+  AffectedAccounts: AffectedAccount[];
+  TotalDebits: number;
+  TotalCredits: number;
+  /** Per-company subtotals for the workspace footer. */
+  PerCompany: Array<{ CompanyID: string; Debit: number; Credit: number }>;
+  /**
+   * MOD-8: how many entries OLDER than the newest included one were excluded. >0 means later
+   * entries would batch ahead of older ones — allowed, but the workspace must SAY so.
+   */
+  OutOfOrderSkipCount: number;
+}
+
+/**
+ * MOD-8 out-of-order detection — pure, so it is unit-tested rather than inferred from a screenshot.
+ *
+ * The candidate pool is gathered oldest-first. If the operator excludes an entry that is OLDER than
+ * the newest entry they kept, then that older entry gets left behind while a later one batches — the
+ * "allowed, but visible" case. Excluding entries from the END of the pool is NOT out-of-order (you
+ * are simply batching less far forward), which is the distinction this encodes.
+ *
+ * @param candidatesOldestFirst the full candidate pool, ascending by EffectiveDate
+ * @param includedIds the ids the operator kept ticked
+ */
+export function outOfOrderSkipCount(
+  candidatesOldestFirst: Array<{ ID: string }>,
+  includedIds: ReadonlySet<string>,
+): number {
+  // Index of the LAST (newest) entry the operator kept.
+  let newestIncluded = -1;
+  for (let i = 0; i < candidatesOldestFirst.length; i++) {
+    if (includedIds.has(candidatesOldestFirst[i].ID)) newestIncluded = i;
+  }
+  if (newestIncluded < 0) return 0; // nothing included — nothing jumps the queue
+
+  let skipped = 0;
+  for (let i = 0; i < newestIncluded; i++) {
+    if (!includedIds.has(candidatesOldestFirst[i].ID)) skipped++;
+  }
+  return skipped;
+}
+
+/**
+ * Preview what a build WOULD produce for the given criteria — read-only, no writes.
+ *
+ * Powers the §8.2 Batch workspace: the candidate grid, the affected-accounts summary, the live
+ * Dr = Cr footer, and the MOD-8 out-of-order warning. Runs the SAME `pendingCandidateFilter` and the
+ * SAME `netLines` the build runs, so the preview cannot drift from what the build actually does —
+ * that shared path is the point (a preview computed a different way is a lie waiting to happen).
+ *
+ * @param includedIds when supplied, the netted summary reflects only these (the include/exclude
+ *   preview). Omit to preview the whole candidate pool.
+ */
+export async function previewBatch(
+  options: BuildBatchOptions,
+  contextUser: UserInfo,
+  includedIds?: ReadonlySet<string>,
+): Promise<BatchPreviewResult> {
+  const rv = new RunView();
+  const res = await rv.RunView<{
+    ID: string; EntryNumber: string; EffectiveDate: string; EntryType: string;
+    CompanyID: string; Description: string | null;
+  }>(
+    {
+      EntityName: JE_ENTITY,
+      ExtraFilter: pendingCandidateFilter(options),
+      OrderBy: 'EffectiveDate ASC, EntryNumber ASC', // the same oldest-first order buildBatch uses
+      Fields: ['ID', 'EntryNumber', 'EffectiveDate', 'EntryType', 'CompanyID', 'Description'],
+      ResultType: 'simple',
+      BypassCache: true,
+    },
+    contextUser,
+  );
+  if (!res.Success) throw new Error(`previewBatch: could not load candidates: ${res.ErrorMessage ?? 'unknown'}`);
+
+  const rows = res.Results ?? [];
+  const included = includedIds ?? new Set(rows.map(r => r.ID));
+  const includedRows = rows.filter(r => included.has(r.ID));
+
+  // Net exactly what a build of the INCLUDED set would net.
+  const lines = includedRows.length > 0 ? await loadNettableLines(includedRows.map(r => r.ID), contextUser) : [];
+  const groups = netLines(lines);
+  const { totalDebits, totalCredits } = computeControlTotals(groups);
+
+  // Σ debits per entry — the preview grid's money column.
+  const amountByJE = new Map<string, number>();
+  for (const r of includedRows) amountByJE.set(r.ID, 0);
+  const perEntry = await loadEntryDebitTotals(includedRows.map(r => r.ID), contextUser);
+  for (const [id, amt] of perEntry) amountByJE.set(id, amt);
+
+  return {
+    Candidates: rows.map(r => ({
+      ID: r.ID,
+      EntryNumber: r.EntryNumber,
+      EffectiveDate: new Date(r.EffectiveDate),
+      EntryType: r.EntryType,
+      CompanyID: r.CompanyID,
+      Description: r.Description,
+      Amount: amountByJE.get(r.ID) ?? 0,
+    })),
+    AffectedAccounts: await summarizeAffectedAccounts(groups, contextUser),
+    TotalDebits: totalDebits,
+    TotalCredits: totalCredits,
+    PerCompany: perCompanySubtotals(groups),
+    OutOfOrderSkipCount: outOfOrderSkipCount(rows, included),
+  };
+}
+
+/** Per-company Dr/Cr subtotals — pure. */
+export function perCompanySubtotals(groups: NetGroup[]): Array<{ CompanyID: string; Debit: number; Credit: number }> {
+  const map = new Map<string, { CompanyID: string; Debit: number; Credit: number }>();
+  for (const g of groups) {
+    let e = map.get(g.companyId);
+    if (!e) { e = { CompanyID: g.companyId, Debit: 0, Credit: 0 }; map.set(g.companyId, e); }
+    if (g.side === 'Debit') e.Debit += g.net;
+    else e.Credit += -g.net;
+  }
+  return [...map.values()].map(e => ({
+    CompanyID: e.CompanyID,
+    Debit: Math.round(e.Debit * 100) / 100,
+    Credit: Math.round(e.Credit * 100) / 100,
+  }));
+}
+
+/** Σ debits per journal entry (one read, never per-entry). */
+async function loadEntryDebitTotals(jeIds: string[], contextUser: UserInfo): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (jeIds.length === 0) return out;
+  const rv = new RunView();
+  const res = await rv.RunView<{ JournalEntryID: string; DebitAmount: number | null }>(
+    { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID IN (${jeIds.map(sqlGuid).join(',')})`,
+      Fields: ['JournalEntryID', 'DebitAmount'], ResultType: 'simple', BypassCache: true },
+    contextUser,
+  );
+  for (const l of res.Results ?? []) {
+    out.set(l.JournalEntryID, (out.get(l.JournalEntryID) ?? 0) + Number(l.DebitAmount ?? 0));
+  }
+  for (const [k, v] of out) out.set(k, Math.round(v * 100) / 100);
+  return out;
+}
+
+/** Fold the netted groups into per-GL-account rows with their names (one read for the accounts). */
+async function summarizeAffectedAccounts(groups: NetGroup[], contextUser: UserInfo): Promise<AffectedAccount[]> {
+  if (groups.length === 0) return [];
+  const ids = [...new Set(groups.map(g => g.glAccountId))];
+  const rv = new RunView();
+  const res = await rv.RunView<{ ID: string; Code: string; Name: string }>(
+    { EntityName: GL_ENTITY, ExtraFilter: `ID IN (${ids.map(sqlGuid).join(',')})`,
+      Fields: ['ID', 'Code', 'Name'], ResultType: 'simple', BypassCache: true },
+    contextUser,
+  );
+  const meta = new Map((res.Results ?? []).map(a => [a.ID, a]));
+
+  const map = new Map<string, AffectedAccount>();
+  for (const g of groups) {
+    let e = map.get(g.glAccountId);
+    if (!e) {
+      const m = meta.get(g.glAccountId);
+      e = { GLAccountID: g.glAccountId, Code: m?.Code ?? '?', Name: m?.Name ?? '(unknown account)', CompanyIDs: [], Debit: 0, Credit: 0 };
+      map.set(g.glAccountId, e);
+    }
+    if (!e.CompanyIDs.includes(g.companyId)) e.CompanyIDs.push(g.companyId);
+    if (g.side === 'Debit') e.Debit += g.net;
+    else e.Credit += -g.net;
+  }
+  return [...map.values()]
+    .map(e => ({ ...e, Debit: Math.round(e.Debit * 100) / 100, Credit: Math.round(e.Credit * 100) / 100 }))
+    .sort((a, b) => a.Code.localeCompare(b.Code));
 }
