@@ -1,4 +1,5 @@
 import { Component, ChangeDetectionStrategy, Input } from '@angular/core';
+import { MJEmptyStateComponent } from '@memberjunction/ng-ui-components';
 
 /**
  * Honest placeholder for a rail page that the UI wave has not built yet.
@@ -8,11 +9,15 @@ import { Component, ChangeDetectionStrategy, Input } from '@angular/core';
  * rendering an empty grid that reads as "no data" — which would be a lie about the state of the
  * system, and is exactly the failure the workspace's honesty rule targets.
  *
- * Every one of these is a tracked gap, not a design: they disappear as §8.6 proceeds.
+ * Every one of these is a tracked gap, not a design: they disappear as the UI wave proceeds.
+ *
+ * STANDALONE (unlike its sibling pages): orders' shell imports it directly, and MJ prefers
+ * standalone for leaf components. Both apps' rails render the same placeholder rather than two.
  */
 @Component({
-  standalone: false,
+  standalone: true,
   selector: 'mj-shell-page-pending',
+  imports: [MJEmptyStateComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <mj-empty-state

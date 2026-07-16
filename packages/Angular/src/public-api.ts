@@ -74,6 +74,23 @@ export { CompanyScopeService, type ScopeCompany } from './lib/custom/shared/comp
 // GL-resolution preview — accounting-domain, SHARED with orders (its product panel + Confirm-failure
 // UX). Presentation only: orders resolves with its own fallback chain and hands the result in.
 export { GlResolutionPreviewComponent, type GlResolutionResult, type GlResolutionStep } from './lib/custom/shared/gl-resolution-preview.component';
+export { CompanyScopeChipComponent } from './lib/custom/shared/company-scope-chip.component';
+
+// ─── Shell primitives, shared with orders (orders UI plan §13.0) ─────────────
+// The category-shell pattern (Explorer nav item -> <mj-left-nav> + local page switching) is
+// IDENTICAL in both apps, so it exists once here rather than as two drifting copies. Exported —
+// not re-homed in bizapps-common — because the dependency direction already allows it
+// (common -> accounting -> orders) and orders must import accounting-homed surfaces regardless
+// (the GL-resolution preview above, and the Customer A/R base view). CategoryShellBase's only
+// app-specific binding is CompanyScopeService, which orders shares.
+export { CategoryShellBase } from './lib/custom/shell/category-shell.base';
+export { ShellPagePendingComponent } from './lib/custom/shell/pages/shell-page-pending.component';
+
+// The workspace-tab framework (parked, framework-clean — TRANSFER-BACKLOG target: common -> MJ
+// base). Orders' Order editor uses the same session-tab semantics as the JE/Batch workspaces.
+export { WorkspaceTabStripComponent } from './lib/transfer-pending/workspace-tabs/workspace-tab-strip.component';
+export { WorkspaceTabStore } from './lib/transfer-pending/workspace-tabs/workspace-tab-store';
+export type { WorkspaceTab, WorkspaceTabState } from './lib/transfer-pending/workspace-tabs/workspace-tabs.types';
 
 /**
  * Bootstrap function called during MJExplorer initialization.

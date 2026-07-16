@@ -80,9 +80,9 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
     ErpMappingPageComponent,
     AccountLinksPageComponent,
     JournalEntryDetailPanelComponent,
-    ShellPagePendingComponent,
   ],
   imports: [
+    ShellPagePendingComponent, // standalone — shared with orders' shell
     CommonModule,
     FormsModule,
     SharedGenericModule,
