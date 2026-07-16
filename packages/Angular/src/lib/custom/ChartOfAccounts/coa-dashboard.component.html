@@ -1,8 +1,6 @@
-<mj-page-layout>
-  <mj-page-header
-    Title="Chart of Accounts"
-    Icon="fa-solid fa-sitemap"
-    Subtitle="Browse the GL account hierarchy by company — filter by account type or search, and open any account to edit it">
+  <mj-page-header-interior
+    Title="Chart of accounts"
+    Subtitle="The GL account tree — number, name, type and company">
 
     <div meta>
       <mj-stat-badge Icon="fa-solid fa-list" [Count]="AllAccounts.length" Label="accounts" Variant="info" />
@@ -36,9 +34,9 @@
         </div>
       </div>
     </div>
-  </mj-page-header>
+  </mj-page-header-interior>
 
-  <mj-page-body>
+  <div class="cat-page">
     @if (IsBusy) {
       <mj-loading text="Loading chart of accounts…"></mj-loading>
     } @else {
@@ -72,8 +70,7 @@
         </div>
       }
     }
-  </mj-page-body>
-</mj-page-layout>
+  </div>
 
 <!-- Clean, user-suitable account panel: read-only VIEW with an Edit action, and a create/edit form (replaces the raw generated-form popup). -->
 <mj-dialog [Visible]="DialogVisible" [Title]="DialogTitle" Width="560px" (Close)="CloseDialog()">

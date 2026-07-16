@@ -1,8 +1,6 @@
-<mj-page-layout>
-  <mj-page-header
-    Title="Trial Balance & AR"
-    Icon="fa-solid fa-scale-balanced"
-    Subtitle="Trial balance, open accounts-receivable, and AR aging over committed journal entries">
+  <mj-page-header-interior
+    Title="Trial balance & AR"
+    Subtitle="The AR subledger trial balance">
 
     <div meta>
       @if (SelectedCompanyID && !IsLoading) {
@@ -45,9 +43,9 @@
         </button>
       </div>
     </div>
-  </mj-page-header>
+  </mj-page-header-interior>
 
-  <mj-page-body>
+  <div class="cat-page">
     @if (IsLoading) {
       <mj-loading text="Loading read models…"></mj-loading>
     } @else if (LoadError) {
@@ -96,5 +94,4 @@
         }
       }
     }
-  </mj-page-body>
-</mj-page-layout>
+  </div>

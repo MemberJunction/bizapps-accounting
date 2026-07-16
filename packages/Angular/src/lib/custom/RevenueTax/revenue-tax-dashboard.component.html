@@ -1,8 +1,6 @@
-<mj-page-layout>
-  <mj-page-header
-    Title="Revenue & Tax"
-    Icon="fa-solid fa-receipt"
-    Subtitle="Deferred-revenue rollforward and sales-tax liability over committed journal entries">
+  <mj-page-header-interior
+    Title="Revenue & tax"
+    Subtitle="Deferred revenue rollforward + tax liability">
 
     <div meta>
       @if (SelectedCompanyID && !IsLoading) {
@@ -43,9 +41,9 @@
         </button>
       </div>
     </div>
-  </mj-page-header>
+  </mj-page-header-interior>
 
-  <mj-page-body>
+  <div class="cat-page">
     @if (IsLoading) {
       <mj-loading text="Loading read models…"></mj-loading>
     } @else if (LoadError) {
@@ -83,5 +81,4 @@
         }
       }
     }
-  </mj-page-body>
-</mj-page-layout>
+  </div>

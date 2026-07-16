@@ -22,10 +22,18 @@ import { CompanyScopeChipComponent } from '../shared/company-scope-chip.componen
 import { WorkspaceTabStripComponent } from '../../transfer-pending/workspace-tabs/workspace-tab-strip.component';
 
 import { BatchDispatchModule } from '../BatchDispatch/batch-dispatch.module';
+import { ChartOfAccountsModule } from '../ChartOfAccounts/chart-of-accounts.module';
+import { CompanySetupModule } from '../CompanySetup/company-setup.module';
 import { ReadModelsModule } from '../shared/read-models.module';
 
+import { AccountsCategoryComponent } from './accounts-category.component';
+import { AccountsCategoryResourceComponent } from './accounts-category-resource.component';
 import { BatchesCategoryComponent } from './batches-category.component';
 import { BatchesCategoryResourceComponent } from './batches-category-resource.component';
+import { ConfigurationCategoryComponent } from './configuration-category.component';
+import { ConfigurationCategoryResourceComponent } from './configuration-category-resource.component';
+import { ReportsCategoryComponent } from './reports-category.component';
+import { ReportsCategoryResourceComponent } from './reports-category-resource.component';
 import { JournalEntriesCategoryComponent } from './journal-entries-category.component';
 import { JournalEntriesCategoryResourceComponent } from './journal-entries-category-resource.component';
 import { AllJournalEntriesPageComponent } from './pages/all-journal-entries.page';
@@ -42,6 +50,12 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
  */
 @NgModule({
   declarations: [
+    AccountsCategoryComponent,
+    AccountsCategoryResourceComponent,
+    ConfigurationCategoryComponent,
+    ConfigurationCategoryResourceComponent,
+    ReportsCategoryComponent,
+    ReportsCategoryResourceComponent,
     BatchesCategoryComponent,
     BatchesCategoryResourceComponent,
     JournalEntriesCategoryComponent,
@@ -58,7 +72,9 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
     EntityViewerModule, // <mj-entity-data-grid> — the house grid
     // The Batches category HOSTS these existing dashboards (now on interior chrome, §6 sweep).
     BatchDispatchModule, // <mj-batch-dispatch-dashboard> — Batch approvals
-    ReadModelsModule, // <mj-batch-status-dashboard> — All batches
+    ReadModelsModule, // <mj-batch-status-dashboard> + the read-model report dashboards
+    ChartOfAccountsModule, // <mj-coa-dashboard> — Accounts
+    CompanySetupModule, // <mj-company-setup-dashboard> — Configuration
     MJButtonDirective,
     MJPageLayoutComponent,
     MJPageBodyComponent,
@@ -74,6 +90,12 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
     WorkspaceTabStripComponent,
   ],
   exports: [
+    AccountsCategoryComponent,
+    AccountsCategoryResourceComponent,
+    ConfigurationCategoryComponent,
+    ConfigurationCategoryResourceComponent,
+    ReportsCategoryComponent,
+    ReportsCategoryResourceComponent,
     BatchesCategoryComponent,
     BatchesCategoryResourceComponent,
     JournalEntriesCategoryComponent,

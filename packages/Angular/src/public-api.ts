@@ -45,6 +45,12 @@ import { LoadCompanySetupResource } from './lib/custom/CompanySetup/company-setu
 
 // App shell (UI plan §8.0) — the category shells hosting MJ's mj-left-nav + their pages.
 import { AccountingShellModule } from './lib/custom/shell/shell.module';
+import { LoadAccountsCategory } from './lib/custom/shell/accounts-category.component';
+import { LoadAccountsCategoryResource } from './lib/custom/shell/accounts-category-resource.component';
+import { LoadConfigurationCategory } from './lib/custom/shell/configuration-category.component';
+import { LoadConfigurationCategoryResource } from './lib/custom/shell/configuration-category-resource.component';
+import { LoadReportsCategory } from './lib/custom/shell/reports-category.component';
+import { LoadReportsCategoryResource } from './lib/custom/shell/reports-category-resource.component';
 import { LoadBatchesCategory } from './lib/custom/shell/batches-category.component';
 import { LoadBatchesCategoryResource } from './lib/custom/shell/batches-category-resource.component';
 import { LoadJournalEntriesCategory } from './lib/custom/shell/journal-entries-category.component';
@@ -106,5 +112,11 @@ export function LoadBizAppsAccountingClient(): void {
     LoadJournalEntriesCategoryResource();
     LoadBatchesCategory();
     LoadBatchesCategoryResource();
+    LoadAccountsCategory();
+    LoadAccountsCategoryResource();
+    LoadConfigurationCategory();
+    LoadConfigurationCategoryResource();
+    LoadReportsCategory();
+    LoadReportsCategoryResource();
     void AccountingShellModule;
 }

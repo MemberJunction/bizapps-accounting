@@ -1,8 +1,6 @@
-<mj-page-layout>
-  <mj-page-header
-    Title="Company Setup"
-    Icon="fa-solid fa-building"
-    Subtitle="Review each accounting company profile — identity, fiscal year, currencies, and default GL accounts. Open a profile to edit it.">
+  <mj-page-header-interior
+    Title="Companies"
+    Subtitle="Accounting company profiles — functional currency, fiscal year, default accounts">
 
     <div meta>
       <mj-stat-badge Icon="fa-solid fa-building" [Count]="Companies.length" Label="companies" Variant="info" />
@@ -11,9 +9,9 @@
     <div actions>
       <mj-refresh-button [Loading]="IsBusy" (Clicked)="loadData()"></mj-refresh-button>
     </div>
-  </mj-page-header>
+  </mj-page-header-interior>
 
-  <mj-page-body>
+  <div class="cat-page">
     @if (IsBusy) {
       <mj-loading text="Loading company profiles…"></mj-loading>
     } @else {
@@ -129,5 +127,4 @@
         </div>
       }
     }
-  </mj-page-body>
-</mj-page-layout>
+  </div>

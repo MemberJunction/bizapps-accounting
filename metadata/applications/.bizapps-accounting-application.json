@@ -22,47 +22,24 @@
         "isDefault": false
       },
       {
-        "Label": "Chart of Accounts",
+        "Label": "Accounts",
         "Icon": "fa-solid fa-sitemap",
         "ResourceType": "Custom",
-        "DriverClass": "ChartOfAccountsResource",
+        "DriverClass": "AccountsCategoryResource",
         "isDefault": false
       },
       {
-        "Label": "Companies",
-        "Icon": "fa-solid fa-building",
+        "Label": "Reports",
+        "Icon": "fa-solid fa-chart-column",
         "ResourceType": "Custom",
-        "DriverClass": "CompanySetupResource",
+        "DriverClass": "ReportsCategoryResource",
         "isDefault": false
       },
       {
-        "Label": "Dimensions",
-        "Icon": "fa-solid fa-tags",
-        "ResourceType": "User Views",
-        "Configuration": {
-          "Entity": "MJ_BizApps_Accounting: Dimensions"
-        },
-        "isDefault": false
-      },
-      {
-        "Label": "Trial Balance & AR",
-        "Icon": "fa-solid fa-scale-balanced",
+        "Label": "Configuration",
+        "Icon": "fa-solid fa-gear",
         "ResourceType": "Custom",
-        "DriverClass": "TrialBalanceARResource",
-        "isDefault": false
-      },
-      {
-        "Label": "Revenue & Tax",
-        "Icon": "fa-solid fa-receipt",
-        "ResourceType": "Custom",
-        "DriverClass": "RevenueTaxResource",
-        "isDefault": false
-      },
-      {
-        "Label": "Intercompany Flow",
-        "Icon": "fa-solid fa-arrows-turn-to-dots",
-        "ResourceType": "Custom",
-        "DriverClass": "IntercompanyFlowResource",
+        "DriverClass": "ConfigurationCategoryResource",
         "isDefault": false
       }
     ]
@@ -74,7 +51,7 @@
     "ID": "08B5D905-6FB3-438B-94E5-2C5FF021B794"
   },
   "sync": {
-    "lastModified": "2026-07-16T16:53:20.747Z",
-    "checksum": "c5c68d7f000f71132aa2df5dd1063c2f4c4a1f3b1721b9b1ddfc78332ce3f3d5"
+    "lastModified": "2026-07-16T18:45:28.277Z",
+    "checksum": "2eace700a7640584d6cf068a7a3de24fed2e8addb75ab2d6de4763a6bf69f750"
   }
 }
