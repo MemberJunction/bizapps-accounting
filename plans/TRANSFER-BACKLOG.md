@@ -4,7 +4,7 @@
 > branches** — framework-clean shared components are PARKED in accounting for iteration speed and
 > transferred to their real homes at the named trigger. This doc is the ledger that guarantees the
 > "we never moved it" risk stays managed: it is **reviewed at every team-question consolidation**
-> (instance QUESTIONS.md q25 carries the who-receives-what asks), and a row is removed only when
+> (`plans/QUESTIONS.md#q25` carries the who-receives-what asks), and a row is removed only when
 > the item ships in its target (note the PR).
 >
 > **Parking discipline (non-negotiable):** parked framework-clean components live in a bounded
