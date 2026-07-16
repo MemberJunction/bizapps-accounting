@@ -52,6 +52,9 @@ export { GeneratedFormsModule } from './lib/generated/generated-forms.module';
 export { CustomFormsModule } from './lib/custom/custom-forms.module';
 export { BatchDispatchModule } from './lib/custom/BatchDispatch/batch-dispatch.module';
 export { ReadModelsModule } from './lib/custom/shared/read-models.module';
+// Shared bizapps detail surfaces (slide-in + centered dialog over the MJ form host). Exported so orders reuses the
+// same two standardized surfaces across the suite.
+export { openBizDetail, type BizDetailMode, type BizDetailOptions } from './lib/custom/shared/biz-detail-form';
 
 /**
  * Bootstrap function called during MJExplorer initialization.

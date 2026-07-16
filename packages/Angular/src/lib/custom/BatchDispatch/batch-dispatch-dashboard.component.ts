@@ -209,6 +209,12 @@ export class BatchDispatchDashboardComponent extends BaseDashboard {
         EntityName: BATCH_ENTITY,
         OrderBy: 'BatchedAt DESC',
         ResultType: 'simple',
+        // Batch status transitions (Pending→Approved→Posted, Regenerate, Reject→Cancelled) happen through
+        // server-side resolvers (buildBatch/approveBatch/sendBatch/recordDecision) — NOT a client-side
+        // BaseEntity.Save() — so MJ's read cache isn't invalidated on the client's behalf. Without this,
+        // the immediate reload after an action returns a STALE snapshot (e.g. a just-approved batch still
+        // shows Pending until a later manual refresh). BypassCache forces true DB state on every reload.
+        BypassCache: true,
       },
       this.contextUser(),
     );

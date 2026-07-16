@@ -1,6 +1,7 @@
 import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@angular/core';
 import { BaseDashboard } from '@memberjunction/ng-shared';
 import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
+import { openBizDetail } from '../shared/biz-detail-form';
 import { RegisterClass } from '@memberjunction/global';
 import { CompositeKey, RunView } from '@memberjunction/core';
 import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
@@ -225,7 +226,7 @@ export class JournalEntryConsoleDashboardComponent extends BaseDashboard {
 
   public OpenSourceOrder(row: JERow): void {
     if (!row.OrderID) return;
-    this.forms.Open({ EntityName: ORDER_ENTITY, PrimaryKey: CompositeKey.FromID(row.OrderID), Presentation: 'dialog', Width: '94vw' });
+    openBizDetail(this.forms, { entityName: ORDER_ENTITY, primaryKey: CompositeKey.FromID(row.OrderID), title: 'Order', mode: 'slide-in' });
   }
 
   public CanReverse(row: JERow): boolean {
