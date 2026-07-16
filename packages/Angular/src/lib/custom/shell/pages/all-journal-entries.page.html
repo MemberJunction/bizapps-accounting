@@ -1,0 +1,77 @@
+<!-- Sub-page of a left-nav shell → mj-page-header-interior, NOT mj-page-header (which would double
+     the header). Slot conventions: [meta] = state, [actions] = verbs, [toolbar] = filters. -->
+<mj-page-header-interior Title="All journal entries" Subtitle="The ledger — every entry, newest first">
+  <ng-container meta>
+    <mj-stat-badge [Label]="ScopeLabel" Icon="fa-solid fa-building" Variant="info"></mj-stat-badge>
+  </ng-container>
+
+  <ng-container actions>
+    <!-- The ONE refresh control per list (§8 dispatch refresh policy). Deleting this seam is how
+         live push lands later — there is deliberately no polling and no per-button wiring. -->
+    <mj-refresh-button (Clicked)="Refresh()"></mj-refresh-button>
+  </ng-container>
+
+  <ng-container toolbar>
+    <div class="aje-filters">
+      <label class="aje-field">
+        <span class="aje-field__label">Window</span>
+        <select class="mj-input" [(ngModel)]="TimeWindow" (ngModelChange)="OnFilterChanged()" aria-label="Time window">
+          @for (w of TimeWindows; track w.Id) {
+            <option [value]="w.Id">{{ w.Label }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="aje-field">
+        <span class="aje-field__label">Status</span>
+        <select class="mj-input" [(ngModel)]="StatusFilter" (ngModelChange)="OnFilterChanged()" aria-label="Status">
+          <option value="All">All statuses</option>
+          @for (s of Statuses; track s) {
+            <option [value]="s">{{ s }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="aje-field">
+        <span class="aje-field__label">Entry type</span>
+        <select class="mj-input" [(ngModel)]="TypeFilter" (ngModelChange)="OnFilterChanged()" aria-label="Entry type">
+          <option value="All">All types</option>
+          @for (t of EntryTypes; track t) {
+            <option [value]="t">{{ t }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="aje-field aje-field--grow">
+        <span class="aje-field__label">Search</span>
+        <input
+          type="search"
+          class="mj-input"
+          placeholder="Entry № or description"
+          [(ngModel)]="Search"
+          (change)="OnFilterChanged()"
+          aria-label="Search entries" />
+      </label>
+    </div>
+  </ng-container>
+</mj-page-header-interior>
+
+<!-- MJ's house grid (§8 MJ-wins): AG Grid + RunView loading + infinite server-side paging (the
+     plan's keyset "Load more" in MJ's idiom) + server sorting + export + per-user state. -->
+<div class="aje-grid">
+  <mj-entity-data-grid
+    [Params]="GridParams"
+    [Columns]="Columns"
+    PaginationMode="infinite"
+    [PageSize]="100"
+    [ServerSideSorting]="true"
+    [AllowSorting]="true"
+    [ShowToolbar]="false"
+    [SelectionMode]="'single'"
+    KeyField="ID"
+    StateKey="mj.bizappsacct.grid.allJournalEntries.v1"
+    [AutoPersistState]="true"
+    Height="fit-content"
+    (AfterRowClick)="OnRowClicked($event.rowKey)">
+  </mj-entity-data-grid>
+</div>

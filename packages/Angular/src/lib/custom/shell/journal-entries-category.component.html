@@ -1,0 +1,26 @@
+<mj-page-layout>
+  <mj-page-body Direction="row">
+    <!-- MJ's canonical left rail (§8 MJ-wins). The scope chip rides its [header] slot, which is
+         why the rail needs no accounting knowledge. -->
+    <mj-left-nav
+      [Sections]="RailSections"
+      [ActiveId]="ActivePageId"
+      [MobileTitle]="CategoryTitle"
+      (ItemClicked)="OnRailItemClicked($event)">
+      <div header>
+        <mj-company-scope-chip></mj-company-scope-chip>
+      </div>
+    </mj-left-nav>
+
+    <div class="cat-content">
+      @switch (ActivePageId) {
+        @case ('all-entries') {
+          <mj-all-journal-entries-page></mj-all-journal-entries-page>
+        }
+        @default {
+          <mj-shell-page-pending [PageName]="PendingPageName(ActivePageId)"></mj-shell-page-pending>
+        }
+      }
+    </div>
+  </mj-page-body>
+</mj-page-layout>

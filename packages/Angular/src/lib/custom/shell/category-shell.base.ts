@@ -67,4 +67,13 @@ export abstract class CategoryShellBase extends BaseDashboard {
     this.ActivePageId = pageId;
     this.cdr.markForCheck();
   }
+
+  /** Label for a rail page that isn't built yet — read back off the rail so it can't drift. */
+  public PendingPageName(pageId: string): string {
+    for (const section of this.RailSections) {
+      const item = section.items.find((i) => i.id === pageId);
+      if (item) return item.label;
+    }
+    return 'This screen';
+  }
 }

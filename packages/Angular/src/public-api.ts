@@ -43,6 +43,11 @@ import { LoadChartOfAccountsResource } from './lib/custom/ChartOfAccounts/coa-re
 import { CompanySetupModule } from './lib/custom/CompanySetup/company-setup.module';
 import { LoadCompanySetupResource } from './lib/custom/CompanySetup/company-setup-resource.component';
 
+// App shell (UI plan §8.0) — the category shells hosting MJ's mj-left-nav + their pages.
+import { AccountingShellModule } from './lib/custom/shell/shell.module';
+import { LoadJournalEntriesCategory } from './lib/custom/shell/journal-entries-category.component';
+import { LoadJournalEntriesCategoryResource } from './lib/custom/shell/journal-entries-category-resource.component';
+
 // Import class registrations manifest
 import { CLASS_REGISTRATIONS } from './lib/generated/class-registrations-manifest';
 
@@ -55,6 +60,9 @@ export { ReadModelsModule } from './lib/custom/shared/read-models.module';
 // Shared bizapps detail surfaces (slide-in + centered dialog over the MJ form host). Exported so orders reuses the
 // same two standardized surfaces across the suite.
 export { openBizDetail, type BizDetailMode, type BizDetailOptions } from './lib/custom/shared/biz-detail-form';
+export { AccountingShellModule } from './lib/custom/shell/shell.module';
+// App-wide company scope (rail-top chip). Exported so orders can share the same scope surface.
+export { CompanyScopeService, type ScopeCompany } from './lib/custom/shared/company-scope.service';
 
 /**
  * Bootstrap function called during MJExplorer initialization.
@@ -90,4 +98,9 @@ export function LoadBizAppsAccountingClient(): void {
     void ChartOfAccountsModule;
     LoadCompanySetupResource();
     void CompanySetupModule;
+
+    // UI wave §8.0 — category shells (Explorer app nav items -> mj-left-nav + pages).
+    LoadJournalEntriesCategory();
+    LoadJournalEntriesCategoryResource();
+    void AccountingShellModule;
 }
