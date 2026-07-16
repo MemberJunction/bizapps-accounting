@@ -22,6 +22,7 @@
 | 8 | [Q9](#q9) | Amith — GLAccountLink role FK (bless-as-built) | OPEN |
 | 9 | [Q26](#q26) | Matt — Explorer header widget slot (feature ask) | OPEN |
 | 10 | [Q27](#q27) | Matt — `mj-left-nav` desktop icons-only collapse (feature ask) | OPEN |
+| 4b | [Q28](#q28) | Marcelo — batch/task transaction split + batch task pointer (MOD-14) | OPEN ★HIGH |
 | 11 | [T36](#t36) | Marcelo — deterministic test data (internal) | OPEN |
 
 ## Index — by feature
@@ -31,7 +32,7 @@
 | B.1 GL account mapping | [Q9](#q9) |
 | C.5 reversals / C.8 manual-JE gate | [Q12](#q12) (via Q19), [Q6](#q6) |
 | C.6 backdating dates | [Q15](#q15) (via Q19) |
-| D batching (defaults, cutoff, ordering, reject) | [Q19](#q19), [Q13](#q13)✓, [Q14](#q14)✓, [Q4](#q4)✓, [Q5](#q5)✓ |
+| D batching (defaults, cutoff, ordering, reject) | [Q28](#q28), [Q19](#q19), [Q13](#q13)✓, [Q14](#q14)✓, [Q4](#q4)✓, [Q5](#q5)✓ |
 | D.3 batch approvals | [Q6](#q6), [Q7](#q7) |
 | H reporting / cutover | [Q19](#q19) ★ |
 | I periods/timing | [Q18](#q18)✓, [Q8](#q8)✓ |
@@ -299,6 +300,39 @@
 - **Context to share:** the mockups (scope chip at rail-top with the interim-home tooltip).
 - **Additional context (for a verifying agent):** `explorer-core/src/lib/shell/` (app-nav renders
   NavItems; header-actions Explorer-owned); design-docs component inventory row.
+- **Answer:** _(pending)_
+
+<a id="q28"></a>
+### Q28 · Batch build / approval-task split + the batch task pointer (MOD-14) — ask Marcelo — added 2026-07-16
+- **Status:** OPEN — **proposed solution, building against it now; confirm the details.**
+- **Who to ask:** Marcelo
+- **Features:** D batching · D.3 batch approvals
+- **Background (self-contained):** Building a batch currently does **12 sequential `.Save()` calls
+  with no transaction** (header → summary lines → line dimensions → control totals → one save per JE
+  to lock it → approval task). A failure partway leaves a half-built batch with only *some* JEs
+  locked. Separately, if the tasks gate throws, `raiseApprovalTaskOrReverse` **cancels the whole
+  batch**. Marcelo's ruling (2026-07-16): batch writes go in ONE transaction; the approval task is a
+  SEPARATE action in its OWN transaction that also stamps a pointer field on the batch, so batches
+  with a task are cheap to validate; batch creation must not be gated on task success; accounting
+  owns that transaction because tasks is a dependency of accounting.
+- **What we built to it (MOD-14):** `ApprovalTaskID` + `ApprovalTaskRaisedAt` on JournalEntryBatch
+  (CHECK: both-null or both-set; filtered index; **no FK** — cross-app coupling), transaction 1 =
+  batch atomic, transaction 2 = task-raise + stamp atomic together, exposed as a Remote Operation.
+- **The questions (details, not shape):**
+  1. **Retry:** a batch with `ApprovalTaskID IS NULL` is the detectable failed-raise state. Should
+     retry be **automatic** (a scheduled sweep re-raising missing tasks) or **manual** (an admin
+     action / a chip in the Batch approvals inbox)? We default to manual + visible.
+  2. **Should a task-less batch be dispatchable?** `assertApproved` still blocks unapproved batches,
+     so it cannot reach the ERP — but should the UI surface it as "needs attention" distinctly from
+     "awaiting approval"? We assume yes.
+  3. **`RegenerateJEBatch`** currently re-runs the same path — should regenerate re-raise the task
+     (new Task, re-stamp) or reuse the existing one? We assume re-raise + re-stamp.
+  4. **No FK to the tasks table** — confirm that's the right call (our read: yes; accounting must stay
+     migratable without the tasks schema).
+- **Additional context (for a verifying agent):** `packages/CoreEntitiesServer/src/BatchingEngine.ts`
+  (`buildBatchFromIds`, `raiseApprovalTaskOrReverse`, `cancelBatch`), `TasksAppApprovalGate.ts`
+  (the TaskLink lookup this pointer replaces), `AccountingEngine.CreateJournalEntries` (the proven
+  TransactionGroup pattern), `migrations/V202607161700__v1.0.x__Batch_ApprovalTask_Pointer.sql`.
 - **Answer:** _(pending)_
 
 <a id="q27"></a>

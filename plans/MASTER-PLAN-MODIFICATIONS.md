@@ -222,3 +222,44 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
   Resolved on the removal; the A5 action-plan item, the closed-span trigger, the close UI, and the orders
   Confirm closed-span check are all struck. The design constraint stated here survives as a general
   principle: **JEs carry only their posted date — any future timing rule detects by time, never a period FK.**
+
+## MOD-14 — Batch build and approval-task raise are TWO transactions; the batch carries a task pointer (2026-07-16)
+
+- **Supersedes:** the current batching behaviour in which building a batch is **gated on the approval
+  task succeeding** — `BatchingEngine.raiseApprovalTaskOrReverse` calls `cancelBatch(batchId)` and
+  rethrows if `gate.onBatchBuilt` throws, so a tasks-side failure destroys an otherwise valid batch.
+- **Status:** **Proposed** — pending Marcelo's confirmation, see [Q28](QUESTIONS.md#q28).
+  (Schema + engine are being built against it now; the shape is his ruling, the confirmation is on
+  the details.)
+- **Why / source:** Marcelo, 2026-07-16, during the §8.2 Batch-workspace build.
+
+### The change
+
+1. **Transaction 1 — the batch, atomic.** Batch header + summary lines + summary-line dimensions +
+   control totals + the JE `Pending→Batched` locks commit in ONE `TransactionGroup` (all rows or
+   none). Today these are **12 sequential `.Save()` calls with no transaction**: a failure partway
+   through leaves a header, summary lines, control totals, and *some* of the JEs locked to a batch —
+   a half-built batch. This is a live latent defect, independent of the UI work.
+2. **Transaction 2 — the approval task, separate, accounting-owned.** Raising the CFO Task is its
+   own action in its own transaction, which **also stamps `JournalEntryBatch.ApprovalTaskID` +
+   `ApprovalTaskRaisedAt`**. The two commit together, so a Task without a pointer (or a pointer
+   without a Task) is unrepresentable. It runs as part of the batch-creation process.
+3. **Batch creation is NOT gated on task success.** `cancelBatch`-on-task-failure is removed. A built
+   batch with `ApprovalTaskID IS NULL` is a **detectable, retryable** state — not a destroyed batch.
+4. **Accounting owns transaction 2**, because bizapps-tasks is a dependency OF accounting, not the
+   reverse.
+
+### Consequences
+
+- **Schema (applied):** `V202607161700__v1.0.x__Batch_ApprovalTask_Pointer.sql` adds `ApprovalTaskID`
+  + `ApprovalTaskRaisedAt`, a CHECK making the half-stamped state unrepresentable, and a filtered
+  index. **No FK** — a cross-app FK would couple accounting's DDL to the tasks schema; integrity comes
+  from the single transaction that writes both rows.
+- **Validation becomes a column check**, not a cross-schema join through `MJ_BizApps_Tasks: Task Links`
+  (which is how `TasksAppApprovalGate` finds a batch's task today — see its
+  "Batch X has no approval Task" path). That was Marcelo's stated motivation.
+- The dispatch gate (`assertApproved`) is unaffected: an unapproved batch still cannot dispatch. What
+  changes is only that a *task-raise* failure no longer annihilates the batch.
+- Implemented via a Remote Operation over the engine (the app's established pattern —
+  `Accounting.CreateJournalEntry`, `Accounting.MaterializeDueScheduledEntries`), not a hand-written
+  resolver.

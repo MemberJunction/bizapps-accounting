@@ -1357,6 +1357,16 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * Display Name: Updated At
         * * SQL Data Type: datetimeoffset
         * * Default Value: getutcdate()`),
+    ApprovalTaskID: z.string().nullable().describe(`
+        * * Field Name: ApprovalTaskID
+        * * Display Name: Approval Task ID
+        * * SQL Data Type: uniqueidentifier
+        * * Description: Soft reference to the MJ_BizApps_Tasks Task that carries this batch's CFO approval. Written by the accounting-owned task transaction, which raises the Task and stamps this column together (all-or-none), so the two can never disagree. NULL on a built batch means the task-raise did not complete — a detectable, retryable state, NOT a gate on batch creation (the batch itself is already committed and valid). Intentionally NOT a foreign key: bizapps-tasks is a separate OpenApp schema and a cross-app FK would couple accounting's DDL to it.`),
+    ApprovalTaskRaisedAt: z.date().nullable().describe(`
+        * * Field Name: ApprovalTaskRaisedAt
+        * * Display Name: Approval Task Raised At
+        * * SQL Data Type: datetimeoffset
+        * * Description: When the approval Task was raised and stamped (UTC). Set in the same transaction as ApprovalTaskID; both are NULL together or set together.`),
     BatchedByUser: z.string().describe(`
         * * Field Name: BatchedByUser
         * * Display Name: Batched By User
@@ -5548,6 +5558,32 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     */
     get __mj_UpdatedAt(): Date {
         return this.Get('__mj_UpdatedAt');
+    }
+
+    /**
+    * * Field Name: ApprovalTaskID
+    * * Display Name: Approval Task ID
+    * * SQL Data Type: uniqueidentifier
+    * * Description: Soft reference to the MJ_BizApps_Tasks Task that carries this batch's CFO approval. Written by the accounting-owned task transaction, which raises the Task and stamps this column together (all-or-none), so the two can never disagree. NULL on a built batch means the task-raise did not complete — a detectable, retryable state, NOT a gate on batch creation (the batch itself is already committed and valid). Intentionally NOT a foreign key: bizapps-tasks is a separate OpenApp schema and a cross-app FK would couple accounting's DDL to it.
+    */
+    get ApprovalTaskID(): string | null {
+        return this.Get('ApprovalTaskID');
+    }
+    set ApprovalTaskID(value: string | null) {
+        this.Set('ApprovalTaskID', value);
+    }
+
+    /**
+    * * Field Name: ApprovalTaskRaisedAt
+    * * Display Name: Approval Task Raised At
+    * * SQL Data Type: datetimeoffset
+    * * Description: When the approval Task was raised and stamped (UTC). Set in the same transaction as ApprovalTaskID; both are NULL together or set together.
+    */
+    get ApprovalTaskRaisedAt(): Date | null {
+        return this.Get('ApprovalTaskRaisedAt');
+    }
+    set ApprovalTaskRaisedAt(value: Date | null) {
+        this.Set('ApprovalTaskRaisedAt', value);
     }
 
     /**
