@@ -1,13 +1,13 @@
 <!doctype html>
 <!-- ============================================================================
-  MOCKUP (ephemeral) · cycle 2026-07-15 · Accounting — Approval inbox (shared component)
+  MOCKUP (ephemeral) · cycle 2026-07-15 · Accounting — Batch approvals
   Generated as part of the fully-fleshed shareable set (every nav link works).
 ============================================================================ -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mockup — Accounting · Approval inbox (shared component)</title>
+<title>Mockup — Accounting · Batch approvals</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <link rel="stylesheet" href="../style-kit/mj-mock.css">
 <style>
@@ -73,8 +73,8 @@ tfoot td{font-weight:700;border-top:2px solid var(--mj-border-strong,var(--mj-bo
   <nav class="x-topnav">
     <span class="x-brand"><i class="fa-solid fa-cubes"></i> MJ <span class="app">/ Accounting</span></span>
     <div class="x-tabs">
-      <a class="x-tab active" href="nav-shell-je-dashboard.html"><i class="fa-solid fa-book"></i> Journal Entries</a>
-      <a class="x-tab" href="nav-shell-batches-dashboard.html"><i class="fa-solid fa-boxes-stacked"></i> Batches</a>
+      <a class="x-tab" href="nav-shell-je-dashboard.html"><i class="fa-solid fa-book"></i> Journal Entries</a>
+      <a class="x-tab active" href="nav-shell-batches-dashboard.html"><i class="fa-solid fa-boxes-stacked"></i> Batches</a>
       <a class="x-tab" href="nav-shell-accounts.html"><i class="fa-solid fa-sitemap"></i> Accounts</a>
       <a class="x-tab" href="nav-shell-reports.html"><i class="fa-solid fa-chart-column"></i> Reports</a>
       <a class="x-tab" href="nav-shell-configuration.html"><i class="fa-solid fa-gear"></i> Configuration</a>
@@ -90,22 +90,22 @@ tfoot td{font-weight:700;border-top:2px solid var(--mj-border-strong,var(--mj-bo
       <button class="x-iconbtn" onclick="rail()" title="Collapse / expand" style="align-self:flex-start"><i class="fa-solid fa-bars"></i></button>
       <div class="x-scopechip" title="App-wide company scope (persisted per user); interim home while an Explorer header-widget slot is proposed upstream"><i class="fa-solid fa-building"></i><span class="lbl">Scope: <b>Demo Co. +2</b></span></div>
       <div class="x-rail-group">MAIN</div>
-      <a href="nav-shell-je-dashboard.html"><i class="fa-solid fa-gauge-high"></i><span class="lbl">Dashboard</span></a>
-      <a href="nav-shell-all-journal-entries.html"><i class="fa-solid fa-table-list"></i><span class="lbl">All journal entries</span></a>
-      <a href="nav-shell-je-workspace.html"><i class="fa-solid fa-diagram-project"></i><span class="lbl">JE workspace</span></a>
-      <div class="x-rail-group">VIEWS</div>
-      <a href="nav-shell-scheduled-entries.html"><i class="fa-regular fa-calendar-days"></i><span class="lbl">Scheduled entries</span></a>
-      <a class="active" href="#"><i class="fa-solid fa-user-check"></i><span class="lbl">Awaiting approval</span><span class="x-badge">3</span></a>
+      <a href="nav-shell-batches-dashboard.html"><i class="fa-solid fa-gauge-high"></i><span class="lbl">Dashboard</span></a>
+      <a href="nav-shell-all-batches.html"><i class="fa-solid fa-table-list"></i><span class="lbl">All batches</span></a>
+      <a href="nav-shell-batch-workspace.html"><i class="fa-solid fa-diagram-project"></i><span class="lbl">Batch workspace</span></a>
+      <div class="x-rail-group">WORK</div>
+      <a class="active" href="#"><i class="fa-solid fa-inbox"></i><span class="lbl">Batch approvals</span><span class="x-badge">3</span></a>
+      <a href="nav-shell-dispatch-status.html"><i class="fa-solid fa-truck-fast"></i><span class="lbl">Dispatch status</span></a>
     </aside>
     <main class="x-content">
       <div class="x-pagehead">
-        <h1>Approval inbox</h1><span class="mjm-chip mjm-chip--warning">3 items</span>
+        <h1>Batch approvals</h1><span class="mjm-chip mjm-chip--warning">3 awaiting me</span>
       </div>
-      <p class="x-note" style="margin:0 0 12px"><i class="fa-solid fa-circle-info"></i> ONE shared inbox component (tasks-backed) — batch approvals and manual-JE approvals arrive here; each category's rail deep-links to it. Review = modal (single item, full detail) with pop-out (↗) to the item's workspace.</p>
-      <div class="x-inboxitem"><i class="fa-solid fa-boxes-stacked"></i><span><span class="t"><span class="mjm-chip mjm-chip--info">Batch</span> BAT-00042 · Demo Co. + Cheese Co.</span><br><span class="s">cutoff 2026-07-14 23:59 · 245 entries · $84,320.00 Dr = Cr · submitted by M. Torres</span></span><button class="mjm-btn mjm-btn--sm mjm-btn--primary">Review</button></div>
-      <div class="x-inboxitem"><i class="fa-solid fa-boxes-stacked"></i><span><span class="t"><span class="mjm-chip mjm-chip--info">Batch</span> BAT-00041 · Demo Co.</span><br><span class="s">cutoff 2026-07-10 23:59 · 118 entries · $31,750.00 Dr = Cr</span></span><button class="mjm-btn mjm-btn--sm mjm-btn--primary">Review</button></div>
-      <div class="x-inboxitem"><i class="fa-solid fa-book"></i><span><span class="t"><span class="mjm-chip mjm-chip--neutral">Manual JE</span> JE-CHZ-2026-00214 · Cheese Co. · $2,400.00</span><br><span class="s">Membership rev-rec correction (Jul) · by J. Ramirez · blocks batching until approved</span></span><button class="mjm-btn mjm-btn--sm mjm-btn--primary">Review</button></div>
-      <p class="x-note"><i class="fa-solid fa-user-check"></i> You see items routed to YOUR role (CFO approver, per company profile). Approve/Reject actions carry the same semantics everywhere: batch reject UNLOCKS; JE reject returns to draft with a reason.</p>
+      <p class="x-note" style="margin:0 0 12px"><i class="fa-solid fa-circle-info"></i> Batches routed to YOUR approval (CFO approver, per company profile) — the same tasks-backed inbox component as manual-JE approvals, scoped to batches. Review = the batch slide-in (criteria + summary lines + member entries) with pop-out (↗) to the batch workspace.</p>
+      <div class="x-inboxitem"><i class="fa-solid fa-boxes-stacked"></i><span><span class="t">BAT-00042 · Demo Co. + Cheese Co.</span><br><span class="s">cutoff 2026-07-14 23:59 · 245 entries · $84,320.00 Dr = Cr · built by M. Torres</span></span><button class="mjm-btn mjm-btn--sm mjm-btn--primary">Review</button></div>
+      <div class="x-inboxitem"><i class="fa-solid fa-boxes-stacked"></i><span><span class="t">BAT-00041 · Demo Co.</span><br><span class="s">cutoff 2026-07-10 23:59 · 118 entries · $31,750.00 Dr = Cr</span></span><button class="mjm-btn mjm-btn--sm mjm-btn--primary">Review</button></div>
+      <div class="x-inboxitem"><i class="fa-solid fa-boxes-stacked"></i><span><span class="t">BAT-00040 · Cheese Co.</span><br><span class="s">cutoff 2026-07-07 23:59 · 36 entries · $6,180.00 Dr = Cr</span></span><button class="mjm-btn mjm-btn--sm mjm-btn--primary">Review</button></div>
+      <p class="x-note"><i class="fa-solid fa-rotate-left"></i> Reject UNLOCKS the batch — member entries return to the unbatched pool (lock levels, MOD-3). Approval makes the lock permanent.</p>
     </main>
   </div>
 </div>

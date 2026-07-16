@@ -1,13 +1,13 @@
 <!doctype html>
 <!-- ============================================================================
-  MOCKUP (ephemeral) · cycle 2026-07-15 · Accounting — Scheduled entries browser
+  MOCKUP (ephemeral) · cycle 2026-07-15 · Accounting — Manual-JE approvals (C.8)
   Generated as part of the fully-fleshed shareable set (every nav link works).
 ============================================================================ -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mockup — Accounting · Scheduled entries browser</title>
+<title>Mockup — Accounting · Manual-JE approvals (C.8)</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <link rel="stylesheet" href="../style-kit/mj-mock.css">
 <style>
@@ -94,23 +94,18 @@ tfoot td{font-weight:700;border-top:2px solid var(--mj-border-strong,var(--mj-bo
       <a href="nav-shell-all-journal-entries.html"><i class="fa-solid fa-table-list"></i><span class="lbl">All journal entries</span></a>
       <a href="nav-shell-je-workspace.html"><i class="fa-solid fa-diagram-project"></i><span class="lbl">JE workspace</span></a>
       <div class="x-rail-group">VIEWS</div>
-      <a class="active" href="#"><i class="fa-regular fa-calendar-days"></i><span class="lbl">Scheduled entries</span></a>
-      <a href="nav-shell-je-approvals.html"><i class="fa-solid fa-user-check"></i><span class="lbl">Awaiting approval</span><span class="x-badge">3</span></a>
+      <a href="nav-shell-scheduled-entries.html"><i class="fa-regular fa-calendar-days"></i><span class="lbl">Scheduled entries</span></a>
+      <a class="active" href="#"><i class="fa-solid fa-user-check"></i><span class="lbl">Awaiting approval</span><span class="x-badge">3</span></a>
     </aside>
     <main class="x-content">
       <div class="x-pagehead">
-        <h1>Scheduled entries</h1><span class="mjm-chip mjm-chip--info">Trailing 30 + forward 90 days</span><span class="actions"><button class="mjm-btn mjm-btn--outline"><i class="fa-solid fa-filter"></i> Filters</button><button class="mjm-btn mjm-btn--primary"><i class="fa-solid fa-play"></i> Materialize due through…</button></span>
+        <h1>Manual-JE approvals</h1><span class="mjm-chip mjm-chip--warning">3 awaiting me</span>
       </div>
-      <table class="mjm-grid">
-        <thead><tr><th>Origin</th><th>Due</th><th>Memo</th><th>Company</th><th class="num">Amount</th><th>Status</th><th>Materialized as</th></tr></thead>
-        <tbody>
-          <tr><td class="mjm-mono">ORD-1042 · line 1</td><td>2026-08-01</td><td>Membership rev-rec (Aug)</td><td>Demo Co.</td><td class="num">$1,000.00</td><td><span class="mjm-chip mjm-chip--neutral">Pending</span></td><td>—</td></tr>
-          <tr><td class="mjm-mono">ORD-1042 · line 1</td><td>2026-09-01</td><td>Membership rev-rec (Sep)</td><td>Demo Co.</td><td class="num">$1,000.00</td><td><span class="mjm-chip mjm-chip--neutral">Pending</span></td><td>—</td></tr>
-          <tr><td class="mjm-mono">ORD-1041 · line 1</td><td>2026-07-14</td><td>Membership rev-rec (Jul)</td><td>Cheese Co.</td><td class="num">$200.00</td><td><span class="mjm-chip mjm-chip--success">Materialized</span></td><td class="mjm-mono">JE-CHZ-2026-00190</td></tr>
-          <tr><td class="mjm-mono">ORD-1031 · line 2</td><td>2026-07-01</td><td>Event deposit recognition</td><td>Demo Co.</td><td class="num">$1,120.00</td><td><span class="mjm-chip mjm-chip--warning">Superseded</span></td><td class="mjm-mono">→ schedule v2 (recomputed)</td></tr>
-        </tbody>
-      </table>
-      <p class="x-note"><i class="fa-solid fa-circle-info"></i> Date-driven recognition (MOD-11): all scheduled entries are created up-front at booking, each with its own date — no period machinery. "Materialize due through [date]" runs the same op the Settings page exposes, with preview + confirm. Superseded rows keep the chain visible.</p>
+      <p class="x-note" style="margin:0 0 12px"><i class="fa-solid fa-circle-info"></i> Manual journal entries awaiting CFO approval (C.8) — they cannot batch until approved. Same tasks-backed inbox component as batch approvals, scoped to manual JEs. Review = the quick-review modal (full entry detail) with pop-out (↗) to the JE workspace.</p>
+      <div class="x-inboxitem"><i class="fa-solid fa-book"></i><span><span class="t">JE-CHZ-2026-00214 · Cheese Co. · $2,400.00</span><br><span class="s">Membership rev-rec correction (Jul) · by J. Ramirez · 2026-07-14</span></span><button class="mjm-btn mjm-btn--sm mjm-btn--primary">Review</button></div>
+      <div class="x-inboxitem"><i class="fa-solid fa-book"></i><span><span class="t">JE-DEMO-2026-00874 · Demo Co. · $1,750.00</span><br><span class="s">Event deposit reclass · by J. Ramirez · 2026-07-15</span></span><button class="mjm-btn mjm-btn--sm mjm-btn--primary">Review</button></div>
+      <div class="x-inboxitem"><i class="fa-solid fa-book"></i><span><span class="t">JE-DEMO-2026-00876 · Demo Co. · $310.00</span><br><span class="s">Bank-fee accrual correction · by M. Torres · 2026-07-15</span></span><button class="mjm-btn mjm-btn--sm mjm-btn--primary">Review</button></div>
+      <p class="x-note"><i class="fa-solid fa-user-check"></i> Approve → the entry joins the unbatched pool. Reject → back to draft with a reason, author notified.</p>
     </main>
   </div>
 </div>
