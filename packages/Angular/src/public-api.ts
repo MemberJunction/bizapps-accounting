@@ -75,6 +75,14 @@ export { CompanyScopeService, type ScopeCompany } from './lib/custom/shared/comp
 // UX). Presentation only: orders resolves with its own fallback chain and hands the result in.
 export { GlResolutionPreviewComponent, type GlResolutionResult, type GlResolutionStep } from './lib/custom/shared/gl-resolution-preview.component';
 export { CompanyScopeChipComponent } from './lib/custom/shared/company-scope-chip.component';
+// Customer A/R base view — accounting-homed, READ-ONLY (the §0 placement ruling). Orders' Reports
+// category hosts the page and wraps this with its verbs (§13.4). A/R is accounting's subsidiary
+// ledger, so the numbers are defined here once and cannot drift between the two apps.
+export { CustomerARBaseComponent, type CustomerARView } from './lib/custom/shared/customer-ar-base.component';
+// The read-model client (vw_ARAging / vw_AROpenByCustomer / …) — orders' A/R page reads through it
+// rather than re-querying the ledger itself.
+export { ReadModelsClient } from './lib/custom/shared/read-models.client';
+export type { AROpenByCustomerRow, ARAgingRow } from './lib/custom/shared/read-models.client';
 
 // ─── Shell primitives, shared with orders (orders UI plan §13.0) ─────────────
 // The category-shell pattern (Explorer nav item -> <mj-left-nav> + local page switching) is

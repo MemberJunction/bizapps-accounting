@@ -1,0 +1,44 @@
+@if (View; as v) {
+  <div class="arb">
+    <!-- Identity + the headline number. -->
+    <div class="arb__head">
+      <span class="arb__name">{{ v.CustomerName }}</span>
+      <mj-stat-badge
+        [Label]="'Open ' + (v.TotalOpen | currency)"
+        Icon="fa-solid fa-file-invoice-dollar"
+        [Variant]="v.TotalOpen > 0 ? 'info' : 'success'">
+      </mj-stat-badge>
+      @if (PastDue > 0) {
+        <mj-stat-badge [Label]="(PastDue | currency) + ' past due'" Icon="fa-solid fa-triangle-exclamation" Variant="error"></mj-stat-badge>
+      }
+    </div>
+
+    <!-- Charges vs payments — how the open balance got there. -->
+    <div class="arb__money">
+      <div><span class="l">CHARGES</span><span class="v">{{ v.TotalCharges | currency }}</span></div>
+      <div><span class="l">PAYMENTS</span><span class="v">{{ v.TotalPayments | currency }}</span></div>
+      <div><span class="l">OPEN</span><span class="v">{{ v.OpenBalance | currency }}</span></div>
+    </div>
+
+    <!-- Aging strip, straight from vw_ARAging. -->
+    <p class="arb__h">Aging</p>
+    <div class="arb__aging">
+      @for (b of Buckets; track b.Label) {
+        <div class="arb__bucket" [class.arb__bucket--overdue]="b.Overdue && b.Amount > 0">
+          <span class="l">{{ b.Label }}</span>
+          <span class="v">{{ b.Amount | currency }}</span>
+        </div>
+      }
+    </div>
+
+    @if (!BucketsFoot) {
+      <!-- Never hidden: if the buckets and the total disagree, the read model is wrong and an
+           accountant must know rather than be shown a tidy sum that papers over it. -->
+      <p class="arb__mismatch" role="alert">
+        <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+        The aging buckets ({{ BucketSum | currency }}) do not foot to the total open
+        ({{ v.TotalOpen | currency }}). This is a data problem — report it before acting on these figures.
+      </p>
+    }
+  </div>
+}
