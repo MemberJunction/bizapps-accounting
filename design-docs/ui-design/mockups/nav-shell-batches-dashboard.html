@@ -3,11 +3,10 @@
   MOCKUP (ephemeral) · cycle 2026-07-15 · Accounting — Batches DASHBOARD
   Adds to the nav-shell demo: the APPROVAL INBOX pattern (rail item w/ badge +
   "awaiting my approval" card), the SLIDE-IN detail panel (click any batch row
-  or Review — approve/reject in the footer, confirm on the LEFT per MJ), and
-  the NEW BATCH dialog ("New batch" button — cutoff default now, per-company
-  preview, MOD-8 out-of-order warning chip).
-  INTERACTIVE: hamburger collapses rail · row/Review opens slide-in · New batch
-  opens the dialog.
+  or Review — approve/reject in the footer, confirm on the LEFT per MJ).
+  ROUND 3: the New-batch DIALOG is REMOVED (ruled: batch building fails the
+  modal encapsulation test) — "New batch" navigates to the batch workspace.
+  INTERACTIVE: hamburger collapses rail · row/Review opens slide-in.
 ============================================================================ -->
 <html lang="en">
 <head>
@@ -123,7 +122,7 @@ tr.clickable:hover td{background:var(--mj-bg-surface-hover)}
         <span class="mjm-chip mjm-chip--info">Batched through 2026-07-14 · Demo Co.</span>
         <span class="actions">
           <button class="mjm-btn mjm-btn--outline"><i class="fa-solid fa-filter"></i> Filters</button>
-          <button class="mjm-btn mjm-btn--primary" onclick="dlg(true)"><i class="fa-solid fa-plus"></i> New batch</button>
+          <a class="mjm-btn mjm-btn--primary" href="nav-shell-batch-workspace.html"><i class="fa-solid fa-plus"></i> New batch</a>
         </span>
       </div>
 
@@ -218,36 +217,9 @@ tr.clickable:hover td{background:var(--mj-bg-surface-hover)}
   </footer>
 </aside>
 
-<div class="x-dlgback" id="dlgback">
-  <div class="x-dlg">
-    <header><i class="fa-solid fa-plus"></i> New batch</header>
-    <div class="dbody">
-      <label class="mjm-field">Include everything unbatched through
-        <input class="mjm-input" type="datetime-local" value="2026-07-15T17:00">
-      </label>
-      <p class="x-sect" style="margin-top:2px">PREVIEW</p>
-      <table class="mjm-grid">
-        <thead><tr><th>Company</th><th class="num">Entries</th><th class="num">Dr total</th><th class="num">Cr total</th></tr></thead>
-        <tbody>
-          <tr><td>Demo Co.</td><td class="num">182</td><td class="num">$61,450.00</td><td class="num">$61,450.00</td></tr>
-          <tr><td>Cheese Co.</td><td class="num">63</td><td class="num">$22,870.00</td><td class="num">$22,870.00</td></tr>
-          <tr><td><b>Total</b></td><td class="num"><b>245</b></td><td class="num"><b>$84,320.00</b></td><td class="num"><b>$84,320.00</b></td></tr>
-        </tbody>
-      </table>
-      <div class="x-warn"><i class="fa-solid fa-triangle-exclamation" style="color:var(--mj-status-warning)"></i> 3 manual entries awaiting CFO approval are excluded and will remain unbatched.</div>
-    </div>
-    <footer>
-      <button class="mjm-btn mjm-btn--primary"><i class="fa-solid fa-boxes-stacked"></i> Build batch</button>
-      <a class="mjm-btn mjm-btn--outline" href="nav-shell-batch-workspace.html"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open in batch workspace</a>
-      <button class="mjm-btn mjm-btn--flat" style="margin-left:auto" onclick="dlg(false)">Cancel</button>
-    </footer>
-  </div>
-</div>
-
 <script>
 function rail(){document.getElementById('rail').classList.toggle('collapsed')}
 function slide(o){document.getElementById('slide').classList.toggle('open',o);document.getElementById('ovl').classList.toggle('show',o)}
-function dlg(o){document.getElementById('dlgback').classList.toggle('show',o)}
 </script>
 </body>
 </html>

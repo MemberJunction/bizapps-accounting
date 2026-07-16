@@ -1,0 +1,119 @@
+<!doctype html>
+<!-- ============================================================================
+  MOCKUP (ephemeral) · cycle 2026-07-15 · Accounting — ACCOUNTS category
+  Pins the Accounts category structure: rail = Chart of accounts (active) ·
+  Account links (GLAccountLink manager) · ERP mapping (B.3 approval grid) ·
+  Dimensions. Page = the CoA hierarchy grid with type/normal-side/active.
+  INTERACTIVE: hamburger collapses the rail.
+============================================================================ -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup — Accounting · Chart of accounts</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link rel="stylesheet" href="../style-kit/mj-mock.css">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:var(--mj-bg-page);color:var(--mj-text-primary)}
+.x-app{display:flex;flex-direction:column;height:100vh}
+.x-topnav{display:flex;align-items:center;gap:6px;height:52px;padding:0 16px;background:var(--mj-bg-surface);border-bottom:1px solid var(--mj-border-default);flex:none}
+.x-brand{display:flex;align-items:center;gap:9px;font-weight:700;margin-right:22px;white-space:nowrap;font-size:14.5px}
+.x-brand i{color:var(--mj-brand-primary);font-size:17px}
+.x-brand .app{color:var(--mj-text-muted);font-weight:500}
+.x-tabs{display:flex;gap:2px;height:100%}
+.x-tab{display:flex;align-items:center;gap:7px;padding:0 15px;color:var(--mj-text-secondary);text-decoration:none;font-weight:500;font-size:13.5px;border-bottom:3px solid transparent;border-top:3px solid transparent}
+.x-tab:hover{color:var(--mj-text-primary);background:var(--mj-bg-surface-hover)}
+.x-tab.active{color:var(--mj-brand-primary);border-bottom-color:var(--mj-brand-primary);font-weight:600}
+.x-topnav .right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.x-iconbtn{border:none;background:none;color:var(--mj-text-secondary);font-size:15px;cursor:pointer;padding:7px;border-radius:7px}
+.x-iconbtn:hover{background:var(--mj-bg-surface-hover);color:var(--mj-text-primary)}
+.x-avatar{width:30px;height:30px;border-radius:50%;background:var(--mj-brand-primary);color:var(--mj-text-inverse,#fff);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600}
+.x-body{display:flex;flex:1;min-height:0}
+.x-rail{width:230px;flex:none;background:var(--mj-bg-surface);border-right:1px solid var(--mj-border-default);display:flex;flex-direction:column;padding:8px;gap:2px;transition:width .18s ease;overflow-x:hidden;overflow-y:auto}
+.x-rail.collapsed{width:56px}
+.x-rail-group{margin:14px 0 4px;font-size:10.5px;font-weight:700;letter-spacing:.08em;color:var(--mj-text-muted);padding:0 10px;white-space:nowrap}
+.x-rail.collapsed .x-rail-group{visibility:hidden;height:8px;margin:8px 0 0}
+.x-rail a{display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:8px;color:var(--mj-text-secondary);text-decoration:none;font-size:13.5px;white-space:nowrap}
+.x-rail a i{width:18px;text-align:center;font-size:14px;flex:none}
+.x-rail a:hover{background:var(--mj-bg-surface-hover);color:var(--mj-text-primary)}
+.x-rail a.active{background:color-mix(in srgb,var(--mj-brand-primary) 10%,transparent);color:var(--mj-brand-primary);font-weight:600}
+.x-rail.collapsed a .lbl{display:none}
+.x-scopechip{display:flex;align-items:center;gap:9px;margin:4px 2px 0;padding:8px 10px;border:1px solid var(--mj-border-default);border-radius:8px;background:var(--mj-bg-surface-card);font-size:12.5px;cursor:pointer;white-space:nowrap}
+.x-scopechip i{color:var(--mj-brand-primary)}
+.x-rail.collapsed .x-scopechip .lbl{display:none}
+.x-content{flex:1;min-width:0;overflow:auto;padding:20px 24px}
+.x-pagehead{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.x-pagehead h1{font-size:19px;margin:0}
+.x-pagehead .actions{margin-left:auto;display:flex;gap:8px}
+.x-filterbar{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.indent1{padding-left:22px}
+.indent2{padding-left:44px}
+tr:hover td{background:var(--mj-bg-surface-hover)}
+</style>
+</head>
+<body>
+<div class="x-app">
+  <nav class="x-topnav">
+    <span class="x-brand"><i class="fa-solid fa-cubes"></i> MJ <span class="app">/ Accounting</span></span>
+    <div class="x-tabs">
+      <a class="x-tab" href="nav-shell-je-dashboard.html"><i class="fa-solid fa-book"></i> Journal Entries</a>
+      <a class="x-tab" href="nav-shell-batches-dashboard.html"><i class="fa-solid fa-boxes-stacked"></i> Batches</a>
+      <a class="x-tab active" href="#"><i class="fa-solid fa-sitemap"></i> Accounts</a>
+      <a class="x-tab" href="nav-shell-reports.html"><i class="fa-solid fa-chart-column"></i> Reports</a>
+      <a class="x-tab" href="nav-shell-configuration.html"><i class="fa-solid fa-gear"></i> Configuration</a>
+    </div>
+    <div class="right">
+      <button class="x-iconbtn"><i class="fa-solid fa-magnifying-glass"></i></button>
+      <button class="x-iconbtn"><i class="fa-regular fa-bell"></i></button>
+      <span class="x-avatar">MT</span>
+    </div>
+  </nav>
+
+  <div class="x-body">
+    <aside class="x-rail" id="rail">
+      <button class="x-iconbtn" onclick="rail()" style="align-self:flex-start"><i class="fa-solid fa-bars"></i></button>
+      <div class="x-scopechip"><i class="fa-solid fa-building"></i><span class="lbl">Scope: <b>Demo Co. +2</b></span></div>
+      <div class="x-rail-group">MAIN</div>
+      <a class="active" href="#"><i class="fa-solid fa-sitemap"></i><span class="lbl">Chart of accounts</span></a>
+      <a href="#"><i class="fa-solid fa-link"></i><span class="lbl">Account links</span></a>
+      <a href="#"><i class="fa-solid fa-right-left"></i><span class="lbl">ERP mapping</span></a>
+      <a href="#"><i class="fa-solid fa-tags"></i><span class="lbl">Dimensions</span></a>
+    </aside>
+
+    <main class="x-content">
+      <div class="x-pagehead">
+        <h1>Chart of accounts</h1>
+        <span class="mjm-chip mjm-chip--info">Demo Co.</span>
+        <span class="actions">
+          <button class="mjm-btn mjm-btn--outline"><i class="fa-solid fa-filter"></i> Filters</button>
+          <button class="mjm-btn mjm-btn--primary"><i class="fa-solid fa-plus"></i> Add account</button>
+        </span>
+      </div>
+
+      <div class="x-filterbar">
+        <input class="mjm-input" style="width:240px" placeholder="Search code or name…">
+        <select class="mjm-select"><option>All types</option><option>Asset</option><option>Liability</option><option>Revenue</option><option>Expense</option></select>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--mj-text-secondary)"><input type="checkbox" checked> Active only</label>
+      </div>
+
+      <table class="mjm-grid">
+        <thead><tr><th>Code</th><th>Account</th><th>Type</th><th>Normal side</th><th>Links</th><th>ERP mapping</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td class="mjm-mono">1000</td><td><b>Assets</b></td><td>Asset</td><td>Dr</td><td>—</td><td>—</td><td><span class="mjm-chip mjm-chip--success">Active</span></td></tr>
+          <tr><td class="mjm-mono">1000</td><td class="indent1">Cash</td><td>Asset</td><td>Dr</td><td>—</td><td class="mjm-mono">BC 10100 ✓</td><td><span class="mjm-chip mjm-chip--success">Active</span></td></tr>
+          <tr><td class="mjm-mono">1100</td><td class="indent1">Accounts receivable</td><td>Asset</td><td>Dr</td><td>2 company defaults</td><td class="mjm-mono">BC 13100 ✓</td><td><span class="mjm-chip mjm-chip--success">Active</span></td></tr>
+          <tr><td class="mjm-mono">2000</td><td><b>Liabilities</b></td><td>Liability</td><td>Cr</td><td>—</td><td>—</td><td><span class="mjm-chip mjm-chip--success">Active</span></td></tr>
+          <tr><td class="mjm-mono">2300</td><td class="indent1">Customer deposits</td><td>Liability</td><td>Cr</td><td>—</td><td class="mjm-mono">BC 23400 ✓</td><td><span class="mjm-chip mjm-chip--success">Active</span></td></tr>
+          <tr><td class="mjm-mono">2400</td><td class="indent1">Deferred revenue</td><td>Liability</td><td>Cr</td><td>1 role link (DefRev)</td><td class="mjm-mono">BC 23700 ✓</td><td><span class="mjm-chip mjm-chip--success">Active</span></td></tr>
+          <tr><td class="mjm-mono">4000</td><td><b>Revenue</b> <span class="indent1"></span></td><td>Revenue</td><td>Cr</td><td>4 role links (Sales)</td><td><span class="mjm-chip mjm-chip--warning">needs approval</span></td><td><span class="mjm-chip mjm-chip--success">Active</span></td></tr>
+          <tr><td class="mjm-mono">6100</td><td class="indent1">Processing fees</td><td>Expense</td><td>Dr</td><td>—</td><td>—</td><td><span class="mjm-chip mjm-chip--neutral">Inactive</span></td></tr>
+        </tbody>
+      </table>
+      <p class="mjm-muted" style="font-size:12px"><i class="fa-solid fa-circle-info"></i> "Links" counts GLAccountLink roles pointing at the account (manage in <b>Account links</b>); "ERP mapping" shows roundtrip status (approve in <b>ERP mapping</b> — B.3).</p>
+    </main>
+  </div>
+</div>
+<script>function rail(){document.getElementById('rail').classList.toggle('collapsed')}</script>
+</body>
+</html>

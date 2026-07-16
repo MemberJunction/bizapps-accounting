@@ -113,9 +113,10 @@ tr.ooo td{background:color-mix(in srgb,var(--mj-status-warning) 7%,transparent)}
       <div class="x-pagehead">
         <h1>Batch workspace</h1>
         <span class="mjm-chip mjm-chip--neutral">Draft — not built</span>
-        <span class="actions">
-          <button class="mjm-btn mjm-btn--outline"><i class="fa-solid fa-filter"></i> Filters</button>
-        </span>
+        <span class="mjm-chip mjm-chip--info" title="The ERP this batch dispatches to — Business Central is the only configured target today; selectable when more targets exist"><i class="fa-solid fa-plug"></i> Target: Business Central</span>
+        <!-- ROUND 3 ruling: NO Filters button here — the build-criteria panel is the ONLY
+             filter surface on this page (never two filter systems; never view-filters that
+             don't match batch contents). -->
       </div>
 
       <div class="x-wstabs">
@@ -141,10 +142,23 @@ tr.ooo td{background:color-mix(in srgb,var(--mj-status-warning) 7%,transparent)}
           <label>Source
             <select class="mjm-select"><option>Standard (oldest-forward)</option><option>From a saved view…</option></select>
           </label>
+          <label>Target system
+            <select class="mjm-select"><option>Business Central</option></select>
+          </label>
           <div class="x-chips">
             <span class="mjm-chip mjm-chip--info">through 07-15 17:00</span>
             <span class="mjm-chip mjm-chip--info">Demo + Cheese</span>
             <span class="mjm-chip mjm-chip--neutral">approved only</span>
+            <span class="mjm-chip mjm-chip--neutral">→ Business Central</span>
+          </div>
+          <p class="x-card-title" style="margin:14px 0 6px"><i class="fa-solid fa-sitemap"></i> Affected accounts (6)</p>
+          <div style="display:flex;flex-direction:column;gap:4px;font-size:12px" title="Every GL account the current selection touches — expands as the selection changes">
+            <span><span class="mjm-mono">1100</span> A/R <span class="mjm-muted">(Demo, Cheese)</span></span>
+            <span><span class="mjm-mono">4000</span> Sales <span class="mjm-muted">(Demo, Cheese)</span></span>
+            <span><span class="mjm-mono">2400</span> Deferred revenue <span class="mjm-muted">(Demo)</span></span>
+            <span><span class="mjm-mono">2200</span> Sales tax payable <span class="mjm-muted">(Demo)</span></span>
+            <span><span class="mjm-mono">1000</span> Cash <span class="mjm-muted">(Demo)</span></span>
+            <span><span class="mjm-mono">6100</span> Processing fees <span class="mjm-muted">(Cheese)</span></span>
           </div>
         </div>
 

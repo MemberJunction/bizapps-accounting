@@ -1,0 +1,174 @@
+<!doctype html>
+<!-- ============================================================================
+  MOCKUP (ephemeral) · cycle 2026-07-15 · Accounting — ALL JOURNAL ENTRIES
+  The volume list page (thousands of JEs): filter toolbar (window default,
+  status/company, server search), the EXPANDABLE DROP-DOWN GRID (click the
+  caret — lines render inline under the row), quick-view via modal (eye),
+  pop-out (↗) to the JE workspace. Keyset "Load more" instead of unbounded
+  loads. Element doctrine: modal = single-record quick ops · page = depth ·
+  slide-in reserved for peeks from working contexts (not used here).
+  INTERACTIVE: carets expand rows · hamburger collapses the rail.
+============================================================================ -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup — Accounting · All journal entries</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link rel="stylesheet" href="../style-kit/mj-mock.css">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:var(--mj-bg-page);color:var(--mj-text-primary)}
+.x-app{display:flex;flex-direction:column;height:100vh}
+.x-topnav{display:flex;align-items:center;gap:6px;height:52px;padding:0 16px;background:var(--mj-bg-surface);border-bottom:1px solid var(--mj-border-default);flex:none}
+.x-brand{display:flex;align-items:center;gap:9px;font-weight:700;margin-right:22px;white-space:nowrap;font-size:14.5px}
+.x-brand i{color:var(--mj-brand-primary);font-size:17px}
+.x-brand .app{color:var(--mj-text-muted);font-weight:500}
+.x-tabs{display:flex;gap:2px;height:100%}
+.x-tab{display:flex;align-items:center;gap:7px;padding:0 15px;color:var(--mj-text-secondary);text-decoration:none;font-weight:500;font-size:13.5px;border-bottom:3px solid transparent;border-top:3px solid transparent}
+.x-tab:hover{color:var(--mj-text-primary);background:var(--mj-bg-surface-hover)}
+.x-tab.active{color:var(--mj-brand-primary);border-bottom-color:var(--mj-brand-primary);font-weight:600}
+.x-topnav .right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.x-iconbtn{border:none;background:none;color:var(--mj-text-secondary);font-size:15px;cursor:pointer;padding:7px;border-radius:7px}
+.x-iconbtn:hover{background:var(--mj-bg-surface-hover);color:var(--mj-text-primary)}
+.x-avatar{width:30px;height:30px;border-radius:50%;background:var(--mj-brand-primary);color:var(--mj-text-inverse,#fff);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600}
+.x-body{display:flex;flex:1;min-height:0}
+.x-rail{width:230px;flex:none;background:var(--mj-bg-surface);border-right:1px solid var(--mj-border-default);display:flex;flex-direction:column;padding:8px;gap:2px;transition:width .18s ease;overflow-x:hidden;overflow-y:auto}
+.x-rail.collapsed{width:56px}
+.x-rail-group{margin:14px 0 4px;font-size:10.5px;font-weight:700;letter-spacing:.08em;color:var(--mj-text-muted);padding:0 10px;white-space:nowrap}
+.x-rail.collapsed .x-rail-group{visibility:hidden;height:8px;margin:8px 0 0}
+.x-rail a{display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:8px;color:var(--mj-text-secondary);text-decoration:none;font-size:13.5px;white-space:nowrap}
+.x-rail a i{width:18px;text-align:center;font-size:14px;flex:none}
+.x-rail a:hover{background:var(--mj-bg-surface-hover);color:var(--mj-text-primary)}
+.x-rail a.active{background:color-mix(in srgb,var(--mj-brand-primary) 10%,transparent);color:var(--mj-brand-primary);font-weight:600}
+.x-rail.collapsed a .lbl,.x-rail.collapsed .x-badge{display:none}
+.x-badge{margin-left:auto;background:var(--mj-status-error);color:#fff;border-radius:999px;font-size:10.5px;padding:1px 7px;font-weight:700}
+.x-scopechip{display:flex;align-items:center;gap:9px;margin:4px 2px 0;padding:8px 10px;border:1px solid var(--mj-border-default);border-radius:8px;background:var(--mj-bg-surface-card);font-size:12.5px;cursor:pointer;white-space:nowrap}
+.x-scopechip i{color:var(--mj-brand-primary)}
+.x-rail.collapsed .x-scopechip .lbl{display:none}
+.x-content{flex:1;min-width:0;overflow:auto;padding:20px 24px}
+.x-pagehead{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.x-pagehead h1{font-size:19px;margin:0}
+.x-pagehead .actions{margin-left:auto;display:flex;gap:8px}
+.x-filterbar{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.x-filterbar .count{margin-left:auto;font-size:12.5px;color:var(--mj-text-muted)}
+tr.mainrow{cursor:default}
+tr.mainrow:hover td{background:var(--mj-bg-surface-hover)}
+.caret{cursor:pointer;color:var(--mj-text-muted);width:26px;text-align:center}
+.caret i{transition:transform .15s}
+tr.expanded .caret i{transform:rotate(90deg)}
+tr.linesrow{display:none}
+tr.linesrow.show{display:table-row}
+tr.linesrow>td{background:var(--mj-bg-surface-sunken,var(--mj-bg-surface-card));padding:10px 14px 14px 40px}
+.x-lines table{margin:0;width:auto;min-width:70%}
+.rowicons{display:flex;gap:2px;justify-content:flex-end}
+.x-loadmore{display:flex;justify-content:center;padding:14px}
+</style>
+</head>
+<body>
+<div class="x-app">
+  <nav class="x-topnav">
+    <span class="x-brand"><i class="fa-solid fa-cubes"></i> MJ <span class="app">/ Accounting</span></span>
+    <div class="x-tabs">
+      <a class="x-tab active" href="nav-shell-je-dashboard.html"><i class="fa-solid fa-book"></i> Journal Entries</a>
+      <a class="x-tab" href="nav-shell-batches-dashboard.html"><i class="fa-solid fa-boxes-stacked"></i> Batches</a>
+      <a class="x-tab" href="nav-shell-accounts.html"><i class="fa-solid fa-sitemap"></i> Accounts</a>
+      <a class="x-tab" href="nav-shell-reports.html"><i class="fa-solid fa-chart-column"></i> Reports</a>
+      <a class="x-tab" href="nav-shell-configuration.html"><i class="fa-solid fa-gear"></i> Configuration</a>
+    </div>
+    <div class="right">
+      <button class="x-iconbtn" title="Search"><i class="fa-solid fa-magnifying-glass"></i></button>
+      <button class="x-iconbtn" title="Notifications"><i class="fa-regular fa-bell"></i></button>
+      <span class="x-avatar">MT</span>
+    </div>
+  </nav>
+
+  <div class="x-body">
+    <aside class="x-rail" id="rail">
+      <button class="x-iconbtn" onclick="rail()" title="Collapse / expand" style="align-self:flex-start"><i class="fa-solid fa-bars"></i></button>
+      <div class="x-scopechip"><i class="fa-solid fa-building"></i><span class="lbl">Scope: <b>Demo Co. +2</b></span></div>
+      <div class="x-rail-group">MAIN</div>
+      <a href="nav-shell-je-dashboard.html"><i class="fa-solid fa-gauge-high"></i><span class="lbl">Dashboard</span></a>
+      <a class="active" href="#"><i class="fa-solid fa-table-list"></i><span class="lbl">All journal entries</span></a>
+      <a href="nav-shell-je-workspace.html"><i class="fa-solid fa-diagram-project"></i><span class="lbl">JE workspace</span></a>
+      <div class="x-rail-group">VIEWS</div>
+      <a href="#"><i class="fa-regular fa-calendar-days"></i><span class="lbl">Scheduled entries</span></a>
+      <a href="#"><i class="fa-solid fa-user-check"></i><span class="lbl">Awaiting approval</span><span class="x-badge">3</span></a>
+    </aside>
+
+    <main class="x-content">
+      <div class="x-pagehead">
+        <h1>All journal entries</h1>
+        <span class="actions">
+          <button class="mjm-btn mjm-btn--outline"><i class="fa-solid fa-filter"></i> Filters</button>
+          <a class="mjm-btn mjm-btn--primary" href="nav-shell-je-workspace.html"><i class="fa-solid fa-plus"></i> New journal entry</a>
+        </span>
+      </div>
+
+      <div class="x-filterbar">
+        <input class="mjm-input" style="width:260px" placeholder="Search memo, entry #, order # (server-side)…">
+        <select class="mjm-select"><option>Last 30 days</option><option>Last 7 days</option><option>This FY</option><option>Custom…</option></select>
+        <select class="mjm-select"><option>All statuses</option><option>Pending</option><option>Awaiting approval</option><option>Batched</option><option>GL Posted</option></select>
+        <select class="mjm-select"><option>All companies (in scope)</option><option>Demo Co.</option><option>Cheese Co.</option></select>
+        <span class="count">1,284 entries · showing 50 (keyset paged)</span>
+      </div>
+
+      <table class="mjm-grid">
+        <thead><tr><th></th><th>Entry #</th><th>Date</th><th>Memo</th><th>Company</th><th class="num">Amount</th><th>Status</th><th>Batch</th><th></th></tr></thead>
+        <tbody>
+          <tr class="mainrow" id="r1"><td class="caret" onclick="exp('r1')"><i class="fa-solid fa-chevron-right"></i></td><td class="mjm-mono">JE-DEMO-2026-00871</td><td>2026-07-15</td><td>Order ORD-1042 revenue</td><td>Demo Co.</td><td class="num">$15,099.00</td><td><span class="mjm-chip mjm-chip--neutral">Pending</span></td><td>—</td>
+            <td class="rowicons"><button class="x-iconbtn" title="Quick view (modal)"><i class="fa-regular fa-eye"></i></button><a class="x-iconbtn" href="nav-shell-je-workspace.html" title="Open in JE workspace"><i class="fa-solid fa-arrow-up-right-from-square"></i></a></td></tr>
+          <tr class="linesrow" id="r1x"><td colspan="9"><div class="x-lines">
+            <table class="mjm-grid"><thead><tr><th>Account</th><th>Dimension</th><th class="num">Dr</th><th class="num">Cr</th></tr></thead>
+            <tbody>
+              <tr><td class="mjm-mono">1100 · A/R</td><td>—</td><td class="num">15,099.00</td><td class="num">—</td></tr>
+              <tr><td class="mjm-mono">4000 · Sales</td><td>Events</td><td class="num">—</td><td class="num">3,099.00</td></tr>
+              <tr><td class="mjm-mono">2400 · Deferred revenue</td><td>Membership</td><td class="num">—</td><td class="num">12,000.00</td></tr>
+            </tbody></table>
+            <p class="mjm-muted" style="font-size:11.5px;margin:8px 0 0"><i class="fa-solid fa-link"></i> Origin: Order <span class="mjm-mono">ORD-1042</span> (deep link) · created by system at Confirm</p>
+          </div></td></tr>
+
+          <tr class="mainrow" id="r2"><td class="caret" onclick="exp('r2')"><i class="fa-solid fa-chevron-right"></i></td><td class="mjm-mono">JE-CHZ-2026-00214</td><td>2026-07-14</td><td>Membership rev-rec correction (Jul)</td><td>Cheese Co.</td><td class="num">$2,400.00</td><td><span class="mjm-chip mjm-chip--warning">Awaiting approval</span></td><td>—</td>
+            <td class="rowicons"><button class="x-iconbtn" title="Quick view (modal)"><i class="fa-regular fa-eye"></i></button><a class="x-iconbtn" href="nav-shell-je-workspace.html" title="Open in JE workspace"><i class="fa-solid fa-arrow-up-right-from-square"></i></a></td></tr>
+          <tr class="linesrow" id="r2x"><td colspan="9"><div class="x-lines">
+            <table class="mjm-grid"><thead><tr><th>Account</th><th>Dimension</th><th class="num">Dr</th><th class="num">Cr</th></tr></thead>
+            <tbody>
+              <tr><td class="mjm-mono">2400 · Deferred revenue</td><td>Membership</td><td class="num">2,400.00</td><td class="num">—</td></tr>
+              <tr><td class="mjm-mono">4000 · Sales</td><td>Membership</td><td class="num">—</td><td class="num">2,400.00</td></tr>
+            </tbody></table>
+            <p class="mjm-muted" style="font-size:11.5px;margin:8px 0 0"><i class="fa-solid fa-user"></i> Manual entry by J. Ramirez · blocks batching until CFO approval (C.8)</p>
+          </div></td></tr>
+
+          <tr class="mainrow" id="r3"><td class="caret" onclick="exp('r3')"><i class="fa-solid fa-chevron-right"></i></td><td class="mjm-mono">JE-DEMO-2026-00863</td><td>2026-07-14</td><td>Manual accrual — event deposit</td><td>Demo Co.</td><td class="num">$860.00</td><td><span class="mjm-chip mjm-chip--info">Batched</span></td><td class="mjm-mono">BAT-00042</td>
+            <td class="rowicons"><button class="x-iconbtn" title="Quick view (modal)"><i class="fa-regular fa-eye"></i></button><a class="x-iconbtn" href="nav-shell-je-workspace.html" title="Open in JE workspace"><i class="fa-solid fa-arrow-up-right-from-square"></i></a></td></tr>
+          <tr class="linesrow" id="r3x"><td colspan="9"><div class="x-lines">
+            <table class="mjm-grid"><thead><tr><th>Account</th><th>Dimension</th><th class="num">Dr</th><th class="num">Cr</th></tr></thead>
+            <tbody>
+              <tr><td class="mjm-mono">1000 · Cash</td><td>Events</td><td class="num">860.00</td><td class="num">—</td></tr>
+              <tr><td class="mjm-mono">2300 · Customer deposits</td><td>Events</td><td class="num">—</td><td class="num">860.00</td></tr>
+            </tbody></table>
+            <p class="mjm-muted" style="font-size:11.5px;margin:8px 0 0"><i class="fa-solid fa-lock"></i> Locked (Batched) — immutable except status/GL ref</p>
+          </div></td></tr>
+
+          <tr class="mainrow" id="r4"><td class="caret" onclick="exp('r4')"><i class="fa-solid fa-chevron-right"></i></td><td class="mjm-mono">JE-DEMO-2026-00858</td><td>2026-07-13</td><td>Order ORD-1039 reversal</td><td>Demo Co.</td><td class="num">$12,000.00</td><td><span class="mjm-chip mjm-chip--success">GL Posted</span></td><td class="mjm-mono">BAT-00039</td>
+            <td class="rowicons"><button class="x-iconbtn" title="Quick view (modal)"><i class="fa-regular fa-eye"></i></button><a class="x-iconbtn" href="nav-shell-je-workspace.html" title="Open in JE workspace"><i class="fa-solid fa-arrow-up-right-from-square"></i></a></td></tr>
+          <tr class="linesrow" id="r4x"><td colspan="9"><div class="x-lines">
+            <table class="mjm-grid"><thead><tr><th>Account</th><th>Dimension</th><th class="num">Dr</th><th class="num">Cr</th></tr></thead>
+            <tbody>
+              <tr><td class="mjm-mono">4000 · Sales</td><td>Events</td><td class="num">12,000.00</td><td class="num">—</td></tr>
+              <tr><td class="mjm-mono">1100 · A/R</td><td>—</td><td class="num">—</td><td class="num">12,000.00</td></tr>
+            </tbody></table>
+            <p class="mjm-muted" style="font-size:11.5px;margin:8px 0 0"><i class="fa-solid fa-rotate-left"></i> Reverses <span class="mjm-mono">JE-DEMO-2026-00812</span> · GL ref <span class="mjm-mono">BC-88213</span></p>
+          </div></td></tr>
+        </tbody>
+      </table>
+      <div class="x-loadmore"><button class="mjm-btn mjm-btn--outline">Load more (keyset)</button></div>
+    </main>
+  </div>
+</div>
+<script>
+function rail(){document.getElementById('rail').classList.toggle('collapsed')}
+function exp(id){document.getElementById(id).classList.toggle('expanded');document.getElementById(id+'x').classList.toggle('show')}
+</script>
+</body>
+</html>
