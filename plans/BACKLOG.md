@@ -53,3 +53,37 @@ Convention: `~/MJDev/shared-plans/repo-planning-system.md` §5.1. (The instance-
 - [ ] **Manual-JE approval gate** — require approval before a `Manual` JE can be batched? Folds into the
       MOD-9 role/status-rule design (action-plan A2). `[decision needed: Robert]` — 2026-06 rescope
       rulings §12.
+
+## UI wave §8 — remaining build (recorded 2026-07-16, UI-build agent handoff)
+
+The §8.6 build order got through step 1 (shell foundation) and a PARTIAL step 2. What remains, in
+order, with the notes a next agent needs:
+
+- **§8.1 All journal entries → parity, then retire the JE Console.** The page is built and
+  nav-wired, but as **"Journal Entries (new)" ALONGSIDE** the console — deliberately, because it
+  lacks the console's **expandable lines · reversal · source-order cross-app deep link · balance
+  indicator**. Swapping before parity is a feature regression. Add those + the C.8 approval chip +
+  the reserved void/attachment slots, THEN flip the nav item and delete the console (that retirement
+  IS the §6 sweep for this screen).
+- **§8.0 remaining shells:** Batches, Accounts, Reports, Configuration categories. Copy
+  `journal-entries-category.component.ts` — the base class carries rail/scope/page-switch; each
+  shell supplies `RailSections` + `DefaultPageId` + an `@switch`. **Use `<mj-left-nav>`** (the
+  bespoke rail was deleted — see TRANSFER-BACKLOG).
+- **§8.2 Batches · §8.1b JE workspace + approvals · §8.3 Accounts · dashboards · §8.5 Reports ·
+  §8.4 Configuration (LAST, A2/C.8-gated, stubs OK)** — all unbuilt.
+- **Approval inbox + report-page scaffold** — unbuilt; still parked items in TRANSFER-BACKLOG.
+
+**Two rulings this build established (apply them, don't re-litigate):**
+1. **Check MJ before building any "shared component."** Two of the parked components evaporated on
+   inspection: the nav rail (→ `<mj-left-nav>`) and most of the list scaffold (→
+   `<mj-entity-data-grid>`, which already does AG Grid + RunView + infinite server-side paging +
+   server sorting + export + per-user grid state). Search `ng-ui-components` / `ng-entity-viewer` /
+   `ng-shared*` FIRST. Sub-pages of a left-nav shell use `<mj-page-header-interior>`, never
+   `<mj-page-header>` (that doubles the header).
+2. **Derive value lists from metadata, not by hand.** `JournalEntry.EntryType` is a 16-value CodeGen
+   union from the column CHECK — a hand-written `['System','Manual']` was wrong on both count and
+   content. Read `EntityFieldValues` off entity metadata (see all-journal-entries.page.ts).
+
+**Testing debt (be honest about it):** tier 1 (64) + tier 4 (14) are green for what was built. Tier
+4's **real-DB binding is not wired yet** and there is **no tier-2/3/5 coverage for any new UI**.
+See test-harnesses/testing.md and the instance TASKS.md.
