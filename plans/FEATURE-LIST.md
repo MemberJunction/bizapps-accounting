@@ -46,15 +46,15 @@
 
 | ID | Feature | Status | Source |
 |---|---|---|---|
-| D.1 | JournalEntryBatch + netted summary lines — SINGLE-COMPANY batch (header `CompanyID`; one batch per company per run), netted per (GLAccount × Dim-combo × EffectiveDate) | Building — as-built is multi-company; rework to MOD-15/16 shape pending | BA-D26 + MOD-4 (rev.) + MOD-15/16 |
+| D.1 | JournalEntryBatch + netted summary lines — SINGLE-COMPANY batch (header `CompanyID`; one batch per company per run), netted per (GLAccount × Dim-combo) | Building — as-built is multi-company; rework to MOD-15/16 shape pending | BA-D26 + MOD-4 (rev.) + MOD-15/16 |
 | D.2 | Lock LEVELS: preliminary/reversible pre-approval → permanent at approval; reject UNLOCKS; open batch regenerates | Shipped | MOD-3 |
 | D.3 | Batch approval via bizapps-tasks (CFO gate — `TasksAppApprovalGate`); decider ENFORCED = Accounting Approver for the batch's company (any-linked-person = dev scaffolding only) | Shipped (gate) / Planned (approver enforcement — required before non-dev) | MOD-3; Q6 answer |
 | D.4 | Standard batch filter: empty start + inclusive end date, oldest-forward ascending | Shipped ◇ | MOD-8 (Robert 2026-07-14 semantics) |
 | D.5 | View-driven batch builder (arbitrary batches from an MJ User View, validated unbatched-only) | Planned | MOD-8; instance Task 33 |
 | D.6 | Batch dispatch to ERP (summary foots-to-control-totals trigger; freeze at Sent/Acknowledged) | Building ◇ (mock target; real BC connector later) | §8.4 |
 | D.7 | Global batch numbering sequence (batch sequence stays global; JE numbering is per-company) | Shipped — revisit with MOD-15 rework (per-company batch may re-key) | CH-4; A4 |
-| D.8 | Per-JE Posting Date (= EffectiveDate) carried to BC per line; no batch-level posting/document date | Planned | MOD-16 |
-| D.9 | Closed-period exception handling: HOLD-and-flag on BC rejection, never auto-roll; feedback loop | Planned | MOD-16 (OQ-1, Jeremy) |
+| D.8 | Batch `PostingDate` — singular, accountant-set at build (default from the window); one aggregated JE per batch to the GL; must match between systems | Planned | MOD-16 (rev. — Amith model, Q37) |
+| D.9 | Closed-period exceptions: HOLD-and-flag (never auto-roll) via the exceptions/in-flight inbox; v1 = flag on BC rejection, later = proactive period-status feedback loop | Planned | MOD-16 (OQ-1, Jeremy — restated for the record) |
 | D.10 | BC API dispatch — API v2.0 `journalLines`, Azure AD client-credentials OAuth, separate write-scoped app registration; NO CSV step | Planned — external dep: Jeremy's BC company-config standardization (9+ companies) | UPD-2 |
 
 ## E. Scheduled JEs (rev-rec / amortization)

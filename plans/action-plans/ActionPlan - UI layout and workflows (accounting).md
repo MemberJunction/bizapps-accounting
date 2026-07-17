@@ -161,6 +161,13 @@ receive-only posture) is decided at the Task 65b review.
 
 ### ⚠ 2026-07-17 Amith demo-feedback rulings — FORMS ARE THE BASIS OF THE UI (binds all remaining §8 work)
 
+**Recorded in the plan chain as UPD-3** (action plans are ephemeral by design — the UPD is the
+authority; this block is its working copy). Reference implementation per Amith: **the agents
+app's forms** (MJ core-entity-forms' custom AI-Agent forms). **Before the form family builds
+out: a forms DESIGN PASS** (Marcelo — mockups + discussion via ui-dev-loop; similar data
+structures handled the same way without over-standardizing; base form pattern + specialization;
+current forms = "medium to medium-low start").
+
 From `meetings/2026-07-17 - Amith Demo Feedback.md` (Marcelo: fold in and incorporate):
 
 1. **Entity Forms first-class; widgets shared with dashboards — "one UX."** For every core entity
@@ -192,10 +199,13 @@ New MODs from the Robert P-proposals + Jeremy/Amith sign-offs (`MASTER-PLAN-MODI
   (a batch is built FOR one company); batch lists/dashboards show per-company batches; approvals
   are per company-batch (Jeremy: better segregation of duties). Surface the cadence-alignment note
   for active-intercompany company pairs where batch schedules are configured.
-- **MOD-16 (per-JE posting dates + closed-period holds):** no batch-level posting/document date
-  anywhere in the UI; batch summary lines group per (GLAccount × dims × **EffectiveDate**). New UI
-  state: a JE **held/flagged for closed-period review** (dispatch exception) — hold, never
-  auto-roll; needs a visible exception affordance on batch detail/dispatch status.
+- **MOD-16 (REWORKED 2026-07-17 — singular batch PostingDate + closed-period holds):** the batch
+  build flow gains a **Posting Date control** (accountant-set; sensible default from the batch
+  window/cutoff; shown alongside the swept date range at approval). Summary lines net per
+  (GLAccount × dims) — no per-date grouping. New UI state: a batch/entry **held/flagged for
+  closed-period review** (dispatch exception, the in-flight/exceptions inbox) — hold, never
+  auto-roll. Batch-window presets (end-of-yesterday/-week/-month) are the period-boundary
+  guardrail (accountant-owned discipline, MOD-1).
 - **MOD-17 (forward-dated JEs replace ScheduledJournalEntry):** §8.1's **"Scheduled entries" page
   is re-specced** — it becomes a **future-dated-JE browser** (same window/waterfall-view intent;
   NO "Materialize due through [date]" action — materialization no longer exists). Batch build gets

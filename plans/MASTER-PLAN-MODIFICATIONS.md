@@ -71,20 +71,20 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
 - **Status:** Implemented — migration `V202607081600__…JEBatch_Reversible_Preliminary_Lock.sql`;
   Implemented-by: `action-plans/ActionPlan - Batch approval lock redesign.md`.
 
-## MOD-4 — Batch summary granularity: NETTED per (GLAccount × Dimension-combo × EffectiveDate) (2026-06-28; key revised 2026-07-14/17)
+## MOD-4 — Batch summary granularity: NETTED per (GLAccount × Dimension-combo) within the single-company batch (2026-06-28; key revised 2026-07-14/17)
 - **Supersedes:** BA-D26's "GLAccount × dimension combo × side" (separate Dr/Cr summary lines).
-- **Change:** one `JournalEntryBatchLineItem` per **(GLAccount × Dimension-combo × EffectiveDate)**
-  carrying the **net** amount on a single side (e.g. $2,000 Dr + $1,500 Cr same group → one $500 Dr
-  line). Null-dimension entries aggregate together within their Account × date group.
+- **Change:** one `JournalEntryBatchLineItem` per **(GLAccount × Dimension-combo)** carrying the
+  **net** amount on a single side (e.g. $2,000 Dr + $1,500 Cr same group → one $500 Dr line).
+  Null-dimension entries aggregate together within their Account group.
 - **Key evolution (edited in place per ledger hygiene):** the original 2026-06-28 key was
-  **(Company × GLAccount × Dimension-combo)**. Two later rulings reshaped it: **Company left the key**
-  because the batch itself became single-company (MOD-15 — company is now the batch header), and
-  **EffectiveDate joined the key** because Posting Date travels per JE and summary lines must never
-  net across posting dates or the per-JE date is lost (MOD-16, P1-amended). Slightly less
-  consolidation around month boundaries — correct periods in exchange.
-- **Why / source:** Amith 2026-06-28; 2026-06 rescope rulings C5; Robert P1/P3 + Jeremy sign-off
+  **(Company × GLAccount × Dimension-combo)**. **Company left the key** because the batch became
+  single-company (MOD-15 — company is the batch header). A brief 2026-07-14 draft added
+  EffectiveDate to the key (per-JE posting dates, Robert P1) — **withdrawn 2026-07-17** when the
+  thread consensus landed on Amith's singular batch Posting Date (MOD-16): one date per batch ⇒
+  nothing per-date to preserve in the summary.
+- **Why / source:** Amith 2026-06-28; 2026-06 rescope rulings C5; MOD-15/16 evolution
   (`meetings/2026-07-14 - je-single-company-batching-proposal.md`, `2026-07-17 - User Feedabck…`).
-- **Status:** Accepted (engine behavior spec — rework to the revised key lands with MOD-15/16).
+- **Status:** Accepted (engine behavior spec — rework lands with MOD-15/16).
 
 ## MOD-5 — Intercompany: per-company-pair Due-To/Due-From accounts; Payments generates ALL legs (2026-06-28/30)
 - **Supersedes/refines:** BA-D17 (confirmed and sharpened) + the seed COA's centralized intercompany accounts.
@@ -307,29 +307,46 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
   the posting-date thread — his formal P3 sign-off rides the same channel). Schema + engine rework
   to schedule.
 
-## MOD-16 — Posting Date travels PER JE (= its `EffectiveDate`); no batch-level posting date; closed-period = HOLD-and-flag (2026-07-14/17)
-- **Supersedes:** any batch-level document/posting date (the earlier "document date chosen at batch
-  time" idea; Amith's initial "singular Posting Date for a Batch" position — he is now "100% on
-  board" with per-JE dates after the 2026-07-17 thread). Amends MOD-8's filter semantics with the
-  period mapping.
-- **Change:** (a) **Posting Date is set per Journal Entry, equal to that JE's `EffectiveDate`**, and
-  carried through to BC's per-line Posting Date — BC natively supports one journal whose lines bear
-  different posting dates. (b) `BatchedAt`/`SentAt`/`AcknowledgedAt` are PROCESS timestamps only —
-  they never determine the period. (c) **Document date is informational** in BC (carries the source
-  document's reference date); **posting date drives the period** — never cross the two in the field
-  mapping (Jeremy's explicit warning: crossing them puts entries in the wrong period silently).
-  (d) Netting must not collapse dates → EffectiveDate joins the netting key (revised MOD-4).
-- **Closed-period rule (OQ-1 — ANSWERED by Jeremy, 2026-07-17):** when a JE's posting date falls in
-  a period BC has closed, **HOLD it — pull the entry out for human review and flag it; the rest of
-  the batch proceeds. Never auto-roll the date forward.** The system needs a **feedback loop** so
-  closed-period collisions surface as flagged exceptions rather than blind post attempts.
-  **Mechanism (proceeding, v1):** dispatch-time exception handling — a BC rejection on a line flags
-  that JE for review (hold state) without failing the batch; a proactive BC period-status pull is a
-  later enhancement, not v1.
-- **Why / source:** P1-as-amended (Jeremy's correction adopted by Robert) + the 2026-07-17 feedback
-  thread (Jeremy: document-vs-posting date; OQ-1 ruling; posting date settable via API to any date —
-  "worth testing to verify"). Amith's convergence recorded same thread.
-- **Status:** Accepted (Jeremy ✅ P1-amended 2026-07-15; Amith ✅ 2026-07-17).
+## MOD-16 — The batch carries a SINGULAR Posting Date; one aggregated JE per batch to the GL; closed-period = HOLD-and-flag (2026-07-14/17; reworked 2026-07-17 per the thread consensus)
+
+- **Supersedes:** Robert's P1-as-amended per-JE posting-date model (and this entry's own first
+  draft of it — edited in place per ledger hygiene; git holds the history). The thread's FINAL
+  consensus is **Amith's model, Jeremy explicitly on board** ("I had a quick chat with Robert…
+  I'm 100% on board with this approach and agree the Posting Date is a critical element and needs
+  to match between systems").
+- **Change:**
+  1. **One aggregated journal entry per batch** goes to the GL — "we do not send individual
+     transactions, we aggregate and roll up… you never get individual JEs/dates into the GL
+     system" (Amith). The detail lives only in the subledger (his standing philosophy).
+  2. **`JournalEntryBatch.PostingDate` — a singular, accountant-set date per batch** (chosen at
+     batch build; sensible default from the batch window, e.g. the cutoff date). It is carried to
+     the GL's posting date and **must match between systems**. `BatchedAt`/`SentAt`/
+     `AcknowledgedAt` remain process timestamps.
+  3. **Document date is informational; posting date drives the period** (Jeremy's field-mapping
+     warning stands — never cross the two).
+  4. **Period-boundary discipline is the ACCOUNTANT's, aided by the UI** (consistent with MOD-1
+     FINAL: "the accountants are responsible for batching the entries into the right periods"):
+     batch windows shouldn't straddle a period boundary that matters; the batch UI's presets
+     (end-of-yesterday / end-of-week / end-of-month) + the displayed swept date range are the
+     guardrails, not engine machinery.
+  5. **Closed-period rule (OQ-1 — ANSWERED, Jeremy restated for the record):** "an
+     exceptions/flagging process — the system should know when a period is closed in BC (via a
+     feedback loop) and flag the entry rather than attempt to post blind. That's the 'hold for
+     review' option, NOT auto-roll." v1 mechanism: dispatch-time exception handling (a BC
+     rejection flags the batch/entry for review — the in-flight/exceptions inbox surface); a
+     proactive BC period-status pull is the later feedback-loop enhancement.
+- **Netting consequence:** with one posting date per batch there are no per-line dates to
+  preserve → the MOD-4 netting key stays **(GLAccount × Dimension-combo)** within the
+  single-company batch (the brief EffectiveDate-in-the-key draft is withdrawn with the P1 model).
+- **Follow-up owed to Robert:** his P1 proposal doc + BatchingEngine model implement per-JE dates
+  ("I am going to stick with my model for now… changing the batching strategy is fairly
+  straightforward. I will keep an ear open to future changes") — the thread consensus supersedes
+  it; Jeremy also asked him to update OQ-1's status in that doc. Tracked in
+  EXTERNAL-EXPECTATIONS R2.
+- **Why / source:** Amith's posting-date chime-in + Jeremy's alignment + OQ-1 restatement,
+  `meetings/2026-07-17 - User Feedabck over the week 07-12.md`; Marcelo ruling 2026-07-17 (Q37:
+  "answered directly by Amith"). Resolves [Q37](QUESTIONS.md#q37).
+- **Status:** Accepted (Amith ✅ author · Jeremy ✅ 100% · Marcelo ✅; Robert to sync his doc).
 
 ## MOD-17 — Deferred revenue = REAL forward-dated JEs at booking; `ScheduledJournalEntry` machinery retired (2026-07-14/15)
 - **Supersedes:** **MOD-11** (schedule records + date-driven materializer + daily materialization),

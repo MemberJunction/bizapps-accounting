@@ -17,8 +17,8 @@
 
 | Ask order | Q | Ask | Status |
 |---|---|---|---|
-| 1 | [Q37](#q37) | Robert/Amith — MOD-16 posting-date model + closed-period HOLD (Jeremy-vs-design tension) | OPEN — proceeding ★HIGH |
-| 2 | [Q19](#q19) | Jeremy — golden path + exceptions (absorbs Q12/Q15) | OPEN ★HIGH |
+| — | [Q37](#q37) | posting-date model — ANSWERED same-day (Amith's singular batch PostingDate; Jeremy 100%; OQ-1 hold-and-flag) | ANSWERED |
+| 1 | [Q19](#q19) | Jeremy — golden path + exceptions (absorbs Q12/Q15) | OPEN ★HIGH |
 | — | [Q22](#q22) | company-visibility mechanism — ANSWERED (UserCompanyRole grant table) | ANSWERED |
 | — | [Q24](#q24) | grants + governance — ANSWERED (audit cols now, workflow deferred) | ANSWERED |
 | 4 | [Q25](#q25) | Ian/Matt/team — shared-UI component routing (transfer backlog) | OPEN |
@@ -1018,7 +1018,7 @@ queryable surface for "which questions touch feature X".)*
 
 <a id="q37"></a>
 ### Q37 · Posting-date model + closed-period handling (MOD-16) — does per-JE posting survive the one-consolidated-JE-per-company push? — review: Robert (+ Amith) — added 2026-07-17
-- **Status:** OPEN — proceeding
+- **Status:** ANSWERED (2026-07-17, same day — Marcelo: the thread had already answered it) — frozen.
 - **Requested reviewer:** Robert (design); Amith (the one-JE-per-company push model is his)
 - **Features:** ACC-D.8/D.9 (per-JE posting dates; closed-period exceptions), ACC-D.1 (netting key)
 - **Proposed solution (what we are implementing — MOD-16):** Posting Date travels **per Journal
@@ -1051,4 +1051,15 @@ queryable surface for "which questions touch feature X".)*
   batches are per-company (MOD-15); document date never drives the period.
 - **Additional context (for a verifying agent):** MOD-16 + revised MOD-4 in
   `plans/MASTER-PLAN-MODIFICATIONS.md`; BatchingEngine netting rework (pending).
-- **Answer:** _(pending)_
+- **Answer:** **The thread's final consensus answers it — AMITH'S MODEL WINS, not the per-JE
+  draft this question proposed.** Chronology: Jeremy's per-JE correction came EARLY in the
+  thread; Amith's chime-in came after ("we do have a singular Posting Date for a Batch… you get
+  one journal entry when a batch is sent across… the posting date in the source system is quite
+  important and should match the date in the GL system"); Jeremy then — after Robert clarified —
+  went "100% on board with this approach." So: **singular accountant-set `PostingDate` per
+  (single-company) batch; ONE aggregated JE to the GL; detail stays in the subledger.** Jeremy's
+  surviving condition = the closed-period exceptions process (feedback loop / flag, HOLD for
+  review, never auto-roll — his OQ-1 restatement). Period-boundary discipline is the
+  accountant's, aided by batch-window presets. MOD-16 reworked in place; MOD-4's brief
+  EffectiveDate key withdrawn. Residual: Robert to sync his P1 doc + OQ-1 status (he said
+  changing his model is "fairly straightforward" — EXTERNAL-EXPECTATIONS R2).

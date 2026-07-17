@@ -902,13 +902,15 @@ Post-close JEs that adjust a previously-closed period don't actually post to the
 > ⚠ **MODIFIED by MOD-3 (2026-07-08, Robert):** batches now have LEVELS of locking — pre-approval =
 > preliminary/REVERSIBLE lock; approval = permanent; **reject UNLOCKS entries back to the candidate pool**;
 > an open batch can be regenerated. "Batched = permanent immutable lock" below is superseded.
-> Also **MOD-4 (key revised):** batch summary lines are NETTED per (GLAccount × Dimension-combo ×
-> EffectiveDate), one net side — not separate Dr/Cr per side (§8.4).
+> Also **MOD-4 (key revised):** batch summary lines are NETTED per (GLAccount × Dimension-combo),
+> one net side — not separate Dr/Cr per side (§8.4).
 > ⚠ **MODIFIED by MOD-15 + MOD-16 (2026-07-14/17):** batches are **SINGLE-COMPANY**
 > (`JournalEntryBatch.CompanyID` header; one batch per company per run; per-company approvals —
-> restores BA-D16's per-company intent) and **Posting Date travels PER JE (= its EffectiveDate)** —
-> no batch-level posting/document date; closed-period collisions **HOLD-and-flag, never auto-roll**
-> (OQ-1, Jeremy). ORIGINAL design retained below; see `MASTER-PLAN-MODIFICATIONS.md`.
+> restores BA-D16's per-company intent) and the batch carries a **SINGULAR accountant-set
+> `PostingDate`** — one aggregated JE per batch to the GL, posting date matching between systems
+> (Amith's model, Jeremy 100% on board); document date stays informational; closed-period
+> collisions **HOLD-and-flag via an exceptions process, never auto-roll** (OQ-1, Jeremy).
+> ORIGINAL design retained below; see `MASTER-PLAN-MODIFICATIONS.md`.
 
 ### 8.1 States
 

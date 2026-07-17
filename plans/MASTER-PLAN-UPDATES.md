@@ -45,3 +45,31 @@ text.** Convention: `~/MJDev/shared-plans/repo-planning-system.md` §3.1.
 - **Why / source:** Jeremy + Robert, `meetings/2026-07-17 - User Feedabck over the week 07-12.md`
   (P4 thread); REST-over-MCP preference in `meetings/2026-07-14 - Accounting Meeting.md`.
 - **Status:** Accepted.
+
+## UPD-3 — Forms-first UX: MJ Entity Forms are the basis of the UI; widgets shared with dashboards (2026-07-17, Amith)
+- **Amends:** the app's UX approach (the master plan is schema/engine-focused; this records the
+  binding UI-architecture direction the action plans execute). Refines — does not replace — the
+  element doctrine (modal = quick action, slide-in = quick view, page = depth).
+- **Change:**
+  1. **Every core entity gets a first-class MJ Entity Form** (extend the generated form via
+     `@RegisterClass(BaseFormComponent, …)`; MJ's Forms Architecture guide is the recipe;
+     **reference implementation per Amith: the agents app's forms** — the custom AI-Agent forms
+     in MJ core-entity-forms), composed of **reusable widgets that dashboards embed directly** —
+     the drill-in form and the dashboard panel are the same components ("truly one UX").
+  2. **No bespoke pop-ups:** modal/slide-in surfaces render the entity form through MJ's form
+     host (`forms.open()` / `<mj-form-dialog>` / `<mj-form-slide-in>` + `EntityFormConfig`) —
+     never one-off popup components.
+  3. **Reuse `ng-entity-viewer` + User Views** for entity browse surfaces (e.g. Chart of
+     Accounts) instead of rebuilding grid UX.
+  4. **Manual JEs (C.8) carry three hard requirements:** provenance unmistakable on every JE
+     surface (origin lineage loud — Orders/Payments/app vs Manual); creating/approving is
+     authorization-gated (the Q6 Accounting-Approver enforcement); manual-ness visually
+     prominent, never a subtle field.
+  5. **Forms design pass required before the family builds out (Marcelo):** the current forms
+     are a "medium to medium-low start" — run a mockup + discussion round (ui-dev-loop) to
+     design the entity-form FAMILY: similar data structures handled the same way (familiarity)
+     without over-standardizing; start from a base form pattern and specialize.
+- **Why / source:** `meetings/2026-07-17 - Amith Demo Feedback.md`; Marcelo rulings 2026-07-17
+  (record in the plan chain — action plans are ephemeral by design; forms design pass; agents-app
+  pointer). Orders counterpart: orders UPD-11.
+- **Status:** Accepted.

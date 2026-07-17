@@ -26,7 +26,7 @@
 | # | Expectation | Why / source | Status |
 |---|---|---|---|
 | R1 | **Stand up (or bless) the separate, purpose-built BC app registration scoped to journal WRITE** — his own recommendation, his call to execute; we treat it as a REQUIREMENT (never widen the read-only reporting registration) | Jeremy recommended, "your call" to Robert — UPD-2; Marcelo 2026-07-17: "separate registration is a requirement" | STATED |
-| R2 | **Q37 review** — the MOD-16 posting-date model (per-line posting dates inside the one consolidated per-company journal) + HOLD-and-flag closed-period behavior | Q37 (★HIGH; Jeremy-wants vs Amith-model tension) | STATED |
+| R2 | **Sync the P1 proposal doc + BatchingEngine model to the thread consensus** — singular batch `PostingDate` (Amith's model, Jeremy 100% on board; Q37 ANSWERED) supersedes P1's per-JE dates; Jeremy also asked him to flip OQ-1's status to answered in that doc | Q37 answer; his own "I'll keep an ear open to future changes" | STATED |
 | R3 | **OS7 coupons-schema review** once we share the artifacts (see `~/MJDev/reports/robert-file-share-2026-07-17/`) | UPD-8; his review checklist is recorded | COMMUNICATED (files shared 2026-07-17) |
 | R4 | **Ask Sidecar the coupon questions** (surfaces beyond Stripe checkout? shapes in use incl. ASAE config? LXP display/validate needs?) + run the two provider investigations before the recording-schema freeze | His own A2 plan — UPD-8 | ACCEPTED (self-assigned) |
 | R5 | **Ask Ethan the A3 entitlement questions** (grant granularity · lifecycle coupling · read contract · team beneficiary semantics) — gates the grant-shape freeze | His own A3 response | ACCEPTED (self-assigned) |
@@ -46,5 +46,5 @@
 | # | Expectation | Why / source | Status |
 |---|---|---|---|
 | A1 | **FYI acknowledgments** (no decisions): Q3 ID-contract revision of his early instruction · Q9 GLAccountRoleID formality · CH-2/CH-3 reversal now fully ratified (MOD-12/15) | FYI report `~/MJDev/reports/amith-fyi-2026-07-17/` | COMMUNICATED (report ready) |
-| A2 | **Q37 confirmation** — losing the singular batch posting date (per-line dates in the per-company journal) | Q37 | STATED |
+| A2 | ~~Q37 confirmation~~ — **DELIVERED**: his posting-date message WAS the answer (singular batch PostingDate adopted, MOD-16 reworked) | Q37 answer | DELIVERED |
 | A3 | **Multi-company-batch evolution** — his 2026-07-17 lean is backlogged (per-company sections inside a batch, later); he asked Robert + Jeremy to weigh in | BACKLOG row; MOD-15 stands for v1 | COMMUNICATED (his own ask) |
