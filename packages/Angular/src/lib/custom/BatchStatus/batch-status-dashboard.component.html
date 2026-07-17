@@ -61,6 +61,11 @@
     </div>
   </mj-page-header-interior>
 
+<!-- Scrollable body — <mj-page-body-interior>. This dashboard is HOSTED inside
+     <mj-left-nav-content>, whose gutters only apply to the interior primitives; without this
+     wrapper its content sat flush against the nav rail and the page edge. body-interior is
+     display:block, so children size with height/min-height, never flex. -->
+<mj-page-body-interior>
   <div class="cat-page">
     @if (ActionMessage) {
       <div class="bs-banner" [class.bs-banner--error]="ActionMessageIsError" [class.bs-banner--success]="!ActionMessageIsError" role="status">
@@ -157,6 +162,7 @@
       </div>
     }
   </div>
+</mj-page-body-interior>
 
 <!-- Build-Batch preview: shows the time span + the journal entries a build will include, then confirms. -->
 <mj-dialog [Visible]="BuildPreviewVisible" Title="Build Batch — preview" [Width]="640" (Close)="CloseBuildPreview()">

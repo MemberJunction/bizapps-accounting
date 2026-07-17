@@ -1,8 +1,11 @@
+/* ⚠ These wrappers live inside <mj-page-body-interior>, which is display:block — so `flex`
+   does NOT size them (that no-op blanked All journal entries once). Use height/min-height:
+   a percentage resolves against body-interior's flex-derived height. */
 /* Dispatch status (§8.2). Design tokens only; same height-chain rule as the other rail pages. */
 :host { display: flex; flex-direction: column; height: 100%; min-height: 0; gap: 12px; }
 .ds-field { display: flex; flex-direction: column; gap: 4px; }
 .ds-field__label { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--mj-text-muted); }
-.ds-wrap { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--mj-border-default); border-radius: 10px; background: var(--mj-bg-surface); }
+.ds-wrap { height: 100%; min-height: 320px; overflow: auto; border: 1px solid var(--mj-border-default); border-radius: 10px; background: var(--mj-bg-surface); }
 .ds-grid { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .ds-grid th, .ds-grid td { padding: 8px 10px; border-bottom: 1px solid var(--mj-border-subtle, var(--mj-border-default)); text-align: left; white-space: nowrap; }
 .ds-grid thead th { position: sticky; top: 0; background: var(--mj-bg-surface-card); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--mj-text-muted); z-index: 1; }

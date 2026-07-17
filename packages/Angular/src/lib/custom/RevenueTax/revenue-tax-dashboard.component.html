@@ -43,6 +43,11 @@
     </div>
   </mj-page-header-interior>
 
+<!-- Scrollable body — <mj-page-body-interior>. This dashboard is HOSTED inside
+     <mj-left-nav-content>, whose gutters only apply to the interior primitives; without this
+     wrapper its content sat flush against the nav rail and the page edge. body-interior is
+     display:block, so children size with height/min-height, never flex. -->
+<mj-page-body-interior>
   <div class="cat-page">
     @if (IsLoading) {
       <mj-loading text="Loading read models…"></mj-loading>
@@ -82,3 +87,4 @@
       }
     }
   </div>
+</mj-page-body-interior>

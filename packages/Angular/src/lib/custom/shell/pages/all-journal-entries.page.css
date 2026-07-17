@@ -2,9 +2,14 @@
 
    HEIGHT CHAIN (this is load-bearing, not decoration): mj-entity-data-grid's own :host is
    height:100%, so it renders nothing unless every ancestor gives it a real height. This component
-   is dynamically switched into <mj-left-nav-content>, so it must declare its own flex-column host —
-   without it, .aje-grid's flex:1 has no flex parent, the grid collapses to zero height, and AG Grid
-   shows its "No data to display" overlay even though the RunView returned rows. */
+   is dynamically switched into <mj-left-nav-content>, so it must declare its own flex-column host.
+
+   ⚠ REGRESSION THIS COMMENT DID NOT PREVENT (2026-07-16): the grid is now inside
+   <mj-page-body-interior>, which is `display:block` — so `.aje-grid { flex: 1 }` became a NO-OP
+   (no flex parent), the grid collapsed to zero, and the page rendered blank. body-interior does
+   have a definite height (it is `flex:1 1 auto; min-height:0` inside this flex host), so the fix is
+   `height:100%` on the grid wrapper — a percentage resolves against it, whereas `flex` does not.
+   Rule of thumb: inside body-interior, size with height/min-height, NEVER with flex. */
 
 :host {
   display: flex;
@@ -41,8 +46,11 @@
 }
 
 .aje-grid {
-  flex: 1;
-  min-height: 0;
+  /* height (not flex) — the parent <mj-page-body-interior> is display:block. See the header note.
+     100% resolves against body-interior's flex-derived height, so the grid fills the pane and
+     scrolls INTERNALLY rather than making the page scroll (Marcelo: tables scroll, pages don't). */
+  height: 100%;
+  min-height: 320px;
   display: flex;
   flex-direction: column;
 }

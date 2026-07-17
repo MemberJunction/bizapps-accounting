@@ -21,6 +21,11 @@
   </ng-container>
 </mj-page-header-interior>
 
+<!-- Scrollable body — <mj-page-body-interior> is the interior primitive
+     <mj-left-nav-content> expects; it owns the gutters that keep content off the rail and
+     off the page edge. NOTE it is display:block, so children size with height/min-height,
+     never with flex. -->
+<mj-page-body-interior>
 <!-- Session tabs. v1 is deliberately session-scoped — the note says so rather than letting a user
      assume their draft is saved. -->
 <div class="bw-tabs">
@@ -215,3 +220,4 @@
     </div>
   </section>
 </div>
+</mj-page-body-interior>

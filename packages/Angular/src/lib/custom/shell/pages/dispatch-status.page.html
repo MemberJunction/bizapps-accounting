@@ -21,6 +21,11 @@
   </div>
 </mj-page-header-interior>
 
+<!-- Scrollable body — <mj-page-body-interior> is the interior primitive
+     <mj-left-nav-content> expects; it owns the gutters that keep content off the rail and
+     off the page edge. NOTE it is display:block, so children size with height/min-height,
+     never with flex. -->
+<mj-page-body-interior>
 @if (ActionMessage) {
   <mj-alert [Variant]="ActionIsError ? 'error' : 'success'" [Message]="ActionMessage"></mj-alert>
 }
@@ -79,3 +84,4 @@
     </table>
   }
 </div>
+</mj-page-body-interior>
