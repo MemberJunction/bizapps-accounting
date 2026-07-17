@@ -115,6 +115,12 @@ export type { TimeWindowId } from './lib/transfer-pending/list-scaffold/time-win
 export { sqlLiteral, sqlLikePattern, likeContains } from './lib/transfer-pending/list-scaffold/sql-filter';
 export { rowKeyToId } from './lib/transfer-pending/list-scaffold/grid-row-key';
 
+// Backdrop-click + Escape dismissal for a scrim editor, with the confirm-on-dirty gate (parked,
+// framework-clean). Shared, not repeated: every roster editor in BOTH apps is the same dialog by
+// construction, so the rule "clean closes, dirty asks" exists once instead of six drifting copies.
+export { DismissableDialogDirective } from './lib/transfer-pending/dialog-dismiss/dismissable-dialog.directive';
+export { DiscardConfirmComponent } from './lib/transfer-pending/dialog-dismiss/discard-confirm.component';
+
 // The shell header's page-aware Refresh. Provided PER SHELL (never root) — Explorer keeps tabs
 // alive, so a root-provided instance would let one open category refresh another's page.
 export { PageRefreshService } from './lib/transfer-pending/shell-refresh/page-refresh.service';
