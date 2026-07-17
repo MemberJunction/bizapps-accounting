@@ -29,7 +29,8 @@
 | 9 | [Q26](#q26) | Matt — Explorer header widget slot (feature ask) | OPEN |
 | 10 | [Q36](#q36) | Marcelo — no global GL-account pool; is the COA model as-built right? | OPEN — was dup-numbered Q29, renumbered 2026-07-17 |
 | — | [Q30](#q30) | batches single-company — ANSWERED 2026-07-17 (yes; MOD-15/16) | ANSWERED |
-| 12 | [Q31](#q31) | Robert/Amith — company derived from account; should links carry a ROLE? | OPEN ★HIGH |
+| 12 | [Q31](#q31) | Robert/Amith — should product/category links carry a ROLE? (premise updated: company now derives from PRODUCT) | OPEN ★HIGH |
+| 12b | [Q38](#q38) | Robert/Amith — may a product's linked account belong to a different company? (lean: NO; categories company-specific or per-company routed) | OPEN — proceeding ★HIGH |
 | 13 | [Q32](#q32) | Matt — tab strip's overflow-x silently enables overflow-y (real bug + fix) | OPEN |
 | 14 | [Q33](#q33) | Matt — dense/inline [meta] on mj-page-header (⚠ may be obsolete — check) | OPEN |
 | 15 | [Q34](#q34) | Matt — we duplicated mj-accordion-panel; is there a component catalogue? | OPEN |
@@ -791,7 +792,10 @@ queryable surface for "which questions touch feature X".)*
 
 <a id="q31"></a>
 ### Q31 · GL routing derives the COMPANY from the ACCOUNT — should product/category links carry a ROLE instead? — ask Robert/Amith — added 2026-07-16
-- **Status:** OPEN
+- **Status:** OPEN — ⚠ premise UPDATED 2026-07-17: Marcelo ruled the line's company now derives
+  from the PRODUCT (`Product.CompanyID`), not from the resolved account (orders MOD-3 rev-2), and
+  product-account company consistency is its own question ([Q38](#q38), lean: mismatch disallowed).
+  The role-on-links ask below still stands — ask both at one sitting.
 - **Requested reviewer:** Robert (COA semantics) · Amith (GLAccountLink design, OQ-G)
 - **Features:** A.1 (GLAccount), B.* (Account links), ORD product→GL routing
 - **Proposed solution:** ⏸ HOLD on the model change (it is a schema + engine change). PROCEEDING
@@ -1063,3 +1067,34 @@ queryable surface for "which questions touch feature X".)*
   accountant's, aided by batch-window presets. MOD-16 reworked in place; MOD-4's brief
   EffectiveDate key withdrawn. Residual: Robert to sync his P1 doc + OQ-1 status (he said
   changing his model is "fairly straightforward" — EXTERNAL-EXPECTATIONS R2).
+
+<a id="q38"></a>
+### Q38 · May a product's linked account (direct or via category) belong to a DIFFERENT company than the product? — review: Robert/Amith — added 2026-07-17
+- **Status:** OPEN — proceeding (with the lean below; schema/engine enforcement waits for the ruling)
+- **Requested reviewer:** Robert (+ Amith — it constrains his GLAccountLink polymorphic-mapping design, MOD-10)
+- **Features:** ACC-B.1/B.2 (GL mapping + resolution), ORD-C.1/E.2 (line company derivation), ORD-J.1
+- **Proposed solution (what we are implementing — Marcelo's lean, 2026-07-17): NO — disallow the
+  mismatch.** The ownership chain is: every product is owned by a company (`Product.CompanyID`);
+  an order line derives its company **from the product** (not from the resolved account — MOD-3
+  rev-2); therefore a product's connected accounts (linked directly OR reached through its
+  category tree) **should be owned by that same company**. Under this invariant the account
+  lookup can never silently move revenue across companies, and "which company does this line
+  belong to" is answerable without resolving accounts at all. **Categories** (the tree the walk
+  climbs) should correspondingly be **company-specific — or carry per-company routing** (one
+  category node holding a distinct account link per supported company), since a shared global
+  category with one account link cannot satisfy the invariant for products of multiple companies.
+- **The question:** (1) Confirm the invariant: product's linked accounts (direct + category-
+  reached + the company-default rung) must belong to the product's company — enforce at link
+  time (validation on GLAccountLink save) and/or at resolution time (typed error)? (2) Categories:
+  company-specific trees, or shared trees with per-company account routing on each node? Which
+  does the as-built GLAccountLink shape support cleanly? (3) If a real use case for cross-company
+  account borrowing exists (Robert/Amith may know one from Aptify/BC history), what is it — and
+  is it worth the complexity it reintroduces?
+- **Context to share:** MOD-10 (role-based polymorphic mapping) · orders MOD-3 rev-2 (product-
+  company derivation) · [Q31](#q31) (the related role-on-links question — same sitting).
+- **What motivates this now:** Marcelo flags the resolution path as a coming **performance +
+  complexity pain point requiring a deep dive** (orders BACKLOG row); the invariant decides how
+  much of that complexity exists at all.
+- **Additional context (for a verifying agent):** `AccountingEngineBase.ResolveLinkedAccount`;
+  `OrdersEngine.ResolveAccount`; GLAccountLink/GLAccountRole migration (B202605281200).
+- **Answer:** _(pending)_

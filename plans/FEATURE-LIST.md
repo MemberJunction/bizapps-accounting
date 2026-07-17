@@ -46,7 +46,7 @@
 
 | ID | Feature | Status | Source |
 |---|---|---|---|
-| D.1 | JournalEntryBatch + netted summary lines — SINGLE-COMPANY batch (header `CompanyID`; one batch per company per run), netted per (GLAccount × Dim-combo) | Building — as-built is multi-company; rework to MOD-15/16 shape pending | BA-D26 + MOD-4 (rev.) + MOD-15/16 |
+| D.1 | JournalEntryBatch + netted summary lines — SINGLE-COMPANY batch (header `CompanyID`; one batch per company per run), netted per (Company × GLAccount × Dim-combo; Company degenerate under MOD-15) | Building — as-built is multi-company; rework to MOD-15/16 shape pending | BA-D26 + MOD-4 (rev.) + MOD-15/16 |
 | D.2 | Lock LEVELS: preliminary/reversible pre-approval → permanent at approval; reject UNLOCKS; open batch regenerates | Shipped | MOD-3 |
 | D.3 | Batch approval via bizapps-tasks (CFO gate — `TasksAppApprovalGate`); decider ENFORCED = Accounting Approver for the batch's company (any-linked-person = dev scaffolding only) | Shipped (gate) / Planned (approver enforcement — required before non-dev) | MOD-3; Q6 answer |
 | D.4 | Standard batch filter: empty start + inclusive end date, oldest-forward ascending | Shipped ◇ | MOD-8 (Robert 2026-07-14 semantics) |

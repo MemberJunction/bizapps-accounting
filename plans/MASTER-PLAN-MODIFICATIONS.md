@@ -71,19 +71,21 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
 - **Status:** Implemented — migration `V202607081600__…JEBatch_Reversible_Preliminary_Lock.sql`;
   Implemented-by: `action-plans/ActionPlan - Batch approval lock redesign.md`.
 
-## MOD-4 — Batch summary granularity: NETTED per (GLAccount × Dimension-combo) within the single-company batch (2026-06-28; key revised 2026-07-14/17)
+## MOD-4 — Batch summary granularity: NETTED per (Company × GLAccount × Dimension-combo) (2026-06-28; reaffirmed 2026-07-17)
 - **Supersedes:** BA-D26's "GLAccount × dimension combo × side" (separate Dr/Cr summary lines).
-- **Change:** one `JournalEntryBatchLineItem` per **(GLAccount × Dimension-combo)** carrying the
-  **net** amount on a single side (e.g. $2,000 Dr + $1,500 Cr same group → one $500 Dr line).
-  Null-dimension entries aggregate together within their Account group.
-- **Key evolution (edited in place per ledger hygiene):** the original 2026-06-28 key was
-  **(Company × GLAccount × Dimension-combo)**. **Company left the key** because the batch became
-  single-company (MOD-15 — company is the batch header). A brief 2026-07-14 draft added
-  EffectiveDate to the key (per-JE posting dates, Robert P1) — **withdrawn 2026-07-17** when the
-  thread consensus landed on Amith's singular batch Posting Date (MOD-16): one date per batch ⇒
-  nothing per-date to preserve in the summary.
-- **Why / source:** Amith 2026-06-28; 2026-06 rescope rulings C5; MOD-15/16 evolution
-  (`meetings/2026-07-14 - je-single-company-batching-proposal.md`, `2026-07-17 - User Feedabck…`).
+- **Change:** one `JournalEntryBatchLineItem` per **(Company × GLAccount × Dimension-combo)**
+  carrying the **net** amount on a single side (e.g. $2,000 Dr + $1,500 Cr same group → one $500
+  Dr line). Null-dimension entries aggregate together within their Company × Account group.
+- **Key notes (2026-07-17, Marcelo reaffirmation — the canonical key KEEPS Company):** under
+  MOD-15 single-company batches the Company dimension is degenerate (every line shares the batch
+  header's company) — but it stays in the stated key: it is correct today at zero cost, and it is
+  REQUIRED the day the backlogged multi-company-batch evolution lands (Amith's per-company-
+  sections-inside-a-batch lean — BACKLOG row). A brief 2026-07-14 draft added EffectiveDate to
+  the key (per-JE posting dates, Robert P1) — **withdrawn 2026-07-17** when the thread consensus
+  landed on Amith's singular batch Posting Date (MOD-16): one date per batch ⇒ nothing per-date
+  to preserve in the summary.
+- **Why / source:** Amith 2026-06-28; 2026-06 rescope rulings C5; Marcelo 2026-07-17 ("remember
+  we split by company × account × dimension"); MOD-15/16 evolution.
 - **Status:** Accepted (engine behavior spec — rework lands with MOD-15/16).
 
 ## MOD-5 — Intercompany: per-company-pair Due-To/Due-From accounts; Payments generates ALL legs (2026-06-28/30)
