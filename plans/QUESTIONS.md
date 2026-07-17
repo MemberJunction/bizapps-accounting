@@ -29,6 +29,9 @@
 | 10 | [Q29](#q29) | Marcelo — no global GL-account pool; is the COA model as-built right? | OPEN |
 | 11 | [Q30](#q30) | Amith/Robert — batches single-company (Marcelo ruled; MOD-4 suggests Amith assumed multi) | OPEN ★HIGH |
 | 12 | [Q31](#q31) | Robert/Amith — company derived from account; should links carry a ROLE? | OPEN ★HIGH |
+| 13 | [Q32](#q32) | Matt — tab strip's overflow-x silently enables overflow-y (real bug + fix) | OPEN |
+| 14 | [Q33](#q33) | Matt — dense/inline [meta] on mj-page-header (⚠ may be obsolete — check) | OPEN |
+| 15 | [Q34](#q34) | Matt — we duplicated mj-accordion-panel; is there a component catalogue? | OPEN |
 | 10 | [Q27](#q27) | Matt — `mj-left-nav` desktop icons-only collapse (feature ask) | OPEN |
 | 4b | [Q28](#q28) | Marcelo — batch/task transaction split + batch task pointer (MOD-14) | OPEN (no-CFO precheck RULED+built) |
 | 4c | [Q29](#q29) | Marcelo/Ian — regenerate: reset the existing task vs void+replace (principle ruled) | OPEN |
@@ -412,11 +415,54 @@ queryable surface for "which questions touch feature X".)*
   Its narrow-viewport answer is the mobile drawer; on a laptop the rail is always its full width.
   The mockup's hamburger therefore does not ship. Not a blocker — the rail is 240px and the
   laptop-width tolerance holds — but it is a real deviation from the approved mockup.
-- **The question for Matt:** would MJ accept a `[Collapsible]` / `[Collapsed]` input on
-  `<mj-left-nav>` (hamburger → icons-only, labels/badges hidden, tooltips carry the label,
-  state persisted by the consumer via `UserInfoEngine`)? If yes we contribute it upstream; if no,
-  the always-expanded rail becomes the permanent accounting/orders answer and the mockup's
-  hamburger is struck from the design record.
+- **Proposed solution — PROCEEDING (Marcelo, 2026-07-17): a bottom-anchored ARROW toggle, no hover.**
+  He ruled: *"we start with just the toggle... the left nav is designed to work on mobile and on
+  desktop, and that's already built in. There's just no toggle right now to have the ability to
+  collapse it if you want to... it would go at the BOTTOM. So it'd be out of the way. But it would
+  just give someone who wants to see a few more rows the option to see them if they're on a smaller
+  screen."*
+- **The design reasoning, recorded because it is the interesting part — three icons, three different
+  promises:**
+  - **Hamburger** promises *"a menu lives here"* — a TRANSIENT overlay that dismisses on selection.
+    Our rail is persistent, so a hamburger lies about its own behaviour. Marcelo: *"the hamburger is
+    usually a — you click it, it opens, you click something, and then it closes back again."*
+  - **Pin** promises *"this would otherwise float away — hold it."* It presupposes a hover/float
+    default. With no hover behaviour the pin answers a question nobody asked. Marcelo: *"a pin, I
+    think, is used to lock something that would otherwise be floating and come up when you hover it."*
+  - **Arrow** promises *direction and reversibility* — symmetric, two-state, no hidden claim. It is
+    the only one of the three that describes what actually happens. **Convention: the arrow points
+    where the rail will GO, not where it is** (`«` expanded → collapse left; `»` collapsed → expand
+    right) — VS Code / Notion / Finder. Pointing at the current state reads backwards to most people.
+    Marcelo, converging: *"an arrow is kind of a well-recognized in-and-out type thing... and pointing
+    in the direction I'm just gonna go, that also makes sense."*
+- **Hover-expand was considered and REJECTED for now** (Marcelo floated a Notion-style
+  float-on-hover + pin-to-push; his float/push instinct was right — layout shift on hover would sink
+  it alone). Two objections specific to THIS app killed it for v1:
+  1. **Our rail items are siblings in one domain**, not categories. Accounts' rail is Chart of
+     accounts / Account links / ERP mapping / Dimensions / All accounts → as icons that is
+     sitemap/link/plug/tags/list: five near-identical glyphs. Icon rails work when items are
+     *categorically* different (Home/Search/Settings) and fail on sibling content — users would hover
+     each one to read it, at which point the collapse COST them time.
+  2. **Hover-expand overlays misfire when reaching for the left edge of the content** — and in an
+     accounting grid the leftmost column is exactly where row chevrons and checkboxes live. The rail
+     would fly out over the thing being clicked.
+  So: toggle first (~90% of the benefit, none of the misfire risk); revisit hover only if asked.
+- **Default EXPANDED, and the unpin sticks per user via `UserInfoEngine`** (MJ's rule — never
+  localStorage, or the choice dies on every new browser). Rationale: a first-run user must see the
+  nav to learn the app; Marcelo's 30–40% figure is about *sustained* use, not first contact. Features
+  that optimise for the expert at the novice's expense are a classic mistake.
+- **The question for Matt:** (1) Would MJ take a `[Collapsible]` / `[Collapsed]` input on
+  `<mj-left-nav>` upstream — bottom-anchored arrow, icons-only when collapsed, tooltips carrying the
+  label, state persisted by the consumer via `UserInfoEngine`? (2) If yes, do you want it as
+  described, or is there a house pattern we should match? (3) If no, we keep it local and every other
+  MJ app keeps the always-expanded rail — is that divergence acceptable to you?
+  **We are proceeding on the local build meanwhile**; it is small and reversible, and it is a strict
+  addition (the rail's existing mobile drawer at ≤700px is untouched).
+- **Verified against the component (2026-07-17), so the ask is accurate:**
+  `mj-left-nav` HAS a ≤700px off-canvas drawer (`MobileNavOpen`, `OpenMobileNav()`, `CloseMobileNav()`,
+  a scrim, `aria-expanded`) but **no desktop collapse of any kind**. The drawer is NOT reusable for
+  this: a drawer is transient + scrimmed; a collapsed rail is persistent + unscrimmed. Different mode,
+  not a variant.
 - **Context to share:** the mockup rail (`design-docs/ui-design/mockups/nav-shell-je-dashboard.html`
   — the `.x-rail`/`.collapsed` CSS is the exact intended behavior) + `<mj-left-nav>` as-is.
 - **Additional context (for a verifying agent):**
@@ -740,4 +786,88 @@ queryable surface for "which questions touch feature X".)*
   - `bizapps-accounting/packages/Entities/src/generated/entity_subclasses.ts` — `GLAccountSchema`,
     `GLAccountLinkSchema`, `GLAccountRoleSchema`, `AccountingCompanyProfileSchema`
   - Related: Q9 (GLAccountLink role FK, Amith OQ-G), Q3 (JE-draft account contract), Q29 (no account pool)
+- **Answer:** _(pending)_
+
+<a id="q32"></a>
+### Q32 · `mj-workspace-tab-strip`'s CSS makes the tabs vertically scrollable — a real bug, plus how to contribute the fix — ask Matt — added 2026-07-17
+- **Status:** OPEN
+- **Requested reviewer:** Matt (MJ Angular / ng-ui-components)
+- **Features:** cross-cutting (MJ base)
+- **Proposed solution — PROCEEDING locally, offered upstream.** Fixed in our copy of the strip; the
+  one-line fix is below and is Matt's to take or refuse. Also filed to `~/MJDev/MJ-UPSTREAM.md` so an
+  MJ agent can pick it up independently.
+- **The bug (found twice, independently, by two agents — which is why we believe it):** the strip sets
+  `overflow-x: auto` and leaves `overflow-y` at its `visible` default. **Per the CSS overflow spec, a
+  `visible` axis paired with a non-`visible` axis COMPUTES TO `auto`.** So asking for horizontal
+  scrolling silently turns on VERTICAL scrolling too — and `.ws-tab`'s `margin-bottom: -1px` (the
+  trick that makes an active tab sit on the strip's rule) gives it exactly 1px of overflow to scroll.
+  Nobody wrote vertical scrolling; CSS inferred it. Marcelo hit it twice and could not explain it:
+  *"why are the tabs scrollable? I'm confused. Having the ability to scroll left and right on them,
+  that kind of makes sense because they're tabs, but I don't know why they're vertically scrollable."*
+- **The fix (one line):** set `overflow-y: hidden` explicitly on `.ws-tabs`. Horizontal scrolling is
+  unaffected; the -1px overhang still renders (it is a negative margin, not overflow the user needs).
+  We also added `:host { display: block }` so the strip's bottom rule spans the card it heads rather
+  than stopping under the last tab.
+- **Why it is worth Matt's time even though it is 1px:** it affects EVERY consumer of the strip (our
+  JE workspace, batch workspace, order editor, product workshop), it is invisible in code review, and
+  the symptom (a phantom scrollbar on a single row of tabs) reads as "the app is broken" rather than
+  "a CSS axis computed to auto".
+- **The question for Matt:** (1) Take the `overflow-y: hidden` + `:host { display:block }` fix
+  upstream? (2) If yes, what is the contribution path — PR to MJ, or do you want it? (3) Any consumer
+  we would break by pinning that axis?
+- **Additional context (for a verifying agent):**
+  `packages/Angular/Generic/ui-components/src/lib/...` (the shared strip) vs our local copy at
+  `bizapps-accounting/packages/Angular/src/lib/transfer-pending/workspace-tabs/workspace-tab-strip.component.css`.
+- **Answer:** _(pending)_
+
+<a id="q33"></a>
+### Q33 · `mj-page-header` — an inline/dense `[meta]` placement, or are we simply wrong? — ask Matt — added 2026-07-17
+- **Status:** OPEN
+- **Requested reviewer:** Matt (MJ Angular / ng-ui-components)
+- **Features:** cross-cutting (MJ base)
+- **⚠ This question may be OBSOLETE before it is asked — check first.** It exists because `[meta]`
+  renders BELOW the identity, costing a header line, so we put our stat chips in `[actions]` instead
+  and added a density override. **On 2026-07-17 Marcelo asked to try the chips back under the title**
+  (*"can you just try shifting it to be under the orders title and see what it looks like instead?
+  Maybe I was wrong"*) — i.e. `[meta]` used exactly as MJ designed. **That change is shipped and
+  awaiting his look.** If he likes it, this deviation deletes itself, the density override shrinks to
+  just the scope-chip/refresh height match, and **there is nothing to ask Matt for.** Do not send this
+  until he has judged it.
+- **The question for Matt (only if the above still stands):** (1) Would MJ take a `[Dense]` input on
+  `mj-page-header` / `mj-page-header-interior` (tighter vertical rhythm for data-forward apps)?
+  (2) Would MJ take an inline `[meta]` placement option (chips beside the identity rather than under
+  it) for the same reason? (3) Or is the below-identity placement deliberate and we should stop
+  fighting it?
+- **Context to share:** accounting/orders is a data-forward app where vertical space is the scarce
+  resource; Marcelo's driving complaint was *"we don't wanna waste space on our page... no stacking
+  in that header."* Also worth telling Matt: our density override originally forked `.mj-btn` and was
+  **silently squashing MJ's 44px small-screen touch target** — caught by MJ's own CI gate. That is a
+  point IN FAVOUR of the gate and of asking rather than overriding.
+- **Answer:** _(pending)_
+
+<a id="q34"></a>
+### Q34 · We duplicated `mj-accordion-panel` — retiring ours; anything upstream wants? — ask Matt — added 2026-07-17
+- **Status:** OPEN (informational — no decision blocked)
+- **Requested reviewer:** Matt (MJ Angular / ng-ui-components)
+- **Features:** cross-cutting (MJ base)
+- **Proposed solution — DONE, no ask.** We hand-rolled disclosure sections in the Product workshop
+  believing MJ had no accordion primitive. **It does** — `mj-accordion-panel`, and its `[Bare]` input
+  is precisely the variant we built by hand: *"drop the panel's own border and header background so
+  the panel sits cleanly inside a host that already provides chrome... only the box styling is
+  removed"* → `border: none` + transparent header + a `border-bottom` rule on the expanded header =
+  Marcelo's *"just a drop down section with the text and then the line that goes across."* It also
+  ships `mjAccordionTitle` (rich titles), `mjAccordionActions` (header controls, deliberately NOT
+  inside the toggle button), `aria-controls`/`aria-labelledby`, and a `[Fill]` mode for
+  "section owns the leftover height and scrolls internally". **Ours is being deleted and replaced.**
+- **Why this is filed at all:** as a caution, not a request. The deviations register briefly listed
+  our sections as an upstream contribution to propose — which would have wasted Matt's time
+  proposing a component he had already built, with a variant aimed at our exact case. It was one of
+  FOUR absence-assertions this session that turned out false (`Payment.Last4`,
+  `AccountingCompanyProfile.ApprovalCFOUserID`, `PaymentLine` as the payment-application concept, and
+  this). Every one was the same move: search for the name *we* would have used, fail to find it,
+  conclude absence.
+- **The only real question for Matt:** is there a discovery surface for ng-ui-components (a catalogue,
+  a storybook, a doc index) that would make "does MJ already have X?" cheap to answer? The failure
+  mode above is expensive and repeatable, and `ls packages/Angular/Generic/ui-components/src/lib/`
+  is what finally answered it.
 - **Answer:** _(pending)_
