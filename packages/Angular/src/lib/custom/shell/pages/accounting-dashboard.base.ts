@@ -1,4 +1,4 @@
-import { Directive, ChangeDetectorRef, inject } from '@angular/core';
+import { Directive, ChangeDetectorRef, EventEmitter, Output, inject } from '@angular/core';
 import { RunView, RunViewParams } from '@memberjunction/core';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
 
@@ -44,6 +44,12 @@ export interface DashboardList {
   /** Shown instead of rows when the list is empty. An empty inbox is good news — say so, don't say "no data". */
   EmptyMessage: string;
   Items: DashboardListItem[];
+  /**
+   * The header count. NOT `Items.length`: the lists are capped at DASHBOARD_LIST_ROWS (§0 — small
+   * lists only), so a card showing 5 of 40 must say 40. Source it from the authoritative COUNT the
+   * page already ran; `null` renders "—" rather than a fabricated 0 when the count could not be had.
+   */
+  Count: number | null;
 }
 
 /** How many rows a dashboard list card shows. Small enough that these stay cheap reads (§0). */
@@ -74,6 +80,28 @@ export abstract class AccountingDashboardBase extends BaseAngularComponent {
   public Lists: DashboardList[] = [];
   public IsLoading = false;
   public LoadError: string | null = null;
+
+  /**
+   * The primary create button's label — "New journal entry", "New batch", "New order", … Each page
+   * sets it for ITS section; the shared template renders one button from it.
+   */
+  public CreateLabel = '';
+
+  /**
+   * Emitted when the user asks to create a new record of this section's kind.
+   *
+   * **The page does NOT navigate itself, by design.** An Explorer resource is not a routed
+   * component — which page is showing is shell state, and MJ forbids importing the Router into a
+   * Generic-layer component. So the dashboard states the INTENT and the shell that hosts it decides
+   * what "create" means (open a form, switch pages, pop a panel). **Every shell mounting one of
+   * these dashboards must bind `(CreateRequested)` or the button will do nothing.**
+   */
+  @Output() CreateRequested = new EventEmitter<void>();
+
+  /** Template hook for the create button. Emits the intent — see CreateRequested. */
+  public RequestCreate(): void {
+    this.CreateRequested.emit();
+  }
 
   /** Count-only read: MaxRows 1 keeps the transfer to one row; TotalRowCount is the answer. */
   protected async count(params: Omit<RunViewParams, 'MaxRows' | 'ResultType'>): Promise<number> {

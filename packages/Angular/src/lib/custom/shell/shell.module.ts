@@ -50,6 +50,7 @@ import { BatchesDashboardPageComponent } from './pages/batches-dashboard.page';
 import { DimensionsPageComponent } from './pages/dimensions.page';
 import { ErpMappingPageComponent } from './pages/erp-mapping.page';
 import { AccountLinksPageComponent } from './pages/account-links.page';
+import { GLAccountsPageComponent } from './pages/gl-accounts.page';
 import { JournalEntryDetailPanelComponent } from './pages/journal-entry-detail-panel.component';
 import { ShellPagePendingComponent } from './pages/shell-page-pending.component';
 
@@ -82,6 +83,7 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
     DimensionsPageComponent,
     ErpMappingPageComponent,
     AccountLinksPageComponent,
+    GLAccountsPageComponent,
     JournalEntryDetailPanelComponent,
   ],
   imports: [
@@ -133,6 +135,7 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
     DimensionsPageComponent,
     ErpMappingPageComponent,
     AccountLinksPageComponent,
+    GLAccountsPageComponent,
     JournalEntryDetailPanelComponent,
   ],
 })

@@ -13,10 +13,11 @@
       </mj-stat-badge>
     }
   </div>
-  <div toolbar>
+  <!-- Drop-downs together, search to their right — one line (Marcelo's filter-bar rule). -->
+  <div toolbar class="al-filters">
     <label class="al-field">
       <span class="al-field__label">Role</span>
-      <select class="mj-input" [(ngModel)]="RoleFilter" aria-label="Role">
+      <select class="mj-input" [(ngModel)]="RoleFilter" (ngModelChange)="OnFilterChanged()" aria-label="Role">
         <option value="All">All roles</option>
         @for (r of Roles; track r.ID) {
           <option [value]="r.ID">{{ r.Name }}</option>
@@ -25,10 +26,19 @@
     </label>
     <label class="al-field">
       <span class="al-field__label">Status</span>
-      <select class="mj-input" [(ngModel)]="StatusFilter" aria-label="Status">
+      <select class="mj-input" [(ngModel)]="StatusFilter" (ngModelChange)="OnFilterChanged()" aria-label="Status">
         <option value="Active">Active only</option>
         <option value="All">All</option>
       </select>
+    </label>
+    <label class="al-field al-field--search">
+      <span class="al-field__label">Search</span>
+      <input
+        class="mj-input"
+        [(ngModel)]="Search"
+        (ngModelChange)="OnFilterChanged()"
+        placeholder="Name, account, role or ID…"
+        aria-label="Search links by record name, GL account, role or ID" />
     </label>
   </div>
 </mj-page-header-interior>
@@ -74,7 +84,14 @@
           <tr [class.al-row--active]="PreviewFor === r.ID">
             <td>{{ r.GLAccountRole || '—' }}</td>
             <td>{{ r.Entity || '—' }}</td>
-            <td class="al-mono">{{ r.RecordID.slice(0, 8) }}…</td>
+            <!-- Marcelo: "our database IDs are meaningless to them." So lead with the record's NAME
+                 where accounting can resolve it (companies, GL accounts, dimensions + their values),
+                 and say plainly when it can't — orders' Products/Categories live in an app this one
+                 must not depend on. The id stays beside it, copyable, and searchable in FULL. -->
+            <td class="al-target">
+              <span class="al-target__name" [class.al-target__name--unresolved]="!r.TargetName">{{ TargetLabel(r) }}</span>
+              <span class="al-mono al-target__id" [title]="r.RecordID">{{ r.RecordID.slice(0, 8) }}…</span>
+            </td>
             <td>{{ r.GLAccount || r.GLAccountID }}</td>
             <td>{{ (r.StartedAt | date: 'yyyy-MM-dd') || '—' }}{{ r.EndedAt ? ' → ' + (r.EndedAt | date: 'yyyy-MM-dd') : ' → open' }}</td>
             <td>

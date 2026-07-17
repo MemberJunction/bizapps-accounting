@@ -56,6 +56,12 @@ export class ErpMappingPageComponent extends BaseAngularComponent implements OnI
 
   /** Default: the reason you opened this screen. */
   public Filter: 'NeedsApproval' | 'Approved' | 'All' = 'NeedsApproval';
+  /**
+   * One box over the rows this filter already loaded. CLIENT-side on purpose: the approval filter is
+   * a server round-trip because it changes WHICH rows exist, but a search must never be one — and
+   * user-typed text must never reach an `ExtraFilter`.
+   */
+  public Search = '';
 
   ngOnInit(): void {
     this.subscribeToShellRefresh();
@@ -79,6 +85,27 @@ export class ErpMappingPageComponent extends BaseAngularComponent implements OnI
     void this.load();
   }
 
+  public OnSearchChanged(): void {
+    this.cdr.markForCheck();
+  }
+
+  /** The rows the grid shows — filtered CLIENT-side over what's loaded, no round-trip per keystroke. */
+  public get Filtered(): MappingRow[] {
+    const q = this.Search.trim().toLowerCase();
+    if (!q) return this.Rows;
+    // The names + the ERP account CODE lead — what an admin actually knows. The ids match too, for
+    // anyone pasting one. Lowercased `includes` — a text match, not a UUID equality test.
+    return this.Rows.filter((r) =>
+      [r.InternalGLAccount, r.ExternalAccountID, r.ExternalAccountName, r.ExternalSystem, r.Company, r.InternalGLAccountID, r.ID].some(
+        (v) => (v ?? '').toLowerCase().includes(q),
+      ),
+    );
+  }
+
+  /**
+   * DELIBERATELY counted over every loaded row, never the searched subset — a chip a search box can
+   * mute is not a chip.
+   */
   public get NeedsApprovalCount(): number {
     return this.Rows.filter((r) => !r.ApprovedByUserID).length;
   }

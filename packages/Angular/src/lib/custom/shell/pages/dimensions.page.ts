@@ -39,6 +39,8 @@ export class DimensionsPageComponent extends BaseAngularComponent implements OnI
   public SelectedID: string | null = null;
   public IsLoading = false;
   public LoadError: string | null = null;
+  /** One box over the master list: the code + name a human knows, plus the ID they may paste. */
+  public Search = '';
   public ValueParams: RunViewParams = { EntityName: DIMVAL_ENTITY };
 
   public ValueColumns: GridColumnConfig[] = [
@@ -47,6 +49,9 @@ export class DimensionsPageComponent extends BaseAngularComponent implements OnI
     { field: 'IsActive', title: 'Active', width: 90, sortable: true },
     { field: 'EffectiveFrom', title: 'From', width: 120, sortable: true },
     { field: 'EffectiveTo', title: 'To', width: 120, sortable: true },
+    // The ID is meaningless to read but IS what a human copies into a filter or a bug report —
+    // Code + Name above are how they find the row.
+    { field: 'ID', title: 'ID', width: 280, sortable: true },
   ];
 
   ngOnInit(): void {
@@ -69,6 +74,24 @@ export class DimensionsPageComponent extends BaseAngularComponent implements OnI
 
   public get Selected(): DimensionRow | null {
     return this.Dimensions.find((d) => d.ID === this.SelectedID) ?? null;
+  }
+
+  /**
+   * The master list the rail shows. Filters CLIENT-SIDE over the dimensions already loaded — no
+   * round-trip per keystroke, and no user-typed text anywhere near an `ExtraFilter`.
+   */
+  public get FilteredDimensions(): DimensionRow[] {
+    const q = this.Search.trim().toLowerCase();
+    if (!q) return this.Dimensions;
+    // Code + name lead — what a human knows. The ID matches too, for anyone pasting one.
+    // Lowercased `includes`: a text match, not a UUID equality test.
+    return this.Dimensions.filter(
+      (d) => d.Code.toLowerCase().includes(q) || d.Name.toLowerCase().includes(q) || d.ID.toLowerCase().includes(q),
+    );
+  }
+
+  public OnSearchChanged(): void {
+    this.cdr.markForCheck();
   }
 
   public Select(id: string): void {

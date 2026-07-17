@@ -1,0 +1,280 @@
+<mj-page-header-interior Title="GL accounts" Subtitle="Every account, in the company chart that owns it">
+  <div meta>
+    <mj-stat-badge [Count]="Rows.length" Label="accounts" Variant="default"></mj-stat-badge>
+    <mj-stat-badge [Count]="CompanyOptions.length" Label="companies" Variant="default"></mj-stat-badge>
+    @if (OrphanCount > 0) {
+      <mj-stat-badge
+        [Count]="OrphanCount"
+        Label="broken parents"
+        Icon="fa-solid fa-triangle-exclamation"
+        Variant="warning"
+        title="These accounts point at a parent that isn't in this chart, or their parent chain loops. They're shown at the top of their chart rather than hidden.">
+      </mj-stat-badge>
+    }
+  </div>
+  <!-- Filters on ONE line, search to the RIGHT of the drop-downs. -->
+  <div toolbar>
+    <label class="gla-field">
+      <span class="gla-field__label">Company</span>
+      <select class="mj-input" [(ngModel)]="FilterCompanyID" aria-label="Company">
+        <option value="">All companies</option>
+        @for (c of CompanyOptions; track c.ID) {
+          <option [value]="c.ID">{{ c.Name }}</option>
+        }
+      </select>
+    </label>
+    <label class="gla-field">
+      <span class="gla-field__label">Type</span>
+      <select class="mj-input" [(ngModel)]="FilterAccountType" aria-label="Account type">
+        <option value="">All types</option>
+        @for (t of AccountTypes; track t) {
+          <option [value]="t">{{ t }}</option>
+        }
+      </select>
+    </label>
+    <label class="gla-field">
+      <span class="gla-field__label">Status</span>
+      <select class="mj-input" [(ngModel)]="FilterActive" aria-label="Status">
+        <option value="">Active &amp; inactive</option>
+        <option value="Active">Active only</option>
+        <option value="Inactive">Inactive only</option>
+      </select>
+    </label>
+    <label class="gla-field">
+      <!-- IsSystemSeeded exists for exactly this distinction: platform-shipped accounts vs.
+           deployment customizations. -->
+      <span class="gla-field__label">Source</span>
+      <select class="mj-input" [(ngModel)]="FilterSource" aria-label="Source">
+        <option value="">Seeded &amp; custom</option>
+        <option value="Seeded">System-seeded</option>
+        <option value="Custom">Custom</option>
+      </select>
+    </label>
+    <label class="gla-field gla-field--search">
+      <span class="gla-field__label">Search</span>
+      <input class="mj-input" type="search" [(ngModel)]="SearchText" placeholder="Name, code or ID…" aria-label="Search accounts" />
+    </label>
+    <button type="button" mjButton Variant="flat" Size="sm" (click)="StartCreate()">
+      <i class="fa-solid fa-plus" aria-hidden="true"></i> New account
+    </button>
+  </div>
+</mj-page-header-interior>
+
+<!-- <mj-page-body-interior> owns the gutters that keep content off the rail and off the page edge.
+     NOTE it is display:block — children size with height/min-height, NEVER flex:1 (which is a no-op
+     here and collapses the list to zero height). -->
+<mj-page-body-interior>
+  @if (LoadError) {
+    <mj-alert Variant="error" [Message]="LoadError"></mj-alert>
+  }
+
+  @if (OrphanCount > 0) {
+    <mj-alert
+      Variant="warning"
+      Message="Some accounts point at a parent that isn't in this chart, or their parent chain loops back on itself. They're listed at the top of their company's chart and marked, rather than dropped — a rollup parent must be another account in the SAME company's chart.">
+    </mj-alert>
+  }
+
+  @if (Draft) {
+    <section class="gla-editor" aria-label="Edit account">
+      <header class="gla-editor__head">
+        <h3 class="gla-editor__title">{{ Draft.ID ? 'Edit account' : 'New account' }}</h3>
+        @if (EditingSeeded) {
+          <mj-stat-badge Label="system-seeded" Icon="fa-solid fa-cube" Variant="default"
+            title="Created by spSeedDefaultChartOfAccounts — part of the platform-shipped chart, not a deployment customization."></mj-stat-badge>
+        }
+      </header>
+
+      @if (EditorError) {
+        <mj-alert Variant="error" [Message]="EditorError"></mj-alert>
+      }
+
+      <div class="gla-editor__grid">
+        <label class="gla-field">
+          <span class="gla-field__label">Company</span>
+          <!-- Every account is born inside exactly one company's chart (CompanyID is NOT NULL,
+               UNIQUE(CompanyID, Code)) — there is no pool of unowned accounts to hook up later.
+               On edit the company is fixed: moving an account between charts would silently break
+               its rollup parent and could collide with the target chart's codes. -->
+          <select class="mj-input" [(ngModel)]="Draft.CompanyID" [disabled]="!!Draft.ID" aria-label="Owning company">
+            <option value="">Choose the owning company…</option>
+            @for (c of CompanyOptions; track c.ID) {
+              <option [value]="c.ID">{{ c.Name }}</option>
+            }
+          </select>
+          <span class="gla-help">{{ Draft.ID ? 'An account stays in the chart it was created in.' : 'This company will own the account.' }}</span>
+        </label>
+
+        <label class="gla-field">
+          <span class="gla-field__label">Code</span>
+          <input class="mj-input" type="text" [(ngModel)]="Draft.Code" maxlength="40" placeholder="e.g. 11201" aria-label="Code" />
+          <span class="gla-help">Unique within this company’s chart.</span>
+        </label>
+
+        <label class="gla-field gla-field--wide">
+          <span class="gla-field__label">Name</span>
+          <input class="mj-input" type="text" [(ngModel)]="Draft.Name" maxlength="200" placeholder="e.g. Cash — Operating" aria-label="Name" />
+        </label>
+
+        <label class="gla-field">
+          <span class="gla-field__label">Account type</span>
+          <select class="mj-input" [(ngModel)]="Draft.AccountType" aria-label="Account type">
+            @for (t of AccountTypes; track t) {
+              <option [value]="t">{{ t }}</option>
+            }
+          </select>
+        </label>
+
+        <label class="gla-field gla-field--wide">
+          <span class="gla-field__label">Parent account (rollup)</span>
+          <!-- The picker offers only THIS company's own accounts, minus this account and everything
+               beneath it. That IS what a parent is: the account this one rolls up into, inside the
+               same chart (e.g. 11200 Cash parents 11201 Cash — Operating). -->
+          <select class="mj-input" [(ngModel)]="Draft.ParentGLAccountID" [disabled]="!Draft.CompanyID" aria-label="Parent account">
+            <option value="">None — top of the chart</option>
+            @for (p of ParentOptions; track p.ID) {
+              <option [value]="p.ID">{{ p.Label }}</option>
+            }
+          </select>
+          <span class="gla-help">
+            The account this one rolls up into — always another account in {{ Draft.CompanyID ? 'this same company’s chart' : 'the owning company’s chart' }}.
+            Leave as “None” for a top-level account.
+          </span>
+        </label>
+
+        <label class="gla-field">
+          <span class="gla-field__label">Currency</span>
+          <select class="mj-input" [(ngModel)]="Draft.CurrencyCode" aria-label="Currency">
+            <option value="">Company’s functional currency</option>
+            @for (c of CurrencyOptions; track c.Code) {
+              <option [value]="c.Code">{{ c.Code }} — {{ c.Name }}</option>
+            }
+          </select>
+        </label>
+
+        <label class="gla-field">
+          <!-- OUTBOUND: this maps MJ's account out to the ERP's account. MJ's copy is the record. -->
+          <span class="gla-field__label">External system</span>
+          <input class="mj-input" type="text" [(ngModel)]="Draft.ExternalSystem" maxlength="50" placeholder="BusinessCentral, QuickBooks, NetSuite…" aria-label="External system" />
+          <span class="gla-help">The system this account syncs OUT to. Leave blank for local-only.</span>
+        </label>
+
+        <label class="gla-field">
+          <span class="gla-field__label">External account ID</span>
+          <input class="mj-input" type="text" [(ngModel)]="Draft.ExternalAccountID" maxlength="100" placeholder="That system’s identifier" aria-label="External account ID" />
+        </label>
+
+        <label class="gla-field gla-field--wide">
+          <span class="gla-field__label">Description</span>
+          <textarea class="mj-textarea" rows="2" [(ngModel)]="Draft.Description" aria-label="Description"></textarea>
+        </label>
+
+        <label class="gla-check">
+          <input class="mj-checkbox" type="checkbox" [(ngModel)]="Draft.IsActive" aria-label="Active" />
+          <span>Active — available for new journal-entry lines</span>
+        </label>
+      </div>
+
+      <!-- Confirm LEFT, Cancel RIGHT. -->
+      <div class="gla-editor__actions">
+        <button type="button" mjButton Variant="primary" Size="sm" [disabled]="IsSaving" (click)="Save()">
+          {{ IsSaving ? 'Saving…' : (Draft.ID ? 'Save account' : 'Create account') }}
+        </button>
+        <button type="button" mjButton Variant="flat" Size="sm" [disabled]="IsSaving" (click)="CancelEdit()">Cancel</button>
+      </div>
+    </section>
+  }
+
+  <div class="gla-wrap">
+    @if (IsLoading) {
+      <mj-loading text="Loading accounts…"></mj-loading>
+    } @else {
+      <table class="gla-grid">
+        <thead>
+          <tr>
+            <th>Company</th>
+            <th>Code</th>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Parent</th>
+            <th>Currency</th>
+            <th>External system</th>
+            <th>External account ID</th>
+            <th>Active</th>
+            <th>Source</th>
+            <th>ID</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (r of Filtered; track r.ID) {
+            <tr [class.gla-row--inactive]="!r.IsActive">
+              <!-- Company first, always: an account only exists inside a company's chart. -->
+              <td>{{ r.Company }}</td>
+              <td class="gla-mono">
+                <!-- Indentation IS the rollup — a child sits under its parent. -->
+                <span class="gla-code" [style.padding-left]="IndentFor(r)">
+                  @if (r.Depth > 0) {
+                    <i class="fa-solid fa-turn-up fa-rotate-90 gla-rollup" aria-hidden="true" title="Rolls up into the account above"></i>
+                  }
+                  {{ r.Code }}
+                </span>
+              </td>
+              <td>{{ r.Name }}</td>
+              <td>{{ r.AccountType }}</td>
+              <td>
+                {{ r.ParentLabel || '—' }}
+                @if (r.IsOrphan) {
+                  <i class="fa-solid fa-link-slash gla-flag" aria-hidden="true" title="This account's parent isn't in this chart. A rollup parent must be another account in the same company's chart."></i>
+                }
+                @if (r.InCycle) {
+                  <i class="fa-solid fa-rotate gla-flag" aria-hidden="true" title="This account's parent chain loops back on itself — the rollup is broken. Shown at the top of the chart."></i>
+                }
+              </td>
+              <td>{{ r.CurrencyCode || '—' }}</td>
+              <td>{{ r.ExternalSystem || '—' }}</td>
+              <td class="gla-mono">{{ r.ExternalAccountID || '—' }}</td>
+              <td>
+                <mj-stat-badge [Label]="r.IsActive ? 'Active' : 'Inactive'" [Variant]="r.IsActive ? 'success' : 'default'"></mj-stat-badge>
+              </td>
+              <td>
+                <mj-stat-badge [Label]="r.IsSystemSeeded ? 'Seeded' : 'Custom'" Variant="default"
+                  [title]="r.IsSystemSeeded ? 'Shipped by spSeedDefaultChartOfAccounts.' : 'Created for this deployment.'"></mj-stat-badge>
+              </td>
+              <td class="gla-mono gla-id" [title]="r.ID">{{ r.ID }}</td>
+              <td class="gla-actions">
+                <button type="button" mjButton Variant="flat" Size="sm" (click)="StartEdit(r)" title="Edit this account">
+                  <i class="fa-solid fa-pen" aria-hidden="true"></i> Edit
+                </button>
+                <!-- No Delete: an account referenced by a JE line or an account link can't be
+                     deleted (FK). Retiring it is the schema's own intended path — "Inactive
+                     accounts retain historical data." -->
+                <button
+                  type="button"
+                  mjButton
+                  Variant="flat"
+                  Size="sm"
+                  [disabled]="IsSaving"
+                  (click)="ToggleActive(r)"
+                  [title]="r.IsActive ? 'Retire this account — it stops being available for new journal-entry lines but keeps its history' : 'Return this account to use for new journal-entry lines'">
+                  {{ r.IsActive ? 'Retire' : 'Reactivate' }}
+                </button>
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="12" class="gla-empty">
+                @if (Rows.length === 0) {
+                  No accounts in scope. Every account belongs to a company’s chart — widen the company scope, or create one.
+                } @else {
+                  No accounts match these filters.
+                  <button type="button" mjButton Variant="flat" Size="sm" (click)="ClearFilters()">Clear filters</button>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  </div>
+</mj-page-body-interior>

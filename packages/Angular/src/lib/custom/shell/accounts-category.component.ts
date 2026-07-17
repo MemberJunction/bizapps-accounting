@@ -33,6 +33,8 @@ export class AccountsCategoryComponent extends CategoryShellBase {
       {
         // No section header — a single flat group (mj-left-nav renders unlabelled sections as-is).
         items: [
+          // The roster Marcelo asked for: "a page for account viewing that shows all the accounts".
+          { id: 'accounts', label: 'All accounts', icon: 'fa-solid fa-list-ul' },
           { id: 'coa', label: 'Chart of accounts', icon: 'fa-solid fa-sitemap' },
           { id: 'links', label: 'Account links', icon: 'fa-solid fa-link' },
           { id: 'erp', label: 'ERP mapping', icon: 'fa-solid fa-plug' },

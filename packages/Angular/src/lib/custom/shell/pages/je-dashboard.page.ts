@@ -1,9 +1,15 @@
 import { Component, ChangeDetectionStrategy, inject, OnInit, OnDestroy } from '@angular/core';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
-import { RunView } from '@memberjunction/core';
+import { RunView, RunViewParams } from '@memberjunction/core';
 import { mjBizAppsAccountingJournalEntryEntityType } from '@mj-biz-apps/accounting-entities';
 import { CompanyScopeService } from '../../shared/company-scope.service';
-import { AccountingDashboardBase, DashboardListItem, DASHBOARD_LIST_ROWS } from './accounting-dashboard.base';
+import {
+  AccountingDashboardBase,
+  DashboardList,
+  DashboardListItem,
+  DashboardStat,
+  DASHBOARD_LIST_ROWS,
+} from './accounting-dashboard.base';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const SJE_ENTITY = 'MJ_BizApps_Accounting: Scheduled Journal Entries';
@@ -37,6 +43,23 @@ const JE_LIST_FIELDS: (keyof JournalEntryListRow)[] = [
   'Company',
 ];
 
+/** Every count the page reads, carried together so the cards can source their headers from them. */
+interface JeCounts {
+  thisMonth: number;
+  pending: number;
+  batched: number;
+  glPosted: number;
+  awaiting: number;
+  scheduledDue: number;
+}
+
+/** The rows behind the three list cards — fetched in one batched RunViews call. */
+interface JeListRows {
+  recent: JournalEntryListRow[];
+  awaiting: JournalEntryListRow[];
+  oldest: JournalEntryListRow[];
+}
+
 /**
  * Journal Entries dashboard (UI plan §8.1) — cheap stats + short lists only.
  *
@@ -58,6 +81,9 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
   public Scope = inject(CompanyScopeService);
   public Title = 'Journal Entries';
   public Subtitle = 'What needs attention in the ledger';
+  /** The section's create verb — the shell must bind (CreateRequested). See the base class. */
+  public override CreateLabel = 'New journal entry';
+
 
   ngOnInit(): void {
     this.refreshSub = this.pageRefresh.OnRefresh(() => this.Refresh());
@@ -77,8 +103,12 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
     this.LoadError = null;
     this.cdr.markForCheck();
     try {
-      // Stats and lists are independent — run them together rather than stacking two waits.
-      await Promise.all([this.loadStats(), this.loadLists()]);
+      // Counts and list rows are independent reads — run them together rather than stacking waits.
+      // The cards are built AFTER both settle because a card's header count comes from the COUNT,
+      // not from however many rows we chose to show (see DashboardList.Count).
+      const [counts, rows] = await Promise.all([this.loadCounts(), this.loadListRows()]);
+      this.Stats = this.buildStats(counts);
+      this.Lists = this.buildLists(rows, counts);
     } catch (e) {
       this.LoadError = e instanceof Error ? e.message : String(e);
       this.Stats = [];
@@ -89,52 +119,78 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
     }
   }
 
-  private async loadStats(): Promise<void> {
+  /**
+   * Every count this page shows, in one place. All are `MaxRows: 1` + `TotalRowCount` — SQL counts,
+   * one row transfers — which is the only kind of number §0 allows on demand.
+   *
+   * **No "out of balance" count.** It looks like the most useful card on the page and it is not
+   * buildable: the balanced-JE invariant is enforced by a DEFERRABLE constraint trigger, so an
+   * unbalanced entry cannot be committed in the first place. Counting them would need a
+   * `SUM(Debit)<>SUM(Credit)` GROUP BY over every line in the ledger — the exact heavy aggregate §0
+   * forbids — to always return 0. A card that costs a ledger scan to prove a DB constraint works is
+   * not worth its price.
+   */
+  private async loadCounts(): Promise<JeCounts> {
     const monthStart = this.monthStartUTC();
+    const scoped = (own: string | null): string => this.Scope.ComposeFilter(own);
 
-    const [thisMonth, unbatched, awaiting, scheduledDue] = await Promise.all([
-      this.count({ EntityName: JE_ENTITY, ExtraFilter: this.Scope.ComposeFilter(`EffectiveDate >= '${monthStart}'`) }),
-      this.count({ EntityName: JE_ENTITY, ExtraFilter: this.Scope.ComposeFilter(`Status='Pending'`) }),
+    const [thisMonth, pending, batched, glPosted, awaiting, scheduledDue] = await Promise.all([
+      this.count({ EntityName: JE_ENTITY, ExtraFilter: scoped(`EffectiveDate >= '${monthStart}'`) }),
+      this.count({ EntityName: JE_ENTITY, ExtraFilter: scoped(`Status='Pending'`) }),
+      this.count({ EntityName: JE_ENTITY, ExtraFilter: scoped(`Status='Batched'`) }),
+      this.count({ EntityName: JE_ENTITY, ExtraFilter: scoped(`Status='GLPosted'`) }),
       // C.8: a Pending MANUAL entry is sitting behind the CFO gate — it will not be batched.
-      this.count({ EntityName: JE_ENTITY, ExtraFilter: this.Scope.ComposeFilter(`Status='Pending' AND EntryType='Manual'`) }),
+      this.count({ EntityName: JE_ENTITY, ExtraFilter: scoped(`Status='Pending' AND EntryType='Manual'`) }),
       this.count({ EntityName: SJE_ENTITY, ExtraFilter: `Status='Scheduled' AND ScheduledEffectiveDate <= '${this.todayUTC()}'` }),
     ]);
 
-    this.Stats = [
-      { Id: 'month', Label: 'Entries this month', Value: thisMonth, Icon: 'fa-solid fa-book-open',
+    return { thisMonth, pending, batched, glPosted, awaiting, scheduledDue };
+  }
+
+  /**
+   * The status breakdown + the two time-shaped counts. Pending / Batched / GLPosted are the WHOLE
+   * `JournalEntry.Status` value list, so the three together account for every entry in scope.
+   */
+  private buildStats(c: JeCounts): DashboardStat[] {
+    return [
+      { Id: 'month', Label: 'Entries this month', Value: c.thisMonth, Icon: 'fa-solid fa-book-open', GoTo: 'all-entries',
         Tooltip: 'Journal entries with an effective date in the current calendar month (UTC).' },
-      { Id: 'unbatched', Label: 'Unbatched', Value: unbatched, Icon: 'fa-solid fa-layer-group', GoTo: 'all-entries',
-        Tooltip: 'Pending entries — the candidate pool a batch build would sweep.' },
-      { Id: 'awaiting', Label: 'Awaiting CFO approval', Value: awaiting, Icon: 'fa-solid fa-user-check',
-        GoTo: 'approvals', Warn: awaiting > 0,
+      { Id: 'pending', Label: 'Pending', Value: c.pending, Icon: 'fa-solid fa-layer-group', GoTo: 'all-entries',
+        Tooltip: 'Not yet batched — the candidate pool a batch build would sweep.' },
+      { Id: 'batched', Label: 'Batched', Value: c.batched, Icon: 'fa-solid fa-box-archive', GoTo: 'all-batches',
+        Tooltip: 'Locked into a batch and on their way to the ERP. Immutable from here (BA trigger).' },
+      { Id: 'glposted', Label: 'GL posted', Value: c.glPosted, Icon: 'fa-solid fa-circle-check', GoTo: 'all-entries',
+        Tooltip: 'Confirmed landed in the ERP general ledger — the end of the line for an entry.' },
+      { Id: 'awaiting', Label: 'Awaiting CFO approval', Value: c.awaiting, Icon: 'fa-solid fa-user-check',
+        GoTo: 'approvals', Warn: c.awaiting > 0,
         Tooltip: 'Pending MANUAL entries. They are excluded from batching until approved (C.8) — this is why an entry can look "stuck".' },
-      { Id: 'due', Label: 'Scheduled entries due', Value: scheduledDue, Icon: 'fa-regular fa-calendar-days', GoTo: 'scheduled',
+      { Id: 'due', Label: 'Scheduled entries due', Value: c.scheduledDue, Icon: 'fa-regular fa-calendar-days', GoTo: 'scheduled',
         Tooltip: 'Scheduled entries whose date has arrived and which have not materialised yet.' },
     ];
   }
 
-  /** The two list cards. One batched round-trip — never a read per card, let alone per row. */
-  private async loadLists(): Promise<void> {
+  /**
+   * Every list card's rows, in ONE batched round-trip. Three `MaxRows: 5` top-Ns over an indexed
+   * sort column — never a read per card, let alone per row.
+   */
+  private async loadListRows(): Promise<JeListRows> {
     const rv = RunView.FromMetadataProvider(this.ProviderToUse);
-    const [recent, awaiting] = await rv.RunViews<JournalEntryListRow>(
+    const list = (own: string | null, orderBy: string): RunViewParams => ({
+      EntityName: JE_ENTITY,
+      ExtraFilter: this.Scope.ComposeFilter(own),
+      Fields: JE_LIST_FIELDS,
+      OrderBy: orderBy,
+      MaxRows: DASHBOARD_LIST_ROWS,
+      ResultType: 'simple',
+    });
+
+    const [recent, awaiting, oldest] = await rv.RunViews<JournalEntryListRow>(
       [
-        {
-          EntityName: JE_ENTITY,
-          ExtraFilter: this.Scope.ComposeFilter(null),
-          Fields: JE_LIST_FIELDS,
-          OrderBy: 'EffectiveDate DESC',
-          MaxRows: DASHBOARD_LIST_ROWS,
-          ResultType: 'simple',
-        },
-        {
-          // C.8 again — the same population the "Awaiting CFO approval" stat counts, now named.
-          EntityName: JE_ENTITY,
-          ExtraFilter: this.Scope.ComposeFilter(`EntryType='Manual' AND Status='Pending'`),
-          Fields: JE_LIST_FIELDS,
-          OrderBy: 'EffectiveDate DESC',
-          MaxRows: DASHBOARD_LIST_ROWS,
-          ResultType: 'simple',
-        },
+        list(null, 'EffectiveDate DESC'),
+        // C.8 again — the same population the "Awaiting CFO approval" stat counts, now named.
+        list(`EntryType='Manual' AND Status='Pending'`, 'EffectiveDate DESC'),
+        // ASC, not DESC: the point of this card is the entry that has been sitting UNPOSTED longest.
+        list(`Status='Pending'`, 'EffectiveDate ASC'),
       ],
       this.ProviderToUse.CurrentUser,
     );
@@ -142,21 +198,39 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
     // RunView reports failure in the result, it does not throw — so check, don't assume.
     if (!recent.Success) throw new Error(recent.ErrorMessage ?? 'Could not load recent journal entries');
     if (!awaiting.Success) throw new Error(awaiting.ErrorMessage ?? 'Could not load entries awaiting approval');
+    if (!oldest.Success) throw new Error(oldest.ErrorMessage ?? 'Could not load the oldest unposted entries');
 
-    this.Lists = [
+    return { recent: recent.Results ?? [], awaiting: awaiting.Results ?? [], oldest: oldest.Results ?? [] };
+  }
+
+  /** @param c supplies each card's header count — the TRUE total, not the five rows we fetched. */
+  private buildLists(rows: JeListRows, c: JeCounts): DashboardList[] {
+    return [
       {
         Id: 'recent',
         Title: 'Recent journal entries',
         Icon: 'fa-solid fa-clock-rotate-left',
+        // The "recent" card is a top-5 of everything, so its own row count IS its honest header.
+        Count: rows.recent.length,
         EmptyMessage: 'No journal entries in this company scope yet.',
-        Items: (recent.Results ?? []).map((r) => this.toItem(r, false)),
+        Items: rows.recent.map((r) => this.toItem(r, false)),
       },
       {
         Id: 'awaiting',
         Title: 'Awaiting approval',
         Icon: 'fa-solid fa-user-check',
+        Count: c.awaiting,
         EmptyMessage: 'Nothing is waiting on the CFO — every manual entry is approved.',
-        Items: (awaiting.Results ?? []).map((r) => this.toItem(r, true)),
+        Items: rows.awaiting.map((r) => this.toItem(r, true)),
+      },
+      {
+        Id: 'oldest',
+        Title: 'Oldest unposted',
+        Icon: 'fa-solid fa-hourglass-end',
+        Count: c.pending,
+        EmptyMessage: 'Nothing is unposted — every entry has been batched.',
+        // Warn: an entry that has sat Pending the longest is the one most likely to be stuck.
+        Items: rows.oldest.map((r) => this.toItem(r, true)),
       },
     ];
   }

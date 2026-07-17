@@ -13,7 +13,8 @@
       </mj-stat-badge>
     }
   </div>
-  <div toolbar>
+  <!-- Drop-down first, search to its right — one line (Marcelo's filter-bar rule). -->
+  <div toolbar class="erp-filters">
     <label class="erp-field">
       <span class="erp-field__label">Show</span>
       <select class="mj-input" [(ngModel)]="Filter" (ngModelChange)="OnFilterChanged()" aria-label="Mapping filter">
@@ -21,6 +22,15 @@
         <option value="Approved">Approved</option>
         <option value="All">All</option>
       </select>
+    </label>
+    <label class="erp-field erp-field--search">
+      <span class="erp-field__label">Search</span>
+      <input
+        class="mj-input"
+        [(ngModel)]="Search"
+        (ngModelChange)="OnSearchChanged()"
+        placeholder="Account, ERP code, company or ID…"
+        aria-label="Search mappings by GL account, ERP account, company or ID" />
     </label>
   </div>
 </mj-page-header-interior>
@@ -51,11 +61,12 @@
           <th>Company</th>
           <th>Effective</th>
           <th>Status</th>
+          <th>GL account ID</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
-        @for (r of Rows; track r.ID) {
+        @for (r of Filtered; track r.ID) {
           <tr>
             <td>{{ r.InternalGLAccount || r.InternalGLAccountID }}</td>
             <td class="erp-mono">{{ r.ExternalAccountID }}</td>
@@ -70,6 +81,8 @@
                 <mj-stat-badge Label="Needs approval" Variant="warning"></mj-stat-badge>
               }
             </td>
+            <!-- The id is here to be READ and COPIED; the account name/ERP code are how you find it. -->
+            <td class="erp-mono erp-id" [title]="r.InternalGLAccountID">{{ r.InternalGLAccountID }}</td>
             <td>
               @if (!IsApproved(r)) {
                 <button
@@ -90,7 +103,7 @@
             </td>
           </tr>
         } @empty {
-          <tr><td colspan="8" class="erp-empty">Nothing to show for this filter.</td></tr>
+          <tr><td colspan="9" class="erp-empty">Nothing to show for this filter.</td></tr>
         }
       </tbody>
     </table>

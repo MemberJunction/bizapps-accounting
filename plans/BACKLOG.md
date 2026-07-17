@@ -232,3 +232,85 @@ See test-harnesses/testing.md and the instance TASKS.md.
 - **Action:** sweep the migrations + engines for `D-*` / `OQ-*` / "decided" comments that alter the plan, and
   land each as a MOD/UPD with its reciprocal inline marker — or withdraw it.
 - **Trigger:** next planning pass; do it before the batches slice, since Q30 depends on it.
+
+---
+
+## ★ HIGH — The account/ERP/routing model: consolidate, de-duplicate, and stop deriving company from account
+- **Added:** 2026-07-16 · **Source:** extended design discussion with Marcelo (GUI review) · **Question:** [Q31](QUESTIONS.md#q31)
+- **Marcelo, 2026-07-16:** *"all of the information about the accounts here, everything you've output to me,
+  everything I'm saying, it needs to be filed as a backlog item, and we're gonna pick it back up tomorrow as
+  one of our high priority ones. But it's just that it can't be done right now... I'm beginning to understand
+  what your issue was, and it's basically that our system isn't designed to support this level of flexibility."*
+
+### The good news, discovered while writing this up: MOST OF THE MODEL ALREADY EXISTS
+Marcelo asked for *"an entity that models the ERP account... because we're gonna need to store ERP credentials
+at some point anyway"*. **It is already built.** The layering as-shipped:
+
+| Layer | Entity | Job |
+|---|---|---|
+| The account | `GLAccount` | a row in exactly ONE company's chart (`CompanyID` NOT NULL, `UNIQUE(CompanyID, Code)`) |
+| **ERP identity** | **`ChartOfAccountsMapping`** | `CompanyID` + `ExternalSystem` + `ExternalAccountID` + `ExternalAccountName` ("snapshot for audit") → `InternalGLAccountID`, **date-effective** (`EffectiveFrom`/`EffectiveTo`) + **approved** (`ApprovedByUserID`/`ApprovedAt`/`ChangeNote`) |
+| The wiring | `GLAccountLink` | polymorphic `(EntityID, RecordID, RoleID)` → `GLAccountID`, date-effective |
+
+**Two of Marcelo's premises are factually wrong, and correcting them shrinks the work:**
+1. *"a GL account link seems to only link a company"* — **no.** It is polymorphic; the live data contains
+   **Products→Sales** and **Products→Deferred Revenue** links. It links any record of any entity.
+2. *"we need free floating accounts that can be linked to a company, but not necessarily take up one of the
+   default roles"* — **that is just a `GLAccount`.** Accounts exist independently of links; nothing forces an
+   account into a role. The only thing missing was a page to create one — **shipped 2026-07-16** (All accounts,
+   `gl-accounts.page.ts`).
+
+**His product-type→role model is also ~80% built.** `OrdersEngineBase.RevenueRoleFor()` is literally
+`product.RevenueRecognitionType === 'Deferred' ? 'Deferred Revenue' : 'Sales'`, and `ProductType` already
+carries `DefaultRevenueRecognitionType`, `IsBillableRecurring`, `DefaultSubscriptionType`,
+`RequiresFulfillment`, `BehaviorClass`. Marcelo: *"in the product type itself, you're gonna select which role
+it goes to... how we handle the revenue of that product is gonna be specified by the type of that product."*
+**The gap:** `Product.RevenueRecognitionType` is a COPY on the product, not read from its type at resolve time,
+so changing a type does not re-route its products.
+
+### The REAL defects (this is the actual work)
+1. **Company is derived FROM the account.** `buildDraftsForOrder` does `CompanyID: account.CompanyID`. Cause
+   inferred from effect. Marcelo: *"deriving a company from account is not a good system."* It also **breaks
+   `ParentAccountingCompanyID`** (shared books): two companies sharing books resolve to the SAME account and
+   collapse to the SAME CompanyID — the derivation destroys the distinction that field exists to preserve.
+   **Agreed direction (Marcelo):** *"company comes from the product, role comes from the hierarchy, and then
+   company and role together can determine account, and that is the goal. We don't want someone picking the
+   account at the configure the product."*
+2. **THREE duplicated wirings, none agreeing:**
+   - `GLAccount.ExternalSystem`/`ExternalAccountID` (columns) **vs** `ChartOfAccountsMapping` (entity). Both
+     model account→ERP. Marcelo: *"an account should be an entity that handles the linking to an ERP."* The
+     mapping entity is strictly better (dated + approved + audit snapshot). Pick one.
+   - `AccountingCompanyProfile.AROpenGLAccountID`/`DeferredRevenueGLAccountID`/… (columns, **populated by the
+     seed for all 4 companies**) **vs** `GLAccountLink(Companies, X, role)` (rows, **present for only 1**).
+     **Booking reads ONLY the rows.** Marcelo: *"this is the exact example of why we need standalone accounts."*
+   - `Product.RevenueRecognitionType` (copy) **vs** `ProductType.DefaultRevenueRecognitionType` (source).
+3. **Company is overloaded as an ERP identity.** Marcelo: *"we are treating companies as ERP identities... we're
+   assuming that each company is going to send to one ERP system and that different companies, even though they
+   could use the same system integration, they aren't gonna use the same ERP identity."* `ChartOfAccountsMapping`
+   is keyed `(CompanyID, ExternalSystem)`, which bakes that assumption in. A separate **ERP Connection/Account**
+   entity (the natural home for credentials too) would let Company go back to meaning a company. **Note this is
+   ALSO what Q30 (single-company batches) collides with** — a batch has one `TargetSystem` and no endpoint.
+
+### The shape of the fix
+- Stamp the resolved **triple (CompanyID, GLAccountID, GLAccountRoleID) on the ORDER LINE at booking time.**
+  Marcelo: *"each line should have company and account that gets the resolved account, and it should also have
+  the role because all three of those features are very important at that level."*
+  **Store, do not derive — and the reason is not efficiency, it is immutability.** A JE booked to company A must
+  not silently become company B because someone re-pointed the product later. Config resolves live; the booked
+  fact is history and must be frozen. Precedent in this schema: `OrderLine.LineTotalNet` is stored rather than
+  re-derived; `JournalEntryBatch.TotalEntries/TotalDebits` are denormalized *"for fast batch dashboards."*
+- Resolution becomes: **company** ← the product (or its type) · **role** ← the product TYPE, overridable up the
+  category chain · **account** ← `ResolveCompanyAccount(company, role)` — which **already exists** and is
+  exactly `(company, role) → account`.
+- Then the UI Marcelo wants falls out: product/category configure a **role** (business vocabulary, no chart
+  hunting); accounting maps **role → account per company** (chart access); ERP mapping stays where it already
+  is (`ChartOfAccountsMapping`). Nobody hunts ERP numbers in orders. Marcelo's correction, recorded:
+  *"orders is really meant to be used by the accounting team... orders is basically invoices under the hood"* —
+  so orders MAY name accounts; it just shouldn't require hunting ERP identifiers to do it.
+- **Already fixed 2026-07-16 (independent of the above):** the company tier was DEAD in booking
+  (`ResolveAccount` called with 3 of 4 args), and the Catalog ran a more optimistic resolution than booking.
+
+### Sequencing
+Marcelo, 2026-07-16: *"it can't be done right now. It's too complicated, and it's late at night. What I need to
+do is kind of get the GUI set up so I can get a basic demo out."* **Picked up tomorrow as a high priority.**
+- **Trigger:** tomorrow's session. Q31 carries the discussion; this carries the work.

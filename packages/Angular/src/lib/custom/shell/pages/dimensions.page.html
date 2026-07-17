@@ -2,6 +2,18 @@
   <div meta>
     <mj-stat-badge [Count]="Dimensions.length" Label="dimensions" Variant="default"></mj-stat-badge>
   </div>
+  <!-- One line: the search sits where the drop-downs' right edge would be (Marcelo's filter-bar rule). -->
+  <div toolbar class="dim-filters">
+    <label class="dim-field dim-field--search">
+      <span class="dim-field__label">Search</span>
+      <input
+        class="mj-input"
+        [(ngModel)]="Search"
+        (ngModelChange)="OnSearchChanged()"
+        placeholder="Code, name or ID…"
+        aria-label="Search dimensions by code, name or ID" />
+    </label>
+  </div>
 </mj-page-header-interior>
 
 <!-- Scrollable body — <mj-page-body-interior> is the interior primitive
@@ -15,17 +27,20 @@
 
 <div class="dim-cols">
   <aside class="dim-master" aria-label="Dimensions">
-    @for (d of Dimensions; track d.ID) {
-      <button type="button" class="dim-item" [class.dim-item--active]="d.ID === SelectedID" (click)="Select(d.ID)">
+    @for (d of FilteredDimensions; track d.ID) {
+      <button type="button" class="dim-item" [class.dim-item--active]="d.ID === SelectedID" (click)="Select(d.ID)" [title]="d.ID">
         <span class="dim-item__code">{{ d.Code }}</span>
         <span class="dim-item__name">{{ d.Name }}</span>
+        <!-- Code + name are how a human finds it; the id is here to be copied (full id on hover,
+             and the search box above matches it in full). -->
+        <span class="dim-item__id">{{ d.ID.slice(0, 8) }}…</span>
         @if (!d.IsActive) {
           <span class="dim-item__inactive">inactive</span>
         }
       </button>
     } @empty {
       @if (!IsLoading) {
-        <p class="dim-empty">No dimensions defined.</p>
+        <p class="dim-empty">{{ Search ? 'No dimensions match this search.' : 'No dimensions defined.' }}</p>
       }
     }
   </aside>

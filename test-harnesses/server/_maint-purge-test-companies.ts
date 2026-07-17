@@ -15,13 +15,16 @@
  *     GLPosted — i.e. protected by the immutability triggers (50003/50004/50006). Triggers are
  *     re-enabled in a `finally`, so a mid-run failure cannot leave the ledger's invariants off.
  *
- * ⚠ KNOWN LIMITATION (2026-07-16): it purges the ACCOUNTING footprint (profiles, JEs + lines +
- * dimensions, scheduled entries, mappings) but currently leaves the bare `__mj.Company` rows when a
- * PRIOR run already removed their JEs — the batch-id lookup keys off the JEs, so a second run finds
- * none and never cleans the JournalEntryBatchLineItem rows that still reference those GL accounts,
- * which then block GLAccount -> Company. Not chased further because the bare rows are INVISIBLE to
- * the accounting app (it lists AccountingCompanyProfiles, not raw companies) and to the scope chip.
- * Fix by resolving batch ids from JournalEntryBatchLineItem.CompanyID instead of from the JEs.
+ * ✅ The former KNOWN LIMITATION (bare `__mj.Company` rows surviving a re-run) was FIXED 2026-07-16 by
+ * resolving batch ids from JournalEntryBatchLineItem.CompanyID as well as from the JEs — see the
+ * comment at the batch-id lookup below.
+ *
+ * RUN ORDER: run the ORDERS purge first —
+ * `bizapps-orders/test-harnesses/server/_maint-purge-orders-test-data.ts --yes`. Product rows carry
+ * `OwningCompanyID -> __mj.Company`, so this script cannot drop a test company while a test product
+ * still points at it. That script owns the orders footprint (products/types/orders/lines) via the MJ
+ * entity layer; this one owns the Company/GLAccount/JE footprint, which needs db_owner + trigger
+ * suspension and therefore cannot go through the entity layer.
  *
  * DESTRUCTIVE. Run deliberately:
  *   npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/_maint-purge-test-companies.ts --yes
@@ -85,8 +88,16 @@ const TEST_NAME_PATTERNS = ["'ORD2JE%'", "'ORD2JEAPI%'", "'PWBATCH%'", "'SJE-%'"
     // them is legitimate ONLY for removing test fixtures as db_owner, and only for this window.
     for (const t of TRIGGERED) await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
 
-    const batchIds = (await pool.request().query(
-      `SELECT DISTINCT BatchID id FROM ${SCHEMA}.JournalEntry WHERE CompanyID IN (${ids}) AND BatchID IS NOT NULL`)).recordset.map((r) => `'${r.id}'`).join(',');
+    // Resolve batch ids from BOTH the JEs and the batch line items. Keying off the JEs alone was the
+    // old KNOWN LIMITATION: once a prior run removed a company's JEs, a re-run found no batch ids, so
+    // it never cleaned the JournalEntryBatchLineItem rows still pointing at that company's GL
+    // accounts — which then blocked GLAccount -> Company and left bare Company rows behind forever.
+    // JournalEntryBatchLineItem.CompanyID survives the JEs, so it is the reliable key.
+    const batchIds = (await pool.request().query(`
+      SELECT DISTINCT BatchID id FROM ${SCHEMA}.JournalEntry WHERE CompanyID IN (${ids}) AND BatchID IS NOT NULL
+      UNION
+      SELECT DISTINCT BatchID id FROM ${SCHEMA}.JournalEntryBatchLineItem WHERE CompanyID IN (${ids}) AND BatchID IS NOT NULL`
+    )).recordset.map((r) => `'${r.id}'`).join(',');
 
     // FK order: deepest child first.
     await exec(`DELETE d FROM ${SCHEMA}.JournalEntryLineDimension d JOIN ${SCHEMA}.JournalEntryLine l ON l.ID=d.JournalEntryLineID JOIN ${SCHEMA}.JournalEntry je ON je.ID=l.JournalEntryID WHERE je.CompanyID IN (${ids})`);

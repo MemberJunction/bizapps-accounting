@@ -3,7 +3,10 @@
    a percentage resolves against body-interior's flex-derived height. */
 /* Account links (§8.3). Design tokens only; own flex host (height chain). */
 :host { display: flex; flex-direction: column; height: 100%; min-height: 0; gap: 12px; }
+/* Drop-downs together with the search to their right — one line; the bar must not get taller. */
+.al-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
 .al-field { display: flex; flex-direction: column; gap: 4px; }
+.al-field--search { flex: 0 1 240px; min-width: 180px; }
 .al-field__label { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--mj-text-muted); }
 .al-wrap { height: 100%; min-height: 320px; overflow: auto; border: 1px solid var(--mj-border-default); border-radius: 10px; background: var(--mj-bg-surface); }
 .al-grid { width: 100%; border-collapse: collapse; font-size: 12.5px; }
@@ -11,6 +14,11 @@
 .al-grid thead th { position: sticky; top: 0; background: var(--mj-bg-surface-card); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--mj-text-muted); z-index: 1; }
 .al-row--active { background: color-mix(in srgb, var(--mj-brand-primary) 6%, transparent); }
 .al-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+/* The target cell: the NAME reads, the id sits under it as the copyable/searchable handle. */
+.al-target { line-height: 1.35; }
+.al-target__name { display: block; }
+.al-target__name--unresolved { color: var(--mj-text-muted); font-style: italic; }
+.al-target__id { display: block; font-size: 11px; color: var(--mj-text-muted); }
 .al-empty { padding: 20px; text-align: center; color: var(--mj-text-muted); font-style: italic; }
 
 /* The chevron that says "this opens a panel" rather than making the reader click to find out. */

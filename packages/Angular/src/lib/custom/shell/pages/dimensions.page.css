@@ -3,6 +3,11 @@
    a percentage resolves against body-interior's flex-derived height. */
 /* Dimensions (§8.3) — master list + values grid. Design tokens only; own flex host (height chain). */
 :host { display: flex; flex-direction: column; height: 100%; min-height: 0; gap: 12px; }
+/* Search on the filter line — the bar must not get taller. */
+.dim-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.dim-field { display: flex; flex-direction: column; gap: 4px; }
+.dim-field--search { flex: 0 1 220px; min-width: 170px; }
+.dim-field__label { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--mj-text-muted); }
 .dim-cols { display: grid; grid-template-columns: 240px 1fr; gap: 14px; height: 100%; min-height: 320px; }
 @media (max-width: 900px) { .dim-cols { grid-template-columns: 1fr; } }
 .dim-master { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; border: 1px solid var(--mj-border-default); border-radius: 10px; background: var(--mj-bg-surface-card); padding: 6px; min-height: 0; }
@@ -11,6 +16,7 @@
 .dim-item--active { background: color-mix(in srgb, var(--mj-brand-primary) 10%, transparent); color: var(--mj-brand-primary); font-weight: 600; }
 .dim-item__code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 .dim-item__name { font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
+.dim-item__id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10.5px; color: var(--mj-text-muted); }
 .dim-item__inactive { margin-left: auto; font-size: 10.5px; color: var(--mj-text-muted); }
 .dim-empty { padding: 12px; font-size: 12.5px; color: var(--mj-text-muted); font-style: italic; }
 .dim-values { display: flex; flex-direction: column; min-height: 0; gap: 8px; }

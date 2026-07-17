@@ -38,6 +38,9 @@
 
     <mj-left-nav-content>
       @switch (ActivePageId) {
+        @case ('accounts') {
+          <mj-gl-accounts-page></mj-gl-accounts-page>
+        }
         @case ('coa') {
           <mj-chart-of-accounts-dashboard></mj-chart-of-accounts-dashboard>
         }

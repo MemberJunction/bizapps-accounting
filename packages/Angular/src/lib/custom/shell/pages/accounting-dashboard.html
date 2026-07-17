@@ -1,5 +1,17 @@
 <!-- Shared template for the category dashboards (§8.6 step 6). Cheap stats only — §0. -->
+<!-- [actions] is the verbs slot (chrome conventions §10). The ONE refresh control lives in the shell
+     header — deliberately not repeated here — so this slot carries only the section's create verb.
+     The page cannot navigate itself (Explorer resources are not routed), so the button emits
+     CreateRequested and the hosting shell decides what "create" does. -->
 <mj-page-header-interior>
+  @if (CreateLabel) {
+    <div actions>
+      <button mjButton variant="primary" size="sm" (click)="RequestCreate()">
+        <i class="fa-solid fa-plus" aria-hidden="true"></i>
+        <span>{{ CreateLabel }}</span>
+      </button>
+    </div>
+  }
 </mj-page-header-interior>
 
 <!-- The scrollable body MUST be <mj-page-body-interior>: it is the interior primitive
@@ -30,10 +42,14 @@
   <div class="dash-lists">
     @for (l of Lists; track l.Id) {
       <section class="dash-card">
+        <!-- Credentials-dashboard card idiom: a small header (icon chip + title + count), then the
+             content within the card. Same markup as the Orders/Payments cards, so a card reads
+             identically in both apps. -->
         <header class="dash-card__header">
-          <i [class]="l.Icon" aria-hidden="true"></i>
+          <span class="dash-card__head-icon"><i [class]="l.Icon" aria-hidden="true"></i></span>
           <span class="dash-card__title">{{ l.Title }}</span>
-          <span class="dash-card__count">{{ l.Items.length }}</span>
+          <!-- A count that could not be read renders "—". A fabricated 0 would read as "all clear". -->
+          <span class="dash-card__count">{{ l.Count === null ? '—' : l.Count }}</span>
         </header>
         <div class="dash-card__body">
           @for (i of l.Items; track i.Id) {

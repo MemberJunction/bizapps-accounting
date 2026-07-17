@@ -173,4 +173,20 @@ async function teardown(): Promise<void> {
   }
 }
 
-void main();
+/**
+ * A crash MUST still clean up. `await teardown()` on the happy path only is what left `SJE-*` test
+ * companies (each with a seeded 10-account chart) behind: anything throwing outside a `test()`
+ * skipped teardown and leaked the run's fixtures, and `void main()` swallowed the reason into an
+ * unhandled rejection. This is the FK-aware teardown-in-a-finally.
+ */
+main().catch(async (e) => {
+  console.error(`\nFATAL — harness aborted before its normal teardown: ${e instanceof Error ? e.stack ?? e.message : String(e)}`);
+  try {
+    await teardown();
+    console.error(`Teardown ran — no ${RUN_TAG} fixtures leaked.`);
+  } catch (te) {
+    console.error(`TEARDOWN ALSO FAILED (${te instanceof Error ? te.message : String(te)}). ${RUN_TAG} fixtures are LEAKED. Purge with:`);
+    console.error('  npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/_maint-purge-test-companies.ts --yes');
+  }
+  process.exit(1);
+});
