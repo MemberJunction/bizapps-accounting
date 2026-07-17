@@ -495,7 +495,55 @@ do is kind of get the GUI set up so I can get a basic demo out."* **Picked up to
   GraphQL boundary — so a unit of work assembled in the browser is a unit of work the server never sees as
   one. It failed on `FK_OrderLine_Order` and (on our stale base) took MJAPI down with it.
 
-### ⚠ AGENT'S PROPOSED REFINEMENT — needs Marcelo's ruling before the sweep
+### ✅ RESOLVED 2026-07-17 — the refinement is RATIFIED, and it is MJ's documented rule
+Marcelo: *"I understand your idea. It's not never save. It's just, yeah, never orchestrate, never derive on
+the front end. Yeah. Let's go with that instead."* — and he told the agent to verify against MJ's standards
+rather than take its own word. **Verified. All three sources agree:**
+
+1. **MJ's Transport-Layer Architecture Guide, line 5 (verbatim):** *"**This is NOT for plain CRUD.** Every
+   entity already gets a generated, secured, typed API (views + spCreate/spUpdate/spDelete + GraphQL types)
+   via CodeGen, consumed in the UI through `RunView` / `GetEntityObject` / **`BaseEntity.Save()`**. Do **not**
+   hand-write a resolver or a GraphQL client for ordinary record reads/writes — use the generated entity
+   layer. This guide is for **custom operations** that aren't a single-entity CRUD call: cross-entity logic,
+   compute-heavy work, third-party calls, **orchestration**, anything with real business logic."* Its decision
+   table: *"Plain single-entity CRUD — use generated entity layer (RunView/BaseEntity)."*
+2. **MJ's Remote Operations Guide** decision table: *"Table-backed record **CRUD** → **`BaseEntity`**
+   (already generated)."*
+3. **Amith (via Marcelo, 2026-07-17):** *"we should make sure that we are using Remotable Operation for
+   **larger chunks of logical work** if we want a simple encapsulated unit of work for something big. **It is
+   also fine to use BaseEntity sub-classes to create Order and OrderLine type records one at a time.**"*
+
+**So: there is NO MJ rule against `BaseEntity.Save()` — the rule is the opposite.** MJ explicitly says do not
+wrap plain CRUD in a resolver. Putting a 5-field roster behind a remote op would CONTRADICT MJ's guidance.
+(Marcelo suspected a prohibition existed — *"I think there might be something that tells us not to use base
+entity save... but I'm not really sure"* — searched: no such rule exists anywhere in `guides/`.)
+
+**THE RATIFIED LINE — "never ORCHESTRATE, never DERIVE" on the front end.** The client may ask the server to
+create ONE row through the generated entity layer. The client must never: (1) orchestrate a multi-record unit
+of work (TGs do not cross GraphQL), (2) compute a derived value (totals, balances, GL/company resolution),
+(3) enforce an invariant (a second client bypasses it).
+
+### AMITH'S ADDITIONAL DIRECTION (2026-07-17) — and note it is ALREADY BUILT
+- *"Make sure that all logic stays encapsulated in BaseEntity subclasses for the whole system and the UX is
+  just a thin/dumb wrapper."*
+- *"It is critical that the Journal Entry/Journal Entry Line Items are created through a singular call to an
+  **AccountingEngine.CreateJournalEntry** type of method so that we have a proper transaction wrapper."*
+  → **exists**: `CreateJournalEntryOperation` / `Accounting.CreateJournalEntry`.
+- *"The logic for the journal entry creation belongs in the **OrdersEngine** because that order engine is where
+  we will know to look at the Product definition to look up its accounting rules (rev rec type per RK comment)
+  as well as looking up its **ProductGLAccount** rows. We should be using **metadata caching** for the
+  Product/GLAccount type info in the **OrdersEngineBase** (which we can wrap for easy access in the server-only
+  **OrdersEngine** class that simply wraps the base class for convenience like the **AIEngineBase/AIEngine**
+  pattern)."*
+  → **This is verbatim what `OrdersEngineBase`'s file header already says it does.** The engine is RIGHT. The
+  problem is that `order-editor.page.ts` BYPASSES it — hand-rolling the transaction in the browser instead of
+  calling the engine. **So this is not a build, it is a re-route.**
+- ⚠ **"ProductGLAccount rows"** — Amith names a product→account concept directly. **Put this in front of him
+  alongside [Q31](QUESTIONS.md#q31)**: today that relationship is the polymorphic `GLAccountLink`, and Q31 asks
+  whether product/category links should carry a ROLE instead of an account. His phrasing suggests he pictures
+  something more specific. That is a real signal for tomorrow's account-model session.
+
+### ORIGINAL PROPOSAL (retained for the record)
 **`BaseEntity.Save()` is ALREADY a server-side operation.** The client writes no SQL: `GetEntityObject` →
 `Save()` marshals over GraphQL, runs the server's `BaseEntity` subclass (its `Validate()`, its hooks — e.g.
 `OrderEntityServer` books the JE there), and calls `spCreate*`. So a single-row create through the entity
@@ -519,8 +567,12 @@ multi-record or derived. **Same outcome where it matters, far less ceremony wher
   is not atomic** because no apply-payment op exists. → `Orders.ApplyPayment`.
 - `product-workshop.page.ts` — product + its GLAccountLink rows, saved separately.
 - Category workshop (planned, GUI-26) — bulk-reassigning N products' `ProductCategoryID` is N saves.
-**Single-row rosters (violate the literal rule; NOT the refinement — pending his ruling):**
-`categories`, `product-types`, `payment-terms-types`, `payment-providers`, `subscription-plans`, `gl-accounts`.
+**COMPLIANT under the ratified rule — leave them alone:** `categories`, `product-types`,
+`payment-terms-types`, `payment-providers`, `subscription-plans`, `gl-accounts`. Each creates ONE row through
+the generated entity layer, which is precisely what MJ's Transport-Layer guide says to do and what Amith
+explicitly blessed ("fine to use BaseEntity sub-classes... one at a time"). **Wrapping these in remote ops
+would violate MJ's documented guidance, not satisfy it.** The one caveat: if a roster ever grows a derived
+value or a second-record write, it crosses the line and needs an op.
 **Already compliant:** `Orders.ConfirmOrder`, `Orders.CapturePayment`, `Orders.CreateReversalOrder`,
 `Accounting.CreateJournalEntry`, `BuildBatchOperation`.
 
@@ -532,3 +584,27 @@ rather than patching the client path first and rewriting it a day later.
 touched this exact Save()/TG-notification path). Upgrade first (`mjdev merge accounting-engine-dev`), re-test,
 then build the op.
 - **Trigger:** tomorrow, with the account model.
+
+
+## Engine operations needed — one per orchestrating page (from the ★★ imperative above)
+- **Added:** 2026-07-17 · **Source:** Marcelo — *"then we're gonna need backlog items for all of those
+  workspace pages because we're gonna need engine operations for them is my guess."* He is right; scoped below.
+- **The rule they all satisfy:** each composes MULTIPLE records and/or DERIVES values, so per the ratified
+  line (and MJ's Transport-Layer guide, and Amith) each needs one encapsulated server-side unit of work.
+  **Logic in the engine; the op is a thin transactional wrapper; the page becomes a dumb form.**
+
+| Op | Page it replaces | Why it must be an op | Notes |
+|---|---|---|---|
+| **`Orders.CreateOrder`** | `order-editor.page.ts` | order + N lines + N journal entries (one per company — MOD-11), derives GL/company resolution | ★ FIRST. Amith: JE creation logic belongs in **OrdersEngine**, calling **`AccountingEngine.CreateJournalEntry`** as a *singular call* for the transaction wrapper. **Both already exist** — the editor just bypasses them. Also stamps the point-in-time (CompanyID, GLAccountID, GLAccountRoleID) triple on each line. |
+| **`Orders.CreatePayment`** | `payment-entry.page.ts` | payment + N payment lines, in one client-side TG today | Same defect class as the order editor. |
+| **`Orders.ApplyPayment`** | `payment-capture.page.ts` | N payment-line writes + recompute of each order's AmountPaid/Balance/PaymentStatus | The page **already tells the user on screen it is not atomic** — that notice comes out when this lands. |
+| **`Orders.SaveProduct`** | `product-workshop.page.ts` | product + its GLAccountLink rows | The product alone is a single-row save (fine); it is the LINKS that make it a unit of work. |
+| **`Orders.AssignProductsToCategory`** | category workshop (GUI-26) | bulk `ProductCategoryID` update across N products | Do NOT ship a multi-select that half-applies. |
+
+- **Sequencing — do NOT start on this base.** The instance predates PR #3097 (Marcelo's own TransactionGroup
+  crash fix), which touched the exact `Save()`/TG-notification path these pages fail through. **Upgrade
+  (`mjdev merge accounting-engine-dev` + `mjdev setup`), re-test, then build.**
+- **Build `Orders.CreateOrder` FIRST and together with the ★HIGH account-model item** — it is where the
+  point-in-time triple gets stamped, so building it before that decision means writing it twice.
+- **Reference:** `ConfirmOrderOperation` / `Orders.ConfirmOrder` is the working model — typed client in
+  `order-editor.client.ts`, op server-side, TG composed where TGs actually work.
