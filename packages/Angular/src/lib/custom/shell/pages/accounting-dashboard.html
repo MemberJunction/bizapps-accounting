@@ -5,11 +5,16 @@
   </div>
 </mj-page-header-interior>
 
-@if (LoadError) {
-  <mj-alert Variant="error" [Message]="LoadError"></mj-alert>
-}
+<!-- The scrollable body MUST be <mj-page-body-interior>: it is the interior primitive
+     <mj-left-nav-content> expects, and it owns the padding that keeps content off the rail. Bare
+     divs here sat flush against the nav rail — the header card only looked right because it
+     supplies its own margin. -->
+<mj-page-body-interior>
+  @if (LoadError) {
+    <mj-alert Variant="error" [Message]="LoadError"></mj-alert>
+  }
 
-<div class="dash-stats">
+  <div class="dash-stats">
   @for (s of Stats; track s.Id) {
     <div class="dash-stat" [class.dash-stat--warn]="s.Warn" [title]="s.Tooltip">
       <i [class]="s.Icon" aria-hidden="true"></i>
@@ -23,6 +28,7 @@
   }
 </div>
 
-@if (IsLoading) {
-  <mj-loading text="Counting…"></mj-loading>
-}
+  @if (IsLoading) {
+    <mj-loading text="Counting…"></mj-loading>
+  }
+</mj-page-body-interior>

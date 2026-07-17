@@ -66,7 +66,10 @@
      feeds rows through AG's IDatasource and never fills `rowData`. Logged in MJ-UPSTREAM.md.
      Switch back to infinite (with ShowPager off) the moment that lands. Our JE volume is small, so
      client mode is honest and correct today. -->
-<div class="aje-grid">
+<!-- The scrollable body is <mj-page-body-interior> — the interior primitive left-nav-content
+     expects. It owns the padding that keeps content off the rail. -->
+<mj-page-body-interior>
+  <div class="aje-grid">
   <mj-entity-data-grid
     [Params]="GridParams"
     [Columns]="Columns"
@@ -82,7 +85,8 @@
     Height="auto"
     (AfterRowClick)="OnRowClicked($event.rowKey)">
   </mj-entity-data-grid>
-</div>
+  </div>
+</mj-page-body-interior>
 
 <!-- Row detail: lines + lineage + reversal chain + batch membership + the C.8 chip. -->
 <mj-journal-entry-detail-panel
