@@ -115,6 +115,11 @@ export type { TimeWindowId } from './lib/transfer-pending/list-scaffold/time-win
 export { sqlLiteral, sqlLikePattern, likeContains } from './lib/transfer-pending/list-scaffold/sql-filter';
 export { rowKeyToId } from './lib/transfer-pending/list-scaffold/grid-row-key';
 
+// Cross-app deep linking (parked, framework-clean — §0 lists it as a shared component targeted at
+// MJ base). Explorer is a TABBED SPA: a URL only navigates on a cold load, so a cross-app "link"
+// must go through NavigationService, not an <a href>. Both apps' plans specify these links.
+export { CrossAppLinkService } from './lib/transfer-pending/cross-app-link/cross-app-link.service';
+
 /**
  * Bootstrap function called during MJExplorer initialization.
  * Static imports above handle most registration; the explicit Load* calls below

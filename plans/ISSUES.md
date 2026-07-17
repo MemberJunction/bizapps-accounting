@@ -103,3 +103,19 @@ showed. That is a correctness trap, not a shortcut.
   possible, and if so what do the control totals mean? (Today every seeded company profile would
   need checking; the AED company above shows the currencies do differ in practice.)
 
+
+### [OPEN] C.8's approval gate was never DECIDED — an unanswered question's lean became a feature ID — 2026-07-16
+- **Found:** Marcelo questioned why manual-JE approval existed at all ("it just seems new. I'm surprised to see it"). Tracing it proved him right.
+- **What actually happened:**
+  1. `EntryType='Manual'` **is** original master-plan scope (§4 JournalEntry CHECK constraint) — manual entries are not new.
+  2. The **approval gate** is **§14 Q10 — an OPEN QUESTION**, verbatim: *"should `EntryType='Manual'` JEs require an approval before they can go to `Batched`? … **My lean**: yes — leverage MJ's approval framework (`__mj.ApprovalRequest`). **Confirms.**"* Nobody ever confirmed it. There is NO entry in MASTER-PLAN-MODIFICATIONS.md or MASTER-PLAN-UPDATES.md — because there was no decision to record.
+  3. The lean then leaked into the plan **as settled fact, twice**:
+     - **§15 (Out of scope)** states *"Approval workflows for routine JEs (only Manual JEs require approval **per Q10 above**)"* — scoping something OUT on the strength of an unconfirmed lean, and reading as though Q10 resolved.
+     - **FEATURE-LIST** minted the stable ID **C.8** (`Planned`, source "§14 Q10 (lean yes)"). Once it had an ID it looked ratified, so the UI plan §1 designed a page for it (2026-07-15) and the review queue was built.
+  4. **A second, unrecorded drift:** the master plan's lean named **MJ's `__mj.ApprovalRequest`** framework. The implementation uses the **bizapps-tasks** substrate instead — also never recorded as a MOD/UPD.
+- **Why this matters beyond C.8:** the planning system exists to make exactly this impossible — a decision must be a MOD/UPD with a source. A feature ID is not a decision, but it *reads* like one, and everything downstream (UI plan, build, tests) treated it as ratified. Worth checking whether other FEATURE-LIST rows sourced to a §14 question have the same shape.
+- **Marcelo's ruling (2026-07-16):** the lean is accepted in principle but the gate is **DEFERRED** (plans/DEFERRALS.md), with a real reservation to weigh at revisit — whether the right to create a manual JE already carries the authority, making a separate approver redundant.
+- **Corrections still owed (NOT yet made):**
+  - §15's out-of-scope line asserts Q10 resolved → needs an inline marker or rewording.
+  - FEATURE-LIST C.8's status should say "Deferred — gated on an unanswered question (§14 Q10)", not `Planned`.
+  - If the gate is ever built, the substrate choice (tasks vs `__mj.ApprovalRequest`) needs recording as a MOD against the master plan's stated lean.
