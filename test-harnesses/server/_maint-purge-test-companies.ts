@@ -1,11 +1,18 @@
 /**
  * _maint — purge harness-created TEST companies that leaked past a run's teardown.
  *
- * Why this exists: several harnesses (`ORD2JE-*` orders→JE, `ORD2JEAPI-*`, `PWBATCH-*` Playwright,
- * `SJE-*`) create throwaway companies and delete them in teardown — but a run that crashes before
- * teardown leaks them. They then pollute the accounting Companies screen, the company-scope chip,
- * and the JE grid with test data that looks real. (This is the operational face of the open T36
- * "deterministic test data" question.)
+ * Why this exists: many harnesses create throwaway companies and delete them in teardown — but a run
+ * that crashes BEFORE teardown (or, for the block harnesses, a crash inside `bootstrap()` after the
+ * company was seeded but before `main()`'s teardown is reachable) leaks them. They then pollute the
+ * accounting Companies screen, the company-scope chip, and the JE grid with test data that looks real.
+ * (This is the operational face of the open T36 "deterministic test data" question.) Tagged prefixes:
+ *   ORD2JE- / ORD2JEAPI-  — orders order→JE (server + api)     SJE-      — scheduled-je-runtime
+ *   PWBATCH-              — accounting Playwright batching       ENGINE-   — engine-runtime
+ *   BLOCK0-/1-/2-/4-/5-/6- — block*-runtime                      MCBATCH-  — batching-multicompany-runtime
+ * NOTE: this script owns the Company / GLAccount / JE / batch footprint. The block/engine harnesses
+ * also tag a few `cfo-*@mjdev.local` Users, `*-<tag>` Persons, and `DEPT-<tag>` Dimensions; those are
+ * swept by each harness's own normal-path teardown and are NOT cleaned here (they don't surface as
+ * "companies" in the UI). Extend this script if that orphan set ever needs mop-up too.
  *
  * SAFETY — this script refuses rather than guesses:
  *  1. It only ever touches companies whose NAME matches a harness tag (never a name-less match).
@@ -36,8 +43,15 @@ import path from 'node:path';
 dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
 
 const SCHEMA = '__mj_BizAppsAccounting';
-/** Harness name tags. Anything NOT matching these is never touched. */
-const TEST_NAME_PATTERNS = ["'ORD2JE%'", "'ORD2JEAPI%'", "'PWBATCH%'", "'SJE-%'"];
+/**
+ * Harness name tags. Anything NOT matching these is never touched (the script refuses rather than
+ * guesses). Patterns are precise per-tag — never a loose 'BLOCK%' that could catch a real "Block Inc".
+ */
+const TEST_NAME_PATTERNS = [
+  "'ORD2JE%'", "'ORD2JEAPI%'", "'PWBATCH%'", "'SJE-%'",
+  "'BLOCK0-%'", "'BLOCK1-%'", "'BLOCK2-%'", "'BLOCK4-%'", "'BLOCK5-%'", "'BLOCK6-%'",
+  "'ENGINE-%'", "'MCBATCH-%'",
+];
 
 (async () => {
   const confirmed = process.argv.includes('--yes');
