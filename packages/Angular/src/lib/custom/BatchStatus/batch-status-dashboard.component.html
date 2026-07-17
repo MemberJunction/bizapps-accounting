@@ -12,7 +12,6 @@
     </div>
 
     <div actions>
-      <mj-refresh-button [Loading]="IsLoading" (Clicked)="Reload()"></mj-refresh-button>
       <button mjButton variant="primary" size="sm" [disabled]="Building" (click)="OpenBuildPreview()">
         <i class="fa-solid fa-layer-group"></i> Build Batch
       </button>

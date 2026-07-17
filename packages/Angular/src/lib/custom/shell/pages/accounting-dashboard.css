@@ -53,3 +53,19 @@
 }
 .dash-item__detail { color: var(--mj-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dash-item__when { flex-shrink: 0; font-size: 11px; color: var(--mj-text-disabled); white-space: nowrap; }
+
+/* ── CONSISTENT CARD SPACING ─────────────────────────────────────────────────
+   Marcelo: "these bubbles are not padded in space consistently. All bubbles should be spaced
+   consistently, just straight up." One gap token drives BOTH the stat strip and the list-card grid,
+   so the two can't drift apart — which is what made them look mismatched. */
+:host {
+  --mj-dash-gap: 12px;
+}
+.dash-stats,
+.dash-lists,
+.dash-cards {
+  gap: var(--mj-dash-gap);
+}
+.dash-stats {
+  margin-bottom: var(--mj-dash-gap);
+}
