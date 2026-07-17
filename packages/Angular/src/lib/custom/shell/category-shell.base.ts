@@ -70,10 +70,43 @@ export abstract class CategoryShellBase extends BaseDashboard {
 
   /** Label for a rail page that isn't built yet — read back off the rail so it can't drift. */
   public PendingPageName(pageId: string): string {
+    return this.RailItemLabel(pageId) ?? 'This screen';
+  }
+
+  /**
+   * The ACTIVE page's label, read off the rail config.
+   *
+   * This is the shell header's title (Marcelo 2026-07-16: *"that header is meant to say, here's the
+   * page you're on"*). Read from the rail rather than declared per-page so the header and the rail's
+   * active item can never disagree — and so a page cannot forget to set it.
+   */
+  public get ActivePageLabel(): string {
+    return this.RailItemLabel(this.ActivePageId) ?? this.CategoryTitle;
+  }
+
+  /** The active page's icon, for the header. Falls back to the category's own. */
+  public get ActivePageIcon(): string {
+    return this.RailItemIcon(this.ActivePageId) ?? this.CategoryIcon;
+  }
+
+  /** The category's icon — subclasses override; used when a page has none. */
+  public get CategoryIcon(): string {
+    return 'fa-solid fa-table-list';
+  }
+
+  private RailItemLabel(pageId: string): string | null {
     for (const section of this.RailSections) {
       const item = section.items.find((i) => i.id === pageId);
       if (item) return item.label;
     }
-    return 'This screen';
+    return null;
+  }
+
+  private RailItemIcon(pageId: string): string | null {
+    for (const section of this.RailSections) {
+      const item = section.items.find((i) => i.id === pageId);
+      if (item?.icon) return item.icon;
+    }
+    return null;
   }
 }

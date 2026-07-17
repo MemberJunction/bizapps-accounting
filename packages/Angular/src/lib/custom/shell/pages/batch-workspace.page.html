@@ -2,7 +2,7 @@
      NOTE there is deliberately NO Filters control here: the build-criteria panel is the ONLY
      filter surface on this page (round-2 ruling — never two filter systems, never view-filters
      that don't match the batch contents). -->
-<mj-page-header-interior Title="Batch workspace" Subtitle="Build a batch — the criteria below are the only filter on this page">
+<mj-page-header-interior>
   <ng-container meta>
     @if (IsBuilt) {
       <mj-stat-badge [Label]="'Built — ' + Draft?.BuiltBatchNumber" Icon="fa-solid fa-check" Variant="success"></mj-stat-badge>

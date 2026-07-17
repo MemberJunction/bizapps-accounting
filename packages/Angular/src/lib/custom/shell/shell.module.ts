@@ -7,6 +7,7 @@ import { EntityViewerModule } from '@memberjunction/ng-entity-viewer';
 import {
   MJButtonDirective,
   MJPageLayoutComponent,
+  MJPageHeaderComponent,
   MJPageBodyComponent,
   MJPageBodyInteriorComponent,
   MJPageHeaderInteriorComponent,
@@ -95,6 +96,7 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
     CompanySetupModule, // <mj-company-setup-dashboard> — Configuration
     MJButtonDirective,
     MJPageLayoutComponent,
+    MJPageHeaderComponent,
     MJPageBodyComponent,
   MJPageBodyInteriorComponent,
     MJPageHeaderInteriorComponent,
