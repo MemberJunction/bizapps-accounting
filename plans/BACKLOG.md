@@ -39,6 +39,16 @@ Convention: `~/MJDev/shared-plans/repo-planning-system.md` §5.1. (The instance-
       aggregate query measurably slow on real data volumes, or the dashboards phase (§8.6 step 6)
       surfacing a stat that can't be served cheaply.
 
+- [ ] **Cross-app frontend cache for journal entries (idea)** — JEs get read in many places across
+      accounting AND orders (lists, workspaces, order-lineage slide-ins, dashboards); consider one
+      shared client-side cache/engine layer instead of per-page fetches. MJ prior art: the
+      `BaseEngine` cached-array pattern (fits reference data, NOT unbounded JE sets — a JE layer
+      would need windowed/keyset-aware caching, closer to LiveDashboardBase's paged feed) + the
+      platform's IndexedDB RunView cache already underneath. Candidate home: bizapps-common
+      (cross-app by definition). Explicitly LATER per Marcelo 2026-07-17 — revisit trigger: the
+      Live Page System build (natural substrate) or observed duplicate-fetch pain across the two
+      apps' UIs.
+
 - [ ] **Scheduled-entry approval-before-materialization (idea)** — extend the C.8 manual-JE
       approval gate to optionally cover scheduled entries before they materialize. Not in the
       current plan chain; parked as an idea from the 2026-07-15 mockup review (Marcelo). Revisit
