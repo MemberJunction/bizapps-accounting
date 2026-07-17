@@ -1,12 +1,28 @@
 /* Workspace tab strip. Design tokens only — see nav-rail.component.css for the same rationale. */
 
+/* The strip spans its host so the bottom rule runs the full width of the card it heads,
+   rather than stopping under the last tab. */
+:host {
+  display: block;
+}
+
 .ws-tabs {
   display: flex;
   align-items: stretch;
   gap: 4px;
   border-bottom: 1px solid var(--mj-border-default);
-  padding: 0 4px;
+  /* Indented, NOT flush: the first tab lines up with the card's content gutter, so there is one
+     straight edge down the left of the page (Marcelo 2026-07-16 — flush was my misreading of
+     "in line with the left side of the card"). */
+  padding: 0 12px;
   overflow-x: auto;
+  /* MUST be explicit. Per the CSS overflow spec a `visible` axis paired with a non-`visible` axis
+     COMPUTES TO `auto` — so `overflow-x: auto` alone silently made the strip vertically scrollable
+     too, and .ws-tab's `margin-bottom: -1px` (how an active tab sits on the rule) gave it exactly
+     1px of overflow to scroll. That is the "why are the tabs vertically scrollable? I'm confused"
+     bug: nobody wrote vertical scrolling, CSS inferred it. Fixed here rather than per-page because
+     all four consumers (JE + batch workspaces, order editor, product workshop) inherit it. */
+  overflow-y: hidden;
   min-height: 38px;
 }
 

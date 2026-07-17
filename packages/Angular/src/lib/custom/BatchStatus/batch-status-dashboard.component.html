@@ -84,6 +84,24 @@
     } @else {
       <div class="bs-table-region">
         <table class="bs-table">
+          <!-- Shared column geometry: the expanded JE panel below reuses these SAME col classes
+               (minus the chevron column, which its 28px indent replaces) so its Debit/Credit
+               columns land exactly under the batch table's Debit/Credit. Only the trailing
+               ERP-Ref column is auto, so it absorbs all slack (incl. the scrollbar gutter) and
+               the numeric columns never drift. -->
+          <colgroup>
+            <col class="bs-col-chev" />
+            <col class="bs-col-status" />
+            <col class="bs-col-target" />
+            <col class="bs-col-cos" />
+            <col class="bs-col-jes" />
+            <col class="bs-col-start" />
+            <col class="bs-col-end" />
+            <col class="bs-col-debit" />
+            <col class="bs-col-credit" />
+            <col class="bs-col-batched" />
+            <col class="bs-col-ref" />
+          </colgroup>
           <thead>
             <tr>
               <th class="bs-th--chev"></th>
@@ -107,8 +125,8 @@
                 <td>{{ row.TargetSystem }}</td>
                 <td class="bs-num">{{ row.CompanyIDs.length }}</td>
                 <td class="bs-num">{{ row.TotalEntries }}</td>
-                <td>{{ row.StartDate ? (row.StartDate | date:'yyyy-MM-dd') : '—' }}</td>
-                <td>{{ row.EndDate ? (row.EndDate | date:'yyyy-MM-dd') : '—' }}</td>
+                <td>{{ row.StartDate ? (row.StartDate | date:'yyyy-MM-dd':'UTC') : '—' }}</td>
+                <td>{{ row.EndDate ? (row.EndDate | date:'yyyy-MM-dd':'UTC') : '—' }}</td>
                 <td class="bs-num">{{ row.TotalDebits | number:'1.2-2' }}</td>
                 <td class="bs-num">{{ row.TotalCredits | number:'1.2-2' }}</td>
                 <td>{{ row.BatchedAt ? (row.BatchedAt | date:'yyyy-MM-dd HH:mm') : '—' }}</td>
@@ -123,33 +141,54 @@
                       } @else if (!row.Detail || row.Detail.Lines.length === 0) {
                         <div class="bs-detail__empty">This batch has no consolidated movements.</div>
                       } @else {
-                        <table class="bs-detail-table">
-                          <thead>
-                            <tr>
-                              <th>Company</th>
-                              <th>Account</th>
-                              <th class="bs-num">Debit</th>
-                              <th class="bs-num">Credit</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            @for (line of row.Detail.Lines; track $index) {
-                              <tr class="bs-detail-line" [class.bs-detail-line--credit]="line.Credit > 0">
-                                <td>{{ line.CompanyName }}</td>
-                                <td>{{ line.AccountName }}@if (line.AccountCode) {<span class="bs-detail-code"> · {{ line.AccountCode }}</span>}</td>
-                                <td class="bs-num">{{ line.Debit ? (line.Debit | number:'1.2-2') : '' }}</td>
-                                <td class="bs-num">{{ line.Credit ? (line.Credit | number:'1.2-2') : '' }}</td>
+                        <!-- Capped + independently scrollable: long batches scroll INSIDE the
+                             drop-down instead of growing the row. Its own header/totals stay put. -->
+                        <div class="bs-detail__scroll">
+                          <table class="bs-detail-table bs-je-table">
+                            <!-- Same col classes as the batch table above (chevron col omitted —
+                                 the panel's 28px indent stands in for it), so Debit/Credit line up. -->
+                            <colgroup>
+                              <col class="bs-col-status" />
+                              <col class="bs-col-target" />
+                              <col class="bs-col-cos" />
+                              <col class="bs-col-jes" />
+                              <col class="bs-col-start" />
+                              <col class="bs-col-end" />
+                              <col class="bs-col-debit" />
+                              <col class="bs-col-credit" />
+                              <col class="bs-col-batched" />
+                              <col class="bs-col-ref" />
+                            </colgroup>
+                            <thead>
+                              <tr>
+                                <th colspan="3">Company</th>
+                                <th colspan="3">Account</th>
+                                <th class="bs-num">Debit</th>
+                                <th class="bs-num">Credit</th>
+                                <th class="bs-je-spacer" colspan="2"></th>
                               </tr>
-                            }
-                          </tbody>
-                          <tfoot>
-                            <tr class="bs-detail-total">
-                              <td colspan="2">Totals</td>
-                              <td class="bs-num">{{ row.Detail.TotalDebits | number:'1.2-2' }}</td>
-                              <td class="bs-num">{{ row.Detail.TotalCredits | number:'1.2-2' }}</td>
-                            </tr>
-                          </tfoot>
-                        </table>
+                            </thead>
+                            <tbody>
+                              @for (line of row.Detail.Lines; track $index) {
+                                <tr class="bs-detail-line" [class.bs-detail-line--credit]="line.Credit > 0">
+                                  <td colspan="3">{{ line.CompanyName }}</td>
+                                  <td colspan="3">{{ line.AccountName }}@if (line.AccountCode) {<span class="bs-detail-code"> · {{ line.AccountCode }}</span>}</td>
+                                  <td class="bs-num">{{ line.Debit ? (line.Debit | number:'1.2-2') : '' }}</td>
+                                  <td class="bs-num">{{ line.Credit ? (line.Credit | number:'1.2-2') : '' }}</td>
+                                  <td class="bs-je-spacer" colspan="2"></td>
+                                </tr>
+                              }
+                            </tbody>
+                            <tfoot>
+                              <tr class="bs-detail-total">
+                                <td colspan="6">Totals</td>
+                                <td class="bs-num">{{ row.Detail.TotalDebits | number:'1.2-2' }}</td>
+                                <td class="bs-num">{{ row.Detail.TotalCredits | number:'1.2-2' }}</td>
+                                <td class="bs-je-spacer" colspan="2"></td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
                       }
                     </div>
                   </td>
@@ -178,9 +217,9 @@
         </label>
         <div class="bs-preview__facts">
           <div><span class="bs-field__label">Covers</span>
-            <strong>{{ PreviewStart ? (PreviewStart | date:'yyyy-MM-dd') : '—' }}</strong>
+            <strong>{{ PreviewStart ? (PreviewStart | date:'yyyy-MM-dd':'UTC') : '—' }}</strong>
             <span class="bs-preview__arrow">→</span>
-            <strong>{{ PreviewEnd ? (PreviewEnd | date:'yyyy-MM-dd') : '—' }}</strong>
+            <strong>{{ PreviewEnd ? (PreviewEnd | date:'yyyy-MM-dd':'UTC') : '—' }}</strong>
           </div>
           <div><span class="bs-field__label">Entries</span> <strong>{{ PreviewCount }}</strong></div>
         </div>
@@ -198,7 +237,7 @@
               @for (e of PreviewEntries; track e.ID) {
                 <tr class="bs-detail-line">
                   <td>{{ e.EntryNumber }}@if (e.Description) {<span class="bs-detail-code"> · {{ e.Description }}</span>}</td>
-                  <td>{{ e.EffectiveDate ? (e.EffectiveDate | date:'yyyy-MM-dd') : '—' }}</td>
+                  <td>{{ e.EffectiveDate ? (e.EffectiveDate | date:'yyyy-MM-dd':'UTC') : '—' }}</td>
                   <td>{{ e.EntryType }}</td>
                   <td class="bs-num">{{ e.Amount | number:'1.2-2' }}</td>
                 </tr>

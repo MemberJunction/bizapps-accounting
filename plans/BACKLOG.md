@@ -105,3 +105,130 @@ See test-harnesses/testing.md and the instance TASKS.md.
   additive field) and the Configuration → Companies screen to exist as a deep-link target
   (§8.4 — currently gated/last). Cheap once both land.
 - **Trigger:** when §8.4 Companies ships, or the first time someone hits the hard-fail in real use.
+
+---
+
+## Batch coverage dates — denormalize `CoversFromDate` / `CoversToDate` onto `JournalEntryBatch`
+- **Added:** 2026-07-16 · **Source:** Marcelo, GUI review — *"give me the ability to put in, like, actual
+  calendar dates for a span of time. And if the batch covers a journal entry that's in that time, it should
+  show up... but that could be a really complex and expensive query. So let me know what's the case with
+  that, and maybe we need to have some more features in the batch... entries in the schema that cover, like,
+  start and end of a batch. That's actually based on the journal entries that are in there, so we're not
+  coring through those journal entries every time we wanna know what's the earliest and latest entry."*
+- **The answer to his question:** he is right, and he named the fix himself.
+  - **Today there are NO coverage columns on `JournalEntryBatch`** (verified 2026-07-16 against the generated
+    entity — the batch has `BatchedAt`/`ApprovedAt`/`SentAt`/`PostedAt`, all *lifecycle instants*, and nothing
+    describing the span of the JEs inside it).
+  - So a date-span filter today means, per batch, a join/subquery into `JournalEntry` to find MIN/MAX
+    `EffectiveDate`. That is O(batches × entries) on every filter keystroke and cannot use an index on the
+    thing being filtered. The Batch approvals page currently infers the span in memory from an already-loaded
+    set — fine for an inbox of tens, wrong as a filter predicate at scale.
+- **The fix, and why it is not a new idea:** stamp `CoversFromDate` / `CoversToDate` (DATE, nullable) at
+  batch-build time, exactly as `TotalEntries` / `TotalDebits` / `TotalCredits` already are — those columns'
+  own descriptions say *"denormalized for fast batch dashboards."* Same precedent, same write point, same
+  invariant. The filter then becomes a plain indexed overlap test:
+  `CoversFromDate <= @to AND CoversToDate >= @from` — which also answers his "is it *any* entry in the span,
+  or the *whole* batch?" question: overlap semantics = *any* entry falls in the window, which is what an
+  accountant means.
+- **Scope:** migration (2 columns + index) · stamp them in the batch-build path · backfill existing rows ·
+  CodeGen · then the UI filter is trivial on Batch approvals, All batches and Dispatch status.
+- **Trigger:** when we do the batches feature slice, or the first time someone needs to find a batch by period.
+
+## Batch approvals — who is *required* to approve (routing + visibility)
+- **Added:** 2026-07-16 · **Source:** Marcelo, GUI review — *"We need to file a backlog item on the batch
+  approval to know who needs to approve it because that's going to decide who gets to see it. We likely are
+  going to track whoever created it and who needs to approve it. That's gonna come in the roles changes."*
+- **Correction to what was reported to him in-session:** a required approver **does exist today**, at the
+  COMPANY level — `AccountingCompanyProfile.ApprovalCFOUserID` — and `JournalEntryBatch.ApprovedByUserID`'s
+  own field description points at it. An agent reported "no such field" and that was relayed to Marcelo
+  before being checked; it was wrong. What genuinely does NOT exist is **per-batch approver routing** and any
+  notion of approver-driven **visibility**.
+- **What's missing:** the batch records who approved *after the fact* (`ApprovedByUserID`/`ApprovedAt`) and
+  who built it (`BatchedByUserID`), but nothing says *who must act* on THIS batch, and nothing scopes the
+  inbox to the person who must act. Today the approvals page shows every pending batch to everyone.
+- **Depends on:** the roles/visibility work (A2 — see Q22/Q24 on company-visibility mechanism). Marcelo
+  explicitly sequenced it there: *"That's gonna come in the roles changes, though. So, yeah, that's okay.
+  You can leave that for now."*
+- **Trigger:** the A2 roles/visibility slice.
+
+## Batch approvals — a denser view for large inboxes
+- **Added:** 2026-07-16 · **Source:** Marcelo, GUI review — *"we're getting to the point where it's like that
+  page is gonna need a better viewing mechanism because those cards take up so much space. And if someone has
+  even a hundred batches, it's a lot scrolling to see them all in there."*
+- The information-rich card is the right default for an inbox of tens (it is what makes a batch reviewable
+  without opening it). At ~100 batches it stops working. Wanted: a compact/table mode toggle, or virtual
+  scrolling, keeping the expandable per-account detail.
+- **Trigger:** when a real inbox exceeds ~30 batches, or the batches feature slice.
+
+---
+
+## GL routing: links should carry a ROLE, and the company should come from the SALE (not the account)
+- **Added:** 2026-07-16 · **Source:** Marcelo, GUI review · **Question:** [Q31](QUESTIONS.md#q31) (⏸ HOLD — needs Robert/Amith)
+- **The defect in one line:** `buildDraftsForOrder` does `CompanyID: account.CompanyID` — the JE's company is
+  **derived from the resolved account**. Cause is inferred from effect. Marcelo: *"You shouldn't be deriving
+  the company based on the accounts."*
+- **Why it is a real defect, not a preference:** `AccountingCompanyProfile.ParentAccountingCompanyID` already
+  models *"this company uses that company's books."* Two such companies resolve to the SAME account and
+  therefore collapse to the SAME CompanyID on the JE — **the derivation destroys the distinction that field
+  exists to preserve.** Same for a "company" used as a brand. Both are cases the plan already intends to
+  support.
+- **Second-order effect (the UX complaint):** because `GLAccountLink` names a concrete ACCOUNT, overriding a
+  product's routing from the **orders** app requires choosing an account out of some company's **accounting**
+  chart — a sales user doing a ledger job, possibly without permission to see the chart. There is no account
+  picker because there *shouldn't* be one in orders.
+- **The shape of the fix (reuses what exists — not a rewrite):**
+  1. **Company comes from the sale.** Candidate: `Product.OwningCompanyID` (exists, nullable) or an explicit
+     line-level company. Needs Q31's answer.
+  2. **Role comes from the hierarchy.** product → category chain → default, carrying a **role**, not an account.
+  3. **(company, role) → account** is the company's chart mapping — **`ResolveCompanyAccount(companyID, role,
+     asOf)` is ALREADY exactly this function.** No new lookup needed.
+  - Then "Deferred Revenue — Physical" is a **new GLAccountRole**, and every company points it at its own
+    account. Marcelo's lever, with no shared accounts and no commingling.
+  - UI falls out: orders picks roles (business vocabulary, no chart access); accounting maps roles→accounts per
+    company (chart access). Product workshop + Categories both get role pickers instead of account pickers.
+- **Migration impact:** `GLAccountLink` would need to permit a role-only link (nullable `GLAccountID`), or a
+  sibling "role assignment" concept. Existing account-carrying links stay valid as company-pinning overrides.
+- **Two outright bugs from the same area — FIXED 2026-07-16, independent of the design question:**
+  - The company tier was **dead in booking** (`ResolveAccount` called with 3 of 4 args) → the seeded company
+    defaults were never consulted. Now passes `product.OwningCompanyID`.
+  - The **Catalog disagreed with booking** (it passed the fallback; booking didn't), so the "will it book?"
+    tripwire was optimistic and could show a product as resolved that fails at Confirm.
+- **Also unresolved in this area (smaller, same root):** `AccountingCompanyProfile.AROpenGLAccountID` /
+  `DeferredRevenueGLAccountID` / … are **columns the seed populates**, but booking reads **`GLAccountLink`
+  rows** and never those columns. Two parallel wirings that do not agree — all 4 companies have the columns
+  set; only 1 has an AR link. Pick one mechanism.
+- **Trigger:** Q31 answered by Robert/Amith.
+
+## Batches: single-company vs multi-company (plan says single; code says multi)
+- **Added:** 2026-07-16 · **Source:** Marcelo, GUI review · **Question:** [Q30](QUESTIONS.md#q30) (⏸ HOLD — needs Robert)
+- **DECIDED (Marcelo, 2026-07-16): ONE COMPANY PER BATCH.** *"Our marching orders as my decision are going to
+  be one company per batch."* BA-D16 (the plan of record) already agrees; `D-SEQ` (a comment in the baseline
+  migration, never recorded as a MOD) went the other way; `BatchingEngine`'s `OQ-F` left the question open.
+  Q30 carries the full context for Amith — including that **MOD-4's netting key implies Amith assumed
+  multi-company**, which is the one thing that could reverse this.
+- **Why it is safe to build toward:** `JournalEntryBatch.TargetSystem` is a single column, so a batch already
+  cannot address two ERPs; and no per-company endpoint exists anywhere, so two companies on two BC tenants are
+  unrepresentable regardless. Single-company removes a problem the schema has no model for.
+- **If the answer is single-company:** batch build groups by company (one batch per company × TargetSystem),
+  `spAssignNextBatchNumber` returns to a per-company sequence, `BuildBatchOperation.CompanyIDs` collapses to
+  one, and the "split at send" path disappears. Migration + engine + UI (the build criteria panel currently
+  offers multi-select companies).
+- **If the answer is multi-company:** BA-D16 must be superseded by a real **MOD** (it currently is not), and
+  the per-company split at dispatch needs verifying — a batch carries ONE `TargetSystem` but N companies, and
+  BA-D16 requires "one consolidated JE per Company".
+- **Already safe either way:** MOD-4 nets per (Company × GLAccount × Dimension-combo), so money never nets
+  across companies. Marcelo's netting worry is handled.
+- **Trigger:** Q30 answered.
+
+## Planning-system hygiene: decisions are being made in code comments, not the plan chain
+- **Added:** 2026-07-16 · **Source:** fallout from Q30 · **Type:** process, not code
+- Two plan-changing decisions were found recorded ONLY in source comments: **`D-SEQ` 2026-07-06** ("batches are
+  multi-company", in the baseline migration) and **`OQ-F`** (the open question that shape depends on, in
+  `BatchingEngine.ts`). Neither is a MOD/UPD/Extension. The planning system's rule is explicit — *"nothing is
+  silently superseded"* and *"if it isn't in MASTER-PLAN(-MODIFICATIONS/-UPDATES), it isn't the plan"* — so
+  **BA-D16 still reads as the plan of record and contradicts the shipped schema.**
+- This is not pedantry: it is exactly why Marcelo read the plan, concluded single-company, and was contradicted
+  by the code. A reader cannot tell which is current.
+- **Action:** sweep the migrations + engines for `D-*` / `OQ-*` / "decided" comments that alter the plan, and
+  land each as a MOD/UPD with its reciprocal inline marker — or withdraw it.
+- **Trigger:** next planning pass; do it before the batches slice, since Q30 depends on it.

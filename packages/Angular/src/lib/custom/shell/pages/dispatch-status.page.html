@@ -1,84 +1,184 @@
-<mj-page-header-interior>
+<!-- Sub-page of a left-nav shell → mj-page-header-interior + mj-page-body-interior as the ONLY two
+     root elements. Those two primitives carry the gutters; anything else at the root sits flush
+     against the nav rail and the page edge. Slots: [meta] = state, [actions] = verbs, [toolbar] =
+     filters — the same chrome contract All batches / All journal entries use. -->
+<mj-page-header-interior
+  Title="Dispatch status"
+  Subtitle="The wire, not the archive — batches awaiting the ERP’s confirmation or needing a retry, broken first. All batches is the full history.">
+
   <div meta>
-    <mj-stat-badge [Count]="Rows.length" Label="batches" Variant="default"></mj-stat-badge>
+    <mj-stat-badge Icon="fa-solid fa-paper-plane" [Count]="TotalCount ?? '—'" Label="batches" Variant="info"></mj-stat-badge>
     @if (FailedCount > 0) {
       <mj-stat-badge [Count]="FailedCount" Label="failed" Icon="fa-solid fa-triangle-exclamation" Variant="error"></mj-stat-badge>
     }
   </div>
+
+  <div actions>
+    <!-- No refresh button here: the shell header owns the ONE refresh control (§8 refresh policy).
+         Deleting this seam is how live push lands later — there is deliberately no polling. -->
+  </div>
+
+  <!-- The All-batches filter set, applied here in idiom: status toggles → Target ERP → From/To
+       calendar → window preset. Same controls, same order, same labels — plus this list's own
+       dispatch search. NO company select: a batch carries no CompanyID (it is multi-company, CH-4),
+       so a narrowing in that control position would be a lie. -->
   <div toolbar>
-    <label class="ds-field">
-      <span class="ds-field__label">Status</span>
-      <select class="mj-input" [(ngModel)]="StatusFilter" aria-label="Dispatch status">
-        <option value="All">All</option>
-        <option value="Failed">Failed</option>
-        <option value="Sent">Sent</option>
-        <option value="Posted">Posted</option>
-      </select>
-    </label>
+    <div class="ds-filters">
+      <div class="ds-field">
+        <span class="ds-field__label">Status</span>
+        <div class="ds-toggles">
+          <button mjButton size="sm" [variant]="ToggleVariant(ShowingInFlight)" (click)="ShowInFlight()" title="Sent + Failed — what this page is for">In flight</button>
+          <button mjButton size="sm" [variant]="ToggleVariant(AllStatusesShown)" (click)="ShowAllStatuses()">All</button>
+          @for (s of Statuses; track s) {
+            <button mjButton size="sm" [variant]="ToggleVariant(IsStatusOn(s))" (click)="ToggleStatus(s)">{{ s }}</button>
+          }
+        </div>
+      </div>
+
+      <label class="ds-field">
+        <span class="ds-field__label">Target ERP</span>
+        <select class="mj-input" [(ngModel)]="TargetFilter" (ngModelChange)="OnFilterChanged()" aria-label="Target ERP">
+          <option value="All">All systems</option>
+          @for (t of Targets; track t) {
+            <option [value]="t">{{ t }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="ds-field">
+        <span class="ds-field__label">Window</span>
+        <select class="mj-input" [(ngModel)]="TimeWindow" (ngModelChange)="OnWindowChanged()" aria-label="Time window">
+          @for (w of TimeWindows; track w.Id) {
+            <option [value]="w.Id">{{ w.Label }}</option>
+          }
+          <option value="custom">Custom range</option>
+        </select>
+      </label>
+
+      <label class="ds-field ds-field--date">
+        <span class="ds-field__label">From</span>
+        <input type="date" class="mj-input" [(ngModel)]="FromDate" (ngModelChange)="OnDateChanged()" aria-label="Batched from" />
+      </label>
+
+      <label class="ds-field ds-field--date">
+        <span class="ds-field__label">To</span>
+        <input type="date" class="mj-input" [(ngModel)]="ToDate" (ngModelChange)="OnDateChanged()" aria-label="Batched to" />
+      </label>
+
+      <label class="ds-field ds-field--grow">
+        <span class="ds-field__label">Search</span>
+        <input
+          type="search"
+          class="mj-input"
+          placeholder="Batch № or ERP reference"
+          [(ngModel)]="Search"
+          (change)="OnFilterChanged()"
+          aria-label="Search dispatches" />
+      </label>
+    </div>
   </div>
 </mj-page-header-interior>
 
-<!-- Scrollable body — <mj-page-body-interior> is the interior primitive
-     <mj-left-nav-content> expects; it owns the gutters that keep content off the rail and
-     off the page edge. NOTE it is display:block, so children size with height/min-height,
-     never with flex. -->
+<!-- ⚠ <mj-page-body-interior> is display:block — a child styled `flex:1` is a NO-OP that collapses
+     to ZERO height (that blanked All journal entries once). Size with height/min-height only. -->
 <mj-page-body-interior>
-@if (ActionMessage) {
-  <mj-alert [Variant]="ActionIsError ? 'error' : 'success'" [Message]="ActionMessage"></mj-alert>
-}
-@if (LoadError) {
-  <mj-alert Variant="error" [Message]="LoadError"></mj-alert>
-}
-
-<div class="ds-wrap">
-  @if (IsLoading) {
-    <mj-loading text="Loading dispatch status…"></mj-loading>
-  } @else {
-    <table class="ds-grid">
-      <thead>
-        <tr>
-          <th>Batch №</th>
-          <th>Dispatched</th>
-          <th>Target</th>
-          <th class="ds-num">Summary lines</th>
-          <th class="ds-num">Entries</th>
-          <th>Status</th>
-          <th>ERP reference</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (r of Filtered; track r.BatchID) {
-          <tr>
-            <td class="ds-mono">{{ r.BatchNumber }}</td>
-            <td>{{ r.SentAt ? (r.SentAt | date: 'yyyy-MM-dd HH:mm') : '—' }}</td>
-            <td>{{ r.TargetSystem }}</td>
-            <td class="ds-num">{{ r.SummaryLineCount }}</td>
-            <td class="ds-num">{{ r.TotalEntries }}</td>
-            <td><mj-stat-badge [Label]="r.Status" [Variant]="StatusVariant(r.Status)"></mj-stat-badge></td>
-            <td class="ds-mono">{{ r.ExternalBatchRef || '—' }}</td>
-            <td>
-              <button
-                type="button"
-                mjButton
-                Variant="outline"
-                Size="sm"
-                [disabled]="!CanRetry(r)"
-                [title]="RetryBlockedReason(r) ?? 'Re-attempt the ERP dispatch'"
-                (click)="Retry(r)">
-                @if (RetryingBatchID === r.BatchID) {
-                  <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Retrying…
-                } @else {
-                  <i class="fa-solid fa-rotate-right" aria-hidden="true"></i> Retry dispatch
-                }
-              </button>
-            </td>
-          </tr>
-        } @empty {
-          <tr><td colspan="8" class="ds-empty">No batches match this filter.</td></tr>
-        }
-      </tbody>
-    </table>
+  @if (ActionMessage) {
+    <mj-alert [Variant]="ActionIsError ? 'error' : 'success'" [Message]="ActionMessage"></mj-alert>
   }
-</div>
+  @if (LoadError) {
+    <mj-alert Variant="error" [Message]="LoadError"></mj-alert>
+  }
+
+  <!-- ATTENTION STRIP — the page's reason for being. A Failed batch's ErrorMessage is the single
+       most valuable thing here, so it is shown in full, at the top, with the Retry verb attached.
+       It deliberately ignores the status toggles (turning Failed off must not hide the alarm) while
+       still honouring the date / target / search filters. -->
+  @if (FailedBatches.length > 0) {
+    <section class="ds-attention" aria-label="Failed dispatches">
+      <h2 class="ds-attention__title">
+        <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+        {{ FailedBatches.length }} dispatch{{ FailedBatches.length === 1 ? '' : 'es' }} failed — needs a retry
+      </h2>
+      @for (b of FailedBatches; track b.ID) {
+        <article class="ds-fail">
+          <div class="ds-fail__head">
+            <span class="ds-mono">{{ b.BatchNumber }}</span>
+            <span class="ds-fail__meta">{{ b.TargetSystem }}</span>
+            <!-- SentAt is datetimeoffset (a true instant) → render LOCAL, no 'UTC' arg. Passing
+                 'UTC' here would misreport when the send actually happened. -->
+            <span class="ds-fail__meta">Sent {{ b.SentAt ? (b.SentAt | date: 'yyyy-MM-dd HH:mm') : '—' }}</span>
+            <span class="ds-fail__meta">{{ b.TotalEntries }} JEs</span>
+            <button
+              type="button"
+              mjButton
+              variant="primary"
+              size="sm"
+              [disabled]="!CanRetry(b)"
+              [title]="RetryBlockedReason(b) ?? 'Re-attempt the ERP dispatch'"
+              (click)="Retry(b)">
+              @if (RetryingBatchID === b.ID) {
+                <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Retrying…
+              } @else {
+                <i class="fa-solid fa-rotate-right" aria-hidden="true"></i> Retry dispatch
+              }
+            </button>
+          </div>
+          <p class="ds-fail__error">{{ b.ErrorMessage || 'The ERP send failed but returned no message.' }}</p>
+        </article>
+      }
+    </section>
+  }
+
+  <!-- A clicked row pins its full dispatch facts here — the grid's Error column truncates. -->
+  @if (SelectedBatch) {
+    <section class="ds-selected" aria-label="Selected batch">
+      <div class="ds-fail__head">
+        <span class="ds-mono">{{ SelectedBatch.BatchNumber }}</span>
+        <span class="ds-fail__meta">{{ SelectedBatch.Status }} · {{ SelectedBatch.TargetSystem }}</span>
+        <span class="ds-fail__meta">Sent {{ SelectedBatch.SentAt ? (SelectedBatch.SentAt | date: 'yyyy-MM-dd HH:mm') : '—' }}</span>
+        <span class="ds-fail__meta">Posted {{ SelectedBatch.PostedAt ? (SelectedBatch.PostedAt | date: 'yyyy-MM-dd HH:mm') : '—' }}</span>
+        <span class="ds-fail__meta">ERP ref <span class="ds-mono">{{ SelectedBatch.ExternalBatchRef || '—' }}</span></span>
+        @if (SelectedBatch.Status === 'Failed') {
+          <button type="button" mjButton variant="primary" size="sm" [disabled]="!CanRetry(SelectedBatch)" (click)="Retry(SelectedBatch)">
+            <i class="fa-solid fa-rotate-right" aria-hidden="true"></i> Retry dispatch
+          </button>
+        }
+        <button type="button" mjButton variant="flat" size="sm" (click)="ClearSelection()" aria-label="Clear selection">
+          <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+        </button>
+      </div>
+      @if (SelectedBatch.ErrorMessage) {
+        <p class="ds-fail__error">{{ SelectedBatch.ErrorMessage }}</p>
+      }
+    </section>
+  }
+
+  <!-- MJ's house grid (§8 MJ-wins), used exactly as All journal entries does: AG Grid + RunView
+       loading + sorting + export + per-user grid state. The bespoke table this page used to hand-roll
+       is gone — it looked like nothing else in the app and re-solved a solved problem. -->
+  @if (IsEmpty) {
+    <mj-empty-state
+      Icon="fa-solid fa-paper-plane"
+      Title="Nothing in flight"
+      [Message]="EmptyMessage">
+    </mj-empty-state>
+  } @else {
+    <div class="ds-grid">
+      <mj-entity-data-grid
+        [Params]="GridParams"
+        [Columns]="Columns"
+        PaginationMode="client"
+        [PageSize]="100"
+        [ShowPager]="true"
+        [AllowSorting]="true"
+        [ShowToolbar]="false"
+        [SelectionMode]="'single'"
+        KeyField="ID"
+        StateKey="mj.bizappsacct.grid.dispatchStatus.v1"
+        [AutoPersistState]="true"
+        Height="auto"
+        (AfterRowClick)="OnRowClicked($event.rowKey)">
+      </mj-entity-data-grid>
+    </div>
+  }
 </mj-page-body-interior>

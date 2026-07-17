@@ -27,25 +27,57 @@
 .bs-banner--error { border-color: var(--mj-status-error-border); background: var(--mj-status-error-bg); color: var(--mj-status-error-text); }
 
 /* ── main table ──────────────────────────────────────────────────────────── */
-.bs-table-region { overflow-x: auto; }
-.bs-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+/* THE TABLE ITSELF SCROLLS — not the page. `position: sticky` only sticks relative to a
+   SCROLLING ancestor, so the header needs a bounded, overflow-y:auto region to stick inside;
+   without one the page scrolled and rows rode up OVER the header. Both axes are set
+   explicitly: per the overflow spec a `visible` axis next to a non-`visible` one computes to
+   `auto`, so "overflow-x: auto" alone would have silently made both axes scrollable. */
+.bs-table-region {
+  height: min(68vh, 900px);
+  min-height: 320px;
+  overflow-x: auto;
+  overflow-y: auto;
+  border: 1px solid var(--mj-border-subtle);
+  border-radius: 8px;
+  background: var(--mj-bg-surface);
+}
+/* Fixed layout + an explicit colgroup pins the column geometry the expanded JE panel mirrors.
+   Every column is a fixed px width EXCEPT the trailing ERP-Ref column, which absorbs all slack
+   (window width, scrollbar gutter) — so Debit/Credit sit at stable x offsets in both tables. */
+.bs-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 13px; }
+.bs-col-chev { width: 28px; }
+.bs-col-status { width: 100px; }
+.bs-col-target { width: 120px; }
+.bs-col-cos { width: 56px; }
+.bs-col-jes { width: 56px; }
+.bs-col-start { width: 96px; }
+.bs-col-end { width: 96px; }
+.bs-col-debit { width: 116px; }
+.bs-col-credit { width: 116px; }
+.bs-col-batched { width: 132px; }
+/* .bs-col-ref intentionally has NO width — it takes the remainder. */
 .bs-table thead th {
-  position: sticky; top: 0; z-index: 1;
+  position: sticky; top: 0; z-index: 3;
   text-align: left; padding: 8px 10px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
   font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
   color: var(--mj-text-secondary);
+  /* Must be an OPAQUE surface token — rows scroll UNDER this and would otherwise show through. */
   background: var(--mj-bg-surface-sunken); border-bottom: 1px solid var(--mj-border-default);
 }
 .bs-th--sort { cursor: pointer; user-select: none; }
 .bs-th--sort:hover { color: var(--mj-text-primary); }
 .bs-th--sort i { margin-left: 4px; opacity: 0.6; font-size: 11px; }
-.bs-th--chev, .bs-td--chev { width: 28px; text-align: center; }
+.bs-th--chev, .bs-td--chev { text-align: center; }
 .bs-num { text-align: right; }
 
 .bs-row { cursor: pointer; border-bottom: 1px solid var(--mj-border-subtle); }
 .bs-row:hover { background: var(--mj-bg-surface-hover); }
 .bs-row--open { background: var(--mj-bg-surface-hover); }
-.bs-row td { padding: 8px 10px; white-space: nowrap; color: var(--mj-text-primary); }
+.bs-row td {
+  padding: 8px 10px; white-space: nowrap; color: var(--mj-text-primary);
+  overflow: hidden; text-overflow: ellipsis;
+}
 .bs-td--chev i { color: var(--mj-text-muted); font-size: 11px; }
 .bs-ref { color: var(--mj-text-muted); }
 
@@ -62,14 +94,23 @@
 
 /* ── expanded detail (indented under its batch row) ──────────────────────── */
 .bs-detail-row td { padding: 0; }
+/* The indent is EXACTLY the chevron column's width (28px) and the brand accent is an INSET
+   SHADOW, not a border — both keep the panel's inner table on the parent's column grid. Any
+   horizontal padding/border here would shift the JE table off the batch table's columns, so
+   there is none: the panel's own cells carry the inner spacing instead. The trailing
+   Batched/ERP-Ref spacer columns mean the numbers are never flush against the right edge. */
 .bs-detail {
-  margin: 0 0 6px 34px;                 /* indent so it reads as part of the batch above */
-  padding: 10px 12px;
-  border-left: 3px solid var(--mj-brand-primary);
+  margin: 0 0 6px 28px;                 /* indent so it reads as part of the batch above */
+  padding: 8px 0;
+  box-shadow: inset 3px 0 0 var(--mj-brand-primary);
   background: var(--mj-bg-surface-sunken);
   border-radius: 0 6px 6px 0;
 }
-.bs-detail__empty { color: var(--mj-text-muted); font-size: 13px; font-style: italic; }
+.bs-detail__empty { color: var(--mj-text-muted); font-size: 13px; font-style: italic; padding: 0 12px 0 14px; }
+/* Cap the JE list at ~10 rows, then scroll INSIDE the drop-down (Marcelo (d)). overflow-x is
+   pinned to `hidden` deliberately — leaving it `visible` would compute to `auto` and add a
+   second horizontal scrollbar inside the row. */
+.bs-detail__scroll { max-height: 320px; overflow-y: auto; overflow-x: hidden; }
 
 .bs-detail-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .bs-detail-table thead th {
@@ -79,13 +120,33 @@
 }
 .bs-detail-table thead th.bs-num { text-align: right; }
 .bs-detail-line td { padding: 5px 10px; color: var(--mj-text-primary); vertical-align: top; border-top: 1px solid var(--mj-border-subtle); }
-/* Credit-side rows carry a subtle left accent so the debit→credit split reads at a glance. */
-.bs-detail-line--credit td:first-child { box-shadow: inset 2px 0 0 color-mix(in srgb, var(--mj-brand-primary) 45%, transparent); }
+/* Credit-side rows carry a subtle left accent so the debit→credit split reads at a glance.
+   Painted as a background gradient (not a shadow/border) so it sits INSIDE the cell at
+   x 6–8px — clear of the panel's own 3px brand accent — and costs zero layout. */
+.bs-detail-line--credit td:first-child {
+  background-image: linear-gradient(
+    to right,
+    transparent 0 6px,
+    color-mix(in srgb, var(--mj-brand-primary) 45%, transparent) 6px 8px,
+    transparent 8px);
+}
 .bs-detail-total td {
   padding: 6px 10px; font-weight: 700; color: var(--mj-text-primary);
   border-top: 2px solid var(--mj-border-strong);
 }
 .bs-detail-code { color: var(--mj-text-muted); }
+
+/* ── the batch's JE table: shares the batch table's column geometry ───────── */
+/* Scoped to .bs-je-table so the Build-Batch preview dialog (which reuses .bs-detail-table with
+   its own 4-column shape and no colgroup) is untouched. */
+.bs-je-table { table-layout: fixed; }
+.bs-je-table th:first-child, .bs-je-table td:first-child { padding-left: 14px; }
+.bs-je-table td { white-space: normal; overflow-wrap: anywhere; }
+.bs-je-table .bs-je-spacer { padding: 0; }
+/* Header + totals stay visible while the JE list scrolls under them. Opaque background
+   required for the same reason as the batch table's header. */
+.bs-je-table thead th { position: sticky; top: 0; z-index: 1; background: var(--mj-bg-surface-sunken); }
+.bs-je-table tfoot td { position: sticky; bottom: 0; z-index: 1; background: var(--mj-bg-surface-sunken); }
 
 /* ── Build-Batch preview dialog ── */
 .bs-preview { display: flex; flex-direction: column; gap: 14px; min-width: 0; }

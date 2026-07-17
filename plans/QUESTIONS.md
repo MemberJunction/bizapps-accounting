@@ -27,6 +27,8 @@
 | 8 | [Q9](#q9) | Amith — GLAccountLink role FK (bless-as-built) | OPEN |
 | 9 | [Q26](#q26) | Matt — Explorer header widget slot (feature ask) | OPEN |
 | 10 | [Q29](#q29) | Marcelo — no global GL-account pool; is the COA model as-built right? | OPEN |
+| 11 | [Q30](#q30) | Amith/Robert — batches single-company (Marcelo ruled; MOD-4 suggests Amith assumed multi) | OPEN ★HIGH |
+| 12 | [Q31](#q31) | Robert/Amith — company derived from account; should links carry a ROLE? | OPEN ★HIGH |
 | 10 | [Q27](#q27) | Matt — `mj-left-nav` desktop icons-only collapse (feature ask) | OPEN |
 | 4b | [Q28](#q28) | Marcelo — batch/task transaction split + batch task pointer (MOD-14) | OPEN (no-CFO precheck RULED+built) |
 | 4c | [Q29](#q29) | Marcelo/Ian — regenerate: reset the existing task vs void+replace (principle ruled) | OPEN |
@@ -601,4 +603,141 @@ queryable surface for "which questions touch feature X".)*
   - Schema: `bizapps-accounting/packages/Entities/src/generated/entity_subclasses.ts` → `mjBizAppsAccountingGLAccountSchema`
   - Plan: `plans/MASTER-PLAN.md` §4.1 (~line 188)
   - Related: Q9 (GLAccountLink role FK), Q3 (JE-draft account contract)
+- **Answer:** _(pending)_
+
+<a id="q30"></a>
+### Q30 · Are batches single-company? The plan says yes; the code says no; the deciding note lives only in a SQL comment — ask Robert/Amith — added 2026-07-16
+- **Status:** OPEN
+- **Requested reviewer:** Robert (owns OQ-F) · Amith (owns BA-D16's AN-BC rationale)
+- **Features:** D.* (batching + dispatch)
+- **Proposed solution — PROCEEDING: ONE COMPANY PER BATCH.** Marcelo's decision, 2026-07-16: *"our marching
+  orders as my decision are going to be one company per batch."* Rationale: *"then you don't have to deal with
+  the ERP problem. When an accountant is using the system, they're probably not going to expect to go to two
+  ERP systems off of one batch."* He explicitly invites reversal: *"if you specifically think that in a regular
+  accountant's workflow, having a batch with two separate ERP systems and two companies in it makes sense,
+  then let me know and we can revert that."*
+- **The agent's assessment: AGREE — and there is a structural argument nobody has made yet.**
+  **`JournalEntryBatch.TargetSystem` is a SINGLE column.** A batch therefore *cannot* target two ERPs today,
+  full stop. Multi-company batching only works when every company in the batch shares one ERP **type** — and
+  even then, two companies on two different **Business Central tenants** are *unrepresentable*, because there
+  is no per-company endpoint/connection field anywhere in the schema (`ExternalSystem` on `GLAccount` names the
+  ERP *kind*, not an instance). So the multi-company design silently depends on routing infrastructure that
+  does not exist. Marcelo's simple answer removes a problem we have no model for.
+- **⚠ The strongest evidence AGAINST single-company, stated fairly:** **MOD-4** nets batch summary lines per
+  **(Company × GLAccount × Dimension-combo)**. If a batch were single-company, Company in that key would be
+  redundant — so **Amith evidently expected batches to span companies** when he specified it (2026-06-28).
+  Marcelo spotted this himself. Single-company does not *contradict* MOD-4 (the key just becomes a no-op), but
+  it does mean we are overturning an assumption Amith held. **This is the specific thing to put in front of
+  him.** If Amith confirms multi-company is intended, BA-D16 needs a real MOD and the ERP-endpoint gap above
+  becomes a blocking design problem to solve first.
+- **The question for Robert/Amith:** (1) Is a batch single-company, or may it span companies and split at
+  send? (2) If multi-company: what is the dispatch contract when N companies map to different ERP endpoints
+  (or different tenants of the same `TargetSystem`)? (3) Was there a rationale for D-SEQ beyond batch-number
+  sequencing?
+- **Context to share — the plan and the code disagree, and the change was never recorded:**
+  - **The plan says SINGLE-company.** `MASTER-PLAN.md` **BA-D16**: *"Batching aggregates JEs by **(Company**,
+    AccountingPeriod, TargetSystem)**, locks them, and ships **one consolidated JE per Company** to the ERP."*
+    Company is IN the grouping key. §4.5 even specifies `BatchNumber` as `'BATCH-{Company.Code}-{seq}'`.
+  - **The code says MULTI-company.** `migrations/B202605281200__v1.0.x__Schema_and_Tables.sql` §5.2:
+    *"Atomically increments the **GLOBAL** singleton batch sequence and returns 'BATCH-{seq:000000}'.
+    **(D-SEQ 2026-07-06: batches are multi-company.)**"* — the company code was dropped from the batch number
+    as a direct consequence.
+  - **"D-SEQ" is not in the plan chain.** It is a comment in a SQL file. It is not a MOD, not an UPD, not an
+    Extension. Per the planning system's own rules (*"nothing is silently superseded"*; *"if it isn't in
+    MASTER-PLAN(-MODIFICATIONS/-UPDATES), it isn't the plan"*), **BA-D16 remains the plan of record.** Anyone
+    reading the plan today concludes single-company and is contradicted by the schema. That is exactly how
+    Marcelo hit this.
+  - **It is ALSO already an open question in the engine.** `packages/CoreEntitiesServer/src/BatchingEngine.ts`
+    (~line 19): *"⚠ **OQ-F (Robert)**: whether the flat per-line CompanyID grouping suffices or a batch-group
+    element is needed. Current shape = flat line items carrying CompanyID; **the per-company split happens at
+    send**."* So the multi-company shape shipped with its central question unresolved.
+- **Marcelo's reasoning (2026-07-16), verbatim:** *"It's my understanding that batches are meant to be single
+  company by necessity because journal entries, one, are single company. And, two, if you batch across
+  multiple companies, you're gonna be sending to two different ERP endpoints possibly, which is just... that's
+  just not a good system... Also, if we wanna do multi company batching, then we have to be really smart about
+  how we net the batches out. And I don't think we have logic for that or have plans to do that."*
+- **Assessment of his three points (verified):**
+  1. **JEs are single-company — CORRECT** (MOD-11/12; a JE's company derives from its resolved accounts).
+  2. **Multiple ERP endpoints — UNRESOLVED, and his strongest point.** A batch carries exactly ONE
+     `TargetSystem`, but N companies. BA-D16 requires "one consolidated JE **per Company**", so a
+     multi-company batch MUST split at dispatch. `BatchingEngine`'s own comment says the split "happens at
+     send" — whether that code exists and is correct is NOT verified here. If it does not, a multi-company
+     batch is undispatchable.
+  3. **Netting across companies — already safe.** **MOD-4** nets per **(Company × GLAccount ×
+     Dimension-combo)** — Company is in the netting key, so money never nets across companies. This specific
+     worry is handled; worth telling him.
+- **Additional context (for a verifying agent):**
+  - `plans/MASTER-PLAN.md` BA-D16 (~line 119), §4.5 (~line 426), BA-D26 (~line 129)
+  - `plans/MASTER-PLAN-MODIFICATIONS.md` MOD-4 (netting key), MOD-11/12 (JE↔company)
+  - `migrations/B202605281200__v1.0.x__Schema_and_Tables.sql` §5.2 (D-SEQ comment, ~line 1708)
+  - `packages/CoreEntitiesServer/src/BatchingEngine.ts` (OQ-F comment; `CompanyIDs` plural on BuildBatchOperation)
+- **Answer:** _(pending)_
+
+<a id="q31"></a>
+### Q31 · GL routing derives the COMPANY from the ACCOUNT — should product/category links carry a ROLE instead? — ask Robert/Amith — added 2026-07-16
+- **Status:** OPEN
+- **Requested reviewer:** Robert (COA semantics) · Amith (GLAccountLink design, OQ-G)
+- **Features:** A.1 (GLAccount), B.* (Account links), ORD product→GL routing
+- **Proposed solution:** ⏸ HOLD on the model change (it is a schema + engine change). PROCEEDING
+  independently on the two outright bugs below, which are wrong under ANY answer.
+- **How it works TODAY (verified 2026-07-16, not from memory):**
+  - `GLAccount.CompanyID` is **NOT NULL**, `UNIQUE(CompanyID, Code)` — *"each company has its own chart."*
+    There is no global account pool. 10 seeded accounts per company via `spSeedDefaultChartOfAccounts`.
+  - `GLAccountRole` — 8 seeded roles (Cash, Accounts Receivable, Inventory, COGS, Sales, Sales Discounts,
+    Sales Returns and Allowances, Deferred Revenue). This is the company-agnostic vocabulary.
+  - `GLAccountLink` is polymorphic: `(EntityID, RecordID, GLAccountRoleID) -> GLAccountID`, date-effective.
+    **It points at a concrete ACCOUNT, never at a role.**
+  - `OrdersEngineBase.ResolveAccount` walks **product link -> up the category chain -> company default**.
+  - **`buildDraftsForOrder` then does `CompanyID: account.CompanyID`** — i.e. **the company is DERIVED FROM
+    THE RESOLVED ACCOUNT** (`accountFromLink` reads `GLAccountByID(id).CompanyID`). An Order has no
+    CompanyID by design (MOD-11/12), so the account is the ONLY thing that answers "whose books?".
+- **The question for Robert/Amith:** (1) Should a product/category GLAccountLink carry a **ROLE** (abstract,
+  resolved against each company's own chart) rather than a concrete **ACCOUNT** (which also pins the company)?
+  (2) If links carry roles, **what decides the company** — `Product.OwningCompanyID`, the selling entity, or
+  something explicit on the order line? (3) Is deriving the JE's company from the account intended, or an
+  accident of MOD-11/12's "no header company" ruling?
+- **Marcelo's argument (2026-07-16), verbatim:** *"orders should have lines, and the lines should have a
+  product, and that product should be booked to a specific company. And that's how you should determine what
+  accounts it's going to hit. **You shouldn't be deriving the company based on the accounts.** First of all,
+  you could have multiple companies under the same accounting roof, and that should be supported. Secondly,
+  you could have somebody who's using what we call a company as just a brand... they could have multiple
+  products that they wanna track as different companies, but they're gonna send their revenue to the same
+  place."*
+- **Why his argument holds (the strongest form of it):** `AccountingCompanyProfile.ParentAccountingCompanyID`
+  ALREADY exists and means *"this profile uses the books (COA, JEs) of the referenced profile."* But if the
+  company is derived from the account, two companies sharing books resolve to the SAME account and therefore
+  collapse to the SAME CompanyID on the JE. **The derivation destroys the very distinction that field exists
+  to preserve.** So the shared-books case is not hypothetical — it is already modelled and already broken by
+  the derivation.
+- **The UX consequence (his second complaint):** because links name accounts, an ORDERS user overriding a
+  product's routing must choose a concrete account out of some company's chart — i.e. a sales person must
+  read the accounting chart, which they may not be permitted to see. If links carried roles, orders would say
+  *"this is Deferred Revenue — Physical"* (a business statement) and accounting would say *"for company X that
+  role is account 24150"* (a ledger statement). Clean separation of duty; no chart access in orders.
+- **What the fix would reuse rather than invent:** `ResolveCompanyAccount(companyID, role, asOf)` is ALREADY
+  exactly `(company, role) -> account`. The change is to make the product/category tier resolve a **role**,
+  then hand (company, role) to that existing function.
+- **His "shared accounts across companies?" question — my recommendation: NO.** Reasons: (a) the account is
+  currently the only thing answering "whose books?", so sharing collapses the derivation entirely; (b) each
+  company's chart mirrors ITS ERP and `ExternalAccountID` is per-account — two companies in two ERPs need two
+  rows regardless; (c) commingling two legal entities' balances in one account is consolidation, not a COA
+  feature — and consolidation already has `ParentAccountingCompanyID`. What he actually wants ("a deferred
+  revenue account for physical goods") is a **new ROLE**, not a shared account.
+- **Context to share:** the two outright bugs below (filed to BACKLOG.md), which are worth fixing regardless:
+  1. **The company tier was DEAD in booking** — `resolveRevenueLines` called `ResolveAccount(productID, role,
+     asOfDate)` with three args; the fallback company is the optional FOURTH. Booking was really
+     "product -> category -> fail". **FIXED 2026-07-16** (now passes `product.OwningCompanyID`).
+  2. **The Catalog disagreed with booking** — the catalog DID pass the fallback, so its "will it book?"
+     tripwire was strictly more optimistic than booking: a product could read as resolved and still fail at
+     Confirm. Same engine method, different arguments. Resolved by (1).
+- **Data reality (verified):** only **4** GLAccountLink rows exist in the whole DB — 1 Companies/AR,
+  2 Products/Sales, 1 Products/Deferred Revenue. **Zero** product categories exist. No company has a Sales
+  link. That is why 36 of 39 products fail at Confirm: the 3 that resolve are exactly the 3 with a direct
+  product link.
+- **Additional context (for a verifying agent):**
+  - `bizapps-orders/packages/EngineBase/src/OrdersEngineBase.ts` — `ResolveAccount`, `accountFromLink`,
+    `resolveRevenueLines`, `ResolveCompanyAccount`
+  - `bizapps-accounting/packages/Entities/src/generated/entity_subclasses.ts` — `GLAccountSchema`,
+    `GLAccountLinkSchema`, `GLAccountRoleSchema`, `AccountingCompanyProfileSchema`
+  - Related: Q9 (GLAccountLink role FK, Amith OQ-G), Q3 (JE-draft account contract), Q29 (no account pool)
 - **Answer:** _(pending)_

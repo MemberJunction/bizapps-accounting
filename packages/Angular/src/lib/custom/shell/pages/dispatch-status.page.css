@@ -1,14 +1,58 @@
-/* ⚠ These wrappers live inside <mj-page-body-interior>, which is display:block — so `flex`
-   does NOT size them (that no-op blanked All journal entries once). Use height/min-height:
-   a percentage resolves against body-interior's flex-derived height. */
-/* Dispatch status (§8.2). Design tokens only; same height-chain rule as the other rail pages. */
+/* Dispatch status (§8.2). Design tokens only — no hex/rgb literals (CI gate), no .mj-btn overrides.
+
+   ⚠ These wrappers live inside <mj-page-body-interior>, which is display:block — so `flex` does NOT
+   size them (that no-op blanked All journal entries once). Use height/min-height: a percentage
+   resolves against body-interior's flex-derived height. */
 :host { display: flex; flex-direction: column; height: 100%; min-height: 0; gap: 12px; }
+
+/* ── filters (header [toolbar]) — the All-batches shape: one row on desktop, wraps when it can't ── */
+.ds-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
 .ds-field { display: flex; flex-direction: column; gap: 4px; }
+.ds-field--date { min-width: 140px; }
+.ds-field--grow { flex: 1 1 200px; min-width: 180px; }
 .ds-field__label { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--mj-text-muted); }
-.ds-wrap { height: 100%; min-height: 320px; overflow: auto; border: 1px solid var(--mj-border-default); border-radius: 10px; background: var(--mj-bg-surface); }
-.ds-grid { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-.ds-grid th, .ds-grid td { padding: 8px 10px; border-bottom: 1px solid var(--mj-border-subtle, var(--mj-border-default)); text-align: left; white-space: nowrap; }
-.ds-grid thead th { position: sticky; top: 0; background: var(--mj-bg-surface-card); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--mj-text-muted); z-index: 1; }
-.ds-num { text-align: right; font-variant-numeric: tabular-nums; }
-.ds-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.ds-empty { padding: 20px; text-align: center; color: var(--mj-text-muted); font-style: italic; }
+.ds-toggles { display: flex; flex-wrap: wrap; gap: 4px; }
+
+/* ── failed-dispatch attention strip: the error message is the point, so it gets real space ── */
+.ds-attention {
+  border: 1px solid var(--mj-status-error-border, var(--mj-status-error));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--mj-status-error) 6%, var(--mj-bg-surface));
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ds-attention__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--mj-status-error-text, var(--mj-status-error));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ds-fail, .ds-selected {
+  border: 1px solid var(--mj-border-default);
+  border-radius: 8px;
+  background: var(--mj-bg-surface);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ds-fail__head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.ds-fail__meta { font-size: 12px; color: var(--mj-text-secondary); }
+.ds-fail__error {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--mj-status-error-text, var(--mj-status-error));
+  white-space: pre-wrap;      /* an ERP failure is often multi-line — show it, don't flatten it */
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.ds-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; color: var(--mj-text-primary); }
+
+/* ── the MJ grid's height chain (height, never flex — see the header note) ── */
+.ds-grid { height: 100%; min-height: 320px; }

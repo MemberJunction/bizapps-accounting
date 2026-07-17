@@ -43,17 +43,9 @@ mj-page-body-interior {
 .bw-head mj-workspace-tab-strip {
   display: block;
 }
-/* Reaching into the shared strip is deliberate and scoped to this page: the strip is used
-   elsewhere and must not change. Two fixes:
-     1. overflow-x:auto computes overflow-y to `auto` (CSS overflow §3), so the tabs' -1px
-        connect-to-body overhang produced a pointless VERTICAL scrollbar. Horizontal scrolling is
-        wanted; vertical never was.
-     2. padding-left:0 puts the first tab's left edge on the card's left edge. */
-.bw-head ::ng-deep .ws-tabs {
-  overflow-y: hidden;
-  padding-left: 0;
-}
-
+/* The tab strip's own CSS owns its overflow + gutter now (see workspace-tab-strip.component.css):
+   the overflow-x/overflow-y computed-value trap and the left indent are fixed once, at the source,
+   so all four consumers inherit them instead of each carrying a copy of the workaround. */
 /* Identity + status + target + the session note — BELOW the tab line, never in line with it. */
 .bw-headmeta {
   display: flex;

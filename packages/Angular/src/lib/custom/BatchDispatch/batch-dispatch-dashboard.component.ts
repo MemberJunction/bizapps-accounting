@@ -25,6 +25,20 @@ type TargetSystem = mjBizAppsAccountingJournalEntryBatchEntity['TargetSystem'];
  */
 const INBOX_STATUSES: BatchStatus[] = ['Pending', 'Approved'];
 
+/**
+ * The rest of the lifecycle — reachable by filter, never loaded by default.
+ *
+ * Marcelo (2026-07-16), correcting his own earlier "shouldn't have batches that are canceled":
+ * *"I don't wanna strict only pending on that page. I wanna have approved and pending... I guess maybe
+ * having the ability to see batches that are sent and that are canceled might be good, and that are posted
+ * so you can kinda see a history... we should definitely just have the ability to filter at least on those,
+ * and then by default, it should just be pending and approved so that it's just the ones that explicitly
+ * need an action to move forward."*
+ *
+ * So the default is the WORKLIST (things needing an action); history is one click away, not gone.
+ */
+const HISTORY_STATUSES: BatchStatus[] = ['Sent', 'Posted', 'Failed', 'Cancelled'];
+
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEBLI_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batch Line Items';
@@ -131,11 +145,15 @@ export class BatchDispatchDashboardComponent extends BaseDashboard implements On
   public ActionMessageIsError = false;
 
   // ─── filters (mirrored from All batches — same shape, same labels, same idiom) ───
-  /** Only the inbox statuses are offered; empty set = every inbox status. */
-  public StatusOptions: BatchStatus[] = INBOX_STATUSES;
+  /** Every status is offered: the worklist first, then history. */
+  public StatusOptions: BatchStatus[] = [...INBOX_STATUSES, ...HISTORY_STATUSES];
   public TargetOptions: TargetSystem[] = [];
-  /** Defaults to the approvals queue proper; toggle Approved on to reach Dispatch. */
-  public SelectedStatuses = new Set<BatchStatus>(['Pending']);
+  /**
+   * The DEFAULT is the worklist — "just the ones that explicitly need an action to move forward"
+   * (Marcelo 2026-07-16). Pending needs an approval; Approved needs a dispatch. History
+   * (Sent/Posted/Failed/Cancelled) is one toggle away, never loaded by default.
+   */
+  public SelectedStatuses = new Set<BatchStatus>(INBOX_STATUSES);
   public SelectedCompanyID: string | null = null;
   public SelectedTarget: TargetSystem | null = null;
   public FromDate: string | null = null;
