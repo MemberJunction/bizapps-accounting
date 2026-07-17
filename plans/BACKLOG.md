@@ -472,3 +472,63 @@ do is kind of get the GUI set up so I can get a basic demo out."* **Picked up to
   audit produces exactly that list, so the two are one job.
 - **Trigger:** next UI session. Cheap (it is a grep + a read per hit) and it directly answers the boss's
   note about following MJ's UI/UX guidelines and controls.
+
+---
+
+## ★★ IMPERATIVE (Marcelo, 2026-07-17) — creation goes through ENGINES + REMOTE OPS. The front end is a wrapper.
+- **Needs a MOD.** This is an architectural ruling, not a backlog item — it belongs in the plan chain, not
+  here. Filed here only because it landed at the end of a session; **promote it to MASTER-PLAN-MODIFICATIONS
+  on the next planning pass** or it will be a decision living outside the plan, which is the exact failure
+  D-SEQ/OQ-F already caused (see the planning-hygiene item above).
+- **His words, verbatim — treat as authority:** *"Orders should be created in a remote operation every time.
+  Let me just set down a groundwork rule here, which is that we should always be using remote operations to
+  create journal entries, create orders, create products, create anything, basically. We shouldn't be doing
+  it on the client side. We should be doing it on the server side. We should mostly be doing it in
+  transactions because a lot of these things link together, and this is an accounting system. So we can't
+  have broken data in it. We should be using engines and remote ops for all of this stuff and for its
+  validation. Let me make sure this is an imperative. **The front end is just supposed to be a wrapper that
+  helps format the input and tells the user what they need to do and presents the information in a useful
+  way. That's it. That's the whole front end. It's not supposed to be doing creation logic and interacting
+  with the server. We're supposed to use engines for that.**"*
+- **Why he is right, demonstrated the same day:** the order-create FK failure. `order-editor.page.ts` composes
+  an order + its lines in a client-side `CreateTransactionGroup()`. TransactionGroups do not cross the
+  GraphQL boundary — so a unit of work assembled in the browser is a unit of work the server never sees as
+  one. It failed on `FK_OrderLine_Order` and (on our stale base) took MJAPI down with it.
+
+### ⚠ AGENT'S PROPOSED REFINEMENT — needs Marcelo's ruling before the sweep
+**`BaseEntity.Save()` is ALREADY a server-side operation.** The client writes no SQL: `GetEntityObject` →
+`Save()` marshals over GraphQL, runs the server's `BaseEntity` subclass (its `Validate()`, its hooks — e.g.
+`OrderEntityServer` books the JE there), and calls `spCreate*`. So a single-row create through the entity
+layer is not "creation logic on the client" — it is the client *asking the server to create a row*.
+
+**Proposed line: "never ORCHESTRATE, never DERIVE"** rather than "never `Save()`". The client must not:
+  1. **Orchestrate a multi-record unit of work** — TGs do not cross GraphQL (tonight's bug).
+  2. **Compute derived values** — totals, balances, GL/company resolution.
+  3. **Enforce invariants** — it cannot; a second client bypasses them.
+Under Marcelo's rule as literally stated, a 5-field Product Category roster needs a remote op. Under the
+refinement it does not — while **Order, Payment, JE, and product+GL-links still do**, because every one is
+multi-record or derived. **Same outcome where it matters, far less ceremony where it does not.**
+**If Marcelo rejects the refinement, the literal rule stands and the sweep below widens to every roster.**
+
+### Blast radius (audited 2026-07-17) — what violates the rule TODAY
+**Definitely violating (multi-record orchestration in the browser):**
+- `order-editor.page.ts` — `CreateTransactionGroup()` composing order + lines. **This is the one that broke.**
+  → `Orders.CreateOrder` remote op. (`Orders.ConfirmOrder` already exists and is the model.)
+- `payment-entry.page.ts` — same client-side TG for payment + its lines.
+- `payment-capture.page.ts` — saves each Payment Line individually; **already states on screen that the write
+  is not atomic** because no apply-payment op exists. → `Orders.ApplyPayment`.
+- `product-workshop.page.ts` — product + its GLAccountLink rows, saved separately.
+- Category workshop (planned, GUI-26) — bulk-reassigning N products' `ProductCategoryID` is N saves.
+**Single-row rosters (violate the literal rule; NOT the refinement — pending his ruling):**
+`categories`, `product-types`, `payment-terms-types`, `payment-providers`, `subscription-plans`, `gl-accounts`.
+**Already compliant:** `Orders.ConfirmOrder`, `Orders.CapturePayment`, `Orders.CreateReversalOrder`,
+`Accounting.CreateJournalEntry`, `BuildBatchOperation`.
+
+### Sequencing
+Pairs with the ★HIGH account-model item: `Orders.CreateOrder` is where the (CompanyID, GLAccountID,
+GLAccountRoleID) point-in-time triple gets stamped on the order line — so build the op once, correctly,
+rather than patching the client path first and rewriting it a day later.
+**Do NOT fix the order-create FK on this base:** the instance predates PR #3097 (the TG crash fix, which
+touched this exact Save()/TG-notification path). Upgrade first (`mjdev merge accounting-engine-dev`), re-test,
+then build the op.
+- **Trigger:** tomorrow, with the account model.
