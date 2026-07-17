@@ -61,18 +61,19 @@ Convention: `~/MJDev/shared-plans/repo-planning-system.md` §5.1. (The instance-
       (full verbatim in MOD-1; CA-1 resolved-for-now; CA-2 resolved by MOD-11). Robert is still
       researching his guard requirement — reopens ONLY if he overturns. Jeremy's correcting-entry
       exception rules still collect via Q19.
-- [ ] **Tax first iteration: order-line-type vs separate tables** — pick one (Robert offered the quick
-      path; accounting tax tables exist either way). `[decision needed: Robert]`
+- [x] ~~**Tax first iteration: order-line-type vs separate tables**~~ — **ANSWERED 2026-07-16 (Robert,
+      orders Q21): Option B's durable shape, SKIP the order-line-type path entirely; calculation
+      delegated to a third-party engine (MOD-18).** Launch-tax yes/no = Jeremy/John (orders Q22).
 - [x] ~~**IntercompanyRelationship wiring ownership**~~ — **RESOLVED 2026-07-13 (verified from the
       baseline):** the 2026-07-06 squash ruling already answered it — wiring is Payments-side; Accounting
       does no intercompany balancing. Residual (Q20): at O2 design, sanity-check with Amith where the
       wiring table lives + how per-pair accounts provision into the COA. `[residual: Amith, at O2]`
-- [ ] **Open-AR cutover** — import open BC invoices pre-go-live (payments apply in the new system) vs
-      let pre-cutover AR close out in BC. Matters for the ≥2026-08-17 cutover.
-      `[decision needed: Robert/Jeremy]` — 2026-06 rescope rulings §12.
-- [ ] **Manual-JE approval gate** — require approval before a `Manual` JE can be batched? Folds into the
-      MOD-9 role/status-rule design (action-plan A2). `[decision needed: Robert]` — 2026-06 rescope
-      rulings §12.
+- [x] ~~**Open-AR cutover**~~ — **RULED 2026-07-16 (Robert, OQD; orders UPD-10):** transfer open
+      invoices ONLY where no GL JEs exist yet (they flow through the normal Orders pipeline);
+      already-journalized open invoices = Jeremy's companion call (stay in legacy vs JE-suppressed
+      import). Jeremy identifies the no-GL-JE set. Timing rides aidp Stage 4.
+- [x] ~~**Manual-JE approval gate**~~ — **ANSWERED 2026-07-16 (Robert, Q6.3): CONFIRMED YES** — CFO
+      approval before a Manual JE can batch; C.8's inbox + review-modal UI shape blessed.
 
 ## UI wave §8 — remaining build (recorded 2026-07-16, UI-build agent handoff)
 
@@ -628,3 +629,9 @@ then build the op.
   point-in-time triple gets stamped, so building it before that decision means writing it twice.
 - **Reference:** `ConfirmOrderOperation` / `Orders.ConfirmOrder` is the working model — typed client in
   `order-editor.client.ts`, op server-side, TG composed where TGs actually work.
+
+## Batch findability — add `JournalEntryBatch.Memo` (schema)
+- Source: Marcelo 2026-07-17. "We at least need to have a memo with batches if we don't already have that." Confirmed: JournalEntryBatch has BatchNumber/TargetSystem/Status/ExternalBatchRef/ErrorMessage — NO memo/name/description.
+- Keep `BatchNumber` as the agreed ID (D-SEQ). Add optional `Memo NVARCHAR(500) NULL` purely for findability — so a user can label "why this batch" and search it. NOT a rename of the ID scheme.
+- Proposed: migration adds Memo; surface it in All Batches + Batch workspace (editable pre-build), searchable (task 41/47). Marcelo leaning "naming batches maybe not, but a memo yes" — so memo, not a Name field.
+- Note: JournalEntry already HAS a Memo — for JEs no schema change is needed, just show the memo in JE tables + drive the tab caption (task 47).
