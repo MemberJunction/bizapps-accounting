@@ -32,6 +32,7 @@
 | 13 | [Q32](#q32) | Matt — tab strip's overflow-x silently enables overflow-y (real bug + fix) | OPEN |
 | 14 | [Q33](#q33) | Matt — dense/inline [meta] on mj-page-header (⚠ may be obsolete — check) | OPEN |
 | 15 | [Q34](#q34) | Matt — we duplicated mj-accordion-panel; is there a component catalogue? | OPEN |
+| 16 | [Q35](#q35) | Matt — [Bare] accordion: divider, square hover, chevron side (one root cause) | OPEN |
 | 10 | [Q27](#q27) | Matt — `mj-left-nav` desktop icons-only collapse (feature ask) | OPEN |
 | 4b | [Q28](#q28) | Marcelo — batch/task transaction split + batch task pointer (MOD-14) | OPEN (no-CFO precheck RULED+built) |
 | 4c | [Q29](#q29) | Marcelo/Ian — regenerate: reset the existing task vs void+replace (principle ruled) | OPEN |
@@ -870,4 +871,60 @@ queryable surface for "which questions touch feature X".)*
   a storybook, a doc index) that would make "does MJ already have X?" cheap to answer? The failure
   mode above is expensive and repeatable, and `ls packages/Angular/Generic/ui-components/src/lib/`
   is what finally answered it.
+- **Answer:** _(pending)_
+
+<a id="q35"></a>
+### Q35 · `mj-accordion-panel [Bare]` removes the box but keeps three behaviours that assumed it — ask Matt — added 2026-07-17
+- **Status:** OPEN
+- **Requested reviewer:** Matt (MJ Angular / ng-ui-components)
+- **Features:** cross-cutting (MJ base). Supersedes the accordion half of [Q34](#q34).
+- **Proposed solution:** we adopted `[Bare]` and DELETED our hand-rolled equivalent (72 lines → 31), so
+  we are on MJ's component and want to stay there. **No local override applied** — reporting instead of
+  `::ng-deep`-ing, because two overrides this same day turned out to be silently defeating MJ's own
+  decisions (the 44px WCAG touch target; the responsive title). These three are Matt's call.
+- **The finding — one root cause, three symptoms.** `[Bare]`'s doc says it "drops the panel's own border
+  and header background so the panel sits cleanly inside a host that already provides chrome... only the
+  box styling is removed." In practice it removes the box but **retains three behaviours that were
+  correct only BECAUSE the box was there**:
+  1. **The rule only exists while EXPANDED.** `accordion.scss:110` puts `border-bottom` on
+     `.mj-accordion-panel--expanded > .mj-accordion-header-row`; `[Bare]` (line 191) only recolours it.
+     Collapsed = no line. **Five collapsed bare panels stack with nothing separating them.** MJ's own
+     comment explains the intent ("a border on the collapsing body would leave a stray line at 0fr") and
+     it is right for a bordered panel — the box already separates. Under Bare, nothing does.
+  2. **The hover paints a hard rectangle.** `.mj-accordion-panel` is `border-radius: var(--mj-radius-sm)`
+     + `overflow:hidden`, so the full-bleed `.mj-accordion-header-row:hover` is clipped round. `[Bare]`
+     sets `border-radius: 0` — so the same full-bleed hover now renders a **square-cornered grey block
+     appearing from nowhere**, in an app where every other surface is rounded. Marcelo: *"something that
+     is definitely not the standard that I noticed is when you hover the accordion, it shows up as
+     rectangular. The corners aren't rounded on it."*
+  3. **The chevron sits far right, after the label.** Fine as a *secondary* hint when a box already says
+     "I am a container". Under Bare the chevron is the **only** affordance — and it arrives after the
+     eye has already read the label and decided the text is not interactive. Marcelo: *"it's really
+     confusing to me why the arrow is all the way out on the right on these accordions. The user reads
+     the text, and they don't actually know that it's a drop down. They just read the text."*
+- **On the chevron specifically — the agent's UI assessment, since Marcelo asked whether right is simply
+  the standard:** it is context-dependent, and the deciding rule is *the chevron must enter the eye's
+  path BEFORE the label when the label is the scan target.* **Right-side is correct** for wide uniform
+  rows where the row itself reads clickable and disclosure is secondary (FAQ lists, settings rows —
+  Bootstrap/Material do this). **Left-side is correct** when the label is the primary scan target and
+  disclosure IS the point: file trees, IDE outlines, nav trees, Notion toggles, and our own GL-account
+  rollup. A boxless section is the second case. So Marcelo's instinct is right, and it is an
+  affordance-ordering argument, not taste.
+- **The question for Matt:** (1) Under `[Bare]`, should the collapsed header carry a divider rule?
+  (2) Should the hover follow the panel's radius — or should `[Bare]` not paint a full-bleed hover at
+  all, since there is no box to fill? (3) Under `[Bare]`, should the chevron LEAD the label rather than
+  trail it? (4) Framed generally: **is `[Bare]` meant to be a boxless variant of the panel, or a panel
+  that merely hides its border?** Answering that settles all three at once — we would take whichever
+  you rule, and we would rather change our usage than fork the component.
+- **Context to share:** we are the case `[Bare]` was seemingly built for — five stacked disclosure
+  sections in a data-dense workshop card that already provides chrome. Marcelo's original ask, verbatim:
+  *"you don't even need to do accordion dropdowns. You can do, like, just a drop down section with, like,
+  the text and then the line that goes across, if you know what I'm talking about. That's, like, a common
+  one too that you click and it drops down."* — i.e. a persistent divider, open or closed.
+  Also worth telling him: he judged the swap *"fine. It's not nearly as pretty as it was before. It is
+  more in line with MJ's styling, though."* We took the consistency trade deliberately.
+- **Additional context (for a verifying agent):**
+  `packages/Angular/Generic/ui-components/src/lib/accordion/accordion.scss` — lines 11–16 (panel box),
+  27–29 (hover), 110 (expanded-only rule), 187–192 (`--bare`). Consumer:
+  `bizapps-orders/.../shell/pages/product-workshop.page.html`.
 - **Answer:** _(pending)_
