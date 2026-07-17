@@ -314,3 +314,107 @@ so changing a type does not re-route its products.
 Marcelo, 2026-07-16: *"it can't be done right now. It's too complicated, and it's late at night. What I need to
 do is kind of get the GUI set up so I can get a basic demo out."* **Picked up tomorrow as a high priority.**
 - **Trigger:** tomorrow's session. Q31 carries the discussion; this carries the work.
+
+---
+
+## ★ HIGH — Product/Category "own chart of accounts": make the ROLE data, not a hardcoded ternary
+- **Added:** 2026-07-16 · **Source:** Marcelo, extended account discussion · **Question:** [Q31](QUESTIONS.md#q31)
+- **His crucial finding, verbatim:** *"we aren't really supporting the case where product wants to link to an
+  account that isn't in a company's chart, where a category wants to link to an account that isn't in a
+  company's chart. What I'm thinking has to happen here is that the product and the category also have to have
+  their own chart of accounts. Okay. That is the crucial finding here. That is key. That is important... What
+  that does is it lets us have a set chart of known types of accounts, but we can set it at different levels in
+  the hierarchy."*
+- **Assessment: he has re-derived `GLAccountLink`, and it already does this.** A product carrying several links
+  (one per role) IS a per-product chart; same for a category. The link is polymorphic and can point at ANY
+  `GLAccountID`, including one outside the product's own company's chart. **So the capability exists.** The
+  reason it feels impossible is the derivation bug: because `buildDraftsForOrder` does
+  `CompanyID: account.CompanyID`, linking a product to an account outside its company SILENTLY re-books the
+  revenue to that account's company. Fix the derivation and his design works with **zero new schema**.
+- **The genuinely missing piece — and he named it exactly:** *"the revenue for role thing being like a big if
+  statement, that sounds like maybe it's not gonna work... We should have product roles or product types stored
+  in the database and some default ones loadable from metadata. **They should not be based on the results of a
+  function.** Remember, we want our GUI to be a thin wrapper over the metadata and the database."*
+  - **Today:** `OrdersEngineBase.RevenueRoleFor()` is
+    `product.RevenueRecognitionType === 'Deferred' ? ROLE_DEFERRED_REVENUE : ROLE_SALES` — a hardcoded ternary
+    over two string constants.
+  - **The cost, measured:** there are **8 GLAccountRoles in the database** (Cash, Accounts Receivable,
+    Inventory, Cost of Goods Sold, Sales, Sales Discounts, Sales Returns and Allowances, Deferred Revenue).
+    **Six are unreachable from a product**, because a ternary can only ever return two. Marcelo's own use case
+    ("a certain deferred revenue account for one category of products") is un-expressible for the same reason.
+  - **The fix: `ProductType.GLAccountRoleID` (FK → GLAccountRole).** Then role is DATA. New roles work the day
+    they are seeded; no code change. This is also exactly his product-type→role model:
+    *"in the product type itself, you're gonna select which role it goes to. So you might say, okay. This
+    product goes to the deferred revenue role because it's a physical product, and it needs to still be
+    shipped, or it goes to the deferred revenue role because it's a subscription. Or we could say this goes to
+    revenue because it's already sold. How we handle the revenue of that product is gonna be specified by the
+    type of that product."*
+  - Default roles seeded from **metadata**, not a migration constant, per the thin-wrapper rule.
+- **`Product.RevenueRecognitionType` is NOT a bug — it is an override, and it is named so.** The type's column is
+  `**Default**RevenueRecognitionType`; the product's value overrides it. **What IS missing:** nothing seeds the
+  product's value from its type at create time, and there is no way to express *"inherit from my type"*
+  (the column is NOT NULL, so there is no null-means-inherit). Decide: nullable-means-inherit, or an explicit
+  `InheritsRevenueFromType` flag.
+- **Where the editing UI lives — his ruling, and it is right:** *"thinking about where that chart of accounts
+  needs to go, I'm kind of thinking that it needs to go in the product and category sections just because
+  having it in accounting doesn't make sense. Products and categories don't exist in the accounting app.
+  They're just not known things in that app. And we shouldn't have dependencies that point down the dependency
+  tree. Orders depends on accounting. It should be using the elements in accounting if it needs to. The other
+  way around doesn't make sense."*
+  Confirmed by today's search sweep: `account-links.page.ts` (accounting) **cannot name** a Products or
+  Product-Categories link target — it renders *"Not named here"* — precisely because accounting must not import
+  orders. So the product/category account UI belongs in ORDERS. Already true of the Product workshop's GL tab.
+- **Scope:** migration (`ProductType.GLAccountRoleID`; the inherit decision) · replace `RevenueRoleFor` with a
+  lookup · seed default roles from metadata · Product workshop + Category workshop expose the role.
+- **Trigger:** tomorrow (Marcelo: *"we'll pick it back up tomorrow as one of our high priority ones"*).
+
+## Point-in-time facts: audit the accounting system for references that should be stored values
+- **Added:** 2026-07-16 · **Source:** Marcelo — *"that's a really good point out you made that we have to have
+  real history. So, yes, things need to be stored on the order line, not referenced, unfortunately. As
+  point-in-time facts. File a backlog item to think more about the kind of point-in-time fact thing. I think
+  we're gonna find a lot of cases throughout the accounting system where references might need to be something
+  different."*
+- **The principle:** accounting records are history and must be immutable. A live FK to config means history
+  MUTATES when config changes — a JE booked to company A silently becomes company B when someone re-points the
+  product. **Config resolves live; the booked fact is frozen at the moment of booking.**
+- **The precedent is already in this schema** (so this is consistency, not novelty): `OrderLine.LineTotalNet` is
+  stored rather than re-derived from qty×price×discount; `JournalEntryBatch.TotalEntries/TotalDebits/TotalCredits`
+  are denormalized *"for fast batch dashboards"*; `ChartOfAccountsMapping.ExternalAccountName` is explicitly a
+  *"snapshot for audit"*. The pattern is established; it is just applied unevenly.
+- **First concrete case:** stamp the resolved **(CompanyID, GLAccountID, GLAccountRoleID)** on the ORDER LINE at
+  booking time. Marcelo: *"each line should have company and account that gets the resolved account, and it
+  should also have the role because all three of those features are very important at that level."*
+- **The audit:** sweep every accounting/orders entity for a live reference whose value is part of a historical
+  record — prices, tax rates, FX rates, customer names/addresses on an invoice, payment-method descriptors,
+  approver identity. For each: is it config (resolve live) or history (freeze)? Where it is history, is there a
+  stored column, and does anything actually write it?
+- **Trigger:** tomorrow, alongside the account-model item — the order-line triple is the shared first step.
+
+## Payment providers: `IsActive` exists but nothing appears to honour it
+- **Added:** 2026-07-16 · **Source:** Marcelo — *"we at least need a backlog item for being able to mark
+  providers as active or inactive, and we'll have to wire that through the system as well."*
+- **Correction:** `PaymentProvider.IsActive` (bit, default 1) **already exists**, and the new Payment providers
+  page (2026-07-16) edits it. The field is not the gap.
+- **The gap is the wiring**, which is his actual ask: nothing has been verified to RESPECT it. An inactive
+  provider should not be selectable on payment entry, should not be dispatched to, and should not be picked by
+  any default-provider resolution — but an unhonoured flag is worse than no flag, because the UI implies a
+  control that does nothing. Same shape as `AccountingCompanyProfile`'s default-account columns, which the seed
+  populates and booking ignores.
+- **Do:** find every provider selection/resolution path and gate it on `IsActive`; decide what happens to
+  in-flight payments on a provider that goes inactive (they must still settle — deactivation is not deletion).
+- **Trigger:** the payments slice.
+
+## Shared books (`ParentAccountingCompanyID`) — allow a child company to override within the shared chart
+- **Added:** 2026-07-16 · **Source:** Marcelo — *"I wasn't really aware of that parent accounting company ID,
+  but that actually seems like a really good system, so I'm glad we have that. We should probably have that work
+  like the hierarchy. So basically it's required that those two are under the same chart of accounts mapping,
+  but you might be able to override at the secondary company level. Like, if a company that has a parent company
+  wants to have its products go to a different account within the same chart of accounts mapping, it should be
+  able to."*
+- I.e. shared books should behave like the product→category→company resolution hierarchy: the parent supplies
+  the chart + the defaults; a child may override its own role→account mapping **within** that chart, and must not
+  be able to point outside it.
+- **Blocked by the same defect:** while the company is derived FROM the account, a child overriding to a
+  different account changes which company the JE belongs to — the exact opposite of the intent. `ParentAccountingCompanyID`
+  cannot work correctly until the derivation is fixed (see the ★HIGH item above).
+- **Trigger:** after the account-model fix.
