@@ -1,12 +1,12 @@
 import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, OnInit, OnDestroy } from '@angular/core';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
-import { RunViewParams, CompositeKey, Metadata } from '@memberjunction/core';
+import { RunViewParams, CompositeKey, Metadata, RunView } from '@memberjunction/core';
 import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
 import { GridColumnConfig } from '@memberjunction/ng-entity-viewer';
 import { mjBizAppsAccountingJournalEntryEntity } from '@mj-biz-apps/accounting-entities';
-import { CompanyScopeService } from '../../shared/company-scope.service';
+import { CompanyScopeService, ScopeCompany } from '../../shared/company-scope.service';
 import { openBizDetail } from '../../shared/biz-detail-form';
-import { TIME_WINDOWS, TimeWindowId, timeWindowFilter, andFilters } from '../../../transfer-pending/list-scaffold/time-window';
+import { TIME_WINDOWS, TimeWindowId, timeWindowRange, toSqlDate, andFilters } from '../../../transfer-pending/list-scaffold/time-window';
 import { sqlLiteral, likeContains } from '../../../transfer-pending/list-scaffold/sql-filter';
 import { rowKeyToId } from '../../../transfer-pending/list-scaffold/grid-row-key';
 
@@ -22,6 +22,16 @@ type JEStatus = mjBizAppsAccountingJournalEntryEntity['Status'];
  * CHECK constraint this line fails to compile rather than silently omitting a status.
  */
 const STATUSES: readonly JEStatus[] = ['Pending', 'Batched', 'GLPosted'] as const;
+
+/**
+ * The window picker's value: one of the shared presets, or `custom` once the user edits the calendar
+ * boxes directly. A preset FILLS the calendar range (the All-batches idiom) rather than living beside
+ * it, so there is exactly one date source of truth and no "preset says 90 days, calendar says 2020"
+ * contradiction.
+ */
+type WindowChoice = TimeWindowId | 'custom';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * All journal entries (UI plan §8.1) — the **list-scaffold pilot**: the grid/filter/slide-in idiom
@@ -67,8 +77,23 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
   public EntryTypes: string[] = [];
 
   /** Time-window default — §0 requires one on every list; 90 days suits a ledger review. */
-  public TimeWindow: TimeWindowId = 'last90';
-  public StatusFilter: JEStatus | 'All' = 'All';
+  public TimeWindow: WindowChoice = 'last90';
+  /** Calendar range (inclusive, `YYYY-MM-DD`). Filled by the window presets; editable directly. */
+  public FromDate: string | null = null;
+  public ToDate: string | null = null;
+
+  /**
+   * Status filter — a SET, mirroring All batches (empty = all statuses), not a single-select. Same
+   * control idiom, same "All" affordance, so the two screens read identically.
+   */
+  public SelectedStatuses = new Set<JEStatus>();
+
+  /**
+   * Per-page company narrowing, mirroring All batches' Company select. This ANDs *inside* the
+   * app-wide company scope (the rail chip) — it narrows the scope, it never widens it.
+   */
+  public CompanyID: string | null = null;
+
   /**
    * `string`, not `JEType | 'All'`, on purpose: the options come from runtime metadata (see
    * EntryTypes), so claiming the compile-time union here would be a cast we cannot honour. The
@@ -76,6 +101,21 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
    */
   public TypeFilter: string = 'All';
   public Search = '';
+
+  /**
+   * Overview stats for the header's `[meta]` slot.
+   *
+   * **They honour the filters** — every number is a COUNT of exactly what the grid below is showing
+   * (the header subtitle says so on screen, because a chip that silently ignored the filters above it
+   * would be a lie). Each is a §0-legal cheap read: `MaxRows: 1` + `TotalRowCount`, i.e. SQL counts
+   * and ships one row. Nothing here sums the ledger.
+   *
+   * `null` = not yet loaded / the count read failed — rendered as "—" rather than a wrong 0.
+   */
+  public TotalCount: number | null = null;
+  private statusCounts = new Map<JEStatus, number>();
+  /** Guards against an older stat batch landing after a newer one and repainting stale numbers. */
+  private statsToken = 0;
 
   public GridParams: RunViewParams = { EntityName: JE_ENTITY };
 
@@ -98,7 +138,17 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.refreshSub = this.pageRefresh.OnRefresh(() => this.Refresh());
     this.EntryTypes = this.loadEntryTypeValues();
+    // Seed the calendar boxes from the default window, so the preset and the range agree from the
+    // first paint (the range is what actually filters — see WindowChoice).
+    this.applyWindowRange('last90');
+    // Idempotent (the rail chip loads it too) — this only populates the Company select's options.
+    void this.Scope.Load().then(() => this.cdr.markForCheck());
     this.applyFilters();
+  }
+
+  /** The Company select's options — the app-wide roster, so no per-page RunView. */
+  public get Companies(): ScopeCompany[] {
+    return this.Scope.Companies;
   }
 
   /** Read EntryType's allowed values from entity metadata (see the EntryTypes doc comment). */
@@ -110,15 +160,7 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
 
   /** Recompute the grid's RunViewParams from the current filter set + the app-wide company scope. */
   public applyFilters(): void {
-    const filter = andFilters(
-      timeWindowFilter(this.TimeWindow, 'EffectiveDate'),
-      this.StatusFilter === 'All' ? null : `Status='${this.StatusFilter}'`,
-      this.TypeFilter === 'All' ? null : `EntryType='${sqlLiteral(this.TypeFilter)}'`,
-      this.searchFilter(),
-      // Company scope is app-wide: an empty selection means ALL, resolved inside the service so the
-      // rule lives in exactly one place.
-      this.Scope.FilterFor('CompanyID'),
-    );
+    const filter = this.buildFilter();
 
     this.GridParams = {
       EntityName: JE_ENTITY,
@@ -126,6 +168,43 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
       OrderBy: 'EffectiveDate DESC, EntryNumber DESC',
     };
     this.cdr.markForCheck();
+    void this.refreshStats(filter);
+  }
+
+  /**
+   * The single filter expression BOTH the grid and the stat chips are built from — which is precisely
+   * what makes the chips honest: there is no second, chip-only predicate that could drift.
+   */
+  private buildFilter(): string {
+    return andFilters(
+      this.dateFilter(),
+      this.statusFilter(),
+      this.TypeFilter === 'All' ? null : `EntryType='${sqlLiteral(this.TypeFilter)}'`,
+      this.searchFilter(),
+      this.CompanyID ? `CompanyID='${sqlLiteral(this.CompanyID)}'` : null,
+      // Company scope is app-wide: an empty selection means ALL, resolved inside the service so the
+      // rule lives in exactly one place. ANDed with the per-page select above, which only narrows it.
+      this.Scope.FilterFor('CompanyID'),
+    );
+  }
+
+  /**
+   * The calendar range's predicate. Inclusive on BOTH ends: EffectiveDate is a DATE column (no time
+   * component), so `<= ToDate` is exactly equivalent to the shared helper's half-open upper bound
+   * while matching what the To box literally says.
+   */
+  private dateFilter(): string | null {
+    return andFilters(
+      this.FromDate ? `EffectiveDate >= '${sqlLiteral(this.FromDate)}'` : null,
+      this.ToDate ? `EffectiveDate <= '${sqlLiteral(this.ToDate)}'` : null,
+    ) || null;
+  }
+
+  /** Empty set = all statuses (the All-batches rule), so no predicate at all. */
+  private statusFilter(): string | null {
+    if (this.SelectedStatuses.size === 0) return null;
+    const list = [...this.SelectedStatuses].map((s) => `'${s}'`).join(',');
+    return `Status IN (${list})`;
   }
 
   /**
@@ -136,7 +215,114 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
     return likeContains(['EntryNumber', 'Description'], this.Search);
   }
 
+  // ─── overview stats (header [meta]) ──────────────────────────────────────────
+
+  /**
+   * Refresh the header chips: one batched round-trip of count-only reads over the SAME filter the
+   * grid uses. §0-legal — `MaxRows: 1` + `TotalRowCount` counts in SQL and ships a single row; there
+   * is no aggregate over the ledger here and there must never be one.
+   */
+  private async refreshStats(filter: string): Promise<void> {
+    const token = ++this.statsToken;
+    try {
+      const rv = new RunView();
+      const results = await rv.RunViews([
+        this.countParams(filter),
+        ...STATUSES.map((s) => this.countParams(andFilters(filter, `Status='${s}'`))),
+      ]);
+      // A slower earlier batch must never repaint over a newer one's numbers.
+      if (token !== this.statsToken) return;
+
+      this.TotalCount = results[0]?.Success ? (results[0].TotalRowCount ?? 0) : null;
+      const counts = new Map<JEStatus, number>();
+      STATUSES.forEach((s, i) => {
+        const r = results[i + 1];
+        if (r?.Success) counts.set(s, r.TotalRowCount ?? 0);
+      });
+      this.statusCounts = counts;
+    } catch {
+      if (token !== this.statsToken) return;
+      // A failed count shows "—", never a fabricated 0.
+      this.TotalCount = null;
+      this.statusCounts = new Map<JEStatus, number>();
+    }
+    this.cdr.markForCheck();
+  }
+
+  /** Count-only read shape: one row on the wire, the answer in TotalRowCount. */
+  private countParams(filter: string): RunViewParams {
+    return {
+      EntityName: JE_ENTITY,
+      ExtraFilter: filter || undefined,
+      Fields: ['ID'],
+      MaxRows: 1,
+      ResultType: 'simple',
+    };
+  }
+
+  public StatusCount(status: JEStatus): number {
+    return this.statusCounts.get(status) ?? 0;
+  }
+
+  /** Stat-badge variant per status — the same lifecycle colouring the batches header uses. */
+  public BadgeVariant(status: JEStatus): 'success' | 'warning' | 'info' | 'default' {
+    switch (status) {
+      case 'GLPosted':
+        return 'success';
+      case 'Batched':
+        return 'info';
+      case 'Pending':
+        return 'warning';
+      default:
+        return 'default';
+    }
+  }
+
+  // ─── filter controls ─────────────────────────────────────────────────────────
+
   public OnFilterChanged(): void {
+    this.applyFilters();
+  }
+
+  /** Status toggles (multi-select, mirroring All batches). */
+  public ToggleStatus(status: JEStatus): void {
+    if (this.SelectedStatuses.has(status)) this.SelectedStatuses.delete(status);
+    else this.SelectedStatuses.add(status);
+    this.applyFilters();
+  }
+  public IsStatusOn(status: JEStatus): boolean {
+    return this.SelectedStatuses.has(status);
+  }
+  public ShowAllStatuses(): void {
+    this.SelectedStatuses.clear();
+    this.applyFilters();
+  }
+  public get AllStatusesShown(): boolean {
+    return this.SelectedStatuses.size === 0;
+  }
+  /** Button variant for an on/off toggle — the All-batches convention. */
+  public ToggleVariant(active: boolean): 'primary' | 'flat' {
+    return active ? 'primary' : 'flat';
+  }
+
+  /** A window preset FILLS the calendar range (see WindowChoice); 'custom' leaves the dates alone. */
+  public OnWindowChanged(): void {
+    if (this.TimeWindow !== 'custom') this.applyWindowRange(this.TimeWindow);
+    this.applyFilters();
+  }
+
+  private applyWindowRange(window: TimeWindowId): void {
+    const { From, To } = timeWindowRange(window);
+    this.FromDate = From ? toSqlDate(From) : null;
+    // timeWindowRange's `To` is EXCLUSIVE (tomorrow 00:00 UTC). The calendar box states an INCLUSIVE
+    // last day, so step back one day — and since EffectiveDate is a DATE column the resulting
+    // `<= today` predicate selects exactly the same rows as the helper's `< tomorrow`.
+    this.ToDate = To ? toSqlDate(new Date(To.getTime() - DAY_MS)) : null;
+  }
+
+  /** Editing either calendar box means the range is no longer a named preset. */
+  public OnDateChanged(): void {
+    this.TimeWindow = 'custom';
     this.applyFilters();
   }
 

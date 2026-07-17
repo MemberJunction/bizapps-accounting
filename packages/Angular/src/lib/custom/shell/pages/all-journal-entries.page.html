@@ -1,8 +1,19 @@
 <!-- Sub-page of a left-nav shell → mj-page-header-interior, NOT mj-page-header (which would double
      the header). Slot conventions: [meta] = state, [actions] = verbs, [toolbar] = filters. -->
-<mj-page-header-interior>
+<mj-page-header-interior
+  Title="All journal entries"
+  Subtitle="The ledger — every count below reflects the filters, exactly like the grid. Sorted by effective date, newest first.">
+  <!-- Overview stats. Each is a filtered COUNT over the SAME predicate the grid uses (MaxRows 1 +
+       TotalRowCount — §0: no on-demand aggregates), so a chip can never disagree with the rows. The
+       subtitle states that on screen. A status with 0 matches is hidden, as on All batches. -->
   <div meta>
     <mj-stat-badge [Label]="ScopeLabel" Icon="fa-solid fa-building" Variant="info"></mj-stat-badge>
+    <mj-stat-badge Icon="fa-solid fa-book-open" [Count]="TotalCount ?? '—'" Label="entries" Variant="default" />
+    @for (s of Statuses; track s) {
+      @if (StatusCount(s) > 0) {
+        <mj-stat-badge [Count]="StatusCount(s)" [Label]="s" [Variant]="BadgeVariant(s)" />
+      }
+    }
   </div>
 
   <div actions>
@@ -10,23 +21,28 @@
          live push lands later — there is deliberately no polling and no per-button wiring. -->
   </div>
 
+  <!-- The All-batches filter setup, applied here verbatim in idiom: status toggles + company +
+       a calendar range + window presets — plus this list's own entry-type filter and search.
+       ONE ROW on the desktop (the drop-downs side by side, search last on the right); it wraps only
+       when the viewport can't hold it. -->
   <div toolbar>
     <div class="aje-filters">
-      <label class="aje-field">
-        <span class="aje-field__label">Window</span>
-        <select class="mj-input" [(ngModel)]="TimeWindow" (ngModelChange)="OnFilterChanged()" aria-label="Time window">
-          @for (w of TimeWindows; track w.Id) {
-            <option [value]="w.Id">{{ w.Label }}</option>
+      <div class="aje-field">
+        <span class="aje-field__label">Status</span>
+        <div class="aje-toggles">
+          <button mjButton size="sm" [variant]="ToggleVariant(AllStatusesShown)" (click)="ShowAllStatuses()">All</button>
+          @for (s of Statuses; track s) {
+            <button mjButton size="sm" [variant]="ToggleVariant(IsStatusOn(s))" (click)="ToggleStatus(s)">{{ s }}</button>
           }
-        </select>
-      </label>
+        </div>
+      </div>
 
       <label class="aje-field">
-        <span class="aje-field__label">Status</span>
-        <select class="mj-input" [(ngModel)]="StatusFilter" (ngModelChange)="OnFilterChanged()" aria-label="Status">
-          <option value="All">All statuses</option>
-          @for (s of Statuses; track s) {
-            <option [value]="s">{{ s }}</option>
+        <span class="aje-field__label">Company</span>
+        <select class="mj-input" [(ngModel)]="CompanyID" (ngModelChange)="OnFilterChanged()" aria-label="Company">
+          <option [ngValue]="null">All companies</option>
+          @for (co of Companies; track co.ID) {
+            <option [ngValue]="co.ID">{{ co.Name }}</option>
           }
         </select>
       </label>
@@ -39,6 +55,26 @@
             <option [value]="t">{{ t }}</option>
           }
         </select>
+      </label>
+
+      <label class="aje-field">
+        <span class="aje-field__label">Window</span>
+        <select class="mj-input" [(ngModel)]="TimeWindow" (ngModelChange)="OnWindowChanged()" aria-label="Time window">
+          @for (w of TimeWindows; track w.Id) {
+            <option [value]="w.Id">{{ w.Label }}</option>
+          }
+          <option value="custom">Custom range</option>
+        </select>
+      </label>
+
+      <label class="aje-field aje-field--date">
+        <span class="aje-field__label">From</span>
+        <input type="date" class="mj-input" [(ngModel)]="FromDate" (ngModelChange)="OnDateChanged()" aria-label="Effective date from" />
+      </label>
+
+      <label class="aje-field aje-field--date">
+        <span class="aje-field__label">To</span>
+        <input type="date" class="mj-input" [(ngModel)]="ToDate" (ngModelChange)="OnDateChanged()" aria-label="Effective date to" />
       </label>
 
       <label class="aje-field aje-field--grow">

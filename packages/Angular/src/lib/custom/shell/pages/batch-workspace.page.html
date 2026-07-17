@@ -2,49 +2,59 @@
      NOTE there is deliberately NO Filters control here: the build-criteria panel is the ONLY
      filter surface on this page (round-2 ruling — never two filter systems, never view-filters
      that don't match the batch contents). -->
-<mj-page-header-interior>
-  <ng-container meta>
-    @if (IsBuilt) {
-      <mj-stat-badge [Label]="'Built — ' + Draft?.BuiltBatchNumber" Icon="fa-solid fa-check" Variant="success"></mj-stat-badge>
-    } @else {
-      <mj-stat-badge Label="Draft — not built" Variant="default"></mj-stat-badge>
-    }
-    <mj-stat-badge
-      [Label]="'Target: ' + (Draft?.Criteria?.TargetSystem ?? '')"
-      Icon="fa-solid fa-plug"
-      Variant="info"
-      title="The ERP this batch dispatches to.">
-    </mj-stat-badge>
-  </ng-container>
-</mj-page-header-interior>
+<!-- The page header carries NO status bubble: a lone "Draft — not built" capsule spent a whole band
+     of the workspace saying one word. What you are building (its number/status/target) now rides in
+     the workspace card's own header, beside the tabs, next to the thing it describes. -->
+<mj-page-header-interior></mj-page-header-interior>
 
-<!-- Scrollable body — <mj-page-body-interior> is the interior primitive
-     <mj-left-nav-content> expects; it owns the gutters that keep content off the rail and
-     off the page edge. NOTE it is display:block, so children size with height/min-height,
-     never with flex. -->
+<!-- <mj-page-body-interior> is the interior primitive <mj-left-nav-content> expects; it owns the
+     gutters that keep content off the rail and off the page edge (elements were hitting the screen
+     edge without it). NOTE it is display:block, so children size with height/min-height, never with
+     flex — a `flex:1` child collapses to zero here. -->
 <mj-page-body-interior>
-<!-- Session tabs. v1 is deliberately session-scoped — the note says so rather than letting a user
-     assume their draft is saved. -->
-<div class="bw-tabs">
-  <mj-workspace-tab-strip
-    [Tabs]="Tabs"
-    [ActiveId]="ActiveTabId"
-    NewTabLabel="New"
-    (TabSelected)="SelectTab($event)"
-    (TabClosed)="CloseTab($event)"
-    (NewTabRequested)="openNewDraft()">
-  </mj-workspace-tab-strip>
-  <span class="bw-sessionnote">
-    <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
-    Tabs keep your progress for this session — drafts are not saved to the database (v1).
-  </span>
-</div>
+  <!-- ONE backing card for the whole workspace: header section (tabs + identity) above a body that
+       scrolls as a whole, so this reads as a unified object rather than disparate elements. -->
+  <section class="bw" aria-label="Batch workspace">
+    <header class="bw-head">
+      <!-- Session tabs — flush with the card's left edge; their rule runs the card's full width.
+           v1 is deliberately session-scoped: the note below says so rather than letting a user
+           assume their draft is saved. -->
+      <mj-workspace-tab-strip
+        [Tabs]="Tabs"
+        [ActiveId]="ActiveTabId"
+        NewTabLabel="New"
+        (TabSelected)="SelectTab($event)"
+        (TabClosed)="CloseTab($event)"
+        (NewTabRequested)="openNewDraft()">
+      </mj-workspace-tab-strip>
 
-@if (ActionMessage) {
-  <mj-alert [Variant]="ActionIsError ? 'error' : 'success'" [Message]="ActionMessage"></mj-alert>
-}
+      <!-- Identity + status + target: BELOW the tab line, never in line with it. -->
+      <div class="bw-headmeta">
+        <span class="bw-identity">{{ IsBuilt ? Draft?.BuiltBatchNumber : 'New batch' }}</span>
+        @if (IsBuilt) {
+          <mj-stat-badge Label="Built" Icon="fa-solid fa-check" Variant="success"></mj-stat-badge>
+        } @else {
+          <mj-stat-badge Label="Draft — not built" Variant="default"></mj-stat-badge>
+        }
+        <mj-stat-badge
+          [Label]="'Target: ' + (Draft?.Criteria?.TargetSystem ?? '')"
+          Icon="fa-solid fa-plug"
+          Variant="info"
+          title="The ERP this batch dispatches to.">
+        </mj-stat-badge>
+        <span class="bw-sessionnote">
+          <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+          Tabs keep your progress for this session — drafts are not saved to the database (v1).
+        </span>
+      </div>
+    </header>
 
-<div class="bw-cols">
+    <div class="bw-body">
+      @if (ActionMessage) {
+        <mj-alert [Variant]="ActionIsError ? 'error' : 'success'" [Message]="ActionMessage"></mj-alert>
+      }
+
+      <div class="bw-cols">
   <!-- ── Build criteria: ALWAYS visible, because approvers see these too (§0) ── -->
   <section class="bw-crit" aria-label="Build criteria">
     <p class="bw-card-title">
@@ -216,5 +226,7 @@
       <button type="button" mjButton Variant="flat" (click)="Discard()">Discard</button>
     </div>
   </section>
-</div>
+      </div>
+    </div>
+  </section>
 </mj-page-body-interior>

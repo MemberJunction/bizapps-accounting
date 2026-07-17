@@ -34,7 +34,25 @@
   min-width: 0;
 }
 .aje-field--grow {
+  /* Search sits LAST, to the right of the drop-downs, and eats the slack so the whole filter set is
+     one line on the desktop. `flex` is safe HERE — .aje-filters IS a flex container (the body-interior
+     no-op trap in the header note applies only to the grid wrapper below). */
   flex: 1 1 220px;
+}
+
+/* Status toggles — the All-batches control, same shape, same "All" affordance. */
+.aje-toggles {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+/* Native date inputs size to their content; pin them so From/To don't stretch the row. */
+.aje-field--date {
+  flex: 0 0 auto;
+}
+.aje-field--date .mj-input {
+  width: 150px;
 }
 
 .aje-field__label {

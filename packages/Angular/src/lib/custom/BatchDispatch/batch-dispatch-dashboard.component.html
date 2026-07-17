@@ -1,50 +1,116 @@
-  <mj-page-header-interior
-    Title="Batch Approvals"
-    Subtitle="Review, approve, and dispatch journal-entry batches to the ERP">
+<!-- ROOT = exactly <mj-page-header-interior> + <mj-page-body-interior>. This dashboard is a SUB-PAGE
+     of the Batches left-nav shell; those two interior primitives are what carry the gutters. Anything
+     else at the root gets force-sized and sits flush against the nav rail / page edge. -->
+<mj-page-header-interior
+  Title="Batch Approvals"
+  Subtitle="Journal-entry batches awaiting CFO approval — review what each batch posts, then approve, reject, or dispatch">
 
-    <div meta>
-      <mj-stat-badge [Count]="Batches.length" Label="batches" />
+  <div meta>
+    <mj-stat-badge Icon="fa-solid fa-inbox" [Count]="FilteredCount" Label="batches" Variant="info" />
+    @for (s of StatusOptions; track s) {
+      @if (statusCount(s) > 0) {
+        <mj-stat-badge [Count]="statusCount(s)" [Label]="s" [Variant]="statusVariant(s)" />
+      }
+    }
+  </div>
+
+  <!-- Filters MIRRORED from "All batches" (same shape, labels, and idiom — not a bespoke set):
+       status toggles + Company + Target ERP + From/To + moving-window presets. -->
+  <div toolbar>
+    <div class="bd-filters">
+      <div class="bd-toggles">
+        <button mjButton size="sm" [variant]="StatusVariant(AllStatusesShown)" (click)="ShowAllStatuses()">All</button>
+        @for (s of StatusOptions; track s) {
+          <button mjButton size="sm" [variant]="StatusVariant(IsStatusOn(s))" (click)="ToggleStatus(s)">{{ s }}</button>
+        }
+      </div>
+      <label class="bd-field">
+        <span class="bd-field__label">Company</span>
+        <select class="mj-input" [value]="SelectedCompanyID ?? ''" (change)="OnCompanyChange($any($event.target).value)">
+          <option value="">All companies</option>
+          @for (co of Companies; track co.ID) { <option [value]="co.ID">{{ co.Name }}</option> }
+        </select>
+      </label>
+      <label class="bd-field">
+        <span class="bd-field__label">Target ERP</span>
+        <select class="mj-input" [value]="SelectedTarget ?? ''" (change)="OnTargetChange($any($event.target).value)">
+          <option value="">All systems</option>
+          @for (t of TargetOptions; track t) { <option [value]="t">{{ t }}</option> }
+        </select>
+      </label>
+      <label class="bd-field">
+        <span class="bd-field__label">From</span>
+        <input type="date" class="mj-input" [value]="FromDate ?? ''" (change)="OnFromDateChange($any($event.target).value)" />
+      </label>
+      <label class="bd-field">
+        <span class="bd-field__label">To</span>
+        <input type="date" class="mj-input" [value]="ToDate ?? ''" (change)="OnToDateChange($any($event.target).value)" />
+      </label>
+      <div class="bd-field">
+        <span class="bd-field__label">Window</span>
+        <div class="bd-windows">
+          <button mjButton size="sm" [variant]="StatusVariant(IsWindowOn('today'))" (click)="ApplyWindow('today')">Today</button>
+          <button mjButton size="sm" [variant]="StatusVariant(IsWindowOn('7d'))" (click)="ApplyWindow('7d')">7 days</button>
+          <button mjButton size="sm" [variant]="StatusVariant(IsWindowOn('30d'))" (click)="ApplyWindow('30d')">30 days</button>
+          <button mjButton size="sm" variant="flat" (click)="ClearWindow()" title="Clear the date range">Clear</button>
+        </div>
+      </div>
     </div>
+  </div>
+</mj-page-header-interior>
 
-    <div actions>
-    </div>
-  </mj-page-header-interior>
-
-<!-- Scrollable body — <mj-page-body-interior>. This dashboard is HOSTED inside
-     <mj-left-nav-content>, whose gutters only apply to the interior primitives; without this
-     wrapper its content sat flush against the nav rail and the page edge. body-interior is
-     display:block, so children size with height/min-height, never flex. -->
+<!-- NOTE: mj-page-body-interior is display:block — children size with height/min-height, NEVER flex:1
+     (which would be a no-op and collapse the list to zero height). -->
 <mj-page-body-interior>
-  <div class="cat-page">
+  <div class="bd-page">
+    @if (LoadError) {
+      <div class="bd-banner bd-banner--error" role="alert">
+        <i class="fa-solid fa-triangle-exclamation"></i> {{ LoadError }}
+      </div>
+    }
+
+    @if (ActionMessage) {
+      <div class="bd-banner"
+           [class.bd-banner--error]="ActionMessageIsError"
+           [class.bd-banner--success]="!ActionMessageIsError"
+           role="status">
+        <i class="fa-solid" [class.fa-circle-check]="!ActionMessageIsError"
+           [class.fa-triangle-exclamation]="ActionMessageIsError"></i>
+        {{ ActionMessage }}
+      </div>
+    }
+
     @if (IsLoading) {
       <mj-loading text="Loading batches…"></mj-loading>
+    } @else if (FilteredBatches.length === 0) {
+      <mj-empty-state
+        Icon="fa-solid fa-inbox"
+        Title="Nothing awaiting approval"
+        Message="No batch matches these filters. Cancelled, sent, and posted batches are never shown here — see All batches or Dispatch status for those.">
+      </mj-empty-state>
     } @else {
-      @if (LoadError) {
-        <div class="bd-banner bd-banner--error" role="alert">
-          <i class="fa-solid fa-triangle-exclamation"></i> {{ LoadError }}
+      <!-- THE LIST scrolls (own overflow-y + a real height) — not the page. That scroll container is
+           what makes the sticky header below actually stick: position:sticky with no scrolling
+           ancestor does nothing. Rows scroll UNDER the header, never above it. -->
+      <div class="bd-list-region">
+        <div class="bd-list-header">
+          <span class="bd-list-header__label">Sort</span>
+          <button mjButton size="sm" [variant]="StatusVariant(SortField === 'BatchedAt')" (click)="SortBy('BatchedAt')">
+            Batched <i [class]="SortIcon('BatchedAt')"></i>
+          </button>
+          <button mjButton size="sm" [variant]="StatusVariant(SortField === 'EndDate')" (click)="SortBy('EndDate')">
+            Covers thru <i [class]="SortIcon('EndDate')"></i>
+          </button>
+          <button mjButton size="sm" [variant]="StatusVariant(SortField === 'TotalEntries')" (click)="SortBy('TotalEntries')">
+            Entries <i [class]="SortIcon('TotalEntries')"></i>
+          </button>
+          <button mjButton size="sm" [variant]="StatusVariant(SortField === 'TotalDebits')" (click)="SortBy('TotalDebits')">
+            Debits <i [class]="SortIcon('TotalDebits')"></i>
+          </button>
         </div>
-      }
 
-      @if (ActionMessage) {
-        <div class="bd-banner"
-             [class.bd-banner--error]="ActionMessageIsError"
-             [class.bd-banner--success]="!ActionMessageIsError"
-             role="status">
-          <i class="fa-solid" [class.fa-circle-check]="!ActionMessageIsError"
-             [class.fa-triangle-exclamation]="ActionMessageIsError"></i>
-          {{ ActionMessage }}
-        </div>
-      }
-
-      @if (Batches.length === 0) {
-        <mj-empty-state
-          Icon="fa-solid fa-inbox"
-          Title="No batches yet"
-          Message="Batches built from the Batch Status page appear here for review, CFO approval, and dispatch to the ERP.">
-        </mj-empty-state>
-      } @else {
         <div class="bd-list">
-          @for (row of Batches; track row.ID) {
+          @for (row of FilteredBatches; track row.ID) {
             <div class="bd-card">
               <div class="bd-card__head">
                 <div class="bd-card__title">
@@ -64,7 +130,32 @@
                 </div>
               </div>
 
+              <!-- The information an approver actually needs, IN the card. -->
               <div class="bd-card__metrics">
+                <div class="bd-metric bd-metric--wide">
+                  <span class="bd-metric__label">Company</span>
+                  <span class="bd-metric__value">
+                    @if (row.CompanyNames.length) { {{ row.CompanyNames.join(', ') }} } @else { — }
+                  </span>
+                </div>
+                <div class="bd-metric">
+                  <span class="bd-metric__label">Target system</span>
+                  <span class="bd-metric__value">{{ row.TargetSystem }}</span>
+                </div>
+                <div class="bd-metric">
+                  <!-- DATE columns (no timezone) → rendered UTC. There is no accounting-period entity
+                       (removed, MOD-1), so the covered span is INFERRED from the JEs' EffectiveDates. -->
+                  <span class="bd-metric__label">Covers (from JE dates)</span>
+                  <span class="bd-metric__value">
+                    {{ row.StartDate ? (row.StartDate | date: 'yyyy-MM-dd' : 'UTC') : '—' }}
+                    <span class="bd-metric__arrow">→</span>
+                    {{ row.EndDate ? (row.EndDate | date: 'yyyy-MM-dd' : 'UTC') : '—' }}
+                  </span>
+                </div>
+                <div class="bd-metric">
+                  <span class="bd-metric__label">Accounts affected</span>
+                  <span class="bd-metric__value">{{ row.Accounts.length }}</span>
+                </div>
                 <div class="bd-metric">
                   <span class="bd-metric__label">Entries</span>
                   <span class="bd-metric__value">{{ row.TotalEntries }}</span>
@@ -76,6 +167,25 @@
                 <div class="bd-metric">
                   <span class="bd-metric__label">Total Credits</span>
                   <span class="bd-metric__value">{{ row.TotalCredits | number:'1.2-2' }}</span>
+                </div>
+                <div class="bd-metric">
+                  <!-- __mj-style instant → LOCAL time is correct here. -->
+                  <span class="bd-metric__label">Built by</span>
+                  <span class="bd-metric__value">
+                    {{ row.BatchedByUser || '—' }}
+                    @if (row.BatchedAt) { <span class="bd-metric__sub">{{ row.BatchedAt | date: 'yyyy-MM-dd HH:mm' }}</span> }
+                  </span>
+                </div>
+                <div class="bd-metric">
+                  <!-- The schema has NO "required approver" column — approval is a bizapps-tasks Task.
+                       So we show the ACTUAL approver once one exists, and never invent one. -->
+                  <span class="bd-metric__label">Approved by</span>
+                  <span class="bd-metric__value">
+                    @if (row.ApprovedByUser) {
+                      {{ row.ApprovedByUser }}
+                      @if (row.ApprovedAt) { <span class="bd-metric__sub">{{ row.ApprovedAt | date: 'yyyy-MM-dd HH:mm' }}</span> }
+                    } @else { — }
+                  </span>
                 </div>
                 @if (row.ExternalBatchRef) {
                   <div class="bd-metric">
@@ -94,6 +204,55 @@
               @if (row.Status === 'Pending' && row.Approved === false && row.ApprovalReason) {
                 <div class="bd-card__hint">
                   <i class="fa-solid fa-circle-info"></i> {{ row.ApprovalReason }}
+                </div>
+              }
+
+              <!-- The DEPTH: every account this batch touches, with its NET effect. Already in memory
+                   (loaded with the batches), so expanding costs no query. -->
+              <button type="button" class="bd-card__expander" (click)="ToggleExpand(row)"
+                      [attr.aria-expanded]="row.Expanded">
+                <i class="fa-solid" [class.fa-chevron-right]="!row.Expanded" [class.fa-chevron-down]="row.Expanded"></i>
+                {{ row.Expanded ? 'Hide' : 'Show' }} account effect ({{ row.Accounts.length }} account{{ row.Accounts.length === 1 ? '' : 's' }}, netted)
+              </button>
+
+              @if (row.Expanded) {
+                <div class="bd-detail">
+                  @if (row.Accounts.length === 0) {
+                    <div class="bd-detail__empty">This batch nets to zero on every account — nothing would post.</div>
+                  } @else {
+                    <table class="bd-detail-table">
+                      <thead>
+                        <tr>
+                          <th>Company</th>
+                          <th>Account</th>
+                          <th class="bd-num">Net Debit</th>
+                          <th class="bd-num">Net Credit</th>
+                          <th class="bd-num">Movements</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @for (a of row.Accounts; track $index) {
+                          <tr class="bd-detail-line" [class.bd-detail-line--credit]="a.Credit > 0">
+                            <td>{{ a.CompanyName || '—' }}</td>
+                            <td>
+                              @if (a.AccountCode) { <span class="bd-detail-code">{{ a.AccountCode }} · </span> }{{ a.AccountName }}
+                            </td>
+                            <td class="bd-num">{{ a.Debit ? (a.Debit | number:'1.2-2') : '' }}</td>
+                            <td class="bd-num">{{ a.Credit ? (a.Credit | number:'1.2-2') : '' }}</td>
+                            <td class="bd-num">{{ a.SourceCount }}</td>
+                          </tr>
+                        }
+                      </tbody>
+                      <tfoot>
+                        <tr class="bd-detail-total">
+                          <td colspan="2">Net totals</td>
+                          <td class="bd-num">{{ row.NetDebits | number:'1.2-2' }}</td>
+                          <td class="bd-num">{{ row.NetCredits | number:'1.2-2' }}</td>
+                          <td></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  }
                 </div>
               }
 
@@ -125,7 +284,7 @@
             </div>
           }
         </div>
-      }
+      </div>
     }
   </div>
 </mj-page-body-interior>

@@ -3,12 +3,32 @@
   height: 100%;
 }
 
-/* Toolbar selectors (company / period / target). */
+/* mj-page-body-interior is display:block — this page sizes with height, never flex:1. */
+.bd-page {
+  display: block;
+}
+
+/* ─── Filters (mirrors the All-batches toolbar) ─────────────────────────────── */
+.bd-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 16px;
+}
+
+.bd-toggles,
+.bd-windows {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 .bd-field {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-width: 180px;
+  min-width: 150px;
 }
 
 .bd-field__label {
@@ -18,7 +38,7 @@
   letter-spacing: 0.04em;
 }
 
-/* Status / action banners. */
+/* ─── Status / action banners ──────────────────────────────────────────────── */
 .bd-banner {
   display: flex;
   align-items: center;
@@ -44,13 +64,50 @@
   color: var(--mj-status-error-text);
 }
 
-/* Batch list. */
+/* ─── The scrolling list region ────────────────────────────────────────────────
+   THE LIST scrolls, not the page. `position: sticky` only works with a scrolling
+   ancestor, so this container owns both the real height AND the overflow-y — that
+   is what makes .bd-list-header stick and rows scroll UNDER it. */
+.bd-list-region {
+  position: relative;
+  height: min(68vh, 900px);
+  min-height: 320px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border: 1px solid var(--mj-border-subtle);
+  border-radius: var(--mj-radius-lg);
+  background: var(--mj-bg-surface-sunken);
+}
+
+.bd-list-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  background: var(--mj-bg-surface);
+  border-bottom: 1px solid var(--mj-border-default);
+}
+
+.bd-list-header__label {
+  font-size: var(--mj-text-xs);
+  color: var(--mj-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-right: 4px;
+}
+
 .bd-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  padding: 12px;
 }
 
+/* ─── Batch card ───────────────────────────────────────────────────────────── */
 .bd-card {
   border: 1px solid var(--mj-border-default);
   border-radius: var(--mj-radius-lg);
@@ -92,9 +149,9 @@
 }
 
 .bd-card__metrics {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 24px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px 24px;
   margin-top: 14px;
 }
 
@@ -102,6 +159,11 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
+}
+
+.bd-metric--wide {
+  grid-column: span 2;
 }
 
 .bd-metric__label {
@@ -115,6 +177,18 @@
   font-size: var(--mj-text-base);
   font-weight: var(--mj-font-medium);
   color: var(--mj-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.bd-metric__arrow,
+.bd-metric__sub {
+  color: var(--mj-text-muted);
+  font-size: var(--mj-text-xs);
+  font-weight: var(--mj-font-regular);
+}
+
+.bd-metric__sub {
+  display: block;
 }
 
 .bd-card__error {
@@ -131,6 +205,83 @@
   color: var(--mj-text-secondary);
 }
 
+/* ─── Expandable per-account detail ────────────────────────────────────────── */
+.bd-card__expander {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 6px 0;
+  border: none;
+  background: transparent;
+  color: var(--mj-text-link);
+  font-size: var(--mj-text-sm);
+  cursor: pointer;
+}
+
+.bd-card__expander:hover {
+  text-decoration: underline;
+}
+
+.bd-detail {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--mj-border-subtle);
+  border-radius: var(--mj-radius-md);
+  background: var(--mj-bg-surface-sunken);
+  overflow-x: auto;
+}
+
+.bd-detail__empty {
+  font-size: var(--mj-text-sm);
+  color: var(--mj-text-muted);
+}
+
+.bd-detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--mj-text-sm);
+  color: var(--mj-text-primary);
+}
+
+.bd-detail-table th {
+  text-align: left;
+  font-size: var(--mj-text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--mj-text-muted);
+  font-weight: var(--mj-font-medium);
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--mj-border-default);
+  white-space: nowrap;
+}
+
+.bd-detail-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--mj-border-subtle);
+}
+
+.bd-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.bd-detail-code {
+  color: var(--mj-text-muted);
+}
+
+.bd-detail-line--credit td {
+  color: var(--mj-text-secondary);
+}
+
+.bd-detail-total td {
+  font-weight: var(--mj-font-semibold);
+  border-top: 1px solid var(--mj-border-strong);
+  border-bottom: none;
+  color: var(--mj-text-primary);
+}
+
+/* ─── Actions ──────────────────────────────────────────────────────────────── */
 .bd-card__actions {
   display: flex;
   align-items: center;
