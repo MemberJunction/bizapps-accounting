@@ -1,0 +1,35 @@
+<!-- The rail column: MJ's nav (scrolls) above a toggle that never does.
+
+     The toggle sits OUTSIDE <mj-left-nav> on purpose. MJ's [footer] slot renders INSIDE the rail's
+     `overflow-y: auto` box, so a footer scrolls away with the items — an affordance you have to go
+     find is not an affordance. Out here it is always on screen, and it carries its own right border
+     so the rail's edge line runs unbroken to the bottom rather than stopping where MJ's <aside> ends. -->
+<div class="sr" [class.sr--collapsed]="Collapsed">
+  <mj-left-nav
+    class="sr__nav"
+    [Sections]="Sections"
+    [ActiveId]="ActiveId"
+    [MobileTitle]="MobileTitle"
+    [Width]="RailWidth"
+    (ItemClicked)="ItemClicked.emit($event)">
+  </mj-left-nav>
+
+  <!-- An ARROW, per Marcelo: a hamburger says "here is a menu", which is a lie — the menu is already
+       on screen. An arrow says which way the thing next to it will move, which is the actual promise.
+       aria-expanded reports rail state to a screen reader; the label flips with it. -->
+  <button
+    type="button"
+    class="sr__toggle"
+    [attr.aria-label]="ToggleLabel"
+    [attr.aria-expanded]="!Collapsed"
+    [title]="ToggleLabel"
+    (click)="Toggle()">
+    <i
+      class="fa-solid sr__toggle-icon"
+      [class.fa-angles-left]="!Collapsed"
+      [class.fa-angles-right]="Collapsed"
+      aria-hidden="true"></i>
+    <!-- Hidden when collapsed via CSS, not removed: the accessible name lives on the button itself. -->
+    <span class="sr__toggle-text">Collapse</span>
+  </button>
+</div>

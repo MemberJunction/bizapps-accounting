@@ -910,12 +910,30 @@ queryable surface for "which questions touch feature X".)*
   disclosure IS the point: file trees, IDE outlines, nav trees, Notion toggles, and our own GL-account
   rollup. A boxless section is the second case. So Marcelo's instinct is right, and it is an
   affordance-ordering argument, not taste.
-- **The question for Matt:** (1) Under `[Bare]`, should the collapsed header carry a divider rule?
-  (2) Should the hover follow the panel's radius — or should `[Bare]` not paint a full-bleed hover at
-  all, since there is no box to fill? (3) Under `[Bare]`, should the chevron LEAD the label rather than
-  trail it? (4) Framed generally: **is `[Bare]` meant to be a boxless variant of the panel, or a panel
-  that merely hides its border?** Answering that settles all three at once — we would take whichever
-  you rule, and we would rather change our usage than fork the component.
+- **⚠ UPDATE 2026-07-17 — questions (1) and (2) are very likely OUR BUG, not MJ's. Read this before
+  asking Matt.** Re-read `accordion.scss` end-to-end: `[Bare]` drops the border, radius and header
+  background **because it expects the HOST to supply the box** — that is the whole point of the
+  variant. We were not supplying one: all five panels sat inside a single bordered `.pw__panel`, so
+  no panel had its own surface. That — not `[Bare]` — is why the rows read flat against the
+  background, and it is precisely what Marcelo saw: *"maybe my issue is just that the row is the same
+  color as the background."* Giving each panel its own card (`--mj-bg-surface` + `--mj-radius-md` +
+  `--mj-shadow-sm` + `overflow:hidden`) on a `--mj-bg-page` well **dissolves symptom 1** (the cards
+  separate the sections, so no divider rule is needed) **and symptom 2** (`overflow:hidden` on the
+  host clips MJ's full-bleed hover to the host's radius, so the hover rounds itself for free). So
+  MJ's design was right and our usage was wrong. Do NOT ask Matt (1) or (2) as bugs.
+- **The question for Matt (revised — (3) is the only real gap):** (3) Under `[Bare]`, should the
+  chevron LEAD the label rather than trail it? Requesting **`[ChevronPosition]: 'start' | 'end'`**
+  (default `'end'`, so nothing changes for existing consumers). This one is NOT usage error and NOT
+  reachable from a host: `.mj-accordion-chevron` is a **sibling of the header `<button>`** inside
+  `.mj-accordion-header-row` and the source comments state it is **always** the rightmost element —
+  even `mjAccordionActions` renders *before* it, so no projection slot can get left of it. No input
+  affects it (`Bare`/`Size`/`Variant`/`FlushBody`/`Fill` all leave the position fixed).
+  (4) Smaller, same family: should `[Bare]` also zero `.mj-accordion-panel`'s `margin-bottom: 8px`?
+  That margin is box chrome, and inside a host card it becomes a dead surface strip. We currently
+  reset it with a single documented `::ng-deep`; if you agree, that override deletes itself.
+  (5) Framed generally: **is `[Bare]` meant to be a boxless variant whose host owns the box?** If yes
+  — which the above strongly suggests — the doc should SAY so, because its silence is what let us
+  ship it without host chrome and then misread the result as an MJ defect for a full day.
 - **Context to share:** we are the case `[Bare]` was seemingly built for — five stacked disclosure
   sections in a data-dense workshop card that already provides chrome. Marcelo's original ask, verbatim:
   *"you don't even need to do accordion dropdowns. You can do, like, just a drop down section with, like,

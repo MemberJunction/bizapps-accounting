@@ -37,7 +37,7 @@ interface MappingRow {
   standalone: false,
   selector: 'mj-erp-mapping-page',
   templateUrl: './erp-mapping.page.html',
-  styleUrls: ['./erp-mapping.page.css'],
+  styleUrls: ['./shell-table.css', './erp-mapping.page.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ErpMappingPageComponent extends BaseAngularComponent implements OnInit, OnDestroy {

@@ -103,7 +103,7 @@ interface ParentOption {
   standalone: false,
   selector: 'mj-gl-accounts-page',
   templateUrl: './gl-accounts.page.html',
-  styleUrls: ['./gl-accounts.page.css'],
+  styleUrls: ['./shell-table.css', './gl-accounts.page.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class GLAccountsPageComponent extends BaseAngularComponent implements OnInit, OnDestroy {

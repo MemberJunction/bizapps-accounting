@@ -10,6 +10,12 @@ import {
   DashboardStat,
   DASHBOARD_LIST_ROWS,
 } from './accounting-dashboard.base';
+import {
+  BreakdownPercent,
+  BreakdownTotal,
+  type DashboardBreakdown,
+  type DashboardBreakdownSegment,
+} from './dashboard-breakdown';
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
@@ -32,7 +38,12 @@ const BATCH_LIST_FIELDS: (keyof BatchListRow)[] = ['ID', 'BatchNumber', 'Status'
 interface BatchCounts {
   open: number;
   awaiting: number;
+  /** The four below exist so the dispatch breakdown can cover the WHOLE Status value list. */
+  approved: number;
+  sent: number;
+  posted: number;
   failed: number;
+  cancelled: number;
   unbatched: number;
   unstamped: number;
 }
@@ -68,6 +79,20 @@ export class BatchesDashboardPageComponent extends AccountingDashboardBase imple
   /** The section's create verb — the shell must bind (CreateRequested). See the base class. */
   public override CreateLabel = 'New batch';
 
+  /**
+   * The composition cards. Derived ENTIRELY from `BatchCounts` — every segment is a number
+   * `loadCounts` already fetched — so rendering this band costs no additional read.
+   */
+  public Breakdowns: DashboardBreakdown[] = [];
+
+  /** Template hooks for the composition bar. Pure functions; see dashboard-breakdown.ts. */
+  public BreakdownTotal(b: DashboardBreakdown): number {
+    return BreakdownTotal(b);
+  }
+  public BreakdownPercent(b: DashboardBreakdown, s: DashboardBreakdownSegment): number {
+    return BreakdownPercent(b, s);
+  }
+
   ngOnInit(): void {
     this.refreshSub = this.pageRefresh.OnRefresh(() => this.Refresh());
     void this.load();
@@ -91,10 +116,12 @@ export class BatchesDashboardPageComponent extends AccountingDashboardBase imple
       // however many rows we chose to show (see DashboardList.Count).
       const [counts, rows] = await Promise.all([this.loadCounts(), this.loadListRows()]);
       this.Stats = this.buildStats(counts);
+      this.Breakdowns = this.buildBreakdowns(counts);
       this.Lists = this.buildLists(rows, counts);
     } catch (e) {
       this.LoadError = e instanceof Error ? e.message : String(e);
       this.Stats = [];
+      this.Breakdowns = [];
       this.Lists = [];
     } finally {
       this.IsLoading = false;
@@ -103,17 +130,64 @@ export class BatchesDashboardPageComponent extends AccountingDashboardBase imple
   }
 
   private async loadCounts(): Promise<BatchCounts> {
-    const [open, awaiting, failed, unbatched, unstamped] = await Promise.all([
+    // `approved` / `sent` / `posted` / `cancelled` are counted so the dispatch-pipeline breakdown can
+    // cover the WHOLE `JournalEntryBatch.Status` value list (Pending|Approved|Sent|Posted|Failed|
+    // Cancelled — CK_JournalEntryBatch_Status). Four extra `MaxRows: 1` + `TotalRowCount` reads: SQL
+    // counts, one row each, which is precisely the kind of stat §0 permits on demand. Counting
+    // Approved directly rather than deriving it as `open - awaiting` keeps each segment traceable to
+    // one filter — a derived segment silently goes wrong the day `open`'s filter changes.
+    const [open, awaiting, approved, sent, posted, failed, cancelled, unbatched, unstamped] = await Promise.all([
       this.count({ EntityName: BATCH_ENTITY, ExtraFilter: `Status IN ('Pending','Approved')` }),
       this.count({ EntityName: BATCH_ENTITY, ExtraFilter: `Status='Pending'` }),
+      this.count({ EntityName: BATCH_ENTITY, ExtraFilter: `Status='Approved'` }),
+      this.count({ EntityName: BATCH_ENTITY, ExtraFilter: `Status='Sent'` }),
+      this.count({ EntityName: BATCH_ENTITY, ExtraFilter: `Status='Posted'` }),
       this.count({ EntityName: BATCH_ENTITY, ExtraFilter: `Status='Failed'` }),
+      this.count({ EntityName: BATCH_ENTITY, ExtraFilter: `Status='Cancelled'` }),
       this.count({ EntityName: JE_ENTITY, ExtraFilter: this.Scope.ComposeFilter(`Status='Pending'`) }),
       // MOD-14: a built batch with no approval task is the detectable, retryable state. Surfacing
       // it here is what makes it actionable rather than merely detectable.
       this.count({ EntityName: BATCH_ENTITY, ExtraFilter: `Status='Pending' AND ApprovalTaskID IS NULL` }),
     ]);
 
-    return { open, awaiting, failed, unbatched, unstamped };
+    return { open, awaiting, approved, sent, posted, failed, cancelled, unbatched, unstamped };
+  }
+
+  /**
+   * The dispatch pipeline, end to end — a batch's whole journey to the ERP in one bar.
+   *
+   * The segments are the COMPLETE `JournalEntryBatch.Status` value list, which is what makes the
+   * proportions honest: every batch in the system lands in exactly one segment, so these are real
+   * shares of a real total. If a migration widens CK_JournalEntryBatch_Status, a segment belongs
+   * here — the value list is the contract this card depends on.
+   *
+   * Tones follow the journey, not severity: brand (waiting on us) → info (in flight) → success
+   * (landed) → error (broken) → the muted brand tone for Cancelled (deliberately ended, not failed).
+   */
+  private buildBreakdowns(c: BatchCounts): DashboardBreakdown[] {
+    return [
+      {
+        Id: 'dispatch-pipeline',
+        Title: 'Dispatch pipeline',
+        Icon: 'fa-solid fa-paper-plane',
+        Caption: 'Every batch, by status',
+        EmptyMessage: 'No batches have been built yet.',
+        Segments: [
+          { Id: 'pending', Label: 'Awaiting approval', Value: c.awaiting, Tone: 'brand',
+            Tooltip: 'Pending batches waiting on a CFO decision before they can be dispatched.' },
+          { Id: 'approved', Label: 'Approved', Value: c.approved, Tone: 'info',
+            Tooltip: 'Cleared for dispatch — approved, not yet sent to the ERP.' },
+          { Id: 'sent', Label: 'Sent', Value: c.sent, Tone: 'info',
+            Tooltip: 'Handed to the ERP; awaiting confirmation that it posted.' },
+          { Id: 'posted', Label: 'Posted', Value: c.posted, Tone: 'success',
+            Tooltip: 'Confirmed posted in the ERP general ledger — the end of the line for a batch.' },
+          { Id: 'failed', Label: 'Failed', Value: c.failed, Tone: 'error',
+            Tooltip: 'ERP dispatch failed — retry them from Dispatch status.' },
+          { Id: 'cancelled', Label: 'Cancelled', Value: c.cancelled, Tone: 'brand',
+            Tooltip: 'Deliberately abandoned before dispatch. Not a failure — a decision.' },
+        ],
+      },
+    ];
   }
 
   private buildStats(c: BatchCounts): DashboardStat[] {

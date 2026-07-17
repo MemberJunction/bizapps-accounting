@@ -5,8 +5,10 @@
 <!-- There is deliberately NO <mj-page-header-interior> here. What you are building (its
      number/status/target) rides in the workspace card's own header, beside the tabs, next to the
      thing it describes — so an interior header had nothing left to carry, and an empty one still
-     paints its card chrome (background + border + shadow + row padding): a blank bubble. The body's
-     top padding is compensated in the CSS, since MJ tightens it on the assumption a header sits above. -->
+     paints its card chrome (background + border + shadow + row padding): a blank bubble.
+     Note MJ tightens <mj-page-body-interior>'s TOP padding to 8px on the assumption a header sits
+     above it, so this card starts a little higher than a header card would on a sibling page. Left
+     as-is pending Marcelo's eye on the live result. -->
 
 <!-- <mj-page-body-interior> is the interior primitive <mj-left-nav-content> expects; it owns the
      gutters that keep content off the rail and off the page edge (elements were hitting the screen
@@ -167,11 +169,11 @@
       </span>
     </div>
 
-    <div class="bw-tablewrap">
+    <div class="bw-tablewrap mjsh-tablewrap">
       @if (IsPreviewing) {
         <mj-loading text="Matching entries…"></mj-loading>
       } @else {
-        <table class="bw-grid">
+        <table class="bw-grid mjsh-table">
           <thead>
             <tr>
               <th class="bw-tick"><span class="bw-sr">Include</span></th>

@@ -116,7 +116,6 @@ mj-page-body-interior {
 
 /* Line editor. */
 .jew__gridwrap {
-  overflow-x: auto;
   border: 1px solid var(--mj-border-default);
   border-radius: 10px;
 }

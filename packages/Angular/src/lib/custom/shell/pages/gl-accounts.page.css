@@ -79,10 +79,6 @@
    only sticks inside a scrolling ancestor. Both axes are set explicitly, because per the CSS spec a
    `visible` axis paired with a non-`visible` one computes to `auto` anyway. */
 .gla-wrap {
-  height: 100%;
-  min-height: 320px;
-  overflow-x: auto;
-  overflow-y: auto;
   border: 1px solid var(--mj-border-default);
   border-radius: 10px;
   background: var(--mj-bg-surface);

@@ -52,7 +52,7 @@ interface LinkRow extends LinkRecord {
   standalone: false,
   selector: 'mj-account-links-page',
   templateUrl: './account-links.page.html',
-  styleUrls: ['./account-links.page.css'],
+  styleUrls: ['./shell-table.css', './account-links.page.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AccountLinksPageComponent extends BaseAngularComponent implements OnInit, OnDestroy {

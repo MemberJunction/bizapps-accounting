@@ -43,12 +43,14 @@
   <mj-page-body [Flex]="true" [Padding]="false" Direction="row">
     <!-- MJ's canonical left rail (§8 MJ-wins). The scope chip rides its [header] slot, which is
          why the rail needs no accounting knowledge. -->
-    <mj-left-nav
+    <!-- The rail + its desktop icons-only collapse toggle. One wrapper, nine shells: see
+         shell-rail.component.ts for why the collapse is not in MJ's own left-nav (QUESTIONS.md#q27). -->
+    <mj-shell-rail
       [Sections]="RailSections"
       [ActiveId]="ActivePageId"
       [MobileTitle]="CategoryTitle"
       (ItemClicked)="OnRailItemClicked($event)">
-    </mj-left-nav>
+    </mj-shell-rail>
 
     <mj-left-nav-content>
       @switch (ActivePageId) {

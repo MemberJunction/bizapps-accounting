@@ -61,7 +61,7 @@ export interface DimensionColumn {
   standalone: false,
   selector: 'mj-je-workspace-page',
   templateUrl: './je-workspace.page.html',
-  styleUrls: ['./je-workspace.page.css'],
+  styleUrls: ['./shell-table.css', './je-workspace.page.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class JEWorkspacePageComponent extends BaseAngularComponent implements OnInit {

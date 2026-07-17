@@ -98,7 +98,17 @@ export { CategoryShellBase, type ShellHeaderStat } from './lib/custom/shell/cate
 // TEMPLATE is duplicated rather than shared: it is pure presentation, and refactoring two working
 // dashboards mid-wave to save it would cost more than the drift risk it removes.
 export { AccountingDashboardBase, type DashboardStat } from './lib/custom/shell/pages/accounting-dashboard.base';
+/** The dashboard composition-card view model — shared with orders' dashboards (one copy, not two). */
+export {
+  BreakdownTotal,
+  BreakdownPercent,
+  type DashboardTone,
+  type DashboardBreakdown,
+  type DashboardBreakdownSegment,
+} from './lib/custom/shell/pages/dashboard-breakdown';
 export { ShellPagePendingComponent } from './lib/custom/shell/pages/shell-page-pending.component';
+/** Standalone — shared with orders' shell (both apps' category shells render the same rail). */
+export { ShellRailComponent } from './lib/custom/shell/shell-rail.component';
 
 // The workspace-tab framework (parked, framework-clean — TRANSFER-BACKLOG target: common -> MJ
 // base). Orders' Order editor uses the same session-tab semantics as the JE/Batch workspaces.

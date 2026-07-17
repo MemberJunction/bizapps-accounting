@@ -17,18 +17,10 @@
 
    Scoped through :host to WIN specificity. MJ sets these in the component's own `:host` rule
    (0,1,0); a bare `mj-page-body-interior` element selector (0,0,1) LOSES to it and is silently
-   inert. Only the padding-top below actually needs to win — flex/min-height match MJ's defaults —
-   but the whole rule is scoped so it means what it says.
-
-   padding-top: MJ ships --mj-space-2 (8px) here, deliberately tighter "because the body is almost
-   always preceded by an <mj-page-header-interior> whose bottom margin provides the breathing room".
-   This page has no header, so we restore the full --mj-space-4 (16px) — which is exactly the top
-   margin MJ gives the header card. The workspace card therefore starts at the same y-offset as the
-   header card on every sibling page, and nothing shifts when you switch rail items. */
+   inert — these happen to restate MJ's own values, which is why that went unnoticed. */
 :host mj-page-body-interior {
   flex: 1 1 auto;
   min-height: 0;
-  padding-top: var(--mj-space-4);
 }
 
 /* ─── The backing card ────────────────────────────────────────────────────────
@@ -225,9 +217,6 @@
 }
 
 .bw-tablewrap {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
   border: 1px solid var(--mj-border-default);
   border-radius: 10px;
   background: var(--mj-bg-surface);

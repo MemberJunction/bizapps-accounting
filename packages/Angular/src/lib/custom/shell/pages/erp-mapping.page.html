@@ -47,11 +47,11 @@
   <mj-alert Variant="error" [Message]="LoadError"></mj-alert>
 }
 
-<div class="erp-wrap">
+<div class="erp-wrap mjsh-tablewrap">
   @if (IsLoading) {
     <mj-loading text="Loading mappings…"></mj-loading>
   } @else {
-    <table class="erp-grid">
+    <table class="erp-grid mjsh-table">
       <thead>
         <tr>
           <th>GL account</th>

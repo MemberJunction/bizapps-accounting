@@ -10,6 +10,12 @@ import {
   DashboardStat,
   DASHBOARD_LIST_ROWS,
 } from './accounting-dashboard.base';
+import {
+  BreakdownPercent,
+  BreakdownTotal,
+  type DashboardBreakdown,
+  type DashboardBreakdownSegment,
+} from './dashboard-breakdown';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const SJE_ENTITY = 'MJ_BizApps_Accounting: Scheduled Journal Entries';
@@ -84,6 +90,19 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
   /** The section's create verb — the shell must bind (CreateRequested). See the base class. */
   public override CreateLabel = 'New journal entry';
 
+  /**
+   * The composition cards. Derived ENTIRELY from `JeCounts` — every segment is a number `loadCounts`
+   * already fetched for the stat strip — so this band adds no reads at all. See dashboard-breakdown.ts.
+   */
+  public Breakdowns: DashboardBreakdown[] = [];
+
+  /** Template hooks for the composition bar. Pure functions; see dashboard-breakdown.ts. */
+  public BreakdownTotal(b: DashboardBreakdown): number {
+    return BreakdownTotal(b);
+  }
+  public BreakdownPercent(b: DashboardBreakdown, s: DashboardBreakdownSegment): number {
+    return BreakdownPercent(b, s);
+  }
 
   ngOnInit(): void {
     this.refreshSub = this.pageRefresh.OnRefresh(() => this.Refresh());
@@ -108,10 +127,12 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
       // not from however many rows we chose to show (see DashboardList.Count).
       const [counts, rows] = await Promise.all([this.loadCounts(), this.loadListRows()]);
       this.Stats = this.buildStats(counts);
+      this.Breakdowns = this.buildBreakdowns(counts);
       this.Lists = this.buildLists(rows, counts);
     } catch (e) {
       this.LoadError = e instanceof Error ? e.message : String(e);
       this.Stats = [];
+      this.Breakdowns = [];
       this.Lists = [];
     } finally {
       this.IsLoading = false;
@@ -166,6 +187,37 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
         Tooltip: 'Pending MANUAL entries. They are excluded from batching until approved (C.8) — this is why an entry can look "stuck".' },
       { Id: 'due', Label: 'Scheduled entries due', Value: c.scheduledDue, Icon: 'fa-regular fa-calendar-days', GoTo: 'scheduled',
         Tooltip: 'Scheduled entries whose date has arrived and which have not materialised yet.' },
+    ];
+  }
+
+  /**
+   * The pipeline shape, at zero read cost — every segment is a count `loadCounts` already ran.
+   *
+   * Pending / Batched / GLPosted is the WHOLE `JournalEntry.Status` value list, which is what makes
+   * this bar honest: the three segments account for every entry in scope, so the proportions are
+   * real shares of a real total rather than three unrelated numbers sharing an axis. If a migration
+   * widens the Status CHECK constraint, a fourth segment belongs here — the value list is the
+   * contract this card depends on.
+   *
+   * Tones encode the pipeline, not severity: brand (work to do) → info (in flight) → success (done).
+   */
+  private buildBreakdowns(c: JeCounts): DashboardBreakdown[] {
+    return [
+      {
+        Id: 'pipeline',
+        Title: 'Ledger pipeline',
+        Icon: 'fa-solid fa-diagram-project',
+        Caption: 'Every entry in scope, by status',
+        EmptyMessage: 'No journal entries in this company scope yet.',
+        Segments: [
+          { Id: 'pending', Label: 'Pending', Value: c.pending, Tone: 'brand',
+            Tooltip: 'Not yet batched — the candidate pool a batch build would sweep.' },
+          { Id: 'batched', Label: 'Batched', Value: c.batched, Tone: 'info',
+            Tooltip: 'Locked into a batch and on their way to the ERP. Immutable from here (BA trigger).' },
+          { Id: 'glposted', Label: 'GL posted', Value: c.glPosted, Tone: 'success',
+            Tooltip: 'Confirmed landed in the ERP general ledger — the end of the line for an entry.' },
+        ],
+      },
     ];
   }
 

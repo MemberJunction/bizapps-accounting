@@ -42,7 +42,7 @@ interface BatchDraft {
   standalone: false,
   selector: 'mj-batch-workspace-page',
   templateUrl: './batch-workspace.page.html',
-  styleUrls: ['./batch-workspace.page.css'],
+  styleUrls: ['./shell-table.css', './batch-workspace.page.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class BatchWorkspacePageComponent extends BaseAngularComponent implements OnInit, OnDestroy {

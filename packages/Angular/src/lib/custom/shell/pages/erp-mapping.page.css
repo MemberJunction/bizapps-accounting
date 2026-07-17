@@ -8,7 +8,7 @@
 .erp-field { display: flex; flex-direction: column; gap: 4px; }
 .erp-field--search { flex: 0 1 240px; min-width: 180px; }
 .erp-field__label { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--mj-text-muted); }
-.erp-wrap { height: 100%; min-height: 320px; overflow: auto; border: 1px solid var(--mj-border-default); border-radius: 10px; background: var(--mj-bg-surface); }
+.erp-wrap { border: 1px solid var(--mj-border-default); border-radius: 10px; background: var(--mj-bg-surface); }
 .erp-grid { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .erp-grid th, .erp-grid td { padding: 8px 10px; border-bottom: 1px solid var(--mj-border-subtle, var(--mj-border-default)); text-align: left; white-space: nowrap; }
 .erp-grid thead th { position: sticky; top: 0; background: var(--mj-bg-surface-card); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--mj-text-muted); z-index: 1; }

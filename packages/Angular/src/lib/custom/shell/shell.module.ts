@@ -52,6 +52,7 @@ import { ErpMappingPageComponent } from './pages/erp-mapping.page';
 import { AccountLinksPageComponent } from './pages/account-links.page';
 import { GLAccountsPageComponent } from './pages/gl-accounts.page';
 import { JournalEntryDetailPanelComponent } from './pages/journal-entry-detail-panel.component';
+import { ShellRailComponent } from './shell-rail.component';
 import { ShellPagePendingComponent } from './pages/shell-page-pending.component';
 
 /**
@@ -88,6 +89,7 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
   ],
   imports: [
     ShellPagePendingComponent, // standalone — shared with orders' shell
+    ShellRailComponent, // standalone — the rail + its collapse; also shared with orders' shell
     CommonModule,
     FormsModule,
     SharedGenericModule,

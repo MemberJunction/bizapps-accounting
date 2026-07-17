@@ -8,7 +8,7 @@
 .al-field { display: flex; flex-direction: column; gap: 4px; }
 .al-field--search { flex: 0 1 240px; min-width: 180px; }
 .al-field__label { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--mj-text-muted); }
-.al-wrap { height: 100%; min-height: 320px; overflow: auto; border: 1px solid var(--mj-border-default); border-radius: 10px; background: var(--mj-bg-surface); }
+.al-wrap { border: 1px solid var(--mj-border-default); border-radius: 10px; background: var(--mj-bg-surface); }
 .al-grid { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .al-grid th, .al-grid td { padding: 8px 10px; border-bottom: 1px solid var(--mj-border-subtle, var(--mj-border-default)); text-align: left; white-space: nowrap; }
 .al-grid thead th { position: sticky; top: 0; background: var(--mj-bg-surface-card); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--mj-text-muted); z-index: 1; }
