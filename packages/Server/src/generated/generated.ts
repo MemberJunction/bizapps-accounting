@@ -3904,6 +3904,10 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @Field({nullable: true, description: `When the approval Task was raised and stamped (UTC). Set in the same transaction as ApprovalTaskID; both are NULL together or set together.`}) 
     ApprovalTaskRaisedAt?: Date;
         
+    @Field({nullable: true, description: `Optional free-text memo describing what this batch is for. NOT the batch identity — that is BatchNumber (the agreed sequential id). The memo exists purely so a user can label a batch and find it again by a human phrase; it is surfaced in the batch lists + workspace and included in name/id search. Nullable and editable pre-build.`}) 
+    @MaxLength(500)
+    Memo?: string;
+        
     @Field() 
     @MaxLength(100)
     BatchedByUser: string;
@@ -3976,6 +3980,9 @@ export class CreatemjBizAppsAccountingJournalEntryBatchInput {
     @Field({ nullable: true })
     ApprovalTaskRaisedAt: Date | null;
 
+    @Field({ nullable: true })
+    Memo: string | null;
+
     @Field(() => RestoreContextInput, { nullable: true })
     RestoreContext___?: RestoreContextInput;
 }
@@ -4036,6 +4043,9 @@ export class UpdatemjBizAppsAccountingJournalEntryBatchInput {
 
     @Field({ nullable: true })
     ApprovalTaskRaisedAt?: Date | null;
+
+    @Field({ nullable: true })
+    Memo?: string | null;
 
     @Field(() => [KeyValuePairInput], { nullable: true })
     OldValues___?: KeyValuePairInput[];

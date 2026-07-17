@@ -1367,6 +1367,11 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * Display Name: Approval Task Raised At
         * * SQL Data Type: datetimeoffset
         * * Description: When the approval Task was raised and stamped (UTC). Set in the same transaction as ApprovalTaskID; both are NULL together or set together.`),
+    Memo: z.string().nullable().describe(`
+        * * Field Name: Memo
+        * * Display Name: Memo
+        * * SQL Data Type: nvarchar(500)
+        * * Description: Optional free-text memo describing what this batch is for. NOT the batch identity — that is BatchNumber (the agreed sequential id). The memo exists purely so a user can label a batch and find it again by a human phrase; it is surfaced in the batch lists + workspace and included in name/id search. Nullable and editable pre-build.`),
     BatchedByUser: z.string().describe(`
         * * Field Name: BatchedByUser
         * * Display Name: Batched By User
@@ -5584,6 +5589,19 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     }
     set ApprovalTaskRaisedAt(value: Date | null) {
         this.Set('ApprovalTaskRaisedAt', value);
+    }
+
+    /**
+    * * Field Name: Memo
+    * * Display Name: Memo
+    * * SQL Data Type: nvarchar(500)
+    * * Description: Optional free-text memo describing what this batch is for. NOT the batch identity — that is BatchNumber (the agreed sequential id). The memo exists purely so a user can label a batch and find it again by a human phrase; it is surfaced in the batch lists + workspace and included in name/id search. Nullable and editable pre-build.
+    */
+    get Memo(): string | null {
+        return this.Get('Memo');
+    }
+    set Memo(value: string | null) {
+        this.Set('Memo', value);
     }
 
     /**
