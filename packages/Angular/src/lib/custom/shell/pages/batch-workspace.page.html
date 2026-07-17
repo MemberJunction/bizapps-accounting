@@ -2,10 +2,11 @@
      NOTE there is deliberately NO Filters control here: the build-criteria panel is the ONLY
      filter surface on this page (round-2 ruling — never two filter systems, never view-filters
      that don't match the batch contents). -->
-<!-- The page header carries NO status bubble: a lone "Draft — not built" capsule spent a whole band
-     of the workspace saying one word. What you are building (its number/status/target) now rides in
-     the workspace card's own header, beside the tabs, next to the thing it describes. -->
-<mj-page-header-interior></mj-page-header-interior>
+<!-- There is deliberately NO <mj-page-header-interior> here. What you are building (its
+     number/status/target) rides in the workspace card's own header, beside the tabs, next to the
+     thing it describes — so an interior header had nothing left to carry, and an empty one still
+     paints its card chrome (background + border + shadow + row padding): a blank bubble. The body's
+     top padding is compensated in the CSS, since MJ tightens it on the assumption a header sits above. -->
 
 <!-- <mj-page-body-interior> is the interior primitive <mj-left-nav-content> expects; it owns the
      gutters that keep content off the rail and off the page edge (elements were hitting the screen
