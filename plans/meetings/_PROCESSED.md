@@ -26,3 +26,14 @@ updated); Q18 progressed (Robert researching CH-1; batch-as-lock rejected; chang
 `2026-07-02 - engine meeting change ledger (recreated) [CH+AM].md`); D3 tension flagged (company-owns-order
 vs CH-2 multi-company JE → orders Q2 escalated); D4 process (public-repo transcripts OK'd; 24h-intent notes
 to Robert; demo ~Tue). Transcript renamed from "2026-13-2026 - …".
+
+### 2026-07-17 intake batch (seven docs) — ✅ PROCESSED 2026-07-17 (orchestrator Task 97a)
+| Doc | Landed as |
+| --- | --- |
+| `2026-07-14 - je-single-company-batching-proposal.md` (Robert P1–P5 + OQ-1) | **MOD-15** (single-company batches, P3), **MOD-16** (per-JE posting dates + OQ-1 hold-and-flag), **MOD-17** (forward-dated JEs replace ScheduledJournalEntry, P5; supersedes MOD-11), MOD-4 key revised; Q30 ANSWERED. P2 was already MOD-12. |
+| `2026-07-17 - User Feedabck over the week 07-12.md` (Jeremy/Amith/Robert/Marcelo) | Sign-offs + conditions folded into MOD-15/16; **UPD-2** (BC API direct, write-scoped registration, company-config standardization — Jeremy owns). |
+| `2026-07-16 - marcelo-questions-draft-answers.md` (Robert's rulings) | **Q22/Q24/Q6/Q7/Q3 ANSWERED** (UserCompanyRole grant table; audit-cols-now; per-company approval task + enforced Approver; manual-JE gate YES; bless as-built IDs w/ FYI-to-Amith); Q19 amended (default window never forward; company out of dimension list); K.2/C.8/D.3 feature rows updated. Orders-side: Q2/Q21 answers, OF4/OQD/OS7 → orders plan chain. |
+| `2026-07-14 - lxp-open-items-response.md` (Robert A1–A4) | **MOD-18** (tax delegated to third-party engine); orders coupon-provider UPD + orders Q21; A1 (DueDate) closed in place. |
+| `2026-07-14 - lxp-commerce-and-fulfillment 2.md` (Ethan v3 — decisions locked) | orders UPD-6 edit (LXP→Orders DIRECT at launch; Teams-first contingency; A7 date ask) + `ROADMAP-lxp-launch.md` (orders repo). |
+| `2026-07-14 - Accounting Meeting.md` | REST-over-MCP + "just create them" rulings (inside MOD-16/17 + UPD-2); orders Order↔JE junction UPD; batch-UI defaults note in UI plan §8. |
+| `2026-07-16 - Accounting Meeting.md` | Process items only (answers doc incoming — now landed above; "on hold ≠ deferred" framing; Q22 ownership superseded by the answers doc same day). |

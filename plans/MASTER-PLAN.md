@@ -583,10 +583,12 @@ The tax engine itself (calculation logic at order time) lives in BizAppsOrders, 
 
 ### 4.9 Scheduled journal entries (revenue-recognition waterfall) — BA-D25
 
-> ⚠ **MODIFIED by MOD-1 + MOD-11:** the "period-close engine materializes" mechanism below is superseded —
-> periods are removed (MOD-1), and recognition is **DATE-driven** (MOD-11, Robert 2026-07-13): all
-> scheduled entries are created up-front at booking, each with its own recognition date; batches pick
-> them up by date window. Original text retained below.
+> ⚠ **MODIFIED by MOD-1 + MOD-11 → now MOD-17 (2026-07-14/15):** this section's machinery is superseded
+> twice over — periods are removed (MOD-1); then MOD-11's schedule-records-materialized-by-date model was
+> itself superseded by **MOD-17: deferred revenue is staged as REAL forward-dated JEs at booking** (no
+> `ScheduledJournalEntry` records, no materializer, no daily job; batches sweep by date filter with
+> default cutoff = today; changes/cancellations net via correcting Orders). The `ScheduledJournalEntry`
+> trio below retires. Original text retained below.
 
 > **REVISED 2026-06:** the cron-driven `Recurring*` trio (BA-D18) is **removed**. Deferred-revenue recognition — the dominant in-scope need — is modeled as a finite, origin-linked, known-amount waterfall of **scheduled** future entries. FX revaluation moves to a programmatic action (§6.4 / BA-D27).
 
@@ -900,8 +902,13 @@ Post-close JEs that adjust a previously-closed period don't actually post to the
 > ⚠ **MODIFIED by MOD-3 (2026-07-08, Robert):** batches now have LEVELS of locking — pre-approval =
 > preliminary/REVERSIBLE lock; approval = permanent; **reject UNLOCKS entries back to the candidate pool**;
 > an open batch can be regenerated. "Batched = permanent immutable lock" below is superseded.
-> Also **MOD-4:** batch summary lines are NETTED per (Company × GLAccount × Dimension-combo), one net side —
-> not separate Dr/Cr per side (§8.4). ORIGINAL design retained below; see `MASTER-PLAN-MODIFICATIONS.md`.
+> Also **MOD-4 (key revised):** batch summary lines are NETTED per (GLAccount × Dimension-combo ×
+> EffectiveDate), one net side — not separate Dr/Cr per side (§8.4).
+> ⚠ **MODIFIED by MOD-15 + MOD-16 (2026-07-14/17):** batches are **SINGLE-COMPANY**
+> (`JournalEntryBatch.CompanyID` header; one batch per company per run; per-company approvals —
+> restores BA-D16's per-company intent) and **Posting Date travels PER JE (= its EffectiveDate)** —
+> no batch-level posting/document date; closed-period collisions **HOLD-and-flag, never auto-roll**
+> (OQ-1, Jeremy). ORIGINAL design retained below; see `MASTER-PLAN-MODIFICATIONS.md`.
 
 ### 8.1 States
 
@@ -951,6 +958,13 @@ The batch run is itself a Scheduled Action (cron-based, default daily). Manual t
 ---
 
 ## 9. Pluggable tax engine
+
+> ⚠ **MODIFIED by MOD-18 (2026-07-14, Robert A4):** tax **calculation is delegated to a third-party
+> engine** (Stripe Tax / Avalara / Vertex class) behind the provider seam below — we SEND inputs
+> (address, product tax category, customer tax profile/exemptions) and RECORD what returns
+> (multi-jurisdiction per line). `TaxJurisdiction`/`TaxRate` become **snapshot/reference data of what
+> the engine returned**, never a self-maintained rate authority; no "Local" rate-authoring path and no
+> rate-sync build. Engine selection + launch timing open (orders Q21). Original text retained below.
 
 ### 9.1 Interface
 

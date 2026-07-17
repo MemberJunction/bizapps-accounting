@@ -159,6 +159,27 @@ receive-only posture) is decided at the Task 65b review.
 > **Element doctrine + navigation map** are recorded present-tense in
 > `design-docs/ui-design/README.md` (standing design record) — read that first.
 
+### ⚠ 2026-07-17 plan-chain update — MOD-15/16/17 land; three §8 specs are affected (read before building those pages)
+
+New MODs from the Robert P-proposals + Jeremy/Amith sign-offs (`MASTER-PLAN-MODIFICATIONS.md`):
+
+- **MOD-15 (single-company batches):** the Batch workspace/build flow gains a **company picker**
+  (a batch is built FOR one company); batch lists/dashboards show per-company batches; approvals
+  are per company-batch (Jeremy: better segregation of duties). Surface the cadence-alignment note
+  for active-intercompany company pairs where batch schedules are configured.
+- **MOD-16 (per-JE posting dates + closed-period holds):** no batch-level posting/document date
+  anywhere in the UI; batch summary lines group per (GLAccount × dims × **EffectiveDate**). New UI
+  state: a JE **held/flagged for closed-period review** (dispatch exception) — hold, never
+  auto-roll; needs a visible exception affordance on batch detail/dispatch status.
+- **MOD-17 (forward-dated JEs replace ScheduledJournalEntry):** §8.1's **"Scheduled entries" page
+  is re-specced** — it becomes a **future-dated-JE browser** (same window/waterfall-view intent;
+  NO "Materialize due through [date]" action — materialization no longer exists). Batch build gets
+  the **default cutoff = today** filter (never sweeps forward unless explicitly set), and batch
+  approval must display the swept date range. Schema/engine rework is separate work — sequence
+  these pages AFTER it lands or build against the MOD-17 shape, not the ScheduledJournalEntry trio.
+- Batch-filter presets + remembered user defaults (end-of-yesterday / end-of-week / end-of-month,
+  persisted via UserInfoEngine) are confirmed direction (Robert 2026-07-14 meeting).
+
 ### Dispatch rulings (Marcelo, 2026-07-16 — bind the build)
 
 - **65b gate WAIVED for this build** (feature-wave sign-off review returns later — output now;

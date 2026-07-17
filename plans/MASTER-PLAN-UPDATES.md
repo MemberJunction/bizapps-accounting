@@ -23,3 +23,25 @@ text.** Convention: `~/MJDev/shared-plans/repo-planning-system.md` §3.1.
   `meetings/2026-06 - Amith rescope rulings (extracted from retired v2 plan).md`. Formalized when the
   parallel "v2 plan" doc was retired (Marcelo directive 2026-07-11).
 - **Status:** Accepted (already the as-built philosophy — the triggers doctrine + invariant test matrix).
+
+## UPD-2 — BC dispatch goes straight to the API (no CSV step); write-scoped app registration; BC company-config standardization (2026-07-17)
+- **Amends:** MASTER-PLAN.md §8.4 (batch dispatch) — mechanism refinement, intent unchanged (the
+  batch boundary was always the ERP wire format: account numbers, not internal IDs).
+- **Change:**
+  1. **Skip the CSV validation step** (P4's interim idea) — build directly against BC's REST API:
+     standard **API v2.0 `companies({id})/journals({journalId})/journalLines`** (or
+     `generalJournalLines`), authenticated via **Azure AD OAuth client-credentials** — the only
+     supported path (BC SaaS allows no direct DB writes). Jeremy shares the existing tenant/app
+     registration setup so we don't start from scratch. Posting date is API-settable to any date
+     (per Jeremy — verify with a test post).
+  2. **Separate, purpose-built app registration for journal WRITE** — Jeremy's recommendation:
+     don't widen the existing read-only reporting registration (Clara's); stand up a registration
+     scoped just to journal posting. (Robert's call to confirm.)
+  3. **BC company-config standardization precedes integration wiring** — 9+ BC companies with
+     inconsistent posting groups / number series / dimensions / journal templates would turn into
+     per-company API special cases. **Jeremy owns** researching + standardizing. Tracked as an
+     external dependency of D.6 dispatch; Robert + Marcelo aligned ("simple and consistent is
+     better").
+- **Why / source:** Jeremy + Robert, `meetings/2026-07-17 - User Feedabck over the week 07-12.md`
+  (P4 thread); REST-over-MCP preference in `meetings/2026-07-14 - Accounting Meeting.md`.
+- **Status:** Accepted.

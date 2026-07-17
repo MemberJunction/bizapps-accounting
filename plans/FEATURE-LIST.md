@@ -1,6 +1,6 @@
 # FEATURE-LIST — bizapps-accounting
 
-> Derived from the plan chain @ `abf4b09` (2026-07-15) · MODs through MOD-13 (13 withdrawn) · UPDs through UPD-1
+> Derived from the plan chain @ `PENDING-REPIN` (2026-07-17) · MODs through MOD-18 (13 withdrawn, 11 superseded by 17) · UPDs through UPD-2
 > Staleness check: git log abf4b09.. -- plans/MASTER-PLAN.md plans/MASTER-PLAN-MODIFICATIONS.md plans/MASTER-PLAN-UPDATES.md
 >
 > DERIVED document — the plan chain (MASTER-PLAN + MODs + UPDs) is the authority; when they disagree,
@@ -38,7 +38,7 @@
 | C.5 | Reversal JEs (ReversesJournalEntryID + consistency trigger; pen-not-pencil) | Shipped | §8.2; trg_JE_ReversalConsistency |
 | C.6 | Per-company per-FY numbering `JE-{CompanyCode}-{FY}-{seq}` (FY from ACP settings) | Shipped | BA-D15; MOD-12d (A4.4) |
 | C.7 | Dimensions on JE lines (Dimension / DimensionValue / JournalEntryLineDimension) | Shipped | BA-D8; §4.3 |
-| C.8 | Manual-JE approval gate (CFO approval for `EntryType='Manual'` before batch) | Planned | §14 Q10 (lean yes; tasks substrate) |
+| C.8 | Manual-JE approval gate (CFO approval for `EntryType='Manual'` before batch) | Planned — CONFIRMED yes (Robert Q6.3, 2026-07-16) | §14 Q10 → Q6 answer |
 | C.9 | Pending-JE void semantics for voided source events (flag-and-emit-zero vs delete) | Planned — decision open | §14 Q1; orders §15 Q12 |
 | C.10 | JE attachments (`FileID → __mj.File`) | Planned — decision open | §14 Q9 |
 
@@ -46,23 +46,28 @@
 
 | ID | Feature | Status | Source |
 |---|---|---|---|
-| D.1 | JournalEntryBatch + netted summary lines per (Company × GLAccount × Dimension-combo) | Shipped | BA-D26 + MOD-4 |
+| D.1 | JournalEntryBatch + netted summary lines — SINGLE-COMPANY batch (header `CompanyID`; one batch per company per run), netted per (GLAccount × Dim-combo × EffectiveDate) | Building — as-built is multi-company; rework to MOD-15/16 shape pending | BA-D26 + MOD-4 (rev.) + MOD-15/16 |
 | D.2 | Lock LEVELS: preliminary/reversible pre-approval → permanent at approval; reject UNLOCKS; open batch regenerates | Shipped | MOD-3 |
-| D.3 | Batch approval via bizapps-tasks (CFO gate — `TasksAppApprovalGate`) | Shipped | MOD-3; tasks #8 substrate |
+| D.3 | Batch approval via bizapps-tasks (CFO gate — `TasksAppApprovalGate`); decider ENFORCED = Accounting Approver for the batch's company (any-linked-person = dev scaffolding only) | Shipped (gate) / Planned (approver enforcement — required before non-dev) | MOD-3; Q6 answer |
 | D.4 | Standard batch filter: empty start + inclusive end date, oldest-forward ascending | Shipped ◇ | MOD-8 (Robert 2026-07-14 semantics) |
 | D.5 | View-driven batch builder (arbitrary batches from an MJ User View, validated unbatched-only) | Planned | MOD-8; instance Task 33 |
 | D.6 | Batch dispatch to ERP (summary foots-to-control-totals trigger; freeze at Sent/Acknowledged) | Building ◇ (mock target; real BC connector later) | §8.4 |
-| D.7 | Global batch numbering sequence (batch sequence stays global; JE numbering is per-company) | Shipped | CH-4; A4 |
+| D.7 | Global batch numbering sequence (batch sequence stays global; JE numbering is per-company) | Shipped — revisit with MOD-15 rework (per-company batch may re-key) | CH-4; A4 |
+| D.8 | Per-JE Posting Date (= EffectiveDate) carried to BC per line; no batch-level posting/document date | Planned | MOD-16 |
+| D.9 | Closed-period exception handling: HOLD-and-flag on BC rejection, never auto-roll; feedback loop | Planned | MOD-16 (OQ-1, Jeremy) |
+| D.10 | BC API dispatch — API v2.0 `journalLines`, Azure AD client-credentials OAuth, separate write-scoped app registration; NO CSV step | Planned — external dep: Jeremy's BC company-config standardization (9+ companies) | UPD-2 |
 
 ## E. Scheduled JEs (rev-rec / amortization)
 
 | ID | Feature | Status | Source |
 |---|---|---|---|
-| E.1 | ScheduledJournalEntry trio (entry + line items + line dimensions), origin-linked, lockable | Shipped | BA-D25/§4.9 |
-| E.2 | DATE-driven recognition: all scheduled entries created up-front at booking, each with its own date; NO period-close trigger | Shipped ◇ | MOD-11 (resolves CA-2) |
-| E.3 | Materialization of due entries → Pending JEs (`Accounting.MaterializeDueScheduledEntries` op + service) | Shipped ◇ | B3.2 |
-| E.4 | Daily auto-materialization (MJ Scheduled Action metadata seed) | Planned | orders DEFERRALS B3.2 row |
-| E.5 | Supersede pattern for recomputed schedules (Status='Superseded' + pointer; materialized periods correct via reversal) | Shipped (schema) ◇ | §4.9 note |
+| E.1 | ScheduledJournalEntry trio (entry + line items + line dimensions), origin-linked, lockable | Removed (MOD-17) — as-built schema/engine retires (migration pending) | BA-D25/§4.9 |
+| E.2 | DATE-driven recognition created up-front at booking (principles absorbed into E.6) | Removed (MOD-17) | MOD-11 → MOD-17 |
+| E.3 | Materialization of due entries → Pending JEs (`MaterializeDueScheduledEntries`) | Removed (MOD-17) — no materializer | B3.2 |
+| E.4 | Daily auto-materialization (Scheduled Action) | Removed (MOD-17) — no daily job by design (Robert: fragile) | MOD-17 |
+| E.5 | Supersede pattern for recomputed schedules | Removed (MOD-17) — corrections are correcting-order netting | §4.9 note → MOD-17 |
+| E.6 | Rev-rec staged as REAL forward-dated JEs at booking; batch default cutoff = today; future-reaching filter explicit + approval shows swept range | Planned — rework from as-built E.1–E.5 | MOD-17 (P5) |
+| E.7 | Correcting-order netting for contract change/cancel (staged entries immutable) | Planned | MOD-17; orders MOD-12 |
 
 ## F. Currency & FX
 
@@ -78,7 +83,7 @@
 | ID | Feature | Status | Source |
 |---|---|---|---|
 | G.1 | Tax data entities (TaxAuthority/Jurisdiction/Rate/Liability/Remittance/CustomerTaxProfile) | Shipped | §4.8 |
-| G.2 | TaxCalculationProvider interface + adapters (Local/Avalara/TaxJar) + rate sync | Deferred — gated on Robert's structure ruling (ORD-K.1 / Q21) | BA-D19; DEFERRALS |
+| G.2 | Tax DELEGATED to third-party engine (Stripe Tax / Avalara class) behind `TaxCalculationProvider`; our tables snapshot what the engine returned — no rate authoring/sync | Deferred — engine selection + launch-timing open (orders Q21 upd.) | BA-D19 → MOD-18 |
 
 ## H. Reporting (read models)
 
@@ -106,7 +111,7 @@
 | ID | Feature | Status | Source |
 |---|---|---|---|
 | K.1 | App-seeded roles (Accounting User/Admin[/Manager]) + entity permissions | Planned — co-design gated (Marcelo role tree) | MOD-9; instance Task 32 |
-| K.2 | Company-scoped RLS (read AND write — write-path verified enforced in MJ core 2026-07-14); grant-source mechanism = Q22 (Robert); governance = Q24 | Planned — A2, deferred until pre-untrusted-users | MOD-9; research/A2-R1-R3 |
+| K.2 | Company-scoped RLS via the `UserCompanyRole` grant table (per-company roles: User/Approver/Admin siblings + unscoped Global Admin; audit columns; one Accounting MJ role w/ RLS filters on all 4 ops) | Planned — mechanism RULED (Q22/Q24 answers, 2026-07-16); A2 co-design executes; v1 non-blocking | MOD-9; Q22/Q24 answers |
 | K.3 | Role-management/setup screens + install doc | Planned — folds into UI wave (R2) | MOD-9; research doc |
 
 ## L. Engine & API surface

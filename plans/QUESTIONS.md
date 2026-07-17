@@ -18,16 +18,16 @@
 | Ask order | Q | Ask | Status |
 |---|---|---|---|
 | 1 | [Q19](#q19) | Jeremy — golden path + exceptions (absorbs Q12/Q15) | OPEN ★HIGH |
-| 2 | [Q22](#q22) | Robert — company-visibility mechanism (roles/RLS, A2) | OPEN |
-| 3 | [Q24](#q24) | Robert — securable company-access grants + governance | OPEN |
+| — | [Q22](#q22) | company-visibility mechanism — ANSWERED (UserCompanyRole grant table) | ANSWERED |
+| — | [Q24](#q24) | grants + governance — ANSWERED (audit cols now, workflow deferred) | ANSWERED |
 | 4 | [Q25](#q25) | Ian/Matt/team — shared-UI component routing (transfer backlog) | OPEN |
-| 5 | [Q6](#q6) | Robert — batch-approval workflow shape (+ manual-JE gate) | OPEN |
-| 6 | [Q7](#q7) | Robert — batches/approvals visibility (confirm at A2) | OPEN |
-| 7 | [Q3](#q3) | Robert — JE-draft account contract (bless-as-built) | OPEN |
+| — | [Q6](#q6) | batch-approval shape — ANSWERED (per-company task; enforce Approver; manual-JE gate YES) | ANSWERED |
+| — | [Q7](#q7) | batches/approvals visibility — ANSWERED (see=role+grant; act=Approver-for-company) | ANSWERED |
+| — | [Q3](#q3) | JE-draft contract — ANSWERED (bless as-built IDs; FYI to Amith owed) | ANSWERED |
 | 8 | [Q9](#q9) | Amith — GLAccountLink role FK (bless-as-built) | OPEN |
 | 9 | [Q26](#q26) | Matt — Explorer header widget slot (feature ask) | OPEN |
-| 10 | [Q29](#q29) | Marcelo — no global GL-account pool; is the COA model as-built right? | OPEN |
-| 11 | [Q30](#q30) | Amith/Robert — batches single-company (Marcelo ruled; MOD-4 suggests Amith assumed multi) | OPEN ★HIGH |
+| 10 | [Q36](#q36) | Marcelo — no global GL-account pool; is the COA model as-built right? | OPEN — was dup-numbered Q29, renumbered 2026-07-17 |
+| — | [Q30](#q30) | batches single-company — ANSWERED 2026-07-17 (yes; MOD-15/16) | ANSWERED |
 | 12 | [Q31](#q31) | Robert/Amith — company derived from account; should links carry a ROLE? | OPEN ★HIGH |
 | 13 | [Q32](#q32) | Matt — tab strip's overflow-x silently enables overflow-y (real bug + fix) | OPEN |
 | 14 | [Q33](#q33) | Matt — dense/inline [meta] on mj-page-header (⚠ may be obsolete — check) | OPEN |
@@ -63,6 +63,14 @@ queryable surface for "which questions touch feature X".)*
   accountants batch entries into the right periods) — any concerns?; (7) his definitive **batch
   DIMENSION list** (customer, product, renewal-vs-new, event?) — gates the netted-summary shape
   (feature plan B1.5 slot reserved).
+- **Robert's 2026-07-16 amendments to the sitting (draft-answers doc):** (1) default batch date
+  window **cuts off at today and never reaches forward** (P5/MOD-17 constraint — else batches sweep
+  forward-dated rev-rec JEs); Jeremy picks defaults within that. (2) Under MOD-15, **company drops
+  out of the dimension list** — the batch IS the company group; dimensions slot into the
+  (GLAccount × dims × EffectiveDate) netting key. (3) 2026-07-17 UPDATE: several items Robert
+  wanted bundled here are now ANSWERED in the week's feedback thread — OQ-1 closed-period rule
+  (HOLD-and-flag, MOD-16), the P3 trade-offs (accepted w/ two conditions, MOD-15), and P4 BC API
+  (endpoints confirmed, UPD-2) — do NOT re-ask; the remaining items (1)-(7) stand.
 - **Context to share:** the live demo (interface intentionally rough — features matter for the internal
   LXP demo); Robert is re-reading the old Aptify batching capabilities in parallel.
 - **Additional context (for a verifying agent):** `plans/2026-07-09-robert-meeting-decisions.md` D2/D3;
@@ -71,7 +79,14 @@ queryable surface for "which questions touch feature X".)*
 
 <a id="q22"></a>
 ### Q22 · Company-visibility mechanism (roles/RLS) — ask Robert — added 2026-07-14 (Task 50a; context expanded Task 54a)
-- **Status:** OPEN
+- **Status:** OPEN — **Robert now OWNS the path** (2026-07-16/17): Marcelo's `UserCompanyAccess`
+  proposal was posted to the team channel (recorded in `meetings/2026-07-17 - User Feedabck over
+  the week 07-12.md`); Robert's initial response: the core Users→Employee→Company chain exists but
+  is informational-grade (agrees "we're a little too open in the default setting"), MJ's **Access
+  Control Rules** layer may fit ("I need to dig deeper"), and he'll study how **Izzy** does
+  org-level roles + propose a path. Marcelo: **v1 is NON-BLOCKING** — first release proceeds
+  without it (UI builds the gated screens LAST). Expect Robert's proposal doc; also expect his
+  answers doc keyed to these Q IDs.
 - **Who to ask:** Robert (mechanism feedback); the policy decisions themselves are already made by Marcelo.
 - **Background (self-contained):** The accounting app manages MANY companies (our own legal entities/
   subsidiaries) in one database; every journal entry now belongs to exactly one company
@@ -100,11 +115,24 @@ queryable surface for "which questions touch feature X".)*
   MJ RLS mechanics + efficiency analysis (writes are RLS-enforced too — verified in MJ core
   2026-07-14, so one filter mechanism covers read AND write), and the threat model (app users hold no
   DB credentials; the DB triggers are the raw-SQL floor). Q24 covers how grants are governed.
-- **Answer:** _(pending)_
+- **Answer:** **Option A, UPGRADED — a `UserCompanyRole` grant table** (UserID, CompanyID, RoleID,
+  IsActive + Q24 audit columns; unique on the triple): per-company ROLES, not just visibility — a
+  user can be Accounting User in Company X and Accounting Approver in Company Y. Role semantics
+  are SIBLINGS not a ladder: Approver = User + approval authority; Admin = User + company setup —
+  **Admin does NOT inherit approval** (maker-checker). MJ role layer stays minimal: ONE
+  `Accounting` role carrying entity CRUD permissions with RLS filters on all four operations
+  (`CompanyID IN (SELECT CompanyID FROM UserCompanyRole WHERE UserID='{{UserID}}' AND IsActive=1)`)
+  + an optional unscoped `Accounting Global Admin` (no approval authority anywhere; break-glass =
+  self-grant Approver, which audits). Precedent verified: Izzy `OrganizationPersonRole`, Skip-Brain
+  `OrganizationContact`, CDP's ATS company-scoped login. Employee-chain derivation rejected
+  (cardinality, employment≠book-access, no role fit). Deployment rule: audit that NO other role
+  grants unfiltered access to company-scoped accounting entities (MJ RLS exemption footgun).
+  **Routed onward:** amends action plan A2's first-iteration scoping (per Robert's process flag 0);
+  FEATURE-LIST K.2 updated. Source: `meetings/2026-07-16 - marcelo-questions-draft-answers.md` §Q22.
 
 <a id="q24"></a>
 ### Q24 · Securable company-membership grants (vs informational person data) — ask Robert — added 2026-07-14 (Task 51a; context expanded Task 54a)
-- **Status:** OPEN
+- **Status:** ANSWERED (Robert, 2026-07-16 draft-answers doc) — frozen.
 - **Who to ask:** Robert (pairs with Q22 — same sitting; Q22 asks WHERE the user↔company facts live,
   this asks HOW they're established and governed).
 - **Background (self-contained):** The accounting app is getting company-scoped visibility: each user
@@ -129,7 +157,15 @@ queryable surface for "which questions touch feature X".)*
   INTO the grant store — access control never reads HR/CRM data directly. Does he agree?
 - **Context to share:** research doc R3 section (the securable-vs-informational table) + Marcelo's
   fixed rulings (multi-company batch requires access to ALL companies; batch/see only accessible JEs).
-- **Answer:** _(pending)_
+- **Answer:** (1) **Principle CONFIRMED** — grants are explicit, admin-managed security records,
+  editable ONLY by Accounting Global Admin (per-company Admins cannot edit grants even for their
+  own company — else a company Admin could self-grant Approver and defeat maker-checker); never
+  derived/auto-synced from Person/CRM/HR data. (2) **Audit trail NOW, workflow DEFERRED:** ship
+  `GrantedByUserID/GrantedAt/RevokedByUserID/RevokedAt/IsActive` (revoke = deactivate, never
+  delete; optional `ExpiresAt` if cheap); approval workflow + periodic review = later
+  (tasks-substrate shape when wanted). (3) **HR-driven membership: AGREED** — a governed sync INTO
+  the grant store, same audit columns; access control never reads HR/CRM directly.
+  Source: `meetings/2026-07-16 - marcelo-questions-draft-answers.md` §Q24.
 
 <a id="q25"></a>
 ### Q25 · Transfer-backlog routing — who receives the UI components parked in accounting? — added 2026-07-15 (Task 73a)
@@ -158,7 +194,8 @@ queryable surface for "which questions touch feature X".)*
 
 <a id="q6"></a>
 ### Q6 · Batch-approval workflow shape — ask Robert — 2026-07-08 (reformatted 2026-07-16)
-- **Status:** OPEN
+- **Status:** ANSWERED (Robert, 2026-07-16 draft-answers doc) — frozen. Premise updated first:
+  batches are SINGLE-COMPANY (P2+P3 RULED — see MOD-15/Q30), which dissolves sub-question (1).
 - **Who to ask:** Robert
 - **Features:** ACC-D.3 (batch approval), ACC-C.8 (manual-JE gate)
 - **Background (self-contained):** When a batch is built, an approval Task is created via the
@@ -172,11 +209,20 @@ queryable surface for "which questions touch feature X".)*
 - **Context to share:** the batch-approvals + manual-JE approvals mockup pages.
 - **Additional context (for a verifying agent):** `TasksAppApprovalGate` (`onBatchBuilt`,
   `recordDecision`, `resolveCurrentPersonId` = Person.LinkedUserID == user.ID).
-- **Answer:** _(pending)_
+- **Answer:** (1) **One approval task per batch — which IS one per company** under MOD-15
+  single-company batches; assigned to that company's designated CFO by default. (2) **Enforce the
+  decider before anything beyond dev, via ONE path:** `recordDecision` accepts only a user holding
+  **Accounting Approver for that batch's company** in the Q22 `UserCompanyRole` table (the sole
+  source of approval authority); `ApprovalCFOPersonID` remains only the task-ASSIGNMENT default.
+  Admin/Global Admin do NOT inherit approval. Current any-linked-person behavior = dev scaffolding
+  only — this is a security control on financial postings. (3) **Manual-JE gate: CONFIRMED YES**
+  (lean-yes becomes a ruling; C.8's approval-inbox + review-modal UI shape is right).
+  Source: `meetings/2026-07-16 - marcelo-questions-draft-answers.md` §Q6.
 
 <a id="q7"></a>
 ### Q7 · Batches/approvals visibility — ask Robert — 2026-07-08 (reformatted 2026-07-16)
-- **Status:** OPEN — largely absorbed by MOD-9 (roles + RLS) + action plan A2; confirm at the A2 co-design
+- **Status:** ANSWERED (Robert, 2026-07-16 draft-answers doc; final confirm rides the A2 co-design
+  sitting) — frozen.
 - **Who to ask:** Robert
 - **Features:** ACC-D.3, ACC-K.1
 - **Background (self-contained):** No permission gating exists today (dev): every user who can open
@@ -185,11 +231,17 @@ queryable surface for "which questions touch feature X".)*
   Approve/Reject? Needed before exposing the management UI beyond dev.
 - **Context to share:** the proposed role set (Admin / User / CFO Approver) in the users-&-roles mockup.
 - **Additional context (for a verifying agent):** MJ `guides/UNIFIED_PERMISSIONS_GUIDE.md`.
-- **Answer:** _(pending)_
+- **Answer:** **SEE** = any user with an accounting role in the Q22 grant table (Admin / User /
+  Approver — the mockup's "CFO Approver" renames to Accounting Approver), rows RLS-scoped to
+  granted companies; Accounting Global Admin unscoped. **ACT** (Approve/Reject) = ONLY Accounting
+  Approver for THAT company (roles are per-company — same person can be User in one, Approver in
+  another). Users can build batches within their grants but never decide approvals. Nothing
+  visible without an accounting role. Source: `meetings/2026-07-16 - marcelo-questions-draft-answers.md` §Q7.
 
 <a id="q3"></a>
 ### Q3 · JE-draft account contract: resolved ID vs account number — ask Robert — 2026-07-08 (reformatted 2026-07-16)
-- **Status:** OPEN (bless-the-as-built; low risk)
+- **Status:** ANSWERED (Robert, 2026-07-16 draft-answers doc) — frozen. ⚠ FYI-to-Amith owed: this
+  formally revises his early meeting-note "always use the account number" instruction.
 - **Who to ask:** Robert
 - **Features:** ACC-L.2 (JE draft contract)
 - **Background (self-contained):** As built, `JournalEntryDraft` passes resolved **GLAccount ID
@@ -200,7 +252,12 @@ queryable surface for "which questions touch feature X".)*
 - **Context to share:** as-built = ID; numbers only at ERP dispatch.
 - **Additional context (for a verifying agent):** amendment S2 (documents the as-built choice);
   `AccountingEngineBase.ResolveLinkedAccount`.
-- **Answer:** _(pending)_
+- **Answer:** **Bless the as-built resolved-ID contract.** Two boundaries, two identifiers:
+  internal Orders→Accounting `JournalEntryDraft` = resolved GLAccount **ID UUIDs** (GLAccountLink
+  stores the FK; a number round-trip would be lossy + per-company-ambiguous for zero benefit);
+  external batch→BC = **GL Account Numbers, never our IDs** (AM-4, unchanged). Amith's underlying
+  intent (engine independently validates account exists/company/active) is preserved and stays.
+  Source: `meetings/2026-07-16 - marcelo-questions-draft-answers.md` §Q3.
 
 <a id="q9"></a>
 ### Q9 · `GLAccountLink.GLAccountRoleID` confirmation — ask Amith — 2026-07-08 (reformatted 2026-07-16)
@@ -612,8 +669,8 @@ queryable surface for "which questions touch feature X".)*
 - **Answer:** _(pending)_
 ```
 
-<a id="q29"></a>
-### Q29 · The chart of accounts has no global account pool — is Marcelo's "cede then hook to companies" model the intended one? — ask Marcelo (then Amith/Robert) — added 2026-07-16
+<a id="q36"></a>
+### Q36 · The chart of accounts has no global account pool — is Marcelo's "cede then hook to companies" model the intended one? — ask Marcelo (then Amith/Robert) — added 2026-07-16
 - **Status:** OPEN
 - **Requested reviewer:** Marcelo first (he raised it); escalate to Amith/Robert if the model must change
 - **Features:** A.1 (GLAccount + hierarchy), B.* (Account links)
@@ -654,7 +711,15 @@ queryable surface for "which questions touch feature X".)*
 
 <a id="q30"></a>
 ### Q30 · Are batches single-company? The plan says yes; the code says no; the deciding note lives only in a SQL comment — ask Robert/Amith — added 2026-07-16
-- **Status:** OPEN
+- **Status:** ANSWERED (2026-07-17) — frozen. **YES: batches are SINGLE-COMPANY.** Robert
+  independently proposed exactly this (P3, `meetings/2026-07-14 - je-single-company-batching-
+  proposal.md`) before seeing this entry; Jeremy signed off with two conditions (aligned batch
+  cadences for active intercompany pairs; the rec process tracks "posted in source, not yet in BC"
+  as a reconciling item type); Amith aligned on the 2026-07-17 posting-date thread. Landed as
+  **MOD-15** (+ MOD-16 for per-JE posting dates; MOD-4's netting key revised). The TargetSystem
+  contradiction this entry flagged dissolves (one company per batch ⇒ one target per batch);
+  sub-question (3) D-SEQ rationale is moot (per-company batch numbering detail rides the MOD-15
+  rework). Routed onward: MOD-15/16 + FEATURE-LIST D-family + UI plan §8.2 note.
 - **Requested reviewer:** Robert (owns OQ-F) · Amith (owns BA-D16's AN-BC rationale)
 - **Features:** D.* (batching + dispatch)
 - **Proposed solution — PROCEEDING: ONE COMPANY PER BATCH.** Marcelo's decision, 2026-07-16: *"our marching
@@ -718,7 +783,10 @@ queryable surface for "which questions touch feature X".)*
   - `plans/MASTER-PLAN-MODIFICATIONS.md` MOD-4 (netting key), MOD-11/12 (JE↔company)
   - `migrations/B202605281200__v1.0.x__Schema_and_Tables.sql` §5.2 (D-SEQ comment, ~line 1708)
   - `packages/CoreEntitiesServer/src/BatchingEngine.ts` (OQ-F comment; `CompanyIDs` plural on BuildBatchOperation)
-- **Answer:** _(pending)_
+- **Answer:** (1) **Single-company** — confirmed by Robert (P3), Jeremy (with the two conditions
+  above), and the thread Amith joined; Marcelo's ruling stands. (2) Moot — no batch ever spans
+  ERP endpoints again. (3) Global batch numbering was a multi-company-era consequence; numbering
+  shape revisits with the MOD-15 schema rework. See MOD-15/MOD-16.
 
 <a id="q31"></a>
 ### Q31 · GL routing derives the COMPANY from the ACCOUNT — should product/category links carry a ROLE instead? — ask Robert/Amith — added 2026-07-16
@@ -786,7 +854,7 @@ queryable surface for "which questions touch feature X".)*
     `resolveRevenueLines`, `ResolveCompanyAccount`
   - `bizapps-accounting/packages/Entities/src/generated/entity_subclasses.ts` — `GLAccountSchema`,
     `GLAccountLinkSchema`, `GLAccountRoleSchema`, `AccountingCompanyProfileSchema`
-  - Related: Q9 (GLAccountLink role FK, Amith OQ-G), Q3 (JE-draft account contract), Q29 (no account pool)
+  - Related: Q9 (GLAccountLink role FK, Amith OQ-G), Q3 (JE-draft account contract), Q36 (no account pool)
 - **Answer:** _(pending)_
 
 <a id="q32"></a>

@@ -71,13 +71,20 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
 - **Status:** Implemented — migration `V202607081600__…JEBatch_Reversible_Preliminary_Lock.sql`;
   Implemented-by: `action-plans/ActionPlan - Batch approval lock redesign.md`.
 
-## MOD-4 — Batch summary granularity: NETTED per (Company × GLAccount × Dimension-combo) (2026-06-28)
+## MOD-4 — Batch summary granularity: NETTED per (GLAccount × Dimension-combo × EffectiveDate) (2026-06-28; key revised 2026-07-14/17)
 - **Supersedes:** BA-D26's "GLAccount × dimension combo × side" (separate Dr/Cr summary lines).
-- **Change:** one `JournalEntryBatchLineItem` per (Company × GLAccount × Dimension-combo) carrying the **net**
-  amount on a single side (e.g. $2,000 Dr + $1,500 Cr same group → one $500 Dr line). Null-dimension entries
-  aggregate together within their Company × Account group.
-- **Why / source:** Amith 2026-06-28; 2026-06 rescope rulings C5.
-- **Status:** Accepted (engine behavior spec).
+- **Change:** one `JournalEntryBatchLineItem` per **(GLAccount × Dimension-combo × EffectiveDate)**
+  carrying the **net** amount on a single side (e.g. $2,000 Dr + $1,500 Cr same group → one $500 Dr
+  line). Null-dimension entries aggregate together within their Account × date group.
+- **Key evolution (edited in place per ledger hygiene):** the original 2026-06-28 key was
+  **(Company × GLAccount × Dimension-combo)**. Two later rulings reshaped it: **Company left the key**
+  because the batch itself became single-company (MOD-15 — company is now the batch header), and
+  **EffectiveDate joined the key** because Posting Date travels per JE and summary lines must never
+  net across posting dates or the per-JE date is lost (MOD-16, P1-amended). Slightly less
+  consolidation around month boundaries — correct periods in exchange.
+- **Why / source:** Amith 2026-06-28; 2026-06 rescope rulings C5; Robert P1/P3 + Jeremy sign-off
+  (`meetings/2026-07-14 - je-single-company-batching-proposal.md`, `2026-07-17 - User Feedabck…`).
+- **Status:** Accepted (engine behavior spec — rework to the revised key lands with MOD-15/16).
 
 ## MOD-5 — Intercompany: per-company-pair Due-To/Due-From accounts; Payments generates ALL legs (2026-06-28/30)
 - **Supersedes/refines:** BA-D17 (confirmed and sharpened) + the seed COA's centralized intercompany accounts.
@@ -170,7 +177,13 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
   CreateJournalEntry remote op.md` + the orders repo's `meetings/2026-07-02-engine-meeting-amendment.md`).
 - **Status:** Implemented (schema + engine).
 
-## MOD-11 — Scheduled-JE recognition is DATE-driven; entries created up-front at booking (2026-07-13)
+## MOD-11 — ~~Scheduled-JE recognition is DATE-driven; entries created up-front at booking~~ — **SUPERSEDED by MOD-17 (2026-07-14/15)**
+> ⚠ **This entry is superseded by MOD-17:** the schedule-record + materializer mechanism below is
+> replaced by REAL forward-dated JEs written at booking (no `ScheduledJournalEntry` records, no
+> materializer, no daily job). MOD-11's two lasting contributions survive INSIDE MOD-17: recognition
+> is date-driven (never period-close), and all recognition entries are created up-front at booking.
+> Original text retained for history. (ID retained, never reused.)
+
 - **Supersedes:** §4.9's "the period-close engine materializes [each ScheduledJournalEntry] on its target
   period" (BA-D25's period-close trigger), already orphaned by MOD-1. **Resolves CA-2.**
 - **Change:** when an order's JEs are booked and locked, **ALL scheduled journal entries are created
@@ -263,3 +276,103 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
 - Implemented via a Remote Operation over the engine (the app's established pattern —
   `Accounting.CreateJournalEntry`, `Accounting.MaterializeDueScheduledEntries`), not a hand-written
   resolver.
+
+## MOD-15 — Batches are SINGLE-COMPANY: `JournalEntryBatch.CompanyID` header; one batch per company per run (2026-07-14/17)
+- **Supersedes:** the as-built multi-company batch (the un-recorded "D-SEQ 2026-07-06" SQL-comment
+  decision — batches spanning companies with per-line `CompanyID` and a send-time per-company
+  split; `BatchingEngine` OQ-F). **Restores BA-D16's intent** ("one consolidated JE per Company",
+  Company in the grouping key). Resolves [Q30](QUESTIONS.md#q30) — Marcelo had independently ruled
+  one-company-per-batch 2026-07-16; Robert's P3 proposal + Jeremy's sign-off confirm it.
+- **Change:** (a) `JournalEntryBatch` gains a header `CompanyID`; `buildBatch(companyId, dateFilter)`
+  gathers ONLY that company's Pending JEs, on that company's own schedule.
+  (b) `JournalEntryBatchLineItem.CompanyID` is **dropped** (redundant — every line shares the header
+  company); netting key per revised MOD-4. (c) The per-company footing trigger (50023) collapses
+  into the overall footing check (50014) — same assertion. (d) The send-time per-company split
+  disappears. (e) The "an order's JEs land in exactly one batch" rule is rewritten: a multi-company
+  order's JEs land in **one batch per company**, tied via the JEs' order lineage. (f) Per-company
+  batches make **TargetSystem-per-company** work for free (each batch carries one company AND one
+  target — the single-`TargetSystem`-column contradiction Q30 flagged dissolves).
+- **Accepted trade-offs (Jeremy, 2026-07-17 — with two CONDITIONS):** approvals multiply to one per
+  company-batch — Jeremy calls this "actually a better control" (per-entity approvers = segregation
+  of duties). Intercompany legs may post at different times — accepted ONLY with: **(1) companies
+  with an active intercompany relationship keep their batch cadences ALIGNED** (both weekly, not one
+  weekly/one monthly) so the in-transit window stays short — a configuration/ops rule the batch UI
+  should surface; **(2) the intercompany rec process explicitly tracks "posted in source, not yet in
+  BC" as a reconciling item TYPE**, not a break — lands with the AR-to-GL recon definition (H.3).
+- **Why / source:** Robert P2-reason-2 extended to batches (companies batch on different cadences;
+  all-or-nothing multi-company sends trap one company's postables behind another's closed period) —
+  `meetings/2026-07-14 - je-single-company-batching-proposal.md` P3; Jeremy's conditions + Amith's
+  alignment in `meetings/2026-07-17 - User Feedabck over the week 07-12.md`.
+- **Status:** Accepted (Jeremy ✅ w/ conditions; Marcelo ✅ [Q30]; Robert authored; Amith aligned on
+  the posting-date thread — his formal P3 sign-off rides the same channel). Schema + engine rework
+  to schedule.
+
+## MOD-16 — Posting Date travels PER JE (= its `EffectiveDate`); no batch-level posting date; closed-period = HOLD-and-flag (2026-07-14/17)
+- **Supersedes:** any batch-level document/posting date (the earlier "document date chosen at batch
+  time" idea; Amith's initial "singular Posting Date for a Batch" position — he is now "100% on
+  board" with per-JE dates after the 2026-07-17 thread). Amends MOD-8's filter semantics with the
+  period mapping.
+- **Change:** (a) **Posting Date is set per Journal Entry, equal to that JE's `EffectiveDate`**, and
+  carried through to BC's per-line Posting Date — BC natively supports one journal whose lines bear
+  different posting dates. (b) `BatchedAt`/`SentAt`/`AcknowledgedAt` are PROCESS timestamps only —
+  they never determine the period. (c) **Document date is informational** in BC (carries the source
+  document's reference date); **posting date drives the period** — never cross the two in the field
+  mapping (Jeremy's explicit warning: crossing them puts entries in the wrong period silently).
+  (d) Netting must not collapse dates → EffectiveDate joins the netting key (revised MOD-4).
+- **Closed-period rule (OQ-1 — ANSWERED by Jeremy, 2026-07-17):** when a JE's posting date falls in
+  a period BC has closed, **HOLD it — pull the entry out for human review and flag it; the rest of
+  the batch proceeds. Never auto-roll the date forward.** The system needs a **feedback loop** so
+  closed-period collisions surface as flagged exceptions rather than blind post attempts.
+  **Mechanism (proceeding, v1):** dispatch-time exception handling — a BC rejection on a line flags
+  that JE for review (hold state) without failing the batch; a proactive BC period-status pull is a
+  later enhancement, not v1.
+- **Why / source:** P1-as-amended (Jeremy's correction adopted by Robert) + the 2026-07-17 feedback
+  thread (Jeremy: document-vs-posting date; OQ-1 ruling; posting date settable via API to any date —
+  "worth testing to verify"). Amith's convergence recorded same thread.
+- **Status:** Accepted (Jeremy ✅ P1-amended 2026-07-15; Amith ✅ 2026-07-17).
+
+## MOD-17 — Deferred revenue = REAL forward-dated JEs at booking; `ScheduledJournalEntry` machinery retired (2026-07-14/15)
+- **Supersedes:** **MOD-11** (schedule records + date-driven materializer + daily materialization),
+  BA-D25's `ScheduledJournalEntry` design, and §4.9's schedule machinery. Orders counterpart:
+  orders MOD-12 (BO-D11 rewrite). MOD-11's principles survive: date-driven (never period-close),
+  created up-front at booking.
+- **Change:** at booking, the recognition waterfall is written as **actual future-dated JEs** (a
+  12-month $1,200 sub → 12 × $100 Dr DefRev / Cr Revenue JEs, each with its own EffectiveDate). No
+  schedule records, **no materializer, no daily scheduled job** (Robert: a wake-up task is "fragile
+  — just create them"). Batches pick up forward-dated entries ONLY if the batch date filter reaches
+  that far forward: **default cutoff = today** (the default filter never reaches forward); building
+  a future-reaching batch requires explicitly setting the filter; batch approval displays the date
+  range being swept (the accountants are trusted + the UI makes the right thing easy).
+- **Changes & cancellations — correcting-order netting:** staged forward-dated entries are **never
+  edited or deleted**. A contract change/cancel produces a **correcting Order** emitting new
+  rev-rec entries that NET against what's staged (immutable history; every correction auditable).
+  Consistent with the orders reversal model (orders MOD-7). Jeremy: "fully addresses the concern I
+  raised about orphaned forward-dated entries… cleaner model than what I had in mind."
+- **Why / source:** P5 (`meetings/2026-07-14 - je-single-company-batching-proposal.md`) + Robert's
+  ruling in the 2026-07-14 meeting + Jeremy sign-off 2026-07-15 (recorded in the 2026-07-17
+  feedback doc).
+- **Status:** Accepted. ⚠ **Build impact is real:** the shipped `ScheduledJournalEntry` trio +
+  `MaterializeDueScheduledEntries` op retire (feature rows E.1–E.5 → Removed); the UI plan's
+  "Scheduled entries" page (§8.1) becomes a **future-dated-JE browser** (no Materialize action);
+  batch-filter defaults + approval date-range display land in the batch workspace spec (§8.2).
+
+## MOD-18 — Tax calculation DELEGATED to a third-party engine; our tax tables RECORD, never author rates (2026-07-14)
+- **Supersedes:** §9's implied self-maintained rate authority (Local provider + rate sync as a
+  primary path) and any "build a sales-&-use-tax rate package" ambition (LXP D13's long-term wish —
+  the engine IS that package).
+- **Change:** BizApps will **not implement tax calculation**. A third-party engine (Stripe Tax /
+  Avalara / Vertex class) calculates; our responsibilities are exactly two: **(1) send** the engine
+  its inputs at order-line time (ship-to/customer address, product tax category, customer tax
+  profile incl. exemption status); **(2) record** what returns — multiple taxes per line per
+  jurisdiction (`OrderLineTaxLine`-shape). The provider seam (`TaxCalculationProvider`) stands; the
+  engine is a provider implementation. **Consequence:** `TaxJurisdiction`/`TaxRate` become
+  **reference/snapshot data recording what the engine returned** — never a rate authority we
+  maintain or sync.
+- **Open (tracked in orders [Q21](../../bizapps-orders/plans/QUESTIONS.md#q21), updated):**
+  engine selection (Stripe Tax = low-friction LH4I candidate; Avalara-class when non-Stripe
+  channels/exemption-cert management matter — finance + cost call, Robert/Marcelo + Jeremy);
+  launch timing (tax is deliberately NOT phase one — LH4I launching WITH tax vs without is an
+  explicit business call, Jeremy/John); exemption certificates (we sell to nonprofits — profile is
+  ours, cert validation may come from the engine).
+- **Why / source:** Robert's A4 position, `meetings/2026-07-14 - lxp-open-items-response.md`.
+- **Status:** Accepted (position stated by Robert; Marcelo folding it as plan of record 2026-07-17).
