@@ -10,3 +10,46 @@
 .dash-stat--warn i { color: var(--mj-status-warning); }
 .dash-stat__value { font-size: 26px; font-weight: 700; color: var(--mj-text-primary); font-variant-numeric: tabular-nums; }
 .dash-stat__label { font-size: 12px; color: var(--mj-text-muted); }
+
+/* List cards. NOTE: the parent <mj-page-body-interior> is display:BLOCK — never size these with
+   `flex: 1` (a flex child of a block parent is a no-op and collapses to zero height). Use grid +
+   an explicit min-height instead. */
+.dash-lists { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-top: 14px; }
+.dash-card {
+  display: flex; flex-direction: column; min-height: 180px; overflow: hidden;
+  border: 1px solid var(--mj-border-default); border-radius: 10px; background: var(--mj-bg-surface);
+}
+.dash-card__header {
+  display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+  background: var(--mj-bg-surface-card); border-bottom: 1px solid var(--mj-border-default);
+}
+.dash-card__header i { color: var(--mj-brand-primary); font-size: 13px; }
+.dash-card__title { font-size: 13px; font-weight: 600; color: var(--mj-text-primary); }
+.dash-card__count {
+  margin-left: auto; padding: 1px 7px; border-radius: 10px;
+  background: var(--mj-bg-surface-sunken); color: var(--mj-text-muted);
+  font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.dash-card__body { display: flex; flex-direction: column; gap: 6px; padding: 10px; }
+.dash-card__empty { margin: auto 0; padding: 12px 4px; text-align: center; font-size: 12px; color: var(--mj-text-muted); }
+
+.dash-item {
+  display: flex; align-items: center; gap: 12px; padding: 8px 10px;
+  border-radius: 8px; background: var(--mj-bg-surface-card);
+}
+.dash-item--warn { background: color-mix(in srgb, var(--mj-status-warning) 7%, var(--mj-bg-surface-card)); }
+.dash-item__info { flex: 1; min-width: 0; }
+.dash-item__title {
+  font-size: 13px; font-weight: 600; color: var(--mj-text-primary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.dash-item__meta { display: flex; align-items: center; gap: 6px; margin-top: 2px; min-width: 0; font-size: 11px; }
+.dash-item__status {
+  flex-shrink: 0; padding: 1px 6px; border-radius: 4px;
+  background: var(--mj-border-default); color: var(--mj-text-secondary); font-weight: 500;
+}
+.dash-item--warn .dash-item__status {
+  background: color-mix(in srgb, var(--mj-status-warning) 20%, transparent); color: var(--mj-status-warning-text);
+}
+.dash-item__detail { color: var(--mj-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dash-item__when { flex-shrink: 0; font-size: 11px; color: var(--mj-text-disabled); white-space: nowrap; }

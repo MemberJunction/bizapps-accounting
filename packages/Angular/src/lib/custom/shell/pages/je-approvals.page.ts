@@ -1,6 +1,7 @@
-import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, OnInit } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, OnInit, OnDestroy } from '@angular/core';
 import { RunView } from '@memberjunction/core';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
+import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
 import { UUIDsEqual } from '@memberjunction/global';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import { CompanyScopeService } from '../../shared/company-scope.service';
@@ -55,8 +56,11 @@ export interface PendingManualEntry {
   styleUrls: ['./je-approvals.page.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class JEApprovalsPageComponent extends BaseAngularComponent implements OnInit {
+export class JEApprovalsPageComponent extends BaseAngularComponent implements OnInit, OnDestroy {
   private cdr = inject(ChangeDetectorRef);
+  /** The shell header's Refresh reaches this page while it is the mounted one. */
+  private pageRefresh = inject(PageRefreshService);
+  private refreshSub: { unsubscribe: () => void } | null = null;
   public Scope = inject(CompanyScopeService);
 
   public Rows: PendingManualEntry[] = [];
@@ -65,6 +69,7 @@ export class JEApprovalsPageComponent extends BaseAngularComponent implements On
   public SelectedID: string | null = null;
 
   ngOnInit(): void {
+    this.subscribeToShellRefresh();
     void this.load();
   }
 
@@ -74,6 +79,15 @@ export class JEApprovalsPageComponent extends BaseAngularComponent implements On
 
   public Refresh(): void {
     void this.load();
+  }
+
+  private subscribeToShellRefresh(): void {
+    this.refreshSub = this.pageRefresh.OnRefresh(() => this.Refresh());
+  }
+
+  ngOnDestroy(): void {
+    // Unsubscribing is what keeps the header's Refresh page-aware: a destroyed page stops counting.
+    this.refreshSub?.unsubscribe();
   }
 
   public Review(id: string): void {

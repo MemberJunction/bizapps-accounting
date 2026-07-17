@@ -1,7 +1,17 @@
 import { Directive, ChangeDetectorRef, inject } from '@angular/core';
 import { BaseDashboard } from '@memberjunction/ng-shared';
-import { MJLeftNavItem, MJLeftNavSection } from '@memberjunction/ng-ui-components';
+import { MJLeftNavItem, MJLeftNavSection, MJStatBadgeVariant } from '@memberjunction/ng-ui-components';
 import { CompanyScopeService } from '../shared/company-scope.service';
+import { PageRefreshService } from '../../transfer-pending/shell-refresh/page-refresh.service';
+
+/** One composite, category-level stat chip in the shell header. */
+export interface ShellHeaderStat {
+  Label: string;
+  Icon?: string;
+  Variant?: MJStatBadgeVariant;
+  /** Says what the number MEANS — the chip alone is just a figure. */
+  Tooltip?: string;
+}
 
 /**
  * Shared behaviour for the five category shells (UI plan §8.0).
@@ -24,6 +34,8 @@ import { CompanyScopeService } from '../shared/company-scope.service';
 export abstract class CategoryShellBase extends BaseDashboard {
   protected cdr = inject(ChangeDetectorRef);
   public Scope = inject(CompanyScopeService);
+  /** Provided per shell (see the component's `providers`), so two open categories stay independent. */
+  public PageRefresh = inject(PageRefreshService);
 
   /** The rail this category renders (MJ left-nav sections). */
   public abstract get RailSections(): MJLeftNavSection[];
@@ -68,25 +80,54 @@ export abstract class CategoryShellBase extends BaseDashboard {
     this.cdr.markForCheck();
   }
 
+  /**
+   * The header's Refresh — reloads ONLY the page in the body.
+   *
+   * It cannot reach the rail or a background page: the `@switch` means exactly one page is
+   * instantiated, so it is the only subscriber (see PageRefreshService).
+   */
+  public RefreshActivePage(): void {
+    this.PageRefresh.RequestRefresh();
+  }
+
+  /** Hide the button rather than offer one that does nothing on a page with nothing to reload. */
+  public get CanRefreshActivePage(): boolean {
+    return this.PageRefresh.HasSubscriber;
+  }
+
   /** Label for a rail page that isn't built yet — read back off the rail so it can't drift. */
   public PendingPageName(pageId: string): string {
     return this.RailItemLabel(pageId) ?? 'This screen';
   }
 
   /**
-   * The ACTIVE page's label, read off the rail config.
-   *
-   * This is the shell header's title (Marcelo 2026-07-16: *"that header is meant to say, here's the
-   * page you're on"*). Read from the rail rather than declared per-page so the header and the rail's
-   * active item can never disagree — and so a page cannot forget to set it.
+   * The ACTIVE page's label. Kept for the mobile drawer + the not-built placeholder — it is NOT the
+   * header title (see the header note below).
    */
   public get ActivePageLabel(): string {
     return this.RailItemLabel(this.ActivePageId) ?? this.CategoryTitle;
   }
 
-  /** The active page's icon, for the header. Falls back to the category's own. */
+  /** The active page's icon. */
   public get ActivePageIcon(): string {
     return this.RailItemIcon(this.ActivePageId) ?? this.CategoryIcon;
+  }
+
+  /**
+   * ── The shell header ──────────────────────────────────────────────────────
+   * Marcelo (2026-07-16), revising his earlier call: the header shows the CATEGORY, not the
+   * sub-page — *"the tab that we're in is really more descriptive of where we are"*. The sub-page
+   * name is already the rail's active item, inches away, so restating it bought nothing. The
+   * category is the one piece of context NOT otherwise on screen once you are deep in a page.
+   *
+   * That frees the header to be useful rather than decorative: it carries the company scope and
+   * per-category COMPOSITE STATS — a "through line" that stays meaningful across every sub-page —
+   * plus the refresh, which belongs in one reliable place rather than repeated in every body.
+   */
+
+  /** Subclasses override to give their category a through-line stat set. Empty = no chips. */
+  public get HeaderStats(): ShellHeaderStat[] {
+    return [];
   }
 
   /** The category's icon — subclasses override; used when a page has none. */

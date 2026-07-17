@@ -15,6 +15,40 @@ export interface DashboardStat {
   Warn?: boolean;
 }
 
+/** One row inside a dashboard list card. Shaped for DISPLAY — the page maps its entity rows to this. */
+export interface DashboardListItem {
+  Id: string;
+  /** The identifying label — an entry number / batch number. */
+  Title: string;
+  /** One line of supporting detail under the title (description, target system, …). */
+  Detail: string;
+  /** Short status text, rendered as a pill. */
+  Status: string;
+  /** The timestamp shown on the right. */
+  When: Date | string | null;
+  /**
+   * True when `When` came from a DATE column (no timezone). The template must then render it with the
+   * explicit 'UTC' arg — without it Angular applies the browser zone and every user west of UTC sees
+   * the PREVIOUS day. An instant (DATETIMEOFFSET) must NOT set this: local rendering is correct there.
+   */
+  WhenIsDateOnly: boolean;
+  /** Marks a row that needs attention (mirrors DashboardStat.Warn). */
+  Warn?: boolean;
+}
+
+/** A card holding a short list. Small by construction — see the §0 note on the base class. */
+export interface DashboardList {
+  Id: string;
+  Title: string;
+  Icon: string;
+  /** Shown instead of rows when the list is empty. An empty inbox is good news — say so, don't say "no data". */
+  EmptyMessage: string;
+  Items: DashboardListItem[];
+}
+
+/** How many rows a dashboard list card shows. Small enough that these stay cheap reads (§0). */
+export const DASHBOARD_LIST_ROWS = 5;
+
 /**
  * Shared machinery for the two category dashboards (UI plan §8.6 step 6).
  *
@@ -24,6 +58,10 @@ export interface DashboardStat {
  * count and transfers one row. That is cheap enough to run on every dashboard open, which is why
  * these can be plain reads with no caching layer.
  *
+ * The same rule governs the LIST cards: a `MaxRows: 5` top-N over an indexed sort column is a cheap
+ * read, so "recent entries" and "awaiting approval" are fine. A list that needed a per-row total
+ * would not be — it would mean summing lines under every row.
+ *
  * If you are tempted to add a stat that needs summing or grouping over the ledger: it belongs in a
  * scheduled precompute or a read model, not here.
  */
@@ -32,6 +70,8 @@ export abstract class AccountingDashboardBase extends BaseAngularComponent {
   protected cdr = inject(ChangeDetectorRef);
 
   public Stats: DashboardStat[] = [];
+  /** The list cards rendered under the stats. Empty while loading. */
+  public Lists: DashboardList[] = [];
   public IsLoading = false;
   public LoadError: string | null = null;
 

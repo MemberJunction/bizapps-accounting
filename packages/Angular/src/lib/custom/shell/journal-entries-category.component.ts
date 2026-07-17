@@ -4,7 +4,8 @@ import { BaseDashboard } from '@memberjunction/ng-shared';
 import { ResourceData } from '@memberjunction/core-entities';
 import { RunView } from '@memberjunction/core';
 import { MJLeftNavSection } from '@memberjunction/ng-ui-components';
-import { CategoryShellBase } from './category-shell.base';
+import { CategoryShellBase, type ShellHeaderStat } from './category-shell.base';
+import { PageRefreshService } from '../../transfer-pending/shell-refresh/page-refresh.service';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 
@@ -29,16 +30,46 @@ export type JournalEntriesPageId =
   templateUrl: './journal-entries-category.component.html',
   styleUrls: ['./category-shell.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  providers: [PageRefreshService], // per-shell: two open categories must not refresh each other
 })
 @RegisterClass(BaseDashboard, 'JournalEntriesCategoryDashboard')
 export class JournalEntriesCategoryComponent extends CategoryShellBase {
   public CategoryTitle = 'Journal Entries';
+  public override get CategoryIcon(): string {
+    return 'fa-solid fa-book-open';
+  }
   protected get DefaultPageId(): string {
     return 'all-entries';
   }
 
-  /** Cheap count for the rail badge — a filtered COUNT, never a heavy aggregate (§0 ruling). */
+  /** Cheap counts — filtered COUNTs, never heavy aggregates (§0 ruling). */
   public AwaitingApprovalCount = 0;
+  public UnbatchedCount = 0;
+
+  /**
+   * The category's through-line: the two numbers an accountant cares about on EVERY journal-entry
+   * page — what is still unbatched, and what is sitting in review. Both are the same cheap counts
+   * the rail badge already uses, so the header and the rail cannot disagree.
+   */
+  public override get HeaderStats(): ShellHeaderStat[] {
+    const stats: ShellHeaderStat[] = [
+      {
+        Label: `${this.UnbatchedCount} unbatched`,
+        Icon: 'fa-solid fa-inbox',
+        Variant: this.UnbatchedCount > 0 ? 'info' : 'default',
+        Tooltip: 'Pending entries not yet in a batch — the pool the next batch build draws from.',
+      },
+    ];
+    if (this.AwaitingApprovalCount > 0) {
+      stats.push({
+        Label: `${this.AwaitingApprovalCount} awaiting review`,
+        Icon: 'fa-solid fa-user-check',
+        Variant: 'warning',
+        Tooltip: 'Manual entries a CFO would review (C.8). The gate is not yet in force.',
+      });
+    }
+    return stats;
+  }
 
   public get RailSections(): MJLeftNavSection[] {
     return [
@@ -75,7 +106,23 @@ export class JournalEntriesCategoryComponent extends CategoryShellBase {
   }
 
   protected async loadCategoryData(): Promise<void> {
-    await this.loadApprovalBadge();
+    await Promise.all([this.loadApprovalBadge(), this.loadUnbatchedCount()]);
+  }
+
+  /** Pending = unbatched: the ledger's Status goes Pending -> Batched (§4). One cheap count. */
+  private async loadUnbatchedCount(): Promise<void> {
+    const rv = RunView.FromMetadataProvider(this.ProviderToUse);
+    const res = await rv.RunView(
+      {
+        EntityName: JE_ENTITY,
+        ExtraFilter: this.Scope.ComposeFilter(`Status='Pending'`),
+        Fields: ['ID'],
+        MaxRows: 1,
+        ResultType: 'simple',
+      },
+      this.ProviderToUse.CurrentUser,
+    );
+    this.UnbatchedCount = res.Success ? (res.TotalRowCount ?? 0) : 0;
   }
 
   /**

@@ -91,7 +91,7 @@ export type { AROpenByCustomerRow, ARAgingRow } from './lib/custom/shared/read-m
 // (common -> accounting -> orders) and orders must import accounting-homed surfaces regardless
 // (the GL-resolution preview above, and the Customer A/R base view). CategoryShellBase's only
 // app-specific binding is CompanyScopeService, which orders shares.
-export { CategoryShellBase } from './lib/custom/shell/category-shell.base';
+export { CategoryShellBase, type ShellHeaderStat } from './lib/custom/shell/category-shell.base';
 // The category-dashboard base (cheap filtered COUNTS only — the §0 no-heavy-aggregates ruling).
 // Its `count()` helper + stat shape are app-agnostic despite the historical name; orders' dashboards
 // extend it so the "MaxRows 1 + TotalRowCount" discipline exists once. Their ~25-line stat-grid
@@ -114,6 +114,10 @@ export { TIME_WINDOWS, timeWindowRange, timeWindowFilter, andFilters } from './l
 export type { TimeWindowId } from './lib/transfer-pending/list-scaffold/time-window';
 export { sqlLiteral, sqlLikePattern, likeContains } from './lib/transfer-pending/list-scaffold/sql-filter';
 export { rowKeyToId } from './lib/transfer-pending/list-scaffold/grid-row-key';
+
+// The shell header's page-aware Refresh. Provided PER SHELL (never root) — Explorer keeps tabs
+// alive, so a root-provided instance would let one open category refresh another's page.
+export { PageRefreshService } from './lib/transfer-pending/shell-refresh/page-refresh.service';
 
 // Cross-app deep linking (parked, framework-clean — §0 lists it as a shared component targeted at
 // MJ base). Explorer is a TABBED SPA: a URL only navigates on a cold load, so a cross-app "link"

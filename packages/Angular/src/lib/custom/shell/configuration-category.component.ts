@@ -4,6 +4,7 @@ import { BaseDashboard } from '@memberjunction/ng-shared';
 import { ResourceData } from '@memberjunction/core-entities';
 import { MJLeftNavSection } from '@memberjunction/ng-ui-components';
 import { CategoryShellBase } from './category-shell.base';
+import { PageRefreshService } from '../../transfer-pending/shell-refresh/page-refresh.service';
 
 /**
  * Configuration category shell (UI plan §8.0). One of the five Explorer app nav items; hosts MJ's
@@ -15,10 +16,14 @@ import { CategoryShellBase } from './category-shell.base';
   templateUrl: './configuration-category.component.html',
   styleUrls: ['./category-shell.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  providers: [PageRefreshService], // per-shell: two open categories must not refresh each other
 })
 @RegisterClass(BaseDashboard, 'ConfigurationCategoryDashboard')
 export class ConfigurationCategoryComponent extends CategoryShellBase {
   public CategoryTitle = 'Configuration';
+  public override get CategoryIcon(): string {
+    return 'fa-solid fa-gear';
+  }
   protected get DefaultPageId(): string {
     return 'companies';
   }

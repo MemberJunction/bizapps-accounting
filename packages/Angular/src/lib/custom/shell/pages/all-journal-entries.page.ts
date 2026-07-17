@@ -1,4 +1,5 @@
-import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, OnInit } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, OnInit, OnDestroy } from '@angular/core';
+import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
 import { RunViewParams, CompositeKey, Metadata } from '@memberjunction/core';
 import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
 import { GridColumnConfig } from '@memberjunction/ng-entity-viewer';
@@ -43,8 +44,11 @@ const STATUSES: readonly JEStatus[] = ['Pending', 'Batched', 'GLPosted'] as cons
   styleUrls: ['./all-journal-entries.page.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class AllJournalEntriesPageComponent implements OnInit {
+export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
   private cdr = inject(ChangeDetectorRef);
+  /** The shell header's Refresh reaches this page only while it is the mounted one. */
+  private pageRefresh = inject(PageRefreshService);
+  private refreshSub: { unsubscribe: () => void } | null = null;
   private forms = inject(MJFormPresenterService);
   public Scope = inject(CompanyScopeService);
 
@@ -92,6 +96,7 @@ export class AllJournalEntriesPageComponent implements OnInit {
   ];
 
   ngOnInit(): void {
+    this.refreshSub = this.pageRefresh.OnRefresh(() => this.Refresh());
     this.EntryTypes = this.loadEntryTypeValues();
     this.applyFilters();
   }
@@ -136,6 +141,10 @@ export class AllJournalEntriesPageComponent implements OnInit {
   }
 
   /** The ONE refresh control (§8 dispatch ruling) — the seam live push replaces later. */
+  ngOnDestroy(): void {
+    // Unsubscribing is what keeps the header's Refresh page-aware: a destroyed page stops counting.
+    this.refreshSub?.unsubscribe();
+  }
   public Refresh(): void {
     this.RefreshToken++;
     this.applyFilters();

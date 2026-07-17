@@ -1,6 +1,7 @@
-import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, OnInit } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, OnInit, OnDestroy } from '@angular/core';
 import { Metadata, type IRemoteOperationProvider } from '@memberjunction/core';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
+import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
 import { CompanyScopeService } from '../../shared/company-scope.service';
 import { WorkspaceTabStore } from '../../../transfer-pending/workspace-tabs/workspace-tab-store';
 import { WorkspaceTab } from '../../../transfer-pending/workspace-tabs/workspace-tabs.types';
@@ -44,8 +45,11 @@ interface BatchDraft {
   styleUrls: ['./batch-workspace.page.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class BatchWorkspacePageComponent extends BaseAngularComponent implements OnInit {
+export class BatchWorkspacePageComponent extends BaseAngularComponent implements OnInit, OnDestroy {
   private cdr = inject(ChangeDetectorRef);
+  /** The shell header's Refresh reaches this page only while it is the mounted one. */
+  private pageRefresh = inject(PageRefreshService);
+  private refreshSub: { unsubscribe: () => void } | null = null;
   public Scope = inject(CompanyScopeService);
 
   private tabs = new WorkspaceTabStore<BatchDraft>();
@@ -73,6 +77,7 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
   public readonly TargetSystems: readonly BatchTargetSystem[] = ['BusinessCentral'];
 
   ngOnInit(): void {
+    this.refreshSub = this.pageRefresh.OnRefresh(() => this.Refresh());
     this.openNewDraft();
   }
 
@@ -199,6 +204,10 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
     }
   }
 
+  ngOnDestroy(): void {
+    // Unsubscribing is what keeps the header's Refresh page-aware: a destroyed page stops counting.
+    this.refreshSub?.unsubscribe();
+  }
   public Refresh(): void {
     void this.refreshPreview();
   }

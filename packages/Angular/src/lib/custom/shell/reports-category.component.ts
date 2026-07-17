@@ -4,6 +4,7 @@ import { BaseDashboard } from '@memberjunction/ng-shared';
 import { ResourceData } from '@memberjunction/core-entities';
 import { MJLeftNavSection } from '@memberjunction/ng-ui-components';
 import { CategoryShellBase } from './category-shell.base';
+import { PageRefreshService } from '../../transfer-pending/shell-refresh/page-refresh.service';
 
 /**
  * Reports category shell (UI plan §8.0). One of the five Explorer app nav items; hosts MJ's
@@ -15,10 +16,14 @@ import { CategoryShellBase } from './category-shell.base';
   templateUrl: './reports-category.component.html',
   styleUrls: ['./category-shell.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  providers: [PageRefreshService], // per-shell: two open categories must not refresh each other
 })
 @RegisterClass(BaseDashboard, 'ReportsCategoryDashboard')
 export class ReportsCategoryComponent extends CategoryShellBase {
   public CategoryTitle = 'Reports';
+  public override get CategoryIcon(): string {
+    return 'fa-solid fa-chart-column';
+  }
   protected get DefaultPageId(): string {
     return 'trial-balance';
   }

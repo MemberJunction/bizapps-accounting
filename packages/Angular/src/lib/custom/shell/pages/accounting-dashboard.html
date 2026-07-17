@@ -28,7 +28,47 @@
   }
 </div>
 
+  <!-- List cards: each list gets its OWN card (small header + the rows within), so the page answers
+       "what should I look at?" and not just "how many are there?". -->
+  <div class="dash-lists">
+    @for (l of Lists; track l.Id) {
+      <section class="dash-card">
+        <header class="dash-card__header">
+          <i [class]="l.Icon" aria-hidden="true"></i>
+          <span class="dash-card__title">{{ l.Title }}</span>
+          <span class="dash-card__count">{{ l.Items.length }}</span>
+        </header>
+        <div class="dash-card__body">
+          @for (i of l.Items; track i.Id) {
+            <div class="dash-item" [class.dash-item--warn]="i.Warn">
+              <div class="dash-item__info">
+                <div class="dash-item__title">{{ i.Title }}</div>
+                <div class="dash-item__meta">
+                  <span class="dash-item__status">{{ i.Status }}</span>
+                  <span class="dash-item__detail">{{ i.Detail }}</span>
+                </div>
+              </div>
+              <span class="dash-item__when">
+                @if (i.WhenIsDateOnly) {
+                  <!-- DATE column — the 'UTC' arg is REQUIRED, or users west of UTC see the day before. -->
+                  {{ i.When | date: 'mediumDate' : 'UTC' }}
+                } @else {
+                  <!-- An instant — the browser zone is the correct rendering. -->
+                  {{ i.When | date: 'MMM d, h:mm a' }}
+                }
+              </span>
+            </div>
+          } @empty {
+            @if (!IsLoading) {
+              <p class="dash-card__empty">{{ l.EmptyMessage }}</p>
+            }
+          }
+        </div>
+      </section>
+    }
+  </div>
+
   @if (IsLoading) {
-    <mj-loading text="Counting…"></mj-loading>
+    <mj-loading text="Loading…"></mj-loading>
   }
 </mj-page-body-interior>
