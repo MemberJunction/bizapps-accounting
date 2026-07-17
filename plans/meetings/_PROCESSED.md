@@ -37,3 +37,11 @@ to Robert; demo ~Tue). Transcript renamed from "2026-13-2026 - …".
 | `2026-07-14 - lxp-commerce-and-fulfillment 2.md` (Ethan v3 — decisions locked) | orders UPD-6 edit (LXP→Orders DIRECT at launch; Teams-first contingency; A7 date ask) + `ROADMAP-lxp-launch.md` (orders repo). |
 | `2026-07-14 - Accounting Meeting.md` | REST-over-MCP + "just create them" rulings (inside MOD-16/17 + UPD-2); orders Order↔JE junction UPD; batch-UI defaults note in UI plan §8. |
 | `2026-07-16 - Accounting Meeting.md` | Process items only (answers doc incoming — now landed above; "on hold ≠ deferred" framing; Q22 ownership superseded by the answers doc same day). |
+
+### 2026-07-17 - Amith Demo Feedback.md — ✅ PROCESSED 2026-07-17 (Task 98a)
+Landings: **forms-first UI ruling** (Entity Forms first-class, widgets shared with dashboards, no
+bespoke pop-ups — form host renders inside modal/slide-in; UI plan §8 ruling block, mirrored in
+orders §13) · **manual-JE requirements** (provenance loud, authorization-gated — folds into C.8) ·
+**ng-entity-viewer for COA** (§8.3) · **multi-company batches = BACKLOG** (Amith's per-company-
+sections lean recorded; MOD-15 stands for v1; Robert/Jeremy asked by Amith himself) · don't
+over-polish dashboards.

@@ -39,6 +39,31 @@ Convention: `~/MJDev/shared-plans/repo-planning-system.md` §5.1. (The instance-
       aggregate query measurably slow on real data volumes, or the dashboards phase (§8.6 step 6)
       surfacing a stat that can't be served cheaply.
 
+- [ ] **Multi-company GL accounts (shared account across companies) — consider** — today every
+      `GLAccount` belongs to exactly one company (`CompanyID NOT NULL`) and the whole pipeline
+      (JE company derivation, MOD-15 batching, RLS scoping) keys off it. Consider whether a
+      single account definition shared by multiple companies is ever needed (e.g. a common
+      intercompany or clearing account shape) vs the current model of per-company account rows
+      + `ChartOfAccountsMapping` for ERP alignment. (Marcelo, 2026-07-17.) Revisit trigger: the
+      Q36 COA-model sitting, or a real multi-entity config where duplicating accounts per company
+      demonstrably hurts.
+
+- [ ] **Multi-company batches (LATER — after single-company is stable)** — Amith's 2026-07-17 demo
+      feedback leans toward eventually supporting batches that span companies, aggregated
+      **per-company-sections inside the batch**, still pushing one journal per company to the GL
+      ("we probably will need to support batches spanning multiple-companies… properly aggregate
+      by company within the batch"); he explicitly asked Robert + Jeremy to weigh in. MOD-15
+      (single-company batches) stands for v1 — this is the sanctioned evolution path, not a
+      contradiction: the batch header becomes a grouping envelope; per-company aggregation +
+      per-company dispatch already exist under MOD-15/16. (Marcelo, 2026-07-17: "later once the
+      system is stable for one company.") Revisit trigger: single-company batching validated
+      end-to-end (roadmap V1.3 green) + the Robert/Jeremy response to Amith's ask.
+
+- [ ] **Tax EXTENSION on the master plan (candidate)** — MOD-18 re-postures §9 (delegate
+      calculation, snapshot recording); when real tax work schedules (engine selection + LH4I
+      launch-tax call, orders Q22), the accumulated tax scope may warrant a proper master-plan
+      **Extension** (new-scope vehicle) rather than more MOD overlay on §9. (Marcelo, 2026-07-17.)
+
 - [ ] **Cross-app frontend cache for journal entries (idea)** — JEs get read in many places across
       accounting AND orders (lists, workspaces, order-lineage slide-ins, dashboards); consider one
       shared client-side cache/engine layer instead of per-page fetches. MJ prior art: the

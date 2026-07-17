@@ -159,6 +159,31 @@ receive-only posture) is decided at the Task 65b review.
 > **Element doctrine + navigation map** are recorded present-tense in
 > `design-docs/ui-design/README.md` (standing design record) — read that first.
 
+### ⚠ 2026-07-17 Amith demo-feedback rulings — FORMS ARE THE BASIS OF THE UI (binds all remaining §8 work)
+
+From `meetings/2026-07-17 - Amith Demo Feedback.md` (Marcelo: fold in and incorporate):
+
+1. **Entity Forms first-class; widgets shared with dashboards — "one UX."** For every core entity
+   (JournalEntry, Batch, Account, …) build a **first-class MJ Entity Form** (extend the generated
+   form per the `@RegisterClass(BaseFormComponent, …)` pattern; MJ's Forms Architecture guide is
+   the recipe) and compose it from **reusable widgets that the dashboards embed directly** — the
+   drill-in form and the dashboard panel are the same components, not parallel implementations.
+2. **No bespoke pop-ups.** Where the element doctrine calls for a modal or slide-in, its CONTENT
+   is the entity form presented through MJ's form host (`forms.open()` / `<mj-form-dialog>` /
+   `<mj-form-slide-in>` + `EntityFormConfig`) — never a custom one-off popup component. This
+   REFINES the doctrine (modal = quick action, slide-in = quick view stand); it standardizes what
+   renders inside them. Existing §8 specs that say "modal"/"slide-in" now mean the form-host
+   presentation of the entity's form.
+3. **Accounts/COA pages: reuse `ng-entity-viewer` + a User View** rather than rebuilding
+   grid/browse UX (§8.3) — same check-MJ-first rule that found `mj-entity-data-grid`.
+4. **Manual JEs blessed, with three hard requirements (C.8):** (a) **provenance is unmistakable
+   everywhere** — every JE surface shows clear lineage (Orders/Payments/app-origin vs Manual;
+   badge + origin links); (b) creating/approving manual JEs is **authorization-gated** (the Q6
+   answer's Accounting Approver enforcement is exactly this); (c) the manual-ness itself is
+   visually loud, not a subtle field.
+5. **Don't over-polish the dashboards** — "good starting point… improve based on user feedback,
+   many other things to focus on." Ship, move to the next slice.
+
 ### ⚠ 2026-07-17 plan-chain update — MOD-15/16/17 land; three §8 specs are affected (read before building those pages)
 
 New MODs from the Robert P-proposals + Jeremy/Amith sign-offs (`MASTER-PLAN-MODIFICATIONS.md`):

@@ -17,7 +17,8 @@
 
 | Ask order | Q | Ask | Status |
 |---|---|---|---|
-| 1 | [Q19](#q19) | Jeremy — golden path + exceptions (absorbs Q12/Q15) | OPEN ★HIGH |
+| 1 | [Q37](#q37) | Robert/Amith — MOD-16 posting-date model + closed-period HOLD (Jeremy-vs-design tension) | OPEN — proceeding ★HIGH |
+| 2 | [Q19](#q19) | Jeremy — golden path + exceptions (absorbs Q12/Q15) | OPEN ★HIGH |
 | — | [Q22](#q22) | company-visibility mechanism — ANSWERED (UserCompanyRole grant table) | ANSWERED |
 | — | [Q24](#q24) | grants + governance — ANSWERED (audit cols now, workflow deferred) | ANSWERED |
 | 4 | [Q25](#q25) | Ian/Matt/team — shared-UI component routing (transfer backlog) | OPEN |
@@ -1013,4 +1014,41 @@ queryable surface for "which questions touch feature X".)*
   `packages/Angular/Generic/ui-components/src/lib/accordion/accordion.scss` — lines 11–16 (panel box),
   27–29 (hover), 110 (expanded-only rule), 187–192 (`--bare`). Consumer:
   `bizapps-orders/.../shell/pages/product-workshop.page.html`.
+- **Answer:** _(pending)_
+
+<a id="q37"></a>
+### Q37 · Posting-date model + closed-period handling (MOD-16) — does per-JE posting survive the one-consolidated-JE-per-company push? — review: Robert (+ Amith) — added 2026-07-17
+- **Status:** OPEN — proceeding
+- **Requested reviewer:** Robert (design); Amith (the one-JE-per-company push model is his)
+- **Features:** ACC-D.8/D.9 (per-JE posting dates; closed-period exceptions), ACC-D.1 (netting key)
+- **Proposed solution (what we are implementing — MOD-16):** Posting Date travels **per Journal
+  Entry, equal to its `EffectiveDate`**, and is carried through to BC **per line** — no batch-level
+  posting or document date (BatchedAt/SentAt/AcknowledgedAt stay process timestamps). To preserve
+  that, batch summary lines net per **(GLAccount × Dimension-combo × EffectiveDate)** — never
+  across dates. So the thing we push per company is ONE BC journal whose **lines carry different
+  posting dates** (Robert: BC natively supports this; Jeremy: posting date is API-settable to any
+  date — verify with a test post). Document date stays informational; posting date drives the
+  period (Jeremy's field-mapping warning recorded). **Closed periods:** when a line's posting date
+  falls in a closed BC period, we **HOLD that JE — flag it for review in the approvals/in-flight
+  inbox and let the rest of the batch proceed; never auto-roll the date** (Jeremy's OQ-1 ruling).
+  v1 mechanism: flag on BC rejection at dispatch; a proactive BC period-status feedback loop is a
+  later enhancement.
+- **The tension this needs review on (why we're asking):** Amith's stated model in the same thread
+  is "you get **one journal entry** when a batch is sent across… **a singular Posting Date for a
+  Batch** … quite important and should match the date in the GL system." Jeremy's correction (which
+  MOD-16 adopts) is that one date across a week-spanning batch misstates periods at month-end. The
+  two reconcile ONLY IF the one consolidated per-company journal can carry **per-line posting
+  dates** — which collapses "one JE" into "one journal document with N dated lines." (1) Robert:
+  confirm that reconciliation is the intended shape (and that BC's journalLines API accepts
+  per-line postingDate on one journal). (2) Amith: confirm you're OK losing the singular batch
+  posting date — the per-date netting means slightly less consolidation around month boundaries in
+  exchange for correct periods. (3) Confirm HOLD-and-flag (never auto-roll) as the default engine
+  behavior for closed-period collisions, with the flagged-exceptions inbox as the surfacing.
+- **Context to share:** `meetings/2026-07-14 - je-single-company-batching-proposal.md` P1 +
+  `meetings/2026-07-17 - User Feedabck over the week 07-12.md` (the posting-date thread — Jeremy's
+  correction, Amith's singular-date position, Jeremy's OQ-1 ruling).
+- **Fixed constraints (not up for debate):** no period calendar in the subledger (MOD-1 FINAL);
+  batches are per-company (MOD-15); document date never drives the period.
+- **Additional context (for a verifying agent):** MOD-16 + revised MOD-4 in
+  `plans/MASTER-PLAN-MODIFICATIONS.md`; BatchingEngine netting rework (pending).
 - **Answer:** _(pending)_
