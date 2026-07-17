@@ -418,3 +418,57 @@ do is kind of get the GUI set up so I can get a basic demo out."* **Picked up to
   different account changes which company the JE belongs to — the exact opposite of the intent. `ParentAccountingCompanyID`
   cannot work correctly until the derivation is fixed (see the ★HIGH item above).
 - **Trigger:** after the account-model fix.
+
+---
+
+## ★ Audit every MJ override: what intended behaviour is each one silently opting us out of?
+- **Added:** 2026-07-17 · **Source:** Marcelo — *"go look for places where you've overwritten stuff in MJ
+  and determine if that's removing what was intended and well designed behavior that was underlying,
+  and then we're gonna have to have a conversation about which one of those overrides is worth it and
+  which is not."*
+- **Why this is not paranoia — TWO real cases surfaced in a single day, both by accident:**
+  1. **`.mj-btn` height override** — added to satisfy "uniform vertical sizing" in the header. It forced
+     `height: 100%` + 30px onto MJ's button. MJ's own `.mj-btn--sm` is `min-height: 32px`, so we forked
+     MJ's styling for **2px** — and MJ grows that button to **`min-height: 44px` under a small-screen
+     media query**, the **WCAG touch-target minimum**. Our override would have squashed it back to 30px
+     on a phone, silently undoing an accessibility accommodation nobody knew was there. **Caught by MJ's
+     own CI gate**, not by us.
+  2. **`.mj-page-header-title` font-size override** — forced `--mj-text-lg`. MJ's title is
+     `--mj-text-xl` and MJ **already** drops it to `lg` under a `<=768px` media query. So the override
+     **pinned MJ's small-screen size onto desktop permanently**, defeating a responsive decision MJ had
+     already made. **Nothing caught this but Marcelo's eye** — and he read the symptom backwards ("the
+     capsule is almost larger than the title"), because the badge was innocent: the title had shrunk.
+- **The generalised lesson, which is the point of the audit:** **an override does not merely restyle a
+  component — it opts you out of decisions the component already made, including ones you do not know
+  about.** Responsive breakpoints, touch targets, focus rings, reduced-motion, RTL, dark-mode
+  adjustments, aria wiring. Every `::ng-deep` into MJ chrome is a silent opt-out of an unknown set.
+- **THE AUDIT — do this:**
+  1. Enumerate every `::ng-deep` / descendant selector reaching into an `mj-*` component across both
+     apps: `grep -rn "::ng-deep" packages/dev-apps/*/packages/Angular/src --include=*.css`
+  2. For EACH, open the MJ component's own stylesheet and read **what else** that selector's target
+     participates in — **specifically look for `@media` blocks, `:focus-visible`, `prefers-reduced-motion`,
+     `prefers-color-scheme`, `[dir=rtl]`, and `aria-*`-driven rules**. That is where the invisible
+     decisions live, and it is exactly where both known cases hid.
+  3. Classify: **(a) delete** — MJ already does it, or does it better (both known cases were this);
+     **(b) keep, narrowed** — the override is real but is reaching wider than it needs;
+     **(c) keep + ask upstream** — a genuine gap; file a question to Matt (Q27/Q33 are the pattern).
+  4. Bring the (b)/(c) list to Marcelo: *"we're gonna have to have a conversation about which one of
+     those overrides is worth it and which is not."*
+- **Known survivors to start from** (as of 2026-07-17, after both fixes):
+  - `category-shell.css` — header row padding (density). The ONLY remaining chrome override; type scale
+    and icon size were reverted to MJ. Asked upstream as `Dense` (**QUESTIONS.md#q33**) — and that
+    question is **already flagged possibly-obsolete**, since moving the stat chips to `[meta]` may remove
+    its reason for existing entirely.
+  - `category-shell.css` — uniform control height in `[actions]` (scope chip + refresh). Deliberately
+    does NOT touch `.mj-btn` any more; the chip matches MJ's button rather than the reverse.
+  - `workspace-tab-strip.component.css` — `overflow-y: hidden` + `:host{display:block}`. This one is a
+    **bug fix, not a preference** (**QUESTIONS.md#q32**, and filed to `MJ-UPSTREAM.md`) — it should leave
+    us entirely by going upstream.
+- **Already retired by this pattern — evidence the audit pays:** the bespoke disclosure sections
+  (**`mj-accordion-panel [Bare]` already existed** and does it better, with aria we never wrote) and the
+  bespoke nav rail (deleted in favour of `mj-left-nav` during the §8 build).
+- **Do it in the same pass:** finish the **deviations register** Marcelo asked for — a durable document
+  of every non-MJ element and every override, with its justification and its reversal condition. The
+  audit produces exactly that list, so the two are one job.
+- **Trigger:** next UI session. Cheap (it is a grep + a read per hit) and it directly answers the boss's
+  note about following MJ's UI/UX guidelines and controls.
