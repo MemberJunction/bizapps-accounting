@@ -660,3 +660,11 @@ then build the op.
 - Keep `BatchNumber` as the agreed ID (D-SEQ). Add optional `Memo NVARCHAR(500) NULL` purely for findability — so a user can label "why this batch" and search it. NOT a rename of the ID scheme.
 - Proposed: migration adds Memo; surface it in All Batches + Batch workspace (editable pre-build), searchable (task 41/47). Marcelo leaning "naming batches maybe not, but a memo yes" — so memo, not a Name field.
 - Note: JournalEntry already HAS a Memo — for JEs no schema change is needed, just show the memo in JE tables + drive the tab caption (task 47).
+
+### ⚠ DECIDED 2026-07-17 — the naming/memo model (ratified by Marcelo)
+Accounting-norm model: **transactions = number + memo/description; master data = names.**
+- **Journal entries:** Memo ALREADY exists — no schema. Surface it in JE tables + drive the tab caption; include in search.
+- **Batches:** keep `BatchNumber` (agreed D-SEQ id) + **ADD `JournalEntryBatch.Memo NVARCHAR(500) NULL`** — the ONLY migration in this feature. Surface + search it; editable pre-build in the workspace.
+- **GL accounts / dimensions:** already named — ensure name+ID search. No schema.
+- **Migration instruction (Marcelo 2026-07-17):** we are NOT doing version migrations yet — **edit the BASELINE migration directly** to add the batch Memo column (do not add a new V* file). Applying it needs a drop-schema + re-migrate (destructive) — sequence it with the test-data reset (#37), not mid-dev.
+- **Perf tripwire (task 41):** name/memo search uses indexed columns + `LIKE` contains, fine to ~100k rows. If any searchable list realistically exceeds ~100k, move THAT list's search from `LIKE '%…%'` to MJ full-text search (guides/FULL_TEXT_SEARCH_GUIDE). Don't pre-optimize.

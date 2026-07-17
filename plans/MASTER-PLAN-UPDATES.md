@@ -73,3 +73,17 @@ text.** Convention: `~/MJDev/shared-plans/repo-planning-system.md` §3.1.
   (record in the plan chain — action plans are ephemeral by design; forms design pass; agents-app
   pointer). Orders counterpart: orders UPD-11.
 - **Status:** Accepted.
+
+## UPD-4 — List idiom refinement: column-header filters + opt-in column sort; header card = time-span + presets only (2026-07-17)
+- **Amends:** the UI plans' §0 house grid idiom — refinement, intent unchanged. Mirror of orders
+  UPD-12 (one look across both apps).
+- **Change:** per-column filtering lives in the column headers (filter icon per column;
+  click-to-sort with per-column opt-in — AG Grid native config, and `ng-entity-viewer`/User Views
+  already carry column filtering where that surface is used); the filter card above each list
+  shrinks to the **time-span control + high-value preset chips**. Accounting preset suggestions
+  (design-pass inputs): JE lists — Unbatched/Pending · Manual awaiting approval · Batched · this
+  month; Batches — Open · Awaiting approval · Dispatch failed · closed-period held (the MOD-16
+  exceptions state); Accounts — Active only. Reference: the CDP/ATS grid
+  (github.com/BlueCypress/CDP) — review at the list/forms design pass.
+- **Why / source:** Marcelo 2026-07-17. Orders counterpart: UPD-12.
+- **Status:** Accepted — lands with the list screens + the design pass.
