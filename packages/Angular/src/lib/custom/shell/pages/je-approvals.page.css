@@ -77,9 +77,13 @@
   font-size: 11.5px;
   color: var(--mj-text-muted);
 }
-.jea__item .mj-btn {
+/* Positioning only — but it must not select .mj-btn (the CI gate forbids it, because an
+   override there silently forks MJ's button styling). The button is wrapped instead, and
+   the WRAPPER is positioned; mjButton keeps full ownership of the button's appearance. */
+.jea__item .jea__action {
   margin-left: auto;
   flex: none;
+  display: inline-flex;
 }
 
 .jea__empty,

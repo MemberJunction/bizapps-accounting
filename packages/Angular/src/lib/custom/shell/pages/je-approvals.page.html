@@ -46,9 +46,11 @@
                 · created {{ r.CreatedAt | date: 'mediumDate' }}
               </span>
             </span>
-            <button class="mj-btn mj-btn--primary" (click)="Review(r.ID)">
-              <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Review
-            </button>
+            <span class="jea__action">
+              <button class="mj-btn mj-btn--primary" (click)="Review(r.ID)">
+                <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Review
+              </button>
+            </span>
           </li>
         }
       </ul>
