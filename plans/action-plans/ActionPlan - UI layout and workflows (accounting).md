@@ -45,6 +45,14 @@ no premature abstraction). Build each shared thing ONCE.
 - **Slide-in = quick VIEW** (glance-and-go); modal = focused quick ACTION; page = full depth.
 - **Dashboard stats:** no on-demand aggregates — anything expensive (e.g. entries-per-day) is
   precomputed on a schedule and stored, or it doesn't ship.
+  **Stats rule (Marcelo 2026-07-17): never compute a stat client-side by pulling rows.** Every
+  dashboard count/sum/rate comes from a **stored-Query server-side aggregate** (`RunQuery` + SQL
+  `GROUP BY`/`SUM` — MJ exemplar: the Tags dashboard's `Tag Aggregates` query, added there
+  precisely to avoid shipping 17K+ rows to the browser) or from `RunQueryResult.TotalRowCount`
+  (server count without a row pull). Do NOT copy MJ's Actions/AI-analytics dashboards, which pull
+  whole log tables to `.filter().length` — that pattern is filed upstream as an anti-pattern
+  (`~/MJDev/MJ-UPSTREAM.md`). In-memory engine counts (`engine.X.length`) are fine for small
+  already-cached sets. A precomputed-stats endpoint is BACKLOG (plans/BACKLOG.md), not v1.
 - **Company scope chip:** app-owned, top of the rail (persisted per user via UserInfoEngine).
   Explorer's header has NO app-widget slot today — an "Explorer header widget slot" is flagged
   upstream (component inventory / Matt); if it lands, the chip moves up.

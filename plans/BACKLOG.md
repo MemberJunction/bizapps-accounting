@@ -29,6 +29,16 @@ Convention: `~/MJDev/shared-plans/repo-planning-system.md` §5.1. (The instance-
       Task 65b window (feature agent's WIP committed first — these files are DoD-coupled to schema
       work). (2026-07-15 UI-planning session, Marcelo + orchestrator.)
 
+- [ ] **Precomputed-stats backend (stats endpoint / snapshot tables)** — a scheduled server-side
+      stats layer so dashboards read precomputed numbers instead of running aggregates on demand.
+      Definite need per Marcelo (2026-07-17): "that's a definite thing we need to have, a stats
+      endpoint or back end" — but not developable yet; v1 dashboards ship on cheap stored-Query
+      aggregates + `TotalRowCount` per the §8.0 stats rule. Note: MJ has NO platform facility for
+      this (no snapshot tables, no stats resolver — verified 2026-07-17 survey), so this is ours to
+      build (candidate for bizapps-common or an MJ-base contribution). Revisit trigger: an
+      aggregate query measurably slow on real data volumes, or the dashboards phase (§8.6 step 6)
+      surfacing a stat that can't be served cheaply.
+
 - [ ] **Scheduled-entry approval-before-materialization (idea)** — extend the C.8 manual-JE
       approval gate to optionally cover scheduled entries before they materialize. Not in the
       current plan chain; parked as an idea from the 2026-07-15 mockup review (Marcelo). Revisit
