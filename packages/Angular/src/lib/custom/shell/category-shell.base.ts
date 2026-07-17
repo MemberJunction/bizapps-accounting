@@ -74,9 +74,20 @@ export abstract class CategoryShellBase extends BaseDashboard {
     this.GoToPage(item.id);
   }
 
-  public GoToPage(pageId: string): void {
-    if (this.ActivePageId === pageId) return;
+  /**
+   * A record id handed to the page being opened — how one page opens another ON a specific record
+   * (Catalog's "Edit" → the Product workshop for that product).
+   *
+   * Deliberately a plain string, not a route param: page switching inside a category is local state
+   * (Explorer resources are not routed components), so there is nowhere else to put it. Cleared on
+   * every switch so a later plain rail click can never resurrect a stale record.
+   */
+  public PageParam: string | null = null;
+
+  public GoToPage(pageId: string, param: string | null = null): void {
+    if (this.ActivePageId === pageId && this.PageParam === param) return;
     this.ActivePageId = pageId;
+    this.PageParam = param;
     this.cdr.markForCheck();
   }
 

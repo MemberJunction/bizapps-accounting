@@ -81,8 +81,18 @@
               <mj-stat-badge [Label]="r.Status" [Variant]="r.Status === 'Active' ? 'success' : 'default'"></mj-stat-badge>
             </td>
             <td>
-              <button type="button" mjButton Variant="flat" Size="sm" title="Show how this record resolves an account" (click)="ShowPreview(r)">
-                <i class="fa-solid fa-diagram-project" aria-hidden="true"></i> Why?
+              <!-- "Why?" told the reader nothing (Marcelo 2026-07-16: "I don't know what the y
+                   button does or why it's there... that button is weird"). The label now names the
+                   thing it opens, and the chevron says a panel is coming. -->
+              <button
+                type="button"
+                mjButton
+                Variant="flat"
+                Size="sm"
+                title="Open the resolution pattern — the product → category → company chain that picks this record's account"
+                (click)="ShowPreview(r)">
+                <i class="fa-solid fa-diagram-project" aria-hidden="true"></i> Resolution pattern
+                <i class="fa-solid fa-chevron-right al-affordance" aria-hidden="true"></i>
               </button>
             </td>
           </tr>

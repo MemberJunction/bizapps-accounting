@@ -12,3 +12,10 @@
 .al-row--active { background: color-mix(in srgb, var(--mj-brand-primary) 6%, transparent); }
 .al-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .al-empty { padding: 20px; text-align: center; color: var(--mj-text-muted); font-style: italic; }
+
+/* The chevron that says "this opens a panel" rather than making the reader click to find out. */
+.al-affordance {
+  font-size: 0.7em;
+  opacity: 0.55;
+  margin-left: 2px;
+}

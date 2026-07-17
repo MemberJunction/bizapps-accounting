@@ -26,6 +26,7 @@
 | 7 | [Q3](#q3) | Robert — JE-draft account contract (bless-as-built) | OPEN |
 | 8 | [Q9](#q9) | Amith — GLAccountLink role FK (bless-as-built) | OPEN |
 | 9 | [Q26](#q26) | Matt — Explorer header widget slot (feature ask) | OPEN |
+| 10 | [Q29](#q29) | Marcelo — no global GL-account pool; is the COA model as-built right? | OPEN |
 | 10 | [Q27](#q27) | Matt — `mj-left-nav` desktop icons-only collapse (feature ask) | OPEN |
 | 4b | [Q28](#q28) | Marcelo — batch/task transaction split + batch task pointer (MOD-14) | OPEN (no-CFO precheck RULED+built) |
 | 4c | [Q29](#q29) | Marcelo/Ian — regenerate: reset the existing task vs void+replace (principle ruled) | OPEN |
@@ -561,3 +562,43 @@ queryable surface for "which questions touch feature X".)*
 - **Additional context (for a verifying agent):** …
 - **Answer:** _(pending)_
 ```
+
+<a id="q29"></a>
+### Q29 · The chart of accounts has no global account pool — is Marcelo's "cede then hook to companies" model the intended one? — ask Marcelo (then Amith/Robert) — added 2026-07-16
+- **Status:** OPEN
+- **Requested reviewer:** Marcelo first (he raised it); escalate to Amith/Robert if the model must change
+- **Features:** A.1 (GLAccount + hierarchy), B.* (Account links)
+- **Proposed solution (PROCEEDING with this):** build the missing "all accounts" management page (GUI-11)
+  against the schema **as built** — accounts listed per company, filterable/searchable, with create/edit
+  and the ERP mapping (`ExternalSystem` + `ExternalAccountID`) exposed. If the answer is that a global
+  pool is genuinely wanted, that is a schema change (drop the NOT NULL on `GLAccount.CompanyID`, or add a
+  company-account join), NOT a UI change — so building the page now is not wasted either way.
+- **The question for Marcelo:** (1) Your stated model was *"our chart of accounts is backed by a list of
+  general ledger accounts that are ceded over from the general ledger, and then we will then use this
+  section to connect them into companies... a page where users can see all of the accounts from the
+  general ledger, and then they can hook them to the companies they need to hook them to."* The schema does
+  NOT work that way — is the schema wrong, or is the mental model? (2) If the schema is right, is a page
+  that shows every company's accounts in one searchable list (grouped/filterable by company) what you
+  actually wanted, rather than a pool-plus-hookup screen?
+- **Context to share (the schema facts, verified 2026-07-16):**
+  - `GLAccount.CompanyID` is **NOT NULL**, FK → `MJ: Companies`, with **`UNIQUE (CompanyID, Code)`** and the
+    column description *"Company that owns this account. UNIQUE (CompanyID, Code) — each company has its own
+    chart."* So an account is **born owned by exactly one company**. There is no unowned pool to hook up.
+  - MASTER-PLAN §4.1: *"The chart of accounts mirrors the ERP's COA, but BizAppsAccounting owns its copy so
+    JE line items have a stable reference."* — a **copy per company**, not a shared pool.
+  - Accounts originate from **`spSeedDefaultChartOfAccounts`** (flagged by `IsSystemSeeded`, which exists
+    precisely to *"distinguish platform-shipped accounts from deployment customizations"*) plus deployment
+    edits. They are not "ceded over" at runtime from a GL.
+  - The ERP direction is **outbound**: `ExternalSystem` (BusinessCentral | QuickBooks | NetSuite | …) +
+    `ExternalAccountID` map each MJ account **out** to the ERP's account. MJ's copy is the local record;
+    the ERP is the mirror target, not the upstream source of a pool.
+  - **`ParentGLAccountID`** (Marcelo: *"I'm not understanding what the parent account option is and where
+    those accounts are coming from"*): a self-FK **within the same company's chart** for hierarchical
+    rollup — *"Parent account for hierarchical rollup (NULL = top of chart)"*. E.g. `11200 Cash` as parent of
+    `11201 Cash — Operating`, so reports roll child balances into the parent. The dropdown's options are that
+    company's own existing accounts. It is NOT a cross-company or GL-pool link.
+- **Additional context (for a verifying agent):**
+  - Schema: `bizapps-accounting/packages/Entities/src/generated/entity_subclasses.ts` → `mjBizAppsAccountingGLAccountSchema`
+  - Plan: `plans/MASTER-PLAN.md` §4.1 (~line 188)
+  - Related: Q9 (GLAccountLink role FK), Q3 (JE-draft account contract)
+- **Answer:** _(pending)_
