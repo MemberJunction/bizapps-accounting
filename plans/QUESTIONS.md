@@ -1073,23 +1073,39 @@ queryable surface for "which questions touch feature X".)*
 - **Status:** OPEN — proceeding (with the lean below; schema/engine enforcement waits for the ruling)
 - **Requested reviewer:** Robert (+ Amith — it constrains his GLAccountLink polymorphic-mapping design, MOD-10)
 - **Features:** ACC-B.1/B.2 (GL mapping + resolution), ORD-C.1/E.2 (line company derivation), ORD-J.1
-- **Proposed solution (what we are implementing — Marcelo's lean, 2026-07-17): NO — disallow the
-  mismatch.** The ownership chain is: every product is owned by a company (`Product.CompanyID`);
-  an order line derives its company **from the product** (not from the resolved account — MOD-3
-  rev-2); therefore a product's connected accounts (linked directly OR reached through its
-  category tree) **should be owned by that same company**. Under this invariant the account
-  lookup can never silently move revenue across companies, and "which company does this line
-  belong to" is answerable without resolving accounts at all. **Categories** (the tree the walk
-  climbs) should correspondingly be **company-specific — or carry per-company routing** (one
-  category node holding a distinct account link per supported company), since a shared global
-  category with one account link cannot satisfy the invariant for products of multiple companies.
-- **The question:** (1) Confirm the invariant: product's linked accounts (direct + category-
-  reached + the company-default rung) must belong to the product's company — enforce at link
-  time (validation on GLAccountLink save) and/or at resolution time (typed error)? (2) Categories:
-  company-specific trees, or shared trees with per-company account routing on each node? Which
-  does the as-built GLAccountLink shape support cleanly? (3) If a real use case for cross-company
-  account borrowing exists (Robert/Amith may know one from Aptify/BC history), what is it — and
-  is it worth the complexity it reintroduces?
+- **Proposed solution (sharpened 2026-07-17 after the accounting analysis — COMPANY IS AN INPUT
+  TO RESOLUTION, so cross-company results are unrepresentable):** revenue belongs to the legal
+  entity that owns the product and its performance obligation — a PRODUCT fact, never a document
+  fact. So the resolver's question is "what account does this product resolve to **within
+  company X**", X = `Product.CompanyID` (required NOT NULL), known before resolution starts. The
+  company-scoped walk:
+  1. **Product-level link** — must point at an account in the product's company; the ONE place
+     link-save validation is needed (the link names both sides).
+  2. **Category level — SHARED taxonomy trees, PER-COMPANY routes:** a category node may carry N
+     account links per role, one per company it supports (e.g. a DefRev override = one DefRev
+     account link per supported company). Resolution picks the link whose account belongs to the
+     product's company; no route for that company at this node → keep climbing. **No schema
+     change** — the linked account already implies its company; add a uniqueness rule on
+     (target × role × company-of-account) for deterministic routing. A cross-company link is
+     thus not an error to police — it's a route that never applies to your product.
+  3. **Company default** — the PRODUCT-company's defaults (same-company by construction).
+  4. Miss → the loud tripwire (unchanged). A fallback may reduce SPECIFICITY, never change
+     COMPANY.
+  **Cross-company revenue flows, if ever genuinely wanted (agency/intercompany service
+  arrangements), are intercompany TRANSACTIONS** — each entity books its own JE, due-to/due-from
+  legs tie them (the Payments machinery, MOD-5) — never mapping-table routes.
+  **Side benefit (answers the deep-dive worry in part):** line company comes straight off the
+  product row, so JE splitting no longer depends on resolution at all, and resolution becomes a
+  cacheable (product × role × company) lookup.
+- **The question (the Robert sitting):** (1) Confirm the anchor — your Q2 answer resolved the
+  final rung against `Order.CompanyID`; on a multi-company order that books one company's product
+  revenue into another company's default account. Did you mean the single-company case, and do
+  you agree the anchor is the PRODUCT's company? (2) Confirm the company-scoped-walk model +
+  per-company category routes (vs company-specific category trees). (3) **Bundles:** a bundle
+  owned by A containing B's components — does fan-out book per COMPONENT's company (our lean:
+  yes, same rule one level down)? (4) Any real Aptify/BC case of intentional cross-company
+  account borrowing — and if so, does it belong in the intercompany path rather than mapping?
+  (5) Materialize line-company as a stored column (RLS/query efficiency — orders Q23 sub-q 3)?
 - **Context to share:** MOD-10 (role-based polymorphic mapping) · orders MOD-3 rev-2 (product-
   company derivation) · [Q31](#q31) (the related role-on-links question — same sitting).
 - **What motivates this now:** Marcelo flags the resolution path as a coming **performance +
