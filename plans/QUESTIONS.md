@@ -31,7 +31,7 @@
 | — | [Q30](#q30) | batches single-company — ANSWERED 2026-07-17 (yes; MOD-15/16) | ANSWERED |
 | 12 | [Q31](#q31) | Robert/Amith — should product/category links carry a ROLE? (premise updated: company now derives from PRODUCT) | OPEN ★HIGH |
 | 12b | [Q38](#q38) | Robert/Amith — cross-company mapping REFUSED; company-scoped resolution + per-company category routes (posting-group model) | OPEN — proceeding ★HIGH |
-| 12c | [Q39](#q39) | Jeremy (+Robert) — multi-company orders: seller of record + who holds the customer AR (dunning/statements gate) | OPEN — proceeding ★HIGH |
+| 12c | [Q39](#q39) | Jeremy (+Robert) — multi-company AR: MODEL (b) seller-of-record RULED (one invoice, owner holds AR); confirm + booking-time legs + tax edges | OPEN — proceeding ★HIGH |
 | 13 | [Q32](#q32) | Matt — tab strip's overflow-x silently enables overflow-y (real bug + fix) | OPEN |
 | 14 | [Q33](#q33) | Matt — dense/inline [meta] on mj-page-header (⚠ may be obsolete — check) | OPEN |
 | 15 | [Q34](#q34) | Matt — we duplicated mj-accordion-panel; is there a component catalogue? | OPEN |
@@ -1071,7 +1071,10 @@ queryable surface for "which questions touch feature X".)*
 
 <a id="q38"></a>
 ### Q38 · May a product's linked account (direct or via category) belong to a DIFFERENT company than the product? — review: Robert/Amith — added 2026-07-17
-- **Status:** OPEN — proceeding (with the lean below; schema/engine enforcement waits for the ruling)
+- **Status:** OPEN — proceeding; **structure LOCKED by Marcelo 2026-07-17 as UPD-5** (company-
+  scoped mapping, per-company category routes, enforcement tiers — building now). What remains
+  for Robert is the EDGES below (his Q2 rung intent · bundles · any genuine cross-company case ·
+  line-company materialization), not the structure.
 - **Requested reviewer:** Robert (+ Amith — it constrains his GLAccountLink polymorphic-mapping design, MOD-10)
 - **Features:** ACC-B.1/B.2 (GL mapping + resolution), ORD-C.1/E.2 (line company derivation), ORD-J.1
 - **Proposed solution (sharpened 2026-07-17 after the accounting analysis — COMPANY IS AN INPUT
@@ -1140,27 +1143,28 @@ queryable surface for "which questions touch feature X".)*
   fit — his Betty/Izzy sketch was the seller-of-record flavor)
 - **Features:** ORD-C.1/J.1 (multi-company orders), ORD-D.* (order-as-receivable), ACC-M.1
   (intercompany posture), ORD-F.7 (payment application)
-- **Proposed solution (the working model we are implementing):** In the Blue Cypress ecosystem,
-  companies routinely sell OTHER companies' products in one sales process — this is expected
-  normal, not an edge (Marcelo). Our model: the order is OWNED by one company
-  (`Order.CompanyID` — the document/customer-relationship owner); **revenue** always books to
-  each product's owning company (one JE per company, MOD-11/MOD-3 rev-2 — settled, not up for
-  review); **the customer-facing document** is one order/invoice presented by the owning
-  company; **AR as-built** books per company (each company's JE = Dr own-AR / Cr own-revenue,
-  AM-4), with **due-to/due-from legs generated at PAYMENT time** based on where the money
-  actually lands (MOD-5 — Payments generates all legs; e.g. customer pays Company A the full
-  amount → A owes B its share → Due-To/Due-From).
-- **The question for Jeremy:** (1) **Invoice presentation:** on a multi-company order, does the
-  customer see ONE invoice from the owning company (seller of record) covering all lines — or
-  should anything ever present per-company? (2) **AR ownership:** should each product-company
-  book its own receivable against the CUSTOMER (as-built model (a)) — meaning the customer
-  technically owes N companies — or should the OWNING company hold the entire customer AR
-  (model (b): B/C book Dr Due-from-A / Cr Revenue at booking; intercompany settles behind the
-  scenes)? This drives dunning, statements, and what "the customer's balance" means. (3) **When
-  do intercompany legs arise** — at booking (model b) or at payment application (as-built,
-  MOD-5)? (4) **Tax/nexus:** any implications of cross-company selling for sales-tax collection
-  (who collects/remits when A sells B's product)? (5) Any policy limits on WHICH companies may
-  sell whose products, or is it open within the ecosystem?
+- **Proposed solution (RULED by Marcelo 2026-07-17 — MODEL (b), seller-of-record):** In the Blue
+  Cypress ecosystem, companies routinely sell OTHER companies' products in one sales process —
+  expected normal, not an edge. **The working model we are implementing:** one company OWNS the
+  order (`Order.CompanyID`); lines are owned by their products' companies; **the customer AR is
+  owned by the SELLING (order-owning) company** — it presents the ONE invoice, receives the
+  payment, and does the collection. Rationale: the current real-world complaint — customers
+  buying from three ecosystem companies get three invoices; one seller-of-record fixes it.
+  **Revenue** still books to each product's company (MOD-11/MOD-3 rev-2 — fixed constraint).
+  **Booking consequence to confirm:** under (b) the intercompany position arises AT BOOKING —
+  the owning company books the full customer AR and a Due-To per sibling company (or the sibling
+  books Dr Due-from-owner / Cr Revenue) so every JE still balances within its company. ⚠ This
+  moves intercompany-leg creation from payment-time to booking-time, revising MOD-5's "Payments
+  generates ALL legs" posture — flagged, not yet rewritten (this question's confirmation is the
+  trigger).
+- **The question for Jeremy (confirm + edges):** (1) Confirm model (b): one invoice from the
+  seller of record; customer owes ONE company; siblings settle via due-to/due-from. (2) Confirm
+  the booking-time intercompany position (vs as-built payment-time legs) and any preference on
+  which side books the leg (owner Due-To vs sibling Due-From — or both, mirrored). (3)
+  **Tax/nexus:** who collects/remits sales tax when A sells B's product as seller of record?
+  (4) Any policy limits on WHICH companies may sell whose products? (5) Dunning/statements:
+  confirm they run entirely in the selling company's name (one balance per customer per selling
+  company).
 - **Context to share:** Robert's Betty/Izzy example (2026-07-14 meeting — "I posted $150,000 to
   Betty… $50 of that is due to another company"); MOD-5 (Payments generates all legs);
   MOD-11/MOD-12 (one JE per company).

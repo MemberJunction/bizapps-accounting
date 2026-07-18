@@ -668,3 +668,9 @@ Accounting-norm model: **transactions = number + memo/description; master data =
 - **GL accounts / dimensions:** already named — ensure name+ID search. No schema.
 - **Migration instruction (Marcelo 2026-07-17):** we are NOT doing version migrations yet — **edit the BASELINE migration directly** to add the batch Memo column (do not add a new V* file). Applying it needs a drop-schema + re-migrate (destructive) — sequence it with the test-data reset (#37), not mid-dev.
 - **Perf tripwire (task 41):** name/memo search uses indexed columns + `LIKE` contains, fine to ~100k rows. If any searchable list realistically exceeds ~100k, move THAT list's search from `LIKE '%…%'` to MJ full-text search (guides/FULL_TEXT_SEARCH_GUIDE). Don't pre-optimize.
+
+- [ ] **Navigation routing / back-button (UI)** — cross-links (product → category workspace, JE →
+      order, warning pop-outs) currently have no "go back" affordance; routing is manual. Consider
+      a history/back mechanism for in-app navigation — likely partly an MJ Explorer platform
+      concern (tab/navigation history — possible Matt ask alongside Q26/Q27) and partly app-shell
+      work (workspace-tab return links). (Marcelo, 2026-07-17.) Twin row in the orders BACKLOG.

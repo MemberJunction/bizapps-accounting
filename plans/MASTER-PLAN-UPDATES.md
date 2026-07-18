@@ -87,3 +87,39 @@ text.** Convention: `~/MJDev/shared-plans/repo-planning-system.md` §3.1.
   (github.com/BlueCypress/CDP) — review at the list/forms design pass.
 - **Why / source:** Marcelo 2026-07-17. Orders counterpart: UPD-12.
 - **Status:** Accepted — lands with the list screens + the design pass.
+
+## UPD-5 — GL mapping is COMPANY-SCOPED: shared taxonomy, per-company routes; same-company invariant + enforcement tiers (2026-07-17, LOCKED)
+- **Amends:** MOD-10 (role-based polymorphic mapping) — structural constraints added; the
+  role/link design's intent stands. Marcelo: "that's what we're gonna go for… lock that structure
+  into the mods and updates."
+- **Change (the locked structure):**
+  1. **Shared vocabulary, per-company accounts** — ONE category taxonomy across companies; a
+     category node carries **one account link per (role × company)** it supports. This is
+     Business Central's posting-group shape (shared product posting groups × per-company posting
+     setup) — present it to accountants in that vocabulary.
+  2. **Company is the resolver's INPUT** (`Product.CompanyID`, required NOT NULL — the product's
+     company is listed ON the product, the source of truth; **derivation-from-connected-account
+     is struck entirely** — confirmed NOT an accounting practice; ERPs carry company on the item).
+     Walk: product link → category tree (pick the route whose account belongs to the product's
+     company) → product-company default → loud tripwire. A fallback may reduce specificity,
+     never change company.
+  3. **Enforcement tiers (creation-time; invalid data impossible):**
+     **HARD-BLOCK** — product-level link to another company's account · **two accounts on one
+     category for the same (role × company)** (the no-ambiguity rule) · product without a
+     CompanyID. Enforced in the **engine** (typed errors, primary) **+ a DB validation trigger
+     as the raw-SQL floor** (house pattern; a plain unique index can't span the account join —
+     the deep dive weighs denormalizing `GLAccountLink.CompanyID` to make it one).
+     **WARN (incomplete, not invalid)** — assigning a product to a category with no route for
+     its company: legal; falls through to the company default; assignment-time warning **with a
+     pop-out link to the category workspace** (workspace tabs let the user fix the route and
+     return to the product). No eager per-product fall-through scanning in lists — resolution
+     display stays on-demand (cost).
+  4. **Cross-company revenue flows are intercompany TRANSACTIONS** (due-to/due-from machinery),
+     never mapping routes — the mapping layer refuses cross-company entirely.
+  5. **UI attention flagged:** the per-company route-management surface (category × role ×
+     company grid) needs real design — joins the forms/list design pass (UPD-3.5).
+- **Why / source:** Marcelo rulings 2026-07-17 (this session) + the Q38 accounting analysis
+  (posting-group precedent). Robert review rides [Q38](QUESTIONS.md#q38) (proceeding).
+  Orders counterpart: MOD-3 rev-2.
+- **Status:** Accepted — LOCKED as the working structure; Q38's open items are Robert's edges
+  (his Q2 rung intent, bundles, any real cross-company case), not the structure itself.
