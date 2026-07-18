@@ -39,7 +39,7 @@
 | 10 | [Q27](#q27) | Matt — `mj-left-nav` desktop icons-only collapse (feature ask) | OPEN |
 | 4b | [Q28](#q28) | Marcelo — batch/task transaction split + batch task pointer (MOD-14) | OPEN (no-CFO precheck RULED+built) |
 | 4c | [Q29](#q29) | Marcelo/Ian — regenerate: reset the existing task vs void+replace (principle ruled) | OPEN |
-| 11 | [T36](#t36) | Marcelo — deterministic test data (internal) | OPEN |
+| — | [T36](#t36) | test data — ANSWERED (per-run seeded company; accounting agent owns) | ANSWERED |
 
 *(Feature index removed 2026-07-16 per convention — each entry's **Features** field is the
 queryable surface for "which questions touch feature X".)*
@@ -314,7 +314,7 @@ queryable surface for "which questions touch feature X".)*
 
 <a id="t36"></a>
 ### T36 · Read-model API test tier: deterministic data on the lived-in demo instance — ask Marcelo — 2026-07-10 (reformatted 2026-07-16)
-- **Status:** OPEN (internal test-infra — not for team distribution)
+- **Status:** ANSWERED (Marcelo, 2026-07-18) — frozen.
 - **Who to ask:** Marcelo
 - **Features:** ACC-N.2 (test substrate)
 - **Background / the question:** The Tier-3 API harness `test-harnesses/api/readmodels-api.ts` asserts EXACT accounting
@@ -337,7 +337,10 @@ queryable surface for "which questions touch feature X".)*
   I DID fix a genuine harness bug (the customer-name lookup crashed on a null CustomerName — now null-safe).
 - Files to verify: test-harnesses/api/readmodels-api.ts; test-harnesses/server/seed-demo.ts;
   test-harnesses/playwright/lib/env.ts (COMPANY UUIDs).
-- Answer: _(pending)_
+- Answer: **Option (a) — the harness seeds its OWN per-run demo company and removes it after**
+  (never asserts against the shared CO1–CO3). Ownership: **the accounting agent** implements it
+  as part of the testing wave (extends the tier-2 self-bootstrap pattern to the API tier). Demo
+  companies stay untouched.
 
 <a id="q26"></a>
 ### Q26 · Explorer header widget slot — ask Matt — added 2026-07-16 (feature ask)
@@ -557,7 +560,10 @@ queryable surface for "which questions touch feature X".)*
 - Question: When Orders emits a JE dated into a **closed period**, does the engine **auto-route to the next open period** or **reject-and-alert**? Gates accounting's W4 + the engine error contract.
 - Context to share: Open question from the 2026-07-02 meeting; needed for the error-code contract.
 - Additional context: amendment open items; accounting W4 (adjusting-entry routing).
-- Answer: _(pending)_
+- Answer: **Option (a) — the harness seeds its OWN per-run demo company and removes it after**
+  (never asserts against the shared CO1–CO3). Ownership: **the accounting agent** implements it
+  as part of the testing wave (extends the tier-2 self-bootstrap pattern to the API tier). Demo
+  companies stay untouched.
 
 <a id="q13"></a>
 ### [ANSWERED] Q13 — Batch cutoff: oldest-forward only, or arbitrary time spans? — 2026-07-08
@@ -636,7 +642,10 @@ queryable surface for "which questions touch feature X".)*
 - Question: Robert (2026-07-09) wants a **closed-period guard at BOTH the order layer AND the journal-entry layer** ("sorry, June is closed") plus documented correcting-entry rules for extraordinary items. **But our current schema REMOVED `AccountingPeriod`** (migration `B202605281200`: *"AccountingPeriodID removed 2026-07-06 — the ERP owns periods"*), so MJ accounting has no local notion of a closed period to guard against. How do we reconcile? Options: (a) the ERP rejects the batch post-hoc (`Failed`); (b) reintroduce a lightweight per-company "posted-through / close date"; (c) a guard fed by ERP period state. Also define the exception/correcting-entry rules (→ Jeremy).
 - Context to share: Backdating orders is wanted (D-O5) and the ONLY constraint Robert cares about is the closed-period guard — so backdating + Q15 + this all hinge on the same reconciliation. Blocks any period-guard code. Also re-anchors the ScheduledJournalEntry materialization trigger (accounting CA-2).
 - Additional context: `bizapps-accounting/plans/2026-07-09-robert-meeting-decisions.md` D4; migration `B202605281200` lines 28 + 462; supersedes/overlaps Q8. NO period-guard code until this is answered.
-- Answer: _(pending)_
+- Answer: **Option (a) — the harness seeds its OWN per-run demo company and removes it after**
+  (never asserts against the shared CO1–CO3). Ownership: **the accounting agent** implements it
+  as part of the testing wave (extends the tier-2 self-bootstrap pattern to the API tier). Demo
+  companies stay untouched.
 
 <a id="q20"></a>
 ### [ANSWERED] Q20 — IntercompanyRelationship wiring ownership: Accounting or Payments/Orders? — 2026-07-13
