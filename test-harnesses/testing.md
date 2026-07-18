@@ -340,3 +340,6 @@ NEW `api/engine-op-client.ts` **8/8** — `Accounting.CreateJournalEntry` via **
 
 ### 2026-07-18 (correction 3) — batching-scenarios converted to the real client
 NEW `api/batching-scenarios-client.ts` **15/15** — multi-company sweep (JECount 3 / CompanyCount 2 / foots 1000/1000), due-to/from preserved through batching, reject→dispatch-refused, no-CFO hard-fail — all via **`BatchDispatchClient`** (BuildBatch/RecordDecision/GetApprovalState/DispatchBatch) + **`ReadModelsClient.IntercompanyFlow`**, replacing the hand-rolled `fetch` of `batching-scenarios-api.ts`. Warmup read after each seed-wave subprocess (stale-keep-alive rule). **Tier 3 accounting is now FULLY on the real client: readmodels 29 + batch-dispatch 20 + engine-op 8 + batching-scenarios 15 = 72 checks** (gap 3a CLOSED).
+
+### 2026-07-18 (correction 4) — TIER 4 dashboard breadth filled (gap 4a CLOSED)
+Accounting gui suite **9/9**: added `je-console` · `chart-of-accounts` (AllAccounts>0, every Code) · `company-setup` (profiles>0) · `batch-dispatch` (Batches array + StatusOptions; provides PageRefreshService) · `intercompany` (pinned CO2, Legs>0, every EntryType IntercompanyFlow) — all render real data through the real client, keystone-clean. Plus the earlier trial-balance-ar/revenue-tax (exact) + batch-status. Every data-driven accounting dashboard now has a tier-4 spec.
