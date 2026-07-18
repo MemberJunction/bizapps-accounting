@@ -307,3 +307,30 @@ cancelled it. **Fix the test when Marcelo rules — not before.**
 The three new MOD-14 tests are green: failing-gate-does-not-destroy-the-batch, real-gate-stamps-the-
 pointer (and the id resolves to a live Task), and the half-stamp being unrepresentable (raw-SQL
 bypass-proven).
+
+
+---
+### 2026-07-18 — full 5-tier roll-through (real-client tier 3 + new gui tier 4 + tier-5 new-nav)
+Instance accounting-engine-dev · MJAPI :4030 (RESTARTED this session — was stale, see below) · Explorer :4390.
+
+**Tier 1 (unit):** EngineBase **39/39** · CoreEntitiesServer **87/87** (re-run, green).
+**Tier 2 (server/tsx live DB):** after a test-data reset (swept 1 stray Pending JE via `_maint-post-stray`):
+block0 12 · block1 13 · block2 **28/28** (the old 27/28 MOD-14-vs-Q5 red is now green — reconciliation landed) ·
+block4 7 · block5 5 · block6 13 · multicompany 9 · engine-runtime 16 · scheduled-je 5. ALL GREEN.
+**Tier 3 — NOW DRIVES THE APP'S REAL CLIENT (was hand-rolled fetch):**
+- NEW `api/readmodels-client.ts` **29/29** — drives the real `ReadModelsClient` (exact values: TB foots 3920, AR 2300, aging buckets sum to TotalOpen, intercompany scoping).
+- NEW `api/batch-dispatch-client.ts` **20/20** — real `BatchDispatchClient`+`JournalEntryClient` (build netted 600, CFO gate, dispatch-refused-before-approval, dispatch→Posted, reversal).
+- NEW shared `api/_client-bootstrap.ts` (setupGraphQLClient; port from `mjdev ps`, key from `mjdev key`).
+- Verified on fresh MJAPI: engine-op 8/8 · batching-scenarios 15/15. (Old `readmodels-api.ts`/`batch-dispatch-api.ts` retained for the negatives the client swallows to [].)  **Tier-3 total: 65 acct checks.**
+- ENV LEARNINGS: (1) run the direct-SQL subprocess fixture BEFORE bootstrapping the GraphQL client (else stale keep-alive → ECONNRESET on the first mutation). (2) **MJAPI was STALE** (buildBatch atomic write failed via API while tier-2 in-process was green) → `mjdev restart accounting-engine-dev api` FIXED it. This also unblocked the pre-existing raw batch-dispatch-api.ts, which was failing identically.
+
+**Tier 4 — NEW mjdev gui harness (component → real GraphQL client → MJAPI → DB, AOT jsdom):**
+Installed via `mjdev app gui-test sync accounting-engine-dev bizapps-accounting`. Suite **4/4**:
+`example.dom.test` (smoke) · `batch-status.dom.test` (render) · NEW `trial-balance-ar.dom.test` (EXACT: foots 3920, nets 0, AR 11201 = 2300, open AR 2300) · NEW `revenue-tax.dom.test` (EXACT: defrev additions 300/releases 120→a period closes at 180; tax accrued 1500/remitted 350/outstanding 1150; PartiallyPaid 1000/650).
+Pattern: render INSIDE the `it` (scaffold beforeEach re-configures TestBed); pin `SelectedCompanyID` before `detectChanges`; assert the component MODEL for exact values (AG-Grid is external in jsdom → no cell paint); keystone clean.
+KNOWN (shelved, non-blocking): a `TypeError: undefined (reading 'push')` fires in the BaseDashboard lifecycle OUTSIDE loadData — Vitest prints it but does NOT fail the test; escapes all keystone channels + console/stdout interception. Keystone-gap + latent lifecycle item → for the MJDev agent (scaffold bootstrap provider).
+
+**Tier 5 (playwright, browser):** harness verified (system Chrome + magic-link auth + Explorer). NEW `specs/reports-nav.spec.ts` GREEN — Reports category rail → 'Trial balance (AR)' → renders, 0 console errors.
+NAV-DEBT (pre-existing): the committed specs navigate by RETIRED flat nav labels (UI wave → category rails); `dashboards.spec` fails 4 on old labels. Reconciliation pattern proven in reports-nav.spec: category is a visible link; **rail items are `getByRole('button',{name})`** (a hidden `.mj-left-nav__switcher-label` span with the same text defeats `getByText().first()`); interior pages have **no `mj-page-body`** (assert dashboard content). Remaining repoint = bounded mechanical follow-up (tier 4 now owns these dashboards' values).
+
+_All new files uncommitted (holding per instruction). Reasonable-default decisions logged in the response._
