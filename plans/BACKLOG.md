@@ -674,3 +674,61 @@ Accounting-norm model: **transactions = number + memo/description; master data =
       a history/back mechanism for in-app navigation — likely partly an MJ Explorer platform
       concern (tab/navigation history — possible Matt ask alongside Q26/Q27) and partly app-shell
       work (workspace-tab return links). (Marcelo, 2026-07-17.) Twin row in the orders BACKLOG.
+
+## Normalize the "memo/description" field name across entities (schema hygiene)
+- Source: Marcelo 2026-07-17. We keep JournalEntry.Description + Order.Description as-is (renaming existing
+  columns is high-ripple), but the free-text "memo" concept is now named inconsistently: JournalEntryBatch
+  uses `Memo`, JournalEntry + Order use `Description` (UI-labeled "Memo"). Consider a one-time normalization
+  pass so the schema term matches across all transaction entities (either all `Memo` or all `Description`)
+  — a clean isolated refactor for a feature slice (migration + codegen + ref updates), NOT now. Decide the
+  canonical term first; "Memo" matches accounting convention, "Description" is the current majority.
+
+## ═══ UI TASKS — deferred until AFTER the test harness (with decisions) ═══
+Filed 2026-07-17 so the task list can be cleared to testing-only. Pull these back when GUI resumes.
+
+### UI-1 · All Orders grid rework (#32) — top filters + per-column filter/sort, ON HOLD
+- DECIDED: filters ON TOP (not the left rail — after the mockup review). Adopt the ATS-style data-grid
+  pattern (ref BlueCypress/CDP): **per-column header filter buttons + per-column sortability**, plus a
+  **card-level preset/time-range filter strip above** the grid.
+- DECIDED (design doctrine): **active-filter CHIPS are REQUIRED** — applied filters render as removable
+  capsules above the table (the visible, one-click-clearable source of truth). This is non-optional; it is
+  what makes per-column filtering humane and solves the hidden-default-filter problem. Keep to THREE filter
+  surfaces only: column-header filters (power) · preset strip (common) · chip row (truth). No fourth.
+- DECIDED: table **rounded + floating** (not boxed in a card); **visible rest-state sort arrow** so users
+  can tell what's sortable.
+- MJ base grid (`mj-entity-data-grid`) status: per-column SORT works; global search works. Per-column
+  FILTERS: the `AllowColumnFilters` input + `GridColumnConfig.filterable` EXIST but are BYPASSED (hardcoded
+  `filter:false` in a PRIVATE method that re-runs on every rebuild). `unSortIcon` is a native AG option MJ
+  left off (clean to enable via defaultColDef in a subclass). → **Filed to Matt as bundled Q40** (trivial
+  2-3 line upstream fix). Overlay HELD: an app-side filter overlay is fragile (private builder + rebuild
+  clobber + no re-hook) — not worth the risk during testing; take filters from Matt's upstream fix instead.
+- Clean app-side parts we CAN do without Matt: unSortIcon affordance (defaultColDef subclass), the preset
+  strip, per-column sort, rounded/floating styling. Do these when GUI resumes.
+- Batch process specifically: Marcelo wants rich filters enabled there to learn what filtration/defaults/
+  stats matter — a testing-exploration goal, revisit once the grid pattern lands.
+
+### UI-2 · Master-data name+ID search sweep (remainder of #41/#47)
+- DONE this round: JE / orders / batches / payments / dispatch search now match name/number + full ID.
+- REMAINING: the master-data client-filter list pages — catalog, categories, dimensions, pricing, the type
+  pages (product-types/payment-terms-types/subscription-plans), erp-mapping, gl-mapping. gl-accounts already
+  searches ID. Each needs a quick check that its search predicate includes the record ID (ids are meaningless
+  to users → lead with human fields, keep id searchable in full). Mechanical, ~6-8 pages.
+
+### UI-3 · Naming/memo remainder (#47/#48)
+- DONE: memo surfaced (JE Description-as-memo, batch new Memo column, order Description-as-memo) in lists +
+  live tab captions + search; batch Memo migration applied (idempotent standalone; FOLD into baseline at the
+  testing-cycle reset). JE/Order keep `Description` (renaming existing columns deferred — see the
+  name-normalization backlog item).
+- REMAINING (#48): batch workspace Memo does NOT persist onto the built batch — thread it through
+  BatchWorkspaceClient.Build → Accounting.BuildBatch (BuildBatchInput.Memo) → BatchingEngine
+  (BuildBatchOptions.memo + a trailing memo param through buildBatchFromExplicitIds/buildBatchFromIds) →
+  queueBatchHeader (h.memo → batch.Memo). ~10 additive edits + build. Traced in full in task #48.
+
+### UI-4 · #30 GUI-BACKLOG leftovers (still deferred)
+- filters→dropdown (Marcelo may rework filters). "mobile collapse" REMOVED (moot — MJ rail is a native
+  mobile drawer). "chip-right-of-title" → popped to Q33 (Matt). Nothing here is active.
+
+### UI-5 · Baseline fold at testing-cycle reset
+- Fold the standalone batch-Memo migration into the baseline CREATE TABLE (remove the guarded ALTER,
+  normalize to plain convention) as part of the next test-data reset — NOT before (baseline checksum drift
+  would risk the working instance).
