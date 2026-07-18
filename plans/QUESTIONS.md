@@ -30,7 +30,8 @@
 | 10 | [Q36](#q36) | Marcelo — no global GL-account pool; is the COA model as-built right? | OPEN — was dup-numbered Q29, renumbered 2026-07-17 |
 | — | [Q30](#q30) | batches single-company — ANSWERED 2026-07-17 (yes; MOD-15/16) | ANSWERED |
 | 12 | [Q31](#q31) | Robert/Amith — should product/category links carry a ROLE? (premise updated: company now derives from PRODUCT) | OPEN ★HIGH |
-| 12b | [Q38](#q38) | Robert/Amith — may a product's linked account belong to a different company? (lean: NO; categories company-specific or per-company routed) | OPEN — proceeding ★HIGH |
+| 12b | [Q38](#q38) | Robert/Amith — cross-company mapping REFUSED; company-scoped resolution + per-company category routes (posting-group model) | OPEN — proceeding ★HIGH |
+| 12c | [Q39](#q39) | Jeremy (+Robert) — multi-company orders: seller of record + who holds the customer AR (dunning/statements gate) | OPEN — proceeding ★HIGH |
 | 13 | [Q32](#q32) | Matt — tab strip's overflow-x silently enables overflow-y (real bug + fix) | OPEN |
 | 14 | [Q33](#q33) | Matt — dense/inline [meta] on mj-page-header (⚠ may be obsolete — check) | OPEN |
 | 15 | [Q34](#q34) | Matt — we duplicated mj-accordion-panel; is there a component catalogue? | OPEN |
@@ -1097,6 +1098,22 @@ queryable surface for "which questions touch feature X".)*
   **Side benefit (answers the deep-dive worry in part):** line company comes straight off the
   product row, so JE splitting no longer depends on resolution at all, and resolution becomes a
   cacheable (product × role × company) lookup.
+  **Enforcement (Marcelo ruling 2026-07-17): invalid data must be impossible at CREATION time,
+  via the engine functions + DB design** — not only refused at resolution. Two tiers:
+  **HARD-BLOCK (invalid):** product-level link to another company's account · duplicate
+  (target × role × company) route · product without a `CompanyID` (NOT NULL). **WARN
+  (incomplete, not invalid):** assigning a Company-A product to a category with no route for A —
+  legal data (the category's other-company routes are valid for THEIR products); behavior is the
+  well-defined fall-through to A's company default; surface an assignment-time warning ("no
+  Revenue route for Company A here — resolution will use A's default") so accountants get the
+  signal without making categories unusable as catalog/navigation structure.
+  **Category model — the accountant-native frame (2026-07-17 analysis):** shared taxonomy with
+  per-company routes IS Business Central's posting-group model (shared product posting groups ×
+  per-company posting setup; NetSuite multi-subsidiary likewise) — the shape Jeremy's team
+  already lives in, and the one his own J1 config-standardization push points at. Duplicated
+  per-company category trees would be the alien alternative (N trees, re-categorization per
+  company, taxonomy drift, fragmented catalog UX). Present it to Jeremy as "posting groups."
+  
 - **The question (the Robert sitting):** (1) Confirm the anchor — your Q2 answer resolved the
   final rung against `Order.CompanyID`; on a multi-company order that books one company's product
   revenue into another company's default account. Did you mean the single-company case, and do
@@ -1113,4 +1130,46 @@ queryable surface for "which questions touch feature X".)*
   much of that complexity exists at all.
 - **Additional context (for a verifying agent):** `AccountingEngineBase.ResolveLinkedAccount`;
   `OrdersEngine.ResolveAccount`; GLAccountLink/GLAccountRole migration (B202605281200).
+- **Answer:** _(pending)_
+
+<a id="q39"></a>
+### Q39 · Multi-company orders: who is the seller of record, and who holds the customer AR? — review: Jeremy (+ Robert) — added 2026-07-17
+- **Status:** OPEN — proceeding (with the working model below; the AR-ownership half is the part
+  that most needs his ruling before dunning/statements build)
+- **Requested reviewer:** Jeremy (finance policy — invoice presentation, AR, tax); Robert (design
+  fit — his Betty/Izzy sketch was the seller-of-record flavor)
+- **Features:** ORD-C.1/J.1 (multi-company orders), ORD-D.* (order-as-receivable), ACC-M.1
+  (intercompany posture), ORD-F.7 (payment application)
+- **Proposed solution (the working model we are implementing):** In the Blue Cypress ecosystem,
+  companies routinely sell OTHER companies' products in one sales process — this is expected
+  normal, not an edge (Marcelo). Our model: the order is OWNED by one company
+  (`Order.CompanyID` — the document/customer-relationship owner); **revenue** always books to
+  each product's owning company (one JE per company, MOD-11/MOD-3 rev-2 — settled, not up for
+  review); **the customer-facing document** is one order/invoice presented by the owning
+  company; **AR as-built** books per company (each company's JE = Dr own-AR / Cr own-revenue,
+  AM-4), with **due-to/due-from legs generated at PAYMENT time** based on where the money
+  actually lands (MOD-5 — Payments generates all legs; e.g. customer pays Company A the full
+  amount → A owes B its share → Due-To/Due-From).
+- **The question for Jeremy:** (1) **Invoice presentation:** on a multi-company order, does the
+  customer see ONE invoice from the owning company (seller of record) covering all lines — or
+  should anything ever present per-company? (2) **AR ownership:** should each product-company
+  book its own receivable against the CUSTOMER (as-built model (a)) — meaning the customer
+  technically owes N companies — or should the OWNING company hold the entire customer AR
+  (model (b): B/C book Dr Due-from-A / Cr Revenue at booking; intercompany settles behind the
+  scenes)? This drives dunning, statements, and what "the customer's balance" means. (3) **When
+  do intercompany legs arise** — at booking (model b) or at payment application (as-built,
+  MOD-5)? (4) **Tax/nexus:** any implications of cross-company selling for sales-tax collection
+  (who collects/remits when A sells B's product)? (5) Any policy limits on WHICH companies may
+  sell whose products, or is it open within the ecosystem?
+- **Context to share:** Robert's Betty/Izzy example (2026-07-14 meeting — "I posted $150,000 to
+  Betty… $50 of that is due to another company"); MOD-5 (Payments generates all legs);
+  MOD-11/MOD-12 (one JE per company).
+- **What motivates this now:** MOD-3 rev-2 settles the revenue side; the AR/document side has
+  undiscussed edges exactly where the ecosystem's cross-selling makes them common. Dunning
+  (G.7/G.8) and statements (D.6) build on whichever AR model is chosen.
+- **Fixed constraints (not up for debate):** revenue books to the product's company (MOD-3
+  rev-2/Q38); JEs and batches are single-company (MOD-12/15); accounting is RECEIVE-only on
+  intercompany (MOD-5 — Payments owns leg generation).
+- **Additional context (for a verifying agent):** `orderJournalDraft.ts` (as-built per-company
+  Dr AR/Cr Revenue); accounting MOD-5; orders MOD-11.
 - **Answer:** _(pending)_
