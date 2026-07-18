@@ -228,7 +228,7 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
    * string with no parameter binding).
    */
   private searchFilter(): string | null {
-    return likeContains(['BatchNumber', 'ExternalBatchRef'], this.Search);
+    return likeContains(['BatchNumber', 'ExternalBatchRef', 'ID'], this.Search);
   }
 
   // ─── loads ───────────────────────────────────────────────────────────────────
