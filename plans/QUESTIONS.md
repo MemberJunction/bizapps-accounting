@@ -1173,3 +1173,39 @@ queryable surface for "which questions touch feature X".)*
 - **Additional context (for a verifying agent):** `orderJournalDraft.ts` (as-built per-company
   Dr AR/Cr Revenue); accounting MOD-5; orders MOD-11.
 - **Answer:** _(pending)_
+
+<a id="q40"></a>
+
+### Q40 · `mj-entity-data-grid` (AG Grid wrapper) — two small enhancements bundled: wire the existing per-column filter input, and add a rest-state sortable arrow — ask Matt — added 2026-07-17
+- **Status:** OPEN
+- **Who to ask:** Matt (MJ Angular / `@memberjunction/ng-entity-viewer`)
+- **Features:** cross-cutting (MJ base grid). Bundles two AG-Grid asks into one so it's approachable to read.
+- **Background (self-contained):** the accounting/orders "All X" lists render on `<mj-entity-data-grid>`.
+  We want the accountant-familiar grid pattern: **per-column header filters** + a **visible "this column
+  is sortable" arrow at rest**. Marcelo is fixed on this design — it absorbs a lot of filter clutter and
+  is instantly legible to an accountant who has seen that grid shape before. Research (code-confirmed):
+  1. **Per-column filters — the architecture is already there and merely bypassed.** `AllCommunityModule`
+     is registered (`entity-data-grid.component.ts:125`), so AG's Text/Number/Date filters are available;
+     the public `@Input() AllowColumnFilters` exists (487-493); and `GridColumnConfig.filterable` exists.
+     But `filter: false` is **hardcoded** in both `defaultColDef` (line 1363) and `mapColumnConfigToColDef`
+     (line 2337), and `_allowColumnFilters` is never read. So `[AllowColumnFilters]="true"` silently does
+     nothing. Un-bypassing looks like ~2-3 lines: honor `col.filterable !== false && this._allowColumnFilters`
+     (and optionally `floatingFilter: this._allowColumnFilters`) instead of the hardcoded `false`.
+  2. **Rest-state sortable arrow — a native AG option MJ has left off.** AG Grid's `unSortIcon: true`
+     shows the sort arrow even when a column isn't actively sorted (so users can tell what's sortable). It
+     is simply not set; adding `unSortIcon: true` to `defaultColDef` (line 1361) enables it globally (or
+     expose it as an input). Per-column **sorting** and global `FilterText` already work well.
+- **What we're intending to do (so you can steer the shape):** turn per-column filters on for our list
+  grids + show the rest-state sort arrow, keeping everything else the grid already does. We'd rather NOT
+  fork or overlay the grid — both changes look like tiny in-place enhancements to inputs/defaults that
+  already exist, fully backward-compatible (defaults unchanged unless a consumer opts in).
+- **The question for Matt:** (1) Will you wire `AllowColumnFilters` (+ honor `GridColumnConfig.filterable`)
+  to the AG `filter`/`floatingFilter` colDef props — is the hardcoded `filter:false` load-bearing for some
+  reason, or just an untidied default? (2) Add `unSortIcon` (as a default-on, or an opt-in input) for the
+  rest-state sortable affordance? (3) If you'd rather we do it app-side, is a **subclass/extension** of
+  `EntityDataGridComponent` the sanctioned way (it keeps your functionality + UI and stays easy to fold
+  back), or is there a cleaner extension seam?
+- **Context to share:** `packages/Angular/Generic/entity-viewer/src/lib/entity-data-grid/entity-data-grid.component.ts`
+  lines 125, 487-493, 1361-1367, 2329-2360; `models/grid-types.ts` `GridColumnConfig`. Also logged in
+  `~/MJDev/MJ-UPSTREAM.md` (the `AllowColumnFilters` dead-input entry).
+- **Answer:** _(pending)_
