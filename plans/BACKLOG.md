@@ -739,3 +739,14 @@ Filed 2026-07-17 so the task list can be cleared to testing-only. Pull these bac
 - Fold the standalone batch-Memo migration into the baseline CREATE TABLE (remove the guarded ALTER,
   normalize to plain convention) as part of the next test-data reset — NOT before (baseline checksum drift
   would risk the working instance).
+
+### UI-6 · Dashboard open items (from the GUI-4 rebuild, undecided)
+- **Stats exception-only?** Orchestrator recommendation (pending Marcelo): a header stat chip should be an
+  EXCEPTION indicator ("3 overdue"), not a status readout ("Nothing overdue") — a chip that says the same
+  thing 99% of the time goes unread. Applies to the shell header stats + the inline-`[meta]` deviation
+  (currently Orders-only; QUESTIONS Q33). Decide before rolling `[meta]` composition to accounting.
+- **Per-stat colour tone** — a one-line `Tone` field on `DashboardStat` would let stats carry
+  semantic colour (Credentials' blue/green/amber/red) instead of all brand-toned. Offered, not decided.
+- **Dashboards show MONEY, not just record counts** — sales-by-stage / unapplied-balance are `SUM…GROUP BY`
+  over the book (the heavy aggregate §0 rules out on-demand). Needs a precomputed read model before it can
+  ship — real work, not a UI tweak. Revisit with the reporting/read-model slice.

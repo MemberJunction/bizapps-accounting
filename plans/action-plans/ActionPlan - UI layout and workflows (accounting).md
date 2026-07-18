@@ -390,3 +390,19 @@ this wave (deferred).
    drill deferred — flag at build if that's wrong.**
 4. **§5 GLAccountLink manager priority:** ~~pull ahead of reports?~~ **RESOLVED in §8.6: yes** —
    Accounts category (incl. Account links) sequences before Reports.
+
+---
+## ⓘ Status annotation — 2026-07-17 (pre-testing filing)
+The §8 UI wave is **substantially BUILT + refined**. Shipped: all category shells + the JE, Batches,
+Accounts pages + cheap-stat dashboards, then multiple GUI-review refinement rounds (padding sweep, sticky
+table headers, nav-rail collapse, thinner header + page-aware refresh, workspace backing-cards, dashboard
+composition bands + New-X buttons, gl-accounts page, batch approvals/all-batches/dispatch). Naming/memo
+model **shipped**: `JournalEntryBatch.Memo` column (idempotent standalone migration, applied) + JE
+Description-as-memo surfaced in lists, live tab captions, and name/ID search.
+- **Deferred → `plans/BACKLOG.md` "UI TASKS — deferred until after the test harness":** the All-X grid
+  rework (#32, incl. chips-REQUIRED doctrine + per-column filter/sort — held pending Matt's Q40), the
+  master-data name+ID search sweep remainder, batch-memo build-path persistence (#48), and the baseline
+  fold of the batch-Memo migration (at the test-data reset).
+- **Deferred by Marcelo:** §8.5 Reports (parked); §8.4 Configuration (reduced to the already-solid company
+  page — roles deferred).
+- **NEXT:** pivot to the test harness (tiers 1–4). No further §8 UI work until after initial validation.

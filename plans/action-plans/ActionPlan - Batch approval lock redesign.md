@@ -219,3 +219,10 @@ These are accountant-judgment calls my §4 recommendations answer provisionally 
   same scope — enforce chronological order, warn, or allow? (Bites only in the filter era.)
 - **§4-E** backdating: confirm the closed-period date rule (order date in open period; clamp to entry date if the
   target period is closed) — and whether "posted-through per company" is the right close primitive.
+
+---
+## ⓘ Status annotation — 2026-07-17 (pre-testing filing)
+UNTOUCHED this session — the 2026-07-16/17 work was the UI wave + the naming/memo feature only. This plan's
+status stands as its header states; feature/schema execution resumes after test-harness validation. Any
+design decisions from this session live in the app BACKLOG "UI TASKS" section + the Q-stock (Q27–Q40); the
+UI-design-decision doc gap was filed to `~/MJDev/MJDEV-REQUESTS.md`.

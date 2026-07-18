@@ -202,3 +202,10 @@ AM-6 none).
   batch).
 - ⚠ **Known cost:** the existing 170/170 suite partially exercises periods/balances and WILL break with §4;
   tests get updated alongside the schema and every change reported — nothing quietly deleted.
+
+---
+## ⓘ Status annotation — 2026-07-17 (pre-testing filing)
+UNTOUCHED this session — the 2026-07-16/17 work was the UI wave + the naming/memo feature only. This plan's
+status stands as its header states; feature/schema execution resumes after test-harness validation. Any
+design decisions from this session live in the app BACKLOG "UI TASKS" section + the Q-stock (Q27–Q40); the
+UI-design-decision doc gap was filed to `~/MJDev/MJDEV-REQUESTS.md`.
