@@ -205,12 +205,11 @@ export class BatchDispatchDashboardComponent extends BaseDashboard implements On
     // BaseDashboard.ngOnInit() calls NotifyLoadComplete() after loadData() resolves.
   }
 
-  // Must match BaseDashboard's `async Refresh(): Promise<void>` — a `void` override is a type error
-  // (TS2416) and, worse, would hand the caller a completed promise while the load was still running,
-  // so anything awaiting Refresh() would resume too early.
-  public override async Refresh(): Promise<void> {
-    await this.loadData();
-  }
+  // NOTE: Refresh() is intentionally NOT overridden. BaseDashboard.Refresh() already does exactly
+  // `await this.loadData(); this.NotifyLoadComplete();` — the manual refresh button binds to that
+  // inherited method (see the OnRefresh wiring in ngOnInit). The previous override was redundant, it
+  // DROPPED NotifyLoadComplete(), and its sync signature drifted behind MJ core making Refresh async
+  // (TS2416, accounting-ng wouldn't build). The BypassCache-on-refresh behavior lives in loadData().
 
   // ─── filters + sort (template-facing) ──────────────────────────────────────
 
