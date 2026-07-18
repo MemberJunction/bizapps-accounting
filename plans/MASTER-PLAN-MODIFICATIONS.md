@@ -89,6 +89,10 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
 - **Status:** Accepted (engine behavior spec — rework lands with MOD-15/16).
 
 ## MOD-5 — Intercompany: per-company-pair Due-To/Due-From accounts; Payments generates ALL legs (2026-06-28/30)
+> ⚠ **Pending revision (2026-07-17):** orders [Q39](QUESTIONS.md#q39)'s ruled model (b)
+> (seller-of-record holds the customer AR) implies intercompany legs arise **at booking**, not at
+> payment — which would supersede "Payments generates ALL legs." Flagged, not yet rewritten;
+> Jeremy's Q39 confirmation is the trigger.
 - **Supersedes/refines:** BA-D17 (confirmed and sharpened) + the seed COA's centralized intercompany accounts.
 - **Change:** (a) NO centralized Due-To/Due-From accounts — **per-company-pair** accounts, 4 per pair
   (Amith veto of centralized). (b) **Payments** generates the intercompany balancing legs (Orders posts each

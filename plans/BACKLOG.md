@@ -7,6 +7,13 @@ Convention: `~/MJDev/shared-plans/repo-planning-system.md` §5.1. (The instance-
 
 ## Tasks
 
+- [ ] **Update action plan A2 (roles/RLS) from the Q22/Q24 answers** — Robert's process flag: the
+      plan's first-iteration scoping ("Admin/Approver unscoped; User optionally scoped") is
+      superseded by the per-company `UserCompanyRole` grant table + sibling role semantics
+      (Approver/Admin siblings; Global Admin unscoped, no approval). Update the plan FROM the
+      answers before the A2 co-design executes — don't reconcile two designs later. (2026-07-16
+      answers doc, process flag 0; deferred behind the testing wave per Marcelo 2026-07-17.)
+
 - [x] ~~**`IntercompanyRelationship` migration**~~ — **STRUCK 2026-07-13 (mis-promoted):** verification
       (Marcelo's catch) found the table was created-then-DROPPED and deliberately omitted from the
       baseline (2026-07-06 fold ruling: Payments owns due-to/due-from). Not accounting work — wiring

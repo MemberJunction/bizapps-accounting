@@ -7,7 +7,11 @@ Entry: `### [OPEN|RESOLVED] <title> — <date>` with source + status. Convention
 
 ---
 
-### [OPEN] FX + intercompany-leg generation AND per-pair wiring are currently UNOWNED — 2026-07-10 (upd. 2026-07-13)
+### [OPEN] FX + intercompany-leg generation AND per-pair wiring are currently UNOWNED — 2026-07-10 (upd. 2026-07-17)
+- ⚠ **2026-07-17:** Q39's ruled model (b) (seller-of-record AR) implies the intercompany position
+  arises **at BOOKING** (sibling Due-From / owner Due-To), which would move leg generation from
+  the unowned Payments-side slot into the ORDERS booking path — potentially resolving part of this
+  gap. Gated on Jeremy's Q39 confirmation; MOD-5 revision follows it.
 - MOD-5/MOD-6 moved intercompany balancing legs and all FX computation upstream to the Payments
   subsystem (Amith) — but Payments does not exist yet, so these responsibilities live nowhere.
   **2026-07-13 addition:** the per-pair Due-To/Due-From WIRING is also Payments' (the 2026-07-06
