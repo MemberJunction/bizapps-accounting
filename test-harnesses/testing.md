@@ -334,3 +334,6 @@ KNOWN (shelved, non-blocking): a `TypeError: undefined (reading 'push')` fires i
 NAV-DEBT (pre-existing): the committed specs navigate by RETIRED flat nav labels (UI wave → category rails); `dashboards.spec` fails 4 on old labels. Reconciliation pattern proven in reports-nav.spec: category is a visible link; **rail items are `getByRole('button',{name})`** (a hidden `.mj-left-nav__switcher-label` span with the same text defeats `getByText().first()`); interior pages have **no `mj-page-body`** (assert dashboard content). Remaining repoint = bounded mechanical follow-up (tier 4 now owns these dashboards' values).
 
 _All new files uncommitted (holding per instruction). Reasonable-default decisions logged in the response._
+
+### 2026-07-18 (correction 2) — engine-op tier-3 converted to the real client
+NEW `api/engine-op-client.ts` **8/8** — `Accounting.CreateJournalEntry` via **`provider.RouteOperation`** (the real remote-op call the browser makes), replacing the hand-rolled `ExecuteRemoteOperation` GraphQL of `engine-op-api.ts`. Same proofs: success + duplicate-debit merge (LineCount 2) + EntryNumber format; unbalanced → `Output.Success:false`/UNBALANCED (transport green); unknown key refused. Tier 3 accounting is now: readmodels-client 29 + batch-dispatch-client 20 + engine-op-client 8 on the REAL client. `batching-scenarios` convert = OPEN (gap 3a).
