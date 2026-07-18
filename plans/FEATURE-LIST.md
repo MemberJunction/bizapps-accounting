@@ -50,7 +50,7 @@
 | D.2 | Lock LEVELS: preliminary/reversible pre-approval → permanent at approval; reject UNLOCKS; open batch regenerates | Shipped | MOD-3 |
 | D.3 | Batch approval via bizapps-tasks (CFO gate — `TasksAppApprovalGate`); decider ENFORCED = Accounting Approver for the batch's company (any-linked-person = dev scaffolding only) | Shipped (gate) / Planned (approver enforcement — required before non-dev) | MOD-3; Q6 answer |
 | D.4 | Standard batch filter: empty start + inclusive end date, oldest-forward ascending | Shipped ◇ | MOD-8 (Robert 2026-07-14 semantics) |
-| D.5 | View-driven batch builder (arbitrary batches from an MJ User View, validated unbatched-only) | Planned | MOD-8; instance Task 33 |
+| D.5 | View-driven batch builder (arbitrary batches from an MJ User View, validated unbatched-only) | Shipped ◇ — 2026-07-18 audit: `buildBatchFromView` + op + test EXIST (ledger lagged the artifact) | MOD-8; audit 2026-07-18 |
 | D.6 | Batch dispatch to ERP (summary foots-to-control-totals trigger; freeze at Sent/Acknowledged) | Building ◇ (mock target; real BC connector later) | §8.4 |
 | D.7 | Global batch numbering sequence (batch sequence stays global; JE numbering is per-company) | Shipped — revisit with MOD-15 rework (per-company batch may re-key) | CH-4; A4 |
 | D.8 | Batch `PostingDate` — singular, accountant-set at build (default from the window); one aggregated JE per batch to the GL; must match between systems | Planned | MOD-16 (rev. — Amith model, Q37) |

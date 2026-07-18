@@ -1,4 +1,11 @@
 # Accounting Engine Plan — engine pair + `Accounting.CreateJournalEntry`
+
+> **AUDIT 2026-07-18 (orchestrator): COMPLETED — archived.** Engine base + pipeline + remote op
+> built and harness-proven (EngineBase 39/39, engine-runtime 16/16, op-client 8/8 over real
+> RouteOperation). Later MODs superseded three sub-decisions AFTER completion: per-company balance
+> → whole-entry (MOD-12), multi-company batch header (MOD-15 rework pending, roadmap V1.3), global
+> JE numbering → per-company (done, A4). No orphaned work. Statuses = artifact+test evidence;
+> org-level verification = roadmap V0.
 **bizapps-accounting · v1.2 (RECREATED 2026-07-06)**
 
 > **Status:** Active (core engine + remote op implemented and proven; remaining items live)

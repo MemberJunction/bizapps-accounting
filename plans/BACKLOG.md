@@ -7,6 +7,12 @@ Convention: `~/MJDev/shared-plans/repo-planning-system.md` §5.1. (The instance-
 
 ## Tasks
 
+- [ ] **PostgreSQL parity for the reworked batch-lock trigger** — the batch-status-aware
+      immutability trigger (reversible pre-approval lock) exists only in the SQL Server baseline;
+      `migrations-pg/` holds no counterpart. Surfaced by the 2026-07-18 action-plan audit (batch
+      approval lock redesign plan §9 — deferred to PG cutover, previously un-re-homed). Do at PG
+      cutover, alongside the MOD-15/16 batch rework's own PG migrations.
+
 - [ ] **Update action plan A2 (roles/RLS) from the Q22/Q24 answers** — Robert's process flag: the
       plan's first-iteration scoping ("Admin/Approver unscoped; User optionally scoped") is
       superseded by the per-company `UserCompanyRole` grant table + sibling role semantics

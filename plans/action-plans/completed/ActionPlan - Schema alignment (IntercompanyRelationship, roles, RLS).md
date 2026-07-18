@@ -1,5 +1,12 @@
 # Plan — Schema alignment: intercompany disposition, roles/RLS, trigger audit
 
+> **AUDIT 2026-07-18 (orchestrator): COMPLETED — archived.** A1 (intercompany disposition), A3
+> (enforcement audit → ERD appendix), A4 (JournalEntry.CompanyID + numbering + CFO FK) all built +
+> proven. A5 withdrawn with MOD-13. A2 (roles/permissions/RLS/approver enforcement/settings UI)
+> NOT built — fully re-homed: roadmap V1.6 (minimal UserCompanyRole + decider enforcement, required
+> pre-non-dev) + V4 (full RLS + screens) + BACKLOG (update A2 plan from Q22/Q24 answers before the
+> co-design). The Q22/Q24 answers supersede this plan's A2 scoping — do NOT execute A2 from here.
+
 > **Status:** ACTIVE (approved for execution — Marcelo review completed 2026-07-14) · **Created:** 2026-07-11 · **Revised:** 2026-07-13
 > (A1 re-scoped — see the ⚠ correction note in A1)
 > **Implements:** MASTER-PLAN-MODIFICATIONS MOD-5(c) (intercompany wiring is OUT of accounting — verify +

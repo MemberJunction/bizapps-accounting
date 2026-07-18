@@ -1,5 +1,12 @@
 # Plan — Feature build: batching UX-model, reporting pack, scheduled-JE seam
 
+> **AUDIT 2026-07-18 (orchestrator): COMPLETED — archived.** B1 batching done AND AHEAD of ledger
+> (view-driven builder B1.2 is BUILT — FEATURE-LIST D.5 corrected 2026-07-18); B2 = views green,
+> the 7 report pages DEFERRED (DEFERRALS row); B3 built-then-SUPERSEDED by MOD-17 (SJE op +
+> materializer are dead code pending the retirement migration — roadmap V1.5; their green tests
+> cover superseded code); B4 dormant by design (DEFERRALS). B1.5 dimension seeds await Jeremy
+> (BACKLOG row + Q19(7)). No orphaned work.
+
 > **Status:** ACTIVE (approved for execution — Marcelo review completed 2026-07-14) · **Created:** 2026-07-11
 > **Implements:** MOD-8 (view-driven batching + oldest-forward default), the BACKLOG "Jeremy reporting pack"
 > + "Batch dimension strategy", MASTER-PLAN §10 as overlaid, and the CA-2-gated materialization seam (§4.9 /

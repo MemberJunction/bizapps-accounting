@@ -1,5 +1,11 @@
 # Plan — Batch approval lock redesign (reject-unlock + regenerate)
 
+> **AUDIT 2026-07-18 (orchestrator): COMPLETED — archived.** Reversible-lock trigger, cancel/
+> reject-unlock, regenerate all built + proven (block2 28/28 incl. MOD-14 split). Not done →
+> re-homed: PG trigger parity (BACKLOG, added 2026-07-18) · GAAP confirmations ride Q19(3)/(4) ·
+> candidate-filter model superseded by the built view-driven builder. Tier-5 specs carry nav-debt
+> from the UI wave (testing.md). Batch shape itself now reworks under MOD-15/16 (roadmap V1.3/V1.4).
+
 > **Status:** Active · **Created:** 2026-07-08
 > **Implements:** MASTER-PLAN-MODIFICATIONS MOD-3 (supersedes MASTER-PLAN §8 / BA-D7 / BA-D16)
 > **Sources:** meetings/2026-07-08-robert-meeting-decisions.md (D1/D2/D4) + the 07-08 transcript
