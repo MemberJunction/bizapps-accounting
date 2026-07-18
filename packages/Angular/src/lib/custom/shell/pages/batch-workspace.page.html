@@ -66,6 +66,22 @@
     </p>
 
     @if (Draft) {
+      <!-- Memo: an OPTIONAL human label for the batch (JournalEntryBatch.Memo). Not identity —
+           BatchNumber is — but it names the tab as you type and makes the batch findable later.
+           Editable pre-build; frozen once built (like every other criterion). -->
+      <label class="bw-field">
+        <span>Memo</span>
+        <input
+          type="text"
+          class="mj-input"
+          maxlength="500"
+          placeholder="e.g. June month-end AR"
+          [(ngModel)]="Draft.Memo"
+          (ngModelChange)="OnMemoChanged()"
+          [disabled]="IsBuilt" />
+        <span class="bw-hint">Optional — label this batch so you can find it later. The batch number stays its identity.</span>
+      </label>
+
       <label class="bw-field">
         <span>Include unbatched through</span>
         <input

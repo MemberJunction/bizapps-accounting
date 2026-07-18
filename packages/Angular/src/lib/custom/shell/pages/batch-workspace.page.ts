@@ -18,6 +18,9 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 /** One workspace tab's session state — the draft the operator is composing. */
 interface BatchDraft {
   Criteria: BatchCriteria;
+  /** Optional free-text label (JournalEntryBatch.Memo) — "what was this batch for". NOT identity
+   *  (BatchNumber is); purely for findability. Editable pre-build, and it drives the tab caption. */
+  Memo: string;
   /** Ids the operator has UN-ticked. Kept as the exclusion set (not the inclusion set) so newly
    *  appearing candidates default to INCLUDED, which is what an oldest-forward sweep means. */
   ExcludedIDs: string[];
@@ -103,9 +106,42 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
       Label: 'New batch (draft)',
       Icon: 'fa-solid fa-pen-ruler',
       Status: 'draft',
-      State: { Criteria: this.defaultCriteria(), ExcludedIDs: [] },
+      State: { Criteria: this.defaultCriteria(), ExcludedIDs: [], Memo: '' },
     });
     void this.refreshPreview();
+  }
+
+  // ─── memo (the tab caption / findability label) ──────────────────────────────
+
+  /**
+   * The tab caption. Human fields lead: a typed memo IS the caption; else the built batch number;
+   * else a plain "New batch". BatchNumber stays the batch's identity — the memo only makes the tab
+   * (and later the All-Batches list) findable by a phrase the operator remembers.
+   */
+  private batchTabLabel(d: BatchDraft): string {
+    const memo = d.Memo?.trim();
+    if (memo) return memo;
+    return d.BuiltBatchNumber?.trim() || 'New batch';
+  }
+
+  /**
+   * Drive the active tab's caption from the memo as it is typed. The tab store owns the caption; this
+   * is the ONE place it is written (mirrors the order editor's renameActiveTab — no second path).
+   * The store leaks the live tab object through ActiveTab, so mutating Label here is what the strip
+   * re-renders (Tabs returns a fresh array each read, so OnPush picks the new labels up).
+   */
+  private renameActiveTab(label: string): void {
+    const tab = this.tabs.ActiveTab;
+    if (tab) tab.Label = label;
+  }
+
+  /** Memo edited → persist onto the draft and re-caption the tab reactively. */
+  public OnMemoChanged(): void {
+    const d = this.Draft;
+    if (!d) return;
+    if (this.tabs.ActiveId) this.tabs.UpdateState(this.tabs.ActiveId, d);
+    this.renameActiveTab(this.batchTabLabel(d));
+    this.cdr.markForCheck();
   }
 
   public SelectTab(id: string): void {
@@ -301,6 +337,8 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
       if (this.tabs.ActiveId) {
         this.tabs.UpdateState(this.tabs.ActiveId, d, false);
         this.tabs.SetStatus(this.tabs.ActiveId, 'complete');
+        // Keep a memo caption if the operator gave one; otherwise fall to the now-known batch number.
+        this.renameActiveTab(this.batchTabLabel(d));
       }
       this.ActionMessage = res.ApprovalTaskRaised
         ? `Built batch ${d.BuiltBatchNumber} — sent for CFO approval.`

@@ -105,11 +105,13 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
   public openNewDraft(): void {
     this.tabs.Open({
       Id: `je-draft-${++this.keySeq}-${Date.now()}`,
-      Label: 'New entry (draft)',
+      Label: 'New JE',
       Icon: 'fa-solid fa-pen-ruler',
       Status: 'draft',
       State: this.defaultDraft(),
     });
+    // Derive from the (empty) draft so the caption rule has a single source of truth from tab one.
+    this.renameActiveTab(this.jeTabLabel());
     this.clearMessages();
     this.cdr.markForCheck();
   }
@@ -242,9 +244,36 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
   /** Any edit invalidates the server's verdict on the previous shape. */
   public touch(): void {
     if (this.tabs.ActiveId && this.Draft) this.tabs.UpdateState(this.tabs.ActiveId, this.Draft);
+    // The memo lives in `d.Description` and its input calls `touch()` on every keystroke, so driving
+    // the caption here makes it track the memo LIVE as the user types (renameActiveTab is cheap — a
+    // single string assignment on the active tab).
+    this.renameActiveTab(this.jeTabLabel());
     this.LineErrors.clear();
     this.DraftErrors = [];
     this.cdr.markForCheck();
+  }
+
+  /**
+   * The active tab's caption, derived from the memo (Marcelo 2026-07-17: the memo is the human label
+   * people scan by). The memo is the JE's free-text meaning — the `Description` field on the draft
+   * (there is no `Memo` column on the Journal Entry entity). When it is empty we fall back to the
+   * created entry NUMBER, then to "New JE" for a brand-new untyped draft.
+   */
+  private jeTabLabel(): string {
+    const d = this.Draft;
+    const memo = d?.Description?.trim();
+    if (memo) return memo;
+    return d?.CreatedEntryNumber || 'New JE';
+  }
+
+  /**
+   * Write the active tab's caption — the ONE place the tab label is set, matching the order editor's
+   * `renameActiveTab`. Mutating `tab.Label` in place is what the strip re-reads on the next OnPush
+   * pass (its `Tabs` getter returns a fresh copy). The icon is left untouched.
+   */
+  private renameActiveTab(label: string): void {
+    const tab = this.tabs.ActiveTab;
+    if (tab) tab.Label = label;
   }
 
   // ─── balance strip ─────────────────────────────────────────────────────────
@@ -297,6 +326,9 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
         this.tabs.UpdateState(this.tabs.ActiveId, d, false);
         this.tabs.SetStatus(this.tabs.ActiveId, 'complete');
       }
+      // A memo-less entry now falls back to its freshly-minted number (touch() no longer fires on a
+      // locked receipt); a memo'd entry keeps its memo caption.
+      this.renameActiveTab(this.jeTabLabel());
       this.ActionMessage = `Created entry ${d.CreatedEntryNumber} — it is Pending and joins the unbatched pool.`;
       this.ActionIsError = false;
     } catch (e) {

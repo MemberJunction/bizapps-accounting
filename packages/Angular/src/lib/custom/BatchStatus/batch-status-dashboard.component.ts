@@ -35,6 +35,8 @@ export interface PreviewEntry { ID: string; EntryNumber: string; EffectiveDate: 
 export interface BatchRow {
   ID: string;
   BatchNumber: string;
+  /** Optional free-text label — "what was this batch for". Findable; not identity (BatchNumber is). */
+  Memo: string | null;
   Status: BatchStatus;
   TargetSystem: TargetSystem;
   TotalEntries: number;
@@ -92,6 +94,8 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
   public StatusOptions: BatchStatus[] = [];
   public TargetOptions: TargetSystem[] = [];
 
+  /** Free-text search over the human/id fields (Memo + BatchNumber + full ID). Empty = no filter. */
+  public SearchText = '';
   /** Filters. Empty status set = show all; null company/target = "All". */
   public SelectedStatuses = new Set<BatchStatus>();
   public SelectedCompanyID: string | null = null;
@@ -152,6 +156,7 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
   public ShowAllStatuses(): void { this.SelectedStatuses.clear(); this.cdr.markForCheck(); }
   public get AllStatusesShown(): boolean { return this.SelectedStatuses.size === 0; }
 
+  public OnSearchChange(v: string): void { this.SearchText = v; this.cdr.markForCheck(); }
   public OnCompanyChange(companyID: string): void { this.SelectedCompanyID = companyID || null; this.cdr.markForCheck(); }
   public OnTargetChange(target: string): void { this.SelectedTarget = (target as TargetSystem) || null; this.cdr.markForCheck(); }
   public OnBuildTargetChange(target: string): void { this.BuildTarget = target as TargetSystem; this.cdr.markForCheck(); }
@@ -208,8 +213,21 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
       (this.SelectedStatuses.size === 0 || this.SelectedStatuses.has(b.Status)) &&
       (!this.SelectedCompanyID || b.CompanyIDs.includes(this.SelectedCompanyID)) &&
       (!this.SelectedTarget || b.TargetSystem === this.SelectedTarget) &&
+      this.matchesSearch(b) &&
       this.inSpan(b));
     return this.sortRows(rows);
+  }
+
+  /**
+   * Text search — lead with the human fields (Memo, then BatchNumber), and keep the full ID
+   * searchable (ids are meaningless to users, but pasteable in full). Substring, case-insensitive.
+   */
+  private matchesSearch(b: BatchRow): boolean {
+    const q = this.SearchText.trim().toLowerCase();
+    if (!q) return true;
+    return (b.Memo ?? '').toLowerCase().includes(q)
+      || b.BatchNumber.toLowerCase().includes(q)
+      || b.ID.toLowerCase().includes(q);
   }
 
   /** Time-span filter: the batch's inferred [Start,End] range must overlap the [From,To] input (inclusive). */
@@ -335,13 +353,13 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
   }
 
   private toRow(
-    b: { ID: string; BatchNumber: string; Status: BatchStatus; TargetSystem: TargetSystem; TotalEntries: number; TotalDebits: number; TotalCredits: number; ExternalBatchRef: string | null; BatchedAt: Date | null },
+    b: { ID: string; BatchNumber: string; Memo: string | null; Status: BatchStatus; TargetSystem: TargetSystem; TotalEntries: number; TotalDebits: number; TotalCredits: number; ExternalBatchRef: string | null; BatchedAt: Date | null },
     jes: JEHeader[], companyIDs: string[],
   ): BatchRow {
     const dates = jes.map(j => j.EffectiveDate).filter((d): d is Date => d instanceof Date);
     const times = dates.map(d => d.getTime());
     return {
-      ID: b.ID, BatchNumber: b.BatchNumber, Status: b.Status, TargetSystem: b.TargetSystem,
+      ID: b.ID, BatchNumber: b.BatchNumber, Memo: b.Memo, Status: b.Status, TargetSystem: b.TargetSystem,
       TotalEntries: b.TotalEntries, TotalDebits: b.TotalDebits, TotalCredits: b.TotalCredits,
       ExternalBatchRef: b.ExternalBatchRef, BatchedAt: b.BatchedAt,
       StartDate: times.length ? new Date(Math.min(...times)) : null,
@@ -361,11 +379,11 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
       .sort((a, b) => a.Name.localeCompare(b.Name));
   }
 
-  private async loadBatches(): Promise<Array<{ ID: string; BatchNumber: string; Status: BatchStatus; TargetSystem: TargetSystem; TotalEntries: number; TotalDebits: number; TotalCredits: number; ExternalBatchRef: string | null; BatchedAt: Date | null }>> {
+  private async loadBatches(): Promise<Array<{ ID: string; BatchNumber: string; Memo: string | null; Status: BatchStatus; TargetSystem: TargetSystem; TotalEntries: number; TotalDebits: number; TotalCredits: number; ExternalBatchRef: string | null; BatchedAt: Date | null }>> {
     const res = await this.runView().RunView<mjBizAppsAccountingJournalEntryBatchEntity>(
       { EntityName: BATCH_ENTITY, OrderBy: 'BatchedAt DESC', ResultType: 'simple' }, this.contextUser());
     return (res.Results ?? []).map(b => ({
-      ID: b.ID, BatchNumber: b.BatchNumber, Status: b.Status, TargetSystem: b.TargetSystem,
+      ID: b.ID, BatchNumber: b.BatchNumber, Memo: b.Memo, Status: b.Status, TargetSystem: b.TargetSystem,
       TotalEntries: b.TotalEntries, TotalDebits: b.TotalDebits, TotalCredits: b.TotalCredits,
       ExternalBatchRef: b.ExternalBatchRef, BatchedAt: b.BatchedAt ? new Date(b.BatchedAt) : null,
     }));

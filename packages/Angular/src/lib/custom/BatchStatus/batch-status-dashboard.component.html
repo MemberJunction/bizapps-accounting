@@ -19,6 +19,11 @@
 
     <div toolbar>
       <div class="bs-filters">
+        <label class="bs-field">
+          <span class="bs-field__label">Search</span>
+          <input type="search" class="mj-input" placeholder="Memo, batch #, or ID"
+            [value]="SearchText" (input)="OnSearchChange($any($event.target).value)" />
+        </label>
         <div class="bs-toggles">
           <button mjButton size="sm" [variant]="StatusVariant(AllStatusesShown)" (click)="ShowAllStatuses()">All</button>
           @for (s of StatusOptions; track s) {
@@ -101,6 +106,7 @@
             <col class="bs-col-credit" />
             <col class="bs-col-batched" />
             <col class="bs-col-ref" />
+            <col class="bs-col-memo" />
           </colgroup>
           <thead>
             <tr>
@@ -115,6 +121,7 @@
               <th class="bs-th--sort bs-num" (click)="SortBy('TotalCredits')">Credits <i [class]="SortIcon('TotalCredits')"></i></th>
               <th class="bs-th--sort" (click)="SortBy('BatchedAt')">Batched <i [class]="SortIcon('BatchedAt')"></i></th>
               <th>ERP Ref</th>
+              <th>Memo</th>
             </tr>
           </thead>
           <tbody>
@@ -131,10 +138,11 @@
                 <td class="bs-num">{{ row.TotalCredits | number:'1.2-2' }}</td>
                 <td>{{ row.BatchedAt ? (row.BatchedAt | date:'yyyy-MM-dd HH:mm') : '—' }}</td>
                 <td class="bs-ref">{{ row.ExternalBatchRef ?? '—' }}</td>
+                <td class="bs-memo" [title]="row.Memo ?? ''">{{ row.Memo || '—' }}</td>
               </tr>
               @if (row.Expanded) {
                 <tr class="bs-detail-row">
-                  <td class="bs-detail-cell" colspan="11">
+                  <td class="bs-detail-cell" colspan="12">
                     <div class="bs-detail">
                       @if (row.DetailLoading) {
                         <mj-loading text="Loading entries…" size="small"></mj-loading>
@@ -158,6 +166,7 @@
                               <col class="bs-col-credit" />
                               <col class="bs-col-batched" />
                               <col class="bs-col-ref" />
+                              <col class="bs-col-memo" />
                             </colgroup>
                             <thead>
                               <tr>
@@ -165,7 +174,7 @@
                                 <th colspan="3">Account</th>
                                 <th class="bs-num">Debit</th>
                                 <th class="bs-num">Credit</th>
-                                <th class="bs-je-spacer" colspan="2"></th>
+                                <th class="bs-je-spacer" colspan="3"></th>
                               </tr>
                             </thead>
                             <tbody>
@@ -175,7 +184,7 @@
                                   <td colspan="3">{{ line.AccountName }}@if (line.AccountCode) {<span class="bs-detail-code"> · {{ line.AccountCode }}</span>}</td>
                                   <td class="bs-num">{{ line.Debit ? (line.Debit | number:'1.2-2') : '' }}</td>
                                   <td class="bs-num">{{ line.Credit ? (line.Credit | number:'1.2-2') : '' }}</td>
-                                  <td class="bs-je-spacer" colspan="2"></td>
+                                  <td class="bs-je-spacer" colspan="3"></td>
                                 </tr>
                               }
                             </tbody>
@@ -184,7 +193,7 @@
                                 <td colspan="6">Totals</td>
                                 <td class="bs-num">{{ row.Detail.TotalDebits | number:'1.2-2' }}</td>
                                 <td class="bs-num">{{ row.Detail.TotalCredits | number:'1.2-2' }}</td>
-                                <td class="bs-je-spacer" colspan="2"></td>
+                                <td class="bs-je-spacer" colspan="3"></td>
                               </tr>
                             </tfoot>
                           </table>

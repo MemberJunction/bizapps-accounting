@@ -130,7 +130,11 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
     { field: 'EffectiveDate', title: 'Effective', width: 120, sortable: true },
     { field: 'Status', title: 'Status', width: 110, sortable: true },
     { field: 'EntryType', title: 'Type', width: 100, sortable: true },
-    { field: 'Description', title: 'Description', width: 'auto', sortable: false },
+    // The JE's free-text meaning. The field is `Description` (there is no `Memo` column on the
+    // Journal Entry entity), but the ratified naming model (Marcelo 2026-07-17) calls it the MEMO —
+    // the human label people scan by — so the column is TITLED "Memo". `width: 'auto'` gives it the
+    // most room; the grid ellipsises overflow so a long memo stays on one readable line.
+    { field: 'Description', title: 'Memo', width: 'auto', sortable: false },
     { field: 'CompanyID', title: 'Company', width: 160, visible: false, sortable: true },
     { field: 'BatchID', title: 'Batch', width: 140, visible: false, sortable: true },
   ];
@@ -208,11 +212,15 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Server-side search over the entry number + description. Escaped via the shared seam — this text
-   * is composed into a SQL predicate string (RunView.ExtraFilter has no parameter binding).
+   * Server-side search over the HUMAN fields first — the MEMO (`Description`) and the entry NUMBER —
+   * plus the full record ID. Marcelo 2026-07-17: the database IDs are meaningless to users, so the
+   * memo and number lead; but the id stays searchable in full so a support/paste lookup still works.
+   * `likeContains` matches `ID` fine — SQL Server implicitly converts the uniqueidentifier for LIKE.
+   * Escaped via the shared seam — this text is composed into a SQL predicate string (RunView's
+   * ExtraFilter has no parameter binding).
    */
   private searchFilter(): string | null {
-    return likeContains(['EntryNumber', 'Description'], this.Search);
+    return likeContains(['Description', 'EntryNumber', 'ID'], this.Search);
   }
 
   // ─── overview stats (header [meta]) ──────────────────────────────────────────

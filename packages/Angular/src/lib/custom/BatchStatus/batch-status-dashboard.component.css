@@ -55,7 +55,9 @@
 .bs-col-debit { width: 116px; }
 .bs-col-credit { width: 116px; }
 .bs-col-batched { width: 132px; }
-/* .bs-col-ref intentionally has NO width — it takes the remainder. */
+.bs-col-ref { width: 120px; }
+/* Memo is the trailing human label — it takes the remainder; the row's own overflow:hidden +
+   text-overflow:ellipsis (below) truncates a long memo, and the cell title shows it in full. */
 .bs-table thead th {
   position: sticky; top: 0; z-index: 3;
   text-align: left; padding: 8px 10px; white-space: nowrap;
