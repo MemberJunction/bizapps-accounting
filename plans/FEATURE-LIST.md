@@ -1,7 +1,7 @@
 # FEATURE-LIST — bizapps-accounting
 
-> Derived from the plan chain @ `1ae963a` (2026-07-17) · MODs through MOD-18 (13 withdrawn, 11 superseded by 17) · UPDs through UPD-5
-> Staleness check: git log abf4b09.. -- plans/MASTER-PLAN.md plans/MASTER-PLAN-MODIFICATIONS.md plans/MASTER-PLAN-UPDATES.md
+> Derived from the plan chain @ `6911d95` (2026-07-17) · MODs through MOD-18 (13 withdrawn, 11 superseded by 17) · UPDs through UPD-5
+> Staleness check: git log 6911d95.. -- plans/MASTER-PLAN.md plans/MASTER-PLAN-MODIFICATIONS.md plans/MASTER-PLAN-UPDATES.md
 >
 > DERIVED document — the plan chain (MASTER-PLAN + MODs + UPDs) is the authority; when they disagree,
 > fix this file. Convention: `~/MJDev/shared-plans/feature-list-amendment.md` (PLANNING-SYSTEM FEATURE-LIST
