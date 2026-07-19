@@ -11,15 +11,52 @@ import {
   GraphQLProviderConfigData,
 } from '@memberjunction/graphql-dataprovider';
 
-// Register @RegisterClass entity subclasses (side-effect imports) so RunView/GetEntityObject resolve
-// rows to their generated subclasses. Core MJ entities + the app's entities (generated per app).
-import '@memberjunction/core-entities';
-import './tier4.app-entities';
+// Register @RegisterClass entity subclasses so RunView/GetEntityObject resolve rows to their
+// generated subclasses. We ride the SAME generated manifest the real client (MJExplorer) imports —
+// `@memberjunction/ng-bootstrap-lite`'s CLASS_REGISTRATIONS references every @RegisterClass class in
+// the MJ dep tree, so the COMPLETE set is registered (core + AI + every @RegisterForStartup engine's
+// entity subclasses). This matters because `setupGraphQLClient` runs `StartupManager.Startup()`, which
+// fires the full server startup engine sequence; a partial registration (e.g. only core-entities)
+// leaves an engine like AIEngineBase resolving `MJAIPromptCategoryEntity` (no `Prompts` getter) → a
+// `.push` on undefined deep in its Load. Importing the manifest keeps us complete-by-construction as
+// MJ adds entities, instead of hand-maintaining a package list. `void .length` references the const so
+// AOT/tree-shaking cannot drop the side-effect import (same guard MJExplorer relies on).
+import { CLASS_REGISTRATIONS } from '@memberjunction/ng-bootstrap-lite';
+void CLASS_REGISTRATIONS.length;
+import './tier4.app-entities'; // the app's own generated entity subclasses (per-app)
 
 const LAUNCHER = process.env.MJDEV_BIN ?? '/Users/marcelotorres/MJDev/bin/mjdev';
 const SLUG = process.env.MJDEV_SLUG ?? 'accounting-engine-dev';
 
 let bootstrapped = false;
+let keepAliveDisabled = false;
+
+/**
+ * ECONNRESET hardening. `graphql-request` uses the process's global `fetch` (undici), which pools
+ * and keeps HTTP connections alive by default. A kept-alive socket to MJAPI can be closed by the
+ * server while idle — e.g. during slow test setup between this bootstrap and the first query — and
+ * then reused, surfacing as `ECONNRESET` on the first real request (NOT a subprocess-ordering issue:
+ * the socket simply went stale). We turn connection reuse off for the harness process so every
+ * request opens a fresh connection — nothing to go stale. Best-effort: undici ships with Node but is
+ * not always a resolvable bare import, so we no-op if it's absent (then bootstrap right before use).
+ */
+async function disableHttpKeepAlive(): Promise<void> {
+  if (keepAliveDisabled) return;
+  keepAliveDisabled = true;
+  try {
+    const undici = (await import('undici')) as {
+      setGlobalDispatcher: (d: unknown) => void;
+      Agent: new (opts: Record<string, unknown>) => unknown;
+    };
+    // keepAliveTimeout ~1ms → idle sockets close almost immediately, so no request ever reuses a
+    // socket the server may have already dropped. Localhost cost of a fresh connection is negligible.
+    undici.setGlobalDispatcher(
+      new undici.Agent({ pipelining: 0, keepAliveTimeout: 1, keepAliveMaxTimeout: 1 })
+    );
+  } catch {
+    // undici not resolvable in this app — fall back to the "bootstrap late" guidance in README.md.
+  }
+}
 
 /** Boot the real GraphQL client against the running MJAPI. Idempotent. */
 export async function bootstrapTier4(): Promise<{ url: string }> {
@@ -35,6 +72,8 @@ export async function bootstrapTier4(): Promise<{ url: string }> {
   }
   const url = `http://localhost:${api.port}`;
   if (bootstrapped) return { url };
+
+  await disableHttpKeepAlive(); // must run before the first fetch the GraphQL client makes
 
   const userAPIKey = execSync(`${LAUNCHER} key ${SLUG}`).toString().trim();
   const config = new GraphQLProviderConfigData(
