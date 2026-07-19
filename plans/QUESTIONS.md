@@ -29,7 +29,7 @@
 | 9 | [Q26](#q26) | Matt — Explorer header widget slot (feature ask) | OPEN |
 | 10 | [Q36](#q36) | Marcelo — no global GL-account pool; is the COA model as-built right? | OPEN — was dup-numbered Q29, renumbered 2026-07-17 |
 | — | [Q30](#q30) | batches single-company — ANSWERED 2026-07-17 (yes; MOD-15/16) | ANSWERED |
-| 12 | [Q31](#q31) | Robert/Amith — should product/category links carry a ROLE? (premise updated: company now derives from PRODUCT) | OPEN ★HIGH |
+| — | [Q31](#q31) | CLOSED 2026-07-18 — absorbed by MOD-3 rev-2 + UPD-5 (code fix = roadmap V1.1; edges → Q38) | CLOSED |
 | 12b | [Q38](#q38) | Robert/Amith — cross-company mapping REFUSED; company-scoped resolution + per-company category routes (posting-group model) | OPEN — proceeding ★HIGH |
 | 12c | [Q39](#q39) | Jeremy (+Robert) — multi-company AR: MODEL (b) seller-of-record RULED (one invoice, owner holds AR); confirm + booking-time legs + tax edges | OPEN — proceeding ★HIGH |
 | 13 | [Q32](#q32) | Matt — tab strip's overflow-x silently enables overflow-y (real bug + fix) | OPEN |
@@ -802,10 +802,12 @@ queryable surface for "which questions touch feature X".)*
 
 <a id="q31"></a>
 ### Q31 · GL routing derives the COMPANY from the ACCOUNT — should product/category links carry a ROLE instead? — ask Robert/Amith — added 2026-07-16
-- **Status:** OPEN — ⚠ premise UPDATED 2026-07-17: Marcelo ruled the line's company now derives
-  from the PRODUCT (`Product.CompanyID`), not from the resolved account (orders MOD-3 rev-2), and
-  product-account company consistency is its own question ([Q38](#q38), lean: mismatch disallowed).
-  The role-on-links ask below still stands — ask both at one sitting.
+- **Status:** CLOSED (2026-07-18, resolved without an external answer) — frozen. The ruling chain
+  absorbed both halves: the company-from-account derivation this entry documents as-built is
+  formally WRONG and reworks in roadmap V1.1 (MOD-3 rev-2: company comes from the product); the
+  "links carry a ROLE instead" alternative is mooted by UPD-5's locked structure (links stay
+  concrete account-per-company routes; the role FK already exists — Q9). The two code bugs it
+  proceeded on ride the V1.1 rework. Remaining Robert edges live in [Q38](#q38).
 - **Requested reviewer:** Robert (COA semantics) · Amith (GLAccountLink design, OQ-G)
 - **Features:** A.1 (GLAccount), B.* (Account links), ORD product→GL routing
 - **Proposed solution:** ⏸ HOLD on the model change (it is a schema + engine change). PROCEEDING
