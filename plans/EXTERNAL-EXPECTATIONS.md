@@ -31,7 +31,7 @@
 | R4 | **Ask Sidecar the coupon questions** (surfaces beyond Stripe checkout? shapes in use incl. ASAE config? LXP display/validate needs?) + run the two provider investigations before the recording-schema freeze | His own A2 plan — UPD-8 | ACCEPTED (self-assigned) |
 | R5 | **Ask Ethan the A3 entitlement questions** (grant granularity · lifecycle coupling · read contract · team beneficiary semantics) — gates the grant-shape freeze | His own A3 response | ACCEPTED (self-assigned) |
 | R6 | **Roles/visibility path detail** — he owns the `UserCompanyRole` direction through the A2 co-design (incl. the Izzy/Access-Control-Rules dig he flagged) | Q22/Q24 answers + 07-16 meeting | ACCEPTED |
-| R7 | **BAO-ready date (with Marcelo)** for the minimal LH4I scope — the A7 answer Ethan is waiting on | orders Q22; `ROADMAP-lxp-launch.md` V2 gate | STATED |
+| R7 | **BAO-ready date (with Marcelo)** for the minimal LH4I scope — the A7 answer Ethan is waiting on | orders Q22; `ROADMAP-lxp-launch.md` V2 gate | **AGENDA — Monday's meeting (2026-07-20)** |
 
 ## Ethan / LXP team
 
