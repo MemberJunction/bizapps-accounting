@@ -172,9 +172,15 @@ async function setup(p: Pools): Promise<void> {
   acp2.ApprovalCFOUserID = user.ID;
   if (!(await acp2.Save())) throw new Error(`set CFO failed: ${acp2.LatestResult?.CompleteMessage}`);
 
+  // Emit the first JE's EntryNumber too — a UNIQUE key a browser spec can use to click the EXACT
+  // fixture row in a grid (never a lived-in/demo JE). Reload to be certain EntryNumber is populated.
+  const firstJe = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
+  await firstJe.Load(firstJeId);
+  const jeEntryNumber = firstJe.EntryNumber;
+
   // Machine-readable descriptor on the LAST stdout line for the spec/harness to parse.
   // (2026-07-06: no period fields — the dashboard lost its company/period pickers; the build is global.)
-  console.log(`FIXTURE_JSON ${JSON.stringify({ companyId, companyName: `${RUN_TAG} GUI Batch Co`, runTag: RUN_TAG, cfoPersonId, jeId: firstJeId, expected })}`);
+  console.log(`FIXTURE_JSON ${JSON.stringify({ companyId, companyName: `${RUN_TAG} GUI Batch Co`, runTag: RUN_TAG, cfoPersonId, jeId: firstJeId, jeEntryNumber, expected })}`);
 }
 
 async function teardown(p: Pools, companyId: string, cfoPersonId?: string): Promise<void> {

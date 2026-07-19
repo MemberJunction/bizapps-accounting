@@ -15,7 +15,7 @@ import { HARNESS_DIR } from '../lib/env';
 const WORKTREE_ROOT = path.resolve(HARNESS_DIR, '..', '..', '..', '..', '..');
 const TSX = path.resolve(WORKTREE_ROOT, 'node_modules', '.bin', 'tsx');
 const FIXTURE = path.resolve(HARNESS_DIR, 'lib', 'batching-fixture.ts');
-let fx: { companyId: string; cfoPersonId: string } | null = null;
+let fx: { companyId: string; cfoPersonId: string; runTag: string; jeEntryNumber: string } | null = null;
 
 test.beforeAll(() => {
   const out = execFileSync(TSX, [FIXTURE, 'setup'], { cwd: WORKTREE_ROOT, encoding: 'utf8', timeout: 180_000 });
@@ -58,14 +58,20 @@ test('Build→approve→dispatch, then Reverse the GLPosted JE from All journal 
   await approvedCard.getByRole('button', { name: /Dispatch/i }).first().click();
   await expect(page.getByText(/Dispatched batch .+→ Posted/i).first(), 'batch reached Posted (JEs now GLPosted)').toBeVisible({ timeout: 20_000 });
 
-  // 2. Open All journal entries and select a GLPosted entry → the detail panel opens.
+  // 2. Open All journal entries and select THIS fixture's JE by its UNIQUE EntryNumber (prefix JE-PW…,
+  //    never a demo JE-DEMOORD…). This is safe BY CONSTRUCTION: filtering .ag-row on the exact EntryNumber
+  //    can only ever match the fixture JE or nothing — it can NEVER open a lived-in/demo entry. (An earlier
+  //    "click the first GLPosted row" version wrongly reversed demo data; never reach outside the fixture.)
+  //    The reversal it creates lands in the fixture company, so the afterAll teardown cleans it.
   await railItem(page, 'Journal Entries', 'All journal entries');
-  const glRow = page.locator('.ag-row').filter({ hasText: /GLPosted/ }).first();
-  await expect(glRow, 'a GLPosted JE row should be present after dispatch').toBeVisible({ timeout: 30_000 });
-  await glRow.click();
+  const search = page.getByRole('searchbox', { name: /Search entries/i }).first();
+  if (await search.isVisible().catch(() => false)) { await search.fill(fx!.jeEntryNumber); await page.waitForTimeout(3000); }
+  const fixtureRow = page.locator('.ag-row').filter({ hasText: fx!.jeEntryNumber }).first();
+  await expect(fixtureRow, `the fixture JE ${fx!.jeEntryNumber} (GLPosted after dispatch) should be present`).toBeVisible({ timeout: 30_000 });
+  await fixtureRow.click();
   await page.waitForTimeout(2500);
 
-  // 3. Reverse the GLPosted JE — the app confirms "Reversed <N> → new entry <M>".
+  // 3. Reverse the GLPosted fixture JE — the app confirms "Reversed <N> → new entry <M>".
   const reverseBtn = page.getByRole('button', { name: /^Reverse/i }).first();
   await expect(reverseBtn, 'the detail panel offers Reverse for a GLPosted, not-yet-reversed JE').toBeVisible({ timeout: 15_000 });
   await reverseBtn.click();
