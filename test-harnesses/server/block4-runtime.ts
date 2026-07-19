@@ -1,4 +1,12 @@
 /**
+ * ⚠️ SUPERSEDED — retires with roadmap slice S3. The scheduled-JE feature this validates (create
+ * scheduled entries + domain-generation of due Pending JEs) is superseded by MOD-17 (forward-dated
+ * JEs). This suite covers CURRENTLY-LIVE but RETIRING code: keep it running as a regression guard
+ * while the code still ships, but do NOT invest in fixing/extending it. If it fails, note the failure
+ * as "superseded, retires with slice S3" rather than repairing the retiring path; delete this suite
+ * together with the code when S3 lands.
+ */
+/**
  * block4-runtime.ts — live validation of the Block-4 scheduled-JE schedule (S3).
  *
  * Runs against a REAL instance DB through the REAL provider + server subclasses (MJAPI's path).

@@ -1,4 +1,11 @@
 /**
+ * ⚠️ SUPERSEDED — retires with roadmap slice S3. ScheduledJournalEntryService is superseded by MOD-17
+ * (forward-dated JEs). These unit tests cover CURRENTLY-LIVE but RETIRING code: keep them running as a
+ * regression guard while the code still ships, but do NOT invest in fixing/extending them. If they
+ * fail, note it as "superseded, retires with slice S3" rather than repairing the retiring path; delete
+ * this suite together with the code when S3 lands.
+ */
+/**
  * Block 4 unit tests — the PURE schedule math + type mapping (no DB).
  *
  * computeStraightLineSchedule is the money-correctness core: a multi-period schedule must sum to EXACTLY

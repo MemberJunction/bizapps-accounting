@@ -1,4 +1,11 @@
 /**
+ * ⚠️ SUPERSEDED — retires with roadmap slice S3. The ScheduledJournalEntry op + materializer this
+ * exercises are superseded by MOD-17 (forward-dated JEs). This suite covers CURRENTLY-LIVE but
+ * RETIRING code: keep it running as a regression guard while the code still ships, but do NOT invest
+ * in fixing/extending it. If it fails, note the failure as "superseded, retires with slice S3" rather
+ * than repairing the retiring path; delete this suite together with the code when S3 lands.
+ */
+/**
  * scheduled-je-runtime — LIVE B3.1 + B3.2: create a dated rev-rec schedule via the atomic
  * `Accounting.CreateScheduledJournalEntries` op, then materialize due entries by DATE into Pending
  * JEs via `Accounting.MaterializeDueScheduledEntries`. Asserts: N dated SJEs summing to total with
