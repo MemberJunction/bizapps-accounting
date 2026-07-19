@@ -1137,6 +1137,11 @@ queryable surface for "which questions touch feature X".)*
   yes, same rule one level down)? (4) Any real Aptify/BC case of intentional cross-company
   account borrowing — and if so, does it belong in the intercompany path rather than mapping?
   (5) Materialize line-company as a stored column (RLS/query efficiency — orders Q23 sub-q 3)?
+  **Stakes of question (4) — why we ask it even though the structure is locked (Marcelo
+  2026-07-18):** if the answer is "yes, cross-company product↔account links must be supported,"
+  the company-derivation model REOPENS — we'd have to revisit deriving a line's company from the
+  link rather than the product (the model Q31 closed). As long as the answer is no (our lean),
+  product-carries-company stands and nothing revisits.
 - **Context to share:** MOD-10 (role-based polymorphic mapping) · orders MOD-3 rev-2 (product-
   company derivation) · [Q31](#q31) (the related role-on-links question — same sitting).
 - **What motivates this now:** Marcelo flags the resolution path as a coming **performance +
