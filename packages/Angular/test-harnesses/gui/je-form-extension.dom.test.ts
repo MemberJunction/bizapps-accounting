@@ -3,15 +3,10 @@
  * It ADDS app behavior on top of the generated form (that's why it must be tested, per the coverage
  * doctrine): the reversal-affordance GATE (`CanReverse`) and the status `Timeline`.
  *
- * ⛔ SKIPPED — BLOCKED on a tier-4 scaffold gap (filed to MJDEV-ISSUES 2026-07-19). The scaffold's
- * locale fix (1.3.0) cleared the currency-pipe crash, but a SECOND gap remains for ENTITY FORMS:
- * instantiating a `BaseFormComponent`-derived form in the headless harness throws an unhandled
- * rejection `SyntaxError: The URL '' is invalid.` — consistent with the base form opening a
- * record-change WEBSOCKET subscription against the tier-4 provider's deliberately-blank WSURL. It
- * fires on `TestBed.createComponent(...)` alone (before any detectChanges); the 16 dashboard specs
- * never hit it because they don't subclass the entity form. The assertions below are CORRECT and
- * ready — un-skip the moment the scaffold no-ops/guards the blank-WSURL subscription for forms.
- * (Likely the same gap under validation for 4e-ii customer-ar-base / je-detail-panel.)
+ * (History: briefly blocked on a tier-4 blank-WSURL entity-form gap — instantiating a
+ * BaseFormComponent-derived form threw `SyntaxError: The URL '' is invalid.` from its record-change
+ * websocket subscription. Fixed in scaffold v1.5.0, which points the tier-4 provider at the real
+ * MJAPI WS endpoint, ADR-033. Live again.)
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { TestBed } from '@angular/core/testing';
@@ -31,7 +26,7 @@ interface ExtModel {
   Timeline: TimelineStep[];
 }
 
-describe.skip('TIER 4 (4e-iii): JournalEntry form extension — reversal gate + timeline [BLOCKED: tier-4 blank-WSURL entity-form gap]', () => {
+describe('TIER 4 (4e-iii): JournalEntry form extension — reversal gate + timeline', () => {
   beforeAll(async () => { await bootstrapTier4(); }, 180000);
 
   // We instantiate the REAL extended form component (so the extension's code runs against the real
