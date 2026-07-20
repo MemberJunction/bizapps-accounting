@@ -89,10 +89,16 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
 - **Status:** Accepted (engine behavior spec — rework lands with MOD-15/16).
 
 ## MOD-5 — Intercompany: per-company-pair Due-To/Due-From accounts; Payments generates ALL legs (2026-06-28/30)
-> ⚠ **Pending revision (2026-07-17):** orders [Q39](QUESTIONS.md#q39)'s ruled model (b)
-> (seller-of-record holds the customer AR) implies intercompany legs arise **at booking**, not at
-> payment — which would supersede "Payments generates ALL legs." Flagged, not yet rewritten;
-> Jeremy's Q39 confirmation is the trigger.
+> ⚠ **REVISED 2026-07-20 (Robert, Monday meeting — Q39 answered):** leg generation SPLITS by kind.
+> **BOOKING legs are emitted by ORDERS at order creation** (seller-of-record model): the
+> order-owning company books Dr AR(full) / Cr own-revenue(own lines) / Cr **Due-To-sibling (AP)**
+> per sibling company; each sibling books Dr **Due-From-owner (intercompany AR)** / Cr its OWN
+> revenue-or-DefRev (its products' accounts — revenue is NEVER recognized in the owner for a
+> sibling's product; scheduled/forward-dated rev-rec all under the sibling's accounts).
+> **CASH-clearing legs stay with Payments** (payment clears the owner's AR to cash; the cash
+> transfer clears the Due-To/Due-From pair). The per-company-pair account shape (a) stands.
+> The original "(b) Payments generates the intercompany balancing legs" text below is superseded
+> on the booking half. Orders counterpart: orders MOD-14. Jeremy finance co-sign rides Q19.
 - **Supersedes/refines:** BA-D17 (confirmed and sharpened) + the seed COA's centralized intercompany accounts.
 - **Change:** (a) NO centralized Due-To/Due-From accounts — **per-company-pair** accounts, 4 per pair
   (Amith veto of centralized). (b) **Payments** generates the intercompany balancing legs (Orders posts each

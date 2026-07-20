@@ -30,8 +30,8 @@
 | 10 | [Q36](#q36) | Marcelo — no global GL-account pool; is the COA model as-built right? | OPEN — was dup-numbered Q29, renumbered 2026-07-17 |
 | — | [Q30](#q30) | batches single-company — ANSWERED 2026-07-17 (yes; MOD-15/16) | ANSWERED |
 | — | [Q31](#q31) | CLOSED 2026-07-18 — absorbed by MOD-3 rev-2 + UPD-5 (code fix = roadmap V1.1; edges → Q38) | CLOSED |
-| 12b | [Q38](#q38) | Robert/Amith — cross-company mapping REFUSED; company-scoped resolution + per-company category routes (posting-group model) | OPEN — proceeding ★HIGH |
-| 12c | [Q39](#q39) | Jeremy (+Robert) — multi-company AR: MODEL (b) seller-of-record RULED (one invoice, owner holds AR); confirm + booking-time legs + tax edges | OPEN — proceeding ★HIGH |
+| — | [Q38](#q38) | ANSWERED 2026-07-20 (no cross-company links; categories COMPANY-OWNED; AR-vs-revenue anchor split) | ANSWERED |
+| — | [Q39](#q39) | ANSWERED 2026-07-20 (seller-of-record + mirrored booking legs; Jeremy tax co-sign rides Q19) | ANSWERED |
 | 13 | [Q32](#q32) | Matt — tab strip's overflow-x silently enables overflow-y (real bug + fix) | OPEN |
 | 14 | [Q33](#q33) | Matt — dense/inline [meta] on mj-page-header (⚠ may be obsolete — check) | OPEN |
 | 15 | [Q34](#q34) | Matt — we duplicated mj-accordion-panel; is there a component catalogue? | OPEN |
@@ -172,7 +172,10 @@ queryable surface for "which questions touch feature X".)*
 
 <a id="q25"></a>
 ### Q25 · Transfer-backlog routing — who receives the UI components parked in accounting? — added 2026-07-15 (Task 73a)
-- **Status:** OPEN
+- **Status:** OPEN — PARTIAL (Matt, 2026-07-20 UI review): the **cross-app deep-link helper goes
+  to MJ core via OUR PR** (Matt: "you go ahead and PR it"; Amith review requested since it adds
+  functionality; it feeds Matt's this-quarter navigation-rethink). Workspace-tab framework:
+  raised — Matt's nav work may absorb it, no commitment. Remaining items still need routing.
 - **Ask:** Ian (bizapps-tasks) · Matt (MJ base) · team (bizapps-common ownership)
 - **Question(s):**
   1. **Approval inbox** (tasks-backed approve/reject list + context slide-in, used by accounting batch
@@ -464,7 +467,9 @@ queryable surface for "which questions touch feature X".)*
 
 <a id="q27"></a>
 ### Q27 · `mj-left-nav` — desktop icons-only collapse — ask Matt — added 2026-07-16 (feature ask)
-- **Status:** OPEN
+- **Status:** OPEN — raised LIVE with Matt 2026-07-20: he's receptive; direction discussed =
+  bottom-arrow collapse toggle (Marcelo's proposal) + container-width-driven auto-collapse for
+  split-pane layouts (Matt: query the TAB's width, hamburger to expand). Awaiting his build.
 - **Who to ask:** Matt (MJ Angular / ng-ui-components)
 - **Features:** cross-cutting (MJ base; component-inventory row — pairs with [Q26](#q26))
 - **Background (self-contained):** The approved mockup set drew a bespoke, **collapsible** nav rail
@@ -960,7 +965,8 @@ queryable surface for "which questions touch feature X".)*
 
 <a id="q35"></a>
 ### Q35 · `mj-accordion-panel [Bare]` removes the box but keeps three behaviours that assumed it — ask Matt — added 2026-07-17
-- **Status:** OPEN
+- **Status:** OPEN — delivered LIVE to Matt 2026-07-20 (arrow position, corner rounding, divider
+  line); he acknowledged. Awaiting his change.
 - **Requested reviewer:** Matt (MJ Angular / ng-ui-components)
 - **Features:** cross-cutting (MJ base). Supersedes the accordion half of [Q34](#q34).
 - **Proposed solution:** we adopted `[Bare]` and DELETED our hand-rolled equivalent (72 lines → 31), so
@@ -1082,10 +1088,7 @@ queryable surface for "which questions touch feature X".)*
 
 <a id="q38"></a>
 ### Q38 · May a product's linked account (direct or via category) belong to a DIFFERENT company than the product? — review: Robert/Amith — added 2026-07-17
-- **Status:** OPEN — proceeding; **structure LOCKED by Marcelo 2026-07-17 as UPD-5** (company-
-  scoped mapping, per-company category routes, enforcement tiers — building now). What remains
-  for Robert is the EDGES below (his Q2 rung intent · bundles · any genuine cross-company case ·
-  line-company materialization), not the structure.
+- **Status:** ANSWERED (Robert, 2026-07-20 Monday meeting) — frozen.
 - **Requested reviewer:** Robert (+ Amith — it constrains his GLAccountLink polymorphic-mapping design, MOD-10)
 - **Features:** ACC-B.1/B.2 (GL mapping + resolution), ORD-C.1/E.2 (line company derivation), ORD-J.1
 - **Proposed solution (sharpened 2026-07-17 after the accounting analysis — COMPANY IS AN INPUT
@@ -1139,9 +1142,17 @@ queryable surface for "which questions touch feature X".)*
   (5) Materialize line-company as a stored column (RLS/query efficiency — orders Q23 sub-q 3)?
   **Stakes of question (4) — why we ask it even though the structure is locked (Marcelo
   2026-07-18):** if the answer is "yes, cross-company product↔account links must be supported,"
-  the company-derivation model REOPENS — we'd have to revisit deriving a line's company from the
-  link rather than the product (the model Q31 closed). As long as the answer is no (our lean),
-  product-carries-company stands and nothing revisits.
+  the company-derivation model REOPENS. As long as the answer is no (our lean), nothing revisits.
+- **Answer (Robert, 2026-07-20):** (1) **NO cross-company links — invariant CONFIRMED** ("the
+  product stays linked to its account"; resolution filters by company at every rung). Company-
+  derivation stands; nothing reopens. (2) **Categories are COMPANY-OWNED** — stronger than the
+  per-company-routes proposal: each company has its own catalog + category tree (UPD-5 revised;
+  `ProductCategory.CompanyID` → S1). (3) **His Q2 order-company rung: reconciled** — it governs
+  the AR/cash/due-to-from side only; revenue-side resolution anchors to the product's company
+  (his own correction in-meeting: "the revenue entries, the product account… all of that's going
+  to be Company B's accounts"). (4) Residuals not discussed → routed: bundle fan-out company
+  rule + line-company materialization ride the orders GL-resolution deep-dive backlog row.
+  Routed onward: UPD-5 revision · MOD-5 revision · orders MOD-14 · S1 plan scope.
 - **Context to share:** MOD-10 (role-based polymorphic mapping) · orders MOD-3 rev-2 (product-
   company derivation) · [Q31](#q31) (the related role-on-links question — same sitting).
 - **What motivates this now:** Marcelo flags the resolution path as a coming **performance +
@@ -1153,8 +1164,8 @@ queryable surface for "which questions touch feature X".)*
 
 <a id="q39"></a>
 ### Q39 · Multi-company orders: who is the seller of record, and who holds the customer AR? — review: Jeremy (+ Robert) — added 2026-07-17
-- **Status:** OPEN — proceeding (with the working model below; the AR-ownership half is the part
-  that most needs his ruling before dunning/statements build)
+- **Status:** ANSWERED (Robert, 2026-07-20 — the architectural ruling; Jeremy's finance co-sign +
+  tax-remit verification ride the Q19 sitting) — frozen.
 - **Requested reviewer:** Jeremy (finance policy — invoice presentation, AR, tax); Robert (design
   fit — his Betty/Izzy sketch was the seller-of-record flavor)
 - **Features:** ORD-C.1/J.1 (multi-company orders), ORD-D.* (order-as-receivable), ACC-M.1
@@ -1181,6 +1192,19 @@ queryable surface for "which questions touch feature X".)*
   (4) Any policy limits on WHICH companies may sell whose products? (5) Dunning/statements:
   confirm they run entirely in the selling company's name (one balance per customer per selling
   company).
+- **Answer (Robert, 2026-07-20 — the full JE mechanics, "when I write the order creation system
+  it's got to do that" — Marcelo):** (1) **Model (b) CONFIRMED** — the order-owner is the face
+  ("BCHQ pattern"): one contract, one invoice, one check; siblings chase the owner, never the
+  customer. (2) **Booking-time legs, BOTH SIDES MIRRORED:** owner books Dr AR(full 150k) /
+  Cr own-revenue(100k) / Cr Due-To-Betty AP(50k); Betty books Dr Due-From-owner intercompany
+  AR(50k) / Cr her own revenue-or-DefRev(50k) — every JE balances within its company; revenue is
+  NEVER double-recognized and never sits in the owner for a sibling's product; forward-dated
+  rev-rec entries all live under the sibling's accounts. Due-to/due-from is "literally about the
+  money" — ARAP only, disconnected from revenue. Payment side: cash clears the owner's AR; the
+  cash TRANSFER clears the Due-To/Due-From pair (Payments). (3) Tax remit: selling company —
+  Robert's yes; **Jeremy verifies** (nexus). (4) Not limited — practically users hold permissions
+  on involved companies. (5) Yes — seller-of-record name. Routed onward: MOD-5 revision · orders
+  MOD-14 (booking JE shape) · roadmap V1.7/S3 · UPD-5 refinement.
 - **Context to share:** Robert's Betty/Izzy example (2026-07-14 meeting — "I posted $150,000 to
   Betty… $50 of that is due to another company"); MOD-5 (Payments generates all legs);
   MOD-11/MOD-12 (one JE per company).

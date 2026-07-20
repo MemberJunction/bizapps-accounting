@@ -45,3 +45,18 @@ orders §13) · **manual-JE requirements** (provenance loud, authorization-gated
 **ng-entity-viewer for COA** (§8.3) · **multi-company batches = BACKLOG** (Amith's per-company-
 sections lean recorded; MOD-15 stands for v1; Robert/Jeremy asked by Amith himself) · don't
 over-polish dashboards.
+
+### 2026-07-20 - Accounting Meeting - Marcelo robert Ian.md — ✅ PROCESSED 2026-07-20 (Task 116a)
+Q23/Q38/Q39 ANSWERED (see stocks). Landings: MOD-5 REVISED (booking legs from Orders; cash-clearing
+stays Payments) · UPD-5 REVISED (categories COMPANY-OWNED — supersedes shared-taxonomy; AR-vs-revenue
+anchor split) · orders MOD-14 (seller-of-record booking JE shape) · per-line fulfillment YES +
+order-splitting practice + fulfillment-groups future idea (orders BACKLOG) · tax remit = selling
+company (Jeremy verifies via Q19) · Robert to send his review + D2D example (expectations R8) ·
+process note: send packets the night before meetings.
+
+### 2026-07-20 - Accounting UI Review - Matt and.md — ✅ PROCESSED 2026-07-20 (Task 116a)
+Landings: **UPD-6** (container queries · sticky interior chrome + internal tab scroll · tab
+required-indicators · filter variants · table-to-edge) · Q25 PARTIAL (deep-link helper → MJ core
+via OUR PR, Amith review) · Q27/Q35 raised live (awaiting Matt) · routing BACKLOG row updated
+(shift-click/split EXISTS; gap = discoverability + split button + active-window top bar) ·
+workspace-tab framework: Matt's nav-rethink may absorb (no commitment).

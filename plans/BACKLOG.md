@@ -682,11 +682,12 @@ Accounting-norm model: **transactions = number + memo/description; master data =
 - **Migration instruction (Marcelo 2026-07-17):** we are NOT doing version migrations yet — **edit the BASELINE migration directly** to add the batch Memo column (do not add a new V* file). Applying it needs a drop-schema + re-migrate (destructive) — sequence it with the test-data reset (#37), not mid-dev.
 - **Perf tripwire (task 41):** name/memo search uses indexed columns + `LIKE` contains, fine to ~100k rows. If any searchable list realistically exceeds ~100k, move THAT list's search from `LIKE '%…%'` to MJ full-text search (guides/FULL_TEXT_SEARCH_GUIDE). Don't pre-optimize.
 
-- [ ] **Navigation routing / back-button (UI)** — cross-links (product → category workspace, JE →
-      order, warning pop-outs) currently have no "go back" affordance; routing is manual. Consider
-      a history/back mechanism for in-app navigation — likely partly an MJ Explorer platform
-      concern (tab/navigation history — possible Matt ask alongside Q26/Q27) and partly app-shell
-      work (workspace-tab return links). (Marcelo, 2026-07-17.) Twin row in the orders BACKLOG.
+- [ ] **Navigation routing / back-button (UI)** — UPDATED 2026-07-20 (Matt review): Explorer
+      ALREADY supports shift-click → new tab + drag-split panes ("this fixes my entire problem" —
+      Marcelo); the gap is DISCOVERABILITY (add a VS-Code-style split button + tooltip) and
+      active-window top-bar tracking. Matt owns the navigation rethink this quarter; our deep-link
+      helper PRs into MJ core (Q25). Remaining app-side work: adopt shift-click/split in our flows
+      + the split-button ask. Twin row in the orders BACKLOG.
 
 ## Normalize the "memo/description" field name across entities (schema hygiene)
 - Source: Marcelo 2026-07-17. We keep JournalEntry.Description + Order.Description as-is (renaming existing

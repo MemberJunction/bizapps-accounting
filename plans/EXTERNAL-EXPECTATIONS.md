@@ -26,7 +26,8 @@
 | # | Expectation | Why / source | Status |
 |---|---|---|---|
 | R1 | **Stand up (or bless) the separate, purpose-built BC app registration scoped to journal WRITE** — his own recommendation, his call to execute; we treat it as a REQUIREMENT (never widen the read-only reporting registration) | Jeremy recommended, "your call" to Robert — UPD-2; Marcelo 2026-07-17: "separate registration is a requirement" | STATED |
-| R2 | **Sync the P1 proposal doc + BatchingEngine model to the thread consensus** — singular batch `PostingDate` (Amith's model, Jeremy 100% on board; Q37 ANSWERED) supersedes P1's per-JE dates; Jeremy also asked him to flip OQ-1's status to answered in that doc | Q37 answer; his own "I'll keep an ear open to future changes" | STATED |
+| R2 | **Sync the P1 proposal doc + BatchingEngine model to the thread consensus** — singular batch `PostingDate` supersedes P1's per-JE dates; OQ-1 status flip | Q37 answer | STATED |
+| R8 | **Share his Claude review of our packet + the due-to/due-from illustrative example doc** (offered in the 2026-07-20 meeting) — becomes a meetings-folder intake when it lands | 2026-07-20 meeting close | ACCEPTED (self-offered) |
 | R3 | **OS7 coupons-schema review** once we share the artifacts (see `~/MJDev/reports/robert-file-share-2026-07-17/`) | UPD-8; his review checklist is recorded | COMMUNICATED (files shared 2026-07-17) |
 | R4 | **Ask Sidecar the coupon questions** (surfaces beyond Stripe checkout? shapes in use incl. ASAE config? LXP display/validate needs?) + run the two provider investigations before the recording-schema freeze | His own A2 plan — UPD-8 | ACCEPTED (self-assigned) |
 | R5 | **Ask Ethan the A3 entitlement questions** (grant granularity · lifecycle coupling · read contract · team beneficiary semantics) — gates the grant-shape freeze | His own A3 response | ACCEPTED (self-assigned) |
