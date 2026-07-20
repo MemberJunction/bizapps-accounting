@@ -214,4 +214,15 @@ describe('toCreateInput', () => {
     d.Lines[0].Description = '  cash in  ';
     expect(toCreateInput(d).Lines[0].Description).toBe('cash in');
   });
+
+  it('sends CounterpartyOrganizationID on a line when the operator picked one', () => {
+    const d = balancedDraft();
+    d.Lines[0].CounterpartyOrganizationID = 'org-acme';
+    expect(toCreateInput(d).Lines[0].CounterpartyOrganizationID).toBe('org-acme');
+  });
+
+  it('omits CounterpartyOrganizationID entirely when no counterparty is chosen (absent, not null)', () => {
+    // newDraftLine() defaults it to null; the contract field is optional, so it must not be sent.
+    expect(toCreateInput(balancedDraft()).Lines[0]).not.toHaveProperty('CounterpartyOrganizationID');
+  });
 });

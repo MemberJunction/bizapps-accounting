@@ -343,3 +343,10 @@ NEW `api/batching-scenarios-client.ts` **15/15** — multi-company sweep (JECoun
 
 ### 2026-07-18 (correction 4) — TIER 4 dashboard breadth filled (gap 4a CLOSED)
 Accounting gui suite **9/9**: added `je-console` · `chart-of-accounts` (AllAccounts>0, every Code) · `company-setup` (profiles>0) · `batch-dispatch` (Batches array + StatusOptions; provides PageRefreshService) · `intercompany` (pinned CO2, Legs>0, every EntryType IntercompanyFlow) — all render real data through the real client, keystone-clean. Plus the earlier trial-balance-ar/revenue-tax (exact) + batch-status. Every data-driven accounting dashboard now has a tier-4 spec.
+
+### 2026-07-20 — JE workspace counterparty picker (tier-1 mapping + tier-3 persistence)
+Added a per-line **Counterparty** (`CounterpartyOrganizationID`) picker to the manual-JE workspace (Marcelo, 2026-07-20 — "visibility/testing, dial in later"). The field was already in the `CreateJournalEntry` contract + persisted by the engine (`AccountingEngine.ts:280`), so this is UI-only (draft + `toCreateInput` mapping + picker):
+- **`je-draft.test.ts` now 31/31** (was 29) — `toCreateInput` sends `CounterpartyOrganizationID` when picked, omits it (absent, not null) when not. Proves the UI→contract half.
+- **contract→engine→DB half proven live** in the orders tier-3 harness `order-to-je-client.ts` **31/31** (payment-capture AR line carries the counterparty — same `CreateJournalEntry` path). See orders `testing.md` 2026-07-20.
+- **✅ tier-4 CLOSED (2026-07-20, same day):** added `je-workspace.dom.test` (real API) — renders the workspace cleanly (keystone) + asserts the Counterparty column renders + options load through the real client. 1/1 green.
+- The counterparty picker's options load from `MJ_BizApps_Common: Organizations` (one read at open); optional, only meaningful on AR lines.

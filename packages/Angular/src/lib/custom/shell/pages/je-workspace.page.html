@@ -105,6 +105,7 @@
             <thead>
               <tr>
                 <th>Account</th>
+                <th>Counterparty</th>
                 @for (dim of DimensionColumns; track dim.ID) {
                   <th>{{ dim.Name }}</th>
                 }
@@ -125,6 +126,21 @@
                       <option [ngValue]="null">Pick an account…</option>
                       @for (a of AccountOptions; track a.ID) {
                         <option [ngValue]="a.ID">{{ a.Label }}</option>
+                      }
+                    </select>
+                  </td>
+                  <td>
+                    <!-- Optional: the customer/vendor this line's receivable-or-payable belongs to
+                         (AR-by-customer). Blank on non-AR lines. Flows through the CreateJournalEntry
+                         contract to the engine's atomic write — never a frontend-set field. -->
+                    <select
+                      class="mj-input"
+                      [(ngModel)]="line.CounterpartyOrganizationID"
+                      (ngModelChange)="touch()"
+                      [disabled]="IsCreated">
+                      <option [ngValue]="null">—</option>
+                      @for (cp of CounterpartyOptions; track cp.ID) {
+                        <option [ngValue]="cp.ID">{{ cp.Name }}</option>
                       }
                     </select>
                   </td>
@@ -161,7 +177,7 @@
                 </tr>
                 @if (LineIssue(line) || EngineLineError(i)) {
                   <tr class="jew__issuerow">
-                    <td [attr.colspan]="4 + DimensionColumns.length">
+                    <td [attr.colspan]="5 + DimensionColumns.length">
                       <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
                       {{ EngineLineError(i) ?? LineIssue(line) }}
                     </td>

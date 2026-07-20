@@ -1,5 +1,5 @@
 import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, OnInit } from '@angular/core';
-import { type IRemoteOperationProvider } from '@memberjunction/core';
+import { RunView, type IRemoteOperationProvider } from '@memberjunction/core';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
 import { UUIDsEqual } from '@memberjunction/global';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
@@ -31,6 +31,12 @@ export interface DimensionColumn {
   ID: string;
   Name: string;
   Values: Array<{ ID: string; Label: string }>;
+}
+
+/** A counterparty (customer/vendor Organization) offered by the optional per-line picker. */
+export interface CounterpartyOption {
+  ID: string;
+  Name: string;
 }
 
 /**
@@ -80,9 +86,12 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
   public DraftErrors: string[] = [];
 
   public DimensionColumns: DimensionColumn[] = [];
+  /** Options for the optional per-line counterparty picker (AR "who owes"). Loaded once at open. */
+  public CounterpartyOptions: CounterpartyOption[] = [];
 
-  ngOnInit(): void {
+  async ngOnInit(): Promise<void> {
     this.DimensionColumns = this.loadDimensionColumns();
+    await this.loadCounterparties();
     this.openNewDraft();
   }
 
@@ -197,6 +206,26 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
           .map((v) => ({ ID: v.ID, Label: v.Name }))
           .sort((a, b) => a.Label.localeCompare(b.Label)),
       }));
+  }
+
+  /**
+   * Counterparty options for the optional per-line picker. One read at open — the list is small and
+   * stable, and the value is optional (only AR lines carry one). Read from bizapps-common's
+   * Organizations rather than any accounting engine cache (counterparties are not accounting metadata).
+   */
+  private async loadCounterparties(): Promise<void> {
+    const res = await RunView.FromMetadataProvider(this.ProviderToUse).RunView<{ ID: string; Name: string | null }>(
+      {
+        EntityName: 'MJ_BizApps_Common: Organizations',
+        Fields: ['ID', 'Name'],
+        OrderBy: 'Name ASC',
+        ResultType: 'simple',
+      },
+      this.ProviderToUse.CurrentUser,
+    );
+    this.CounterpartyOptions = res.Success
+      ? (res.Results ?? []).map((r) => ({ ID: r.ID, Name: r.Name ?? '(unnamed organization)' }))
+      : [];
   }
 
   public OnCompanyChanged(): void {
