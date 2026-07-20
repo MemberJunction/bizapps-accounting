@@ -18,6 +18,11 @@ import { beforeEach, afterEach, expect } from 'vitest';
 // `undefined.hasOwnProperty(...)` at detectChanges. Registering `en` covers that.
 registerLocaleData(localeEn);
 
+// NOTE: no WebSocket stub here — `tier4-bootstrap.ts` gives the provider the REAL MJAPI WS URL
+// (parity with MJExplorer's GRAPHQL_WS_URI), so an entity form's record-change subscription connects
+// to the running MJAPI exactly as production does instead of doing `new WebSocket('')`. (An earlier
+// v1.4.0 no-op WebSocket stub was replaced by this real-WS parity approach — ADR-033.)
+
 getTestBed().initTestEnvironment(BrowserTestingModule, platformBrowserTesting());
 
 // ── Keystone (mandatory): fail any test that surfaces an error, via ANY of the three channels a

@@ -76,12 +76,19 @@ export async function bootstrapTier4(): Promise<{ url: string }> {
   await disableHttpKeepAlive(); // must run before the first fetch the GraphQL client makes
 
   const userAPIKey = execSync(`${LAUNCHER} key ${SLUG}`).toString().trim();
+  // WSURL points at the REAL running MJAPI WebSocket endpoint — the SAME value MJExplorer uses
+  // (`GRAPHQL_WS_URI = ws://localhost:<apiPort>/` in its generated environment.ts). Parity, not a
+  // blank: a blank WSURL made a `BaseFormComponent`-derived entity form's record-change graphql-ws
+  // subscription do `new WebSocket('')` → `SyntaxError: The URL '' is invalid.` and crash the render.
+  // With the real URL the subscription connects to MJAPI exactly as production does (validated:
+  // socketState=connected, clean process exit) — no divergence, no WebSocket stub. (See ADR-033.)
+  const wsurl = `ws://localhost:${api.port}/`;
   const config = new GraphQLProviderConfigData(
     '', // token — unused (authenticating via the user API key)
     url,
-    '', // wsurl — blank: no subscriptions in tier 4
+    wsurl, // REAL MJAPI WS endpoint (parity with MJExplorer's GRAPHQL_WS_URI)
     async () => '', // refreshTokenFunction — no-op (API key doesn't expire like a JWT)
-    '__mj', // MJCoreSchemaName
+    '__mj', // MJCoreSchemaName — MJ's core-schema default (matches env MJ_CORE_SCHEMA_NAME)
     undefined, // includeSchemas
     undefined, // excludeSchemas
     undefined, // mjAPIKey (system key) — not this
