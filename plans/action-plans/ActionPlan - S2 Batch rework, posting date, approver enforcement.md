@@ -57,7 +57,24 @@ artifact:* test-matrix delta in testing.md.
 
 ## Decisions taken (micro-decisions only — one line each)
 
-- _(record here as they happen)_
+- **Zero-net batches: ALLOW but REQUIRE CONTENT (≥1 JE)** (Marcelo 2026-07-21). Block truly-empty (0 JEs);
+  a non-empty set that nets to zero is valid — marking JEs posted at net-zero is legitimate. Check is
+  BACKEND/engine only, never frontend. (The current `EmptyBatchError` on zero-net groups was an
+  over-reach in commit 3c0f10f — narrow it to "throw only when jeIds is empty"; derive approval
+  companies from the JEs, not the netted groups, for a zero-summary batch; add a build→approve→send→
+  Posted lifecycle test with zero summary lines.)
+- **MOD-4 netting: KEEP the per-company netting key + per-company footing trigger 50023 for SAFETY**
+  (Marcelo 2026-07-21) — do NOT collapse 50023 into 50014 as MOD-15 item (c) states. Degenerate under
+  single-company but retained as a defense-in-depth guardrail (Amith/Robert specified it).
+- **MOD-16 (singular batch PostingDate + one aggregated JE per batch + closed-period HOLD): HELD** —
+  it's a schema+engine change; this slice is single-company ONLY (Marcelo 2026-07-21).
+- **Line-item `CompanyID`: KEEP it** (don't drop per MOD-15 item b) — safety, per the MOD-4 keep-for-safety call.
+- **Single-company go-now confirmed inline with Robert + Amith** (MOD-15 Accepted by all; no re-open needed).
+- Batch workspace **company select is already single-select** (commit 3389d40); the S2 UI step is to
+  drop the "All companies" option + require exactly one company.
+- The **Remote-Ops consolidation carries forward** (build/regenerate/approve/reject/dispatch are now
+  `Accounting.*` remote ops, `BatchDispatchResolver` retired, commit 3c0f10f) — only the multi-company
+  ENGINE internals change in S2; the op surface stays (add required `companyId` to the build input).
 
 ## Out of scope (do not drift)
 
