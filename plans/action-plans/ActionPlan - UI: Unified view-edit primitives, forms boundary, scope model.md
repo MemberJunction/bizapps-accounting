@@ -1,9 +1,11 @@
 # ActionPlan - UI: Unified view-edit primitives, forms boundary, scope model
 
-> **Status:** Active (2026-07-21 — Marcelo delegated the P0 rulings to technical determination:
-> "I don't know enough about forms to rule — that is what I wanted you to research." §2/§7
-> promoted to acct UPD-7 / orders UPD-14 + the design record on that basis; his later override
-> adjusts course. P3's mockup round remains Marcelo-involved.)
+> **Status:** Active (2026-07-21 — Marcelo delegated the P0 rulings to technical determination,
+> then same-day discussion CORRECTED the plan: form = simple edits + detail viewing, workspace =
+> creation + advanced edits; NO invented edit-gating (MJ research verified no state-conditional
+> lock exists — we ride EditMode + metadata + triggers); §7 scope model WITHDRAWN pending his
+> dedicated scope planning message. UPD-7/UPD-14 amended in place the same day. P3's mockup
+> round remains Marcelo-involved; the criteria form-idiom restyle is his mockup call.)
 > **Created:** 2026-07-21
 > **Scope:** CROSS-APP — bizapps-accounting + bizapps-orders (plan homed here because the shared
 > primitives live in this repo's Angular lib; orders consumes via `@mj-biz-apps/accounting-ng`)
@@ -56,18 +58,20 @@ imperative via the presenter. That concentration is a strength: one seam to exte
 
 ## 2. The MJ-forms adoption boundary (the rule)
 
-**The decision test (one question):** *is the surface's subject a single entity record whose
-fields the user reads or writes?*
+**The split (Marcelo-refined 2026-07-21):**
 
-- **YES → the MJ form host renders it.** Full-page, dialog, or slide-in — always through
-  `openBizDetail` (never raw `MJFormPresenterService` calls in pages; keep the one seam). The
-  form that renders is the entity's `*Extended` form, so depth (lines, timelines, trees) comes
-  from the form family (§4), not from bespoke panels.
-- **NO — it's a PROCESS (criteria → preview → commit, multi-record, remote-op-backed) → a
-  workspace-card surface.** The form host has no record to bind mid-flow; forcing it would be
-  form cosplay. This is the existing element-doctrine ruling ("Batch building: no → workspace")
-  generalized: JE workspace (creates via `Accounting.CreateJournalEntry`), batch workspace
-  (`PreviewBatch`/`BuildBatch`), payment capture, product/category workshops.
+- **The MJ entity form** (full-page, dialog, or slide-in — always through `openBizDetail`; never
+  raw `MJFormPresenterService` calls in pages) is the home of **detail VIEWING + simple edits on
+  one record**. Children are *visible* through the form's related grids — which natively
+  navigate, not edit (research-verified: generated related-entity grids are navigation grids;
+  inline child editing is custom wiring we are NOT committing to). The form that renders is the
+  entity's `*Extended` form, so depth (lines view, timelines, trees) comes from the form family
+  (§4), not from bespoke panels.
+- **The workspace is the home of CREATION and advanced edits** (anything multi-record,
+  line-level, or process-shaped). Process surfaces (criteria → preview → commit,
+  remote-op-backed) are always workspaces — the form host has no record to bind mid-flow: JE
+  workspace (`Accounting.CreateJournalEntry`), batch workspace (`PreviewBatch`/`BuildBatch`),
+  payment capture, product/category workshops.
 - **Workflow visualizations** (kanban/status board, worklists, fulfillment queue) are neither —
   they're browse surfaces with verbs; their row-detail opens via the form host (already the
   UPD-11 exemption).
@@ -103,28 +107,25 @@ while `Pending`; the lock begins at `Batched` (reversible while the batch is Pen
 after batch approval). There is no `Approved`/`Reversed` JE status — approval is a batch concept;
 a reversal is a new Pending JE.
 
-**The primitive: `EditabilityPolicy` (per entity, pure, tier-1-tested).**
-```ts
-// transfer-pending/editability/ — framework-free, like WorkspaceTabStore
-type Editability =
-  | { Mode: 'full' }
-  | { Mode: 'partial'; EditableFields: string[]; Reason: string }   // whitelist mirrors the trigger
-  | { Mode: 'locked'; Reason: string; Actions?: StateAction[] };    // e.g. Generate reversal, Cancel batch
-type EditabilityFn<E> = (record: E) => Editability;
-```
-- One policy per stateful entity, colocated with the app (accounting: JE, batch; orders: order,
-  line, payment). The whitelist literally transcribes the trigger's allowed-column list, with a
-  comment citing the trigger + THROW code — when a migration changes a trigger, the policy is part
-  of the same change's Definition of Done (same muscle as the ERD rule).
-- **Consumed identically by all surfaces:** `openBizDetail` gains `policy?: EditabilityFn` — it
-  computes `EditMode` (`locked` → read; else edit) and passes the field whitelist through to the
-  form; `*Extended` forms + shared widgets disable non-whitelisted fields in `partial` mode
-  (MJ's `EditMode` is form-wide, so per-field gating is the Extended form's job — this is a known
-  design point, not a gap in MJ); workspace record-tabs (§5) drive their footer from the same
-  policy. The UI mirrors, the trigger enforces — a drifted mirror degrades to a server error, never
-  silent corruption.
-- `locked` renders the form read-only **plus the state's real verbs** as actions (JE: Generate
-  reversal; batch: Cancel; payment: Refund) — never a disabled Save.
+**How gating works — MJ's shipped machinery only, nothing invented (Marcelo ruling + research,
+2026-07-21).** The 2026-07-21 MJ research verified: MJ ships per-field static ReadOnly
+(metadata `AllowUpdateAPI`/PK/special — a ReadOnly field never renders editable), a form-wide
+`EditMode` (+ `StartInEditMode`), a permission-gated Edit button, and layered validation
+(`Validate()` incl. CHECK-derived rules → server `ValidateAsync` → DB constraints/triggers) —
+and **no record-state-conditional lock anywhere**. So:
+
+- **The DB immutability triggers are the sole enforcement authority** (already true — that's
+  their design: sa-level writes can't violate them). The UI never becomes an enforcement layer.
+- **The only UI addition is a few lines inside the `*Extended` forms we already own:** derive
+  the form's `EditMode`/Edit-button visibility from the record's status (JE: Pending →
+  editable, Batched+ → read-only; batch: Pending → editable, Approved+ → read-only; order/
+  payment mirror their triggers), and render the state's REAL verbs (Generate reversal /
+  Cancel / Refund) instead of a disabled Save. This is standard custom-form code (override
+  `StartEditMode`/set `EditMode`), not a system.
+- **Explicitly NOT built:** no `EditabilityPolicy` primitive, no new entities, no metadata
+  invention, no per-field state whitelists (MJ's EditMode is form-wide; a partial-lock field
+  matrix isn't worth custom machinery — the server rejects what the trigger forbids, and the
+  form surfaces the error). If MJ ever ships state-conditional editability upstream, we adopt it.
 
 ## 4. The form family (what the UPD-3.5 mockup round designs)
 
@@ -155,17 +156,20 @@ receipt. The unification:
   commit) | `RecordTab` (an existing entity record opened to view/edit). A `RecordTab`'s body is
   the SAME entity form (via an embedded `<mj-entity-form-host>` mount inside the card body — the
   host is presentation-agnostic by design), with editability from §3's policy.
-- **Footer verbs derive from tab kind + policy:** Draft → Confirm/Keep-as-draft/Discard (as
-  today). Record+full/partial → Save / Discard-changes. Record+locked → no save; the policy's
-  `Actions` render instead. One card, one action bar, labels vary — exactly the standardization
-  the card was built for.
-- **Where "open in workspace" comes from:** list rows get "peek" (slide-in via `openBizDetail`,
-  unchanged) and "open in workspace" (new tab in the entity's workshop) — the slide-in's pop-out
-  (↗) targets the workspace tab rather than a bare dialog, honoring the doctrine's "full-depth
-  home".
-- Order editor is the pilot (UPD-11.3 + Matt's tab-completeness concern lands here); JE workspace
-  follows (a `RecordTab` on a Pending JE = edit; on a Batched JE = locked view w/ Generate
-  reversal).
+- **Footer verbs derive from tab kind + record state:** Draft → Confirm/Keep-as-draft/Discard
+  (as today). Record, editable state → Save / Discard-changes. Record, locked state → no save;
+  the state's real verbs render instead. One card, one action bar, labels vary — exactly the
+  standardization the card was built for.
+- **Where "open in workspace" comes from (Marcelo-confirmed):** list rows get "peek" (slide-in
+  via `openBizDetail`, unchanged) and a **pop-out that opens the existing JE / order / batch in
+  its workspace** as a record tab — the workspace being the advanced-edit home, the form the
+  simple one.
+- Order editor is the pilot (UPD-11.3 + Matt's tab-completeness concern lands here); JE
+  workspace follows (a record tab on a Pending JE = edit; on a Batched JE = locked view w/
+  Generate reversal). The exact composition (how much of the tab body is the hosted entity form
+  vs the workspace's own editors, e.g. the line grid) is a P3/P4 design decision with Marcelo —
+  he flagged real convergence potential BOTH ways (elements of the extended JE form into the
+  workspace, workspace elements as the standard).
 
 ## 6. "Batch using a form" — pinned definition (Q43, proceeding)
 
@@ -173,42 +177,36 @@ The batch workspace does NOT map to "edit a JournalEntryBatch record" — it's c
 build over remote ops, and the element doctrine already ruled it a workspace. Proposed reading
 (Marcelo confirms via [Q43](../QUESTIONS.md#q43)):
 
-- **(a) YES — the criteria panel adopts the form idiom:** shared form-field primitives/styling so
-  it reads as a structured form (familiarity), while remaining process state, not an entity bind.
-- **(b) YES — the BUILT/existing batch is form-host territory:** a new `JournalEntryBatch`
-  `*Extended` form (per-company summary, line items, approval timeline, dispatch state) renders
-  everywhere a batch is VIEWED — list detail, post-build receipt tab (as a `RecordTab`), approval
-  inbox context — with §3 editability (Pending = full, Approved+ = locked + status verbs).
-- **(c) NO — the orchestration itself is never re-modeled as an entity form.**
+- **(a) MAYBE — the criteria panel adopts the form idiom:** Marcelo judges the mockup
+  (`form-look-strip` artifact, 2026-07-21); explicitly skippable with zero downstream cost —
+  it's a restyle, nothing depends on it.
+- **(b) YES — the BUILT/existing batch is form territory:** a new `JournalEntryBatch`
+  `*Extended` form (per-company summary, line items VIEW, approval timeline, dispatch state)
+  renders everywhere a batch is viewed or simply edited — list detail, post-build receipt tab,
+  approval context — with §3 gating (Pending = editable, Approved+ = locked + status verbs).
+  **Child-JE SELECTION inside the batch form is an AUDIBLE** (Marcelo 2026-07-21) — not
+  committed; if called, it's custom `*Extended` wiring, and the workspace remains the primary
+  membership-editing home.
+- **(c) NO — the build orchestration itself is never re-modeled as an entity form.**
 
-## 7. Company scope vs local filters — one authority per surface (app-wide)
+## 7. Company scope — WITHDRAWN from this plan (2026-07-21)
 
-Extends the ratified doctrine line ("never two filter systems on one page") to company scope:
-
-| Surface type | Authority | Rule |
-|---|---|---|
-| **Browse** (lists, dashboards, worklists, boards) | **GLOBAL scope** | Query through `Scope.ComposeFilter`/`FilterFor` ONLY. **No local company control.** The rail chip is the one place company is chosen. |
-| **Operational workspace** (own criteria: JE workspace, batch workspace, workshops) | **LOCAL criteria** | Scope SEEDS the default once at tab open (as-built behavior — correct); after that the criteria panel is the only company authority on the page. Criteria chips display it; the surface never ANDs the live global scope into its queries. |
-| **Record detail** (form host / record tabs) | **NONE** | A record is a record; no company filtering applies. |
-
-- **Violations to fix (the only two):** `all-journal-entries.page` (local `CompanyID` select ANDed
-  over the scope filter) and `gl-accounts.page` (local `FilterCompanyID` + scope both applied) —
-  remove the local selects; users narrow via the chip.
-- Compliant today (keep): JE dashboard, approvals, batches dashboard, all-payments (global-only);
-  JE workspace + batch workspace (seed-then-local); catalog's `OwningCompanyID` select is a DATA
-  filter on a nullable ownership column, not a scope duplicate — allowed, but label it "Owner".
-- `all-orders` is unscoped only because `Order.CompanyID` doesn't exist yet — S1 adds it; the
-  global-scope rule applies there the moment S1 lands (S1 plan gains this as a checklist row).
-- On ratification this table is promoted to the element doctrine (design record) + a small UPD
-  (mirrored acct/orders) — it's app-wide standing doctrine, not plan-local.
+The scope model originally drafted here (global-scope-vs-local-filter authority per surface) was
+**wrong per Marcelo**: the global scope is not query filtering — *"selecting two companies should
+make the frontend work as if the other companies don't exist — no filter options, no dropdowns,
+nothing."* That is a pervasive frontend-existence model, and he will define it in a **dedicated
+scope planning message**. Until that pass: no scope doctrine, no scope code changes from this
+plan. (The as-built survey's per-screen scope table remains useful raw material for that pass —
+it lives in the 2026-07-21 survey results referenced in the header.) UPD-7 item 3 / UPD-14 item 3
+carry the same withdrawal.
 
 ## 8. Execution phases
 
 | # | What | Where | Gate |
 |---|---|---|---|
 | P0 | ✅ DONE 2026-07-21 — Marcelo delegated to technical determination; §2+§7 promoted to acct UPD-7 / orders UPD-14 + design record; plan Active; Q43 answered on the same basis | both repos' plans | — |
-| P1 | `EditabilityPolicy` primitive + policies (JE, batch, order, payment) + `openBizDetail` policy param + export `mj-workspace-card`/`mjTip` from public-api | acct `transfer-pending/` + both apps | none — mechanical |
-| P2 | Scope cleanup: remove the two double filters; "Owner" relabel; doctrine text | acct pages | P0 |
+| P1 | State→`EditMode` wiring inside the existing `*Extended` forms (JE, GLAccount; batch/order/payment as their Extended forms are born in P5) + real state verbs + export `mj-workspace-card`/`mjTip` from public-api. NO new primitive (2026-07-21 rework). | both apps | none — mechanical |
+| P2 | ~~Scope cleanup~~ **WITHDRAWN** — awaits Marcelo's dedicated scope planning pass (§7) | — | his scope message |
 | P3 | Forms-family mockup round (ui-dev-loop) — §4 roster, base pattern + specialization; Marcelo in the loop | design-docs/ui-design/mockups/ | P0; slots before the family build-out (roadmap slice-ordering note) |
 | P4 | Order-editor pilot: `RecordTab` + embedded form host + policy-driven footer (+ red-dot tabs) | orders | P3 selection |
 | P5 | JE/Batch Extended-form uplift from the selected family pattern; detail panels → thin form-host mounts; batch receipt → `RecordTab` | acct | P3/P4 |

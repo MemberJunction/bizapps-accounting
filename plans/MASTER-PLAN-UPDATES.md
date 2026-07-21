@@ -158,24 +158,34 @@ text.** Convention: `~/MJDev/shared-plans/repo-planning-system.md` §3.1.
   (design record). Orders counterpart: UPD-14.
 - **Change (the three standing rules; full design:
   `action-plans/ActionPlan - UI: Unified view-edit primitives, forms boundary, scope model.md`):**
-  1. **Adoption boundary test:** a surface whose subject is a SINGLE entity record the user
-     reads/writes → the MJ form host, always via `openBizDetail` (the only sanctioned presenter
-     caller). A PROCESS surface (criteria → preview → commit, multi-record, remote-op-backed) →
-     an `mj-workspace-card` workspace — the form host has no record to bind mid-flow.
-     "Batch using a form" is therefore the hybrid: form-idiom criteria panel + a real
-     `JournalEntryBatch` entity form wherever a batch is VIEWED; the build orchestration itself
-     is never re-modeled as a form (Q43, technical determination).
-  2. **Editability is state-derived:** per-entity `EditabilityPolicy` (pure, tier-1-tested)
-     mirrors the DB triggers' frozen-field sets (JE 50003-50006 · batch 50008/50009 · order/
-     payment 51001-51005); one policy consumed identically by form host, Extended forms, and
-     workspace record-tabs. `locked` renders read-only + the state's REAL verbs (Generate
-     reversal / Cancel / Refund) — never a disabled Save. Trigger changes update the policy in
-     the same change (ERD-rule muscle).
-  3. **One company-filter authority per surface:** browse surfaces → the GLOBAL scope chip only
-     (no local company control); operational workspaces → LOCAL criteria only (the scope seeds
-     the default once at tab open); record detail → none. Never two silent company filters.
-     As-built violations to fix: `all-journal-entries` + `gl-accounts` local company selects.
-- **Why / source:** the 2026-07-21 as-built surveys + MJ `guides/FORMS_ARCHITECTURE_GUIDE.md`;
-  Marcelo delegated the ruling to technical determination ("I don't know enough about forms to
-  rule — that is what I wanted you to research", 2026-07-21).
-- **Status:** Accepted — technical determination (Marcelo-delegated; his later override adjusts).
+  1. **Adoption boundary (Marcelo-refined 2026-07-21):** the MJ entity form (always via
+     `openBizDetail`, the only sanctioned presenter caller) is the home of **simple edits on one
+     record + detail VIEWING (children visible via the form's related grids — which natively
+     navigate, not edit)**; the **workspace is the home of CREATION and advanced/multi-record
+     edits**. Process surfaces (criteria → preview → commit, remote-op-backed) are always
+     workspaces — the form host has no record to bind mid-flow. "Batch using a form" = the
+     hybrid (Q43): form-idiom criteria styling (Marcelo judging the mockup — skippable) + a
+     `JournalEntryBatch` entity form for viewing/simple edits; child-JE SELECTION inside the
+     batch form is an explicit audible, not committed. A pop-out lets an existing JE / order /
+     batch be opened in its workspace.
+  2. **Edit gating rides what MJ ships — NOTHING is invented (research-verified 2026-07-21):**
+     MJ has per-field static ReadOnly (metadata: `AllowUpdateAPI`/PK/special), a form-wide
+     `EditMode` (+ `StartInEditMode`), a permission-gated Edit button, layered validation
+     (`Validate()` w/ CHECK-derived rules → server `ValidateAsync` → DB), and an atomic
+     parent+children `TransactionGroup`/`PendingRecords` save primitive — but **no
+     record-state-conditional lock exists in MJ**. Therefore: the **DB immutability triggers
+     remain the sole enforcement authority** (they already are); the only UI addition is a few
+     lines in the `*Extended` forms we already own — set `EditMode`/hide Edit from record
+     status (JE: Pending editable, Batched+ read-only; batch: Pending editable, Approved+
+     read-only) and render the state's REAL verbs (Generate reversal / Cancel / Refund), never
+     a disabled Save. NO new policy system, NO new entities, NO metadata invention.
+  3. *(Withdrawn 2026-07-21 — same day.)* The company-scope model recorded here at mint was
+     wrong per Marcelo: the global scope is not query filtering — **selecting companies makes
+     the frontend behave as if the others don't exist** (filter options, dropdowns, everything).
+     A dedicated planning message from Marcelo will define it; until then no scope doctrine and
+     no code changes.
+- **Why / source:** the 2026-07-21 as-built surveys + MJ `guides/FORMS_ARCHITECTURE_GUIDE.md` +
+  the 2026-07-21 MJ edit-gating research (no state-conditional mechanism in MJCore/base-forms);
+  Marcelo's same-day discussion rulings (form vs workspace roles; no invented gating; scope
+  withdrawn).
+- **Status:** Accepted (items 1-2) · item 3 Withdrawn pending Marcelo's scope planning pass.
