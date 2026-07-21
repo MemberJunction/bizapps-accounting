@@ -782,3 +782,23 @@ Filed 2026-07-17 so the task list can be cleared to testing-only. Pull these bac
 - **Currency symbol in the UI when FX activates (FX-gated)** — the JE workspace shows functional currency as a
   capsule (fine while USD-only). When multi-currency lands, standardize how the currency symbol renders on
   amounts across the workspaces. Revisit trigger: FX activation (pairs with the FX DEFERRALS rows). (Marcelo 2026-07-21)
+- **shell-table scrollbar must not sit behind the row trashcan** — the reserved scrollbar gutter currently
+  falls OUTSIDE the table's own space, so it reads as a wrong blank strip AND the vertical scrollbar can
+  overlap the row delete (trash) button. Want: reserve the gutter WITHIN the table so row lines/continuity
+  are preserved (no blank line), and the trashcan is never behind the scrollbar — EXCEPT at minimum column
+  widths, where we accept the table becomes side-scrollable. Applies to the shared `mjsh-table` card. (Marcelo 2026-07-21)
+- **Company scope should filter at the QUERY layer app-wide** — the global company scope should place the app
+  into a context where "only the scoped companies exist": every dropdown/filter/table only offers + returns
+  scoped companies, and local filters narrow WITHIN that. Must be a query-side mechanism (inject the scope into
+  reads), NOT a per-view frontend check and NOT "query all companies then filter client-side". Architectural —
+  size it with the orchestrator; pairs with the one-authority-per-screen filter model. (Marcelo 2026-07-21)
+- **Sidebar collapse setting → bizapps-common** — the rail-collapsed user setting (`mj.bizapps.shell.railCollapsed`)
+  is bizapps-scoped by naming today; it should eventually live in bizapps-common and install only with the bizapps
+  (covering all of MJ is too broad). (Marcelo 2026-07-21)
+- **Sidebar hover-to-expand (collapsed rail)** — when collapsed, hovering the rail (after a short DELAY, to avoid
+  accidental-graze triggering) expands it as an OVERLAY that does NOT push/shift the body next to it (no layout
+  jump); collapses again on mouse-leave. Supersedes the earlier no-hover ruling now that the overlay + delay
+  address the "moves the target you were aiming at" objection. (Marcelo 2026-07-21)
+- **Batch builder company selection → checkbox dropdown** — replace the native `<select multiple>` in the build
+  criteria with a checkbox dropdown (the app already has the pattern in `mj-company-scope-chip`); ideally a
+  reusable multi-select-dropdown primitive. (Marcelo 2026-07-21)
