@@ -48,10 +48,10 @@
   border: 1px solid var(--mj-border-default);
   border-bottom: none;
   border-radius: 8px 8px 0 0;
-  /* Inactive = the SUNKEN surface: darker/recessed in BOTH modes, so inactive tabs fade back while the
-     active one comes forward. (bg-surface-card's relationship to bg-surface INVERTS in dark mode — that
-     was the dark-mode bug where the active tab looked darker than the inactive ones. Marcelo 2026-07-21.) */
-  background: var(--mj-bg-surface-sunken);
+  /* Inactive = the PAGE background (the darkest surface tier) so unselected tabs recede to the page,
+     while the active tab (bg-surface) clearly comes forward — consistent ordering in both light and
+     dark mode (Marcelo 2026-07-21). */
+  background: var(--mj-bg-page);
   margin-bottom: -1px;
 }
 .ws-tab--active {
@@ -156,6 +156,12 @@
   font-family: inherit;
   cursor: pointer;
   white-space: nowrap;
+  /* Fill to the TOP of the card — cancel the bar's top padding for the button only, so it doesn't
+     "cut off early" above the tab row. Top corners rounded (like the tabs) so a hover highlight
+     isn't a surprising sharp rectangle; bottom stays square to meet the baseline (Marcelo 2026-07-21). */
+  align-self: stretch;
+  margin-top: -4px;
+  border-radius: 8px 8px 0 0;
 }
 .ws-tabs__new:hover {
   background: var(--mj-bg-surface-hover);
