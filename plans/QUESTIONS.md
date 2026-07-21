@@ -26,6 +26,7 @@
 | — | [Q7](#q7) | batches/approvals visibility — ANSWERED (see=role+grant; act=Approver-for-company) | ANSWERED |
 | — | [Q3](#q3) | JE-draft contract — ANSWERED (bless as-built IDs; FYI to Amith owed) | ANSWERED |
 | 8 | [Q9](#q9) | Amith — GLAccountLink role FK (bless-as-built) | OPEN |
+| 9 | [Q41](#q41) | Jeremy/Robert/Amith — GLAccount.AccountType change-guard + replace path | OPEN ⏸ HOLD |
 | 9 | [Q26](#q26) | Matt — Explorer header widget slot (feature ask) | OPEN |
 | 10 | [Q36](#q36) | Marcelo — no global GL-account pool; is the COA model as-built right? | OPEN — was dup-numbered Q29, renumbered 2026-07-17 |
 | — | [Q30](#q30) | batches single-company — ANSWERED 2026-07-17 (yes; MOD-15/16) | ANSWERED |
@@ -1252,4 +1253,28 @@ queryable surface for "which questions touch feature X".)*
 - **Context to share:** `packages/Angular/Generic/entity-viewer/src/lib/entity-data-grid/entity-data-grid.component.ts`
   lines 125, 487-493, 1361-1367, 2329-2360; `models/grid-types.ts` `GridColumnConfig`. Also logged in
   `~/MJDev/MJ-UPSTREAM.md` (the `AllowColumnFilters` dead-input entry).
+- **Answer:** _(pending)_
+
+<a id="q41"></a>
+
+### Q41 · GLAccount.AccountType is mutable after JEs reference it — no change-guard — review: Jeremy / Robert / Amith — added 2026-07-20
+- **Status:** OPEN — ⏸ HOLD (the fix is a schema trigger; the exact policy is a domain call and a wrong rule is expensive to reverse)
+- **Requested reviewer:** Jeremy / Robert / Amith
+- **Features:** ACC GLAccount integrity · golden-path validation (JE / company-accounts steps)
+- **Proposed solution (what we intend to implement):** Add a DB trigger + engine guard that BLOCKS changing
+  `GLAccount.AccountType` once any `JournalEntryLine` references the account. The accepted way to "retype" an
+  account is then REPLACE: create a new GLAccount of the correct type, retire the old via `IsActive=false`
+  (supported today — no hard delete), and repoint future links/defaults to the new account. Historical JEs keep
+  the old account by design (JE immutability) so posted entries stay faithful to what was recorded.
+- **The question for Jeremy/Robert/Amith:** (1) Is blocking the AccountType change the right rule, and from
+  which point — first JE line referencing it, or only once a referencing JE is GLPosted? (2) Is "retire + replace
+  with a new account" the accepted operational handling, or do you expect in-place reclassification with reposting?
+  (3) Do we need a first-class "replace/supersede account" operation (bulk-repoint links + default-account
+  assignments), or is manual create-new + retire-old sufficient for v1?
+- **Context to share:** today there is NO guard — only `CK_GLAccount_AccountType` (value ∈ the 5 types); nothing
+  stops flipping Asset→Revenue on an account with posted JEs, silently changing the classification/reporting
+  meaning of every historical entry on it. Balance is checked as Sum(Debits)=Sum(Credits) overall + per-company,
+  so a type flip does NOT unbalance anything — it corrupts classification quietly, which is worse.
+- **Additional context (for a verifying agent):** `migrations/B202605281200…` GLAccount (col ~245, CHECK ~255, no
+  UPDATE trigger); JE immutability triggers 50003/50004/50006; `gl-accounts.page` retire-via-IsActive + create.
 - **Answer:** _(pending)_
