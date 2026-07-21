@@ -159,6 +159,11 @@ mj-page-body-interior {
 .jew__rowact {
   width: 44px;
   text-align: center;
+  vertical-align: middle;
+}
+/* Center the trash button vertically in the row (the input cells make the row taller than the button). */
+.jew__rowact button {
+  vertical-align: middle;
 }
 .jew__row--bad td {
   background: color-mix(in srgb, var(--mj-status-warning) 7%, transparent);
