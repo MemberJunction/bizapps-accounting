@@ -19,6 +19,12 @@
   border: 1px solid var(--mj-border-default);
   border-radius: 12px;
   overflow: hidden;
+  /* SIZING CONTAINER (design rule, Marcelo 2026-07-21): the card is a query container, so content
+     inside sizes with CONTAINER units (cqh/cqw/cqi) — relative to THIS card (a window/pane), never the
+     viewport (vh/vw). vh would size to the whole screen regardless of the pane the card sits in. The
+     card's own size comes from the flex chain (parent-driven), so size containment is safe here. */
+  container-type: size;
+  container-name: workspace;
 }
 
 .ws-card__head {

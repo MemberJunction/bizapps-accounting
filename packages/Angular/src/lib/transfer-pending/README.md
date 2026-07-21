@@ -38,3 +38,19 @@ idiom first.** A parked component is a debt owed to a future transfer; an MJ com
 
 See `plans/TRANSFER-BACKLOG.md` for each row's target + trigger, and
 `design-docs/ui-design/README.md` for the component inventory / MJ-base candidacy.
+
+## DESIGN RULE — size workspace content by CONTAINER, not viewport (Marcelo 2026-07-21)
+
+Inside a workspace, **use CONTAINER units for sizing, never viewport units.** The workspace card
+(`mj-workspace-card`) is declared a query container (`container-type: size`), so content sizes with
+**`cqh` / `cqw` / `cqi`** — relative to the card, which is a **window/pane** in the inward (dock/split)
+system. A `vh`/`vw` value would size to the whole screen regardless of the pane the card sits in, so
+it breaks the moment the card is in a split or a smaller window.
+
+- ✅ `height: 55cqh;` (55% of the workspace card) · `max-height: 88cqh;`
+- ❌ `height: min(45vh, 560px);` (viewport-relative — wrong in a pane)
+- Fixed **px** floors/ceilings are fine as bounds (`min-height: 160px`); the *proportional* size is `cq*`.
+- Reference: the JE workspace line grid (`je-workspace.page.css` `.jew__gridwrap`) — `cqh` default +
+  `resize: vertical` for a user drag handle.
+
+Applies going forward to every workspace surface (JE + batch workspaces, order editor, future ones).
