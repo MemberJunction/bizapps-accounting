@@ -14,7 +14,8 @@
     NewTabLabel="New entry"
     (TabSelected)="SelectTab($event)"
     (TabClosed)="CloseTab($event)"
-    (NewTabRequested)="openNewDraft()">
+    (NewTabRequested)="openNewDraft()"
+    (TabReordered)="ReorderTabs($event)">
 
     <!-- Identity + status + currency — projected into the card's identity band. -->
     <ng-container workspaceHeader>

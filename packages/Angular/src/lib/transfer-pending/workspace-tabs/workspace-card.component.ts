@@ -1,7 +1,7 @@
 import { Component, ChangeDetectionStrategy, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { WorkspaceTab } from './workspace-tabs.types';
-import { WorkspaceTabStripComponent } from './workspace-tab-strip.component';
+import { WorkspaceTabStripComponent, TabReorder } from './workspace-tab-strip.component';
 
 /**
  * `mj-workspace-card` — the reusable frame every "workspace" screen shares (JE + batch workspaces,
@@ -33,7 +33,8 @@ import { WorkspaceTabStripComponent } from './workspace-tab-strip.component';
           [NewTabLabel]="NewTabLabel"
           (TabSelected)="TabSelected.emit($event)"
           (TabClosed)="TabClosed.emit($event)"
-          (NewTabRequested)="NewTabRequested.emit()">
+          (NewTabRequested)="NewTabRequested.emit()"
+          (TabReordered)="TabReordered.emit($event)">
         </mj-workspace-tab-strip>
         <div class="ws-card__headmeta">
           <ng-content select="[workspaceHeader]"></ng-content>
@@ -55,4 +56,5 @@ export class WorkspaceCardComponent {
   @Output() TabSelected = new EventEmitter<string>();
   @Output() TabClosed = new EventEmitter<string>();
   @Output() NewTabRequested = new EventEmitter<void>();
+  @Output() TabReordered = new EventEmitter<TabReorder>();
 }

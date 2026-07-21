@@ -138,6 +138,12 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
     this.cdr.markForCheck();
   }
 
+  /** Drag-reorder from the strip — apply to the store (order only; active tab + drafts untouched). */
+  public ReorderTabs(e: { previousIndex: number; currentIndex: number }): void {
+    this.tabs.Reorder(e.previousIndex, e.currentIndex);
+    this.cdr.markForCheck();
+  }
+
   /** "Keep as draft tab" — the tab already holds the state; this makes that explicit + clean. */
   public KeepAsDraft(): void {
     if (this.tabs.ActiveId) this.tabs.MarkClean(this.tabs.ActiveId);

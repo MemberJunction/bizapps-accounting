@@ -101,6 +101,18 @@ export class WorkspaceTabStore<TState = unknown> {
     return true;
   }
 
+  /**
+   * Move a tab from one position to another (drag-reorder). Active tab + payloads are untouched — only
+   * strip ORDER changes. Out-of-range or no-op indices return false and change nothing.
+   */
+  public Reorder(fromIndex: number, toIndex: number): boolean {
+    const n = this.tabs.length;
+    if (fromIndex === toIndex || fromIndex < 0 || fromIndex >= n || toIndex < 0 || toIndex >= n) return false;
+    const [moved] = this.tabs.splice(fromIndex, 1);
+    this.tabs.splice(toIndex, 0, moved);
+    return true;
+  }
+
   /** Drop every tab (session end / explicit discard-all). */
   public Clear(): void {
     this.tabs = [];

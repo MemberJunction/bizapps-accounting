@@ -1,7 +1,14 @@
 import { Component, ChangeDetectionStrategy, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { CdkDropList, CdkDrag, CdkDragDrop } from '@angular/cdk/drag-drop';
 import { WorkspaceTab } from './workspace-tabs.types';
 import { WorkspaceTipDirective } from './workspace-tip.directive';
+
+/** A drag-reorder request from the strip: move the tab at `previousIndex` to `currentIndex`. */
+export interface TabReorder {
+  previousIndex: number;
+  currentIndex: number;
+}
 
 /**
  * The workspace tab strip — presentation over `WorkspaceTabStore` (UI plan §8.0).
@@ -18,14 +25,20 @@ import { WorkspaceTipDirective } from './workspace-tip.directive';
 @Component({
   standalone: true,
   selector: 'mj-workspace-tab-strip',
-  imports: [CommonModule, WorkspaceTipDirective],
+  imports: [CommonModule, CdkDropList, CdkDrag, WorkspaceTipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="ws-tabbar">
-      <div class="ws-tabs" role="tablist">
+      <div
+        class="ws-tabs"
+        role="tablist"
+        cdkDropList
+        cdkDropListOrientation="horizontal"
+        (cdkDropListDropped)="onDrop($event)">
         @for (tab of Tabs; track tab.Id) {
           <div
             class="ws-tab"
+            cdkDrag
             [class.ws-tab--active]="tab.Id === ActiveId"
             [class.ws-tab--rejected]="tab.Status === 'rejected'"
             [class.ws-tab--complete]="tab.Status === 'complete'"
@@ -74,4 +87,12 @@ export class WorkspaceTabStripComponent {
   @Output() TabSelected = new EventEmitter<string>();
   @Output() TabClosed = new EventEmitter<string>();
   @Output() NewTabRequested = new EventEmitter<void>();
+  @Output() TabReordered = new EventEmitter<TabReorder>();
+
+  /** CDK drop — emit the reorder intent; the host applies it to the store (the strip stays dumb). */
+  public onDrop(event: CdkDragDrop<WorkspaceTab[]>): void {
+    if (event.previousIndex !== event.currentIndex) {
+      this.TabReordered.emit({ previousIndex: event.previousIndex, currentIndex: event.currentIndex });
+    }
+  }
 }
