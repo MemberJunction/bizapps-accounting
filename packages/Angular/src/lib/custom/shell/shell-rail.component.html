@@ -18,12 +18,13 @@
     [attr.aria-expanded]="!Collapsed"
     [title]="ToggleLabel"
     (click)="Toggle()">
-    <i
-      class="fa-solid sr__toggle-icon"
-      [class.fa-angles-left]="!Collapsed"
-      [class.fa-angles-right]="Collapsed"
-      aria-hidden="true"></i>
-    <!-- Hidden when collapsed via CSS, not removed: the accessible name lives on the button itself. -->
+    <!-- A HAMBURGER that never changes/swaps (Marcelo): the constant menu glyph, fixed in the icon
+         column like every nav icon. When EXPANDED we add a left chevron after it as the collapse cue —
+         the hamburger itself does not move or morph between states. -->
+    <i class="fa-solid fa-bars sr__toggle-icon" aria-hidden="true"></i>
+    <!-- Caret + text are hidden by .sr--collapsed CSS (same as the nav labels), so they show whenever the
+         rail is wide — expanded OR hover-peeked — and the hamburger alone shows when truly collapsed. -->
+    <i class="fa-solid fa-angle-left sr__toggle-caret" aria-hidden="true"></i>
     <span class="sr__toggle-text">Collapse</span>
   </button>
 

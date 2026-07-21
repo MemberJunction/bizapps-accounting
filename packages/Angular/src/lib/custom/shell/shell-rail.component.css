@@ -30,12 +30,17 @@
     height: 100%;
     z-index: 60;
     background: var(--mj-bg-surface);
-    /* A crisp EDGE LINE is what actually separates the floating rail from the content — in DARK MODE a
-       black shadow is invisible against the dark page and a light one reads as a glow, so the border is
-       the real elevation cue in both themes. The shadow is a soft assist (black rgba = sanctioned
-       shadow neutral), not the separator. */
+    /* A crisp EDGE LINE separates the floating rail from the content (a black shadow is invisible on a
+       dark page; a light one glows — so the BORDER is the real elevation cue in both themes).
+       PLUS an INSET TOP shadow: the peek overlay sits at z-index:60, ABOVE MJ's page-header (z-index:1,
+       --mj-shadow-md), so the header's own downward shadow no longer lands on the rail's top and it
+       looks like the rail rose above the header. Getting "above the card but under the header" is a
+       stacking dead-end (the content card sits at the same low level), so we RE-CAST the header's
+       shadow onto the overlay's own top edge — the rail reads as being below the header again. */
     border-right: 1px solid var(--mj-border-strong, var(--mj-border-default));
-    box-shadow: 2px 0 28px 2px rgba(0, 0, 0, 0.38);
+    box-shadow:
+      2px 0 28px 2px rgba(0, 0, 0, 0.38),
+      inset 0 9px 7px -7px rgba(0, 0, 0, 0.40);
   }
 }
 
@@ -49,16 +54,18 @@
 
 /* ── The toggle (TOP of the rail) ──────────────────────────────────────────────
    border-right continues the line MJ draws on the rail's <aside>, so the rail reads as one edge.
-   border-BOTTOM separates it from the nav below it (the toggle now sits above the nav, not under it). */
+   NO bottom divider (Marcelo): it should read as just another icon row, not a boxed-off strip — so it
+   sits on the same vertical rhythm as the nav icons. A small top margin lifts it off the very top edge
+   (it looked jammed under the header shadow) without shoving the whole nav down. */
 .sr__toggle {
   flex: none;
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 10px 12px;
+  margin-top: 8px;
+  padding: 8px 12px;
   border: none;
-  border-bottom: 1px solid var(--mj-border-subtle);
   border-right: 1px solid var(--mj-border-default);
   background: var(--mj-bg-surface);
   color: var(--mj-text-secondary);
@@ -90,6 +97,18 @@
   text-align: center;
   font-size: 13px;
   flex-shrink: 0;
+}
+
+/* The collapse-direction caret sits just after the fixed hamburger when the rail is wide; it's
+   decorative (aria-hidden) so display:none when collapsed is fine (unlike the a11y-preserved label). */
+.sr__toggle-caret {
+  font-size: 11px;
+  color: var(--mj-text-muted);
+  margin-left: -4px;
+  flex-shrink: 0;
+}
+.sr--collapsed .sr__toggle-caret {
+  display: none;
 }
 
 /* ── Collapsed: icons only ────────────────────────────────────────────────────
