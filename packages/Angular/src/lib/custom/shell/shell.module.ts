@@ -116,6 +116,7 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
     CompanyScopeChipComponent,
     GlResolutionPreviewComponent,
     WorkspaceTabStripComponent,
+    WorkspaceTipDirective,
   ],
   exports: [
     AccountsCategoryComponent,
