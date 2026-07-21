@@ -12,7 +12,11 @@
 .ws-tabbar {
   display: flex;
   align-items: stretch;
-  border-bottom: 1px solid var(--mj-border-default);
+  /* Breathing room above the tabs so they read as distinct from the card top rather than running into
+     it (Marcelo 2026-07-21; mirrors the MJ tab system's spacing). The separator line is now per-tab
+     (see .ws-tab) so the ACTIVE tab can clear it — a full-width baseline can't, because the horizontal
+     scroller clips the classic overlap-merge trick. */
+  padding-top: 6px;
   /* A touch taller so the horizontal scrollbar isn't cramped against the tabs (Marcelo 2026-07-21). */
   min-height: 44px;
 }
@@ -38,19 +42,22 @@
   display: flex;
   align-items: center;
   /* Content-sized up to the cap; flex:none so a tab keeps its content width and the LIST scrolls on
-     overflow (never squashes). The reserved dot slot (below) keeps dirty/clean the same width. */
+     overflow (never squashes). */
   max-width: var(--ws-tab-max);
   flex: none;
   border: 1px solid var(--mj-border-default);
-  border-bottom: none;
   border-radius: 8px 8px 0 0;
+  /* Each tab carries its OWN bottom line (the separator from the body below); the ACTIVE tab clears
+     it, so only the active tab merges into the page. A full-width baseline can't do this here — the
+     horizontal scroller clips the classic overlap-merge trick (Marcelo 2026-07-21). */
+  border-bottom: 1px solid var(--mj-border-default);
   background: var(--mj-bg-surface-card);
-  margin-bottom: -1px;
 }
 .ws-tab--active {
   background: var(--mj-bg-surface);
   border-color: var(--mj-border-default);
-  box-shadow: 0 1px 0 0 var(--mj-bg-surface);
+  /* No bottom line + the page's own background → the active tab reads as part of the page (Marcelo). */
+  border-bottom-color: transparent;
 }
 .ws-tab--rejected {
   border-color: var(--mj-status-warning-border, var(--mj-status-warning));
