@@ -33,6 +33,7 @@
 | R5 | **Ask Ethan the A3 entitlement questions** (grant granularity · lifecycle coupling · read contract · team beneficiary semantics) — gates the grant-shape freeze | His own A3 response | ACCEPTED (self-assigned) |
 | R6 | **Roles/visibility path detail** — he owns the `UserCompanyRole` direction through the A2 co-design (incl. the Izzy/Access-Control-Rules dig he flagged) | Q22/Q24 answers + 07-16 meeting | ACCEPTED |
 | R7 | **BAO-ready date (with Marcelo)** for the minimal LH4I scope — the A7 answer Ethan is waiting on | orders Q22; `ROADMAP-lxp-launch.md` V2 gate | **AGENDA — Monday's meeting (2026-07-20)** |
+| R9 | **Review this EXTERNAL-EXPECTATIONS doc** for realism — Marcelo flagged it as the one doc worth his eyes ("I don't know if some of these expectations are not in line with what's realistic") | 2026-07-21 meeting close | ACCEPTED ("OK, we can do that") |
 
 ## Ethan / LXP team
 

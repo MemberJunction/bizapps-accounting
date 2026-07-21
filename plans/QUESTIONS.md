@@ -19,7 +19,7 @@
 |---|---|---|---|
 | — | [Q37](#q37) | posting-date model — ANSWERED same-day (Amith's singular batch PostingDate; Jeremy 100%; OQ-1 hold-and-flag) | ANSWERED |
 | 1 | [Q19](#q19) | Jeremy — golden path + exceptions (absorbs Q12/Q15) | OPEN ★HIGH |
-| 2 | [Q42](#q42) | Robert/Amith — CodeGen INCLUDE (allowlist) mode for open apps ★HIGH | OPEN — proceeding · was dup-numbered Q40, renumbered 2026-07-21 |
+| — | [Q42](#q42) | CodeGen INCLUDE mode — ANSWERED 2026-07-21 (Robert APPROVED; pilot on acct+orders; clients stay exclude) | ANSWERED |
 | — | [Q22](#q22) | company-visibility mechanism — ANSWERED (UserCompanyRole grant table) | ANSWERED |
 | — | [Q24](#q24) | grants + governance — ANSWERED (audit cols now, workflow deferred) | ANSWERED |
 | 4 | [Q25](#q25) | Ian/Matt/team — shared-UI component routing (transfer backlog) | OPEN — PARTIAL 2026-07-20 (deep-link helper → our PR; rest open) |
@@ -27,7 +27,7 @@
 | — | [Q7](#q7) | batches/approvals visibility — ANSWERED (see=role+grant; act=Approver-for-company) | ANSWERED |
 | — | [Q3](#q3) | JE-draft contract — ANSWERED (bless as-built IDs; FYI to Amith owed) | ANSWERED |
 | 8 | [Q9](#q9) | Amith — GLAccountLink role FK (bless-as-built) | OPEN |
-| 9 | [Q41](#q41) | Jeremy/Robert/Amith — GLAccount.AccountType change-guard + replace path | OPEN ⏸ HOLD |
+| 9 | [Q41](#q41) | GLAccount change-guard — Robert direction RULED 2026-07-21 (lock-on-first-use, retire+replace, retirement date); Jeremy detail + Amith ideas remain | OPEN — ⏸ HOLD on impl |
 | 9 | [Q26](#q26) | Matt — Explorer header widget slot (feature ask) | OPEN |
 | 10 | [Q36](#q36) | Marcelo — no global GL-account pool; is the COA model as-built right? | OPEN — was dup-numbered Q29, renumbered 2026-07-17 |
 | — | [Q30](#q30) | batches single-company — ANSWERED 2026-07-17 (yes; MOD-15/16) | ANSWERED |
@@ -1279,8 +1279,20 @@ queryable surface for "which questions touch feature X".)*
 <a id="q41"></a>
 
 ### Q41 · GLAccount.AccountType is mutable after JEs reference it — no change-guard — review: Jeremy / Robert / Amith — added 2026-07-20
-- **Status:** OPEN — ⏸ HOLD (the fix is a schema trigger; the exact policy is a domain call and a wrong rule is expensive to reverse)
-- **Requested reviewer:** Jeremy / Robert / Amith
+- **Status:** OPEN — direction RULED by Robert (2026-07-21 meeting); ⏸ HOLD on the trigger
+  IMPLEMENTATION until Jeremy's operational detail (+ Amith's ideas, per Robert). Not urgent —
+  Robert: "you probably don't need to worry about it right now."
+- **Robert's 2026-07-21 direction (fixed):** **lock-on-first-use** — an account is freely
+  editable until its first JE reference; once used, name stays changeable, **type does not
+  change, number probably not** ("very limited in what you can change"). Operational handling =
+  **retire + replace** (create the new account, deprecate the old; history keeps the old — his
+  description matches our proposed solution exactly). NEW agreements: (a) track a **retirement
+  date on GLAccount** (Marcelo proposal, Robert on board — needed when the ERP reuses a number);
+  (b) once retired, **GLAccountLink date windows may not extend past the retirement date**.
+  Remaining for Jeremy (+ Amith input invited): the exact frozen-field list, from-which-point
+  nuance, and whether a first-class "replace/supersede account" bulk-repoint op is wanted for v1.
+- **Requested reviewer:** Jeremy (operational detail; rides the Q19 sitting) / Amith (ideas — Robert
+  named him) / Robert (direction DELIVERED 2026-07-21)
 - **Features:** ACC GLAccount integrity · golden-path validation (JE / company-accounts steps)
 - **Proposed solution (what we intend to implement):** Add a DB trigger + engine guard that BLOCKS changing
   `GLAccount.AccountType` once any `JournalEntryLine` references the account. The accepted way to "retype" an
@@ -1302,7 +1314,8 @@ queryable surface for "which questions touch feature X".)*
 
 <a id="q42"></a>
 ### Q42 · CodeGen scoping for open apps: INCLUDE (allowlist) mode instead of exclude? — review: Robert + Amith — added 2026-07-21 ★HIGH
-- **Status:** OPEN — proceeding (mjdev-level mitigation filed; this asks for the platform fix) — was dup-numbered Q40 at mint, renumbered Q42 2026-07-21 (Q40 = the entity-data-grid ask to Matt)
+- **Status:** ANSWERED (Robert, 2026-07-21 meeting — APPROVED) — frozen. Was dup-numbered Q40 at
+  mint, renumbered Q42 2026-07-21 (Q40 = the entity-data-grid ask to Matt).
 - **Requested reviewer:** Robert + Amith (MJ CodeGen design)
 - **Features:** cross-cutting (platform robustness; ACC/ORD codegen safety)
 - **Proposed solution (what we are implementing meanwhile):** an mjdev improvement is filed so
@@ -1325,7 +1338,17 @@ queryable surface for "which questions touch feature X".)*
   JournalEntry) — doctrinally fine per MJ's own OpenApp policy, but blocked in dev by exactly
   this codegen behavior. Fixing the scoping unblocks hard FKs in the safe (dependent → dependency)
   direction.
-- **Answer:** _(pending)_
+- **Answer (Robert, 2026-07-21 — APPROVED):** "I'm fine with supporting include schemas for the
+  open apps — add it to CodeGen and **try it out with the Accounting and Orders app**; as we get
+  comfortable, tell everybody else working on an open app." Agreed semantics (Robert's own
+  formulation): **include defines the universe** — absent include = wildcard (today's behavior,
+  zero change for client MJ deployments, which stay exclude-mode since "we don't control the
+  client environment"); when present, only included schemas generate, with exclude applied on
+  top. Ian's convergence point stands: the SaaS products (BCSaaS, Izzy, Skip brain) fit the same
+  include pattern. Config surface: `includeSchemas` beside `excludeSchemas` in `mj.config.cjs`.
+  Routed onward: MJ-UPSTREAM include-mode entry flipped to approved/green-lit (implementation =
+  an MJ CodeGen dev task, piloted on accounting+orders); the mjdev cross-exclusion request
+  remains the interim mitigation until it ships.
 
 <a id="q43"></a>
 ### Q43 · "Batch using a form" — which reading is intended? — review: Marcelo — added 2026-07-21

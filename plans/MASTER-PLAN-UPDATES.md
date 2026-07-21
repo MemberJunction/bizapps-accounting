@@ -98,7 +98,8 @@ text.** Convention: `~/MJDev/shared-plans/repo-planning-system.md` §3.1.
      no shared registry object. This dissolves Robert's meeting-vs-written difference: his
      meeting ruling (company-owned) is the schema; his written "shared label with per-company
      routes" is the UX, delivered at display time. Category links are therefore same-company by
-     construction. Robert confirm rides orders Q24.
+     construction. Robert confirm rides orders Q24 — **CONFIRMED 2026-07-21** ("five companies,
+     5 t-shirt categories… crossing them, no"; his written "shared" phrasing was doc drift).
   2. **Company is the resolver's INPUT** (`Product.CompanyID`, required NOT NULL — the product's
      company is the source of truth; derivation-from-connected-account struck). Walk: product
      link → the product-company's OWN category tree → product-company default → loud tripwire.

@@ -70,3 +70,12 @@ company-owned — Marcelo ruling pending, UPD-5 item 1 + S1 bullet held); Q39 ra
 account-type mechanics (new Intercompany AR/AP roles, per-affiliate routing key, IntercompanyFlow
 pulled forward to launch — BAO-date scope flag). Orders MOD-3 rev-3 + MOD-14 extensions + S1
 updates in the orders repo.
+
+### 2026-07-21 Accounting Meeting- marcelo ian & robert.md — ✅ PROCESSED 2026-07-21 (Task 129a)
+Three questions closed/advanced + follow-ons: **Q42 CodeGen include-mode APPROVED** (pilot on
+acct+orders; clients stay exclude-mode; MJ-UPSTREAM entry flipped green-lit) · **orders Q24
+category model CONFIRMED** (company-level categories, "crossing them, no"; UPD-5 item 1 confirm
+cleared) · **Q41 direction RULED** (lock-on-first-use; retire+replace; NEW: GLAccount retirement
+date + links may not extend past it; Jeremy detail + Amith ideas remain — impl stays held) ·
+due-to/due-from JE-line toggle UI idea → BACKLOG row · Robert ACCEPTED reviewing
+EXTERNAL-EXPECTATIONS (new R9) · Robert asks demo videos shared to Jeremy/him/Amith.

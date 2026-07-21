@@ -802,3 +802,11 @@ Filed 2026-07-17 so the task list can be cleared to testing-only. Pull these bac
 - **Batch builder company selection → checkbox dropdown** — replace the native `<select multiple>` in the build
   criteria with a checkbox dropdown (the app already has the pattern in `mj-company-scope-chip`); ideally a
   reusable multi-select-dropdown primitive. (Marcelo 2026-07-21)
+
+- **JE due-to/due-from line affordance (UI + eventual account-type support)** — added 2026-07-21
+  (Robert meeting): most lines never need due-to/due-from, so don't show it; a per-line toggle
+  ("needs counter entry") reveals it, counter entries possibly rendering as a row below ("Matt
+  might have better ideas"). Robert: doesn't have to be schema/metadata — UI-first is fine.
+  Current gap Marcelo confirmed: no account type supports due-to/due-from yet; deferred
+  deliberately, Jeremy/accounting team trusted for interim validation. Pairs with MOD-14's
+  Intercompany AR/AP roles when that lands (S3).
