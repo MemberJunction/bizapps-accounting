@@ -30,7 +30,9 @@
     height: 100%;
     z-index: 60;
     background: var(--mj-bg-surface);
-    box-shadow: 6px 0 20px color-mix(in srgb, var(--mj-text-primary) 14%, transparent);
+    /* A real drop SHADOW — a BLACK-based rgba (the sanctioned shadow neutral), NOT a token-tinted one:
+       in dark mode a light-tinted shadow reads as a GLOW behind the panel. Dark in both themes. */
+    box-shadow: 6px 0 24px rgba(0, 0, 0, 0.35);
   }
 }
 
@@ -92,11 +94,10 @@
    defends its width with !important, but nothing defends its labels — so an unscoped rule here
    would strip the labels out of the mobile drawer and leave a column of anonymous icons. */
 @media (min-width: 701px) {
-  /* Labels are HIDDEN VISUALLY, NOT REMOVED. `display:none` would drop them from the accessibility
+  /* ITEM labels are HIDDEN VISUALLY, NOT REMOVED. `display:none` would drop them from the accessibility
      tree too, leaving every rail button with no accessible name — an icon-only rail that screen
      readers cannot read. This keeps the name and only takes the pixels. */
   .sr--collapsed ::ng-deep .mj-left-nav__text,
-  .sr--collapsed ::ng-deep .mj-left-nav__section-label,
   .sr--collapsed .sr__toggle-text {
     position: absolute;
     width: 1px;
@@ -116,9 +117,23 @@
     gap: 0;
   }
 
-  /* A section label collapses to nothing, so its padding would otherwise leave a phantom gap. */
+  /* SECTION labels (MAIN / WORK / VIEWS) become a small centred DIVIDER LINE when collapsed, keeping the
+     label's OWN box (padding + height) so the vertical rhythm is IDENTICAL to the expanded rail — the
+     words come back in the exact same place on expand/peek (Marcelo 2026-07-21). `color: transparent`
+     hides the glyphs without removing them from the a11y tree or changing the box height. */
   .sr--collapsed ::ng-deep .mj-left-nav__section-label {
-    padding: 0;
+    position: relative;
+    color: transparent;
+  }
+  .sr--collapsed ::ng-deep .mj-left-nav__section-label::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 20px;
+    height: 1px;
+    background: var(--mj-border-default);
   }
 }
 

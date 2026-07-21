@@ -146,6 +146,10 @@ export class ShellRailComponent implements OnInit, OnDestroy {
   public Toggle(): void {
     // Flip + persist through the shared service, so ALL rail instances (every category) reflect it live.
     this.railState.Toggle();
+    // A deliberate collapse click OVERRIDES an in-progress hover-peek: cancel the peek + its timers so the
+    // rail snaps shut instantly instead of staying open because the pointer is still over it (Marcelo).
+    this.clearTimers();
+    this.HoverExpanded = false;
     this.cdr.markForCheck();
   }
 }

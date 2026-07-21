@@ -4,7 +4,9 @@
      `overflow-y: auto` box, so a footer scrolls away with the items — an affordance you have to go
      find is not an affordance. Out here it is always on screen, and it carries its own right border
      so the rail's edge line runs unbroken to the bottom rather than stopping where MJ's <aside> ends. -->
-<div class="sr" [class.sr--collapsed]="Collapsed">
+<!-- .sr--collapsed (icons-only) applies only when truly collapsed AND not hover-peeking: peeking shows
+     the full expanded rail (labels + wide) so the words come back exactly as on click-expand. -->
+<div class="sr" [class.sr--collapsed]="Collapsed && !HoverExpanded">
   <mj-left-nav
     class="sr__nav"
     [Sections]="Sections"
