@@ -60,3 +60,13 @@ required-indicators · filter variants · table-to-edge) · Q25 PARTIAL (deep-li
 via OUR PR, Amith review) · Q27/Q35 raised live (awaiting Matt) · routing BACKLOG row updated
 (shift-click/split EXISTS; gap = discoverability + split button + active-window top bar) ·
 workspace-tab framework: Matt's nav-rethink may absorb (no commitment).
+
+### 2026-07-20-Robert-q23-q38-q39-answers.md — ✅ PROCESSED 2026-07-20 (Task 119a)
+Written ratification of the meeting rulings + deltas: Q23 answer REVISED (role-grant-driven, NOT
+auto-involvement — owner-scoped RLS one leg; OrderLine.CompanyID = denormalized perf column not an
+RLS need); Q38 ratified (+NOT NULL confirmed vs nullable code, UX auto-populate, bundles per
+component company) ⚠ EXCEPT category model contradicts the meeting (shared-label+routes vs
+company-owned — Marcelo ruling pending, UPD-5 item 1 + S1 bullet held); Q39 ratified + IC
+account-type mechanics (new Intercompany AR/AP roles, per-affiliate routing key, IntercompanyFlow
+pulled forward to launch — BAO-date scope flag). Orders MOD-3 rev-3 + MOD-14 extensions + S1
+updates in the orders repo.

@@ -93,13 +93,18 @@ text.** Convention: `~/MJDev/shared-plans/repo-planning-system.md` §3.1.
   role/link design's intent stands. Marcelo: "that's what we're gonna go for… lock that structure
   into the mods and updates."
 - **Change (the locked structure):**
-  1. **Categories are COMPANY-OWNED (revised 2026-07-20, Robert — supersedes this entry's
-     original shared-taxonomy-with-per-company-routes shape):** "Products need to be owned by a
-     company. Product categories need to be owned by a company… your product catalog is at the
-     company level" (inheritance possible later). Each company has its own category tree;
-     a category's account links are therefore same-company by construction — the per-company
-     route machinery collapses to simple same-company links. Schema impact:
-     `ProductCategory.CompanyID` (orders S1 slice).
+  1. **Category model — ⚠ ROBERT CONTRADICTS HIMSELF ACROSS THE SAME DAY; Marcelo ruling
+     pending (⏸ the S1 sub-item holds):** In the 2026-07-20 MEETING he ruled categories
+     COMPANY-OWNED ("Product categories need to be owned by a company… your product catalog is
+     at the company level"; Marcelo: "Good"). In his WRITTEN answers doc, sent later the same
+     evening (`meetings/2026-07-20-Robert-q23-q38-q39-answers.md` §Q38.3), he describes the
+     OTHER model: "a category is a **shared label with per-company account routes**; the route
+     chosen must resolve to an account in the product's company (no route for that company →
+     keep climbing)." The two differ in schema (ProductCategory.CompanyID vs no column) and UX
+     (N per-company trees vs one tree with per-company wiring). Both satisfy the invariant.
+     Every OTHER element of this entry is unaffected — resolution stays company-scoped either
+     way. Decide with Marcelo (one line), then this item finalizes and S1's category bullet
+     un-holds.
   2. **Company is the resolver's INPUT** (`Product.CompanyID`, required NOT NULL — the product's
      company is the source of truth; derivation-from-connected-account struck). Walk: product
      link → the product-company's OWN category tree → product-company default → loud tripwire.

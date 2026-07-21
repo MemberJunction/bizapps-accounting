@@ -1154,6 +1154,14 @@ queryable surface for "which questions touch feature X".)*
   to be Company B's accounts"). (4) Residuals not discussed → routed: bundle fan-out company
   rule + line-company materialization ride the orders GL-resolution deep-dive backlog row.
   Routed onward: UPD-5 revision · MOD-5 revision · orders MOD-14 · S1 plan scope.
+- **⚠ Written ratification + additions (Robert's answers doc, same evening —
+  `meetings/2026-07-20-Robert-q23-q38-q39-answers.md`):** `Product.CompanyID` NOT NULL confirmed
+  (the column is still nullable in code — S1 flips it); **UX auto-populates CompanyID** when only
+  one company is in play (picker only on genuine choice); enforcement gaps confirmed against code
+  (account-derivation still live; no link validation yet — both S1); **bundles fan out per the
+  COMPONENT's company** (ruled; net-new work when bundles activate). ⚠ EXCEPT: his written §Q38.3
+  describes categories as "shared label with per-company routes," contradicting his in-meeting
+  company-owned ruling — see UPD-5 item 1 (Marcelo ruling pending).
 - **Context to share:** MOD-10 (role-based polymorphic mapping) · orders MOD-3 rev-2 (product-
   company derivation) · [Q31](#q31) (the related role-on-links question — same sitting).
 - **What motivates this now:** Marcelo flags the resolution path as a coming **performance +
@@ -1206,6 +1214,16 @@ queryable surface for "which questions touch feature X".)*
   Robert's yes; **Jeremy verifies** (nexus). (4) Not limited — practically users hold permissions
   on involved companies. (5) Yes — seller-of-record name. Routed onward: MOD-5 revision · orders
   MOD-14 (booking JE shape) · roadmap V1.7/S3 · UPD-5 refinement.
+- **Written ratification + the account-type mechanics (Robert's answers doc, same evening):** the
+  worked three-company example is canonical (owner: Dr trade-AR full / Cr own revenue / Cr
+  **Intercompany AP per counterparty** / Cr Sales Tax Payable; each sister: Dr **Intercompany AR
+  (Due-From)** / Cr its own Revenue-or-DefRev). Two NEW GLAccountRoles required: **Intercompany
+  AR** + **Intercompany AP** (the resolver knows only Cash/AR/Sales/DefRev today; + Sales Tax
+  Payable if tax launches). IC accounts are **per-affiliate** — resolution key is
+  (entity × counterparty), richer than `ResolveAccount`'s (product × role × company): decide the
+  routing shape BEFORE building the legs. **`IntercompanyFlow` is pulled FORWARD from deferred to
+  the launch model** — "a real scope item, not a no-op confirmation — worth surfacing alongside
+  the BAO-date discussion." All routed to orders MOD-14 + roadmap V1.7.
 - **Context to share:** Robert's Betty/Izzy example (2026-07-14 meeting — "I posted $150,000 to
   Betty… $50 of that is due to another company"); MOD-5 (Payments generates all legs);
   MOD-11/MOD-12 (one JE per company).
