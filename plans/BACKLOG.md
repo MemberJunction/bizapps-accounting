@@ -15,8 +15,10 @@ Convention: `~/MJDev/shared-plans/repo-planning-system.md` §5.1. (The instance-
       account; (b) GLAccountLink edits become APPEND-ONLY via the existing date-effectivity —
       end-date + new link, never in-place role/account change (affects only FUTURE resolution;
       booked lines already snapshot resolved GLAccount IDs, the same at-transaction-time
-      principle as OrderLine.CompanyID). Not urgent (unlikely edit) — file, decide at the S2/
-      account-work window or a Robert sitting.
+      principle as OrderLine.CompanyID). Marcelo 2026-07-21: LOW priority — the link
+      start/end-dates already form the change registry, the breaking edit is unlikely, and a
+      GL-side account-type change would be Jeremy's to handle correctly in the ERP anyway.
+      Park; revisit only at the account-work window or if a real case appears.
 
 - [ ] **Permission-grant inventory (collect as they surface)** — running list for the A2/K.2
       role design: **shared-orders grant** (see another company's order — Q23 answer: not
