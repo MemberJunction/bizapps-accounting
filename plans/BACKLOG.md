@@ -810,3 +810,11 @@ Filed 2026-07-17 so the task list can be cleared to testing-only. Pull these bac
   Current gap Marcelo confirmed: no account type supports due-to/due-from yet; deferred
   deliberately, Jeremy/accounting team trusted for interim validation. Pairs with MOD-14's
   Intercompany AR/AP roles when that lands (S3).
+- **Shared "New +" button → header, always-present** — the New-record button shared across the dashboard
+  and all list/views currently sits in a card that eats vertical space. Move it into the page header
+  (top-right preferred), and RESERVE its slot so it's always present — other header buttons must not
+  shift position when it shows/hides. (Marcelo 2026-07-21)
+- **Sidebar collapse-arrow placement** — the collapse toggle at the rail BOTTOM triggers the macOS dock
+  (and would hit the Windows taskbar too) — a cross-machine hazard at the screen's bottom edge. Decide:
+  move it to the rail TOP (recommended — dock/taskbar-safe, always visible) vs. keep bottom with clearance.
+  (Marcelo 2026-07-21)
