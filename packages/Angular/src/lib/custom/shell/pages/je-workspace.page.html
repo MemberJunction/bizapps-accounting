@@ -5,44 +5,37 @@
      gutters that keep content off the rail and off the page edge. NOTE it is display:block, so its
      children size with height/min-height — never with flex, which silently collapses to zero. -->
 <mj-page-body-interior>
-  <!-- ONE backing card for the whole workspace: a header section (tabs + identity) above a body
-       that scrolls as a whole. Everything used to float loose on the page background, which is why
-       a label on --mj-bg-page next to an input on --mj-bg-surface read as unrelated debris. -->
-  <section class="jew" aria-label="Journal entry workspace">
-    <header class="jew__head">
-      <!-- Session tabs — flush with the card's left edge; their rule runs the card's full width. -->
-      <mj-workspace-tab-strip
-        [Tabs]="Tabs"
-        [ActiveId]="ActiveTabId"
-        NewTabLabel="New entry"
-        (TabSelected)="SelectTab($event)"
-        (TabClosed)="CloseTab($event)"
-        (NewTabRequested)="openNewDraft()">
-      </mj-workspace-tab-strip>
+  <!-- The reusable workspace frame owns the card surface + tab strip + scrollable body; this page
+       projects its identity band ([workspaceHeader]) + its form (default slot). -->
+  <mj-workspace-card
+    aria-label="Journal entry workspace"
+    [Tabs]="Tabs"
+    [ActiveId]="ActiveTabId"
+    NewTabLabel="New entry"
+    (TabSelected)="SelectTab($event)"
+    (TabClosed)="CloseTab($event)"
+    (NewTabRequested)="openNewDraft()">
 
-      <!-- Identity + status + currency: BELOW the tab line, never in line with it. -->
-      <div class="jew__headmeta">
-        <span class="jew__identity">
-          {{ IsCreated ? Draft?.CreatedEntryNumber : 'New entry' }}
-        </span>
-        @if (IsCreated) {
-          <mj-stat-badge Label="Created" Icon="fa-solid fa-check" Variant="success"></mj-stat-badge>
-        } @else {
-          <mj-stat-badge Label="Draft" Variant="default"></mj-stat-badge>
-        }
-        <!-- Display-only (no FX in the v1 contract) but real information about what you are
-             editing, so it stays — in the card, not the page header. -->
-        @if (FunctionalCurrency) {
-          <mj-stat-badge [Label]="FunctionalCurrency + ' (functional)'" Icon="fa-solid fa-coins" Variant="default"></mj-stat-badge>
-        }
-        <span class="jew__session">
-          <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
-          Tabs keep your progress for this session — drafts are not saved to the database (v1).
-        </span>
-      </div>
-    </header>
+    <!-- Identity + status + currency — projected into the card's identity band. -->
+    <ng-container workspaceHeader>
+      <span class="jew__identity">
+        {{ IsCreated ? Draft?.CreatedEntryNumber : 'New entry' }}
+      </span>
+      @if (IsCreated) {
+        <mj-stat-badge Label="Created" Icon="fa-solid fa-check" Variant="success"></mj-stat-badge>
+      } @else {
+        <mj-stat-badge Label="Draft" Variant="default"></mj-stat-badge>
+      }
+      @if (FunctionalCurrency) {
+        <mj-stat-badge [Label]="FunctionalCurrency + ' (functional)'" Icon="fa-solid fa-coins" Variant="default"></mj-stat-badge>
+      }
+      <span class="jew__session">
+        <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+        Tabs keep your progress for this session — drafts are not saved to the database (v1).
+      </span>
+    </ng-container>
 
-    <div class="jew__body">
+    <ng-container>
       @if (Draft; as d) {
         <fieldset class="jew__form" [disabled]="IsCreated">
           <label class="jew__field">
@@ -256,6 +249,6 @@
       @if (ActionMessage) {
         <p class="jew__msg" [class.jew__msg--error]="ActionIsError" role="status">{{ ActionMessage }}</p>
       }
-    </div>
-  </section>
+    </ng-container>
+  </mj-workspace-card>
 </mj-page-body-interior>

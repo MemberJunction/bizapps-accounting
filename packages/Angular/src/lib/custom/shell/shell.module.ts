@@ -24,6 +24,7 @@ import { CompanyScopeChipComponent } from '../shared/company-scope-chip.componen
 import { PageRefreshService } from '../../transfer-pending/shell-refresh/page-refresh.service';
 import { GlResolutionPreviewComponent } from '../shared/gl-resolution-preview.component';
 import { WorkspaceTabStripComponent } from '../../transfer-pending/workspace-tabs/workspace-tab-strip.component';
+import { WorkspaceCardComponent } from '../../transfer-pending/workspace-tabs/workspace-card.component';
 import { WorkspaceTipDirective } from '../../transfer-pending/workspace-tabs/workspace-tip.directive';
 
 import { BatchDispatchModule } from '../BatchDispatch/batch-dispatch.module';
@@ -116,6 +117,7 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
     CompanyScopeChipComponent,
     GlResolutionPreviewComponent,
     WorkspaceTabStripComponent,
+    WorkspaceCardComponent,
     WorkspaceTipDirective,
   ],
   exports: [
