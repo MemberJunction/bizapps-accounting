@@ -77,11 +77,16 @@ mj-page-body-interior {
    with a max-height + scroll only when there are many lines (Marcelo 2026-07-21). Border/radius come
    from the shared .mjsh-tablewrap. */
 .jew__gridwrap.mjsh-tablewrap {
-  height: auto;
-  min-height: 0;
-  max-height: min(52vh, 620px);
-  /* Reserve the vertical scrollbar's gutter ALWAYS, so adding/removing a line (which crosses the
-     max-height threshold) doesn't pop a scrollbar in/out and shift the grid sideways (Marcelo 2026-07-21). */
+  /* FIXED default height sized to the viewport (approx the available space) — so adding/removing rows
+     does NOT resize the grid (no jarring movement); rows scroll WITHIN it. DRAGGABLE: `resize: vertical`
+     gives a native bottom handle to make the grid taller/shorter, bounded by min/max (Marcelo 2026-07-21).
+     `flex: none` so the card-body's flex layout doesn't override the chosen/dragged height. */
+  height: min(45vh, 560px);
+  min-height: 160px;
+  max-height: 82vh;
+  flex: none;
+  resize: vertical;
+  /* Reserve the scrollbar gutter so the ever-present vertical scrollbar never shifts the grid sideways. */
   scrollbar-gutter: stable;
 }
 .jew__grid {
