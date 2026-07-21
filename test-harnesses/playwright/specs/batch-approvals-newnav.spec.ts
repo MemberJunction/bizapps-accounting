@@ -9,7 +9,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { loginViaMagicLink } from '../lib/auth';
-import { openAccountingApp, openNavItem, captureConsoleErrors, expectNoConsoleErrors } from '../lib/explorer';
+import { openAccountingApp, openNavItem, captureConsoleErrors, expectNoConsoleErrors, resetCompanyScopeToAll } from '../lib/explorer';
 import { HARNESS_DIR } from '../lib/env';
 
 // Seed a Pending JE (+ running user as CFO) so there's something to build/approve. Uses the proven
@@ -41,6 +41,9 @@ test('Batches → build → Batch approvals → Approve → Dispatch advances to
   const sink = captureConsoleErrors(page);
   await loginViaMagicLink(page);
   await openAccountingApp(page);
+  // The batch workspace inherits the global company scope into its build criteria; reset it to All so
+  // the fixture's isolated company is in scope (an ambient narrow scope otherwise empties the preview).
+  await resetCompanyScopeToAll(page);
 
   // 1. Build a batch — the Build affordance lives on the Batch workspace rail page.
   await railItem(page, 'Batches', 'Batch workspace');

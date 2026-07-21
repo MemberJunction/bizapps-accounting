@@ -8,7 +8,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { loginViaMagicLink } from '../lib/auth';
-import { openAccountingApp, openNavItem, captureConsoleErrors, expectNoConsoleErrors } from '../lib/explorer';
+import { openAccountingApp, openNavItem, captureConsoleErrors, expectNoConsoleErrors, resetCompanyScopeToAll } from '../lib/explorer';
 import { HARNESS_DIR } from '../lib/env';
 
 const WORKTREE_ROOT = path.resolve(HARNESS_DIR, '..', '..', '..', '..', '..');
@@ -36,6 +36,9 @@ test('Batches → build → Batch approvals → Reject cancels the batch (new na
   const sink = captureConsoleErrors(page);
   await loginViaMagicLink(page);
   await openAccountingApp(page);
+  // The batch workspace inherits the global company scope into its build criteria; reset it to All so
+  // the fixture's isolated company is in scope (an ambient narrow scope otherwise empties the preview).
+  await resetCompanyScopeToAll(page);
 
   // 1. Build a batch on the Batch workspace.
   await railItem(page, 'Batches', 'Batch workspace');

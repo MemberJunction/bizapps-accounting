@@ -84,6 +84,24 @@ export async function openNavItem(page: Page, label: string): Promise<void> {
   await page.waitForTimeout(4500);
 }
 
+/**
+ * Reset the GLOBAL company scope to "All companies" via the header scope chip.
+ *
+ * Screens that inherit the global scope (e.g. the batch workspace's build criteria) otherwise show only
+ * whatever the persisted scope happens to be — so a test whose fixture creates an ISOLATED company sees
+ * an empty result when the ambient scope excludes it. Call this after opening the app so scope-inheriting
+ * screens see every company. Idempotent + tolerant: a no-op when already All or when a page has no chip.
+ */
+export async function resetCompanyScopeToAll(page: Page): Promise<void> {
+  const chip = page.getByRole('button', { name: /Scope:/i }).first();
+  if (!(await chip.isVisible().catch(() => false))) return;
+  await chip.click();
+  const all = page.getByRole('button', { name: /All companies/i }).first();
+  if (await all.isVisible().catch(() => false)) await all.click();
+  await page.keyboard.press('Escape').catch(() => undefined);
+  await page.waitForTimeout(600);
+}
+
 /** The company <select> options (excludes disabled placeholders). */
 export async function companyOptions(page: Page): Promise<string[]> {
   return page.evaluate(() =>
