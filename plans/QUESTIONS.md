@@ -42,6 +42,7 @@
 | 10 | [Q27](#q27) | Matt — `mj-left-nav` desktop icons-only collapse (feature ask) | OPEN — raised live 2026-07-20; awaiting Matt's build |
 | 4b | [Q28](#q28) | Marcelo — batch/task transaction split + batch task pointer (MOD-14) | OPEN (no-CFO precheck RULED+built) |
 | 4c | [Q29](#q29) | Marcelo/Ian — regenerate: reset the existing task vs void+replace (principle ruled) | OPEN |
+| 4d | [Q43](#q43) | Marcelo — "batch using a form": hybrid reading proposed (form-styled criteria + Batch entity form for viewing; orchestration stays a workspace) | OPEN — proceeding |
 | — | [T36](#t36) | test data — ANSWERED (per-run seeded company; accounting agent owns) | ANSWERED |
 
 *(Feature index removed 2026-07-16 per convention — each entry's **Features** field is the
@@ -1324,4 +1325,26 @@ queryable surface for "which questions touch feature X".)*
   JournalEntry) — doctrinally fine per MJ's own OpenApp policy, but blocked in dev by exactly
   this codegen behavior. Fixing the scoping unblocks hard FKs in the safe (dependent → dependency)
   direction.
+- **Answer:** _(pending)_
+
+<a id="q43"></a>
+### Q43 · "Batch using a form" — which reading is intended? — review: Marcelo — added 2026-07-21
+- **Status:** OPEN — proceeding
+- **Requested reviewer:** Marcelo
+- **Features:** ACC-D (batching UI) · the forms design pass (UPD-3.5)
+- **Proposed solution (what we are implementing):** the hybrid reading, pinned in
+  `action-plans/ActionPlan - UI: Unified view-edit primitives, forms boundary, scope model.md` §6:
+  (a) the batch workspace's CRITERIA panel adopts the shared form-field idiom (structured-form look
+  + familiarity) while remaining process state; (b) the BUILT/existing batch gets a real
+  `JournalEntryBatch` `*Extended` MJ entity form (per-company summary, line items, approval
+  timeline, dispatch state) rendered everywhere a batch is VIEWED — list detail, post-build
+  receipt tab, approval context — with state-gated editability (Pending = editable, Approved+ =
+  locked + status verbs); (c) the criteria→preview→build ORCHESTRATION itself is never re-modeled
+  as an entity form (the element doctrine already ruled batch building a workspace, and the flow
+  edits no batch record — it calls `PreviewBatch`/`BuildBatch` remote ops).
+- **The question for Marcelo:** does "batch using a form" mean (a)+(b) as proposed, or did you
+  intend something stronger — e.g. the entire build flow hosted INSIDE the batch entity form?
+- **Context to share:** the plan §6 + the element-doctrine ruling ("Batch building: no →
+  workspace"); Amith's UPD-3 "no bespoke pop-ups / forms are the basis" comment that raised the
+  ambiguity.
 - **Answer:** _(pending)_
