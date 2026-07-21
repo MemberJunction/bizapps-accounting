@@ -107,7 +107,8 @@
                       class="mj-input"
                       [(ngModel)]="line.GLAccountID"
                       (ngModelChange)="touch()"
-                      [title]="AccountLabel(line.GLAccountID)"
+                      [mjTip]="AccountLabel(line.GLAccountID)"
+                      mjTipAlways
                       [disabled]="IsCreated || !d.CompanyID">
                       <option [ngValue]="null">Pick an account…</option>
                       @for (a of AccountOptions; track a.ID) {

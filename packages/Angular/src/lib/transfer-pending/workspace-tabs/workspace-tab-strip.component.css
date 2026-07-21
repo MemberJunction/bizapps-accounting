@@ -154,27 +154,5 @@
   background: var(--mj-bg-surface-hover);
 }
 
-/* Delayed, NON-INTERACTIVE tooltip: fixed to the viewport, pointer-events:none so it can never sit
-   between the pointer and a control or block a click; the component hides it on the next mousemove. */
-.ws-tab__tooltip {
-  position: fixed;
-  z-index: 1000;
-  pointer-events: none;
-  /* ~1.5× a tab wide, capped at 3 lines tall — never a screen-wide banner (Marcelo 2026-07-21). */
-  max-width: 300px;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  padding: 5px 9px;
-  border-radius: 6px;
-  background: var(--mj-bg-surface-elevated, var(--mj-bg-surface));
-  border: 1px solid var(--mj-border-default);
-  /* Toned down — the old 18%/14px shadow read "shiny" in dark mode and heavy in light (Marcelo). */
-  box-shadow: 0 2px 6px color-mix(in srgb, var(--mj-text-primary) 8%, transparent);
-  color: var(--mj-text-primary);
-  font-size: 12px;
-  line-height: 1.35;
-  white-space: normal;
-  word-break: break-word;
-}
+/* The truncation tooltip is now the reusable `mjTip` directive (workspace-tip.directive.ts) — themed
+   inline + a neutral shadow, shared with the account-name hover. No per-strip tooltip styles here. */
