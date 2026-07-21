@@ -372,9 +372,14 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
         // Keep a memo caption if the operator gave one; otherwise fall to the now-known batch number.
         this.renameActiveTab(this.batchTabLabel(d));
       }
-      this.ActionMessage = res.ApprovalTaskRaised
-        ? `Built batch ${d.BuiltBatchNumber} — sent for CFO approval.`
-        : `Built batch ${d.BuiltBatchNumber}. ⚠ Its approval task could not be raised — the batch is valid and can be retried from Batch approvals.`;
+      // On confirm, refresh to a FRESH tab (Marcelo 2026-07-21) — the built batch stays in its own
+      // read-only tab for review while a new draft is ready. (openNewDraft clears messages; set after.)
+      const builtNumber = d.BuiltBatchNumber;
+      const taskRaised = res.ApprovalTaskRaised;
+      this.openNewDraft();
+      this.ActionMessage = taskRaised
+        ? `Built batch ${builtNumber} — sent for CFO approval. Its tab is kept for review; this is a fresh batch.`
+        : `Built batch ${builtNumber}. ⚠ Its approval task could not be raised — the batch is valid and can be retried from Batch approvals.`;
       this.ActionIsError = false;
     } catch (e) {
       this.setError(e instanceof Error ? e.message : String(e));

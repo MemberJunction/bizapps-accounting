@@ -57,15 +57,15 @@
 }
 
 /* The standardized action bar — pinned below the scrolling body, so the verbs stay reachable without
-   scrolling to the end of a long form. mj-btn classes match the JE workspace exactly. */
+   scrolling to the end of a long form. NO top border (Marcelo 2026-07-21): the buttons should read as
+   part of the sheet, not a boxed-off strip — the card's own frame is the only border we want. */
 .ws-card__foot {
   flex: none;
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  padding: 10px 14px;
-  border-top: 1px solid var(--mj-border-default);
+  padding: 4px 14px 12px;
 }
 /* Per-workshop caption beside the verbs (projected). Collapses when nothing is slotted. */
 .ws-card__footnote {

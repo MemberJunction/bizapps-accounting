@@ -407,7 +407,12 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
       // A memo-less entry now falls back to its freshly-minted number (touch() no longer fires on a
       // locked receipt); a memo'd entry keeps its memo caption.
       this.renameActiveTab(this.jeTabLabel());
-      this.ActionMessage = `Created entry ${d.CreatedEntryNumber} — it is Pending and joins the unbatched pool.`;
+      // On confirm, behave like a form that refreshes (Marcelo 2026-07-21): open a FRESH tab so the
+      // operator can immediately enter the next entry. The just-created entry stays in its own tab,
+      // read-only, for review. (openNewDraft clears messages, so set the confirmation after it.)
+      const createdNumber = d.CreatedEntryNumber;
+      this.openNewDraft();
+      this.ActionMessage = `Created entry ${createdNumber} — Pending, in the unbatched pool. Its tab is kept for review; this is a fresh entry.`;
       this.ActionIsError = false;
     } catch (e) {
       this.setError(e instanceof Error ? e.message : String(e));
