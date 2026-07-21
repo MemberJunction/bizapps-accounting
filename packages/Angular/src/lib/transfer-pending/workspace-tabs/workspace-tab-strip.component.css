@@ -12,11 +12,11 @@
 .ws-tabbar {
   display: flex;
   align-items: stretch;
-  /* Breathing room above the tabs so they read as distinct from the card top rather than running into
-     it (Marcelo 2026-07-21; mirrors the MJ tab system's spacing). The separator line is now per-tab
-     (see .ws-tab) so the ACTIVE tab can clear it — a full-width baseline can't, because the horizontal
-     scroller clips the classic overlap-merge trick. */
-  padding-top: 6px;
+  /* Full-width baseline across the top of the page — the consistent separator (Marcelo 2026-07-21:
+     preferred over an active-tab merge, which the horizontal scroller clips; the merge's only
+     workarounds are fragile/poor-Safari). The active tab comes forward by COLOR, not by clearing this. */
+  border-bottom: 1px solid var(--mj-border-default);
+  padding-top: 4px;
   /* A touch taller so the horizontal scrollbar isn't cramped against the tabs (Marcelo 2026-07-21). */
   min-height: 44px;
 }
@@ -46,18 +46,18 @@
   max-width: var(--ws-tab-max);
   flex: none;
   border: 1px solid var(--mj-border-default);
+  border-bottom: none;
   border-radius: 8px 8px 0 0;
-  /* Each tab carries its OWN bottom line (the separator from the body below); the ACTIVE tab clears
-     it, so only the active tab merges into the page. A full-width baseline can't do this here — the
-     horizontal scroller clips the classic overlap-merge trick (Marcelo 2026-07-21). */
-  border-bottom: 1px solid var(--mj-border-default);
-  background: var(--mj-bg-surface-card);
+  /* Inactive = the SUNKEN surface: darker/recessed in BOTH modes, so inactive tabs fade back while the
+     active one comes forward. (bg-surface-card's relationship to bg-surface INVERTS in dark mode — that
+     was the dark-mode bug where the active tab looked darker than the inactive ones. Marcelo 2026-07-21.) */
+  background: var(--mj-bg-surface-sunken);
+  margin-bottom: -1px;
 }
 .ws-tab--active {
+  /* Active = the lighter base surface → comes forward in both light and dark mode. */
   background: var(--mj-bg-surface);
   border-color: var(--mj-border-default);
-  /* No bottom line + the page's own background → the active tab reads as part of the page (Marcelo). */
-  border-bottom-color: transparent;
 }
 .ws-tab--rejected {
   border-color: var(--mj-status-warning-border, var(--mj-status-warning));
