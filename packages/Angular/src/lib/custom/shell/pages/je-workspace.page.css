@@ -77,13 +77,12 @@ mj-page-body-interior {
    with a max-height + scroll only when there are many lines (Marcelo 2026-07-21). Border/radius come
    from the shared .mjsh-tablewrap. */
 .jew__gridwrap.mjsh-tablewrap {
-  /* Grow-with-content, bounded (Marcelo 2026-07-21): a COMFORTABLE min (~5 rows, never a 2-row sliver),
-     grow as rows are added, capped by a CONTAINER-based max (cqh — relative to the workspace card, a
-     window/pane, NOT the viewport; the design rule). The vertical scrollbar appears ONLY past the max.
-     Custom drag bar (below) overrides height/maxHeight for a user-chosen size. */
-  height: auto;
-  min-height: 268px;   /* ~5 data rows + header — the default, not a tiny sliver */
-  max-height: 52cqh;   /* container-based cap; leaves room for the balance strip + memo + footer */
+  /* CONSTANT default size (Marcelo 2026-07-21): starts at a comfortable ~5-6 rows and STAYS there —
+     it does NOT grow as rows are added (rows scroll WITHIN it), so the card never gets forced into a
+     scroll. Sized by the CONTAINER (cqh — relative to the workspace card, a window/pane, NOT the
+     viewport; the design rule). Want more visible rows? Drag the bottom bar out (below). */
+  height: 38cqh;
+  min-height: 150px;   /* drag floor ≈ 2–3 rows (you can shrink it that small, not smaller) */
   flex: none;
   /* Reserve the gutter ALWAYS + a THIN scrollbar, so data never sits under the scrollbar and adding/
      removing rows never pops a bar in/out that shifts the grid (reduce footprint AND reserve space). */

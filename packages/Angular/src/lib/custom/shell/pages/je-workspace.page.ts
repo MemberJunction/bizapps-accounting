@@ -265,7 +265,7 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
     const el = this.gridScroll?.nativeElement;
     if (!el) return;
     const card = el.closest('.ws-card') as HTMLElement | null;
-    const MIN = 200;
+    const MIN = 150; // ≈ 2–3 rows — the smallest the grid can be dragged
     const MAX = card ? Math.round(card.clientHeight * 0.85) : 900;
     const startY = ev.clientY;
     const startH = Math.round(el.getBoundingClientRect().height);
