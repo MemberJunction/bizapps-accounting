@@ -1,13 +1,5 @@
-<!-- The page header carries NO status bubble: a lone "Draft" capsule spent a whole band of the
-     workspace saying one word. What you are editing (its number/status/currency) now rides in the
-     workspace card's own header, beside the tabs, where it is next to the thing it describes. -->
-<mj-page-header-interior>
-  <div actions>
-    <button class="mj-btn mj-btn--outline" (click)="openNewDraft()">
-      <i class="fa-solid fa-plus" aria-hidden="true"></i> New entry
-    </button>
-  </div>
-</mj-page-header-interior>
+<!-- No top "New entry" button / header card — the workspace tab strip owns new-entry (browser-style
+     new-tab affordance). Identity/status/currency ride in the card header beside the tabs. -->
 
 <!-- <mj-page-body-interior> is the interior primitive <mj-left-nav-content> expects; it owns the
      gutters that keep content off the rail and off the page edge. NOTE it is display:block, so its
