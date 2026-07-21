@@ -152,3 +152,30 @@ text.** Convention: `~/MJDev/shared-plans/repo-planning-system.md` §3.1.
 - **Why / source:** `meetings/2026-07-20 - Accounting UI Review - Matt and.md`. Feeds the forms/
   list design pass; Marcelo checks back with Matt midweek.
 - **Status:** Accepted.
+
+## UPD-7 — View/edit UX unification: forms adoption boundary · state-derived editability · one-authority company scope (2026-07-21)
+- **Amends:** UPD-3 (refines the forms-first direction — intent unchanged) + the element doctrine
+  (design record). Orders counterpart: UPD-14.
+- **Change (the three standing rules; full design:
+  `action-plans/ActionPlan - UI: Unified view-edit primitives, forms boundary, scope model.md`):**
+  1. **Adoption boundary test:** a surface whose subject is a SINGLE entity record the user
+     reads/writes → the MJ form host, always via `openBizDetail` (the only sanctioned presenter
+     caller). A PROCESS surface (criteria → preview → commit, multi-record, remote-op-backed) →
+     an `mj-workspace-card` workspace — the form host has no record to bind mid-flow.
+     "Batch using a form" is therefore the hybrid: form-idiom criteria panel + a real
+     `JournalEntryBatch` entity form wherever a batch is VIEWED; the build orchestration itself
+     is never re-modeled as a form (Q43, technical determination).
+  2. **Editability is state-derived:** per-entity `EditabilityPolicy` (pure, tier-1-tested)
+     mirrors the DB triggers' frozen-field sets (JE 50003-50006 · batch 50008/50009 · order/
+     payment 51001-51005); one policy consumed identically by form host, Extended forms, and
+     workspace record-tabs. `locked` renders read-only + the state's REAL verbs (Generate
+     reversal / Cancel / Refund) — never a disabled Save. Trigger changes update the policy in
+     the same change (ERD-rule muscle).
+  3. **One company-filter authority per surface:** browse surfaces → the GLOBAL scope chip only
+     (no local company control); operational workspaces → LOCAL criteria only (the scope seeds
+     the default once at tab open); record detail → none. Never two silent company filters.
+     As-built violations to fix: `all-journal-entries` + `gl-accounts` local company selects.
+- **Why / source:** the 2026-07-21 as-built surveys + MJ `guides/FORMS_ARCHITECTURE_GUIDE.md`;
+  Marcelo delegated the ruling to technical determination ("I don't know enough about forms to
+  rule — that is what I wanted you to research", 2026-07-21).
+- **Status:** Accepted — technical determination (Marcelo-delegated; his later override adjusts).

@@ -77,3 +77,10 @@ user via UserInfoEngine; moves to the Explorer header if the upstream widget-slo
   criteria panel is the ONLY filter surface, and what you see is exactly what the criteria select.
 - Dashboards show no on-demand heavy aggregates — expensive stats are precomputed on a schedule or
   don't ship.
+- **Forms adoption boundary (UPD-7, 2026-07-21):** single-record view/edit → the MJ form host via
+  `openBizDetail` (only sanctioned presenter caller); process surfaces (criteria→preview→commit,
+  remote-op-backed) → `mj-workspace-card`. Editability is state-derived (`EditabilityPolicy`
+  mirroring the DB immutability triggers); locked records render read-only + real state verbs.
+- **One company-filter authority per surface (UPD-7):** browse = the global scope chip ONLY (no
+  local company control); operational workspaces = local criteria ONLY (scope seeds the default at
+  tab open); record detail = none. Extends the "never two filter systems" rule to company scope.

@@ -1,6 +1,9 @@
 # ActionPlan - UI: Unified view-edit primitives, forms boundary, scope model
 
-> **Status:** Draft (design pass — Marcelo-involved; flips Active on his review)
+> **Status:** Active (2026-07-21 — Marcelo delegated the P0 rulings to technical determination:
+> "I don't know enough about forms to rule — that is what I wanted you to research." §2/§7
+> promoted to acct UPD-7 / orders UPD-14 + the design record on that basis; his later override
+> adjusts course. P3's mockup round remains Marcelo-involved.)
 > **Created:** 2026-07-21
 > **Scope:** CROSS-APP — bizapps-accounting + bizapps-orders (plan homed here because the shared
 > primitives live in this repo's Angular lib; orders consumes via `@mj-biz-apps/accounting-ng`)
@@ -203,7 +206,7 @@ Extends the ratified doctrine line ("never two filter systems on one page") to c
 
 | # | What | Where | Gate |
 |---|---|---|---|
-| P0 | Marcelo review: this plan + Q43 + §7 table → promote §2 rule + §7 table to UPDs + design record; flip plan Active | both repos' plans | his review |
+| P0 | ✅ DONE 2026-07-21 — Marcelo delegated to technical determination; §2+§7 promoted to acct UPD-7 / orders UPD-14 + design record; plan Active; Q43 answered on the same basis | both repos' plans | — |
 | P1 | `EditabilityPolicy` primitive + policies (JE, batch, order, payment) + `openBizDetail` policy param + export `mj-workspace-card`/`mjTip` from public-api | acct `transfer-pending/` + both apps | none — mechanical |
 | P2 | Scope cleanup: remove the two double filters; "Owner" relabel; doctrine text | acct pages | P0 |
 | P3 | Forms-family mockup round (ui-dev-loop) — §4 roster, base pattern + specialization; Marcelo in the loop | design-docs/ui-design/mockups/ | P0; slots before the family build-out (roadmap slice-ordering note) |

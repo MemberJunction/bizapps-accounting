@@ -42,7 +42,7 @@
 | 10 | [Q27](#q27) | Matt — `mj-left-nav` desktop icons-only collapse (feature ask) | OPEN — raised live 2026-07-20; awaiting Matt's build |
 | 4b | [Q28](#q28) | Marcelo — batch/task transaction split + batch task pointer (MOD-14) | OPEN (no-CFO precheck RULED+built) |
 | 4c | [Q29](#q29) | Marcelo/Ian — regenerate: reset the existing task vs void+replace (principle ruled) | OPEN |
-| 4d | [Q43](#q43) | Marcelo — "batch using a form": hybrid reading proposed (form-styled criteria + Batch entity form for viewing; orchestration stays a workspace) | OPEN — proceeding |
+| — | [Q43](#q43) | "batch using a form" — ANSWERED same-day (Marcelo delegated; hybrid ruled on technical grounds → UPD-7) | ANSWERED |
 | — | [T36](#t36) | test data — ANSWERED (per-run seeded company; accounting agent owns) | ANSWERED |
 
 *(Feature index removed 2026-07-16 per convention — each entry's **Features** field is the
@@ -1329,7 +1329,9 @@ queryable surface for "which questions touch feature X".)*
 
 <a id="q43"></a>
 ### Q43 · "Batch using a form" — which reading is intended? — review: Marcelo — added 2026-07-21
-- **Status:** OPEN — proceeding
+- **Status:** ANSWERED (2026-07-21, same day — Marcelo delegated: "I don't know enough about
+  forms to rule on this; that is what I wanted you to research." Ruling made on technical
+  grounds, recorded in the Answer; his later override adjusts.) — frozen
 - **Requested reviewer:** Marcelo
 - **Features:** ACC-D (batching UI) · the forms design pass (UPD-3.5)
 - **Proposed solution (what we are implementing):** the hybrid reading, pinned in
@@ -1347,4 +1349,12 @@ queryable surface for "which questions touch feature X".)*
 - **Context to share:** the plan §6 + the element-doctrine ruling ("Batch building: no →
   workspace"); Amith's UPD-3 "no bespoke pop-ups / forms are the basis" comment that raised the
   ambiguity.
-- **Answer:** _(pending)_
+- **Answer (technical determination, 2026-07-21):** **The hybrid — (a)+(b), never (c).** Grounds:
+  MJ's form host binds ONE entity record (`EntityName` + record/PK) — the batch build flow has NO
+  batch record until `BuildBatch` creates one, so hosting the orchestration inside the entity
+  form is architecturally unsupported (it would require fake/placeholder records and misuse the
+  machinery); MJ's own decision guide targets record editors, and the element doctrine already
+  ruled batch building a workspace. What "forms-first" (UPD-3) genuinely buys here: the
+  form-field idiom on the criteria panel (familiarity) + a real `JournalEntryBatch` `*Extended`
+  form as the ONE way a batch is viewed/edited everywhere (state-gated: Pending editable,
+  Approved+ locked + status verbs). Routed onward: acct UPD-7 item 1 + plan §6.
