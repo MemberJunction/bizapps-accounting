@@ -407,3 +407,29 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
   ours, cert validation may come from the engine).
 - **Why / source:** Robert's A4 position, `meetings/2026-07-14 - lxp-open-items-response.md`.
 - **Status:** Accepted (position stated by Robert; Marcelo folding it as plan of record 2026-07-17).
+
+## MOD-19 — Amith schema cleanup: ACP default-account FKs → GLAccountLink rows; ChartOfAccountsMapping dropped; batch line CompanyID dropped; contra-account roles (2026-07-21)
+- **Supersedes:** the `AccountingCompanyProfile` five default GL-account FK columns
+  (`ARGLAccountID` … `UnrealizedFXGainLossGLAccountID`) · the `ChartOfAccountsMapping` table ·
+  `JournalEntryBatchLineItem.CompanyID`.
+- **Change (Amith, 2026-07-21 review):**
+  1. **Company default accounts = GLAccountLink rows at the company level** — the five ACP FK
+     columns are REMOVED ("replaced by 5 rows in the GL account link table"). There is no
+     system-level default: "GL account defaults start at the company level." Enforcement that a
+     company carries the required role links is deferred (a `GLAccountRole` required-tracking
+     column was floated and explicitly parked — "we're going to come back to it"; BACKLOG).
+  2. **`ChartOfAccountsMapping` is DROPPED** — "an appendage from a prior design… blow it away."
+     ERP account identity already lives on `GLAccount` (`ExternalSystem` + `ExternalAccountID`);
+     we are not the source of truth for the ERP's chart.
+  3. **`JournalEntryBatchLineItem.CompanyID` is DROPPED** — the batch header carries the company
+     (MOD-15 single-company batches); a line-level company is redundant.
+  4. **Contra-account roles:** `GLAccountRole` gains **Sales Discounts** and **Returns &
+     Allowances** (alongside AR/Sales/DefRev/Inventory/COGS) — the classical contra treatment:
+     gross credit to Sales, discount as a Dr to Sales-Discounts, AR at net; absent a linked
+     discounts account, net into Sales. (Orders-side booking shape: orders MOD-15.)
+  5. **Migration practice (standing, pre-production):** edit the ORIGINAL baseline migration in
+     place, rebuild on a clean database, re-run codegen — no incremental fix-up migrations while
+     nothing is deployed.
+- **Why / source:** `meetings/2026-07-21 Accounting Orders Review - Amith & Marcelo.md`;
+  executed from orders `action-plans/ActionPlan - Amith build direction (per-line JEs, factory, schema cleanup).md`.
+- **Status:** Accepted — the active build basis.

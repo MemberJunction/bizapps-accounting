@@ -79,3 +79,17 @@ cleared) · **Q41 direction RULED** (lock-on-first-use; retire+replace; NEW: GLA
 date + links may not extend past it; Jeremy detail + Amith ideas remain — impl stays held) ·
 due-to/due-from JE-line toggle UI idea → BACKLOG row · Robert ACCEPTED reviewing
 EXTERNAL-EXPECTATIONS (new R9) · Robert asks demo videos shared to Jeremy/him/Amith.
+
+### 2026-07-21 Accounting Orders Review - Amith & Marcelo.md — ✅ PROCESSED 2026-07-21 (Task 130a)
+NEW DIRECTION (Amith, Marcelo-endorsed): build-first, iterate in-system ("go build the whole
+thing… get past these documents"). Landings: **orders MOD-15** (one JE per ORDER LINE ·
+`OrderLine.JournalEntryID` replaces the UPD-7 junction · IC due-to/due-from → PAYMENT side,
+superseding MOD-14's booking shape (⚠ Robert/Jeremy re-closure = orders Q25 ★HIGH) · single
+locked status · resolver+cache in OrdersEngineBase · OrderJournalEntryFactory + Save-override
+pattern) · **acct MOD-19** (drop ACP's 5 default-account FKs → GLAccountLink rows; drop
+ChartOfAccountsMapping; drop JEBatchLineItem.CompanyID; + Sales-Discounts & R&A contra roles;
+edit-baseline-in-place practice) · supersession markers on MOD-11/MOD-14/UPD-7 · roadmap
+V1.2/V1.7 reshaped · execution plan: orders `ActionPlan - Amith build direction (per-line JEs,
+factory, schema cleanup).md` (Active). Deferred by Amith: JE-entity encapsulation move,
+GLAccountRole required-col, coupon dimensions, subscription rev-rec session. FEATURE-LIST
+re-pin owed at the plan's Phase-A close.
