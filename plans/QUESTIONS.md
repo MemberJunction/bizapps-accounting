@@ -1296,3 +1296,30 @@ queryable surface for "which questions touch feature X".)*
 - **Additional context (for a verifying agent):** `migrations/B202605281200…` GLAccount (col ~245, CHECK ~255, no
   UPDATE trigger); JE immutability triggers 50003/50004/50006; `gl-accounts.page` retire-via-IsActive + create.
 - **Answer:** _(pending)_
+
+<a id="q40"></a>
+### Q40 · CodeGen scoping for open apps: INCLUDE (allowlist) mode instead of exclude? — review: Robert + Amith — added 2026-07-21 ★HIGH
+- **Status:** OPEN — proceeding (mjdev-level mitigation filed; this asks for the platform fix)
+- **Requested reviewer:** Robert + Amith (MJ CodeGen design)
+- **Features:** cross-cutting (platform robustness; ACC/ORD codegen safety)
+- **Proposed solution (what we are implementing meanwhile):** an mjdev improvement is filed so
+  that in dev instances, EVERY open app's codegen run excludes ALL OTHER open apps' schemas
+  (cross-exclusion) — this removes the reverse-relationship pollution (a foreign FK into your
+  schema currently injects the other app's entities into YOUR generated types; the bizapps-common
+  breakage). Production is unaffected either way: installs apply migrations + committed generated
+  files via git, they don't rerun codegen.
+- **The question for Robert/Amith:** should MJ CodeGen support an **INCLUDE (allowlist) mode** —
+  an open app declares "generate ONLY these schemas" (its own + intentional additions) — while
+  the MAIN instance keeps exclude-mode (exclude the open apps, include everything else by
+  default, since main-instance codegen must sweep the customer org's own schemas at install)?
+  Today, running codegen inside an installed open app that has dependents pointing FKs at it
+  produces broken output; our conventions avoid triggering it, but it is a robustness gap, not a
+  designed behavior.
+- **Context to share:** `~/MJDev/MJ-UPSTREAM.md` — the CodeGen cross-app reverse-relationship
+  pollution entry (measured blast radius: an app breaks iff another app holds a real FK into its
+  schema) + the new include-mode entry.
+- **What motivates this now:** UPD-7 (orders) wants a real cross-app FK (junction →
+  JournalEntry) — doctrinally fine per MJ's own OpenApp policy, but blocked in dev by exactly
+  this codegen behavior. Fixing the scoping unblocks hard FKs in the safe (dependent → dependency)
+  direction.
+- **Answer:** _(pending)_
