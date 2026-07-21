@@ -101,19 +101,20 @@
       </label>
 
       <label class="bw-field">
-        <span>Companies</span>
+        <span>Company</span>
+        <!-- Single-select (Marcelo 2026-07-21): a batch is single-company (clean single-CFO approval).
+             "All companies" is kept for now so the sweep-all path + existing engine still work; the
+             enforce-exactly-one-company invariant lands with the single-company engine change. -->
         <select
           class="mj-input"
-          multiple
-          size="3"
-          [(ngModel)]="Draft.Criteria.CompanyIDs"
+          [(ngModel)]="SelectedCompanyId"
           (ngModelChange)="OnCriteriaChanged()"
           [disabled]="IsBuilt">
+          <option [ngValue]="null">All companies</option>
           @for (c of Scope.Companies; track c.ID) {
-            <option [value]="c.ID">{{ c.Name }}</option>
+            <option [ngValue]="c.ID">{{ c.Name }}</option>
           }
         </select>
-        <span class="bw-hint">None selected = all companies</span>
       </label>
 
       <label class="bw-field">

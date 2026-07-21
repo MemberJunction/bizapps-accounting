@@ -11,7 +11,7 @@
     [ActiveId]="ActiveId"
     [MobileTitle]="MobileTitle"
     [Width]="RailWidth"
-    (ItemClicked)="ItemClicked.emit($event)">
+    (ItemClicked)="onItemClicked($event)">
   </mj-left-nav>
 
   <!-- An ARROW, per Marcelo: a hamburger says "here is a menu", which is a lie — the menu is already

@@ -1,6 +1,11 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, EventEmitter, Input, OnInit, Output, inject } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, EventEmitter, HostBinding, HostListener, Input, OnDestroy, OnInit, Output, inject } from '@angular/core';
 import { MJLeftNavComponent, MJLeftNavItem, MJLeftNavSection } from '@memberjunction/ng-ui-components';
 import { ShellRailStateService } from './shell-rail-state.service';
+
+/** Hover-to-expand timings (Marcelo 2026-07-21). Enter is delayed so an accidental graze does not pop
+ *  the rail open; leave has a small grace so a wobble off the edge doesn't collapse it mid-reach. */
+const HOVER_EXPAND_DELAY_MS = 450;
+const HOVER_COLLAPSE_DELAY_MS = 160;
 
 /**
  * The category shells' nav rail — MJ's `<mj-left-nav>` plus the one affordance it does not ship:
@@ -44,7 +49,7 @@ import { ShellRailStateService } from './shell-rail-state.service';
   styleUrls: ['./shell-rail.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ShellRailComponent implements OnInit {
+export class ShellRailComponent implements OnInit, OnDestroy {
   private cdr = inject(ChangeDetectorRef);
 
   /** Passed straight through to `mj-left-nav`. */
@@ -70,11 +75,60 @@ export class ShellRailComponent implements OnInit {
   }
 
   /**
-   * 60px is the collapsed rail: MJ's own numbers, not a guess — rail padding 8+8, item padding
-   * 12+12, icon 18, border 1. Derived rather than eyeballed so it stays exact if MJ retunes them.
+   * Hover-to-expand (Marcelo 2026-07-21): while COLLAPSED, hovering the rail (after a delay) expands it
+   * as an OVERLAY that floats over the content — it does NOT change the reserved layout width, so the
+   * body never shifts. Transient (not persisted): mouse-only, desktop-only (the mobile drawer is its own
+   * thing). Superseded the earlier no-hover ruling now that overlay + delay remove the "moves the target
+   * you were aiming at" problem the old instant-hover would have had.
+   */
+  public HoverExpanded = false;
+  private enterTimer: ReturnType<typeof setTimeout> | null = null;
+  private leaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** The rail is visually wide when the user expanded it OR when a collapsed rail is hover-peeked. */
+  private get ShowingWide(): boolean {
+    return !this.Collapsed || this.HoverExpanded;
+  }
+
+  /**
+   * The width the nav renders at. 60px is the collapsed rail (MJ's own numbers: rail padding 8+8, item
+   * padding 12+12, icon 18, border 1 — derived so it stays exact if MJ retunes them); 240px expanded.
    */
   public get RailWidth(): number {
-    return this.Collapsed ? 60 : 240;
+    return this.ShowingWide ? 240 : 60;
+  }
+
+  /** Host reserves the COLLAPSED footprint while hover-peeking, so the overlay never pushes the body. */
+  @HostBinding('class.sr-collapsed') get isCollapsedHost(): boolean { return this.Collapsed; }
+  @HostBinding('class.sr-peeking') get isPeeking(): boolean { return this.Collapsed && this.HoverExpanded; }
+
+  @HostListener('mouseenter')
+  onRailEnter(): void {
+    if (!this.Collapsed) return; // expanded rail has nothing to peek
+    this.clearTimers();
+    this.enterTimer = setTimeout(() => { this.HoverExpanded = true; this.cdr.markForCheck(); }, HOVER_EXPAND_DELAY_MS);
+  }
+
+  @HostListener('mouseleave')
+  onRailLeave(): void {
+    this.clearTimers();
+    if (!this.HoverExpanded) return;
+    this.leaveTimer = setTimeout(() => { this.HoverExpanded = false; this.cdr.markForCheck(); }, HOVER_COLLAPSE_DELAY_MS);
+  }
+
+  private clearTimers(): void {
+    if (this.enterTimer) { clearTimeout(this.enterTimer); this.enterTimer = null; }
+    if (this.leaveTimer) { clearTimeout(this.leaveTimer); this.leaveTimer = null; }
+  }
+
+  /** Picking a destination dismisses the hover-peek immediately (the overlay has served its purpose). */
+  public onItemClicked(item: MJLeftNavItem): void {
+    if (this.HoverExpanded) { this.clearTimers(); this.HoverExpanded = false; }
+    this.ItemClicked.emit(item);
+  }
+
+  public ngOnDestroy(): void {
+    this.clearTimers();
   }
 
   public get ToggleLabel(): string {

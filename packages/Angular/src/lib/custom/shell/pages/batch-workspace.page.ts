@@ -402,6 +402,19 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
   }
 
   /**
+   * Single-company selection for the build criteria (Marcelo 2026-07-21). The criteria model still holds
+   * `CompanyIDs: string[]` (the engine's multi-company shape), so this maps the single choice to a
+   * 0-or-1-element array: null → [] (all companies), an id → [id]. Removing "all" + requiring exactly one
+   * is the single-company engine invariant, landing with the zero-net work.
+   */
+  public get SelectedCompanyId(): string | null {
+    return this.Draft?.Criteria.CompanyIDs[0] ?? null;
+  }
+  public set SelectedCompanyId(value: string | null) {
+    if (this.Draft) this.Draft.Criteria.CompanyIDs = value ? [value] : [];
+  }
+
+  /**
    * The provider, narrowed to the Remote-Operation seam. `ProviderToUse` is typed
    * `IMetadataProvider`, but every resolved provider IS a `ProviderBase` and therefore also
    * implements `IRemoteOperationProvider` — stated in MJ's own RemoteOpInvokeOptions docs. Narrowed

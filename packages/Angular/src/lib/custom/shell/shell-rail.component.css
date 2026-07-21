@@ -1,8 +1,10 @@
 /* The rail column. `mj-page-body Direction="row"` lays the shell out as [rail | content], so this
-   host IS the rail column and must not stretch. */
+   host IS the rail column and must not stretch. position:relative makes it the containing block for
+   the hover-peek overlay below. */
 :host {
   display: block;
   flex-shrink: 0;
+  position: relative;
 }
 
 .sr {
@@ -10,6 +12,26 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
+}
+
+/* ── Hover-to-expand (Marcelo 2026-07-21), DESKTOP ONLY ────────────────────────
+   A collapsed rail reserves only its 60px footprint; while hover-peeking, the rail content floats OUT
+   as an absolute overlay (240px) OVER the page body — the reserved width does not change, so the body
+   never shifts. Scoped to >700px because ≤700px is MJ's off-canvas drawer, which owns its own layout. */
+@media (min-width: 701px) {
+  :host.sr-collapsed {
+    width: 60px;
+  }
+  :host.sr-peeking .sr {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 240px;
+    height: 100%;
+    z-index: 60;
+    background: var(--mj-bg-surface);
+    box-shadow: 6px 0 20px color-mix(in srgb, var(--mj-text-primary) 14%, transparent);
+  }
 }
 
 /* MJ's rail owns its own scroll (overflow-y:auto). It just needs to be the growing flex item so the
