@@ -30,10 +30,11 @@
     height: 100%;
     z-index: 60;
     background: var(--mj-bg-surface);
-    /* A real drop SHADOW — a BLACK-based rgba (the sanctioned shadow neutral), NOT a token-tinted one:
-       in dark mode a light-tinted shadow reads as a GLOW behind the panel. Dark in both themes. Small
-       offset + wide blur so it wraps the top/bottom edges too, not just the right side (avoids the
-       "top has no shadow so it looks like it rose" read). */
+    /* A crisp EDGE LINE is what actually separates the floating rail from the content — in DARK MODE a
+       black shadow is invisible against the dark page and a light one reads as a glow, so the border is
+       the real elevation cue in both themes. The shadow is a soft assist (black rgba = sanctioned
+       shadow neutral), not the separator. */
+    border-right: 1px solid var(--mj-border-strong, var(--mj-border-default));
     box-shadow: 2px 0 28px 2px rgba(0, 0, 0, 0.38);
   }
 }
@@ -46,9 +47,9 @@
   min-height: 0;
 }
 
-/* ── The toggle ───────────────────────────────────────────────────────────────
-   border-right continues the line MJ draws on the rail's <aside>, so the rail reads as one edge to
-   the bottom of the page rather than stopping short. border-top separates it from the last item. */
+/* ── The toggle (TOP of the rail) ──────────────────────────────────────────────
+   border-right continues the line MJ draws on the rail's <aside>, so the rail reads as one edge.
+   border-BOTTOM separates it from the nav below it (the toggle now sits above the nav, not under it). */
 .sr__toggle {
   flex: none;
   display: flex;
@@ -57,7 +58,7 @@
   width: 100%;
   padding: 10px 12px;
   border: none;
-  border-top: 1px solid var(--mj-border-subtle);
+  border-bottom: 1px solid var(--mj-border-subtle);
   border-right: 1px solid var(--mj-border-default);
   background: var(--mj-bg-surface);
   color: var(--mj-text-secondary);

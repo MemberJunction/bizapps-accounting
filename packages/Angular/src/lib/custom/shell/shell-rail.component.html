@@ -7,18 +7,10 @@
 <!-- .sr--collapsed (icons-only) applies only when truly collapsed AND not hover-peeking: peeking shows
      the full expanded rail (labels + wide) so the words come back exactly as on click-expand. -->
 <div class="sr" [class.sr--collapsed]="Collapsed && !HoverExpanded">
-  <mj-left-nav
-    class="sr__nav"
-    [Sections]="Sections"
-    [ActiveId]="ActiveId"
-    [MobileTitle]="MobileTitle"
-    [Width]="RailWidth"
-    (ItemClicked)="onItemClicked($event)">
-  </mj-left-nav>
-
-  <!-- An ARROW, per Marcelo: a hamburger says "here is a menu", which is a lie — the menu is already
-       on screen. An arrow says which way the thing next to it will move, which is the actual promise.
-       aria-expanded reports rail state to a screen reader; the label flips with it. -->
+  <!-- The toggle sits at the TOP of the rail (Marcelo 2026-07-21): a bottom-anchored control collides
+       with the OS dock / taskbar at the screen's bottom edge (cross-machine). At the top it's always
+       reachable and dock-safe. An ARROW (not a hamburger): the menu is already on screen, so an arrow —
+       "which way the thing next to it moves" — is the honest promise. aria-expanded reports state. -->
   <button
     type="button"
     class="sr__toggle"
@@ -34,4 +26,13 @@
     <!-- Hidden when collapsed via CSS, not removed: the accessible name lives on the button itself. -->
     <span class="sr__toggle-text">Collapse</span>
   </button>
+
+  <mj-left-nav
+    class="sr__nav"
+    [Sections]="Sections"
+    [ActiveId]="ActiveId"
+    [MobileTitle]="MobileTitle"
+    [Width]="RailWidth"
+    (ItemClicked)="onItemClicked($event)">
+  </mj-left-nav>
 </div>
