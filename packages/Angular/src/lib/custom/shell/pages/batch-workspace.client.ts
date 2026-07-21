@@ -60,9 +60,7 @@ export interface BatchPreview {
 }
 
 export interface BuildOutcome {
-  NothingToBatch: boolean;
   BatchID?: string;
-  BatchNumber?: string;
   ApprovalTaskRaised?: boolean;
 }
 
@@ -99,16 +97,17 @@ export class BatchWorkspaceClient {
   }
 
   public async Build(provider: IRemoteOperationProvider, criteria: BatchCriteria, includedIds: string[]): Promise<BuildOutcome> {
-    const res = await provider.RouteOperation<Record<string, unknown>, BuildOutcome & { batchId?: string }>(
+    const res = await provider.RouteOperation<Record<string, unknown>, BuildBatchOpOutput>(
       'Accounting.BuildBatch',
       {
         TargetSystem: criteria.TargetSystem,
-        // Always Explicit from the workspace: the operator SAW a list and ticked it, so the build
-        // must be exactly that list — not a re-sweep that might pick up something new in between.
+        // Always Explicit from the workspace: the operator SAW a list and ticked it, so the build must
+        // be exactly that list — not a re-sweep. Cutoff/CompanyIDs are DELIBERATELY omitted: the
+        // Explicit path batches exactly these ids, so those two fields were dead payload the server
+        // discards (Marcelo #4, 2026-07-21). Empty / zero-net selections now throw server-side
+        // (EmptyBatchError) and surface as res.Success=false — never a silent NothingToBatch.
         Source: 'Explicit',
         JournalEntryIDs: includedIds,
-        Cutoff: this.toInstant(criteria.Cutoff),
-        CompanyIDs: criteria.CompanyIDs.length ? criteria.CompanyIDs : null,
       },
     );
     if (!res.Success || !res.Output) {
@@ -117,12 +116,17 @@ export class BatchWorkspaceClient {
       throw new Error(msg);
     }
     const o = res.Output;
-    return {
-      NothingToBatch: o.NothingToBatch,
-      // The engine result names it batchId; surface both shapes rather than assume.
-      BatchID: o.BatchID ?? o.batchId,
-      BatchNumber: o.BatchNumber,
-      ApprovalTaskRaised: o.ApprovalTaskRaised,
-    };
+    return { BatchID: o.batchId, ApprovalTaskRaised: o.approvalTaskRaised };
   }
+}
+
+/** The camelCase build result `Accounting.BuildBatch` returns (the engine's BuildBatchResult). */
+interface BuildBatchOpOutput {
+  batchId: string;
+  summaryLineCount: number;
+  totalDebits: number;
+  totalCredits: number;
+  jeCount: number;
+  companyCount: number;
+  approvalTaskRaised: boolean;
 }

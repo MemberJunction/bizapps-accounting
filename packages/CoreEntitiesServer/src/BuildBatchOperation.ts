@@ -62,8 +62,13 @@ export interface BuildBatchInput extends BatchCriteriaInput {
   JournalEntryIDs?: string[] | null;
 }
 
-/** `null` when there was nothing to batch (or it all netted to zero) — NOT an error. */
-export type BuildBatchOperationResult = (BuildBatchResult & { NothingToBatch: false }) | { NothingToBatch: true };
+/**
+ * The build result. An empty candidate pool / zero-net selection is no longer a quiet `NothingToBatch`
+ * success — the engine THROWS EmptyBatchError (Marcelo 2026-07-21: "can't have empty batches floating
+ * around"), which the RemoteOperation surfaces as `{ Success: false, ErrorMessage }`. So a successful
+ * result always describes a real, persisted batch.
+ */
+export type BuildBatchOperationResult = BuildBatchResult;
 
 function toOptions(input: BatchCriteriaInput): BuildBatchOptions {
   return {
@@ -101,29 +106,23 @@ export class BuildBatchOperation extends BaseRemotableOperation<BuildBatchInput,
     // does. A module-level gate would be shared mutable state across requests.
     const options = toOptions(input);
     const source = input.Source ?? 'Standard';
-    let result: BuildBatchResult | null;
 
+    // Each engine entry point THROWS EmptyBatchError when there is nothing to batch — the
+    // RemoteOperation turns that into { Success: false, ErrorMessage } for the caller. So the
+    // result here always describes a real, persisted batch (never an empty/no-op shape).
     switch (source) {
       case 'View':
         if (!input.ViewID) throw new Error('BuildBatch: Source=View requires a ViewID.');
-        result = await buildBatchFromView(input.ViewID, input.TargetSystem, user.ID, user, new TasksAppApprovalGate(), options, provider);
-        break;
+        return buildBatchFromView(input.ViewID, input.TargetSystem, user.ID, user, new TasksAppApprovalGate(), options, provider);
       case 'Explicit':
         if (!input.JournalEntryIDs?.length) throw new Error('BuildBatch: Source=Explicit requires JournalEntryIDs.');
-        result = await buildBatchFromExplicitIds(input.JournalEntryIDs, input.TargetSystem, user.ID, user, new TasksAppApprovalGate(), provider);
-        break;
+        return buildBatchFromExplicitIds(input.JournalEntryIDs, input.TargetSystem, user.ID, user, new TasksAppApprovalGate(), provider);
       case 'Standard':
-        result = await buildBatch(input.TargetSystem, user.ID, user, new TasksAppApprovalGate(), options, provider);
-        break;
+        return buildBatch(input.TargetSystem, user.ID, user, new TasksAppApprovalGate(), options, provider);
       default:
         // Total today; the default keeps it total if the union ever widens.
         throw new Error(`BuildBatch: unknown Source '${source}'.`);
     }
-
-    // A null result means the candidate pool was empty or netted to zero. That is a legitimate
-    // outcome the workspace reports ("nothing to batch"), never an error.
-    if (!result) return { NothingToBatch: true };
-    return { ...result, NothingToBatch: false };
   }
 }
 

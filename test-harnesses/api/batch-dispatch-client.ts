@@ -67,7 +67,9 @@ async function main(): Promise<void> {
   try {
     // 1. Build the batch — EXACT netted/canceled values.
     console.log('\n1. BuildBatch (multi-JE netting + canceling — EXACT values):');
-    const b = await batch.BuildBatch(TARGET_SYSTEM);
+    // Scope the build to THIS fixture's company (Marcelo 2026-07-21: tests run amid demo data — don't
+    // require an empty system). Standard build is global by default; the fixture owns fx.companyId.
+    const b = await batch.BuildBatch(TARGET_SYSTEM, [fx.companyId]);
     check('BuildBatch Success', b.Success === true, b.ErrorMessage);
     check('a BatchID was returned', !!b.BatchID, JSON.stringify(b));
     check('not NothingToBatch', b.NothingToBatch === false, `got ${b.NothingToBatch}`);

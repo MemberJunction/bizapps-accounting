@@ -21,8 +21,9 @@
  *       summary-foots overall (50014) · summary-foots PER COMPANY (50023, AM-4) ·
  *       batch immutability update (50009) · batch immutability delete (50008/FK).
  *
- * PRECONDITION: buildBatch is global, so the harness requires ZERO stray Pending JEs at bootstrap
- * (it fails fast otherwise). Never run two harnesses against this DB concurrently.
+ * ISOLATION: buildBatch is global by default, but every build here is SCOPED to this run's own two
+ * companies (Co A / Co B), so the suite runs correctly IN THE PRESENCE OF DEMOS — it does NOT require
+ * an empty Pending pool (Marcelo 2026-07-21). Never run two block2 harnesses against this DB at once.
  *
  * USAGE (cwd = instance worktree root, where .env resolves):
  *   npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/block2-runtime.ts
@@ -135,11 +136,10 @@ async function bootstrap(): Promise<Ctx> {
   const ctxUser = UserCache.Users.find(u => u?.Type?.trim().toLowerCase() === 'owner') ?? UserCache.Users[0];
   if (!ctxUser) throw new Error('No context user found.');
 
-  // buildBatch is GLOBAL — stray Pending JEs from another run/harness would be swept into this
-  // run's batches and corrupt the exact-value assertions. Fail fast instead.
-  const stray = (await pool.request().query(`SELECT COUNT(*) n FROM ${SCHEMA}.JournalEntry WHERE Status='Pending'`)).recordset[0].n;
-  if (Number(stray) > 0) throw new Error(`${stray} stray Pending JE(s) exist — clean them up before running block2 (buildBatch sweeps ALL Pending JEs).`);
-
+  // NO empty-system precondition (Marcelo 2026-07-21): "testing shouldn't enforce an empty system —
+  // development will likely happen in the presence of demos." Instead of demanding a globally-empty
+  // Pending pool, every buildBatch below is SCOPED to this run's own companies (see SCOPE, in main),
+  // so demo/other-run Pending JEs are simply out of scope and the exact-value assertions stay honest.
   const rv = new RunView();
   const cur = await rv.RunView<{ Code: string }>({ EntityName: CURRENCY_ENTITY, Fields: ['Code'], MaxRows: 1, ResultType: 'simple' }, ctxUser);
   const currencyCode = cur.Results?.[0]?.Code;
@@ -248,6 +248,13 @@ async function main(): Promise<void> {
   let ctx: Ctx;
   try { ctx = await bootstrap(); } catch (e) { console.error('BOOTSTRAP ERROR:', e instanceof Error ? (e.stack ?? e.message) : String(e)); process.exit(2); }
   const { pool, user, companyA, companyB } = ctx;
+
+  // Scope EVERY build in this harness to this run's own two companies. buildBatch is a global sweep
+  // by default; scoping to [Co A, Co B] means demo companies (CO1–CO3) and other runs' Pending JEs are
+  // out of scope — so the suite runs correctly "in the presence of demos" (Marcelo 2026-07-21) instead
+  // of demanding a globally-empty system. Every test's JEs live on Co A or Co B, so this includes
+  // exactly what each test creates and nothing else.
+  const SCOPE = { companyIds: [companyA.id, companyB.id] } as const;
   console.log(`\n══════ Block 2 runtime validation — user=${user.Email} companies=${companyA.id},${companyB.id} tag=${RUN_TAG} ══════\n`);
 
   // ─── §5.5 GL resolution (AM-4: wire format = account number; never hard-fails) ──
@@ -263,16 +270,17 @@ async function main(): Promise<void> {
   });
 
   // ─── S1 buildBatch ─────────────────────────────────────────────────────────
-  await test('S1 buildBatch — nothing Pending → returns null (no batch created)', async () => {
-    const res = await buildBatch('BusinessCentral', user.ID, user);
-    assert(res === null, 'expected null when no Pending JEs exist');
+  // #1 (Marcelo 2026-07-21): an empty candidate pool now THROWS EmptyBatchError instead of silently
+  // returning null — "can't have empty batches floating around." No batch header is written either way.
+  await test('S1 buildBatch — nothing Pending → THROWS EmptyBatchError (no batch created)', async () => {
+    await expectThrow(() => buildBatch('BusinessCentral', user.ID, user, AutoApproveGate, SCOPE), 'Nothing to batch');
   });
 
   let happyBatchId = '';
   const happyJEs: string[] = [];
   await test('S1 buildBatch — 3 balanced JEs net into a footing Pending batch; JEs lock to Batched', async () => {
     for (let i = 0; i < 3; i++) happyJEs.push(await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 100 }, { gl: companyA.revGL, credit: 100 }]));
-    const res = await buildBatch('BusinessCentral', user.ID, user);
+    const res = await buildBatch('BusinessCentral', user.ID, user, AutoApproveGate, SCOPE);
     assert(res !== null, 'buildBatch returned null (expected a batch)');
     happyBatchId = res!.batchId;
     assert(res!.jeCount === 3, `expected 3 JEs batched, got ${res!.jeCount}`);
@@ -289,7 +297,7 @@ async function main(): Promise<void> {
   await test('S1 buildBatch — MULTI-COMPANY sweep: JEs across 2 companies → one batch, companyCount 2, per-company summary lines, Code on unmapped wire (AM-4)', async () => {
     await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 100 }, { gl: companyA.revGL, credit: 100 }]);
     await makeJE(ctx, companyB.id, [{ gl: companyB.arGL, debit: 40 }, { gl: companyB.unmappedGL, credit: 40 }]);
-    const res = await buildBatch('BusinessCentral', user.ID, user);
+    const res = await buildBatch('BusinessCentral', user.ID, user, AutoApproveGate, SCOPE);
     assert(res !== null, 'buildBatch returned null (expected a batch)');
     multiCoBatchId = res!.batchId;
     assert(res!.jeCount === 2, `expected 2 JEs batched, got ${res!.jeCount}`);
@@ -309,7 +317,7 @@ async function main(): Promise<void> {
   await test('B5 dimension-through-batch — same account, different dimension values → separate summary lines, tagged', async () => {
     await makeJE(ctx, companyA.id, [{ gl: companyA.revGL, credit: 100, dimValueId: ctx.dimValSales }, { gl: companyA.arGL, debit: 100 }]);
     await makeJE(ctx, companyA.id, [{ gl: companyA.revGL, credit: 60, dimValueId: ctx.dimValMktg }, { gl: companyA.arGL, debit: 60 }]);
-    const res = await buildBatch('BusinessCentral', user.ID, user);
+    const res = await buildBatch('BusinessCentral', user.ID, user, AutoApproveGate, SCOPE);
     assert(res !== null, 'buildBatch returned null');
     dimBatchId = res!.batchId;
     // Revenue splits into 2 lines (Sales/Mktg), AR nets into 1 → 3 summary lines.
@@ -389,7 +397,7 @@ async function main(): Promise<void> {
     const batchesBefore = Number((await pool.request().query(`SELECT COUNT(*) n FROM ${SCHEMA}.JournalEntryBatch`)).recordset[0].n);
     const orphanJE = await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 50 }, { gl: companyA.revGL, credit: 50 }]);
 
-    await expectThrow(() => buildBatch('BusinessCentral', user.ID, user, realGate), 'No CFO configured');
+    await expectThrow(() => buildBatch('BusinessCentral', user.ID, user, realGate, SCOPE), 'No CFO configured');
 
     // The JE never left the candidate pool — it was never locked in the first place.
     assert((await jeStatus(ctx, orphanJE)) === 'Pending', 'JE must still be Pending (it should never have been locked)');
@@ -409,7 +417,7 @@ async function main(): Promise<void> {
     decisionPersonA = await makeCFOPerson(ctx, 'DeciderA');
     await setCompanyCFO(ctx, companyA.id, cfoA);
     await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 50 }, { gl: companyA.revGL, credit: 50 }]);
-    const built = await buildBatch('BusinessCentral', user.ID, user, realGate);
+    const built = await buildBatch('BusinessCentral', user.ID, user, realGate, SCOPE);
     assert(built !== null, 'buildBatch returned null (expected a batch)');
     approveBatchId = built!.batchId;
     const task = await batchTask(ctx, approveBatchId);
@@ -423,7 +431,7 @@ async function main(): Promise<void> {
     await setCompanyCFO(ctx, companyB.id, cfoB);
     await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 20 }, { gl: companyA.revGL, credit: 20 }]);
     await makeJE(ctx, companyB.id, [{ gl: companyB.arGL, debit: 30 }, { gl: companyB.revGL, credit: 30 }]);
-    const built = await buildBatch('BusinessCentral', user.ID, user, realGate);
+    const built = await buildBatch('BusinessCentral', user.ID, user, realGate, SCOPE);
     assert(built !== null && built.companyCount === 2, `expected a 2-company batch, got ${built?.companyCount}`);
     const task = await batchTask(ctx, built!.batchId);
     assert(task !== null, 'expected an approval Task linked to the multi-company batch');
@@ -446,7 +454,7 @@ async function main(): Promise<void> {
 
   await test('S1 real gate — recordDecision(Rejected) → dispatch refused at BOTH layers; batch stays Pending', async () => {
     await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 30 }, { gl: companyA.revGL, credit: 30 }]);
-    const built = await buildBatch('BusinessCentral', user.ID, user, realGate);
+    const built = await buildBatch('BusinessCentral', user.ID, user, realGate, SCOPE);
     assert(built !== null, 'buildBatch returned null for the reject scenario');
     await realGate.recordDecision(built!.batchId, 'Rejected', decisionPersonA, 'Numbers off — rejected.', user);
     // Layer 1 (engine status): never approved → sendBatch refuses on status.
@@ -459,7 +467,7 @@ async function main(): Promise<void> {
   // ─── INV summary-foots (trg 50014 overall / 50023 per company) — RAW-SQL bypass ──
   await test('INV summary-foots — DB-bypass: tamper control total then raw UPDATE Status=Sent → rejected (50014)', async () => {
     await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 75 }, { gl: companyA.revGL, credit: 75 }]);
-    const built = await buildBatch('BusinessCentral', user.ID, user);
+    const built = await buildBatch('BusinessCentral', user.ID, user, AutoApproveGate, SCOPE);
     // Break the foot at the DB level (TotalDebits no longer equals the summary sum), while still Pending.
     await pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET TotalDebits = TotalDebits + 100 WHERE ID='${built!.batchId}'`);
     await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Sent', SentAt=GETUTCDATE() WHERE ID='${built!.batchId}'`), 'foot');
@@ -468,7 +476,7 @@ async function main(): Promise<void> {
   await test('INV per-company foot — DB-bypass: shift a summary amount ACROSS companies then raw Sent → rejected (50023, AM-4)', async () => {
     await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 100 }, { gl: companyA.revGL, credit: 100 }]);
     await makeJE(ctx, companyB.id, [{ gl: companyB.arGL, debit: 40 }, { gl: companyB.revGL, credit: 40 }]);
-    const built = await buildBatch('BusinessCentral', user.ID, user);
+    const built = await buildBatch('BusinessCentral', user.ID, user, AutoApproveGate, SCOPE);
     // Tamper: shift 30 of debit from company B's AR line onto company A's AR line (amounts stay
     // strictly positive — CK_JEBLI_OneSide forbids 0). Overall totals still foot (140/140 —
     // passes 50014), but each company is now internally unbalanced → 50023.
@@ -500,7 +508,7 @@ async function main(): Promise<void> {
   await test('#12 cancelBatch — reject reverses the PRELIMINARY lock: batch→Cancelled, JEs→Pending (candidate pool), summary cleared', async () => {
     const je1 = await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 45 }, { gl: companyA.revGL, credit: 45 }]);
     const je2 = await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 55 }, { gl: companyA.revGL, credit: 55 }]);
-    const built = await buildBatch('BusinessCentral', user.ID, user);
+    const built = await buildBatch('BusinessCentral', user.ID, user, AutoApproveGate, SCOPE);
     assert(built !== null, 'buildBatch returned null for the cancel scenario');
     assert((await jeStatus(ctx, je1)) === 'Batched' && (await jeStatus(ctx, je2)) === 'Batched', 'JEs must be Batched (preliminary lock) before cancel');
     const cancelled = await cancelBatch(built!.batchId, user);
@@ -511,13 +519,13 @@ async function main(): Promise<void> {
     const bidNull = (await pool.request().query(`SELECT COUNT(*) c FROM ${SCHEMA}.JournalEntry WHERE ID IN ('${je1}','${je2}') AND BatchID IS NULL`)).recordset[0].c;
     assert(Number(bidNull) === 2, `both JEs must have BatchID cleared, got ${bidNull}`);
     // Prove they're candidates again — a fresh build re-batches them (and leaves them Batched → clean slate).
-    const rebuilt = await buildBatch('BusinessCentral', user.ID, user);
+    const rebuilt = await buildBatch('BusinessCentral', user.ID, user, AutoApproveGate, SCOPE);
     assert(rebuilt !== null && rebuilt.jeCount === 2, `freed JEs must be re-batchable, got jeCount=${rebuilt?.jeCount}`);
   });
 
   await test('#12 permanent lock — once APPROVED the lock is permanent: cancelBatch refused + a raw Batched→Pending unlock is rejected by the trigger', async () => {
     const je = await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 33 }, { gl: companyA.revGL, credit: 33 }]);
-    const built = await buildBatch('BusinessCentral', user.ID, user);
+    const built = await buildBatch('BusinessCentral', user.ID, user, AutoApproveGate, SCOPE);
     assert(built !== null, 'buildBatch returned null for the permanent-lock scenario');
     await approveBatch(built!.batchId, user.ID, user);
     await expectThrow(() => cancelBatch(built!.batchId, user), 'only a Pending'); // engine guard
@@ -528,12 +536,12 @@ async function main(): Promise<void> {
 
   await test('#12 regenerateBatch — unlock current + re-gather ALL candidates (incl. one added after) into the SAME batch', async () => {
     const jeA = await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 20 }, { gl: companyA.revGL, credit: 20 }]);
-    const built = await buildBatch('BusinessCentral', user.ID, user);
+    const built = await buildBatch('BusinessCentral', user.ID, user, AutoApproveGate, SCOPE);
     assert(built !== null && built.jeCount === 1, `expected a 1-JE batch, got jeCount=${built?.jeCount}`);
     const batchId = built!.batchId;
     const jeB = await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 25 }, { gl: companyA.revGL, credit: 25 }]); // lands AFTER the build
     assert((await jeStatus(ctx, jeB)) === 'Pending', 'the new JE must be an unbatched candidate');
-    const regen = await regenerateBatch(batchId, 'BusinessCentral', user);
+    const regen = await regenerateBatch(batchId, 'BusinessCentral', user, SCOPE);
     assert(regen.batchId === batchId, 'regenerate must reuse the SAME batch record');
     assert(regen.jeCount === 2, `regenerate must pick up BOTH JEs, got jeCount=${regen.jeCount}`);
     assert((await jeStatus(ctx, jeA)) === 'Batched' && (await jeStatus(ctx, jeB)) === 'Batched', 'both JEs must be re-locked into the batch');
@@ -556,7 +564,7 @@ async function main(): Promise<void> {
       async assertApproved() { /* not reached */ },
     };
 
-    const res = await buildBatch('BusinessCentral', user.ID, user, explodingGate);
+    const res = await buildBatch('BusinessCentral', user.ID, user, explodingGate, SCOPE);
     assert(res !== null, 'the batch must still be built when the task gate throws');
     assert(res!.approvalTaskRaised === false, 'approvalTaskRaised must report false, not throw');
 
@@ -584,7 +592,7 @@ async function main(): Promise<void> {
     await acp.Save();
 
     await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 33 }, { gl: companyA.revGL, credit: 33 }]);
-    const res = await buildBatch('BusinessCentral', user.ID, user, new TasksAppApprovalGate());
+    const res = await buildBatch('BusinessCentral', user.ID, user, new TasksAppApprovalGate(), SCOPE);
     assert(res !== null, 'expected a batch');
     assert(res!.approvalTaskRaised === true, 'the real gate must report the task as raised');
 
@@ -603,7 +611,7 @@ async function main(): Promise<void> {
     // The engine writes both columns together — but "the engine is careful" is not an invariant.
     // Prove the DB itself refuses the half-stamp, the same posture as 50001/50014.
     await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 12 }, { gl: companyA.revGL, credit: 12 }]);
-    const res = await buildBatch('BusinessCentral', user.ID, user);
+    const res = await buildBatch('BusinessCentral', user.ID, user, AutoApproveGate, SCOPE);
     assert(res !== null, 'expected a batch');
 
     let rejected = false;
@@ -618,6 +626,24 @@ async function main(): Promise<void> {
       await pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET ApprovalTaskRaisedAt=GETUTCDATE() WHERE ID='${res!.batchId}'`);
     } catch { rejected2 = true; }
     assert(rejected2, 'a raw-SQL half-stamp (RaisedAt without id) must be rejected too');
+  });
+
+  // #1 (Marcelo 2026-07-21): a regenerate that re-gathers to NOTHING must not leave an empty batch.
+  // Build a 1-JE batch, then add an equal-and-opposite JE to the pool; on regenerate the two net to
+  // zero, so no summary line survives — the guard CANCELS the (already torn-down) batch and throws.
+  // Placed LAST: it deliberately leaves two zero-netting Pending JEs (a later global buildBatch would
+  // choke on them); teardown deletes them by tracked ID.
+  await test('#1 regenerateBatch — re-gather nets to ZERO → batch Cancelled + EmptyBatchError (no empty batch persisted)', async () => {
+    const jePos = await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, debit: 50 }, { gl: companyA.revGL, credit: 50 }]);
+    const built = await buildBatch('BusinessCentral', user.ID, user, AutoApproveGate, SCOPE);
+    assert(built !== null && built.jeCount === 1, `expected a 1-JE batch, got jeCount=${built?.jeCount}`);
+    const batchId = built!.batchId;
+    // An equal-and-opposite JE joins the candidate pool; on regenerate it nets jePos to zero.
+    const jeNeg = await makeJE(ctx, companyA.id, [{ gl: companyA.arGL, credit: 50 }, { gl: companyA.revGL, debit: 50 }]);
+    await expectThrow(() => regenerateBatch(batchId, 'BusinessCentral', user, SCOPE), 'no pending candidates');
+    const st = await batchState(ctx, batchId);
+    assert(st.status === 'Cancelled' && st.lineCount === 0, `empty regenerate must cancel the batch + clear its summary, got status=${st.status} lines=${st.lineCount}`);
+    assert((await jeStatus(ctx, jePos)) === 'Pending' && (await jeStatus(ctx, jeNeg)) === 'Pending', 'both JEs must return to the candidate pool (unlocked)');
   });
 
   // ─── Teardown ──────────────────────────────────────────────────────────────

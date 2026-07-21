@@ -13,14 +13,16 @@ import '@mj-biz-apps/accounting-actions';
 // Server-side entity subclasses — must come after accounting-entities so
 // @RegisterClass auto-increment gives these higher priority
 import '@mj-biz-apps/accounting-core-entities-server';
-import { LoadApproveMappingOperation, LoadBuildBatchOperations, LoadCreateJournalEntriesOperation, LoadCreateJournalEntryOperation, LoadCreateScheduledJournalEntriesOperation, LoadMaterializeScheduledEntriesOperation } from '@mj-biz-apps/accounting-core-entities-server';
+import { LoadApproveMappingOperation, LoadBatchDispatchOperations, LoadBuildBatchOperations, LoadCreateJournalEntriesOperation, LoadCreateJournalEntryOperation, LoadCreateScheduledJournalEntriesOperation, LoadMaterializeScheduledEntriesOperation } from '@mj-biz-apps/accounting-core-entities-server';
 
 // Import generated GraphQL resolvers
 import './generated/generated.js';
 
 // Import custom (hand-written) GraphQL resolvers so their @Resolver decorators fire.
 // These also need to be in RESOLVER_PATHS (below) so TypeGraphQL builds them into the schema.
-import './resolvers/BatchDispatchResolver.js';
+// (BatchDispatchResolver was RETIRED 2026-07-21 — its build/regenerate/approve/reject/dispatch
+//  surface now lives on the Remote Operations stack in @mj-biz-apps/accounting-core-entities-server:
+//  Accounting.BuildBatch / RegenerateBatch / DispatchBatch / RecordBatchDecision / GetBatchApprovalState.)
 import './resolvers/ReadModelsResolver.js';
 import './resolvers/JournalEntryResolver.js';
 
@@ -59,5 +61,6 @@ export function LoadBizAppsAccountingServer(): void {
     LoadCreateScheduledJournalEntriesOperation(); // tree-shaking anchor for 'Accounting.CreateScheduledJournalEntries' (B3.1)
     LoadMaterializeScheduledEntriesOperation(); // tree-shaking anchor for 'Accounting.MaterializeDueScheduledEntries' (B3.2)
     LoadBuildBatchOperations(); // tree-shaking anchors for 'Accounting.PreviewBatch' + 'Accounting.BuildBatch' (§8.2 workspace)
+    LoadBatchDispatchOperations(); // tree-shaking anchors for RegenerateBatch/DispatchBatch/RecordBatchDecision/GetBatchApprovalState (Remote-Op stack, Marcelo 2026-07-21)
     LoadApproveMappingOperation(); // tree-shaking anchor for 'Accounting.ApproveChartOfAccountsMapping' (§8.3 ERP mapping)
 }

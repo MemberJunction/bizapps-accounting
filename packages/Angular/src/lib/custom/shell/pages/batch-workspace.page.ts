@@ -361,14 +361,11 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
     try {
       // Build EXACTLY the ticked set. Source='Explicit' re-validates server-side that every id is
       // still Pending and loud-rejects a stale selection — the preview is a snapshot.
+      // An empty / zero-net selection now throws server-side (EmptyBatchError) and lands in the catch
+      // below with the engine's message — no silent "nothing to batch" success to check for.
       const res = await this.client.Build(this.opProvider, d.Criteria, this.includedIds(d) ?? []);
 
-      if (res.NothingToBatch) {
-        this.setError('Nothing to batch — the selection netted to zero.');
-        return;
-      }
-
-      d.BuiltBatchNumber = res.BatchNumber ?? res.BatchID;
+      d.BuiltBatchNumber = res.BatchID;
       if (this.tabs.ActiveId) {
         this.tabs.UpdateState(this.tabs.ActiveId, d, false);
         this.tabs.SetStatus(this.tabs.ActiveId, 'complete');

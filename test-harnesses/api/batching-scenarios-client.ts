@@ -52,6 +52,9 @@ async function main(): Promise<void> {
   const provider = await bootstrapClientProvider(); // AFTER the fixture subprocess
   const user = provider.CurrentUser;
   const batch = new BatchDispatchClient(provider);
+  // Scope every global build to THIS run's three fixture companies (Marcelo 2026-07-21: tests run amid
+  // demo data — don't require an empty system). Excludes demo/other-run Pending JEs from the sweep.
+  const SCOPE = [sc.coA.companyId, sc.coB.companyId, sc.coC.companyId];
   const readModels = new ReadModelsClient(provider);
   // re-establish the pooled connection after a seed subprocess (else the next POST can ECONNRESET)
   const warmup = () => new RunView().RunView({ EntityName: ROLE_ENTITY, Fields: ['Name'], MaxRows: 1, ResultType: 'simple' }, user);
@@ -60,7 +63,7 @@ async function main(): Promise<void> {
     // A. Multi-company sweep (wave1: CoA 2 JEs + CoB 1 JE → ONE global batch).
     console.log('\nA. Multi-company sweep:');
     seedWave(sc, 'wave1'); await warmup();
-    const a = await batch.BuildBatch(TARGET);
+    const a = await batch.BuildBatch(TARGET, SCOPE);
     check('global build succeeds', a.Success === true, a.ErrorMessage);
     check('JECount === 3 (both companies swept into one batch)', a.JECount === 3, `got ${a.JECount}`);
     check('CompanyCount === 2 (CH-4 multi-company batch)', a.CompanyCount === 2, `got ${a.CompanyCount}`);
@@ -80,7 +83,7 @@ async function main(): Promise<void> {
     // C. Reject path.
     console.log('\nC. Reject path:');
     seedWave(sc, 'wave2'); await warmup();
-    const b = await batch.BuildBatch(TARGET);
+    const b = await batch.BuildBatch(TARGET, SCOPE);
     check('wave2 build succeeds (1 JE)', b.Success === true && b.JECount === 1, `JECount=${b.JECount} (${b.ErrorMessage ?? ''})`);
     if (!b.BatchID) throw new Error('wave2 batch missing');
     check('wave2 reject recorded', (await batch.RecordDecision(b.BatchID, 'Rejected', 'scenarios-client')).Success === true);
@@ -92,7 +95,7 @@ async function main(): Promise<void> {
     // D. No-CFO hard-fail (wave3: CoC has no configured CFO).
     console.log('\nD. No-CFO hard-fail:');
     seedWave(sc, 'wave3'); await warmup();
-    const c = await batch.BuildBatch(TARGET);
+    const c = await batch.BuildBatch(TARGET, SCOPE);
     check('wave3 build FAILS (no CFO configured)', c.Success === false, `Success=${c.Success}`);
     check('error names the CFO requirement', /cfo/i.test(c.ErrorMessage ?? ''), `ErrorMessage='${c.ErrorMessage ?? ''}'`);
   } catch (e) {
