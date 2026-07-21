@@ -16,9 +16,11 @@
      preferred over an active-tab merge, which the horizontal scroller clips; the merge's only
      workarounds are fragile/poor-Safari). The active tab comes forward by COLOR, not by clearing this. */
   border-bottom: 1px solid var(--mj-border-default);
-  padding-top: 4px;
+  /* Breathing room above the tabs so they don't jam against the card's top edge / get clipped by its
+     rounded corner — they read as tabs on the card, not cut off (Marcelo 2026-07-21). */
+  padding-top: 8px;
   /* A touch taller so the horizontal scrollbar isn't cramped against the tabs (Marcelo 2026-07-21). */
-  min-height: 44px;
+  min-height: 46px;
 }
 
 .ws-tabs {
@@ -55,9 +57,12 @@
   margin-bottom: -1px;
 }
 .ws-tab--active {
-  /* Active = the lighter base surface → comes forward in both light and dark mode. */
+  /* Active = the base surface + a brand top-accent line (the VS Code pattern Marcelo referenced) — an
+     inset box-shadow so it adds NO height/shift. This makes the selected tab obvious in BOTH light and
+     dark mode without needing a seamless baseline-merge (which the horizontal-scroll clip blocks). */
   background: var(--mj-bg-surface);
   border-color: var(--mj-border-default);
+  box-shadow: inset 0 2px 0 0 var(--mj-brand-primary);
 }
 .ws-tab--rejected {
   border-color: var(--mj-status-warning-border, var(--mj-status-warning));
@@ -160,7 +165,7 @@
      "cut off early" above the tab row. Top corners rounded (like the tabs) so a hover highlight
      isn't a surprising sharp rectangle; bottom stays square to meet the baseline (Marcelo 2026-07-21). */
   align-self: stretch;
-  margin-top: -4px;
+  margin-top: -8px;
   /* Round only the OUTER (top-right) corner; the top-left stays square + flush against the border
      divider that separates it from the tabs — rounding it would notch it off the divider (browsers
      keep the +-button's tab-side edge flush too). Marcelo 2026-07-21. */

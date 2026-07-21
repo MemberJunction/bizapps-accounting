@@ -72,10 +72,14 @@ mj-page-body-interior {
   font-weight: 600;
 }
 
-/* Line editor. */
-.jew__gridwrap {
-  border: 1px solid var(--mj-border-default);
-  border-radius: 10px;
+/* Line editor. It's a FEW-ROW editor, not a data grid — so override the shared shell-table's fixed
+   min(68vh,900px) height (which left a huge empty box for a 2-line entry): grow with the rows, cap
+   with a max-height + scroll only when there are many lines (Marcelo 2026-07-21). Border/radius come
+   from the shared .mjsh-tablewrap. */
+.jew__gridwrap.mjsh-tablewrap {
+  height: auto;
+  min-height: 0;
+  max-height: min(52vh, 620px);
 }
 .jew__grid {
   width: 100%;
