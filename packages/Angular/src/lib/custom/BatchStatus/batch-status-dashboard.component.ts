@@ -219,7 +219,8 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
   }
 
   /**
-   * Text search — lead with the human fields (Memo, then BatchNumber), and keep the full ID
+   * Text search — lead with the human fields (Memo, then BatchNumber), then the ERP reference
+   * (ExternalBatchRef — how a batch is found back in Business Central etc.), and keep the full ID
    * searchable (ids are meaningless to users, but pasteable in full). Substring, case-insensitive.
    */
   private matchesSearch(b: BatchRow): boolean {
@@ -227,6 +228,7 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
     if (!q) return true;
     return (b.Memo ?? '').toLowerCase().includes(q)
       || b.BatchNumber.toLowerCase().includes(q)
+      || (b.ExternalBatchRef ?? '').toLowerCase().includes(q)
       || b.ID.toLowerCase().includes(q);
   }
 

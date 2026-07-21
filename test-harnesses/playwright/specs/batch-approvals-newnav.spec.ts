@@ -44,8 +44,13 @@ test('Batches → build → Batch approvals → Approve → Dispatch advances to
 
   // 1. Build a batch — the Build affordance lives on the Batch workspace rail page.
   await railItem(page, 'Batches', 'Batch workspace');
+  // The workspace DEFERS its query (e38fdda): a fresh tab shows no candidates until you Load them, so
+  // Build stays disabled ("Nothing matches these criteria") until then. Load the entries first.
+  const loadBtn = page.getByRole('button', { name: /Load entries/i }).first();
+  await expect(loadBtn, 'the deferred-query Load-entries button').toBeVisible({ timeout: 30_000 });
+  await loadBtn.click();
   const buildBtn = page.getByRole('button', { name: /Build batch/i }).first();
-  await expect(buildBtn, 'Batch workspace should offer a Build batch action').toBeVisible({ timeout: 30_000 });
+  await expect(buildBtn, 'Build batch enables once candidates load').toBeEnabled({ timeout: 30_000 });
   await buildBtn.click();
   await page.waitForTimeout(2000);
   // A preview/confirm may appear ("Build batch (N)"); confirm it if present, else the build was direct.

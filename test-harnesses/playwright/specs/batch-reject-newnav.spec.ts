@@ -39,8 +39,13 @@ test('Batches → build → Batch approvals → Reject cancels the batch (new na
 
   // 1. Build a batch on the Batch workspace.
   await railItem(page, 'Batches', 'Batch workspace');
+  // The workspace DEFERS its query (e38fdda): a fresh tab shows no candidates until you Load them, so
+  // Build stays disabled ("Nothing matches these criteria") until then. Load the entries first.
+  const loadBtn = page.getByRole('button', { name: /Load entries/i }).first();
+  await expect(loadBtn, 'the deferred-query Load-entries button').toBeVisible({ timeout: 30_000 });
+  await loadBtn.click();
   const buildBtn = page.getByRole('button', { name: /Build batch/i }).first();
-  await expect(buildBtn, 'Batch workspace should offer a Build batch action').toBeVisible({ timeout: 30_000 });
+  await expect(buildBtn, 'Build batch enables once candidates load').toBeEnabled({ timeout: 30_000 });
   await buildBtn.click();
   await page.waitForTimeout(2000);
   const confirm = page.getByRole('button', { name: /Build batch \(\d+\)/i }).first();

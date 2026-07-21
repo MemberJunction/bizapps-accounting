@@ -1,9 +1,6 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, EventEmitter, Input, OnInit, Output, inject } from '@angular/core';
-import { UserInfoEngine } from '@memberjunction/core-entities';
 import { MJLeftNavComponent, MJLeftNavItem, MJLeftNavSection } from '@memberjunction/ng-ui-components';
-
-/** The user-setting key holding the rail's collapsed state. Shared by BOTH apps deliberately. */
-const RAIL_COLLAPSED_SETTING = 'mj.bizapps.shell.railCollapsed';
+import { ShellRailStateService } from './shell-rail-state.service';
 
 /**
  * The category shells' nav rail — MJ's `<mj-left-nav>` plus the one affordance it does not ship:
@@ -62,8 +59,15 @@ export class ShellRailComponent implements OnInit {
    * Collapsed = icons only. Marcelo's ruling (2026-07-16): default EXPANDED, and a plain toggle —
    * no pin/auto-expand-on-hover. A rail that expands when the pointer grazes it moves the target
    * you were aiming at; deliberate is better than clever.
+   *
+   * The state itself lives in the APP-WIDE ShellRailStateService (Marcelo 2026-07-21), not as a field
+   * here — otherwise each category's own rail instance keeps its own copy and switching top-nav
+   * categories resets it. Reading through the service means every rail reflects the same live value.
    */
-  public Collapsed = false;
+  private railState = inject(ShellRailStateService);
+  public get Collapsed(): boolean {
+    return this.railState.Collapsed;
+  }
 
   /**
    * 60px is the collapsed rail: MJ's own numbers, not a guess — rail padding 8+8, item padding
@@ -78,19 +82,16 @@ export class ShellRailComponent implements OnInit {
   }
 
   public async ngOnInit(): Promise<void> {
-    // MJ rule #9: preferences go through UserInfoEngine (server-side, per-user, cross-device),
-    // NEVER localStorage — which dies on a browser switch or a second machine. Config() is a no-op
-    // when another feature already loaded it; GetSetting is then a synchronous cache hit.
-    await UserInfoEngine.Instance.Config(false);
-    this.Collapsed = UserInfoEngine.Instance.GetSetting(RAIL_COLLAPSED_SETTING) === 'true';
+    // Load the persisted state ONCE via the shared service (MJ rule #9: UserInfoEngine, server-side +
+    // cross-device, never localStorage). After the first rail loads it, every later category's rail
+    // reads the same in-memory value synchronously — so switching categories never resets the collapse.
+    await this.railState.EnsureLoaded();
     this.cdr.markForCheck();
   }
 
   public Toggle(): void {
-    this.Collapsed = !this.Collapsed;
-    // Debounced: a user flicking the rail should not hammer the DB. Fire-and-forget is right here —
-    // if the write loses, the rail is still correct for this session and re-asserts on the next toggle.
-    UserInfoEngine.Instance.SetSettingDebounced(RAIL_COLLAPSED_SETTING, String(this.Collapsed));
+    // Flip + persist through the shared service, so ALL rail instances (every category) reflect it live.
+    this.railState.Toggle();
     this.cdr.markForCheck();
   }
 }

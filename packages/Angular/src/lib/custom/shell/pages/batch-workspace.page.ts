@@ -390,6 +390,12 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
     this.cdr.markForCheck();
   }
 
+  /** Drag-reorder the session tabs (browser-style), mirroring the JE workspace. */
+  public ReorderTabs(e: { previousIndex: number; currentIndex: number }): void {
+    this.tabs.Reorder(e.previousIndex, e.currentIndex);
+    this.cdr.markForCheck();
+  }
+
   /**
    * The provider, narrowed to the Remote-Operation seam. `ProviderToUse` is typed
    * `IMetadataProvider`, but every resolved provider IS a `ProviderBase` and therefore also

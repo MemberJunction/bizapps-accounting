@@ -24,40 +24,11 @@
 }
 
 /* ─── The backing card ────────────────────────────────────────────────────────
-   One object, not a scatter of floating elements: --mj-bg-surface against the page's
-   --mj-bg-page. The card as a WHOLE scrolls (its body does), with the tab strip pinned. */
-.bw {
-  height: 100%;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--mj-bg-surface);
-  border: 1px solid var(--mj-border-default);
-  border-radius: 12px;
-  /* Contains the body's scroll inside the rounded corners. */
-  overflow: hidden;
-}
-
-.bw-head {
-  flex: none;
-}
-
-/* The strip is a block so it spans the card — which is what makes its own bottom rule run the FULL
-   card width instead of stubbing out under the last tab. */
-.bw-head mj-workspace-tab-strip {
-  display: block;
-}
-/* The tab strip's own CSS owns its overflow + gutter now (see workspace-tab-strip.component.css):
-   the overflow-x/overflow-y computed-value trap and the left indent are fixed once, at the source,
-   so all four consumers inherit them instead of each carrying a copy of the workaround. */
-/* Identity + status + target + the session note — BELOW the tab line, never in line with it. */
-.bw-headmeta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 10px 14px;
-}
+   The card surface + pinned tab strip + scrollable body now come from the SHARED reusable
+   <mj-workspace-card> (transfer-pending/workspace-tabs/workspace-card.component) — same as the JE
+   workspace — so the old bespoke .bw / .bw-head / .bw-headmeta / .bw-body chrome is gone. What
+   remains here is only batch-specific CONTENT styling (identity band spans, criteria/preview cols),
+   projected into the card's [workspaceHeader] + default slots. */
 .bw-identity {
   font-size: 14px;
   font-weight: 700;
@@ -72,20 +43,8 @@
   gap: 6px;
 }
 
-.bw-body {
-  flex: 1;
-  min-height: 0;
-  /* Card-as-a-whole scroll: at full width the two columns manage their own inner scroll and this
-     never engages; once they stack (≤1100px) the card itself scrolls, which is the wanted
-     behaviour rather than crushing the preview grid. */
-  overflow: auto;
-  padding: 0 14px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-/* Criteria left, preview right. */
+/* Criteria left, preview right. (The card's own body — .ws-card__body — is the flex-column scroller
+   that used to be .bw-body: same padding 0 14px 14px, gap, and flex:1, so .bw-cols fills it as before.) */
 .bw-cols {
   display: grid;
   grid-template-columns: 320px 1fr;

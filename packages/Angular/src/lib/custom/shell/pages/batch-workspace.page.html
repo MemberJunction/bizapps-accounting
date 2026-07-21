@@ -15,44 +15,40 @@
      edge without it). NOTE it is display:block, so children size with height/min-height, never with
      flex — a `flex:1` child collapses to zero here. -->
 <mj-page-body-interior>
-  <!-- ONE backing card for the whole workspace: header section (tabs + identity) above a body that
-       scrolls as a whole, so this reads as a unified object rather than disparate elements. -->
-  <section class="bw" aria-label="Batch workspace">
-    <header class="bw-head">
-      <!-- Session tabs — flush with the card's left edge; their rule runs the card's full width.
-           v1 is deliberately session-scoped: the note below says so rather than letting a user
-           assume their draft is saved. -->
-      <mj-workspace-tab-strip
-        [Tabs]="Tabs"
-        [ActiveId]="ActiveTabId"
-        NewTabLabel="New"
-        (TabSelected)="SelectTab($event)"
-        (TabClosed)="CloseTab($event)"
-        (NewTabRequested)="openNewDraft()">
-      </mj-workspace-tab-strip>
+  <!-- ONE backing card for the whole workspace, via the SHARED reusable primitive (same as the JE
+       workspace): the card owns the surface + tab strip + scrollable body, we project the identity
+       band ([workspaceHeader]) + the body (default slot). Browser-style draggable session tabs. -->
+  <mj-workspace-card
+    aria-label="Batch workspace"
+    [Tabs]="Tabs"
+    [ActiveId]="ActiveTabId"
+    NewTabLabel="New"
+    (TabSelected)="SelectTab($event)"
+    (TabClosed)="CloseTab($event)"
+    (NewTabRequested)="openNewDraft()"
+    (TabReordered)="ReorderTabs($event)">
 
-      <!-- Identity + status + target: BELOW the tab line, never in line with it. -->
-      <div class="bw-headmeta">
-        <span class="bw-identity">{{ IsBuilt ? Draft?.BuiltBatchNumber : 'New batch' }}</span>
-        @if (IsBuilt) {
-          <mj-stat-badge Label="Built" Icon="fa-solid fa-check" Variant="success"></mj-stat-badge>
-        } @else {
-          <mj-stat-badge Label="Draft — not built" Variant="default"></mj-stat-badge>
-        }
-        <mj-stat-badge
-          [Label]="'Target: ' + (Draft?.Criteria?.TargetSystem ?? '')"
-          Icon="fa-solid fa-plug"
-          Variant="info"
-          title="The ERP this batch dispatches to.">
-        </mj-stat-badge>
-        <span class="bw-sessionnote">
-          <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
-          Tabs keep your progress for this session — drafts are not saved to the database (v1).
-        </span>
-      </div>
-    </header>
+    <!-- Identity + status + target — projected into the card's identity band. -->
+    <ng-container workspaceHeader>
+      <span class="bw-identity">{{ IsBuilt ? Draft?.BuiltBatchNumber : 'New batch' }}</span>
+      @if (IsBuilt) {
+        <mj-stat-badge Label="Built" Icon="fa-solid fa-check" Variant="success"></mj-stat-badge>
+      } @else {
+        <mj-stat-badge Label="Draft — not built" Variant="default"></mj-stat-badge>
+      }
+      <mj-stat-badge
+        [Label]="'Target: ' + (Draft?.Criteria?.TargetSystem ?? '')"
+        Icon="fa-solid fa-plug"
+        Variant="info"
+        title="The ERP this batch dispatches to.">
+      </mj-stat-badge>
+      <span class="bw-sessionnote">
+        <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+        Tabs keep your progress for this session — drafts are not saved to the database (v1).
+      </span>
+    </ng-container>
 
-    <div class="bw-body">
+    <ng-container>
       @if (ActionMessage) {
         <mj-alert [Variant]="ActionIsError ? 'error' : 'success'" [Message]="ActionMessage"></mj-alert>
       }
@@ -136,7 +132,7 @@
 
       <!-- Apply = the deferred query. Filters do NOT auto-query; the operator applies them when ready. -->
       @if (!IsBuilt) {
-        <button type="button" mjButton Variant="primary" class="bw-apply" (click)="Apply()" [disabled]="IsPreviewing">
+        <button type="button" class="mj-btn mj-btn--outline bw-apply" (click)="Apply()" [disabled]="IsPreviewing">
           @if (IsPreviewing) {
             <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Loading…
           } @else {
@@ -213,7 +209,7 @@
         <div class="bw-loadprompt">
           <i class="fa-solid fa-layer-group" aria-hidden="true"></i>
           <p>Set your criteria on the left, then load the matching journal entries.</p>
-          <button type="button" mjButton Variant="primary" (click)="Apply()">
+          <button type="button" class="mj-btn mj-btn--outline" (click)="Apply()">
             <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Load entries
           </button>
         </div>
@@ -261,20 +257,20 @@
     </div>
 
     <div class="bw-footer">
-      <button type="button" mjButton Variant="primary" [disabled]="!CanBuild" [title]="BuildBlockedReason ?? 'Build the batch'" (click)="Build()">
+      <button type="button" class="mj-btn mj-btn--primary" [disabled]="!CanBuild" [title]="BuildBlockedReason ?? 'Build the batch'" (click)="Build()">
         @if (IsBuilding) {
           <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Building…
         } @else {
           <i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i> Build batch
         }
       </button>
-      <button type="button" mjButton Variant="outline" [disabled]="IsBuilt" (click)="KeepAsDraft()">
+      <button type="button" class="mj-btn mj-btn--outline" [disabled]="IsBuilt" (click)="KeepAsDraft()">
         <i class="fa-regular fa-floppy-disk" aria-hidden="true"></i> Keep as draft tab
       </button>
-      <button type="button" mjButton Variant="flat" (click)="Discard()">Discard</button>
+      <button type="button" class="mj-btn mj-btn--flat" (click)="Discard()">Discard</button>
     </div>
   </section>
       </div>
-    </div>
-  </section>
+    </ng-container>
+  </mj-workspace-card>
 </mj-page-body-interior>
