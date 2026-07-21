@@ -59,9 +59,11 @@ const HOVER_DELAY_MS = 450;
                 <i class="fa-solid fa-triangle-exclamation ws-tab__reject-icon" aria-hidden="true"></i>
               }
               <span class="ws-tab__label">{{ tab.Label }}</span>
-              <!-- Always-rendered fixed-width slot (transparent when clean) so a dirty tab is the SAME
-                   width as a clean one — the unsaved dot never shifts layout (Marcelo 2026-07-21). -->
-              <span class="ws-tab__dirty" [class.ws-tab__dirty--on]="tab.Dirty" [attr.aria-label]="tab.Dirty ? 'unsaved changes' : null">&bull;</span>
+              @if (tab.Dirty) {
+                <!-- Inline dot (no reserved slot): it PUSHES the label, so the ellipsis shifts left on a
+                     capped tab and a short tab grows by the dot's width (Marcelo 2026-07-21). -->
+                <span class="ws-tab__dirty" aria-label="unsaved changes">&bull;</span>
+              }
             </button>
             <button
               type="button"

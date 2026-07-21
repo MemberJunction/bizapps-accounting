@@ -101,19 +101,15 @@
   flex: none;
 }
 
-/* A fixed-width in-flow slot: transparent when clean, dot when dirty — so dirty/clean tabs are the
-   SAME width and the dot never shifts anything (Marcelo 2026-07-21). */
+/* Inline dot — present only when dirty; it pushes the label (ellipsis shifts left on a capped tab).
+   No reserved slot: the text moves over rather than leaving a permanent gap (Marcelo 2026-07-21). */
 .ws-tab__dirty {
   flex: none;
-  width: 12px;
-  text-align: center;
-  color: transparent;
+  padding-left: 3px;
+  color: var(--mj-brand-primary);
   font-size: 18px;
   line-height: 0;
   pointer-events: none;
-}
-.ws-tab__dirty--on {
-  color: var(--mj-brand-primary);
 }
 
 .ws-tab__close {

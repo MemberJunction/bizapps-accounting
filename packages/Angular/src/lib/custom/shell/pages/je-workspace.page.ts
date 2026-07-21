@@ -193,6 +193,13 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
       .sort((a, b) => a.Label.localeCompare(b.Label));
   }
 
+  /** The chosen account's full "Code · Name" — bound to the select's title so the full name shows on
+   *  hover even when the fixed-width column truncates it (Marcelo 2026-07-21). */
+  public AccountLabel(id: string | null): string {
+    if (!id) return '';
+    return this.AccountOptions.find((a) => UUIDsEqual(a.ID, id))?.Label ?? '';
+  }
+
   /** One column per ACTIVE dimension. None configured ⇒ no columns (today's state), not a dead control. */
   private loadDimensionColumns(): DimensionColumn[] {
     const engine = AccountingEngineBase.Instance;
