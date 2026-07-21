@@ -10,6 +10,7 @@ import {
 } from '@mj-biz-apps/accounting-entities';
 import { mjBizAppsAccountingJournalEntryFormComponent } from '../../generated/Entities/mjBizAppsAccountingJournalEntry/mjbizappsaccountingjournalentry.form.component';
 import { JournalEntryClient } from './journal-entry.client';
+import { canReverse } from '../shared/je-rules';
 
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
 const JELD_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Line Dimensions';
@@ -44,7 +45,7 @@ const STATUS_ORDER: Record<'Pending' | 'Batched' | 'GLPosted', number> = { Pendi
  * priority) and adds, alongside the generated field panels:
  *   - a status timeline (Pending → Batched → GLPosted),
  *   - the JE lines with per-line dimension chips,
- *   - a "Generate Reversal" affordance shown ONLY when the JE is GLPosted (W6: a new Pending JE,
+ *   - a "Generate Reversal" affordance shown for any created JE (status-independent, W6: a new Pending JE,
  *     Dr/Cr swapped, via the JournalEntryResolver → JournalEntryEntityServer.generateReversal).
  */
 @RegisterClass(BaseFormComponent, 'MJ_BizApps_Accounting: Journal Entries')
@@ -87,9 +88,21 @@ export class JournalEntryFormComponentExtended extends mjBizAppsAccountingJourna
 
   // ─── reversal affordance ───────────────────────────────────────────────────
 
-  /** The Generate Reversal affordance shows ONLY for a GLPosted JE that hasn't already been reversed. */
+  /**
+   * The Generate Reversal affordance uses the SHARED, status-INDEPENDENT rule (`je-rules.canReverse`,
+   * same as the detail-panel + the engine's `generateReversal` guard) — a created JE of ANY status
+   * (Pending / Batched / GLPosted) is reversible; only a reversal-of-a-reversal or an already-reversed
+   * entry is blocked (Marcelo 2026-07-21: reversal is the correction path since there's no user-facing
+   * delete). This replaces the old GLPosted-only gate, which was stricter than the engine allows.
+   */
   public get CanReverse(): boolean {
-    return this.record?.Status === 'GLPosted' && !this.record?.ReversedByJournalEntryID;
+    const r = this.record;
+    if (!r?.ID) return false; // must be a saved entry (generateReversal throws on an unsaved one)
+    return canReverse({
+      ReversedByJournalEntryID: r.ReversedByJournalEntryID,
+      ReversesJournalEntryID: r.ReversesJournalEntryID,
+      EntryType: r.EntryType,
+    });
   }
 
   public OpenReversalForm(): void {

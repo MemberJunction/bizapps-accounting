@@ -35,7 +35,11 @@ describe('TIER 4 (4e-iii): JournalEntry form extension — reversal gate + timel
   // websocket/provider wiring) is MJ-CORE's layer, not this app's — forcing it here would re-test a
   // lower layer's internals (and trips a blank-WSURL rejection in the headless harness). The gate +
   // timeline are pure over `record`, which is exactly the app-authored behavior 4e-iii must cover.
-  it('gates CanReverse on GLPosted-and-not-reversed, and the timeline tracks status', async () => {
+  // Behavior CHANGED 2026-07-21 (Marcelo): reversal is now status-INDEPENDENT — a created JE of ANY
+  // status is reversible (reversal is the correction path; there's no user-facing delete), matching
+  // the engine's generateReversal guard + the shared je-rules.canReverse + the detail-panel. The gate
+  // blocks ONLY a reversal-of-a-reversal and an already-reversed entry. (Was GLPosted-only; test updated.)
+  it('reverses any created JE (status-independent); blocks already-reversed + reversal-of-a-reversal', async () => {
     TestBed.configureTestingModule({ imports: [CustomFormsModule], providers: [MJFormPresenterService] });
     const f = TestBed.createComponent(JournalEntryFormComponentExtended);
     const c = f.componentInstance as unknown as ExtModel;
@@ -44,23 +48,34 @@ describe('TIER 4 (4e-iii): JournalEntry form extension — reversal gate + timel
     const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY);
     je.NewRecord();
     c.record = je;
+    je.EntryType = 'Manual';
+    je.ReversesJournalEntryID = null;
 
-    // 1. GLPosted + not reversed → reversible.
+    // 1. GLPosted + not reversed → reversible; timeline reflects GLPosted.
     je.Status = 'GLPosted';
     je.ReversedByJournalEntryID = null;
     expect(c.CanReverse, 'GLPosted + not reversed ⇒ CanReverse').toBe(true);
     expect(c.Timeline.find((s) => s.Key === 'GLPosted')?.Current, 'timeline current = GLPosted').toBe(true);
     expect(c.Timeline.find((s) => s.Key === 'GLPosted')?.Done, 'GLPosted step marked done').toBe(true);
 
-    // 2. Pending → NOT reversible; timeline current = Pending, GLPosted not yet reached.
+    // 2. Pending → NOW reversible too (status-independent); timeline still tracks status.
     je.Status = 'Pending';
-    expect(c.CanReverse, 'Pending ⇒ not reversible').toBe(false);
+    expect(c.CanReverse, 'Pending ⇒ reversible (status-independent)').toBe(true);
     expect(c.Timeline.find((s) => s.Key === 'Pending')?.Current, 'timeline current = Pending').toBe(true);
     expect(c.Timeline.find((s) => s.Key === 'GLPosted')?.Done, 'GLPosted not reached from Pending').toBe(false);
 
-    // 3. GLPosted but ALREADY reversed → NOT reversible (no double reversal).
+    // 3. Batched → reversible too.
+    je.Status = 'Batched';
+    expect(c.CanReverse, 'Batched ⇒ reversible').toBe(true);
+
+    // 4. ALREADY reversed → NOT reversible (no double reversal), regardless of status.
     je.Status = 'GLPosted';
     je.ReversedByJournalEntryID = '00000000-0000-4000-8000-000000000abc';
-    expect(c.CanReverse, 'already-reversed GLPosted ⇒ not reversible').toBe(false);
+    expect(c.CanReverse, 'already-reversed ⇒ not reversible').toBe(false);
+
+    // 5. A reversal entry itself → NOT reversible (no reverse-of-a-reversal).
+    je.ReversedByJournalEntryID = null;
+    je.EntryType = 'Reversal';
+    expect(c.CanReverse, 'a reversal entry cannot itself be reversed').toBe(false);
   });
 });

@@ -72,7 +72,7 @@
                 @if (e.ReversesJournalEntryID) { <span class="je-tag"><i class="fa-solid fa-rotate-left"></i> reversal</span> }
                 @if (e.ReversedByJournalEntryID) { <span class="je-tag je-tag--muted"><i class="fa-solid fa-ban"></i> reversed</span> }
                 <span class="je-spacer"></span>
-                @if (e.EffectiveDate) { <span class="je-date">{{ e.EffectiveDate | date:'MMM d, y' }}</span> }
+                @if (e.EffectiveDate) { <span class="je-date">{{ e.EffectiveDate | date:'MMM d, y':'UTC' }}</span> }
                 <span class="je-amt">{{ e.TotalDebits | number:'1.2-2' }}</span>
                 @if (IsBalanced(e)) {
                   <span class="je-bal je-bal--ok" title="Balanced"><i class="fa-solid fa-scale-balanced"></i></span>
