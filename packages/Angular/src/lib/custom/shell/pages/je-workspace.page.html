@@ -158,7 +158,10 @@
                   </td>
                   <td class="jew__rowact">
                     <button
-                      class="mj-btn mj-btn--flat"
+                      type="button"
+                      mjButton
+                      variant="flat"
+                      size="sm"
                       (click)="RemoveLine(line.Key)"
                       [disabled]="IsCreated"
                       title="Remove this line"
