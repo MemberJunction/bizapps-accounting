@@ -1,45 +1,55 @@
 /* Workspace tab strip. Design tokens only — see nav-rail.component.css for the same rationale. */
 
-/* The strip spans its host so the bottom rule runs the full width of the card it heads,
-   rather than stopping under the last tab. */
 :host {
   display: block;
+  /* One knob for the fixed tab width — sized to fully show a "New … (draft)" label without fading.
+     Every tab is exactly this wide (see .ws-tab) so closes line up and tabs are easy to X/reorder. */
+  --ws-tab-width: 190px;
+}
+
+/* The bar = the scrollable tab list + the PINNED new-tab button as siblings. The bottom rule runs
+   the full width here so it spans the button too, not just under the tabs. */
+.ws-tabbar {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--mj-border-default);
+  min-height: 38px;
 }
 
 .ws-tabs {
   display: flex;
   align-items: stretch;
   gap: 4px;
-  border-bottom: 1px solid var(--mj-border-default);
-  /* Indented, NOT flush: the first tab lines up with the card's content gutter, so there is one
-     straight edge down the left of the page (Marcelo 2026-07-16 — flush was my misreading of
-     "in line with the left side of the card"). */
-  padding: 0 12px;
+  /* Indented, NOT flush: the first tab lines up with the card's content gutter (Marcelo 2026-07-16). */
+  padding: 0 4px 0 12px;
+  /* The tab list is what scrolls — behind the pinned new-tab button (browser new-tab behavior). */
+  flex: 1;
+  min-width: 0;
   overflow-x: auto;
-  /* MUST be explicit. Per the CSS overflow spec a `visible` axis paired with a non-`visible` axis
-     COMPUTES TO `auto` — so `overflow-x: auto` alone silently made the strip vertically scrollable
-     too, and .ws-tab's `margin-bottom: -1px` (how an active tab sits on the rule) gave it exactly
-     1px of overflow to scroll. That is the "why are the tabs vertically scrollable? I'm confused"
-     bug: nobody wrote vertical scrolling, CSS inferred it. Fixed here rather than per-page because
-     all four consumers (JE + batch workspaces, order editor, product workshop) inherit it. */
+  /* MUST be explicit: per the overflow spec a `visible` axis paired with a non-`visible` axis COMPUTES
+     TO `auto`, so `overflow-x:auto` alone silently made the strip vertically scrollable (the active
+     tab's `margin-bottom:-1px` gave it 1px to scroll). Pin the vertical axis hidden. */
   overflow-y: hidden;
-  min-height: 38px;
+  scrollbar-width: thin;
 }
 
 .ws-tab {
+  position: relative; /* anchors the absolutely-placed unsaved dot so a dirty tab is the SAME width */
   display: flex;
   align-items: center;
+  /* FIXED width (not max) — uniform tabs. flex:none so they keep their size and scroll rather than
+     squashing when the list overflows. */
+  width: var(--ws-tab-width);
+  flex: none;
   border: 1px solid var(--mj-border-default);
   border-bottom: none;
   border-radius: 8px 8px 0 0;
   background: var(--mj-bg-surface-card);
   margin-bottom: -1px;
-  max-width: 240px;
 }
 .ws-tab--active {
   background: var(--mj-bg-surface);
   border-color: var(--mj-border-default);
-  /* Sit the active tab on top of the strip's bottom border so it reads as connected to the body. */
   box-shadow: 0 1px 0 0 var(--mj-bg-surface);
 }
 .ws-tab--rejected {
@@ -61,6 +71,8 @@
   font-size: 13px;
   font-family: inherit;
   cursor: pointer;
+  /* Fill the tab minus the close button; min-width:0 lets the label actually shrink + fade. */
+  flex: 1;
   min-width: 0;
 }
 .ws-tab--active .ws-tab__select {
@@ -75,20 +87,33 @@
 }
 
 .ws-tab__label {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+  /* FADE, not ellipsis (Firefox-style). The fade zone doubles as the unsaved-dot's home: the text
+     fades out over the last ~22px, exactly where the dot sits, so a dirty tab never grows. */
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent);
 }
 
 .ws-tab__reject-icon {
   color: var(--mj-status-warning);
   font-size: 12px;
+  flex: none;
 }
 
+/* The unsaved dot lives IN the label's right fade zone (absolute, out of flow) so it costs the tab
+   zero width — a dirty tab is identical in size to a clean one (Marcelo 2026-07-21). */
 .ws-tab__dirty {
+  position: absolute;
+  right: 30px;
+  top: 50%;
+  transform: translateY(-50%);
   color: var(--mj-brand-primary);
   font-size: 18px;
   line-height: 0;
+  pointer-events: none;
 }
 
 .ws-tab__close {
@@ -111,20 +136,41 @@
   color: var(--mj-text-primary);
 }
 
+/* Pinned: flex:none keeps it at the right of the bar while .ws-tabs scrolls behind it. */
 .ws-tabs__new {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 8px 12px;
+  flex: none;
   border: none;
-  background: transparent;
+  border-left: 1px solid var(--mj-border-default);
+  background: var(--mj-bg-surface);
   color: var(--mj-text-link);
   font-size: 13px;
   font-family: inherit;
   cursor: pointer;
   white-space: nowrap;
-  border-radius: 6px;
 }
 .ws-tabs__new:hover {
   background: var(--mj-bg-surface-hover);
+}
+
+/* Delayed, NON-INTERACTIVE tooltip: fixed to the viewport, pointer-events:none so it can never sit
+   between the pointer and a control or block a click; the component hides it on the next mousemove. */
+.ws-tab__tooltip {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  max-width: 360px;
+  padding: 5px 9px;
+  border-radius: 6px;
+  background: var(--mj-bg-surface-elevated, var(--mj-bg-surface));
+  border: 1px solid var(--mj-border-default);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--mj-text-primary) 18%, transparent);
+  color: var(--mj-text-primary);
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: normal;
+  word-break: break-word;
 }

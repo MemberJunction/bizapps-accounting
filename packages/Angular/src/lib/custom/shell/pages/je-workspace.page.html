@@ -58,7 +58,7 @@
           </label>
 
           <label class="jew__field">
-            <span>Entry date</span>
+            <span>Posting date</span>
             <input class="mj-input" type="date" [(ngModel)]="d.EffectiveDate" (ngModelChange)="touch()" />
           </label>
 
@@ -103,6 +103,7 @@
                 }
                 <th class="num">Dr</th>
                 <th class="num">Cr</th>
+                <th>Memo</th>
                 <th class="jew__rowact"></th>
               </tr>
             </thead>
@@ -156,6 +157,11 @@
                   <td class="num">
                     <input class="mj-input num" [(ngModel)]="line.Credit" (ngModelChange)="touch()" [disabled]="IsCreated" inputmode="decimal" />
                   </td>
+                  <td>
+                    <!-- Per-line memo (JournalEntryLine.Description) — optional; already flows through
+                         toCreateInput → the CreateJournalEntry contract → the engine's atomic write. -->
+                    <input class="mj-input" [(ngModel)]="line.Description" (ngModelChange)="touch()" [disabled]="IsCreated" placeholder="Line memo (optional)" />
+                  </td>
                   <td class="jew__rowact">
                     <button
                       class="mj-btn mj-btn--flat"
@@ -169,7 +175,7 @@
                 </tr>
                 @if (LineIssue(line) || EngineLineError(i)) {
                   <tr class="jew__issuerow">
-                    <td [attr.colspan]="5 + DimensionColumns.length">
+                    <td [attr.colspan]="6 + DimensionColumns.length">
                       <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
                       {{ EngineLineError(i) ?? LineIssue(line) }}
                     </td>
