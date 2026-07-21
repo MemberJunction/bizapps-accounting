@@ -55,3 +55,25 @@
   flex-direction: column;
   gap: 10px;
 }
+
+/* The standardized action bar — pinned below the scrolling body, so the verbs stay reachable without
+   scrolling to the end of a long form. mj-btn classes match the JE workspace exactly. */
+.ws-card__foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-top: 1px solid var(--mj-border-default);
+}
+/* Per-workshop caption beside the verbs (projected). Collapses when nothing is slotted. */
+.ws-card__footnote {
+  margin-left: auto;
+  max-width: 46ch;
+  font-size: 12px;
+  color: var(--mj-text-muted);
+}
+.ws-card__footnote:empty {
+  display: none;
+}

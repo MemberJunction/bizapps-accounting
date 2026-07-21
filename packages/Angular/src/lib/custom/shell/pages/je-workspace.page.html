@@ -15,7 +15,25 @@
     (TabSelected)="SelectTab($event)"
     (TabClosed)="CloseTab($event)"
     (NewTabRequested)="openNewDraft()"
-    (TabReordered)="ReorderTabs($event)">
+    (TabReordered)="ReorderTabs($event)"
+    [ShowFooter]="!!Draft"
+    ConfirmLabel="Create entry"
+    ConfirmIcon="fa-solid fa-check"
+    [ConfirmDisabled]="!CanSubmit"
+    [ConfirmTitle]="SubmitBlockedReason ?? 'Create this entry'"
+    [ConfirmBusy]="IsSubmitting"
+    ConfirmBusyLabel="Creating…"
+    DraftLabel="Keep as draft tab"
+    [DraftDisabled]="IsCreated"
+    (Confirm)="Submit()"
+    (SaveDraft)="KeepAsDraft()"
+    (Discard)="Discard()">
+
+    <!-- Honest statement of the C.8 gap: the mockup promised approval routing; it does not exist. -->
+    <span workspaceFooterNote>
+      Manual entries route to CFO approval before batching (C.8) — not yet in force; a created entry is
+      Pending and can be picked up by the next batch build.
+    </span>
 
     <!-- Identity + status + currency — projected into the card's identity band. -->
     <ng-container workspaceHeader>
@@ -223,27 +241,8 @@
             placeholder="What is this entry for?" />
         </label>
 
-        <!-- Verbs. -->
-        <div class="jew__footer">
-          <button class="mj-btn mj-btn--primary" (click)="Submit()" [disabled]="!CanSubmit" [title]="SubmitBlockedReason ?? 'Create this entry'">
-            @if (IsSubmitting) {
-              <i class="fa-solid fa-circle-notch fa-spin" aria-hidden="true"></i> Creating…
-            } @else {
-              <i class="fa-solid fa-check" aria-hidden="true"></i> Create entry
-            }
-          </button>
-          <button class="mj-btn mj-btn--outline" (click)="KeepAsDraft()" [disabled]="IsCreated">
-            <i class="fa-regular fa-floppy-disk" aria-hidden="true"></i> Keep as draft tab
-          </button>
-          <button class="mj-btn mj-btn--flat" (click)="Discard()">Discard</button>
-
-          <!-- Honest statement of the C.8 gap: the mockup promised approval routing; it does not exist. -->
-          <span class="jew__footnote">
-            Manual entries are intended to route to CFO approval before batching (C.8). That gate is not
-            yet in force — a created entry is Pending and can be picked up by the next batch build.
-          </span>
-        </div>
-
+        <!-- Verbs now live in the shared <mj-workspace-card> action bar (configured on the card tag
+             above) — the standardized Create / Keep-as-draft / Discard trio. -->
         @if (SubmitBlockedReason && !IsCreated) {
           <p class="jew__hint">
             <i class="fa-solid fa-circle-info" aria-hidden="true"></i> {{ SubmitBlockedReason }}

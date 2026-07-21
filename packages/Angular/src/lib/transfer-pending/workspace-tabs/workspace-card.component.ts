@@ -43,6 +43,32 @@ import { WorkspaceTabStripComponent, TabReorder } from './workspace-tab-strip.co
       <div class="ws-card__body">
         <ng-content></ng-content>
       </div>
+      <!-- Standardized action bar (Marcelo 2026-07-21): the SAME three verbs on every workspace —
+           a primary confirm/submit whose LABEL is the only thing that varies per use case, a neutral
+           save-as-draft, and a neutral discard — so no workshop hand-rolls its own footer. Pinned
+           below the scrolling body. Opt-in via [ShowFooter]; a [workspaceFooterNote] slot carries any
+           per-workshop caption beside the buttons. -->
+      @if (ShowFooter) {
+        <footer class="ws-card__foot">
+          <button type="button" class="mj-btn mj-btn--primary"
+            [disabled]="ConfirmDisabled || ConfirmBusy"
+            [title]="ConfirmTitle || ConfirmLabel"
+            (click)="Confirm.emit()">
+            @if (ConfirmBusy) {
+              <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> {{ ConfirmBusyLabel }}
+            } @else {
+              @if (ConfirmIcon) { <i [class]="ConfirmIcon" aria-hidden="true"></i> } {{ ConfirmLabel }}
+            }
+          </button>
+          @if (ShowDraft) {
+            <button type="button" class="mj-btn mj-btn--outline" [disabled]="DraftDisabled" (click)="SaveDraft.emit()">
+              @if (DraftIcon) { <i [class]="DraftIcon" aria-hidden="true"></i> } {{ DraftLabel }}
+            </button>
+          }
+          <button type="button" class="mj-btn mj-btn--flat" (click)="Discard.emit()">{{ DiscardLabel }}</button>
+          <span class="ws-card__footnote"><ng-content select="[workspaceFooterNote]"></ng-content></span>
+        </footer>
+      }
     </section>
   `,
   styleUrls: ['./workspace-card.component.css'],
@@ -53,8 +79,32 @@ export class WorkspaceCardComponent {
   @Input() NewTabLabel = 'New';
   @Input() AriaLabel = 'Workspace';
 
+  // ── Standardized footer (opt-in) ────────────────────────────────────────────
+  /** Render the standardized action bar (confirm / save-as-draft / discard) below the body. */
+  @Input() ShowFooter = false;
+  /** The primary verb's label — the ONE thing that changes per workshop ("Create entry" / "Build batch"). */
+  @Input() ConfirmLabel = 'Confirm';
+  /** Optional Font Awesome class for the confirm button (e.g. 'fa-solid fa-check'). */
+  @Input() ConfirmIcon: string | null = null;
+  @Input() ConfirmDisabled = false;
+  /** Tooltip / blocked-reason on the confirm button; falls back to ConfirmLabel. */
+  @Input() ConfirmTitle: string | null = null;
+  /** Show the spinner + busy label on the confirm button while an async confirm runs. */
+  @Input() ConfirmBusy = false;
+  @Input() ConfirmBusyLabel = 'Working…';
+  /** Whether the save-as-draft button appears (some workshops have no draft concept). */
+  @Input() ShowDraft = true;
+  @Input() DraftLabel = 'Keep as draft';
+  @Input() DraftIcon: string | null = 'fa-regular fa-floppy-disk';
+  @Input() DraftDisabled = false;
+  @Input() DiscardLabel = 'Discard';
+
   @Output() TabSelected = new EventEmitter<string>();
   @Output() TabClosed = new EventEmitter<string>();
   @Output() NewTabRequested = new EventEmitter<void>();
   @Output() TabReordered = new EventEmitter<TabReorder>();
+  /** The primary verb (create / build / …). */
+  @Output() Confirm = new EventEmitter<void>();
+  @Output() SaveDraft = new EventEmitter<void>();
+  @Output() Discard = new EventEmitter<void>();
 }

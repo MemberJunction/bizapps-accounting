@@ -3,6 +3,11 @@
 .scope-chip {
   position: relative;
   margin: 4px 2px 0;
+  /* Lift the chip (and its dropdown) into its OWN stacking context ABOVE the page body. The workspace
+     card uses `container-type: size`, which applies layout containment → a stacking context; being a
+     later-DOM sibling at z-index:auto, the card would otherwise paint OVER this header dropdown. A
+     positive z-index here keeps the scope menu above the workspace card's tab-strip header. */
+  z-index: 50;
 }
 
 .scope-chip__btn {

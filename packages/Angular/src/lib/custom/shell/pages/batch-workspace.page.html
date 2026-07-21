@@ -26,7 +26,19 @@
     (TabSelected)="SelectTab($event)"
     (TabClosed)="CloseTab($event)"
     (NewTabRequested)="openNewDraft()"
-    (TabReordered)="ReorderTabs($event)">
+    (TabReordered)="ReorderTabs($event)"
+    [ShowFooter]="!!Draft"
+    ConfirmLabel="Build batch"
+    ConfirmIcon="fa-solid fa-boxes-stacked"
+    [ConfirmDisabled]="!CanBuild"
+    [ConfirmTitle]="BuildBlockedReason ?? 'Build the batch'"
+    [ConfirmBusy]="IsBuilding"
+    ConfirmBusyLabel="Building…"
+    DraftLabel="Keep as draft tab"
+    [DraftDisabled]="IsBuilt"
+    (Confirm)="Build()"
+    (SaveDraft)="KeepAsDraft()"
+    (Discard)="Discard()">
 
     <!-- Identity + status + target — projected into the card's identity band. -->
     <ng-container workspaceHeader>
@@ -256,19 +268,6 @@
       }
     </div>
 
-    <div class="bw-footer">
-      <button type="button" class="mj-btn mj-btn--primary" [disabled]="!CanBuild" [title]="BuildBlockedReason ?? 'Build the batch'" (click)="Build()">
-        @if (IsBuilding) {
-          <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Building…
-        } @else {
-          <i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i> Build batch
-        }
-      </button>
-      <button type="button" class="mj-btn mj-btn--outline" [disabled]="IsBuilt" (click)="KeepAsDraft()">
-        <i class="fa-regular fa-floppy-disk" aria-hidden="true"></i> Keep as draft tab
-      </button>
-      <button type="button" class="mj-btn mj-btn--flat" (click)="Discard()">Discard</button>
-    </div>
   </section>
       </div>
     </ng-container>
