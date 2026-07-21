@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, OnInit } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef, ElementRef, ViewChild, inject, OnInit } from '@angular/core';
 import { RunView, type IRemoteOperationProvider } from '@memberjunction/core';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
 import { UUIDsEqual } from '@memberjunction/global';
@@ -252,9 +252,18 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
 
   // ─── lines ─────────────────────────────────────────────────────────────────
 
+  /** The scrollable line-grid wrapper — so Add line can bring the new (bottom) row into view. */
+  @ViewChild('gridScroll') private gridScroll?: ElementRef<HTMLElement>;
+
   public AddLine(): void {
     this.Draft?.Lines.push(this.newLine());
     this.touch();
+    // Scroll the new (last) row into view AFTER it renders. setTimeout(0) runs post-render; this only
+    // reads/sets scrollTop (no change detection), so it's safe under zoneless OnPush.
+    setTimeout(() => {
+      const el = this.gridScroll?.nativeElement;
+      if (el) el.scrollTop = el.scrollHeight;
+    }, 0);
   }
 
   public RemoveLine(key: string): void {

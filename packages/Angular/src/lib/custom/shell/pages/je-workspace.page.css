@@ -80,6 +80,9 @@ mj-page-body-interior {
   height: auto;
   min-height: 0;
   max-height: min(52vh, 620px);
+  /* Reserve the vertical scrollbar's gutter ALWAYS, so adding/removing a line (which crosses the
+     max-height threshold) doesn't pop a scrollbar in/out and shift the grid sideways (Marcelo 2026-07-21). */
+  scrollbar-gutter: stable;
 }
 .jew__grid {
   width: 100%;
