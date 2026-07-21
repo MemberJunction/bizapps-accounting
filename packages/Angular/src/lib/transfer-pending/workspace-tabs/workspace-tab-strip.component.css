@@ -161,7 +161,10 @@
      isn't a surprising sharp rectangle; bottom stays square to meet the baseline (Marcelo 2026-07-21). */
   align-self: stretch;
   margin-top: -4px;
-  border-radius: 8px 8px 0 0;
+  /* Round only the OUTER (top-right) corner; the top-left stays square + flush against the border
+     divider that separates it from the tabs — rounding it would notch it off the divider (browsers
+     keep the +-button's tab-side edge flush too). Marcelo 2026-07-21. */
+  border-radius: 0 8px 0 0;
 }
 .ws-tabs__new:hover {
   background: var(--mj-bg-surface-hover);
