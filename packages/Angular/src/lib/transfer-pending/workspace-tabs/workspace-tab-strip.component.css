@@ -13,7 +13,8 @@
   display: flex;
   align-items: stretch;
   border-bottom: 1px solid var(--mj-border-default);
-  min-height: 38px;
+  /* A touch taller so the horizontal scrollbar isn't cramped against the tabs (Marcelo 2026-07-21). */
+  min-height: 44px;
 }
 
 .ws-tabs {
@@ -69,7 +70,8 @@
   color: var(--mj-text-secondary);
   font-size: 13px;
   font-family: inherit;
-  cursor: pointer;
+  /* Regular arrow over a tab body, like browser tabs — NOT the clicky finger (Marcelo 2026-07-21). */
+  cursor: default;
   /* Content-sized (NOT flex:1) so the tab hugs its text; min-width:0 lets the label ellipsize at cap. */
   flex: 0 1 auto;
   min-width: 0;
@@ -158,12 +160,18 @@
   position: fixed;
   z-index: 1000;
   pointer-events: none;
-  max-width: 360px;
+  /* ~1.5× a tab wide, capped at 3 lines tall — never a screen-wide banner (Marcelo 2026-07-21). */
+  max-width: 300px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
   padding: 5px 9px;
   border-radius: 6px;
   background: var(--mj-bg-surface-elevated, var(--mj-bg-surface));
   border: 1px solid var(--mj-border-default);
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--mj-text-primary) 18%, transparent);
+  /* Toned down — the old 18%/14px shadow read "shiny" in dark mode and heavy in light (Marcelo). */
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--mj-text-primary) 8%, transparent);
   color: var(--mj-text-primary);
   font-size: 12px;
   line-height: 1.35;
