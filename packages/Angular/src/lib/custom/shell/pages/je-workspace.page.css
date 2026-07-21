@@ -77,18 +77,45 @@ mj-page-body-interior {
    with a max-height + scroll only when there are many lines (Marcelo 2026-07-21). Border/radius come
    from the shared .mjsh-tablewrap. */
 .jew__gridwrap.mjsh-tablewrap {
-  /* FIXED default height sized to the CONTAINER (the workspace card = a window/pane), via cqh — NOT
-     the viewport (design rule, Marcelo 2026-07-21). So adding/removing rows does NOT resize the grid
-     (no jarring movement); rows scroll WITHIN it. DRAGGABLE: `resize: vertical` gives a native bottom
-     handle to make the grid taller/shorter, bounded by min/max. `flex: none` so the card-body's flex
-     layout doesn't override the chosen/dragged height. `55cqh` = 55% of the card's height. */
-  height: 55cqh;
-  min-height: 160px;
-  max-height: 88cqh;
+  /* Grow-with-content, bounded (Marcelo 2026-07-21): a COMFORTABLE min (~5 rows, never a 2-row sliver),
+     grow as rows are added, capped by a CONTAINER-based max (cqh — relative to the workspace card, a
+     window/pane, NOT the viewport; the design rule). The vertical scrollbar appears ONLY past the max.
+     Custom drag bar (below) overrides height/maxHeight for a user-chosen size. */
+  height: auto;
+  min-height: 268px;   /* ~5 data rows + header — the default, not a tiny sliver */
+  max-height: 52cqh;   /* container-based cap; leaves room for the balance strip + memo + footer */
   flex: none;
-  resize: vertical;
-  /* Reserve the scrollbar gutter so the ever-present vertical scrollbar never shifts the grid sideways. */
+  /* Reserve the gutter ALWAYS + a THIN scrollbar, so data never sits under the scrollbar and adding/
+     removing rows never pops a bar in/out that shifts the grid (reduce footprint AND reserve space). */
   scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+.jew__gridwrap.mjsh-tablewrap::-webkit-scrollbar { width: 9px; height: 9px; }
+.jew__gridwrap.mjsh-tablewrap::-webkit-scrollbar-thumb {
+  background: var(--mj-border-strong, var(--mj-border-default));
+  border-radius: 999px;
+}
+
+/* Full-width drag bar with a CENTRAL grip — resizes the grid vertically (the corner handle implied
+   both-axis resize, which is wrong; this is vertical-only, grabbable anywhere along the bottom edge). */
+.jew__resize {
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+}
+.jew__resize-grip {
+  width: 46px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--mj-border-strong, var(--mj-border-default));
+  transition: background 120ms;
+}
+.jew__resize:hover .jew__resize-grip {
+  background: var(--mj-brand-primary);
 }
 .jew__grid {
   width: 100%;

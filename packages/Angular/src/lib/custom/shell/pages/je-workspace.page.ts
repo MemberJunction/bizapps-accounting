@@ -255,6 +255,33 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
   /** The scrollable line-grid wrapper — so Add line can bring the new (bottom) row into view. */
   @ViewChild('gridScroll') private gridScroll?: ElementRef<HTMLElement>;
 
+  /**
+   * Drag the full-width bottom bar to resize the grid vertically. Sets an explicit height (a user-chosen
+   * size), clamped to [min, 85% of the CONTAINER card] — container-based, not viewport. Pure DOM writes
+   * (no change detection needed), so window-level pointer listeners are fine under zoneless OnPush.
+   */
+  public StartGridResize(ev: PointerEvent): void {
+    ev.preventDefault();
+    const el = this.gridScroll?.nativeElement;
+    if (!el) return;
+    const card = el.closest('.ws-card') as HTMLElement | null;
+    const MIN = 200;
+    const MAX = card ? Math.round(card.clientHeight * 0.85) : 900;
+    const startY = ev.clientY;
+    const startH = Math.round(el.getBoundingClientRect().height);
+    const onMove = (e: PointerEvent) => {
+      const h = Math.max(MIN, Math.min(MAX, startH + (e.clientY - startY)));
+      el.style.height = `${h}px`;
+      el.style.maxHeight = `${h}px`;
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }
+
   public AddLine(): void {
     this.Draft?.Lines.push(this.newLine());
     this.touch();

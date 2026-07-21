@@ -176,6 +176,10 @@
             </tbody>
           </table>
         </div>
+        <!-- Full-width vertical resize bar (central grip) — drag the grid taller/shorter. -->
+        <div class="jew__resize" (pointerdown)="StartGridResize($event)" title="Drag to resize" aria-hidden="true">
+          <span class="jew__resize-grip"></span>
+        </div>
 
         @if (!IsCreated) {
           <button class="mj-btn mj-btn--flat jew__addline" (click)="AddLine()">
