@@ -2,9 +2,9 @@
 
 :host {
   display: block;
-  /* One knob for the fixed tab width — sized to fully show a "New … (draft)" label without fading.
-     Every tab is exactly this wide (see .ws-tab) so closes line up and tabs are easy to X/reorder. */
-  --ws-tab-width: 190px;
+  /* MAX tab width. Tabs size to their text and only grow to this cap, then clip with an ellipsis
+     (Marcelo 2026-07-21 — a fixed width left short tabs mostly empty). */
+  --ws-tab-max: 210px;
 }
 
 /* The bar = the scrollable tab list + the PINNED new-tab button as siblings. The bottom rule runs
@@ -34,12 +34,11 @@
 }
 
 .ws-tab {
-  position: relative; /* anchors the absolutely-placed unsaved dot so a dirty tab is the SAME width */
   display: flex;
   align-items: center;
-  /* FIXED width (not max) — uniform tabs. flex:none so they keep their size and scroll rather than
-     squashing when the list overflows. */
-  width: var(--ws-tab-width);
+  /* Content-sized up to the cap; flex:none so a tab keeps its content width and the LIST scrolls on
+     overflow (never squashes). The reserved dot slot (below) keeps dirty/clean the same width. */
+  max-width: var(--ws-tab-max);
   flex: none;
   border: 1px solid var(--mj-border-default);
   border-bottom: none;
@@ -71,8 +70,8 @@
   font-size: 13px;
   font-family: inherit;
   cursor: pointer;
-  /* Fill the tab minus the close button; min-width:0 lets the label actually shrink + fade. */
-  flex: 1;
+  /* Content-sized (NOT flex:1) so the tab hugs its text; min-width:0 lets the label ellipsize at cap. */
+  flex: 0 1 auto;
   min-width: 0;
 }
 .ws-tab--active .ws-tab__select {
@@ -87,14 +86,13 @@
 }
 
 .ws-tab__label {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
-  /* FADE, not ellipsis (Firefox-style). The fade zone doubles as the unsaved-dot's home: the text
-     fades out over the last ~22px, exactly where the dot sits, so a dirty tab never grows. */
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent);
-  mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent);
+  /* Ellipsis at the cap. (A right-FADE can't coexist with content-sizing in pure CSS — it would fade
+     a short label's own text; the fade needs JS truncation-measurement, available on request.) */
+  text-overflow: ellipsis;
 }
 
 .ws-tab__reject-icon {
@@ -103,17 +101,19 @@
   flex: none;
 }
 
-/* The unsaved dot lives IN the label's right fade zone (absolute, out of flow) so it costs the tab
-   zero width — a dirty tab is identical in size to a clean one (Marcelo 2026-07-21). */
+/* A fixed-width in-flow slot: transparent when clean, dot when dirty — so dirty/clean tabs are the
+   SAME width and the dot never shifts anything (Marcelo 2026-07-21). */
 .ws-tab__dirty {
-  position: absolute;
-  right: 30px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--mj-brand-primary);
+  flex: none;
+  width: 12px;
+  text-align: center;
+  color: transparent;
   font-size: 18px;
   line-height: 0;
   pointer-events: none;
+}
+.ws-tab__dirty--on {
+  color: var(--mj-brand-primary);
 }
 
 .ws-tab__close {

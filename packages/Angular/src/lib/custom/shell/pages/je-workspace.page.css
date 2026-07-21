@@ -123,6 +123,11 @@ mj-page-body-interior {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  /* Fixed layout: column widths come from the header row, NOT the cells' content. Without this, auto
+     layout re-measured the account/counterparty <select>s when their options populated on company
+     select — widening the columns and shifting the whole grid. Fixed pins the layout so picking a
+     company no longer moves anything (Marcelo 2026-07-21). */
+  table-layout: fixed;
 }
 .jew__grid th {
   text-align: left;
@@ -227,6 +232,14 @@ mj-page-body-interior {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+/* Memo, relocated below the balance strip — full width, its input fills the row. */
+.jew__memo {
+  width: 100%;
+}
+.jew__memo .mj-input {
+  width: 100%;
 }
 
 .jew__msg {

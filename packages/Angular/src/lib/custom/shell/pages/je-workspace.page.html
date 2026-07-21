@@ -74,14 +74,6 @@
             <output class="jew__readonly">{{ FunctionalCurrency ?? '—' }}</output>
           </label>
 
-          <label class="jew__field jew__field--wide">
-            <span>Memo</span>
-            <input
-              class="mj-input"
-              [(ngModel)]="d.Description"
-              (ngModelChange)="touch()"
-              placeholder="What is this entry for?" />
-          </label>
         </fieldset>
 
         @if (!d.CompanyID) {
@@ -215,6 +207,18 @@
             }
           </div>
         }
+
+        <!-- Memo lives HERE — below the balance strip, right above Create — so it captures what the
+             operator actually did (Marcelo 2026-07-21): they build the entry first, then annotate it. -->
+        <label class="jew__field jew__memo">
+          <span>Memo</span>
+          <input
+            class="mj-input"
+            [(ngModel)]="d.Description"
+            (ngModelChange)="touch()"
+            [disabled]="IsCreated"
+            placeholder="What is this entry for?" />
+        </label>
 
         <!-- Verbs. -->
         <div class="jew__footer">
