@@ -7,6 +7,23 @@ Convention: `~/MJDev/shared-plans/repo-planning-system.md` §5.1. (The instance-
 
 ## Tasks
 
+- [ ] **GLAccount / GLAccountLink mutation constraints (retroactive-reclassification hazard)** —
+      Marcelo 2026-07-21: editing a GLAccount's `AccountType` (or a link's role) after entries
+      exist silently re-classifies history (a Dr on an asset becomes a Dr on a liability).
+      **Lean:** (a) `AccountType` (+ normal side) IMMUTABLE once the account has any
+      JournalEntryLine activity — trigger EXISTS check; escape hatch = deactivate + create new
+      account; (b) GLAccountLink edits become APPEND-ONLY via the existing date-effectivity —
+      end-date + new link, never in-place role/account change (affects only FUTURE resolution;
+      booked lines already snapshot resolved GLAccount IDs, the same at-transaction-time
+      principle as OrderLine.CompanyID). Not urgent (unlikely edit) — file, decide at the S2/
+      account-work window or a Robert sitting.
+
+- [ ] **Permission-grant inventory (collect as they surface)** — running list for the A2/K.2
+      role design: **shared-orders grant** (see another company's order — Q23 answer: not
+      automatic, grant-driven; Marcelo 2026-07-21) · cross-company product/category visibility ·
+      per-company Approver/Admin/User (Q22) · configurable owner-only order visibility (Robert's
+      Q23 note). Append here as new ones appear; feeds the A2 co-design.
+
 - [ ] **PostgreSQL parity for the reworked batch-lock trigger** — the batch-status-aware
       immutability trigger (reversible pre-approval lock) exists only in the SQL Server baseline;
       `migrations-pg/` holds no counterpart. Surfaced by the 2026-07-18 action-plan audit (batch
