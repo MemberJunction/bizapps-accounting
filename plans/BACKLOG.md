@@ -776,3 +776,9 @@ Filed 2026-07-17 so the task list can be cleared to testing-only. Pull these bac
 - **Dashboards show MONEY, not just record counts** — sales-by-stage / unapplied-balance are `SUM…GROUP BY`
   over the book (the heavy aggregate §0 rules out on-demand). Needs a precomputed read model before it can
   ship — real work, not a UI tweak. Revisit with the reporting/read-model slice.
+- **Workspace tab-label FADE (second pass)** — tabs ellipsize at the cap today; a right-fade is prettier but
+  needs a bit of JS truncation-measurement to coexist with content-sizing (a pure-CSS mask would fade short
+  labels too). Low priority UI polish. (Marcelo 2026-07-21)
+- **Currency symbol in the UI when FX activates (FX-gated)** — the JE workspace shows functional currency as a
+  capsule (fine while USD-only). When multi-currency lands, standardize how the currency symbol renders on
+  amounts across the workspaces. Revisit trigger: FX activation (pairs with the FX DEFERRALS rows). (Marcelo 2026-07-21)

@@ -25,6 +25,8 @@ Baseline = the AS-BUILT schema (migrations @ `V202607171000__v1.0.x__Batch_Memo.
 
 ---
 
+> ✅ 2026-07-21: the `JournalEntry.ScheduledJournalEntryID` verify flag is RESOLVED — the column DROPS with the SJE trio (S3 retirement migration; Marcelo).
+
 ## §1 Overview — all entities and relationships (planned)
 
 ```mermaid

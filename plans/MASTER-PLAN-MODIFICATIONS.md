@@ -380,6 +380,8 @@ original master-plan text.** Convention: `~/MJDev/shared-plans/repo-planning-sys
 - **Why / source:** P5 (`meetings/2026-07-14 - je-single-company-batching-proposal.md`) + Robert's
   ruling in the 2026-07-14 meeting + Jeremy sign-off 2026-07-15 (recorded in the 2026-07-17
   feedback doc).
+- **Column fate (RULED, Marcelo 2026-07-21):** `JournalEntry.ScheduledJournalEntryID` **drops
+  with the trio** in the S3 retirement migration (pre-production — no lineage worth keeping).
 - **Status:** Accepted. ⚠ **Build impact is real:** the shipped `ScheduledJournalEntry` trio +
   `MaterializeDueScheduledEntries` op retire (feature rows E.1–E.5 → Removed); the UI plan's
   "Scheduled entries" page (§8.1) becomes a **future-dated-JE browser** (no Materialize action);
