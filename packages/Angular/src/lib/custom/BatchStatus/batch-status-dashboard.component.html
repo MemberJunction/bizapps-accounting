@@ -136,7 +136,7 @@
                 <td>{{ row.EndDate ? (row.EndDate | date:'yyyy-MM-dd':'UTC') : '—' }}</td>
                 <td class="bs-num">{{ row.TotalDebits | number:'1.2-2' }}</td>
                 <td class="bs-num">{{ row.TotalCredits | number:'1.2-2' }}</td>
-                <td>{{ row.BatchedAt ? (row.BatchedAt | date:'yyyy-MM-dd HH:mm') : '—' }}</td>
+                <td>{{ row.BatchedAt ? (row.BatchedAt | date:'yyyy-MM-dd HH:mm':'UTC') : '—' }} UTC</td>
                 <td class="bs-ref">{{ row.ExternalBatchRef ?? '—' }}</td>
                 <td class="bs-memo" [title]="row.Memo ?? ''">{{ row.Memo || '—' }}</td>
               </tr>

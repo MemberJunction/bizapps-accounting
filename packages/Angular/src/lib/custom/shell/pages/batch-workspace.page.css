@@ -281,3 +281,39 @@
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/* Deferred-query controls (Marcelo 2026-07-21): Apply = the query trigger; the empty-state Load
+   prompt; the stale-filters hint. */
+.bw-apply {
+  align-self: flex-start;
+  margin-top: 4px;
+}
+.bw-stale {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--mj-status-warning-text, var(--mj-text-secondary));
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.bw-loadprompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 100%;
+  min-height: 220px;
+  padding: 24px;
+  text-align: center;
+  color: var(--mj-text-muted);
+}
+.bw-loadprompt > i {
+  font-size: 30px;
+  color: var(--mj-border-strong, var(--mj-border-default));
+}
+.bw-loadprompt p {
+  margin: 0;
+  max-width: 42ch;
+  font-size: 13px;
+}

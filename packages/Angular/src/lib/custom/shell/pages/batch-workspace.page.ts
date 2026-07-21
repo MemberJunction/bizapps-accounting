@@ -26,6 +26,11 @@ interface BatchDraft {
   ExcludedIDs: string[];
   /** Set once built — the tab becomes a read-only record of the batch. */
   BuiltBatchNumber?: string;
+  /** The loaded preview — stored PER-TAB so switching tabs does NOT re-query the server (Marcelo
+   *  2026-07-21). Null until the operator clicks Load / Apply (the query is deferred, never automatic). */
+  Preview?: BatchPreview | null;
+  /** True when the criteria changed since the last load — the shown preview is stale; Apply refreshes it. */
+  PreviewStale?: boolean;
 }
 
 /**
@@ -58,7 +63,18 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
   private tabs = new WorkspaceTabStore<BatchDraft>();
   private client = new BatchWorkspaceClient();
 
-  public Preview: BatchPreview | null = null;
+  /** The active tab's loaded preview (per-tab, so tab switches don't re-query). Null until Load/Apply. */
+  public get Preview(): BatchPreview | null {
+    return this.Draft?.Preview ?? null;
+  }
+  /** True once this tab has loaded a preview — drives the "Load entries" empty-state vs the table. */
+  public get PreviewLoaded(): boolean {
+    return !!this.Draft?.Preview;
+  }
+  /** True when the criteria changed since the last load — show an "Apply to refresh" hint. */
+  public get PreviewStale(): boolean {
+    return !!this.Draft?.PreviewStale && !this.IsBuilt;
+  }
   public IsPreviewing = false;
   public IsBuilding = false;
   public ActionMessage: string | null = null;
@@ -106,9 +122,11 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
       Label: 'New batch (draft)',
       Icon: 'fa-solid fa-pen-ruler',
       Status: 'draft',
-      State: { Criteria: this.defaultCriteria(), ExcludedIDs: [], Memo: '' },
+      State: { Criteria: this.defaultCriteria(), ExcludedIDs: [], Memo: '', Preview: null, PreviewStale: false },
     });
-    void this.refreshPreview();
+    // NO auto-query (Marcelo 2026-07-21): a new tab does NOT hit the server. The operator clicks
+    // "Load entries" in the table (or Apply in the filters) to run the first query.
+    this.cdr.markForCheck();
   }
 
   // ─── memo (the tab caption / findability label) ──────────────────────────────
@@ -145,15 +163,15 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
   }
 
   public SelectTab(id: string): void {
+    // Just show the tab's OWN stored preview — no re-query (Marcelo 2026-07-21).
     this.tabs.Activate(id);
-    this.Preview = null;
-    void this.refreshPreview();
+    this.cdr.markForCheck();
   }
 
   public CloseTab(id: string): void {
     this.tabs.Close(id);
     if (this.tabs.Count === 0) this.openNewDraft();
-    else void this.refreshPreview();
+    else this.cdr.markForCheck();
   }
 
   /** "Keep as draft tab" — the tab already holds the state; this just makes that explicit + clean. */
@@ -192,8 +210,19 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
   }
 
   public OnCriteriaChanged(): void {
-    // Criteria changed → the previous selection's exclusions may reference entries that are no
-    // longer candidates. Keep them (harmless — they're filtered on use) but refetch the pool.
+    // NO auto-query (Marcelo 2026-07-21): changing a filter does NOT hit the server. Mark the shown
+    // preview stale so the UI prompts "Apply to refresh"; the operator clicks Apply to re-query. This
+    // is what keeps the page fast — no round-trip on every keystroke/filter tweak.
+    const d = this.Draft;
+    if (!d) return;
+    if (d.Preview) d.PreviewStale = true;
+    if (this.tabs.ActiveId) this.tabs.UpdateState(this.tabs.ActiveId, d);
+    this.cdr.markForCheck();
+  }
+
+  /** Apply the criteria — the deferred query. Also does the FIRST load (the empty-state Load button
+   *  calls this too). This is the ONLY path (besides toggle + header Refresh) that hits the server. */
+  public Apply(): void {
     void this.refreshPreview();
   }
 
@@ -229,11 +258,17 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
     this.IsPreviewing = true;
     this.cdr.markForCheck();
     try {
-      this.Preview = await this.client.Preview(this.opProvider, d.Criteria, this.includedIds(d), this.entryTypeValues(d.Criteria.EntryTypeScope));
+      const preview = await this.client.Preview(this.opProvider, d.Criteria, this.includedIds(d), this.entryTypeValues(d.Criteria.EntryTypeScope));
+      // Store the preview ON THE TAB (per-tab), and clear the stale flag — the shown data now matches
+      // the criteria again.
+      d.Preview = preview;
+      d.PreviewStale = false;
+      if (this.tabs.ActiveId) this.tabs.UpdateState(this.tabs.ActiveId, d);
       this.ActionMessage = null;
     } catch (e) {
       this.setError(e instanceof Error ? e.message : String(e));
-      this.Preview = null;
+      d.Preview = null;
+      if (this.tabs.ActiveId) this.tabs.UpdateState(this.tabs.ActiveId, d);
     } finally {
       this.IsPreviewing = false;
       this.cdr.markForCheck();

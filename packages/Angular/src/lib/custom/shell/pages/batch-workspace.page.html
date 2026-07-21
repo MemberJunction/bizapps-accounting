@@ -134,6 +134,24 @@
         </select>
       </label>
 
+      <!-- Apply = the deferred query. Filters do NOT auto-query; the operator applies them when ready. -->
+      @if (!IsBuilt) {
+        <button type="button" mjButton Variant="primary" class="bw-apply" (click)="Apply()" [disabled]="IsPreviewing">
+          @if (IsPreviewing) {
+            <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Loading…
+          } @else {
+            <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+            {{ PreviewLoaded ? 'Apply filters' : 'Load entries' }}
+          }
+        </button>
+        @if (PreviewStale) {
+          <p class="bw-stale">
+            <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+            Filters changed — click <b>Apply filters</b> to refresh the matched entries.
+          </p>
+        }
+      }
+
       <div class="bw-chips">
         @for (chip of CriteriaChips; track chip) {
           <span class="bw-chip">{{ chip }}</span>
@@ -169,6 +187,7 @@
       </div>
     }
 
+    @if (PreviewLoaded) {
     <div class="bw-sumstrip">
       <span>Included <b>{{ IncludedCount }}</b> / {{ Preview?.Candidates?.length ?? 0 }}</span>
       <span>Excluded <b>{{ ExcludedCount }}</b></span>
@@ -184,10 +203,20 @@
         }
       </span>
     </div>
+    }
 
     <div class="bw-tablewrap mjsh-tablewrap">
       @if (IsPreviewing) {
         <mj-loading text="Matching entries…"></mj-loading>
+      } @else if (!PreviewLoaded) {
+        <!-- Deferred first load: the tab opened WITHOUT a server query — the operator loads on demand. -->
+        <div class="bw-loadprompt">
+          <i class="fa-solid fa-layer-group" aria-hidden="true"></i>
+          <p>Set your criteria on the left, then load the matching journal entries.</p>
+          <button type="button" mjButton Variant="primary" (click)="Apply()">
+            <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Load entries
+          </button>
+        </div>
       } @else {
         <table class="bw-grid mjsh-table">
           <thead>
