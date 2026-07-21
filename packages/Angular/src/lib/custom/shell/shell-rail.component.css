@@ -52,33 +52,26 @@
   min-height: 0;
 }
 
-/* ── The toggle (TOP of the rail) ──────────────────────────────────────────────
-   border-right continues the line MJ draws on the rail's <aside>, so the rail reads as one edge.
-   NO bottom divider (Marcelo): it should read as just another icon row, not a boxed-off strip — so it
-   sits on the same vertical rhythm as the nav icons. A small top margin lifts it off the very top edge
-   (it looked jammed under the header shadow) without shoving the whole nav down. */
+/* ── The toggle — styled to MATCH a nav item row exactly ───────────────────────
+   It lives in MJ's [header] slot (inside the nav's 8px container padding), so it already shares the
+   items' icon column + spacing. These values are copied 1:1 from .mj-left-nav__item so it reads as
+   just another row: same padding, same 8px rounded-square HOVER (Marcelo — replaces the old full-width
+   highlight), same margin, same flex-start alignment. No border-right / background of its own. */
 .sr__toggle {
-  flex: none;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   width: 100%;
-  /* NO top margin — it left a gap between the header and the rail. Left padding = MJ's 8px nav-container
-     pad + 12px item pad, so the hamburger sits on the SAME optical column as every nav icon below (those
-     live inside mj-left-nav's 8px padding). Slightly more top than bottom padding optically centres the
-     glyph in the row (FA bars sit a touch high). Collapsed resets the L/R padding to re-centre in 60px. */
-  padding: 13px 12px 9px 20px;
+  padding: 10px 12px;
   border: none;
-  border-right: 1px solid var(--mj-border-default);
-  background: var(--mj-bg-surface);
+  border-radius: 8px;
+  background: transparent;
   color: var(--mj-text-secondary);
   font-family: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  text-align: left;
   cursor: pointer;
   box-sizing: border-box;
   transition: background-color 0.12s ease, color 0.12s ease;
+  margin-bottom: 2px;
 }
 
 .sr__toggle:hover {
@@ -95,10 +88,13 @@
 
 /* Matches .mj-left-nav__icon exactly (18px / 13px, centred) so the arrow sits on the same optical
    column as every rail icon above it — collapsed OR expanded, the column never moves. */
+/* 1:1 with .mj-left-nav__icon (incl. the margin-top:1px nudge) so the hamburger sits on the exact same
+   optical column + baseline as every nav icon. */
 .sr__toggle-icon {
   width: 18px;
   text-align: center;
   font-size: 13px;
+  margin-top: 1px;
   flex-shrink: 0;
 }
 
@@ -127,13 +123,6 @@
   .sr--collapsed .sr__toggle {
     justify-content: center;
     gap: 0;
-  }
-  /* Drop the toggle's expanded left/right inset when collapsed so the hamburger centres in the 60px
-     rail exactly like the collapsed nav icons (the inset only exists to align with the icon column
-     when the rail is wide). */
-  .sr--collapsed .sr__toggle {
-    padding-left: 0;
-    padding-right: 0;
   }
 
   /* SECTION labels (MAIN / WORK / VIEWS) become a small centred DIVIDER LINE when collapsed, keeping the

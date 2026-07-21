@@ -7,27 +7,6 @@
 <!-- .sr--collapsed (icons-only) applies only when truly collapsed AND not hover-peeking: peeking shows
      the full expanded rail (labels + wide) so the words come back exactly as on click-expand. -->
 <div class="sr" [class.sr--collapsed]="Collapsed && !HoverExpanded">
-  <!-- The toggle sits at the TOP of the rail (Marcelo 2026-07-21): a bottom-anchored control collides
-       with the OS dock / taskbar at the screen's bottom edge (cross-machine). At the top it's always
-       reachable and dock-safe. An ARROW (not a hamburger): the menu is already on screen, so an arrow —
-       "which way the thing next to it moves" — is the honest promise. aria-expanded reports state. -->
-  <button
-    type="button"
-    class="sr__toggle"
-    [attr.aria-label]="ToggleLabel"
-    [attr.aria-expanded]="!Collapsed"
-    [title]="ToggleLabel"
-    (click)="Toggle()">
-    <!-- Just the hamburger (Marcelo): fa-bars when collapsed (click to open); fa-outdent — the
-         hamburger-with-left-arrow "close" glyph — when expanded (click to collapse). No text, no
-         separate caret. The button's aria-label carries the accessible name. -->
-    <i
-      class="fa-solid sr__toggle-icon"
-      [class.fa-bars]="Collapsed"
-      [class.fa-outdent]="!Collapsed"
-      aria-hidden="true"></i>
-  </button>
-
   <mj-left-nav
     class="sr__nav"
     [Sections]="Sections"
@@ -35,5 +14,25 @@
     [MobileTitle]="MobileTitle"
     [Width]="RailWidth"
     (ItemClicked)="onItemClicked($event)">
+
+    <!-- The toggle lives INSIDE the nav via MJ's [header] slot (Marcelo 2026-07-21): being in the SAME
+         container as the nav items, it inherits the nav's padding + icon column, so it aligns and spaces
+         identically by construction (no hand-matching). It's styled to match a nav item row (rounded
+         hover, same padding). At the TOP so it's dock/taskbar-safe. fa-bars collapsed (click to open),
+         fa-outdent — the hamburger-with-left-arrow close glyph — expanded (click to collapse). -->
+    <button
+      header
+      type="button"
+      class="sr__toggle"
+      [attr.aria-label]="ToggleLabel"
+      [attr.aria-expanded]="!Collapsed"
+      [title]="ToggleLabel"
+      (click)="Toggle()">
+      <i
+        class="fa-solid sr__toggle-icon"
+        [class.fa-bars]="Collapsed"
+        [class.fa-outdent]="!Collapsed"
+        aria-hidden="true"></i>
+    </button>
   </mj-left-nav>
 </div>
