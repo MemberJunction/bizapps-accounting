@@ -99,18 +99,6 @@
   flex-shrink: 0;
 }
 
-/* The collapse-direction caret sits just after the fixed hamburger when the rail is wide; it's
-   decorative (aria-hidden) so display:none when collapsed is fine (unlike the a11y-preserved label). */
-.sr__toggle-caret {
-  font-size: 11px;
-  color: var(--mj-text-muted);
-  margin-left: -4px;
-  flex-shrink: 0;
-}
-.sr--collapsed .sr__toggle-caret {
-  display: none;
-}
-
 /* ── Collapsed: icons only ────────────────────────────────────────────────────
    SCOPED TO DESKTOP. Below 701px MJ turns the rail into a fixed off-canvas drawer; it already
    defends its width with !important, but nothing defends its labels — so an unscoped rule here
@@ -119,8 +107,7 @@
   /* ITEM labels are HIDDEN VISUALLY, NOT REMOVED. `display:none` would drop them from the accessibility
      tree too, leaving every rail button with no accessible name — an icon-only rail that screen
      readers cannot read. This keeps the name and only takes the pixels. */
-  .sr--collapsed ::ng-deep .mj-left-nav__text,
-  .sr--collapsed .sr__toggle-text {
+  .sr--collapsed ::ng-deep .mj-left-nav__text {
     position: absolute;
     width: 1px;
     height: 1px;
