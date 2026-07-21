@@ -19,9 +19,10 @@
 |---|---|---|---|
 | — | [Q37](#q37) | posting-date model — ANSWERED same-day (Amith's singular batch PostingDate; Jeremy 100%; OQ-1 hold-and-flag) | ANSWERED |
 | 1 | [Q19](#q19) | Jeremy — golden path + exceptions (absorbs Q12/Q15) | OPEN ★HIGH |
+| 2 | [Q42](#q42) | Robert/Amith — CodeGen INCLUDE (allowlist) mode for open apps ★HIGH | OPEN — proceeding · was dup-numbered Q40, renumbered 2026-07-21 |
 | — | [Q22](#q22) | company-visibility mechanism — ANSWERED (UserCompanyRole grant table) | ANSWERED |
 | — | [Q24](#q24) | grants + governance — ANSWERED (audit cols now, workflow deferred) | ANSWERED |
-| 4 | [Q25](#q25) | Ian/Matt/team — shared-UI component routing (transfer backlog) | OPEN |
+| 4 | [Q25](#q25) | Ian/Matt/team — shared-UI component routing (transfer backlog) | OPEN — PARTIAL 2026-07-20 (deep-link helper → our PR; rest open) |
 | — | [Q6](#q6) | batch-approval shape — ANSWERED (per-company task; enforce Approver; manual-JE gate YES) | ANSWERED |
 | — | [Q7](#q7) | batches/approvals visibility — ANSWERED (see=role+grant; act=Approver-for-company) | ANSWERED |
 | — | [Q3](#q3) | JE-draft contract — ANSWERED (bless as-built IDs; FYI to Amith owed) | ANSWERED |
@@ -36,8 +37,9 @@
 | 13 | [Q32](#q32) | Matt — tab strip's overflow-x silently enables overflow-y (real bug + fix) | OPEN |
 | 14 | [Q33](#q33) | Matt — dense/inline [meta] on mj-page-header (⚠ may be obsolete — check) | OPEN |
 | 15 | [Q34](#q34) | Matt — we duplicated mj-accordion-panel; is there a component catalogue? | OPEN |
-| 16 | [Q35](#q35) | Matt — [Bare] accordion: divider, square hover, chevron side (one root cause) | OPEN |
-| 10 | [Q27](#q27) | Matt — `mj-left-nav` desktop icons-only collapse (feature ask) | OPEN |
+| 16 | [Q35](#q35) | Matt — [Bare] accordion: divider, square hover, chevron side (one root cause) | OPEN — delivered live 2026-07-20; awaiting Matt's change |
+| 17 | [Q40](#q40) | Matt — entity-data-grid: wire `AllowColumnFilters` + rest-state sort arrow | OPEN |
+| 10 | [Q27](#q27) | Matt — `mj-left-nav` desktop icons-only collapse (feature ask) | OPEN — raised live 2026-07-20; awaiting Matt's build |
 | 4b | [Q28](#q28) | Marcelo — batch/task transaction split + batch task pointer (MOD-14) | OPEN (no-CFO precheck RULED+built) |
 | 4c | [Q29](#q29) | Marcelo/Ian — regenerate: reset the existing task vs void+replace (principle ruled) | OPEN |
 | — | [T36](#t36) | test data — ANSWERED (per-run seeded company; accounting agent owns) | ANSWERED |
@@ -1297,9 +1299,9 @@ queryable surface for "which questions touch feature X".)*
   UPDATE trigger); JE immutability triggers 50003/50004/50006; `gl-accounts.page` retire-via-IsActive + create.
 - **Answer:** _(pending)_
 
-<a id="q40"></a>
-### Q40 · CodeGen scoping for open apps: INCLUDE (allowlist) mode instead of exclude? — review: Robert + Amith — added 2026-07-21 ★HIGH
-- **Status:** OPEN — proceeding (mjdev-level mitigation filed; this asks for the platform fix)
+<a id="q42"></a>
+### Q42 · CodeGen scoping for open apps: INCLUDE (allowlist) mode instead of exclude? — review: Robert + Amith — added 2026-07-21 ★HIGH
+- **Status:** OPEN — proceeding (mjdev-level mitigation filed; this asks for the platform fix) — was dup-numbered Q40 at mint, renumbered Q42 2026-07-21 (Q40 = the entity-data-grid ask to Matt)
 - **Requested reviewer:** Robert + Amith (MJ CodeGen design)
 - **Features:** cross-cutting (platform robustness; ACC/ORD codegen safety)
 - **Proposed solution (what we are implementing meanwhile):** an mjdev improvement is filed so
