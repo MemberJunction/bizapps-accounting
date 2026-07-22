@@ -7,7 +7,7 @@ This is a **MemberJunction Open App** built on top of the [MemberJunction](https
 
 This repo depends on [bizapps-common](https://github.com/MemberJunction/bizapps-common) for shared entities (Currency, Organization, Address) and extends `__mj.Company` with an `AccountingCompanyProfile` (IsA Disjoint child).
 
-See `plans/bizapps-accounting-master.md` for the full design and `BA-D1`..`BA-D24` decision log.
+See `plans/bizapps-accounting-master.md` for the full design and current decision log — the single source of truth.
 
 ## Repository Structure
 
@@ -332,7 +332,7 @@ This repo uses MemberJunction's CodeGen system to generate entity and action sub
 - CI runs `.github/workflows/pg-migrations.yml` on PRs that touch migrations or the converter to validate the PG output still applies cleanly to a fresh PG 17 database.
 - See `migrations-pg/README.md` for the conversion workflow and the MJ repo's `/pg-migrate` slash command for the deeper toolchain.
 
-### Accounting-specific schema invariants (see `plans/bizapps-accounting-master.md` §5)
+### Accounting-specific schema invariants (see `plans/bizapps-accounting-master.md` §6)
 - Balanced-JE invariant enforced via DEFERRABLE constraint trigger — never UPDATE/DELETE around it.
 - JE immutability after `Status ∈ {Batched, GLPosted}` enforced by trigger — only `GLPostedAt`/`GLReferenceID`/`Status` may change after lock.
 - Period-close trigger blocks JE inserts into a closed `AccountingPeriod` unless `OriginalAccountingPeriodID` is set (adjusting entry pattern).
