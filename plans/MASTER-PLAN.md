@@ -47,21 +47,59 @@ BizAppsAccounting provides the **journal entry primitives and AR subsidiary ledg
 
 ## 3. Entity Model & Target Schema
 
+### 3.1 ERD Diagrams
+
+#### Chart of Accounts, Roles & Account Links
 ```mermaid
 erDiagram
     Company ||--o| AccountingCompanyProfile : "IsA - same UUID"
     AccountingCompanyProfile ||--o{ GLAccount : "owns COA"
     GLAccount ||--o{ GLAccount : "ParentGLAccountID"
     GLAccount ||--o{ GLAccountLink : "GLAccountID"
-    GLAccountRole ||--o{ GLAccountLink : "RoleID"
-    GLAccountLink ||--o{ GLAccountLinkDimension : "LinkID"
+    GLAccountRole ||--o{ GLAccountLink : "GLAccountRoleID"
+    GLAccountLink ||--o{ GLAccountLinkDimension : "GLAccountLinkID"
     Dimension ||--o{ GLAccountLinkDimension : "DimensionID"
-    GLAccountLink }o--|| Company : "company DEFAULTS"
-    GLAccountLink }o--|| ProductCategory : "polymorphic target"
-    GLAccountLink }o--|| Product : "polymorphic target"
+    GLAccountLink }o--|| Company : "Company Default"
+    GLAccountLink }o--|| ProductCategory : "Category Default"
+    GLAccountLink }o--|| Product : "Product Specific"
 
-    JournalEntry ||--|{ JournalEntryLine : "lines"
+    GLAccount {
+        uuid ID PK
+        uuid CompanyID FK
+        string Code "ERP Account Code"
+        string Name
+        string AccountType "Asset|Liability|Equity|Revenue|Expense"
+        bool IsActive
+    }
+    GLAccountRole {
+        uuid ID PK
+        string Name "Cash|AR|Sales|DefRev|Discounts"
+        string Description
+        string Status
+    }
+    GLAccountLink {
+        uuid ID PK
+        uuid GLAccountID FK
+        uuid GLAccountRoleID FK
+        uuid EntityID "Polymorphic Entity"
+        string RecordID "Polymorphic Record"
+        string Status
+        datetimeoffset StartedAt
+        datetimeoffset EndedAt
+    }
+    GLAccountLinkDimension {
+        uuid ID PK
+        uuid GLAccountLinkID FK
+        uuid DimensionID FK
+        int Sequence
+    }
+```
+
+#### Journal Entries & Lines
+```mermaid
+erDiagram
     Company ||--o{ JournalEntry : "CompanyID NOT NULL"
+    JournalEntry ||--|{ JournalEntryLine : "has lines"
     GLAccount ||--o{ JournalEntryLine : "GLAccountID"
     JournalEntryLine ||--o{ JournalEntryLineDimension : "JournalEntryLineID"
     Dimension ||--o{ JournalEntryLineDimension : "DimensionID"
@@ -70,11 +108,64 @@ erDiagram
     JournalEntry ||--o{ JournalEntry : "ReversesJournalEntryID"
     JournalEntry ||--o{ JournalEntryBatch : "BatchID FK"
 
+    JournalEntry {
+        uuid ID PK
+        string EntryNumber UK
+        uuid CompanyID FK
+        date EffectiveDate
+        string EntryType
+        string Status "Pending|Batched|GLPosted"
+        uuid BatchID FK
+    }
+    JournalEntryLine {
+        uuid ID PK
+        uuid JournalEntryID FK
+        int LineNumber
+        uuid GLAccountID FK
+        decimal DebitAmount
+        decimal CreditAmount
+    }
+    JournalEntryLineDimension {
+        uuid ID PK
+        uuid JournalEntryLineID FK
+        uuid DimensionID FK
+        uuid DimensionValueID FK
+    }
+```
+
+#### Batching & ERP Dispatch
+```mermaid
+erDiagram
     Company ||--o{ JournalEntryBatch : "CompanyID NOT NULL"
-    JournalEntryBatch ||--|{ JournalEntryBatchLineItem : "netted summaries"
+    JournalEntryBatch ||--|{ JournalEntryBatchLineItem : "summaries"
     JournalEntryBatchLineItem ||--o{ JournalEntryBatchLineDimension : "LineItemID"
     GLAccount ||--o{ JournalEntryBatchLineItem : "GLAccountID"
     UserCompanyRole }o--|| Company : "permissions"
+
+    JournalEntryBatch {
+        uuid ID PK
+        string BatchNumber UK
+        uuid CompanyID FK
+        date PostingDate
+        string TargetSystem
+        string Status "Pending|Approved|Sent|Posted|Failed|Cancelled"
+        uuid ApprovalTaskID
+    }
+    JournalEntryBatchLineItem {
+        uuid ID PK
+        uuid BatchID FK
+        uuid GLAccountID FK
+        decimal DebitAmount
+        decimal CreditAmount
+        int SourceLineCount
+    }
+    UserCompanyRole {
+        uuid ID PK
+        uuid UserID FK
+        uuid CompanyID FK
+        uuid RoleID FK
+        bool IsActive
+    }
 ```
 
 ### 3.1 Key Tables
@@ -220,13 +311,13 @@ __mj_BizAppsAccounting.UserCompanyRole
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Pending: buildBatch() (Preliminary Lock)
-    Pending --> Approved: CFO Approval via bizapps-tasks (Permanent Lock)
-    Pending --> Cancelled: Reject Batch (Unlocks JEs back to Pending)
-    Pending --> Pending: Regenerate Batch (Sweeps candidates & rebuilds summary)
-    Approved --> Sent: Dispatch to ERP
-    Sent --> Posted: ERP Confirms Receipt
-    Sent --> Failed: ERP Rejection (Hold for Review)
+    [*] --> Pending : buildBatch - Preliminary Lock
+    Pending --> Approved : CFO Approval - Permanent Lock
+    Pending --> Cancelled : Reject Batch - Unlocks JEs
+    Pending --> Pending : Regenerate Batch
+    Approved --> Sent : Dispatch to ERP
+    Sent --> Posted : ERP Confirms Receipt
+    Sent --> Failed : ERP Rejection - Hold for Review
 ```
 
 1. **Build Batch**: Gathers `Pending` JEs up to cutoff `PostingDate`, locks JEs (`Pending` → `Batched`), creates summary lines netted per `(Company × GLAccount × Dimension-combo)` in Tx 1. Raises CFO approval task in Tx 2 (stamping `ApprovalTaskID`).
