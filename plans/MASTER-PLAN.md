@@ -137,27 +137,18 @@ erDiagram
 ```mermaid
 erDiagram
     Company ||--o{ JournalEntryBatch : "CompanyID NOT NULL"
-    JournalEntryBatch ||--|{ JournalEntryBatchLineItem : "summaries"
-    JournalEntryBatchLineItem ||--o{ JournalEntryBatchLineDimension : "LineItemID"
-    GLAccount ||--o{ JournalEntryBatchLineItem : "GLAccountID"
+    JournalEntryBatch ||--o| JournalEntry : "SummaryJournalEntryID FK"
     UserCompanyRole }o--|| Company : "permissions"
 
     JournalEntryBatch {
         uuid ID PK
         string BatchNumber UK
         uuid CompanyID FK
+        uuid SummaryJournalEntryID FK "Summary JournalEntry (EntryType=BatchSummary)"
         date PostingDate
         string TargetSystem
         string Status "Pending|Approved|Sent|Posted|Failed|Cancelled"
         uuid ApprovalTaskID
-    }
-    JournalEntryBatchLineItem {
-        uuid ID PK
-        uuid BatchID FK
-        uuid GLAccountID FK
-        decimal DebitAmount
-        decimal CreditAmount
-        int SourceLineCount
     }
     UserCompanyRole {
         uuid ID PK
@@ -215,7 +206,7 @@ __mj_BizAppsAccounting.JournalEntry
   EntryNumber NVARCHAR(40) NOT NULL UNIQUE, -- 'JE-{CompanyCode}-{FY}-{seq}'
   CompanyID UNIQUEIDENTIFIER NOT NULL FK → __mj.Company,
   EffectiveDate DATE NOT NULL,
-  EntryType NVARCHAR(40) NOT NULL,
+  EntryType NVARCHAR(40) NOT NULL,          -- 'OrderBooking' | 'PaymentReceipt' | 'RevenueRecognition' | 'Reversal' | 'BatchSummary' | ...
   Status NVARCHAR(20) NOT NULL,             -- 'Pending' | 'Batched' | 'GLPosted'
   Description NVARCHAR(MAX),
   OrderID UNIQUEIDENTIFIER NULL,            -- Polymorphic lineage soft-refs
@@ -244,12 +235,13 @@ __mj_BizAppsAccounting.JournalEntryLine
   UNIQUE (JournalEntryID, LineNumber)
 ```
 
-#### `JournalEntryBatch` & `JournalEntryBatchLineItem`
+#### `JournalEntryBatch`
 ```sql
 __mj_BizAppsAccounting.JournalEntryBatch
   ID UNIQUEIDENTIFIER PK,
   BatchNumber NVARCHAR(40) NOT NULL UNIQUE, -- 'BATCH-{CompanyCode}-{seq}'
   CompanyID UNIQUEIDENTIFIER NOT NULL FK → __mj.Company,
+  SummaryJournalEntryID UNIQUEIDENTIFIER NULL FK → JournalEntry, -- Aggregated summary JE (EntryType='BatchSummary')
   PostingDate DATE NOT NULL,                -- Accountant-set posting date
   TargetSystem NVARCHAR(50) NOT NULL,       -- 'BusinessCentral'
   BatchedAt DATETIMEOFFSET NOT NULL,
@@ -263,17 +255,6 @@ __mj_BizAppsAccounting.JournalEntryBatch
   SentAt DATETIMEOFFSET NULL,
   AcknowledgedAt DATETIMEOFFSET NULL,
   ErrorMessage NVARCHAR(MAX) NULL
-
-__mj_BizAppsAccounting.JournalEntryBatchLineItem
-  ID UNIQUEIDENTIFIER PK,
-  BatchID UNIQUEIDENTIFIER NOT NULL FK → JournalEntryBatch,
-  GLAccountID UNIQUEIDENTIFIER NOT NULL FK → GLAccount,
-  LineNumber INT NOT NULL,
-  DebitAmount DECIMAL(18,2) NULL,
-  CreditAmount DECIMAL(18,2) NULL,
-  SourceLineCount INT NOT NULL,
-  ExternalAccountID NVARCHAR(100) NULL,
-  Description NVARCHAR(MAX) NULL
 ```
 
 #### `UserCompanyRole`
