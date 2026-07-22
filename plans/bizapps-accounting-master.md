@@ -144,7 +144,7 @@ The current decision set. Each is the standing ruling — superseded ancestors l
 | D6 | **Immutability after lock** enforced by DB trigger: `UPDATE`/`DELETE` blocked for locked JEs/lines except the GL-roundtrip fields (`GLPostedAt`, `GLReferenceID`, `Status`). Reversals via new JEs only. | Audit trail by construction. |
 | D7 | **Batches are SINGLE-COMPANY:** `JournalEntryBatch.CompanyID` header; one batch per company per run, on that company's own cadence. | Robert's proposal; Jeremy sign-off ("actually a better control" — per-company approvers = segregation of duties); Marcelo ruled independently. See §7.2 conditions. |
 | D8 | **The batch carries a SINGULAR accountant-set `PostingDate`; one aggregated JE per batch posts to the GL.** Posting date must match between systems; document date is informational only (never cross the two — Jeremy). | Amith's model; Jeremy "100% on board". |
-| D9 | **Batch summary lines are NETTED per (Company × GLAccount × Dimension-combo)** — one net side per group. Company is degenerate under single-company batches but stays in the canonical key (required if multi-company-section batches ever return). | Amith 2026-06-28; Marcelo reaffirmed 2026-07-17. |
+| D9 | **Batch summary granularity = GLAccount × dimension-combo (one aggregated Summary `JournalEntry`).** One net summary line per account×dimension group; null-dimension entries aggregate within their account group. The summary is modeled as **one aggregated `JournalEntry` (`EntryType = 'BatchSummary'`)** linked via `JournalEntryBatch.SummaryJournalEntryID`, reusing standard `JournalEntryLine` and `JournalEntryLineDimension` rows (`JournalEntryBatchLineItem` tables retired). | Amith 2026-06-28 → 2026-07-22 simplification. |
 | D10 | **Batch approval runs through bizapps-tasks** (CFO-level gate): the batch cannot dispatch until the approval task completes. Batch build and task-raise are **two transactions** — the batch commits atomically first; the task-raise stamps `ApprovalTaskID`+`ApprovalTaskRaisedAt` in its own transaction; a task-raise failure leaves a **retryable** batch, never a destroyed one. | Amith (approval-via-tasks); Marcelo 2026-07-16 (two-transaction split). |
 | D11 | **Role-based polymorphic GL account mapping:** `GLAccountRole` + `GLAccountLink` (+ `GLAccountLinkDimension`) map accounts to Product / ProductCategory / Company by role, date-effective. Consumers resolve product → category tree → company default. | Amith 2026-07-02 engine meeting. Full rules §5.3. |
 | D12 | **Company default accounts = company-level `GLAccountLink` rows.** The five `AccountingCompanyProfile` default-account FK columns are REMOVED ("replaced by 5 rows in the GL account link table" — Amith 2026-07-21). There is no system-level default: "GL account defaults start at the company level." Required-role enforcement is parked for later. | Amith 2026-07-21 review. |
@@ -183,6 +183,118 @@ Worth its own section because it shapes everything downstream:
 ---
 
 ## 5. Entity model
+
+### 5.0 ERD Diagrams
+
+#### Chart of Accounts, Roles & Account Links
+```mermaid
+erDiagram
+    Company ||--o| AccountingCompanyProfile : "IsA - same UUID"
+    AccountingCompanyProfile ||--o{ GLAccount : "owns COA"
+    GLAccount ||--o{ GLAccount : "ParentGLAccountID"
+    GLAccount ||--o{ GLAccountLink : "GLAccountID"
+    GLAccountRole ||--o{ GLAccountLink : "GLAccountRoleID"
+    GLAccountLink ||--o{ GLAccountLinkDimension : "GLAccountLinkID"
+    Dimension ||--o{ GLAccountLinkDimension : "DimensionID"
+    GLAccountLink }o--|| Company : "Company Default"
+    GLAccountLink }o--|| ProductCategory : "Category Default"
+    GLAccountLink }o--|| Product : "Product Specific"
+
+    GLAccount {
+        uuid ID PK
+        uuid CompanyID FK
+        string Code "ERP Account Code"
+        string Name
+        string AccountType "Asset|Liability|Equity|Revenue|Expense"
+        bool IsActive
+    }
+    GLAccountRole {
+        uuid ID PK
+        string Name "Cash|AR|Sales|DefRev|Discounts"
+        string Description
+        string Status
+    }
+    GLAccountLink {
+        uuid ID PK
+        uuid GLAccountID FK
+        uuid GLAccountRoleID FK
+        uuid EntityID "Polymorphic Entity"
+        string RecordID "Polymorphic Record"
+        string Status
+        datetimeoffset StartedAt
+        datetimeoffset EndedAt
+    }
+    GLAccountLinkDimension {
+        uuid ID PK
+        uuid GLAccountLinkID FK
+        uuid DimensionID FK
+        int Sequence
+    }
+```
+
+#### Journal Entries & Lines
+```mermaid
+erDiagram
+    Company ||--o{ JournalEntry : "CompanyID NOT NULL"
+    JournalEntry ||--|{ JournalEntryLine : "has lines"
+    GLAccount ||--o{ JournalEntryLine : "GLAccountID"
+    JournalEntryLine ||--o{ JournalEntryLineDimension : "JournalEntryLineID"
+    Dimension ||--o{ JournalEntryLineDimension : "DimensionID"
+    DimensionValue ||--o{ JournalEntryLineDimension : "DimensionValueID"
+    Dimension ||--o{ DimensionValue : "DimensionID"
+    JournalEntry ||--o{ JournalEntry : "ReversesJournalEntryID"
+    JournalEntry ||--o{ JournalEntryBatch : "BatchID FK"
+
+    JournalEntry {
+        uuid ID PK
+        string EntryNumber UK
+        uuid CompanyID FK
+        date EffectiveDate
+        string EntryType
+        string Status "Pending|Batched|GLPosted"
+        uuid BatchID FK
+    }
+    JournalEntryLine {
+        uuid ID PK
+        uuid JournalEntryID FK
+        int LineNumber
+        uuid GLAccountID FK
+        decimal DebitAmount
+        decimal CreditAmount
+    }
+    JournalEntryLineDimension {
+        uuid ID PK
+        uuid JournalEntryLineID FK
+        uuid DimensionID FK
+        uuid DimensionValueID FK
+    }
+```
+
+#### Batching & ERP Dispatch
+```mermaid
+erDiagram
+    Company ||--o{ JournalEntryBatch : "CompanyID NOT NULL"
+    JournalEntryBatch ||--o| JournalEntry : "SummaryJournalEntryID FK"
+    UserCompanyRole }o--|| Company : "permissions"
+
+    JournalEntryBatch {
+        uuid ID PK
+        string BatchNumber UK
+        uuid CompanyID FK
+        uuid SummaryJournalEntryID FK "Summary JournalEntry (EntryType=BatchSummary)"
+        date PostingDate
+        string TargetSystem
+        string Status "Pending|Approved|Sent|Posted|Failed|Cancelled"
+        uuid ApprovalTaskID
+    }
+    UserCompanyRole {
+        uuid ID PK
+        uuid UserID FK
+        uuid CompanyID FK
+        uuid RoleID FK
+        bool IsActive
+    }
+```
 
 ### 5.1 GLAccount
 
@@ -290,7 +402,6 @@ DimensionValue   (ID, DimensionID FK, Code, Name, ParentDimensionValueID NULL, I
                   EffectiveFrom, EffectiveTo, UNIQUE (DimensionID, Code))
 JournalEntryLineDimension       (JournalEntryLineID, DimensionID, DimensionValueID,
                                  UNIQUE (JournalEntryLineID, DimensionID))
-JournalEntryBatchLineDimension  (JournalEntryBatchLineItemID, DimensionID, DimensionValueID)
 GLAccountLinkDimension          (GLAccountLinkID, DimensionID, DimensionValueID)
 ```
 
@@ -306,7 +417,7 @@ __mj_BizAppsAccounting.JournalEntry
   CompanyID UNIQUEIDENTIFIER NOT NULL FK → __mj.Company,   -- SINGLE-company (D3)
   EffectiveDate DATE NOT NULL,           -- the accounting date; NO period FK (D2)
   EntryType NVARCHAR(40) NOT NULL,       -- 'OrderBooking' | 'PaymentReceipt' | 'RevenueRecognition'
-                                         -- | 'Refund' | 'Writeoff' | 'Reversal' | 'Manual' | ...
+                                         -- | 'Refund' | 'Writeoff' | 'Reversal' | 'Manual' | 'BatchSummary' | ...
   Status NVARCHAR(20) NOT NULL,          -- 'Pending' | 'Batched' | 'GLPosted'
   Description NVARCHAR(MAX),
   -- Polymorphic origin (soft refs — no cross-app FK constraints yet; see §14 sequencing)
@@ -341,13 +452,14 @@ Notes:
   pre-production — Marcelo 2026-07-21).
 - Forward-dated rev-rec JEs are ordinary rows in this table with future `EffectiveDate`s.
 
-### 5.6 JournalEntryBatch + summary lines
+### 5.6 JournalEntryBatch (Simplified Summary Model)
 
 ```sql
 __mj_BizAppsAccounting.JournalEntryBatch
   ID UNIQUEIDENTIFIER PK,
   BatchNumber NVARCHAR(40) UNIQUE,        -- global sequence (D19)
   CompanyID UNIQUEIDENTIFIER NOT NULL FK → __mj.Company,  -- SINGLE-company batch (D7)
+  SummaryJournalEntryID UNIQUEIDENTIFIER NULL FK → JournalEntry, -- Aggregated summary JE (EntryType='BatchSummary')
   TargetSystem NVARCHAR(50) NOT NULL,     -- one company AND one target per batch
   PostingDate DATE NOT NULL,              -- singular, accountant-set at build (D8);
                                           -- default from the batch window; must match the GL
@@ -359,21 +471,12 @@ __mj_BizAppsAccounting.JournalEntryBatch
   ApprovalTaskRaisedAt DATETIMEOFFSET NULL,
   -- ERP roundtrip
   ExternalBatchRef NVARCHAR(100), SentAt, AcknowledgedAt, ErrorMessage
-
-__mj_BizAppsAccounting.JournalEntryBatchLineItem   -- the NETTED summary that posts to the ERP
-  ID, BatchID FK NOT NULL, GLAccountID FK NOT NULL, LineNumber INT,
-  DebitAmount DECIMAL(18,2) NULL,        -- ONE net side per (GLAccount × Dimension-combo) group (D9)
-  CreditAmount DECIMAL(18,2) NULL,
-  SourceLineCount INT NOT NULL,
-  ExternalAccountID NVARCHAR(100) NULL,  -- resolved from GLAccount at batch time
-  Description NVARCHAR(MAX)
-  -- NO CompanyID — the header carries it (Amith 2026-07-21)
 ```
 
-- Summary lines are built when the batch is created (Pending), can be **regenerated** while the
-  batch is open, and **freeze** once Status ∈ {Sent, Acknowledged}. A trigger checks the summary
-  **foots to the control totals and balances** at dispatch.
-- Null-dimension entries aggregate together within their account group.
+- **Simplified Summary Model:** Batch summary lines are modeled as **one aggregated `JournalEntry` (`EntryType = 'BatchSummary'`, `EffectiveDate = PostingDate`)** linked via `SummaryJournalEntryID`.
+- Its lines (`JournalEntryLine`) net debits/credits per `(GLAccount × Dimension-combo)`, and tags (`JournalEntryLineDimension`) preserve dimensional breakdown. Dedicated `JournalEntryBatchLineItem` and `JournalEntryBatchLineDimension` schema tables are **retired/dropped** — reusing `JournalEntryLine` saves schema clutter and reuses 100% of line validation, DB constraints, and UI line viewer components out of the box.
+- Summary lines are built when the batch is created (Pending), can be **regenerated** while the batch is open, and **freeze** once Status ∈ {Sent, Acknowledged}.
+- **Query Partitioning:** Subledger detail queries filter `WHERE EntryType != 'BatchSummary'`; GL dispatch / summary queries filter `WHERE EntryType = 'BatchSummary'` (or select directly via `JournalEntryBatch.SummaryJournalEntryID`).
 
 ### 5.7 Currency
 
@@ -429,6 +532,17 @@ Critical invariants hold at the database level (T-SQL triggers/CHECKs), immune t
 ---
 
 ## 7. JE lifecycle and batching workflow
+
+```mermaid
+stateDiagram-v2
+    [*] --> Pending : buildBatch - Preliminary Lock
+    Pending --> Approved : CFO Approval - Permanent Lock
+    Pending --> Cancelled : Reject Batch - Unlocks JEs
+    Pending --> Pending : Regenerate Batch
+    Approved --> Sent : Dispatch to ERP
+    Sent --> Posted : ERP Confirms Receipt
+    Sent --> Failed : ERP Rejection - Hold for Review
+```
 
 ### 7.1 States
 
