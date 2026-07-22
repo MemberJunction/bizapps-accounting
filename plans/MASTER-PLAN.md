@@ -49,31 +49,32 @@ BizAppsAccounting provides the **journal entry primitives and AR subsidiary ledg
 
 ```mermaid
 erDiagram
-    Company ||--o| AccountingCompanyProfile : "IsA — same UUID"
+    Company ||--o| AccountingCompanyProfile : "IsA - same UUID"
     AccountingCompanyProfile ||--o{ GLAccount : "owns COA"
     GLAccount ||--o{ GLAccount : "ParentGLAccountID"
-    GLAccount ||--o{ GLAccountLink : ""
+    GLAccount ||--o{ GLAccountLink : "GLAccountID"
     GLAccountRole ||--o{ GLAccountLink : "RoleID"
-    GLAccountLink ||--o{ GLAccountLinkDimension : "Dimensions"
-    Dimension ||--o{ GLAccountLinkDimension : ""
-    GLAccountLink }o..|| Company : "company DEFAULTS"
-    GLAccountLink }o..|| ProductCategory : "polymorphic target"
-    GLAccountLink }o..|| Product : "polymorphic target"
+    GLAccountLink ||--o{ GLAccountLinkDimension : "LinkID"
+    Dimension ||--o{ GLAccountLinkDimension : "DimensionID"
+    GLAccountLink }o--|| Company : "company DEFAULTS"
+    GLAccountLink }o--|| ProductCategory : "polymorphic target"
+    GLAccountLink }o--|| Product : "polymorphic target"
 
-    JournalEntry ||--|{ JournalEntryLine : "≥2 lines, ≥1 Dr + ≥1 Cr"
+    JournalEntry ||--|{ JournalEntryLine : "lines"
     Company ||--o{ JournalEntry : "CompanyID NOT NULL"
-    GLAccount ||--o{ JournalEntryLine : ""
-    JournalEntryLine ||--o{ JournalEntryLineDimension : ""
-    Dimension ||--o{ JournalEntryLineDimension : ""
-    DimensionValue ||--o{ JournalEntryLineDimension : ""
+    GLAccount ||--o{ JournalEntryLine : "GLAccountID"
+    JournalEntryLine ||--o{ JournalEntryLineDimension : "JournalEntryLineID"
+    Dimension ||--o{ JournalEntryLineDimension : "DimensionID"
+    DimensionValue ||--o{ JournalEntryLineDimension : "DimensionValueID"
+    Dimension ||--o{ DimensionValue : "DimensionID"
     JournalEntry ||--o{ JournalEntry : "ReversesJournalEntryID"
     JournalEntry ||--o{ JournalEntryBatch : "BatchID FK"
 
     Company ||--o{ JournalEntryBatch : "CompanyID NOT NULL"
     JournalEntryBatch ||--|{ JournalEntryBatchLineItem : "netted summaries"
-    JournalEntryBatchLineItem ||--o{ JournalEntryBatchLineDimension : ""
-    GLAccount ||--o{ JournalEntryBatchLineItem : ""
-    UserCompanyRole }o..|| Company : "permissions"
+    JournalEntryBatchLineItem ||--o{ JournalEntryBatchLineDimension : "LineItemID"
+    GLAccount ||--o{ JournalEntryBatchLineItem : "GLAccountID"
+    UserCompanyRole }o--|| Company : "permissions"
 ```
 
 ### 3.1 Key Tables
