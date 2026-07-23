@@ -105,28 +105,28 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
   // ─── cached collections ────────────────────────────────────────────────────
 
   public get GLAccounts(): mjBizAppsAccountingGLAccountEntity[] {
-    return this.GetConfigData<mjBizAppsAccountingGLAccountEntity>('_glAccounts');
+    return this._glAccounts;
   }
   public get GLAccountRoles(): mjBizAppsAccountingGLAccountRoleEntity[] {
-    return this.GetConfigData<mjBizAppsAccountingGLAccountRoleEntity>('_glAccountRoles');
+    return this._glAccountRoles;
   }
   public get GLAccountLinks(): mjBizAppsAccountingGLAccountLinkEntity[] {
-    return this.GetConfigData<mjBizAppsAccountingGLAccountLinkEntity>('_glAccountLinks');
+    return this._glAccountLinks;
   }
   public get GLAccountLinkDimensions(): mjBizAppsAccountingGLAccountLinkDimensionEntity[] {
-    return this.GetConfigData<mjBizAppsAccountingGLAccountLinkDimensionEntity>('_glAccountLinkDimensions');
+    return this._glAccountLinkDimensions;
   }
   public get Dimensions(): mjBizAppsAccountingDimensionEntity[] {
-    return this.GetConfigData<mjBizAppsAccountingDimensionEntity>('_dimensions');
+    return this._dimensions;
   }
   public get DimensionValues(): mjBizAppsAccountingDimensionValueEntity[] {
-    return this.GetConfigData<mjBizAppsAccountingDimensionValueEntity>('_dimensionValues');
+    return this._dimensionValues;
   }
   public get CompanyProfiles(): mjBizAppsAccountingAccountingCompanyProfileEntity[] {
-    return this.GetConfigData<mjBizAppsAccountingAccountingCompanyProfileEntity>('_companyProfiles');
+    return this._companyProfiles;
   }
   public get Currencies(): mjBizAppsAccountingCurrencyEntity[] {
-    return this.GetConfigData<mjBizAppsAccountingCurrencyEntity>('_currencies');
+    return this._currencies;
   }
 
   // ─── point lookups ─────────────────────────────────────────────────────────
