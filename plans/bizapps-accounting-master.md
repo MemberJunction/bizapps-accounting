@@ -477,9 +477,10 @@ __mj_BizAppsAccounting.JournalEntryBatch
 
 - **Simplified Summary Model:** Batch summary lines are modeled as **one aggregated `JournalEntry` (`EntryType = 'BatchSummary'`, `EffectiveDate = PostingDate`)** linked via `SummaryJournalEntryID`.
 - Its lines (`JournalEntryLine`) net debits/credits per `(GLAccount × Dimension-combo)`, and tags (`JournalEntryLineDimension`) preserve dimensional breakdown. Dedicated `JournalEntryBatchLineItem` and `JournalEntryBatchLineDimension` schema tables are **retired/dropped** — reusing `JournalEntryLine` saves schema clutter and reuses 100% of line validation, DB constraints, and UI line viewer components out of the box.
-- **Lifecycle:** the summary JE is created at batch build already **`Batched`** (locked with the
-  members — preliminary until approval, permanent after; regeneration rebuilds it), and moves to
-  `GLPosted` when the batch posts.
+- **Lifecycle:** the summary JE is created at batch build already **`Batched`, carrying the
+  batch's `BatchID` like the members** — so it rides the ONE derived lock machinery: preliminary
+  until approval (regeneration uses the standard unlock→rebuild→relock), permanent after, and
+  `GLPosted` when the batch posts. It is distinguished from members purely by its `EntryType`.
 - **Default exclusion:** `EntryType = 'BatchSummary'` is excluded by default from batch-candidate
   gathering (engine + UI — a summary can never be swept into a later batch) and from the
   read-model views (an "include summaries" toggle is permissible).

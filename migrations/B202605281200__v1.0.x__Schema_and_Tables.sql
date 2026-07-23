@@ -353,13 +353,14 @@ CREATE TABLE __mj_BizAppsAccounting.JournalEntry (
     CONSTRAINT CK_JournalEntry_EntryType CHECK (EntryType IN ('OrderBooking','PaymentReceipt','RevenueRecognition','CommissionAccrual','PartnerRevShare','IntercompanyFlow','WaterfallDistribution','Refund','Writeoff','Reversal','Manual','TaxRemittance','PeriodEndAccrual','FXRevaluation','OpeningBalance','Adjustment','BatchSummary')),
     CONSTRAINT CK_JournalEntry_NoSelfReverse CHECK (ReversesJournalEntryID IS NULL OR ReversesJournalEntryID <> ID),
     CONSTRAINT CK_JournalEntry_NoSelfReversedBy CHECK (ReversedByJournalEntryID IS NULL OR ReversedByJournalEntryID <> ID),
-    -- A summary JE (EntryType='BatchSummary') is referenced BY its batch via
-    -- SummaryJournalEntryID and is NEVER a member — BatchID must stay NULL, so a
-    -- summary can never be swept into a later batch (plan §5.6 default exclusion).
-    CONSTRAINT CK_JournalEntry_BatchedHasBatch CHECK (
-        (EntryType = 'BatchSummary' AND BatchID IS NULL) OR
-        (EntryType <> 'BatchSummary' AND (Status = 'Pending' OR BatchID IS NOT NULL))
-    ),
+    -- The summary JE (EntryType='BatchSummary') carries its batch's BatchID like
+    -- any other JE in the batch's orbit, so it rides the SAME derived lock
+    -- machinery (preliminary while its batch is Pending, permanent from
+    -- approval, GLPosted at post). It is NOT a member: netting / count / sweep
+    -- queries exclude it by EntryType (the ruled default exclusion — EntryType
+    -- is THE discriminator; the batch's SummaryJournalEntryID is the redundant
+    -- cross-check).
+    CONSTRAINT CK_JournalEntry_BatchedHasBatch CHECK (Status = 'Pending' OR BatchID IS NOT NULL),
     CONSTRAINT CK_JournalEntry_GLPostedHasRef CHECK (Status <> 'GLPosted' OR (GLPostedAt IS NOT NULL))
 );
 GO
@@ -1184,6 +1185,41 @@ END;
 GO
 
 ---------------------------------------------------------------------------
+-- 4.6b trg_JEBatch_SummaryCoherence
+--      When a batch's SummaryJournalEntryID is set, the referenced JE must be
+--      wired correctly: EntryType='BatchSummary', BatchID = THIS batch, and the
+--      same CompanyID. Catches every summary mis-wiring in one place (pointing
+--      at a regular JE, at another batch's summary, or across companies).
+--      Batch-side only, so the engine's create-summary-then-stamp-pointer order
+--      works in one transaction (stamp the pointer while the summary is locked
+--      into the batch, i.e. Batched with BatchID set).
+---------------------------------------------------------------------------
+CREATE TRIGGER __mj_BizAppsAccounting.trg_JEBatch_SummaryCoherence
+ON __mj_BizAppsAccounting.JournalEntryBatch
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF EXISTS (
+        SELECT 1
+        FROM inserted b
+        LEFT JOIN __mj_BizAppsAccounting.JournalEntry s ON s.ID = b.SummaryJournalEntryID
+        WHERE b.SummaryJournalEntryID IS NOT NULL
+          AND (
+            s.ID IS NULL
+            OR s.EntryType <> 'BatchSummary'
+            OR ISNULL(s.BatchID, '00000000-0000-0000-0000-000000000000') <> b.ID
+            OR s.CompanyID <> b.CompanyID
+          )
+    )
+    BEGIN
+        ROLLBACK TRANSACTION;
+        THROW 50023, 'JournalEntryBatch.SummaryJournalEntryID must reference a JournalEntry with EntryType=''BatchSummary'', BatchID = this batch, and the batch''s CompanyID.', 1;
+    END;
+END;
+GO
+
+---------------------------------------------------------------------------
 -- 4.7 trg_AccountingCompanyProfile_NoChains
 --     Per BA-D9, ParentAccountingCompanyID may be set, but the referenced
 --     parent must NOT itself have a parent. No chains.
@@ -1825,7 +1861,7 @@ EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'The single com
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'CompanyID';
 EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'Singular, accountant-set posting date chosen at batch build (plan D8). Carried to the GL''s posting date and must match between systems; drives the ERP period. Document dates stay informational.',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'PostingDate';
-EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'The aggregated summary JournalEntry (EntryType=BatchSummary, EffectiveDate=PostingDate) that posts to the GL for this batch (plan D9). Its lines net debits/credits per GLAccount x dimension-combo. Never a batch MEMBER (BatchID stays NULL).',
+EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'The aggregated summary JournalEntry (EntryType=BatchSummary, EffectiveDate=PostingDate) that posts to the GL for this batch (plan D9). Its lines net debits/credits per GLAccount x dimension-combo. The summary carries this batch''s BatchID (same derived lock machinery as members) but is excluded from member/netting/sweep queries by its EntryType.',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'SummaryJournalEntryID';
 EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'The bizapps-tasks approval Task raised for this batch (plan D10). NO FK by design (cross-app); stamped together with ApprovalTaskRaisedAt in the task-raise transaction (both-or-neither CHECK). NULL = task not yet raised (retryable state).',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'ApprovalTaskID';
