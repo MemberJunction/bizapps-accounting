@@ -27,7 +27,7 @@
 8. [Multi-currency mechanics](#8-multi-currency-mechanics)
 9. [Intercompany](#9-intercompany)
 10. [Tax](#10-tax)
-11. [Reporting](#11-reporting)
+11. [Reporting: read-model views](#11-reporting-read-model-views)
 12. [Permissions, roles, and company scope](#12-permissions-roles-and-company-scope)
 13. [UX direction](#13-ux-direction)
 14. [Integration contract with BizApps Orders](#14-integration-contract-with-bizapps-orders)
@@ -115,7 +115,8 @@ bizapps-orders          Product, Order, OrderLine, Subscription, Payment —
 tags) via the `Accounting.CreateJournalEntry` / `CreateJournalEntries` remote operations.
 
 **Accounting provides to upstream:** transactional, atomic, balanced JE creation; role-based GL
-account resolution (`AccountingEngineBase.ResolveLinkedAccount`).
+account resolution (`AccountingEngineBase.ResolveLinkedAccount`); AR/balance data via read-model
+views.
 
 **Accounting does NOT:** know about Orders/Subscriptions/Payments as concepts (soft origin refs
 only); generate JEs autonomously; own the ERP connector (dispatch uses the BC REST API — §7.5);
@@ -659,14 +660,23 @@ engine.
 
 ---
 
-## 11. Reporting
+## 11. Reporting: read-model views
 
-**The read-model reporting-view layer is REMOVED** (Amith, 2026-07-22): "way overdone and not
-needed… we can come back to that later as needed, we probably will not." The former `vw_*` set
-(trial balance AR, AR aging/open-by-customer, DefRev rollforward, dimension P&L, FX exposure,
-recon, dispatch status, etc.) lives in git history if ever wanted. Balances still compute on
-demand (D20) — via engine/queries when reporting needs arise. Skip-generated interactive reports
-+ a Report Gallery app remain deferred.
+Shipped view layer (compute on demand — D20):
+
+```
+vw_TrialBalance_AR          AR-side trial balance per company
+vw_GLDetail_Subledger       all JE lines for our accounts, with dimension tags
+vw_AROpenByCustomer         open AR per customer per company
+vw_DefRevRollforward        DefRev beginning + additions + recognitions + ending
+vw_SalesTaxLiability        accrued + remitted per authority
+vw_ARtoGLRecon              our AR balance vs the ERP's (recon definition in progress)
+vw_DimensionPL              subledger revenue by dimension
+vw_FxExposure               foreign-currency open balances
+```
+
+Skip-generated interactive reports + a Report Gallery app are **deferred** (the views answer the
+essential questions now; report pages are mocked and sequenced behind the impact screens).
 
 ---
 
@@ -835,7 +845,7 @@ branch (`feature/je-entry-engine`) and is being re-landed deliberately on this b
 **Built + validated:** GLAccount/roles/links + resolution engine · AccountingCompanyProfile ·
 single-company JEs (numbering, balanced/immutability/reversal/single-company triggers) ·
 dimensions · batch engine with lock levels, view-driven batches, tasks-app approval gate ·
-`CreateJournalEntry`/`CreateJournalEntries` remote ops (atomic, typed errors) ·
+`CreateJournalEntry`/`CreateJournalEntries` remote ops (atomic, typed errors) · read-model views ·
 seeded minimal COA + deterministic demo data · tiered test harnesses (unit / live server / API /
 Playwright) · orders-side per-line booking (factory + Save override + 8/8 harness, on the orders
 donor branch).
