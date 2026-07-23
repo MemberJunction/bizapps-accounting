@@ -15,6 +15,7 @@
  */
 export { AccountingCompanyProfileEntityServer } from './AccountingCompanyProfileEntityServer.js';
 export { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
+export { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
 export { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
 // (AccountingPeriodEntityServer removed 2026-07-06 — AccountingPeriod retired, CH-1.)
 
