@@ -107,25 +107,25 @@
         }
     </mj-collapsible-panel>
 
-    <!-- Journal Entry Batch Line Dimensions Section -->
+    <!-- Dimension Values Section -->
     <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingJournalEntryBatchLineDimensions"
-        SectionName="Journal Entry Batch Line Dimensions"
+        SectionKey="mJBizAppsAccountingDimensionValues"
+        SectionName="Dimension Values"
         Icon="fa fa-table"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingJournalEntryBatchLineDimensions')"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingDimensionValues')"
         [DefaultExpanded]="false">
         @if (record.IsSaved) {
         <div>
             <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entry Batch Line Dimensions','DimensionID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entry Batch Line Dimensions')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntryBatchLineDimensions')"
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Dimension Values','DimensionID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Dimension Values')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingDimensionValues')"
                 [ShowToolbar]="false"
                 (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntryBatchLineDimensions', $event.totalRowCount)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingDimensionValues', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>
@@ -151,56 +151,6 @@
                 [ShowToolbar]="false"
                 (Navigate)="OnFormNavigate($event)"
                 (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingGLAccountLinkDimensions', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
-    <!-- Scheduled Journal Entry Line Dimensions Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingScheduledJournalEntryLineDimensions"
-        SectionName="Scheduled Journal Entry Line Dimensions"
-        Icon="fa fa-table"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingScheduledJournalEntryLineDimensions')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Scheduled Journal Entry Line Dimensions','DimensionID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Scheduled Journal Entry Line Dimensions')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingScheduledJournalEntryLineDimensions')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingScheduledJournalEntryLineDimensions', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
-    <!-- Dimension Values Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingDimensionValues"
-        SectionName="Dimension Values"
-        Icon="fa fa-table"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingDimensionValues')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Dimension Values','DimensionID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Dimension Values')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingDimensionValues')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingDimensionValues', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>

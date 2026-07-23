@@ -119,48 +119,18 @@ export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
         * * Display Name: Default Payment Terms Type ID
         * * SQL Data Type: uniqueidentifier
         * * Description: Default payment terms type for new orders/invoices. FK delegated to BizAppsOrders.PaymentTermsType (soft ref; no FK constraint).`),
-    AROpenGLAccountID: z.string().nullable().describe(`
-        * * Field Name: AROpenGLAccountID
-        * * Display Name: AR Open GL Account ID
+    ApprovalCFOUserID: z.string().nullable().describe(`
+        * * Field Name: ApprovalCFOUserID
+        * * Display Name: Approval CFO User ID
         * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Accounts (vwGLAccounts.ID)
-        * * Description: Which GLAccount represents this company's primary Accounts Receivable. Wired by spSeedDefaultChartOfAccounts.`),
-    DeferredRevenueGLAccountID: z.string().nullable().describe(`
-        * * Field Name: DeferredRevenueGLAccountID
-        * * Display Name: Deferred Revenue GL Account ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Accounts (vwGLAccounts.ID)
-        * * Description: Which GLAccount represents this company's Deferred Revenue.`),
-    SalesTaxPayableGLAccountID: z.string().nullable().describe(`
-        * * Field Name: SalesTaxPayableGLAccountID
-        * * Display Name: Sales Tax Payable GL Account ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Accounts (vwGLAccounts.ID)
-        * * Description: Which GLAccount represents Sales Tax Payable for accrual.`),
-    RealizedFXGainLossGLAccountID: z.string().nullable().describe(`
-        * * Field Name: RealizedFXGainLossGLAccountID
-        * * Display Name: Realized FX Gain Loss GL Account ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Accounts (vwGLAccounts.ID)
-        * * Description: GLAccount used by the FX engine to record realized FX gains/losses on payment-to-AR rate mismatch (BA-D10).`),
-    UnrealizedFXGainLossGLAccountID: z.string().nullable().describe(`
-        * * Field Name: UnrealizedFXGainLossGLAccountID
-        * * Display Name: Unrealized FX Gain Loss GL Account ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Accounts (vwGLAccounts.ID)
-        * * Description: GLAccount used by the period-end FX revaluation template to record unrealized FX adjustments.`),
+        * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+        * * Description: The CFO (an __mj.User — a security identity) who must approve a Journal Entry Batch for this company before it dispatches to the ERP. Resolved by the bizapps-tasks approval gate. Nullable: companies without a configured CFO fall back to the role-based resolver.`),
     IsActive: z.boolean().describe(`
         * * Field Name: IsActive
         * * Display Name: Is Active
         * * SQL Data Type: bit
         * * Default Value: 1
         * * Description: Whether this profile is currently active. Inactive companies cannot have new JEs.`),
-    ApprovalCFOPersonID: z.string().nullable().describe(`
-        * * Field Name: ApprovalCFOPersonID
-        * * Display Name: Approval CFO Person ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Common: People (vwPeople.ID)
-        * * Description: The CFO (a bizapps-common Person) who must approve a Journal Entry Batch for this company before it dispatches to the ERP. Resolved by the bizapps-tasks approval gate. Nullable: companies without a configured CFO fall back to the role-based resolver.`),
     __mj_CreatedAt: z.date().describe(`
         * * Field Name: __mj_CreatedAt
         * * Display Name: Created At
@@ -199,30 +169,10 @@ export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
         * * Field Name: ReportingCurrencyCode_Virtual
         * * Display Name: Reporting Currency Code Virtual
         * * SQL Data Type: nvarchar(80)`),
-    AROpenGLAccount: z.string().nullable().describe(`
-        * * Field Name: AROpenGLAccount
-        * * Display Name: AR Open GL Account
-        * * SQL Data Type: nvarchar(200)`),
-    DeferredRevenueGLAccount: z.string().nullable().describe(`
-        * * Field Name: DeferredRevenueGLAccount
-        * * Display Name: Deferred Revenue GL Account
-        * * SQL Data Type: nvarchar(200)`),
-    SalesTaxPayableGLAccount: z.string().nullable().describe(`
-        * * Field Name: SalesTaxPayableGLAccount
-        * * Display Name: Sales Tax Payable GL Account
-        * * SQL Data Type: nvarchar(200)`),
-    RealizedFXGainLossGLAccount: z.string().nullable().describe(`
-        * * Field Name: RealizedFXGainLossGLAccount
-        * * Display Name: Realized FX Gain Loss GL Account
-        * * SQL Data Type: nvarchar(200)`),
-    UnrealizedFXGainLossGLAccount: z.string().nullable().describe(`
-        * * Field Name: UnrealizedFXGainLossGLAccount
-        * * Display Name: Unrealized FX Gain Loss GL Account
-        * * SQL Data Type: nvarchar(200)`),
-    ApprovalCFOPerson: z.string().nullable().describe(`
-        * * Field Name: ApprovalCFOPerson
-        * * Display Name: Approval CFO Person
-        * * SQL Data Type: nvarchar(201)`),
+    ApprovalCFOUser: z.string().nullable().describe(`
+        * * Field Name: ApprovalCFOUser
+        * * Display Name: Approval CFO User
+        * * SQL Data Type: nvarchar(100)`),
     RootParentAccountingCompanyID: z.string().nullable().describe(`
         * * Field Name: RootParentAccountingCompanyID
         * * Display Name: Root Parent Accounting Company ID
@@ -230,95 +180,6 @@ export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
 });
 
 export type mjBizAppsAccountingAccountingCompanyProfileEntityType = z.infer<typeof mjBizAppsAccountingAccountingCompanyProfileSchema>;
-
-/**
- * zod schema definition for the entity MJ_BizApps_Accounting: Chart Of Accounts Mappings
- */
-export const mjBizAppsAccountingChartOfAccountsMappingSchema = z.object({
-    ID: z.string().describe(`
-        * * Field Name: ID
-        * * Display Name: ID
-        * * SQL Data Type: uniqueidentifier
-        * * Default Value: newsequentialid()
-        * * Description: Unique identifier.`),
-    CompanyID: z.string().describe(`
-        * * Field Name: CompanyID
-        * * Display Name: Company ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
-        * * Description: Company this mapping is for.`),
-    ExternalSystem: z.string().describe(`
-        * * Field Name: ExternalSystem
-        * * Display Name: External System
-        * * SQL Data Type: nvarchar(50)
-        * * Description: Target ERP system the mapping is for.`),
-    ExternalAccountID: z.string().describe(`
-        * * Field Name: ExternalAccountID
-        * * Display Name: External Account ID
-        * * SQL Data Type: nvarchar(100)
-        * * Description: Account identifier as known to the external ERP.`),
-    ExternalAccountName: z.string().nullable().describe(`
-        * * Field Name: ExternalAccountName
-        * * Display Name: External Account Name
-        * * SQL Data Type: nvarchar(200)
-        * * Description: Display name of the external account (snapshot for audit).`),
-    InternalGLAccountID: z.string().describe(`
-        * * Field Name: InternalGLAccountID
-        * * Display Name: Internal GL Account ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Accounts (vwGLAccounts.ID)
-        * * Description: Internal GLAccount this external account maps to.`),
-    EffectiveFrom: z.date().describe(`
-        * * Field Name: EffectiveFrom
-        * * Display Name: Effective From
-        * * SQL Data Type: date
-        * * Description: Earliest date this mapping is in effect.`),
-    EffectiveTo: z.date().nullable().describe(`
-        * * Field Name: EffectiveTo
-        * * Display Name: Effective To
-        * * SQL Data Type: date
-        * * Description: Last date this mapping is in effect (NULL = open-ended).`),
-    ApprovedByUserID: z.string().nullable().describe(`
-        * * Field Name: ApprovedByUserID
-        * * Display Name: Approved By User ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
-        * * Description: Admin (typically Finance.Admin role) who approved this mapping.`),
-    ApprovedAt: z.date().nullable().describe(`
-        * * Field Name: ApprovedAt
-        * * Display Name: Approved At
-        * * SQL Data Type: datetimeoffset
-        * * Description: When the mapping was approved.`),
-    ChangeNote: z.string().nullable().describe(`
-        * * Field Name: ChangeNote
-        * * Display Name: Change Note
-        * * SQL Data Type: nvarchar(MAX)
-        * * Description: Optional note describing why this mapping was created or changed.`),
-    __mj_CreatedAt: z.date().describe(`
-        * * Field Name: __mj_CreatedAt
-        * * Display Name: Created At
-        * * SQL Data Type: datetimeoffset
-        * * Default Value: getutcdate()`),
-    __mj_UpdatedAt: z.date().describe(`
-        * * Field Name: __mj_UpdatedAt
-        * * Display Name: Updated At
-        * * SQL Data Type: datetimeoffset
-        * * Default Value: getutcdate()`),
-    Company: z.string().describe(`
-        * * Field Name: Company
-        * * Display Name: Company
-        * * SQL Data Type: nvarchar(50)`),
-    InternalGLAccount: z.string().describe(`
-        * * Field Name: InternalGLAccount
-        * * Display Name: Internal GL Account
-        * * SQL Data Type: nvarchar(200)`),
-    ApprovedByUser: z.string().nullable().describe(`
-        * * Field Name: ApprovedByUser
-        * * Display Name: Approved By User
-        * * SQL Data Type: nvarchar(100)`),
-});
-
-export type mjBizAppsAccountingChartOfAccountsMappingEntityType = z.infer<typeof mjBizAppsAccountingChartOfAccountsMappingSchema>;
 
 /**
  * zod schema definition for the entity MJ_BizApps_Accounting: Currencies
@@ -924,18 +785,25 @@ export const mjBizAppsAccountingJournalEntrySchema = z.object({
         * * Display Name: Entry Number
         * * SQL Data Type: nvarchar(40)
         * * Description: Gap-free entry number 'JE-{CompanyCode}-{FY}-{seq:000000}' assigned by spAssignNextJournalEntryNumber (BA-D15).`),
+    CompanyID: z.string().describe(`
+        * * Field Name: CompanyID
+        * * Display Name: Company ID
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
+        * * Description: The single company this journal entry belongs to (plan D3). Every line's GLAccount must belong to this company (trigger-enforced).`),
     EffectiveDate: z.date().describe(`
         * * Field Name: EffectiveDate
         * * Display Name: Effective Date
         * * SQL Data Type: date
         * * Description: Accounting date for the entry (the ERP assigns its own period at posting).`),
-    EntryType: z.union([z.literal('Adjustment'), z.literal('CommissionAccrual'), z.literal('FXRevaluation'), z.literal('IntercompanyFlow'), z.literal('Manual'), z.literal('OpeningBalance'), z.literal('OrderBooking'), z.literal('PartnerRevShare'), z.literal('PaymentReceipt'), z.literal('PeriodEndAccrual'), z.literal('Refund'), z.literal('RevenueRecognition'), z.literal('Reversal'), z.literal('TaxRemittance'), z.literal('WaterfallDistribution'), z.literal('Writeoff')]).describe(`
+    EntryType: z.union([z.literal('Adjustment'), z.literal('BatchSummary'), z.literal('CommissionAccrual'), z.literal('FXRevaluation'), z.literal('IntercompanyFlow'), z.literal('Manual'), z.literal('OpeningBalance'), z.literal('OrderBooking'), z.literal('PartnerRevShare'), z.literal('PaymentReceipt'), z.literal('PeriodEndAccrual'), z.literal('Refund'), z.literal('RevenueRecognition'), z.literal('Reversal'), z.literal('TaxRemittance'), z.literal('WaterfallDistribution'), z.literal('Writeoff')]).describe(`
         * * Field Name: EntryType
         * * Display Name: Entry Type
         * * SQL Data Type: nvarchar(40)
     * * Value List Type: List
     * * Possible Values 
     *   * Adjustment
+    *   * BatchSummary
     *   * CommissionAccrual
     *   * FXRevaluation
     *   * IntercompanyFlow
@@ -993,22 +861,11 @@ export const mjBizAppsAccountingJournalEntrySchema = z.object({
         * * Display Name: Contract ID
         * * SQL Data Type: uniqueidentifier
         * * Description: Soft polymorphic ref to a source Contract. NO FK.`),
-    RevRecScheduleID: z.string().nullable().describe(`
-        * * Field Name: RevRecScheduleID
-        * * Display Name: Rev Rec Schedule ID
-        * * SQL Data Type: uniqueidentifier
-        * * Description: Soft polymorphic ref to a RevenueRecognitionSchedule. NO FK.`),
     IntercompanyFlowID: z.string().nullable().describe(`
         * * Field Name: IntercompanyFlowID
         * * Display Name: Intercompany Flow ID
         * * SQL Data Type: uniqueidentifier
         * * Description: Soft polymorphic ref to an IntercompanyFlow record orchestrated upstream. NO FK.`),
-    ScheduledJournalEntryID: z.string().nullable().describe(`
-        * * Field Name: ScheduledJournalEntryID
-        * * Display Name: Scheduled Journal Entry ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Scheduled Journal Entries (vwScheduledJournalEntries.ID)
-        * * Description: When this JE was materialized from a rev-rec / amortization waterfall, the ScheduledJournalEntry that produced it (BA-D25).`),
     TaxRemittanceID: z.string().nullable().describe(`
         * * Field Name: TaxRemittanceID
         * * Display Name: Tax Remittance ID
@@ -1059,6 +916,10 @@ export const mjBizAppsAccountingJournalEntrySchema = z.object({
         * * Display Name: Updated At
         * * SQL Data Type: datetimeoffset
         * * Default Value: getutcdate()`),
+    Company: z.string().describe(`
+        * * Field Name: Company
+        * * Display Name: Company
+        * * SQL Data Type: nvarchar(50)`),
     File: z.string().nullable().describe(`
         * * Field Name: File
         * * Display Name: File
@@ -1074,137 +935,6 @@ export const mjBizAppsAccountingJournalEntrySchema = z.object({
 });
 
 export type mjBizAppsAccountingJournalEntryEntityType = z.infer<typeof mjBizAppsAccountingJournalEntrySchema>;
-
-/**
- * zod schema definition for the entity MJ_BizApps_Accounting: Journal Entry Batch Line Dimensions
- */
-export const mjBizAppsAccountingJournalEntryBatchLineDimensionSchema = z.object({
-    ID: z.string().describe(`
-        * * Field Name: ID
-        * * Display Name: ID
-        * * SQL Data Type: uniqueidentifier
-        * * Default Value: newsequentialid()
-        * * Description: Unique identifier.`),
-    JournalEntryBatchLineItemID: z.string().describe(`
-        * * Field Name: JournalEntryBatchLineItemID
-        * * Display Name: Journal Entry Batch Line Item ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entry Batch Line Items (vwJournalEntryBatchLineItems.ID)
-        * * Description: Batch summary line being tagged.`),
-    DimensionID: z.string().describe(`
-        * * Field Name: DimensionID
-        * * Display Name: Dimension ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Dimensions (vwDimensions.ID)
-        * * Description: Dimension being applied.`),
-    DimensionValueID: z.string().describe(`
-        * * Field Name: DimensionValueID
-        * * Display Name: Dimension Value ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Dimension Values (vwDimensionValues.ID)
-        * * Description: Value of that dimension on this line.`),
-    __mj_CreatedAt: z.date().describe(`
-        * * Field Name: __mj_CreatedAt
-        * * Display Name: Created At
-        * * SQL Data Type: datetimeoffset
-        * * Default Value: getutcdate()`),
-    __mj_UpdatedAt: z.date().describe(`
-        * * Field Name: __mj_UpdatedAt
-        * * Display Name: Updated At
-        * * SQL Data Type: datetimeoffset
-        * * Default Value: getutcdate()`),
-    Dimension: z.string().describe(`
-        * * Field Name: Dimension
-        * * Display Name: Dimension
-        * * SQL Data Type: nvarchar(100)`),
-    DimensionValue: z.string().describe(`
-        * * Field Name: DimensionValue
-        * * Display Name: Dimension Value
-        * * SQL Data Type: nvarchar(200)`),
-});
-
-export type mjBizAppsAccountingJournalEntryBatchLineDimensionEntityType = z.infer<typeof mjBizAppsAccountingJournalEntryBatchLineDimensionSchema>;
-
-/**
- * zod schema definition for the entity MJ_BizApps_Accounting: Journal Entry Batch Line Items
- */
-export const mjBizAppsAccountingJournalEntryBatchLineItemSchema = z.object({
-    ID: z.string().describe(`
-        * * Field Name: ID
-        * * Display Name: ID
-        * * SQL Data Type: uniqueidentifier
-        * * Default Value: newsequentialid()
-        * * Description: Unique identifier.`),
-    BatchID: z.string().describe(`
-        * * Field Name: BatchID
-        * * Display Name: Batch ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entry Batches (vwJournalEntryBatches.ID)
-        * * Description: Batch this summary line belongs to.`),
-    CompanyID: z.string().describe(`
-        * * Field Name: CompanyID
-        * * Display Name: Company ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
-        * * Description: Company whose books this line posts to (one batch = one Company per BA-D16).`),
-    GLAccountID: z.string().describe(`
-        * * Field Name: GLAccountID
-        * * Display Name: GL Account ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Accounts (vwGLAccounts.ID)
-        * * Description: GLAccount this consolidated movement hits.`),
-    LineNumber: z.number().describe(`
-        * * Field Name: LineNumber
-        * * Display Name: Line Number
-        * * SQL Data Type: int
-        * * Description: Line ordering within the batch (1-based).`),
-    DebitAmount: z.number().nullable().describe(`
-        * * Field Name: DebitAmount
-        * * Display Name: Debit Amount
-        * * SQL Data Type: decimal(18, 2)
-        * * Description: Summed debit for this account × dimension combo (NULL if a credit line).`),
-    CreditAmount: z.number().nullable().describe(`
-        * * Field Name: CreditAmount
-        * * Display Name: Credit Amount
-        * * SQL Data Type: decimal(18, 2)
-        * * Description: Summed credit for this account × dimension combo (NULL if a debit line).`),
-    SourceLineCount: z.number().describe(`
-        * * Field Name: SourceLineCount
-        * * Display Name: Source Line Count
-        * * SQL Data Type: int
-        * * Default Value: 0
-        * * Description: How many JournalEntryLine rows rolled up into this summary line (audit aid).`),
-    ExternalAccountID: z.string().nullable().describe(`
-        * * Field Name: ExternalAccountID
-        * * Display Name: External Account ID
-        * * SQL Data Type: nvarchar(100)
-        * * Description: Target ERP account code resolved via ChartOfAccountsMapping at batch time.`),
-    Description: z.string().nullable().describe(`
-        * * Field Name: Description
-        * * Display Name: Description
-        * * SQL Data Type: nvarchar(MAX)
-        * * Description: Optional memo on the consolidated line.`),
-    __mj_CreatedAt: z.date().describe(`
-        * * Field Name: __mj_CreatedAt
-        * * Display Name: Created At
-        * * SQL Data Type: datetimeoffset
-        * * Default Value: getutcdate()`),
-    __mj_UpdatedAt: z.date().describe(`
-        * * Field Name: __mj_UpdatedAt
-        * * Display Name: Updated At
-        * * SQL Data Type: datetimeoffset
-        * * Default Value: getutcdate()`),
-    Company: z.string().describe(`
-        * * Field Name: Company
-        * * Display Name: Company
-        * * SQL Data Type: nvarchar(50)`),
-    GLAccount: z.string().describe(`
-        * * Field Name: GLAccount
-        * * Display Name: GL Account
-        * * SQL Data Type: nvarchar(200)`),
-});
-
-export type mjBizAppsAccountingJournalEntryBatchLineItemEntityType = z.infer<typeof mjBizAppsAccountingJournalEntryBatchLineItemSchema>;
 
 /**
  * zod schema definition for the entity MJ_BizApps_Accounting: Journal Entry Batch Sequences
@@ -1249,6 +979,23 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * Display Name: Batch Number
         * * SQL Data Type: nvarchar(40)
         * * Description: Gap-free batch number assigned by spAssignNextBatchNumber. Format 'BATCH-{CompanyCode}-{seq:000000}'.`),
+    CompanyID: z.string().describe(`
+        * * Field Name: CompanyID
+        * * Display Name: Company ID
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
+        * * Description: The single company this batch belongs to (plan D7). One batch per company per run; the batch gathers ONLY this company's Pending JEs.`),
+    PostingDate: z.date().describe(`
+        * * Field Name: PostingDate
+        * * Display Name: Posting Date
+        * * SQL Data Type: date
+        * * Description: Singular, accountant-set posting date chosen at batch build (plan D8). Carried to the GL's posting date and must match between systems; drives the ERP period. Document dates stay informational.`),
+    SummaryJournalEntryID: z.string().nullable().describe(`
+        * * Field Name: SummaryJournalEntryID
+        * * Display Name: Summary Journal Entry ID
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entries (vwJournalEntries.ID)
+        * * Description: The aggregated summary JournalEntry (EntryType=BatchSummary, EffectiveDate=PostingDate) that posts to the GL for this batch (plan D9). Its lines net debits/credits per GLAccount x dimension-combo. The summary carries this batch's BatchID (same derived lock machinery as members) but is excluded from member/netting/sweep queries by its EntryType.`),
     TargetSystem: z.union([z.literal('BusinessCentral'), z.literal('NetSuite'), z.literal('Other'), z.literal('QuickBooks'), z.literal('Sage'), z.literal('Xero')]).describe(`
         * * Field Name: TargetSystem
         * * Display Name: Target System
@@ -1321,7 +1068,7 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * Display Name: Approved By User ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
-        * * Description: The user who approved the batch (see AccountingCompanyProfile.ApprovalCFOPersonID / the bizapps-tasks approval gate).`),
+        * * Description: The user who approved the batch (see AccountingCompanyProfile.ApprovalCFOUserID / the bizapps-tasks approval gate).`),
     SentAt: z.date().nullable().describe(`
         * * Field Name: SentAt
         * * Display Name: Sent At
@@ -1337,6 +1084,16 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * Display Name: Error Message
         * * SQL Data Type: nvarchar(MAX)
         * * Description: Error message from a Failed send. JEs revert to Pending for retry.`),
+    ApprovalTaskID: z.string().nullable().describe(`
+        * * Field Name: ApprovalTaskID
+        * * Display Name: Approval Task ID
+        * * SQL Data Type: uniqueidentifier
+        * * Description: The bizapps-tasks approval Task raised for this batch (plan D10). NO FK by design (cross-app); stamped together with ApprovalTaskRaisedAt in the task-raise transaction (both-or-neither CHECK). NULL = task not yet raised (retryable state).`),
+    ApprovalTaskRaisedAt: z.date().nullable().describe(`
+        * * Field Name: ApprovalTaskRaisedAt
+        * * Display Name: Approval Task Raised At
+        * * SQL Data Type: datetimeoffset
+        * * Description: When the approval task was raised; set together with ApprovalTaskID (both-or-neither CHECK).`),
     __mj_CreatedAt: z.date().describe(`
         * * Field Name: __mj_CreatedAt
         * * Display Name: Created At
@@ -1347,6 +1104,10 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * Display Name: Updated At
         * * SQL Data Type: datetimeoffset
         * * Default Value: getutcdate()`),
+    Company: z.string().describe(`
+        * * Field Name: Company
+        * * Display Name: Company
+        * * SQL Data Type: nvarchar(50)`),
     BatchedByUser: z.string().describe(`
         * * Field Name: BatchedByUser
         * * Display Name: Batched By User
@@ -1562,6 +1323,11 @@ export type mjBizAppsAccountingJournalEntryLinkEntityType = z.infer<typeof mjBiz
  * zod schema definition for the entity MJ_BizApps_Accounting: Journal Entry Sequences
  */
 export const mjBizAppsAccountingJournalEntrySequenceSchema = z.object({
+    CompanyID: z.string().describe(`
+        * * Field Name: CompanyID
+        * * Display Name: Company ID
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)`),
     FiscalYear: z.number().describe(`
         * * Field Name: FiscalYear
         * * Display Name: Fiscal Year
@@ -1581,265 +1347,13 @@ export const mjBizAppsAccountingJournalEntrySequenceSchema = z.object({
         * * Display Name: Updated At
         * * SQL Data Type: datetimeoffset
         * * Default Value: getutcdate()`),
-});
-
-export type mjBizAppsAccountingJournalEntrySequenceEntityType = z.infer<typeof mjBizAppsAccountingJournalEntrySequenceSchema>;
-
-/**
- * zod schema definition for the entity MJ_BizApps_Accounting: Scheduled Journal Entries
- */
-export const mjBizAppsAccountingScheduledJournalEntrySchema = z.object({
-    ID: z.string().describe(`
-        * * Field Name: ID
-        * * Display Name: ID
-        * * SQL Data Type: uniqueidentifier
-        * * Default Value: newsequentialid()
-        * * Description: Unique identifier.`),
-    CompanyID: z.string().describe(`
-        * * Field Name: CompanyID
-        * * Display Name: Company ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
-        * * Description: Company that owns this scheduled entry.`),
-    EntryType: z.union([z.literal('DeferredRevenueRelease'), z.literal('DepreciationAccrual'), z.literal('Manual'), z.literal('PeriodEndAccrual'), z.literal('PrepaidAmortization'), z.literal('RevenueRecognition')]).describe(`
-        * * Field Name: EntryType
-        * * Display Name: Entry Type
-        * * SQL Data Type: nvarchar(40)
-        * * Default Value: RevenueRecognition
-    * * Value List Type: List
-    * * Possible Values 
-    *   * DeferredRevenueRelease
-    *   * DepreciationAccrual
-    *   * Manual
-    *   * PeriodEndAccrual
-    *   * PrepaidAmortization
-    *   * RevenueRecognition
-        * * Description: RevenueRecognition | DeferredRevenueRelease | PrepaidAmortization | DepreciationAccrual | PeriodEndAccrual | Manual. Becomes the materialized JE's EntryType.`),
-    Status: z.union([z.literal('Cancelled'), z.literal('Generated'), z.literal('Scheduled'), z.literal('Superseded')]).describe(`
-        * * Field Name: Status
-        * * Display Name: Status
-        * * SQL Data Type: nvarchar(20)
-        * * Default Value: Scheduled
-    * * Value List Type: List
-    * * Possible Values 
-    *   * Cancelled
-    *   * Generated
-    *   * Scheduled
-    *   * Superseded
-        * * Description: Scheduled | Generated | Cancelled | Superseded. Frozen once Generated (trg_SJE_Immutability).`),
-    ScheduleSequence: z.number().describe(`
-        * * Field Name: ScheduleSequence
-        * * Display Name: Schedule Sequence
-        * * SQL Data Type: int
-        * * Description: 1-based position in the waterfall (the "3" of "3 of 12").`),
-    ScheduleCount: z.number().describe(`
-        * * Field Name: ScheduleCount
-        * * Display Name: Schedule Count
-        * * SQL Data Type: int
-        * * Description: Total number of entries in this schedule (the "12").`),
-    ScheduledEffectiveDate: z.date().describe(`
-        * * Field Name: ScheduledEffectiveDate
-        * * Display Name: Scheduled Effective Date
-        * * SQL Data Type: date
-        * * Description: Accounting date the materialized JE will bear (typically period-end).`),
-    CurrencyCode: z.string().describe(`
-        * * Field Name: CurrencyCode
-        * * Display Name: Currency Code
-        * * SQL Data Type: char(3)
-        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Currencies (vwCurrencies.Code)
-        * * Description: Currency of TotalAmount and the line amounts.`),
-    TotalAmount: z.number().describe(`
-        * * Field Name: TotalAmount
-        * * Display Name: Total Amount
-        * * SQL Data Type: decimal(18, 2)
-        * * Description: Gross amount recognized by this entry; lines carry the Dr/Cr detail. Front-loaded rounding (extra pennies in sequence 1) is reflected here per row.`),
-    Description: z.string().nullable().describe(`
-        * * Field Name: Description
-        * * Display Name: Description
-        * * SQL Data Type: nvarchar(MAX)
-        * * Description: Free-form description.`),
-    SubscriptionID: z.string().nullable().describe(`
-        * * Field Name: SubscriptionID
-        * * Display Name: Subscription ID
-        * * SQL Data Type: uniqueidentifier
-        * * Description: Soft polymorphic ref to the originating Subscription (BizAppsOrders). NO FK.`),
-    SubscriptionTermID: z.string().nullable().describe(`
-        * * Field Name: SubscriptionTermID
-        * * Display Name: Subscription Term ID
-        * * SQL Data Type: uniqueidentifier
-        * * Description: Soft polymorphic ref to the SubscriptionTerm that generated this schedule. NO FK.`),
-    OrderID: z.string().nullable().describe(`
-        * * Field Name: OrderID
-        * * Display Name: Order ID
-        * * SQL Data Type: uniqueidentifier
-        * * Description: Soft polymorphic ref to the originating Order. NO FK.`),
-    OrderLineID: z.string().nullable().describe(`
-        * * Field Name: OrderLineID
-        * * Display Name: Order Line ID
-        * * SQL Data Type: uniqueidentifier
-        * * Description: Soft polymorphic ref to the originating OrderLine. NO FK.`),
-    ContractID: z.string().nullable().describe(`
-        * * Field Name: ContractID
-        * * Display Name: Contract ID
-        * * SQL Data Type: uniqueidentifier
-        * * Description: Soft polymorphic ref to the originating Contract. NO FK.`),
-    RevRecScheduleID: z.string().nullable().describe(`
-        * * Field Name: RevRecScheduleID
-        * * Display Name: Rev Rec Schedule ID
-        * * SQL Data Type: uniqueidentifier
-        * * Description: Soft polymorphic ref to the upstream RevenueRecognitionSchedule. NO FK.`),
-    GeneratedJournalEntryID: z.string().nullable().describe(`
-        * * Field Name: GeneratedJournalEntryID
-        * * Display Name: Generated Journal Entry ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entries (vwJournalEntries.ID)
-        * * Description: The JournalEntry produced when this row materialized (set with Status=Generated).`),
-    GeneratedAt: z.date().nullable().describe(`
-        * * Field Name: GeneratedAt
-        * * Display Name: Generated At
-        * * SQL Data Type: datetimeoffset
-        * * Description: When this row materialized into a JournalEntry.`),
-    SupersededByScheduledJournalEntryID: z.string().nullable().describe(`
-        * * Field Name: SupersededByScheduledJournalEntryID
-        * * Display Name: Superseded By Scheduled Journal Entry ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Scheduled Journal Entries (vwScheduledJournalEntries.ID)
-        * * Description: When a renewal/amendment recomputed the remaining schedule, the ScheduledJournalEntry that replaced this one (Status=Superseded).`),
-    __mj_CreatedAt: z.date().describe(`
-        * * Field Name: __mj_CreatedAt
-        * * Display Name: Created At
-        * * SQL Data Type: datetimeoffset
-        * * Default Value: getutcdate()`),
-    __mj_UpdatedAt: z.date().describe(`
-        * * Field Name: __mj_UpdatedAt
-        * * Display Name: Updated At
-        * * SQL Data Type: datetimeoffset
-        * * Default Value: getutcdate()`),
     Company: z.string().describe(`
         * * Field Name: Company
         * * Display Name: Company
         * * SQL Data Type: nvarchar(50)`),
-    CurrencyCode_Virtual: z.string().describe(`
-        * * Field Name: CurrencyCode_Virtual
-        * * Display Name: Currency Code Virtual
-        * * SQL Data Type: nvarchar(80)`),
-    RootSupersededByScheduledJournalEntryID: z.string().nullable().describe(`
-        * * Field Name: RootSupersededByScheduledJournalEntryID
-        * * Display Name: Root Superseded By Scheduled Journal Entry ID
-        * * SQL Data Type: uniqueidentifier`),
 });
 
-export type mjBizAppsAccountingScheduledJournalEntryEntityType = z.infer<typeof mjBizAppsAccountingScheduledJournalEntrySchema>;
-
-/**
- * zod schema definition for the entity MJ_BizApps_Accounting: Scheduled Journal Entry Line Dimensions
- */
-export const mjBizAppsAccountingScheduledJournalEntryLineDimensionSchema = z.object({
-    ID: z.string().describe(`
-        * * Field Name: ID
-        * * Display Name: ID
-        * * SQL Data Type: uniqueidentifier
-        * * Default Value: newsequentialid()
-        * * Description: Unique identifier.`),
-    ScheduledJournalEntryLineItemID: z.string().describe(`
-        * * Field Name: ScheduledJournalEntryLineItemID
-        * * Display Name: Scheduled Journal Entry Line Item ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Scheduled Journal Entry Line Items (vwScheduledJournalEntryLineItems.ID)
-        * * Description: Scheduled line being tagged.`),
-    DimensionID: z.string().describe(`
-        * * Field Name: DimensionID
-        * * Display Name: Dimension ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Dimensions (vwDimensions.ID)
-        * * Description: Dimension being applied.`),
-    DimensionValueID: z.string().describe(`
-        * * Field Name: DimensionValueID
-        * * Display Name: Dimension Value ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Dimension Values (vwDimensionValues.ID)
-        * * Description: Value of that dimension on this line.`),
-    __mj_CreatedAt: z.date().describe(`
-        * * Field Name: __mj_CreatedAt
-        * * Display Name: Created At
-        * * SQL Data Type: datetimeoffset
-        * * Default Value: getutcdate()`),
-    __mj_UpdatedAt: z.date().describe(`
-        * * Field Name: __mj_UpdatedAt
-        * * Display Name: Updated At
-        * * SQL Data Type: datetimeoffset
-        * * Default Value: getutcdate()`),
-    Dimension: z.string().describe(`
-        * * Field Name: Dimension
-        * * Display Name: Dimension
-        * * SQL Data Type: nvarchar(100)`),
-    DimensionValue: z.string().describe(`
-        * * Field Name: DimensionValue
-        * * Display Name: Dimension Value
-        * * SQL Data Type: nvarchar(200)`),
-});
-
-export type mjBizAppsAccountingScheduledJournalEntryLineDimensionEntityType = z.infer<typeof mjBizAppsAccountingScheduledJournalEntryLineDimensionSchema>;
-
-/**
- * zod schema definition for the entity MJ_BizApps_Accounting: Scheduled Journal Entry Line Items
- */
-export const mjBizAppsAccountingScheduledJournalEntryLineItemSchema = z.object({
-    ID: z.string().describe(`
-        * * Field Name: ID
-        * * Display Name: ID
-        * * SQL Data Type: uniqueidentifier
-        * * Default Value: newsequentialid()
-        * * Description: Unique identifier.`),
-    ScheduledJournalEntryID: z.string().describe(`
-        * * Field Name: ScheduledJournalEntryID
-        * * Display Name: Scheduled Journal Entry ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Scheduled Journal Entries (vwScheduledJournalEntries.ID)
-        * * Description: Parent scheduled entry.`),
-    LineNumber: z.number().describe(`
-        * * Field Name: LineNumber
-        * * Display Name: Line Number
-        * * SQL Data Type: int
-        * * Description: Line ordering (1-based).`),
-    GLAccountID: z.string().describe(`
-        * * Field Name: GLAccountID
-        * * Display Name: GL Account ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Accounts (vwGLAccounts.ID)
-        * * Description: GLAccount this line posts to.`),
-    DebitAmount: z.number().nullable().describe(`
-        * * Field Name: DebitAmount
-        * * Display Name: Debit Amount
-        * * SQL Data Type: decimal(18, 2)
-        * * Description: Debit amount (NULL if a credit line).`),
-    CreditAmount: z.number().nullable().describe(`
-        * * Field Name: CreditAmount
-        * * Display Name: Credit Amount
-        * * SQL Data Type: decimal(18, 2)
-        * * Description: Credit amount (NULL if a debit line).`),
-    Description: z.string().nullable().describe(`
-        * * Field Name: Description
-        * * Display Name: Description
-        * * SQL Data Type: nvarchar(MAX)
-        * * Description: Optional memo.`),
-    __mj_CreatedAt: z.date().describe(`
-        * * Field Name: __mj_CreatedAt
-        * * Display Name: Created At
-        * * SQL Data Type: datetimeoffset
-        * * Default Value: getutcdate()`),
-    __mj_UpdatedAt: z.date().describe(`
-        * * Field Name: __mj_UpdatedAt
-        * * Display Name: Updated At
-        * * SQL Data Type: datetimeoffset
-        * * Default Value: getutcdate()`),
-    GLAccount: z.string().describe(`
-        * * Field Name: GLAccount
-        * * Display Name: GL Account
-        * * SQL Data Type: nvarchar(200)`),
-});
-
-export type mjBizAppsAccountingScheduledJournalEntryLineItemEntityType = z.infer<typeof mjBizAppsAccountingScheduledJournalEntryLineItemSchema>;
+export type mjBizAppsAccountingJournalEntrySequenceEntityType = z.infer<typeof mjBizAppsAccountingJournalEntrySequenceSchema>;
 
 /**
  * zod schema definition for the entity MJ_BizApps_Accounting: Tax Authorities
@@ -2458,73 +1972,17 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
     }
 
     /**
-    * * Field Name: AROpenGLAccountID
-    * * Display Name: AR Open GL Account ID
+    * * Field Name: ApprovalCFOUserID
+    * * Display Name: Approval CFO User ID
     * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Accounts (vwGLAccounts.ID)
-    * * Description: Which GLAccount represents this company's primary Accounts Receivable. Wired by spSeedDefaultChartOfAccounts.
+    * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+    * * Description: The CFO (an __mj.User — a security identity) who must approve a Journal Entry Batch for this company before it dispatches to the ERP. Resolved by the bizapps-tasks approval gate. Nullable: companies without a configured CFO fall back to the role-based resolver.
     */
-    get AROpenGLAccountID(): string | null {
-        return this.Get('AROpenGLAccountID');
+    get ApprovalCFOUserID(): string | null {
+        return this.Get('ApprovalCFOUserID');
     }
-    set AROpenGLAccountID(value: string | null) {
-        this.Set('AROpenGLAccountID', value);
-    }
-
-    /**
-    * * Field Name: DeferredRevenueGLAccountID
-    * * Display Name: Deferred Revenue GL Account ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Accounts (vwGLAccounts.ID)
-    * * Description: Which GLAccount represents this company's Deferred Revenue.
-    */
-    get DeferredRevenueGLAccountID(): string | null {
-        return this.Get('DeferredRevenueGLAccountID');
-    }
-    set DeferredRevenueGLAccountID(value: string | null) {
-        this.Set('DeferredRevenueGLAccountID', value);
-    }
-
-    /**
-    * * Field Name: SalesTaxPayableGLAccountID
-    * * Display Name: Sales Tax Payable GL Account ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Accounts (vwGLAccounts.ID)
-    * * Description: Which GLAccount represents Sales Tax Payable for accrual.
-    */
-    get SalesTaxPayableGLAccountID(): string | null {
-        return this.Get('SalesTaxPayableGLAccountID');
-    }
-    set SalesTaxPayableGLAccountID(value: string | null) {
-        this.Set('SalesTaxPayableGLAccountID', value);
-    }
-
-    /**
-    * * Field Name: RealizedFXGainLossGLAccountID
-    * * Display Name: Realized FX Gain Loss GL Account ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Accounts (vwGLAccounts.ID)
-    * * Description: GLAccount used by the FX engine to record realized FX gains/losses on payment-to-AR rate mismatch (BA-D10).
-    */
-    get RealizedFXGainLossGLAccountID(): string | null {
-        return this.Get('RealizedFXGainLossGLAccountID');
-    }
-    set RealizedFXGainLossGLAccountID(value: string | null) {
-        this.Set('RealizedFXGainLossGLAccountID', value);
-    }
-
-    /**
-    * * Field Name: UnrealizedFXGainLossGLAccountID
-    * * Display Name: Unrealized FX Gain Loss GL Account ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Accounts (vwGLAccounts.ID)
-    * * Description: GLAccount used by the period-end FX revaluation template to record unrealized FX adjustments.
-    */
-    get UnrealizedFXGainLossGLAccountID(): string | null {
-        return this.Get('UnrealizedFXGainLossGLAccountID');
-    }
-    set UnrealizedFXGainLossGLAccountID(value: string | null) {
-        this.Set('UnrealizedFXGainLossGLAccountID', value);
+    set ApprovalCFOUserID(value: string | null) {
+        this.Set('ApprovalCFOUserID', value);
     }
 
     /**
@@ -2539,20 +1997,6 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
     }
     set IsActive(value: boolean) {
         this.Set('IsActive', value);
-    }
-
-    /**
-    * * Field Name: ApprovalCFOPersonID
-    * * Display Name: Approval CFO Person ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Common: People (vwPeople.ID)
-    * * Description: The CFO (a bizapps-common Person) who must approve a Journal Entry Batch for this company before it dispatches to the ERP. Resolved by the bizapps-tasks approval gate. Nullable: companies without a configured CFO fall back to the role-based resolver.
-    */
-    get ApprovalCFOPersonID(): string | null {
-        return this.Get('ApprovalCFOPersonID');
-    }
-    set ApprovalCFOPersonID(value: string | null) {
-        this.Set('ApprovalCFOPersonID', value);
     }
 
     /**
@@ -2659,57 +2103,12 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
     }
 
     /**
-    * * Field Name: AROpenGLAccount
-    * * Display Name: AR Open GL Account
-    * * SQL Data Type: nvarchar(200)
+    * * Field Name: ApprovalCFOUser
+    * * Display Name: Approval CFO User
+    * * SQL Data Type: nvarchar(100)
     */
-    get AROpenGLAccount(): string | null {
-        return this.Get('AROpenGLAccount');
-    }
-
-    /**
-    * * Field Name: DeferredRevenueGLAccount
-    * * Display Name: Deferred Revenue GL Account
-    * * SQL Data Type: nvarchar(200)
-    */
-    get DeferredRevenueGLAccount(): string | null {
-        return this.Get('DeferredRevenueGLAccount');
-    }
-
-    /**
-    * * Field Name: SalesTaxPayableGLAccount
-    * * Display Name: Sales Tax Payable GL Account
-    * * SQL Data Type: nvarchar(200)
-    */
-    get SalesTaxPayableGLAccount(): string | null {
-        return this.Get('SalesTaxPayableGLAccount');
-    }
-
-    /**
-    * * Field Name: RealizedFXGainLossGLAccount
-    * * Display Name: Realized FX Gain Loss GL Account
-    * * SQL Data Type: nvarchar(200)
-    */
-    get RealizedFXGainLossGLAccount(): string | null {
-        return this.Get('RealizedFXGainLossGLAccount');
-    }
-
-    /**
-    * * Field Name: UnrealizedFXGainLossGLAccount
-    * * Display Name: Unrealized FX Gain Loss GL Account
-    * * SQL Data Type: nvarchar(200)
-    */
-    get UnrealizedFXGainLossGLAccount(): string | null {
-        return this.Get('UnrealizedFXGainLossGLAccount');
-    }
-
-    /**
-    * * Field Name: ApprovalCFOPerson
-    * * Display Name: Approval CFO Person
-    * * SQL Data Type: nvarchar(201)
-    */
-    get ApprovalCFOPerson(): string | null {
-        return this.Get('ApprovalCFOPerson');
+    get ApprovalCFOUser(): string | null {
+        return this.Get('ApprovalCFOUser');
     }
 
     /**
@@ -2719,232 +2118,6 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
     */
     get RootParentAccountingCompanyID(): string | null {
         return this.Get('RootParentAccountingCompanyID');
-    }
-}
-
-
-/**
- * MJ_BizApps_Accounting: Chart Of Accounts Mappings - strongly typed entity sub-class
- * * Schema: __mj_BizAppsAccounting
- * * Base Table: ChartOfAccountsMapping
- * * Base View: vwChartOfAccountsMappings
- * * @description Maps an internal GLAccount to an external ERP account code. Required so a Batch can ship JE postings with the right external IDs. Admin approval enforced per master plan M16/D27 (unmapped accounts hard-fail at batch time).
- * * Primary Key: ID
- * @extends {BaseEntity}
- * @class
- * @public
- */
-@RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Chart Of Accounts Mappings')
-export class mjBizAppsAccountingChartOfAccountsMappingEntity extends BaseEntity<mjBizAppsAccountingChartOfAccountsMappingEntityType> {
-    /**
-    * Loads the MJ_BizApps_Accounting: Chart Of Accounts Mappings record from the database
-    * @param ID: string - primary key value to load the MJ_BizApps_Accounting: Chart Of Accounts Mappings record.
-    * @param EntityRelationshipsToLoad - (optional) the relationships to load
-    * @returns {Promise<boolean>} - true if successful, false otherwise
-    * @public
-    * @async
-    * @memberof mjBizAppsAccountingChartOfAccountsMappingEntity
-    * @method
-    * @override
-    */
-    public async Load(ID: string, EntityRelationshipsToLoad?: string[]) : Promise<boolean> {
-        const compositeKey: CompositeKey = new CompositeKey();
-        compositeKey.KeyValuePairs.push({ FieldName: 'ID', Value: ID });
-        return await super.InnerLoad(compositeKey, EntityRelationshipsToLoad);
-    }
-
-    /**
-    * * Field Name: ID
-    * * Display Name: ID
-    * * SQL Data Type: uniqueidentifier
-    * * Default Value: newsequentialid()
-    * * Description: Unique identifier.
-    */
-    get ID(): string {
-        return this.Get('ID');
-    }
-    set ID(value: string) {
-        this.Set('ID', value);
-    }
-
-    /**
-    * * Field Name: CompanyID
-    * * Display Name: Company ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
-    * * Description: Company this mapping is for.
-    */
-    get CompanyID(): string {
-        return this.Get('CompanyID');
-    }
-    set CompanyID(value: string) {
-        this.Set('CompanyID', value);
-    }
-
-    /**
-    * * Field Name: ExternalSystem
-    * * Display Name: External System
-    * * SQL Data Type: nvarchar(50)
-    * * Description: Target ERP system the mapping is for.
-    */
-    get ExternalSystem(): string {
-        return this.Get('ExternalSystem');
-    }
-    set ExternalSystem(value: string) {
-        this.Set('ExternalSystem', value);
-    }
-
-    /**
-    * * Field Name: ExternalAccountID
-    * * Display Name: External Account ID
-    * * SQL Data Type: nvarchar(100)
-    * * Description: Account identifier as known to the external ERP.
-    */
-    get ExternalAccountID(): string {
-        return this.Get('ExternalAccountID');
-    }
-    set ExternalAccountID(value: string) {
-        this.Set('ExternalAccountID', value);
-    }
-
-    /**
-    * * Field Name: ExternalAccountName
-    * * Display Name: External Account Name
-    * * SQL Data Type: nvarchar(200)
-    * * Description: Display name of the external account (snapshot for audit).
-    */
-    get ExternalAccountName(): string | null {
-        return this.Get('ExternalAccountName');
-    }
-    set ExternalAccountName(value: string | null) {
-        this.Set('ExternalAccountName', value);
-    }
-
-    /**
-    * * Field Name: InternalGLAccountID
-    * * Display Name: Internal GL Account ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Accounts (vwGLAccounts.ID)
-    * * Description: Internal GLAccount this external account maps to.
-    */
-    get InternalGLAccountID(): string {
-        return this.Get('InternalGLAccountID');
-    }
-    set InternalGLAccountID(value: string) {
-        this.Set('InternalGLAccountID', value);
-    }
-
-    /**
-    * * Field Name: EffectiveFrom
-    * * Display Name: Effective From
-    * * SQL Data Type: date
-    * * Description: Earliest date this mapping is in effect.
-    */
-    get EffectiveFrom(): Date {
-        return this.Get('EffectiveFrom');
-    }
-    set EffectiveFrom(value: Date) {
-        this.Set('EffectiveFrom', value);
-    }
-
-    /**
-    * * Field Name: EffectiveTo
-    * * Display Name: Effective To
-    * * SQL Data Type: date
-    * * Description: Last date this mapping is in effect (NULL = open-ended).
-    */
-    get EffectiveTo(): Date | null {
-        return this.Get('EffectiveTo');
-    }
-    set EffectiveTo(value: Date | null) {
-        this.Set('EffectiveTo', value);
-    }
-
-    /**
-    * * Field Name: ApprovedByUserID
-    * * Display Name: Approved By User ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
-    * * Description: Admin (typically Finance.Admin role) who approved this mapping.
-    */
-    get ApprovedByUserID(): string | null {
-        return this.Get('ApprovedByUserID');
-    }
-    set ApprovedByUserID(value: string | null) {
-        this.Set('ApprovedByUserID', value);
-    }
-
-    /**
-    * * Field Name: ApprovedAt
-    * * Display Name: Approved At
-    * * SQL Data Type: datetimeoffset
-    * * Description: When the mapping was approved.
-    */
-    get ApprovedAt(): Date | null {
-        return this.Get('ApprovedAt');
-    }
-    set ApprovedAt(value: Date | null) {
-        this.Set('ApprovedAt', value);
-    }
-
-    /**
-    * * Field Name: ChangeNote
-    * * Display Name: Change Note
-    * * SQL Data Type: nvarchar(MAX)
-    * * Description: Optional note describing why this mapping was created or changed.
-    */
-    get ChangeNote(): string | null {
-        return this.Get('ChangeNote');
-    }
-    set ChangeNote(value: string | null) {
-        this.Set('ChangeNote', value);
-    }
-
-    /**
-    * * Field Name: __mj_CreatedAt
-    * * Display Name: Created At
-    * * SQL Data Type: datetimeoffset
-    * * Default Value: getutcdate()
-    */
-    get __mj_CreatedAt(): Date {
-        return this.Get('__mj_CreatedAt');
-    }
-
-    /**
-    * * Field Name: __mj_UpdatedAt
-    * * Display Name: Updated At
-    * * SQL Data Type: datetimeoffset
-    * * Default Value: getutcdate()
-    */
-    get __mj_UpdatedAt(): Date {
-        return this.Get('__mj_UpdatedAt');
-    }
-
-    /**
-    * * Field Name: Company
-    * * Display Name: Company
-    * * SQL Data Type: nvarchar(50)
-    */
-    get Company(): string {
-        return this.Get('Company');
-    }
-
-    /**
-    * * Field Name: InternalGLAccount
-    * * Display Name: Internal GL Account
-    * * SQL Data Type: nvarchar(200)
-    */
-    get InternalGLAccount(): string {
-        return this.Get('InternalGLAccount');
-    }
-
-    /**
-    * * Field Name: ApprovedByUser
-    * * Display Name: Approved By User
-    * * SQL Data Type: nvarchar(100)
-    */
-    get ApprovedByUser(): string | null {
-        return this.Get('ApprovedByUser');
     }
 }
 
@@ -4505,6 +3678,20 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     }
 
     /**
+    * * Field Name: CompanyID
+    * * Display Name: Company ID
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
+    * * Description: The single company this journal entry belongs to (plan D3). Every line's GLAccount must belong to this company (trigger-enforced).
+    */
+    get CompanyID(): string {
+        return this.Get('CompanyID');
+    }
+    set CompanyID(value: string) {
+        this.Set('CompanyID', value);
+    }
+
+    /**
     * * Field Name: EffectiveDate
     * * Display Name: Effective Date
     * * SQL Data Type: date
@@ -4524,6 +3711,7 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     * * Value List Type: List
     * * Possible Values 
     *   * Adjustment
+    *   * BatchSummary
     *   * CommissionAccrual
     *   * FXRevaluation
     *   * IntercompanyFlow
@@ -4541,10 +3729,10 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     *   * Writeoff
     * * Description: OrderBooking | PaymentReceipt | RevenueRecognition | CommissionAccrual | PartnerRevShare | IntercompanyFlow | WaterfallDistribution | Refund | Writeoff | Reversal | Manual | TaxRemittance | PeriodEndAccrual | FXRevaluation | OpeningBalance | Adjustment.
     */
-    get EntryType(): 'Adjustment' | 'CommissionAccrual' | 'FXRevaluation' | 'IntercompanyFlow' | 'Manual' | 'OpeningBalance' | 'OrderBooking' | 'PartnerRevShare' | 'PaymentReceipt' | 'PeriodEndAccrual' | 'Refund' | 'RevenueRecognition' | 'Reversal' | 'TaxRemittance' | 'WaterfallDistribution' | 'Writeoff' {
+    get EntryType(): 'Adjustment' | 'BatchSummary' | 'CommissionAccrual' | 'FXRevaluation' | 'IntercompanyFlow' | 'Manual' | 'OpeningBalance' | 'OrderBooking' | 'PartnerRevShare' | 'PaymentReceipt' | 'PeriodEndAccrual' | 'Refund' | 'RevenueRecognition' | 'Reversal' | 'TaxRemittance' | 'WaterfallDistribution' | 'Writeoff' {
         return this.Get('EntryType');
     }
-    set EntryType(value: 'Adjustment' | 'CommissionAccrual' | 'FXRevaluation' | 'IntercompanyFlow' | 'Manual' | 'OpeningBalance' | 'OrderBooking' | 'PartnerRevShare' | 'PaymentReceipt' | 'PeriodEndAccrual' | 'Refund' | 'RevenueRecognition' | 'Reversal' | 'TaxRemittance' | 'WaterfallDistribution' | 'Writeoff') {
+    set EntryType(value: 'Adjustment' | 'BatchSummary' | 'CommissionAccrual' | 'FXRevaluation' | 'IntercompanyFlow' | 'Manual' | 'OpeningBalance' | 'OrderBooking' | 'PartnerRevShare' | 'PaymentReceipt' | 'PeriodEndAccrual' | 'Refund' | 'RevenueRecognition' | 'Reversal' | 'TaxRemittance' | 'WaterfallDistribution' | 'Writeoff') {
         this.Set('EntryType', value);
     }
 
@@ -4646,19 +3834,6 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     }
 
     /**
-    * * Field Name: RevRecScheduleID
-    * * Display Name: Rev Rec Schedule ID
-    * * SQL Data Type: uniqueidentifier
-    * * Description: Soft polymorphic ref to a RevenueRecognitionSchedule. NO FK.
-    */
-    get RevRecScheduleID(): string | null {
-        return this.Get('RevRecScheduleID');
-    }
-    set RevRecScheduleID(value: string | null) {
-        this.Set('RevRecScheduleID', value);
-    }
-
-    /**
     * * Field Name: IntercompanyFlowID
     * * Display Name: Intercompany Flow ID
     * * SQL Data Type: uniqueidentifier
@@ -4669,20 +3844,6 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     }
     set IntercompanyFlowID(value: string | null) {
         this.Set('IntercompanyFlowID', value);
-    }
-
-    /**
-    * * Field Name: ScheduledJournalEntryID
-    * * Display Name: Scheduled Journal Entry ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Scheduled Journal Entries (vwScheduledJournalEntries.ID)
-    * * Description: When this JE was materialized from a rev-rec / amortization waterfall, the ScheduledJournalEntry that produced it (BA-D25).
-    */
-    get ScheduledJournalEntryID(): string | null {
-        return this.Get('ScheduledJournalEntryID');
-    }
-    set ScheduledJournalEntryID(value: string | null) {
-        this.Set('ScheduledJournalEntryID', value);
     }
 
     /**
@@ -4802,6 +3963,15 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     }
 
     /**
+    * * Field Name: Company
+    * * Display Name: Company
+    * * SQL Data Type: nvarchar(50)
+    */
+    get Company(): string {
+        return this.Get('Company');
+    }
+
+    /**
     * * Field Name: File
     * * Display Name: File
     * * SQL Data Type: nvarchar(500)
@@ -4831,342 +4001,11 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
 
 
 /**
- * MJ_BizApps_Accounting: Journal Entry Batch Line Dimensions - strongly typed entity sub-class
- * * Schema: __mj_BizAppsAccounting
- * * Base Table: JournalEntryBatchLineDimension
- * * Base View: vwJournalEntryBatchLineDimensions
- * * @description Dimension tag on a batch summary line. Preserves the analytical breakdown through to the ERP so departmental/segment financials survive summarization (BA-D26).
- * * Primary Key: ID
- * @extends {BaseEntity}
- * @class
- * @public
- */
-@RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Journal Entry Batch Line Dimensions')
-export class mjBizAppsAccountingJournalEntryBatchLineDimensionEntity extends BaseEntity<mjBizAppsAccountingJournalEntryBatchLineDimensionEntityType> {
-    /**
-    * Loads the MJ_BizApps_Accounting: Journal Entry Batch Line Dimensions record from the database
-    * @param ID: string - primary key value to load the MJ_BizApps_Accounting: Journal Entry Batch Line Dimensions record.
-    * @param EntityRelationshipsToLoad - (optional) the relationships to load
-    * @returns {Promise<boolean>} - true if successful, false otherwise
-    * @public
-    * @async
-    * @memberof mjBizAppsAccountingJournalEntryBatchLineDimensionEntity
-    * @method
-    * @override
-    */
-    public async Load(ID: string, EntityRelationshipsToLoad?: string[]) : Promise<boolean> {
-        const compositeKey: CompositeKey = new CompositeKey();
-        compositeKey.KeyValuePairs.push({ FieldName: 'ID', Value: ID });
-        return await super.InnerLoad(compositeKey, EntityRelationshipsToLoad);
-    }
-
-    /**
-    * * Field Name: ID
-    * * Display Name: ID
-    * * SQL Data Type: uniqueidentifier
-    * * Default Value: newsequentialid()
-    * * Description: Unique identifier.
-    */
-    get ID(): string {
-        return this.Get('ID');
-    }
-    set ID(value: string) {
-        this.Set('ID', value);
-    }
-
-    /**
-    * * Field Name: JournalEntryBatchLineItemID
-    * * Display Name: Journal Entry Batch Line Item ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entry Batch Line Items (vwJournalEntryBatchLineItems.ID)
-    * * Description: Batch summary line being tagged.
-    */
-    get JournalEntryBatchLineItemID(): string {
-        return this.Get('JournalEntryBatchLineItemID');
-    }
-    set JournalEntryBatchLineItemID(value: string) {
-        this.Set('JournalEntryBatchLineItemID', value);
-    }
-
-    /**
-    * * Field Name: DimensionID
-    * * Display Name: Dimension ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Dimensions (vwDimensions.ID)
-    * * Description: Dimension being applied.
-    */
-    get DimensionID(): string {
-        return this.Get('DimensionID');
-    }
-    set DimensionID(value: string) {
-        this.Set('DimensionID', value);
-    }
-
-    /**
-    * * Field Name: DimensionValueID
-    * * Display Name: Dimension Value ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Dimension Values (vwDimensionValues.ID)
-    * * Description: Value of that dimension on this line.
-    */
-    get DimensionValueID(): string {
-        return this.Get('DimensionValueID');
-    }
-    set DimensionValueID(value: string) {
-        this.Set('DimensionValueID', value);
-    }
-
-    /**
-    * * Field Name: __mj_CreatedAt
-    * * Display Name: Created At
-    * * SQL Data Type: datetimeoffset
-    * * Default Value: getutcdate()
-    */
-    get __mj_CreatedAt(): Date {
-        return this.Get('__mj_CreatedAt');
-    }
-
-    /**
-    * * Field Name: __mj_UpdatedAt
-    * * Display Name: Updated At
-    * * SQL Data Type: datetimeoffset
-    * * Default Value: getutcdate()
-    */
-    get __mj_UpdatedAt(): Date {
-        return this.Get('__mj_UpdatedAt');
-    }
-
-    /**
-    * * Field Name: Dimension
-    * * Display Name: Dimension
-    * * SQL Data Type: nvarchar(100)
-    */
-    get Dimension(): string {
-        return this.Get('Dimension');
-    }
-
-    /**
-    * * Field Name: DimensionValue
-    * * Display Name: Dimension Value
-    * * SQL Data Type: nvarchar(200)
-    */
-    get DimensionValue(): string {
-        return this.Get('DimensionValue');
-    }
-}
-
-
-/**
- * MJ_BizApps_Accounting: Journal Entry Batch Line Items - strongly typed entity sub-class
- * * Schema: __mj_BizAppsAccounting
- * * Base Table: JournalEntryBatchLineItem
- * * Base View: vwJournalEntryBatchLineItems
- * * @description Consolidated summary line shipped to the ERP: the locked JE lines in a batch aggregated by GLAccount × dimension combo × side (BA-D16/BA-D26). The JournalEntryLine detail stays for drill-through; this is the netted GL movement that posts.
- * * Primary Key: ID
- * @extends {BaseEntity}
- * @class
- * @public
- */
-@RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Journal Entry Batch Line Items')
-export class mjBizAppsAccountingJournalEntryBatchLineItemEntity extends BaseEntity<mjBizAppsAccountingJournalEntryBatchLineItemEntityType> {
-    /**
-    * Loads the MJ_BizApps_Accounting: Journal Entry Batch Line Items record from the database
-    * @param ID: string - primary key value to load the MJ_BizApps_Accounting: Journal Entry Batch Line Items record.
-    * @param EntityRelationshipsToLoad - (optional) the relationships to load
-    * @returns {Promise<boolean>} - true if successful, false otherwise
-    * @public
-    * @async
-    * @memberof mjBizAppsAccountingJournalEntryBatchLineItemEntity
-    * @method
-    * @override
-    */
-    public async Load(ID: string, EntityRelationshipsToLoad?: string[]) : Promise<boolean> {
-        const compositeKey: CompositeKey = new CompositeKey();
-        compositeKey.KeyValuePairs.push({ FieldName: 'ID', Value: ID });
-        return await super.InnerLoad(compositeKey, EntityRelationshipsToLoad);
-    }
-
-    /**
-    * * Field Name: ID
-    * * Display Name: ID
-    * * SQL Data Type: uniqueidentifier
-    * * Default Value: newsequentialid()
-    * * Description: Unique identifier.
-    */
-    get ID(): string {
-        return this.Get('ID');
-    }
-    set ID(value: string) {
-        this.Set('ID', value);
-    }
-
-    /**
-    * * Field Name: BatchID
-    * * Display Name: Batch ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entry Batches (vwJournalEntryBatches.ID)
-    * * Description: Batch this summary line belongs to.
-    */
-    get BatchID(): string {
-        return this.Get('BatchID');
-    }
-    set BatchID(value: string) {
-        this.Set('BatchID', value);
-    }
-
-    /**
-    * * Field Name: CompanyID
-    * * Display Name: Company ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
-    * * Description: Company whose books this line posts to (one batch = one Company per BA-D16).
-    */
-    get CompanyID(): string {
-        return this.Get('CompanyID');
-    }
-    set CompanyID(value: string) {
-        this.Set('CompanyID', value);
-    }
-
-    /**
-    * * Field Name: GLAccountID
-    * * Display Name: GL Account ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Accounts (vwGLAccounts.ID)
-    * * Description: GLAccount this consolidated movement hits.
-    */
-    get GLAccountID(): string {
-        return this.Get('GLAccountID');
-    }
-    set GLAccountID(value: string) {
-        this.Set('GLAccountID', value);
-    }
-
-    /**
-    * * Field Name: LineNumber
-    * * Display Name: Line Number
-    * * SQL Data Type: int
-    * * Description: Line ordering within the batch (1-based).
-    */
-    get LineNumber(): number {
-        return this.Get('LineNumber');
-    }
-    set LineNumber(value: number) {
-        this.Set('LineNumber', value);
-    }
-
-    /**
-    * * Field Name: DebitAmount
-    * * Display Name: Debit Amount
-    * * SQL Data Type: decimal(18, 2)
-    * * Description: Summed debit for this account × dimension combo (NULL if a credit line).
-    */
-    get DebitAmount(): number | null {
-        return this.Get('DebitAmount');
-    }
-    set DebitAmount(value: number | null) {
-        this.Set('DebitAmount', value);
-    }
-
-    /**
-    * * Field Name: CreditAmount
-    * * Display Name: Credit Amount
-    * * SQL Data Type: decimal(18, 2)
-    * * Description: Summed credit for this account × dimension combo (NULL if a debit line).
-    */
-    get CreditAmount(): number | null {
-        return this.Get('CreditAmount');
-    }
-    set CreditAmount(value: number | null) {
-        this.Set('CreditAmount', value);
-    }
-
-    /**
-    * * Field Name: SourceLineCount
-    * * Display Name: Source Line Count
-    * * SQL Data Type: int
-    * * Default Value: 0
-    * * Description: How many JournalEntryLine rows rolled up into this summary line (audit aid).
-    */
-    get SourceLineCount(): number {
-        return this.Get('SourceLineCount');
-    }
-    set SourceLineCount(value: number) {
-        this.Set('SourceLineCount', value);
-    }
-
-    /**
-    * * Field Name: ExternalAccountID
-    * * Display Name: External Account ID
-    * * SQL Data Type: nvarchar(100)
-    * * Description: Target ERP account code resolved via ChartOfAccountsMapping at batch time.
-    */
-    get ExternalAccountID(): string | null {
-        return this.Get('ExternalAccountID');
-    }
-    set ExternalAccountID(value: string | null) {
-        this.Set('ExternalAccountID', value);
-    }
-
-    /**
-    * * Field Name: Description
-    * * Display Name: Description
-    * * SQL Data Type: nvarchar(MAX)
-    * * Description: Optional memo on the consolidated line.
-    */
-    get Description(): string | null {
-        return this.Get('Description');
-    }
-    set Description(value: string | null) {
-        this.Set('Description', value);
-    }
-
-    /**
-    * * Field Name: __mj_CreatedAt
-    * * Display Name: Created At
-    * * SQL Data Type: datetimeoffset
-    * * Default Value: getutcdate()
-    */
-    get __mj_CreatedAt(): Date {
-        return this.Get('__mj_CreatedAt');
-    }
-
-    /**
-    * * Field Name: __mj_UpdatedAt
-    * * Display Name: Updated At
-    * * SQL Data Type: datetimeoffset
-    * * Default Value: getutcdate()
-    */
-    get __mj_UpdatedAt(): Date {
-        return this.Get('__mj_UpdatedAt');
-    }
-
-    /**
-    * * Field Name: Company
-    * * Display Name: Company
-    * * SQL Data Type: nvarchar(50)
-    */
-    get Company(): string {
-        return this.Get('Company');
-    }
-
-    /**
-    * * Field Name: GLAccount
-    * * Display Name: GL Account
-    * * SQL Data Type: nvarchar(200)
-    */
-    get GLAccount(): string {
-        return this.Get('GLAccount');
-    }
-}
-
-
-/**
  * MJ_BizApps_Accounting: Journal Entry Batch Sequences - strongly typed entity sub-class
  * * Schema: __mj_BizAppsAccounting
  * * Base Table: JournalEntryBatchSequence
  * * Base View: vwJournalEntryBatchSequences
- * * @description GLOBAL singleton counter backing gap-free JournalEntryBatch numbering (D-SEQ 2026-07-06: batches are multi-company). One row, ID = 1. Consumed only by spAssignNextBatchNumber.
+ * * @description GLOBAL singleton counter backing gap-free JournalEntryBatch numbering (plan D19: batch numbering stays global). One row, ID = 1. Consumed only by spAssignNextBatchNumber.
  * * Primary Key: ID
  * @extends {BaseEntity}
  * @class
@@ -5294,6 +4133,47 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     }
     set BatchNumber(value: string) {
         this.Set('BatchNumber', value);
+    }
+
+    /**
+    * * Field Name: CompanyID
+    * * Display Name: Company ID
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
+    * * Description: The single company this batch belongs to (plan D7). One batch per company per run; the batch gathers ONLY this company's Pending JEs.
+    */
+    get CompanyID(): string {
+        return this.Get('CompanyID');
+    }
+    set CompanyID(value: string) {
+        this.Set('CompanyID', value);
+    }
+
+    /**
+    * * Field Name: PostingDate
+    * * Display Name: Posting Date
+    * * SQL Data Type: date
+    * * Description: Singular, accountant-set posting date chosen at batch build (plan D8). Carried to the GL's posting date and must match between systems; drives the ERP period. Document dates stay informational.
+    */
+    get PostingDate(): Date {
+        return this.Get('PostingDate');
+    }
+    set PostingDate(value: Date) {
+        this.Set('PostingDate', value);
+    }
+
+    /**
+    * * Field Name: SummaryJournalEntryID
+    * * Display Name: Summary Journal Entry ID
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entries (vwJournalEntries.ID)
+    * * Description: The aggregated summary JournalEntry (EntryType=BatchSummary, EffectiveDate=PostingDate) that posts to the GL for this batch (plan D9). Its lines net debits/credits per GLAccount x dimension-combo. The summary carries this batch's BatchID (same derived lock machinery as members) but is excluded from member/netting/sweep queries by its EntryType.
+    */
+    get SummaryJournalEntryID(): string | null {
+        return this.Get('SummaryJournalEntryID');
+    }
+    set SummaryJournalEntryID(value: string | null) {
+        this.Set('SummaryJournalEntryID', value);
     }
 
     /**
@@ -5440,7 +4320,7 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     * * Display Name: Approved By User ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
-    * * Description: The user who approved the batch (see AccountingCompanyProfile.ApprovalCFOPersonID / the bizapps-tasks approval gate).
+    * * Description: The user who approved the batch (see AccountingCompanyProfile.ApprovalCFOUserID / the bizapps-tasks approval gate).
     */
     get ApprovedByUserID(): string | null {
         return this.Get('ApprovedByUserID');
@@ -5489,6 +4369,32 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     }
 
     /**
+    * * Field Name: ApprovalTaskID
+    * * Display Name: Approval Task ID
+    * * SQL Data Type: uniqueidentifier
+    * * Description: The bizapps-tasks approval Task raised for this batch (plan D10). NO FK by design (cross-app); stamped together with ApprovalTaskRaisedAt in the task-raise transaction (both-or-neither CHECK). NULL = task not yet raised (retryable state).
+    */
+    get ApprovalTaskID(): string | null {
+        return this.Get('ApprovalTaskID');
+    }
+    set ApprovalTaskID(value: string | null) {
+        this.Set('ApprovalTaskID', value);
+    }
+
+    /**
+    * * Field Name: ApprovalTaskRaisedAt
+    * * Display Name: Approval Task Raised At
+    * * SQL Data Type: datetimeoffset
+    * * Description: When the approval task was raised; set together with ApprovalTaskID (both-or-neither CHECK).
+    */
+    get ApprovalTaskRaisedAt(): Date | null {
+        return this.Get('ApprovalTaskRaisedAt');
+    }
+    set ApprovalTaskRaisedAt(value: Date | null) {
+        this.Set('ApprovalTaskRaisedAt', value);
+    }
+
+    /**
     * * Field Name: __mj_CreatedAt
     * * Display Name: Created At
     * * SQL Data Type: datetimeoffset
@@ -5506,6 +4412,15 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     */
     get __mj_UpdatedAt(): Date {
         return this.Get('__mj_UpdatedAt');
+    }
+
+    /**
+    * * Field Name: Company
+    * * Display Name: Company
+    * * SQL Data Type: nvarchar(50)
+    */
+    get Company(): string {
+        return this.Get('Company');
     }
 
     /**
@@ -6048,8 +4963,8 @@ export class mjBizAppsAccountingJournalEntryLinkEntity extends BaseEntity<mjBizA
  * * Schema: __mj_BizAppsAccounting
  * * Base Table: JournalEntrySequence
  * * Base View: vwJournalEntrySequences
- * * @description GLOBAL per-fiscal-year counter backing gap-free JournalEntry numbering (D-SEQ 2026-07-06: JEs are multi-company, so numbering is not company-scoped). Consumed only by spAssignNextJournalEntryNumber.
- * * Primary Key: FiscalYear
+ * * @description PER-COMPANY per-fiscal-year counter backing gap-free JournalEntry numbering JE-{CompanyCode}-{FY}-{seq} (plan D19). Consumed only by spAssignNextJournalEntryNumber.
+ * * Primary Keys: CompanyID, FiscalYear
  * @extends {BaseEntity}
  * @class
  * @public
@@ -6058,6 +4973,7 @@ export class mjBizAppsAccountingJournalEntryLinkEntity extends BaseEntity<mjBizA
 export class mjBizAppsAccountingJournalEntrySequenceEntity extends BaseEntity<mjBizAppsAccountingJournalEntrySequenceEntityType> {
     /**
     * Loads the MJ_BizApps_Accounting: Journal Entry Sequences record from the database
+    * @param CompanyID: string - primary key value to load the MJ_BizApps_Accounting: Journal Entry Sequences record.
     * @param FiscalYear: number - primary key value to load the MJ_BizApps_Accounting: Journal Entry Sequences record.
     * @param EntityRelationshipsToLoad - (optional) the relationships to load
     * @returns {Promise<boolean>} - true if successful, false otherwise
@@ -6067,10 +4983,24 @@ export class mjBizAppsAccountingJournalEntrySequenceEntity extends BaseEntity<mj
     * @method
     * @override
     */
-    public async Load(FiscalYear: number, EntityRelationshipsToLoad?: string[]) : Promise<boolean> {
+    public async Load(CompanyID: string, FiscalYear: number, EntityRelationshipsToLoad?: string[]) : Promise<boolean> {
         const compositeKey: CompositeKey = new CompositeKey();
+        compositeKey.KeyValuePairs.push({ FieldName: 'CompanyID', Value: CompanyID });
         compositeKey.KeyValuePairs.push({ FieldName: 'FiscalYear', Value: FiscalYear });
         return await super.InnerLoad(compositeKey, EntityRelationshipsToLoad);
+    }
+
+    /**
+    * * Field Name: CompanyID
+    * * Display Name: Company ID
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
+    */
+    get CompanyID(): string {
+        return this.Get('CompanyID');
+    }
+    set CompanyID(value: string) {
+        this.Set('CompanyID', value);
     }
 
     /**
@@ -6117,326 +5047,6 @@ export class mjBizAppsAccountingJournalEntrySequenceEntity extends BaseEntity<mj
     get __mj_UpdatedAt(): Date {
         return this.Get('__mj_UpdatedAt');
     }
-}
-
-
-/**
- * MJ_BizApps_Accounting: Scheduled Journal Entries - strongly typed entity sub-class
- * * Schema: __mj_BizAppsAccounting
- * * Base Table: ScheduledJournalEntry
- * * Base View: vwScheduledJournalEntries
- * * @description A pre-computed FUTURE journal entry in a revenue-recognition / amortization waterfall (BA-D25). Amounts are known up front; the schedule is computed upstream (BizAppsOrders) and persisted here. The period-close engine materializes each row into a real Pending JournalEntry on its target period.
- * * Primary Key: ID
- * @extends {BaseEntity}
- * @class
- * @public
- */
-@RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Scheduled Journal Entries')
-export class mjBizAppsAccountingScheduledJournalEntryEntity extends BaseEntity<mjBizAppsAccountingScheduledJournalEntryEntityType> {
-    /**
-    * Loads the MJ_BizApps_Accounting: Scheduled Journal Entries record from the database
-    * @param ID: string - primary key value to load the MJ_BizApps_Accounting: Scheduled Journal Entries record.
-    * @param EntityRelationshipsToLoad - (optional) the relationships to load
-    * @returns {Promise<boolean>} - true if successful, false otherwise
-    * @public
-    * @async
-    * @memberof mjBizAppsAccountingScheduledJournalEntryEntity
-    * @method
-    * @override
-    */
-    public async Load(ID: string, EntityRelationshipsToLoad?: string[]) : Promise<boolean> {
-        const compositeKey: CompositeKey = new CompositeKey();
-        compositeKey.KeyValuePairs.push({ FieldName: 'ID', Value: ID });
-        return await super.InnerLoad(compositeKey, EntityRelationshipsToLoad);
-    }
-
-    /**
-    * * Field Name: ID
-    * * Display Name: ID
-    * * SQL Data Type: uniqueidentifier
-    * * Default Value: newsequentialid()
-    * * Description: Unique identifier.
-    */
-    get ID(): string {
-        return this.Get('ID');
-    }
-    set ID(value: string) {
-        this.Set('ID', value);
-    }
-
-    /**
-    * * Field Name: CompanyID
-    * * Display Name: Company ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
-    * * Description: Company that owns this scheduled entry.
-    */
-    get CompanyID(): string {
-        return this.Get('CompanyID');
-    }
-    set CompanyID(value: string) {
-        this.Set('CompanyID', value);
-    }
-
-    /**
-    * * Field Name: EntryType
-    * * Display Name: Entry Type
-    * * SQL Data Type: nvarchar(40)
-    * * Default Value: RevenueRecognition
-    * * Value List Type: List
-    * * Possible Values 
-    *   * DeferredRevenueRelease
-    *   * DepreciationAccrual
-    *   * Manual
-    *   * PeriodEndAccrual
-    *   * PrepaidAmortization
-    *   * RevenueRecognition
-    * * Description: RevenueRecognition | DeferredRevenueRelease | PrepaidAmortization | DepreciationAccrual | PeriodEndAccrual | Manual. Becomes the materialized JE's EntryType.
-    */
-    get EntryType(): 'DeferredRevenueRelease' | 'DepreciationAccrual' | 'Manual' | 'PeriodEndAccrual' | 'PrepaidAmortization' | 'RevenueRecognition' {
-        return this.Get('EntryType');
-    }
-    set EntryType(value: 'DeferredRevenueRelease' | 'DepreciationAccrual' | 'Manual' | 'PeriodEndAccrual' | 'PrepaidAmortization' | 'RevenueRecognition') {
-        this.Set('EntryType', value);
-    }
-
-    /**
-    * * Field Name: Status
-    * * Display Name: Status
-    * * SQL Data Type: nvarchar(20)
-    * * Default Value: Scheduled
-    * * Value List Type: List
-    * * Possible Values 
-    *   * Cancelled
-    *   * Generated
-    *   * Scheduled
-    *   * Superseded
-    * * Description: Scheduled | Generated | Cancelled | Superseded. Frozen once Generated (trg_SJE_Immutability).
-    */
-    get Status(): 'Cancelled' | 'Generated' | 'Scheduled' | 'Superseded' {
-        return this.Get('Status');
-    }
-    set Status(value: 'Cancelled' | 'Generated' | 'Scheduled' | 'Superseded') {
-        this.Set('Status', value);
-    }
-
-    /**
-    * * Field Name: ScheduleSequence
-    * * Display Name: Schedule Sequence
-    * * SQL Data Type: int
-    * * Description: 1-based position in the waterfall (the "3" of "3 of 12").
-    */
-    get ScheduleSequence(): number {
-        return this.Get('ScheduleSequence');
-    }
-    set ScheduleSequence(value: number) {
-        this.Set('ScheduleSequence', value);
-    }
-
-    /**
-    * * Field Name: ScheduleCount
-    * * Display Name: Schedule Count
-    * * SQL Data Type: int
-    * * Description: Total number of entries in this schedule (the "12").
-    */
-    get ScheduleCount(): number {
-        return this.Get('ScheduleCount');
-    }
-    set ScheduleCount(value: number) {
-        this.Set('ScheduleCount', value);
-    }
-
-    /**
-    * * Field Name: ScheduledEffectiveDate
-    * * Display Name: Scheduled Effective Date
-    * * SQL Data Type: date
-    * * Description: Accounting date the materialized JE will bear (typically period-end).
-    */
-    get ScheduledEffectiveDate(): Date {
-        return this.Get('ScheduledEffectiveDate');
-    }
-    set ScheduledEffectiveDate(value: Date) {
-        this.Set('ScheduledEffectiveDate', value);
-    }
-
-    /**
-    * * Field Name: CurrencyCode
-    * * Display Name: Currency Code
-    * * SQL Data Type: char(3)
-    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Currencies (vwCurrencies.Code)
-    * * Description: Currency of TotalAmount and the line amounts.
-    */
-    get CurrencyCode(): string {
-        return this.Get('CurrencyCode');
-    }
-    set CurrencyCode(value: string) {
-        this.Set('CurrencyCode', value);
-    }
-
-    /**
-    * * Field Name: TotalAmount
-    * * Display Name: Total Amount
-    * * SQL Data Type: decimal(18, 2)
-    * * Description: Gross amount recognized by this entry; lines carry the Dr/Cr detail. Front-loaded rounding (extra pennies in sequence 1) is reflected here per row.
-    */
-    get TotalAmount(): number {
-        return this.Get('TotalAmount');
-    }
-    set TotalAmount(value: number) {
-        this.Set('TotalAmount', value);
-    }
-
-    /**
-    * * Field Name: Description
-    * * Display Name: Description
-    * * SQL Data Type: nvarchar(MAX)
-    * * Description: Free-form description.
-    */
-    get Description(): string | null {
-        return this.Get('Description');
-    }
-    set Description(value: string | null) {
-        this.Set('Description', value);
-    }
-
-    /**
-    * * Field Name: SubscriptionID
-    * * Display Name: Subscription ID
-    * * SQL Data Type: uniqueidentifier
-    * * Description: Soft polymorphic ref to the originating Subscription (BizAppsOrders). NO FK.
-    */
-    get SubscriptionID(): string | null {
-        return this.Get('SubscriptionID');
-    }
-    set SubscriptionID(value: string | null) {
-        this.Set('SubscriptionID', value);
-    }
-
-    /**
-    * * Field Name: SubscriptionTermID
-    * * Display Name: Subscription Term ID
-    * * SQL Data Type: uniqueidentifier
-    * * Description: Soft polymorphic ref to the SubscriptionTerm that generated this schedule. NO FK.
-    */
-    get SubscriptionTermID(): string | null {
-        return this.Get('SubscriptionTermID');
-    }
-    set SubscriptionTermID(value: string | null) {
-        this.Set('SubscriptionTermID', value);
-    }
-
-    /**
-    * * Field Name: OrderID
-    * * Display Name: Order ID
-    * * SQL Data Type: uniqueidentifier
-    * * Description: Soft polymorphic ref to the originating Order. NO FK.
-    */
-    get OrderID(): string | null {
-        return this.Get('OrderID');
-    }
-    set OrderID(value: string | null) {
-        this.Set('OrderID', value);
-    }
-
-    /**
-    * * Field Name: OrderLineID
-    * * Display Name: Order Line ID
-    * * SQL Data Type: uniqueidentifier
-    * * Description: Soft polymorphic ref to the originating OrderLine. NO FK.
-    */
-    get OrderLineID(): string | null {
-        return this.Get('OrderLineID');
-    }
-    set OrderLineID(value: string | null) {
-        this.Set('OrderLineID', value);
-    }
-
-    /**
-    * * Field Name: ContractID
-    * * Display Name: Contract ID
-    * * SQL Data Type: uniqueidentifier
-    * * Description: Soft polymorphic ref to the originating Contract. NO FK.
-    */
-    get ContractID(): string | null {
-        return this.Get('ContractID');
-    }
-    set ContractID(value: string | null) {
-        this.Set('ContractID', value);
-    }
-
-    /**
-    * * Field Name: RevRecScheduleID
-    * * Display Name: Rev Rec Schedule ID
-    * * SQL Data Type: uniqueidentifier
-    * * Description: Soft polymorphic ref to the upstream RevenueRecognitionSchedule. NO FK.
-    */
-    get RevRecScheduleID(): string | null {
-        return this.Get('RevRecScheduleID');
-    }
-    set RevRecScheduleID(value: string | null) {
-        this.Set('RevRecScheduleID', value);
-    }
-
-    /**
-    * * Field Name: GeneratedJournalEntryID
-    * * Display Name: Generated Journal Entry ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entries (vwJournalEntries.ID)
-    * * Description: The JournalEntry produced when this row materialized (set with Status=Generated).
-    */
-    get GeneratedJournalEntryID(): string | null {
-        return this.Get('GeneratedJournalEntryID');
-    }
-    set GeneratedJournalEntryID(value: string | null) {
-        this.Set('GeneratedJournalEntryID', value);
-    }
-
-    /**
-    * * Field Name: GeneratedAt
-    * * Display Name: Generated At
-    * * SQL Data Type: datetimeoffset
-    * * Description: When this row materialized into a JournalEntry.
-    */
-    get GeneratedAt(): Date | null {
-        return this.Get('GeneratedAt');
-    }
-    set GeneratedAt(value: Date | null) {
-        this.Set('GeneratedAt', value);
-    }
-
-    /**
-    * * Field Name: SupersededByScheduledJournalEntryID
-    * * Display Name: Superseded By Scheduled Journal Entry ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Scheduled Journal Entries (vwScheduledJournalEntries.ID)
-    * * Description: When a renewal/amendment recomputed the remaining schedule, the ScheduledJournalEntry that replaced this one (Status=Superseded).
-    */
-    get SupersededByScheduledJournalEntryID(): string | null {
-        return this.Get('SupersededByScheduledJournalEntryID');
-    }
-    set SupersededByScheduledJournalEntryID(value: string | null) {
-        this.Set('SupersededByScheduledJournalEntryID', value);
-    }
-
-    /**
-    * * Field Name: __mj_CreatedAt
-    * * Display Name: Created At
-    * * SQL Data Type: datetimeoffset
-    * * Default Value: getutcdate()
-    */
-    get __mj_CreatedAt(): Date {
-        return this.Get('__mj_CreatedAt');
-    }
-
-    /**
-    * * Field Name: __mj_UpdatedAt
-    * * Display Name: Updated At
-    * * SQL Data Type: datetimeoffset
-    * * Default Value: getutcdate()
-    */
-    get __mj_UpdatedAt(): Date {
-        return this.Get('__mj_UpdatedAt');
-    }
 
     /**
     * * Field Name: Company
@@ -6445,305 +5055,6 @@ export class mjBizAppsAccountingScheduledJournalEntryEntity extends BaseEntity<m
     */
     get Company(): string {
         return this.Get('Company');
-    }
-
-    /**
-    * * Field Name: CurrencyCode_Virtual
-    * * Display Name: Currency Code Virtual
-    * * SQL Data Type: nvarchar(80)
-    */
-    get CurrencyCode_Virtual(): string {
-        return this.Get('CurrencyCode_Virtual');
-    }
-
-    /**
-    * * Field Name: RootSupersededByScheduledJournalEntryID
-    * * Display Name: Root Superseded By Scheduled Journal Entry ID
-    * * SQL Data Type: uniqueidentifier
-    */
-    get RootSupersededByScheduledJournalEntryID(): string | null {
-        return this.Get('RootSupersededByScheduledJournalEntryID');
-    }
-}
-
-
-/**
- * MJ_BizApps_Accounting: Scheduled Journal Entry Line Dimensions - strongly typed entity sub-class
- * * Schema: __mj_BizAppsAccounting
- * * Base Table: ScheduledJournalEntryLineDimension
- * * Base View: vwScheduledJournalEntryLineDimensions
- * * @description Analytical tag on a scheduled line; carried through to the materialized JournalEntryLineDimension.
- * * Primary Key: ID
- * @extends {BaseEntity}
- * @class
- * @public
- */
-@RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Scheduled Journal Entry Line Dimensions')
-export class mjBizAppsAccountingScheduledJournalEntryLineDimensionEntity extends BaseEntity<mjBizAppsAccountingScheduledJournalEntryLineDimensionEntityType> {
-    /**
-    * Loads the MJ_BizApps_Accounting: Scheduled Journal Entry Line Dimensions record from the database
-    * @param ID: string - primary key value to load the MJ_BizApps_Accounting: Scheduled Journal Entry Line Dimensions record.
-    * @param EntityRelationshipsToLoad - (optional) the relationships to load
-    * @returns {Promise<boolean>} - true if successful, false otherwise
-    * @public
-    * @async
-    * @memberof mjBizAppsAccountingScheduledJournalEntryLineDimensionEntity
-    * @method
-    * @override
-    */
-    public async Load(ID: string, EntityRelationshipsToLoad?: string[]) : Promise<boolean> {
-        const compositeKey: CompositeKey = new CompositeKey();
-        compositeKey.KeyValuePairs.push({ FieldName: 'ID', Value: ID });
-        return await super.InnerLoad(compositeKey, EntityRelationshipsToLoad);
-    }
-
-    /**
-    * * Field Name: ID
-    * * Display Name: ID
-    * * SQL Data Type: uniqueidentifier
-    * * Default Value: newsequentialid()
-    * * Description: Unique identifier.
-    */
-    get ID(): string {
-        return this.Get('ID');
-    }
-    set ID(value: string) {
-        this.Set('ID', value);
-    }
-
-    /**
-    * * Field Name: ScheduledJournalEntryLineItemID
-    * * Display Name: Scheduled Journal Entry Line Item ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Scheduled Journal Entry Line Items (vwScheduledJournalEntryLineItems.ID)
-    * * Description: Scheduled line being tagged.
-    */
-    get ScheduledJournalEntryLineItemID(): string {
-        return this.Get('ScheduledJournalEntryLineItemID');
-    }
-    set ScheduledJournalEntryLineItemID(value: string) {
-        this.Set('ScheduledJournalEntryLineItemID', value);
-    }
-
-    /**
-    * * Field Name: DimensionID
-    * * Display Name: Dimension ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Dimensions (vwDimensions.ID)
-    * * Description: Dimension being applied.
-    */
-    get DimensionID(): string {
-        return this.Get('DimensionID');
-    }
-    set DimensionID(value: string) {
-        this.Set('DimensionID', value);
-    }
-
-    /**
-    * * Field Name: DimensionValueID
-    * * Display Name: Dimension Value ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Dimension Values (vwDimensionValues.ID)
-    * * Description: Value of that dimension on this line.
-    */
-    get DimensionValueID(): string {
-        return this.Get('DimensionValueID');
-    }
-    set DimensionValueID(value: string) {
-        this.Set('DimensionValueID', value);
-    }
-
-    /**
-    * * Field Name: __mj_CreatedAt
-    * * Display Name: Created At
-    * * SQL Data Type: datetimeoffset
-    * * Default Value: getutcdate()
-    */
-    get __mj_CreatedAt(): Date {
-        return this.Get('__mj_CreatedAt');
-    }
-
-    /**
-    * * Field Name: __mj_UpdatedAt
-    * * Display Name: Updated At
-    * * SQL Data Type: datetimeoffset
-    * * Default Value: getutcdate()
-    */
-    get __mj_UpdatedAt(): Date {
-        return this.Get('__mj_UpdatedAt');
-    }
-
-    /**
-    * * Field Name: Dimension
-    * * Display Name: Dimension
-    * * SQL Data Type: nvarchar(100)
-    */
-    get Dimension(): string {
-        return this.Get('Dimension');
-    }
-
-    /**
-    * * Field Name: DimensionValue
-    * * Display Name: Dimension Value
-    * * SQL Data Type: nvarchar(200)
-    */
-    get DimensionValue(): string {
-        return this.Get('DimensionValue');
-    }
-}
-
-
-/**
- * MJ_BizApps_Accounting: Scheduled Journal Entry Line Items - strongly typed entity sub-class
- * * Schema: __mj_BizAppsAccounting
- * * Base Table: ScheduledJournalEntryLineItem
- * * Base View: vwScheduledJournalEntryLineItems
- * * @description Dr/Cr shape of a scheduled entry; copied verbatim onto the materialized JournalEntryLine.
- * * Primary Key: ID
- * @extends {BaseEntity}
- * @class
- * @public
- */
-@RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Scheduled Journal Entry Line Items')
-export class mjBizAppsAccountingScheduledJournalEntryLineItemEntity extends BaseEntity<mjBizAppsAccountingScheduledJournalEntryLineItemEntityType> {
-    /**
-    * Loads the MJ_BizApps_Accounting: Scheduled Journal Entry Line Items record from the database
-    * @param ID: string - primary key value to load the MJ_BizApps_Accounting: Scheduled Journal Entry Line Items record.
-    * @param EntityRelationshipsToLoad - (optional) the relationships to load
-    * @returns {Promise<boolean>} - true if successful, false otherwise
-    * @public
-    * @async
-    * @memberof mjBizAppsAccountingScheduledJournalEntryLineItemEntity
-    * @method
-    * @override
-    */
-    public async Load(ID: string, EntityRelationshipsToLoad?: string[]) : Promise<boolean> {
-        const compositeKey: CompositeKey = new CompositeKey();
-        compositeKey.KeyValuePairs.push({ FieldName: 'ID', Value: ID });
-        return await super.InnerLoad(compositeKey, EntityRelationshipsToLoad);
-    }
-
-    /**
-    * * Field Name: ID
-    * * Display Name: ID
-    * * SQL Data Type: uniqueidentifier
-    * * Default Value: newsequentialid()
-    * * Description: Unique identifier.
-    */
-    get ID(): string {
-        return this.Get('ID');
-    }
-    set ID(value: string) {
-        this.Set('ID', value);
-    }
-
-    /**
-    * * Field Name: ScheduledJournalEntryID
-    * * Display Name: Scheduled Journal Entry ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Scheduled Journal Entries (vwScheduledJournalEntries.ID)
-    * * Description: Parent scheduled entry.
-    */
-    get ScheduledJournalEntryID(): string {
-        return this.Get('ScheduledJournalEntryID');
-    }
-    set ScheduledJournalEntryID(value: string) {
-        this.Set('ScheduledJournalEntryID', value);
-    }
-
-    /**
-    * * Field Name: LineNumber
-    * * Display Name: Line Number
-    * * SQL Data Type: int
-    * * Description: Line ordering (1-based).
-    */
-    get LineNumber(): number {
-        return this.Get('LineNumber');
-    }
-    set LineNumber(value: number) {
-        this.Set('LineNumber', value);
-    }
-
-    /**
-    * * Field Name: GLAccountID
-    * * Display Name: GL Account ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Accounts (vwGLAccounts.ID)
-    * * Description: GLAccount this line posts to.
-    */
-    get GLAccountID(): string {
-        return this.Get('GLAccountID');
-    }
-    set GLAccountID(value: string) {
-        this.Set('GLAccountID', value);
-    }
-
-    /**
-    * * Field Name: DebitAmount
-    * * Display Name: Debit Amount
-    * * SQL Data Type: decimal(18, 2)
-    * * Description: Debit amount (NULL if a credit line).
-    */
-    get DebitAmount(): number | null {
-        return this.Get('DebitAmount');
-    }
-    set DebitAmount(value: number | null) {
-        this.Set('DebitAmount', value);
-    }
-
-    /**
-    * * Field Name: CreditAmount
-    * * Display Name: Credit Amount
-    * * SQL Data Type: decimal(18, 2)
-    * * Description: Credit amount (NULL if a debit line).
-    */
-    get CreditAmount(): number | null {
-        return this.Get('CreditAmount');
-    }
-    set CreditAmount(value: number | null) {
-        this.Set('CreditAmount', value);
-    }
-
-    /**
-    * * Field Name: Description
-    * * Display Name: Description
-    * * SQL Data Type: nvarchar(MAX)
-    * * Description: Optional memo.
-    */
-    get Description(): string | null {
-        return this.Get('Description');
-    }
-    set Description(value: string | null) {
-        this.Set('Description', value);
-    }
-
-    /**
-    * * Field Name: __mj_CreatedAt
-    * * Display Name: Created At
-    * * SQL Data Type: datetimeoffset
-    * * Default Value: getutcdate()
-    */
-    get __mj_CreatedAt(): Date {
-        return this.Get('__mj_CreatedAt');
-    }
-
-    /**
-    * * Field Name: __mj_UpdatedAt
-    * * Display Name: Updated At
-    * * SQL Data Type: datetimeoffset
-    * * Default Value: getutcdate()
-    */
-    get __mj_UpdatedAt(): Date {
-        return this.Get('__mj_UpdatedAt');
-    }
-
-    /**
-    * * Field Name: GLAccount
-    * * Display Name: GL Account
-    * * SQL Data Type: nvarchar(200)
-    */
-    get GLAccount(): string {
-        return this.Get('GLAccount');
     }
 }
 

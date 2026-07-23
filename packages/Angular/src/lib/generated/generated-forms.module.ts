@@ -16,7 +16,6 @@ import { LinkDirectivesModule } from '@memberjunction/ng-link-directives';
 
 // Import Generated Components
 import { mjBizAppsAccountingAccountingCompanyProfileFormComponent } from "./Entities/mjBizAppsAccountingAccountingCompanyProfile/mjbizappsaccountingaccountingcompanyprofile.form.component";
-import { mjBizAppsAccountingChartOfAccountsMappingFormComponent } from "./Entities/mjBizAppsAccountingChartOfAccountsMapping/mjbizappsaccountingchartofaccountsmapping.form.component";
 import { mjBizAppsAccountingCurrencyFormComponent } from "./Entities/mjBizAppsAccountingCurrency/mjbizappsaccountingcurrency.form.component";
 import { mjBizAppsAccountingCurrencySpotRateFormComponent } from "./Entities/mjBizAppsAccountingCurrencySpotRate/mjbizappsaccountingcurrencyspotrate.form.component";
 import { mjBizAppsAccountingCustomerTaxProfileFormComponent } from "./Entities/mjBizAppsAccountingCustomerTaxProfile/mjbizappsaccountingcustomertaxprofile.form.component";
@@ -27,17 +26,12 @@ import { mjBizAppsAccountingGLAccountLinkFormComponent } from "./Entities/mjBizA
 import { mjBizAppsAccountingGLAccountRoleFormComponent } from "./Entities/mjBizAppsAccountingGLAccountRole/mjbizappsaccountingglaccountrole.form.component";
 import { mjBizAppsAccountingGLAccountFormComponent } from "./Entities/mjBizAppsAccountingGLAccount/mjbizappsaccountingglaccount.form.component";
 import { mjBizAppsAccountingJournalEntryFormComponent } from "./Entities/mjBizAppsAccountingJournalEntry/mjbizappsaccountingjournalentry.form.component";
-import { mjBizAppsAccountingJournalEntryBatchLineDimensionFormComponent } from "./Entities/mjBizAppsAccountingJournalEntryBatchLineDimension/mjbizappsaccountingjournalentrybatchlinedimension.form.component";
-import { mjBizAppsAccountingJournalEntryBatchLineItemFormComponent } from "./Entities/mjBizAppsAccountingJournalEntryBatchLineItem/mjbizappsaccountingjournalentrybatchlineitem.form.component";
 import { mjBizAppsAccountingJournalEntryBatchSequenceFormComponent } from "./Entities/mjBizAppsAccountingJournalEntryBatchSequence/mjbizappsaccountingjournalentrybatchsequence.form.component";
 import { mjBizAppsAccountingJournalEntryBatchFormComponent } from "./Entities/mjBizAppsAccountingJournalEntryBatch/mjbizappsaccountingjournalentrybatch.form.component";
 import { mjBizAppsAccountingJournalEntryLineDimensionFormComponent } from "./Entities/mjBizAppsAccountingJournalEntryLineDimension/mjbizappsaccountingjournalentrylinedimension.form.component";
 import { mjBizAppsAccountingJournalEntryLineFormComponent } from "./Entities/mjBizAppsAccountingJournalEntryLine/mjbizappsaccountingjournalentryline.form.component";
 import { mjBizAppsAccountingJournalEntryLinkFormComponent } from "./Entities/mjBizAppsAccountingJournalEntryLink/mjbizappsaccountingjournalentrylink.form.component";
 import { mjBizAppsAccountingJournalEntrySequenceFormComponent } from "./Entities/mjBizAppsAccountingJournalEntrySequence/mjbizappsaccountingjournalentrysequence.form.component";
-import { mjBizAppsAccountingScheduledJournalEntryFormComponent } from "./Entities/mjBizAppsAccountingScheduledJournalEntry/mjbizappsaccountingscheduledjournalentry.form.component";
-import { mjBizAppsAccountingScheduledJournalEntryLineDimensionFormComponent } from "./Entities/mjBizAppsAccountingScheduledJournalEntryLineDimension/mjbizappsaccountingscheduledjournalentrylinedimension.form.component";
-import { mjBizAppsAccountingScheduledJournalEntryLineItemFormComponent } from "./Entities/mjBizAppsAccountingScheduledJournalEntryLineItem/mjbizappsaccountingscheduledjournalentrylineitem.form.component";
 import { mjBizAppsAccountingTaxAuthorityFormComponent } from "./Entities/mjBizAppsAccountingTaxAuthority/mjbizappsaccountingtaxauthority.form.component";
 import { mjBizAppsAccountingTaxJurisdictionFormComponent } from "./Entities/mjBizAppsAccountingTaxJurisdiction/mjbizappsaccountingtaxjurisdiction.form.component";
 import { mjBizAppsAccountingTaxLiabilityFormComponent } from "./Entities/mjBizAppsAccountingTaxLiability/mjbizappsaccountingtaxliability.form.component";
@@ -48,7 +42,6 @@ import { mjBizAppsAccountingTaxRemittanceFormComponent } from "./Entities/mjBizA
 @NgModule({
 declarations: [
     mjBizAppsAccountingAccountingCompanyProfileFormComponent,
-    mjBizAppsAccountingChartOfAccountsMappingFormComponent,
     mjBizAppsAccountingCurrencyFormComponent,
     mjBizAppsAccountingCurrencySpotRateFormComponent,
     mjBizAppsAccountingCustomerTaxProfileFormComponent,
@@ -59,14 +52,15 @@ declarations: [
     mjBizAppsAccountingGLAccountRoleFormComponent,
     mjBizAppsAccountingGLAccountFormComponent,
     mjBizAppsAccountingJournalEntryFormComponent,
-    mjBizAppsAccountingJournalEntryBatchLineDimensionFormComponent,
-    mjBizAppsAccountingJournalEntryBatchLineItemFormComponent,
     mjBizAppsAccountingJournalEntryBatchSequenceFormComponent,
     mjBizAppsAccountingJournalEntryBatchFormComponent,
     mjBizAppsAccountingJournalEntryLineDimensionFormComponent,
     mjBizAppsAccountingJournalEntryLineFormComponent,
     mjBizAppsAccountingJournalEntryLinkFormComponent,
-    mjBizAppsAccountingJournalEntrySequenceFormComponent],
+    mjBizAppsAccountingJournalEntrySequenceFormComponent,
+    mjBizAppsAccountingTaxAuthorityFormComponent,
+    mjBizAppsAccountingTaxJurisdictionFormComponent,
+    mjBizAppsAccountingTaxLiabilityFormComponent],
 imports: [
     CommonModule,
     FormsModule,
@@ -83,12 +77,6 @@ export class GeneratedForms_SubModule_0 { }
 
 @NgModule({
 declarations: [
-    mjBizAppsAccountingScheduledJournalEntryFormComponent,
-    mjBizAppsAccountingScheduledJournalEntryLineDimensionFormComponent,
-    mjBizAppsAccountingScheduledJournalEntryLineItemFormComponent,
-    mjBizAppsAccountingTaxAuthorityFormComponent,
-    mjBizAppsAccountingTaxJurisdictionFormComponent,
-    mjBizAppsAccountingTaxLiabilityFormComponent,
     mjBizAppsAccountingTaxRateFormComponent,
     mjBizAppsAccountingTaxRemittanceFormComponent],
 imports: [

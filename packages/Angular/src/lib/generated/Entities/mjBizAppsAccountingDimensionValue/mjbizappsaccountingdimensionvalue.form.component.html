@@ -133,56 +133,6 @@
         }
     </mj-collapsible-panel>
 
-    <!-- Scheduled Journal Entry Line Dimensions Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingScheduledJournalEntryLineDimensions"
-        SectionName="Scheduled Journal Entry Line Dimensions"
-        Icon="fa fa-table"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingScheduledJournalEntryLineDimensions')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Scheduled Journal Entry Line Dimensions','DimensionValueID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Scheduled Journal Entry Line Dimensions')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingScheduledJournalEntryLineDimensions')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingScheduledJournalEntryLineDimensions', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
-    <!-- Journal Entry Batch Line Dimensions Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingJournalEntryBatchLineDimensions"
-        SectionName="Journal Entry Batch Line Dimensions"
-        Icon="fa fa-table"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingJournalEntryBatchLineDimensions')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entry Batch Line Dimensions','DimensionValueID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entry Batch Line Dimensions')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntryBatchLineDimensions')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntryBatchLineDimensions', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
     <!-- Dimension Values Section -->
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingDimensionValues"

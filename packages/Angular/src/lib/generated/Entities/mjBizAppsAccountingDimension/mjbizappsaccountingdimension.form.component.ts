@@ -18,10 +18,8 @@ export class mjBizAppsAccountingDimensionFormComponent extends BaseFormComponent
         this.initSections([
             { sectionKey: 'details', sectionName: 'Details', isExpanded: true },
             { sectionKey: 'mJBizAppsAccountingJournalEntryLineDimensions', sectionName: 'Journal Entry Line Dimensions', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingJournalEntryBatchLineDimensions', sectionName: 'Journal Entry Batch Line Dimensions', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingGLAccountLinkDimensions', sectionName: 'GL Account Link Dimensions', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingScheduledJournalEntryLineDimensions', sectionName: 'Scheduled Journal Entry Line Dimensions', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingDimensionValues', sectionName: 'Dimension Values', isExpanded: false }
+            { sectionKey: 'mJBizAppsAccountingDimensionValues', sectionName: 'Dimension Values', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingGLAccountLinkDimensions', sectionName: 'GL Account Link Dimensions', isExpanded: false }
         ]);
     }
 }
