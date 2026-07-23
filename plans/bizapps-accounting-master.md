@@ -360,11 +360,13 @@ is deferred ("we're going to come back to it" — Amith).
 __mj_BizAppsAccounting.GLAccountRole        -- role registry: AR, Sales, Deferred Revenue,
   ID, Name, Description, IsActive           -- Inventory, COGS, Sales Discounts, Returns & Allowances
 
-__mj_BizAppsAccounting.GLAccountLink        -- polymorphic, date-effective account routing
-  ID, GLAccountRoleID FK, GLAccountID FK,
-  EntityName NVARCHAR(...),                 -- 'Company' | orders Product | orders ProductCategory
-  RecordID UNIQUEIDENTIFIER,
-  EffectiveFrom, EffectiveTo,
+__mj_BizAppsAccounting.GLAccountLink        -- polymorphic, date-effective account routing (as-built shape)
+  ID, GLAccountID FK, GLAccountRoleID FK,
+  EntityID UNIQUEIDENTIFIER NOT NULL,       -- polymorphic entity ref: Company | Product | ProductCategory
+  RecordID NVARCHAR(400) NOT NULL,          -- polymorphic target record
+  Status NVARCHAR(10) NOT NULL,             -- 'Pending' | 'Active' | 'Disabled'
+  StartedAt, EndedAt DATETIMEOFFSET NULL,   -- date-effective window (CHECK EndedAt > StartedAt)
+  Comments NVARCHAR(MAX) NULL
   -- + GLAccountLinkDimension for analytical tags carried into resolved lines
 ```
 
@@ -402,7 +404,7 @@ DimensionValue   (ID, DimensionID FK, Code, Name, ParentDimensionValueID NULL, I
                   EffectiveFrom, EffectiveTo, UNIQUE (DimensionID, Code))
 JournalEntryLineDimension       (JournalEntryLineID, DimensionID, DimensionValueID,
                                  UNIQUE (JournalEntryLineID, DimensionID))
-GLAccountLinkDimension          (GLAccountLinkID, DimensionID, DimensionValueID)
+GLAccountLinkDimension          (GLAccountLinkID, DimensionID, Sequence — UNIQUE (link, dimension))
 ```
 
 Dimension tags survive end-to-end: JE line → batch summary line (the netting key includes the
@@ -464,7 +466,7 @@ __mj_BizAppsAccounting.JournalEntryBatch
   PostingDate DATE NOT NULL,              -- singular, accountant-set at build (D8);
                                           -- default from the batch window; must match the GL
   BatchedAt DATETIMEOFFSET NOT NULL, BatchedByUserID FK NOT NULL,
-  Status NVARCHAR(20) NOT NULL,           -- 'Pending' | 'Approved' | 'Sent' | 'Acknowledged' | 'Failed'
+  Status NVARCHAR(20) NOT NULL,           -- 'Pending' | 'Approved' | 'Sent' | 'Posted' | 'Failed' | 'Cancelled'
   TotalEntries INT, TotalDebits DECIMAL(18,2), TotalCredits DECIMAL(18,2),
   -- Approval task pointer (D10) — stamped in the task-raise transaction; CHECK forbids half-stamped
   ApprovalTaskID UNIQUEIDENTIFIER NULL,   -- NO FK (cross-app; integrity via the single transaction)
@@ -475,8 +477,16 @@ __mj_BizAppsAccounting.JournalEntryBatch
 
 - **Simplified Summary Model:** Batch summary lines are modeled as **one aggregated `JournalEntry` (`EntryType = 'BatchSummary'`, `EffectiveDate = PostingDate`)** linked via `SummaryJournalEntryID`.
 - Its lines (`JournalEntryLine`) net debits/credits per `(GLAccount × Dimension-combo)`, and tags (`JournalEntryLineDimension`) preserve dimensional breakdown. Dedicated `JournalEntryBatchLineItem` and `JournalEntryBatchLineDimension` schema tables are **retired/dropped** — reusing `JournalEntryLine` saves schema clutter and reuses 100% of line validation, DB constraints, and UI line viewer components out of the box.
-- Summary lines are built when the batch is created (Pending), can be **regenerated** while the batch is open, and **freeze** once Status ∈ {Sent, Acknowledged}.
+- **Lifecycle:** the summary JE is created at batch build already **`Batched`** (locked with the
+  members — preliminary until approval, permanent after; regeneration rebuilds it), and moves to
+  `GLPosted` when the batch posts.
+- **Default exclusion:** `EntryType = 'BatchSummary'` is excluded by default from batch-candidate
+  gathering (engine + UI — a summary can never be swept into a later batch) and from the
+  read-model views (an "include summaries" toggle is permissible).
 - **Query Partitioning:** Subledger detail queries filter `WHERE EntryType != 'BatchSummary'`; GL dispatch / summary queries filter `WHERE EntryType = 'BatchSummary'` (or select directly via `JournalEntryBatch.SummaryJournalEntryID`).
+- **Pending Amith's input:** (a) whether a dispatch-time trigger should still assert the summary
+  foots to the batch control totals, or the lock-at-creation + tests suffice; (b) whether
+  summaries should live in a separate table vs. this same-table model with default exclusion.
 
 ### 5.7 Currency
 
@@ -524,7 +534,8 @@ Critical invariants hold at the database level (T-SQL triggers/CHECKs), immune t
 4. **Immutability by status:** locked JEs/lines reject UPDATE/DELETE except GL-roundtrip fields;
    batches freeze at Sent/Acknowledged.
 5. **Reversal consistency:** the reversal chain's cross-links stay coherent (trigger).
-6. **Batch footing:** summary lines foot to batch control totals (and balance) at dispatch.
+6. **Batch footing (pending Amith's input):** whether a dispatch-time trigger asserts the summary
+   JE foots to the batch control totals, or the summary's lock-at-creation + tests suffice.
 7. **Approval-pointer coherence:** `ApprovalTaskID`/`ApprovalTaskRaisedAt` set together (CHECK).
 8. **Mapping validation floor:** the §5.3 hard-block rules carry a DB validation trigger under the
    engine's typed errors.
@@ -585,9 +596,10 @@ scaffolding only, replaced before non-dev use).
 
 ### 7.4 Dispatch
 
-One aggregated JE per batch posts to the GL, dated `PostingDate`. Status walk:
-`Pending → Sent → Acknowledged` (JEs → `GLPosted`) or `Failed` (JEs revert to Pending for retry).
-Closed-period rejections HOLD-and-flag (§4).
+One aggregated JE per batch (the summary JE) posts to the GL, dated `PostingDate`. Status walk:
+`Pending → Approved → Sent → Posted` (member JEs + the summary JE → `GLPosted`) ·
+`Sent → Failed` (ERP rejection — hold for review/retry) · `Pending → Cancelled` (reject —
+member JEs unlock back to the candidate pool). Closed-period rejections HOLD-and-flag (§4).
 
 ### 7.5 BC dispatch mechanics (Jeremy/Robert, 2026-07-17)
 
