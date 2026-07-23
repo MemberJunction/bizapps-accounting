@@ -18,8 +18,6 @@ export class mjBizAppsAccountingDimensionValueFormComponent extends BaseFormComp
         this.initSections([
             { sectionKey: 'details', sectionName: 'Details', isExpanded: true },
             { sectionKey: 'mJBizAppsAccountingJournalEntryLineDimensions', sectionName: 'Journal Entry Line Dimensions', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingScheduledJournalEntryLineDimensions', sectionName: 'Scheduled Journal Entry Line Dimensions', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingJournalEntryBatchLineDimensions', sectionName: 'Journal Entry Batch Line Dimensions', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingDimensionValues', sectionName: 'Dimension Values', isExpanded: false }
         ]);
     }
