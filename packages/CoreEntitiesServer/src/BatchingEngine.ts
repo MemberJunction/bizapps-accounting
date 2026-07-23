@@ -1,57 +1,59 @@
 /**
- * BatchingEngine — Block 2 headline (S1 dispatch). The core subledger→ERP process.
- * REWORKED 2026-07-06 for the engine-meeting rulings (CH-3/CH-4/AM-4): batches are MULTI-COMPANY.
+ * BatchingEngine — the core subledger→ERP dispatch process (plan §7).
+ * REWORKED 2026-07-23 for the rewritten baseline: batches are SINGLE-COMPANY (D7)
+ * and the netted summary is an ORDINARY JournalEntry (EntryType='BatchSummary')
+ * instead of the retired JournalEntryBatchLineItem tables (Amith's summary-JE model).
  *
- *   buildBatch(): gather ALL Pending JEs → ONE JournalEntryBatch (no company/period scope — an order's
- *     JEs land in exactly one batch, ¶44), build the consolidated SUMMARY lines (one per
- *     Company × GLAccount × Dimension-combo — company comes from each line's GLAccount.CompanyID —
- *     Dr/Cr **netted** to one side per §C5), resolve each line's ERP account NUMBER (AM-4 wire format:
- *     ChartOfAccountsMapping override → GLAccount.ExternalAccountID → GLAccount.Code), set the balanced
- *     control totals, **lock** the JEs to Batched, and raise the approval task.
- *   approveBatch(): the human sign-off — Pending→Approved (+ApprovedAt/ApprovedByUserID). Content is
- *     frozen from here (trg_JEBatch_Immutability).
- *   sendBatch(): require approval (gate seam + Status='Approved'), flip Approved→Sent —
- *     trg_JEBatch_SummaryReconciles (50014 overall + 50023 PER COMPANY, AM-4) verifies the summary
- *     foots — post to the ERP (the poster splits by company: ONE summary JE per company, all-or-nothing,
- *     ¶151-153), and on confirmation flip Sent→Posted + the JEs Batched→GLPosted. Failure → Failed
- *     (retry + escalating alerts).
+ *   buildBatch(companyId, …): gather that company's Pending JEs → ONE JournalEntryBatch
+ *     (one batch per company per run, D7), net their lines to consolidated summary groups
+ *     (one per GLAccount × Dimension-combo, Dr/Cr netted to one side), write the summary
+ *     as a BatchSummary JournalEntry (header + JournalEntryLines + dimension tags) that
+ *     carries the batch's BatchID so it rides the SAME derived lock machinery as the
+ *     members, set the balanced control totals + SummaryJournalEntryID (trigger 50023
+ *     verifies coherence), **lock** the member JEs to Batched, and raise the approval task.
+ *   approveBatch(): the human sign-off — Pending→Approved (+ApprovedAt/ApprovedByUserID).
+ *     Content is frozen from here (trg_JEBatch_Immutability, 50009).
+ *   sendBatch(): require approval (gate seam + Status='Approved'), flip Approved→Sent,
+ *     post the summary JE's lines to the ERP (all-or-nothing per batch), and on
+ *     confirmation flip Sent→Posted + the member JEs AND the summary JE Batched→GLPosted.
+ *     Failure → Failed (retry + escalating alerts).
  *
- * ⚠ OQ-F (Robert): whether the flat per-line CompanyID grouping suffices or a batch-group element is
- *   needed. Current shape = flat line items carrying CompanyID; the per-company split happens at send.
- *
- * The detail (JournalEntryLine) stays in the subledger for drill-through; the netted summary is what BC sees.
+ * The detail (member JournalEntryLines) stays in the subledger for drill-through; the
+ * netted summary JE is what the ERP sees, dated the batch's PostingDate.
  *
  * SECURITY MODEL:
- *   - **Financial invariants are DB triggers — un-bypassable even by raw SQL / SA:** the summary must foot
- *     to the control totals overall (50014) AND within each company (50023), an Approved/Sent/Posted batch
- *     is immutable (50008/50009), and JEs must balance overall (50001) + per company (50019) to lock.
- *   - **The CFO approval is a WORKFLOW gate, not a financial invariant** — enforced in the engine via a
- *     pluggable BatchApprovalGate (default backed by the bizapps-tasks app).
+ *   - **Financial invariants are DB triggers — un-bypassable even by raw SQL / SA:** JEs must
+ *     balance to lock (50001), lines must match the header company (50019), an Approved/Sent/
+ *     Posted batch is immutable (50008/50009), and the summary pointer must cohere (50023).
+ *   - **The CFO approval is a WORKFLOW gate, not a financial invariant** — enforced in the
+ *     engine via a pluggable BatchApprovalGate (default backed by the bizapps-tasks app).
+ *
+ * NOT YET HERE (the §7.2 batch-rework slice, deliberately out of this pass): date-filter
+ * sweeps, view-defined arbitrary batches, the one-transaction-per-batch guarantee (D10),
+ * and PostingDate selection UI (defaults to today, UTC).
  *
  * CONNECTS TO:
- *   READS/WRITES: Journal Entries (lock) · Journal Entry Lines (+ Dimensions) · Journal Entry Batches
- *                 · Journal Entry Batch Line Items (+ Dimensions) · GL Accounts · ChartOfAccountsMapping
- *   DB TRIGGERS:  trg_JEBatch_SummaryReconciles (50014/50023) · trg_JEBatch_Immutability (50008/50009)
- *                 · trg_JournalEntry_Immutability (lock) · balanced-on-lock (50001/50019)
+ *   READS/WRITES: Journal Entries (members + the BatchSummary JE) · Journal Entry Lines
+ *                 (+ Dimensions) · Journal Entry Batches · GL Accounts
+ *   DB TRIGGERS:  trg_JEBatch_SummaryCoherence (50023) · trg_JEBatch_Immutability (50008/50009)
+ *                 · trg_JournalEntry_Immutability (lock) · balanced-on-lock (50001)
  *   ENTITY:       'MJ_BizApps_Accounting: Journal Entry Batches'
- *   DOC:          docs/ARCHITECTURE.md (batching) · plan §C5 (netting) · accounting-engine-plan.md §4.7
+ *   DOC:          plans/bizapps-accounting-master.md §7 (lifecycle + batching)
  */
 import { Metadata, RunView, UserInfo } from '@memberjunction/core';
 import type {
   mjBizAppsAccountingJournalEntryBatchEntity,
-  mjBizAppsAccountingJournalEntryBatchLineItemEntity,
-  mjBizAppsAccountingJournalEntryBatchLineDimensionEntity,
   mjBizAppsAccountingJournalEntryEntity,
+  mjBizAppsAccountingJournalEntryLineEntity,
+  mjBizAppsAccountingJournalEntryLineDimensionEntity,
 } from '@mj-biz-apps/accounting-entities';
+import { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
 const JELD_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Line Dimensions';
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
-const JEBLI_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batch Line Items';
-const JEBLD_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batch Line Dimensions';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
-const COA_MAP_ENTITY = 'MJ_BizApps_Accounting: Chart Of Accounts Mappings';
 
 /** Cent-level tolerance — amounts are decimal(18,2), so anything under half a cent is "zero". */
 const NET_TOLERANCE = 0.005;
@@ -61,7 +63,7 @@ export type BatchTargetSystem = 'BusinessCentral' | 'NetSuite' | 'Other' | 'Quic
 
 export interface DimRef { DimensionID: string; DimensionValueID: string }
 
-/** Pure netting input: one JE line, dimension-tagged. Company = the line's GLAccount.CompanyID (CH-2). */
+/** Pure netting input: one JE line, dimension-tagged. Company = the parent JE's header CompanyID (D3). */
 export interface NettableLine { companyId: string; glAccountId: string; debit: number; credit: number; dims: DimRef[] }
 
 /** Pure netting output: one consolidated summary group (Dr/Cr collapsed to a single side). */
@@ -78,21 +80,21 @@ export interface NetGroup {
 
 export interface BuildBatchResult {
   batchId: string;
+  summaryJournalEntryId: string;
   summaryLineCount: number;
   totalDebits: number;
   totalCredits: number;
   jeCount: number;
-  companyCount: number;
 }
 
 export interface ErpPostResult { success: boolean; externalBatchRef?: string; error?: string }
 
-/** ERP-post seam. The REAL poster must split the summary lines BY COMPANY and post one summary JE per
- *  company, by account NUMBER, all-or-nothing per batch (AM-4, ¶151-153). This mock lets the whole
- *  dispatch flow run + be tested without a live BC tenant. */
+/** ERP-post seam. The REAL poster posts the summary JE's lines by account NUMBER
+ *  (resolve via resolveExternalAccount at dispatch time), all-or-nothing per batch.
+ *  This mock lets the whole dispatch flow run + be tested without a live ERP tenant. */
 export type ErpPoster = (
   batch: mjBizAppsAccountingJournalEntryBatchEntity,
-  lines: mjBizAppsAccountingJournalEntryBatchLineItemEntity[],
+  summaryLines: mjBizAppsAccountingJournalEntryLineEntity[],
   contextUser: UserInfo,
 ) => Promise<ErpPostResult>;
 
@@ -113,8 +115,10 @@ export const AutoApproveGate: BatchApprovalGate = { async assertApproved() { /* 
 // ─── Pure netting (unit-tested without a DB) ─────────────────────────────────
 
 /**
- * Collapse JE lines to consolidated summary groups: one per (Company × GLAccount × dimension-combo), with
- * debits netted against credits to a single side. Groups that net to ~zero drop out. No I/O — pure + deterministic.
+ * Collapse JE lines to consolidated summary groups: one per (Company × GLAccount × dimension-combo),
+ * with debits netted against credits to a single side. Groups that net to ~zero drop out. In a
+ * single-company batch the company key is constant — it stays in the key as a safety net so a
+ * mixed-company input can never silently merge across companies. No I/O — pure + deterministic.
  */
 export function netLines(lines: NettableLine[]): NetGroup[] {
   const map = new Map<string, { companyId: string; glAccountId: string; dims: DimRef[]; dimKey: string; debit: number; credit: number; sourceLineCount: number }>();
@@ -140,35 +144,36 @@ export function netLines(lines: NettableLine[]): NetGroup[] {
 // ─── buildBatch ──────────────────────────────────────────────────────────────
 
 /**
- * Build a Pending MULTI-COMPANY batch from ALL Pending JEs: netted per-company summary lines + locked JEs
- * + approval task. Returns null when there is nothing to batch.
+ * Build a Pending SINGLE-COMPANY batch (D7) from that company's Pending JEs: a netted BatchSummary
+ * JE + locked members + the approval task. Returns null when there is nothing to batch.
  */
 export async function buildBatch(
+  companyId: string,
   targetSystem: BatchTargetSystem,
   batchedByUserId: string,
   contextUser: UserInfo,
   gate: BatchApprovalGate = AutoApproveGate,
 ): Promise<BuildBatchResult | null> {
-  const jeIds = await loadPendingJEIds(contextUser);
+  const jeIds = await loadPendingJEIds(companyId, contextUser);
   if (jeIds.length === 0) return null;
 
-  const groups = netLines(await loadNettableLines(jeIds, contextUser));
+  const groups = netLines(await loadNettableLines(companyId, jeIds, contextUser));
   if (groups.length === 0) return null; // everything netted to zero
 
-  const batch = await createBatchHeader(targetSystem, batchedByUserId, jeIds.length, contextUser);
-  const { totalDebits, totalCredits } = await writeSummaryLines(batch.ID, targetSystem, groups, contextUser);
-  await setControlTotals(batch, totalDebits, totalCredits);
+  const batch = await createBatchHeader(companyId, targetSystem, batchedByUserId, jeIds.length, contextUser);
+  const summary = await writeSummaryJournalEntry(batch, groups, contextUser);
+  const { totalDebits, totalCredits } = summaryTotals(groups);
+  await setSummaryPointerAndTotals(batch, summary.ID, totalDebits, totalCredits, jeIds.length);
   await lockJournalEntries(jeIds, batch.ID, contextUser);
   await raiseApprovalTaskOrReverse(batch.ID, gate, contextUser);
 
-  const companyCount = new Set(groups.map(g => g.companyId)).size;
-  return { batchId: batch.ID, summaryLineCount: groups.length, totalDebits, totalCredits, jeCount: jeIds.length, companyCount };
+  return { batchId: batch.ID, summaryJournalEntryId: summary.ID, summaryLineCount: groups.length, totalDebits, totalCredits, jeCount: jeIds.length };
 }
 
 /**
- * Raise the approval task; if the gate throws (e.g. a company has no CFO) do NOT leave a locked, task-less
- * batch stranded — with reversible preliminary locks we cancel it (unlock JEs + Cancelled) and rethrow, so
- * the caller sees the real failure and the candidate pool is intact. (Fixes the Q5 orphan-batch atomicity gap.)
+ * Raise the approval task; if the gate throws (e.g. the company has no CFO) do NOT leave a locked,
+ * task-less batch stranded — with reversible preliminary locks we cancel it (unlock JEs + Cancelled)
+ * and rethrow, so the caller sees the real failure and the candidate pool is intact.
  */
 async function raiseApprovalTaskOrReverse(batchId: string, gate: BatchApprovalGate, contextUser: UserInfo): Promise<void> {
   if (!gate.onBatchBuilt) return;
@@ -180,16 +185,17 @@ async function raiseApprovalTaskOrReverse(batchId: string, gate: BatchApprovalGa
   }
 }
 
-async function loadPendingJEIds(contextUser: UserInfo): Promise<string[]> {
+/** The company's unbatched Pending JEs. BatchSummary JEs are excluded by EntryType (the ruled default exclusion). */
+async function loadPendingJEIds(companyId: string, contextUser: UserInfo): Promise<string[]> {
   const rv = new RunView();
   const res = await rv.RunView<{ ID: string }>(
-    { EntityName: JE_ENTITY, ExtraFilter: `Status='Pending'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true },
+    { EntityName: JE_ENTITY, ExtraFilter: `Status='Pending' AND CompanyID='${companyId}' AND EntryType<>'BatchSummary'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true },
     contextUser,
   );
   return (res.Results ?? []).map(r => r.ID);
 }
 
-async function loadNettableLines(jeIds: string[], contextUser: UserInfo): Promise<NettableLine[]> {
+async function loadNettableLines(companyId: string, jeIds: string[], contextUser: UserInfo): Promise<NettableLine[]> {
   const rv = new RunView();
   const inList = jeIds.map(id => `'${id}'`).join(',');
   const lineRes = await rv.RunView<{ ID: string; GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null }>(
@@ -197,29 +203,10 @@ async function loadNettableLines(jeIds: string[], contextUser: UserInfo): Promis
     contextUser,
   );
   const lines = lineRes.Results ?? [];
-  const [dimsByLine, companyByGL] = await Promise.all([
-    loadDimensionsByLine(lines.map(l => l.ID), contextUser),
-    loadCompanyByGLAccount([...new Set(lines.map(l => l.GLAccountID))], contextUser),
-  ]);
-  return lines.map(l => {
-    const companyId = companyByGL.get(l.GLAccountID);
-    if (!companyId) throw new Error(`buildBatch: GL account ${l.GLAccountID} not found while resolving line companies`);
-    return { companyId, glAccountId: l.GLAccountID, debit: l.DebitAmount ?? 0, credit: l.CreditAmount ?? 0, dims: dimsByLine.get(l.ID) ?? [] };
-  });
-}
-
-/** A line's company is implicit via its GLAccount.CompanyID (CH-2 — JEs have no header company). */
-async function loadCompanyByGLAccount(glAccountIds: string[], contextUser: UserInfo): Promise<Map<string, string>> {
-  const byGL = new Map<string, string>();
-  if (glAccountIds.length === 0) return byGL;
-  const rv = new RunView();
-  const inList = glAccountIds.map(id => `'${id}'`).join(',');
-  const res = await rv.RunView<{ ID: string; CompanyID: string }>(
-    { EntityName: GL_ENTITY, ExtraFilter: `ID IN (${inList})`, Fields: ['ID', 'CompanyID'], ResultType: 'simple', BypassCache: true },
-    contextUser,
-  );
-  for (const g of res.Results ?? []) byGL.set(g.ID, g.CompanyID);
-  return byGL;
+  const dimsByLine = await loadDimensionsByLine(lines.map(l => l.ID), contextUser);
+  // The line's company IS the parent JE's header company (single-company JE, D3; trigger 50019
+  // guarantees every line's GLAccount belongs to it) — and every gathered JE belongs to companyId.
+  return lines.map(l => ({ companyId, glAccountId: l.GLAccountID, debit: l.DebitAmount ?? 0, credit: l.CreditAmount ?? 0, dims: dimsByLine.get(l.ID) ?? [] }));
 }
 
 async function loadDimensionsByLine(lineIds: string[], contextUser: UserInfo): Promise<Map<string, DimRef[]>> {
@@ -239,12 +226,19 @@ async function loadDimensionsByLine(lineIds: string[], contextUser: UserInfo): P
   return byLine;
 }
 
+/** Today as a date-only value, UTC (repo convention). PostingDate selection is a §7.2 rework item. */
+function todayUTC(): Date {
+  return new Date(new Date().toISOString().slice(0, 10));
+}
+
 async function createBatchHeader(
-  targetSystem: BatchTargetSystem, batchedByUserId: string, jeCount: number, contextUser: UserInfo,
+  companyId: string, targetSystem: BatchTargetSystem, batchedByUserId: string, jeCount: number, contextUser: UserInfo,
 ): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
   const md = new Metadata();
   const batch = await md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
   batch.NewRecord();
+  batch.CompanyID = companyId;
+  batch.PostingDate = todayUTC();
   batch.TargetSystem = targetSystem;
   batch.BatchedAt = new Date();
   batch.BatchedByUserID = batchedByUserId;
@@ -256,63 +250,98 @@ async function createBatchHeader(
   return batch;
 }
 
-/** Write one netted JournalEntryBatchLineItem (+ dimension tags) per group; resolve the ERP account number. */
-async function writeSummaryLines(
-  batchId: string, targetSystem: BatchTargetSystem, groups: NetGroup[], contextUser: UserInfo,
-): Promise<{ totalDebits: number; totalCredits: number }> {
+/**
+ * Write the netted summary as a BatchSummary JournalEntry: header + one JournalEntryLine per net
+ * group (via the encapsulated JournalEntryEntityServer — lines save transactionally with the
+ * header), then the dimension tags, then flip it to Batched (BatchID is already set, so the flip
+ * is the sanctioned preliminary lock; balanced-on-lock 50001 verifies the summary foots).
+ */
+async function writeSummaryJournalEntry(
+  batch: mjBizAppsAccountingJournalEntryBatchEntity, groups: NetGroup[], contextUser: UserInfo,
+): Promise<JournalEntryEntityServer> {
   const md = new Metadata();
-  let totalDebits = 0, totalCredits = 0, lineNo = 0;
+  const summary = await md.GetEntityObject<JournalEntryEntityServer>(JE_ENTITY, contextUser);
+  summary.NewRecord();
+  summary.CompanyID = batch.CompanyID;
+  summary.EffectiveDate = batch.PostingDate;
+  summary.EntryType = 'BatchSummary';
+  summary.Status = 'Pending';
+  summary.BatchID = batch.ID;
+  summary.Description = `Netted summary for batch ${batch.BatchNumber}`;
+
   for (const g of groups) {
-    const externalAccountId = await resolveExternalAccount(g.glAccountId, g.companyId, targetSystem, contextUser);
-    lineNo += 1;
-    const li = await md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchLineItemEntity>(JEBLI_ENTITY, contextUser);
-    li.NewRecord();
-    li.BatchID = batchId;
-    li.CompanyID = g.companyId;
-    li.GLAccountID = g.glAccountId;
-    li.LineNumber = lineNo;
-    li.SourceLineCount = g.sourceLineCount;
-    li.ExternalAccountID = externalAccountId;
-    if (g.side === 'Debit') { li.DebitAmount = g.net; totalDebits += g.net; }
-    else { li.CreditAmount = -g.net; totalCredits += -g.net; }
-    if (!(await li.Save())) throw new Error(`buildBatch: summary line save failed: ${li.LatestResult?.CompleteMessage ?? 'unknown'}`);
-    await writeSummaryDimensions(li.ID, g.dims, contextUser);
+    const line = await summary.CreateLine(contextUser);
+    line.GLAccountID = g.glAccountId;
+    if (g.side === 'Debit') line.DebitAmount = g.net;
+    else line.CreditAmount = -g.net;
+    line.Description = `Netted from ${g.sourceLineCount} source line(s)`;
+  }
+  if (!(await summary.Save())) {
+    throw new Error(`buildBatch: summary JE save failed: ${summary.LatestResult?.CompleteMessage ?? 'unknown'}`);
+  }
+  await writeSummaryDimensions(summary, groups, contextUser);
+
+  // Preliminary lock: Pending→Batched with BatchID set (reversible while the batch stays Pending).
+  summary.Status = 'Batched';
+  if (!(await summary.Save())) {
+    throw new Error(`buildBatch: summary JE lock (Pending→Batched) failed — the summary must foot (50001): ${summary.LatestResult?.CompleteMessage ?? 'unknown'}`);
+  }
+  return summary;
+}
+
+/** Tag each summary line with its group's dimension refs (JournalEntryLineDimension rows). */
+async function writeSummaryDimensions(
+  summary: JournalEntryEntityServer, groups: NetGroup[], contextUser: UserInfo,
+): Promise<void> {
+  const md = new Metadata();
+  const lines = summary.Lines;
+  for (let i = 0; i < groups.length; i++) {
+    const line = lines[i];
+    if (!line) throw new Error(`buildBatch: summary line ${i + 1} missing after save`);
+    for (const d of groups[i].dims) {
+      const dim = await md.GetEntityObject<mjBizAppsAccountingJournalEntryLineDimensionEntity>(JELD_ENTITY, contextUser);
+      dim.NewRecord();
+      dim.JournalEntryLineID = line.ID;
+      dim.DimensionID = d.DimensionID;
+      dim.DimensionValueID = d.DimensionValueID;
+      if (!(await dim.Save())) throw new Error(`buildBatch: summary dimension save failed: ${dim.LatestResult?.CompleteMessage ?? 'unknown'}`);
+    }
+  }
+}
+
+function summaryTotals(groups: NetGroup[]): { totalDebits: number; totalCredits: number } {
+  let totalDebits = 0, totalCredits = 0;
+  for (const g of groups) {
+    if (g.side === 'Debit') totalDebits += g.net;
+    else totalCredits += -g.net;
   }
   return { totalDebits: Math.round(totalDebits * 100) / 100, totalCredits: Math.round(totalCredits * 100) / 100 };
 }
 
-async function writeSummaryDimensions(batchLineItemId: string, dims: DimRef[], contextUser: UserInfo): Promise<void> {
-  const md = new Metadata();
-  for (const d of dims) {
-    const dim = await md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchLineDimensionEntity>(JEBLD_ENTITY, contextUser);
-    dim.NewRecord();
-    dim.JournalEntryBatchLineItemID = batchLineItemId;
-    dim.DimensionID = d.DimensionID;
-    dim.DimensionValueID = d.DimensionValueID;
-    if (!(await dim.Save())) throw new Error(`buildBatch: summary dimension save failed: ${dim.LatestResult?.CompleteMessage ?? 'unknown'}`);
-  }
+/** Point the batch at its summary JE + record the balanced control totals (trigger 50023 verifies coherence). */
+async function setSummaryPointerAndTotals(
+  batch: mjBizAppsAccountingJournalEntryBatchEntity, summaryJournalEntryId: string | null,
+  totalDebits: number, totalCredits: number, jeCount: number,
+): Promise<void> {
+  batch.SummaryJournalEntryID = summaryJournalEntryId;
+  batch.TotalDebits = totalDebits;
+  batch.TotalCredits = totalCredits;
+  batch.TotalEntries = jeCount;
+  if (!(await batch.Save())) throw new Error(`buildBatch: summary-pointer/control-totals save failed (coherence 50023): ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
 }
 
 /**
- * Resolve a local GL account to the identifier the ERP receives — the ACCOUNT NUMBER wire format (AM-4;
- * "BC knows nothing of our IDs"). Precedence: an effective, approved ChartOfAccountsMapping override →
- * the inline GLAccount.ExternalAccountID (when its ExternalSystem matches or is unset) → the account's
- * own Code (the account number — the AM-4 default; per-company charts mirror the ERP's numbers).
- * (The old §5.5 unmapped-GL hard-fail is retired: Code is always present, so resolution never fails.)
+ * Resolve a local GL account to the identifier the ERP receives — the ACCOUNT NUMBER wire format
+ * ("the ERP knows nothing of our IDs"). Precedence: the inline GLAccount.ExternalAccountID (when
+ * its ExternalSystem matches or is unset) → the account's own Code (the account number — the
+ * default; per-company charts mirror the ERP's numbers, so resolution never fails).
+ * ⚠ OPEN with Amith: whether dispatch snapshots this resolution or re-resolves at post time
+ * (the retired batch-line-item snapshot column has no successor yet).
  */
 export async function resolveExternalAccount(
-  glAccountId: string, companyId: string, targetSystem: BatchTargetSystem, contextUser: UserInfo,
+  glAccountId: string, targetSystem: BatchTargetSystem, contextUser: UserInfo,
 ): Promise<string> {
   const rv = new RunView();
-  const today = new Date().toISOString().slice(0, 10);
-  const mapRes = await rv.RunView<{ ExternalAccountID: string }>(
-    { EntityName: COA_MAP_ENTITY,
-      ExtraFilter: `InternalGLAccountID='${glAccountId}' AND CompanyID='${companyId}' AND ExternalSystem='${targetSystem}' AND ApprovedByUserID IS NOT NULL AND EffectiveFrom <= '${today}' AND (EffectiveTo IS NULL OR EffectiveTo >= '${today}')`,
-      Fields: ['ExternalAccountID'], OrderBy: 'EffectiveFrom DESC', MaxRows: 1, ResultType: 'simple', BypassCache: true },
-    contextUser,
-  );
-  if (mapRes.Success && mapRes.Results.length > 0) return mapRes.Results[0].ExternalAccountID;
-
   const glRes = await rv.RunView<{ Code: string; ExternalSystem: string | null; ExternalAccountID: string | null }>(
     { EntityName: GL_ENTITY, ExtraFilter: `ID='${glAccountId}'`, Fields: ['Code', 'ExternalSystem', 'ExternalAccountID'], ResultType: 'simple', BypassCache: true },
     contextUser,
@@ -320,16 +349,10 @@ export async function resolveExternalAccount(
   const gl = glRes.Results?.[0];
   if (!gl) throw new Error(`resolveExternalAccount: GL account ${glAccountId} not found`);
   if (gl.ExternalAccountID && (!gl.ExternalSystem || gl.ExternalSystem === targetSystem)) return gl.ExternalAccountID;
-  return gl.Code; // AM-4: the account number IS the wire identity
+  return gl.Code; // the account number IS the wire identity
 }
 
-async function setControlTotals(batch: mjBizAppsAccountingJournalEntryBatchEntity, totalDebits: number, totalCredits: number): Promise<void> {
-  batch.TotalDebits = totalDebits;
-  batch.TotalCredits = totalCredits;
-  if (!(await batch.Save())) throw new Error(`buildBatch: control-totals save failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
-}
-
-/** Lock the JEs: Status → Batched with BatchID (CK_JournalEntry_BatchedHasBatch + the immutability triggers). */
+/** Lock the member JEs: Status → Batched with BatchID (CK_JournalEntry_BatchedHasBatch + the immutability triggers). */
 async function lockJournalEntries(jeIds: string[], batchId: string, contextUser: UserInfo): Promise<void> {
   const md = new Metadata();
   for (const jeId of jeIds) {
@@ -344,9 +367,10 @@ async function lockJournalEntries(jeIds: string[], batchId: string, contextUser:
 // ─── cancelBatch / regenerateBatch — reverse a PRELIMINARY (unapproved) lock ──
 
 /**
- * Reverse an unapproved (Pending) batch: return its journal entries to the candidate pool, clear its summary,
- * and mark it Cancelled. Valid ONLY while Status='Pending' (approval makes the lock permanent — plan §6). This
- * is the reject path's engine action (task #12) and the atomicity-safety net for a failed approval-task raise.
+ * Reverse an unapproved (Pending) batch: return its member journal entries to the candidate pool,
+ * delete its BatchSummary JE, and mark it Cancelled. Valid ONLY while Status='Pending' (approval
+ * makes the lock permanent — plan §7.3). This is the reject path's engine action and the
+ * atomicity-safety net for a failed approval-task raise.
  */
 export async function cancelBatch(
   batchId: string, contextUser: UserInfo,
@@ -357,19 +381,17 @@ export async function cancelBatch(
   if (batch.Status !== 'Pending') {
     throw new Error(`cancelBatch: batch ${batchId} is ${batch.Status}; only a Pending (unapproved) batch can be cancelled/reversed`);
   }
-  // Order matters: unlock the JEs while the batch is still Pending — the immutability trigger permits the
-  // Batched→Pending reversal only when the owning batch's status is Pending.
-  await unlockJournalEntries(batchId, contextUser);
-  await clearSummaryLines(batchId, contextUser);
+  await tearDownSummaryAndUnlock(batch, contextUser);
   batch.Status = 'Cancelled';
   if (!(await batch.Save())) throw new Error(`cancelBatch: Pending→Cancelled failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
   return batch;
 }
 
 /**
- * Regenerate an OPEN (Pending) batch in place: unlock its current JEs + clear its summary, then re-gather ALL
- * current candidates (every unbatched Pending JE, incl. ones added since) and rebuild the netted summary on the
- * SAME batch record. Candidate FILTERS are a future enhancement (plan §13) — for now it takes everything pending.
+ * Regenerate an OPEN (Pending) batch in place: unlock its current JEs + delete its summary JE, then
+ * re-gather ALL current candidates for the batch's company (every unbatched Pending JE, incl. ones
+ * added since) and rebuild the netted summary on the SAME batch record. Candidate FILTERS are the
+ * §7.2 rework — for now it takes everything pending for the company.
  */
 export async function regenerateBatch(
   batchId: string, targetSystem: BatchTargetSystem, contextUser: UserInfo,
@@ -380,24 +402,44 @@ export async function regenerateBatch(
   if (batch.Status !== 'Pending') {
     throw new Error(`regenerateBatch: batch ${batchId} is ${batch.Status}; only a Pending batch can be regenerated`);
   }
-  await unlockJournalEntries(batchId, contextUser);
-  await clearSummaryLines(batchId, contextUser);
+  await tearDownSummaryAndUnlock(batch, contextUser);
 
-  const jeIds = await loadPendingJEIds(contextUser);
-  const groups = netLines(await loadNettableLines(jeIds, contextUser));
-  const { totalDebits, totalCredits } = await writeSummaryLines(batch.ID, targetSystem, groups, contextUser);
+  const jeIds = await loadPendingJEIds(batch.CompanyID, contextUser);
+  const groups = netLines(await loadNettableLines(batch.CompanyID, jeIds, contextUser));
+  const { totalDebits, totalCredits } = summaryTotals(groups);
   batch.TargetSystem = targetSystem;
-  batch.TotalEntries = jeIds.length;
-  await setControlTotals(batch, totalDebits, totalCredits);
+  let summaryId = '';
+  if (groups.length > 0) {
+    const summary = await writeSummaryJournalEntry(batch, groups, contextUser);
+    summaryId = summary.ID;
+  }
+  await setSummaryPointerAndTotals(batch, summaryId || null, totalDebits, totalCredits, jeIds.length);
   await lockJournalEntries(jeIds, batch.ID, contextUser);
 
-  const companyCount = new Set(groups.map(g => g.companyId)).size;
-  return { batchId: batch.ID, summaryLineCount: groups.length, totalDebits, totalCredits, jeCount: jeIds.length, companyCount };
+  return { batchId: batch.ID, summaryJournalEntryId: summaryId, summaryLineCount: groups.length, totalDebits, totalCredits, jeCount: jeIds.length };
 }
 
 /**
- * Reverse the preliminary lock on every Batched JE in the batch: Status Batched→Pending, BatchID→NULL.
- * MUST run while the batch is still Pending (the reworked immutability trigger permits the unlock only then).
+ * Shared teardown for cancel/regenerate (batch MUST still be Pending):
+ *   1. clear the batch's SummaryJournalEntryID (frees the FK on the summary JE),
+ *   2. unlock every Batched JE in the batch's orbit — members AND the summary — back to
+ *      Pending/BatchID NULL (the sanctioned reversible unlock while the batch is Pending),
+ *   3. delete the now-Pending summary JE (dimension tags → lines → header).
+ */
+async function tearDownSummaryAndUnlock(batch: mjBizAppsAccountingJournalEntryBatchEntity, contextUser: UserInfo): Promise<void> {
+  const summaryId = batch.SummaryJournalEntryID;
+  if (summaryId) {
+    batch.SummaryJournalEntryID = null;
+    if (!(await batch.Save())) throw new Error(`batch teardown: clearing SummaryJournalEntryID failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
+  }
+  await unlockJournalEntries(batch.ID, contextUser);
+  if (summaryId) await deleteSummaryJournalEntry(summaryId, contextUser);
+}
+
+/**
+ * Reverse the preliminary lock on every Batched JE in the batch (members + the summary):
+ * Status Batched→Pending, BatchID→NULL. MUST run while the batch is still Pending (the
+ * immutability trigger permits the unlock only then).
  */
 async function unlockJournalEntries(batchId: string, contextUser: UserInfo): Promise<void> {
   const rv = new RunView();
@@ -415,28 +457,32 @@ async function unlockJournalEntries(batchId: string, contextUser: UserInfo): Pro
   }
 }
 
-/** Delete a Pending batch's summary line items (+ their dimension tags). Allowed while the batch isn't Approved. */
-async function clearSummaryLines(batchId: string, contextUser: UserInfo): Promise<void> {
+/** Delete an unlocked (Pending) BatchSummary JE: dimension tags → lines → header. */
+async function deleteSummaryJournalEntry(summaryJournalEntryId: string, contextUser: UserInfo): Promise<void> {
   const rv = new RunView();
-  const res = await rv.RunView<mjBizAppsAccountingJournalEntryBatchLineItemEntity>(
-    { EntityName: JEBLI_ENTITY, ExtraFilter: `BatchID='${batchId}'`, ResultType: 'entity_object', BypassCache: true },
+  const lineRes = await rv.RunView<mjBizAppsAccountingJournalEntryLineEntity>(
+    { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID='${summaryJournalEntryId}'`, ResultType: 'entity_object', BypassCache: true },
     contextUser,
   );
-  for (const li of res.Results ?? []) {
-    await clearLineDimensions(li.ID, contextUser);
-    if (!(await li.Delete())) throw new Error(`clearSummaryLines: delete line ${li.ID} failed: ${li.LatestResult?.CompleteMessage ?? 'unknown'}`);
+  for (const line of lineRes.Results ?? []) {
+    await deleteLineDimensions(line.ID, contextUser);
+    if (!(await line.Delete())) throw new Error(`deleteSummaryJournalEntry: delete line ${line.ID} failed: ${line.LatestResult?.CompleteMessage ?? 'unknown'}`);
   }
+  const md = new Metadata();
+  const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
+  if (!(await je.Load(summaryJournalEntryId))) throw new Error(`deleteSummaryJournalEntry: summary JE ${summaryJournalEntryId} not found`);
+  if (!(await je.Delete())) throw new Error(`deleteSummaryJournalEntry: delete summary JE failed: ${je.LatestResult?.CompleteMessage ?? 'unknown'}`);
 }
 
-/** Delete the dimension tags on a batch summary line (FK children — must go before the line item). */
-async function clearLineDimensions(batchLineItemId: string, contextUser: UserInfo): Promise<void> {
+/** Delete the dimension tags on a summary JE line (FK children — must go before the line). */
+async function deleteLineDimensions(lineId: string, contextUser: UserInfo): Promise<void> {
   const rv = new RunView();
-  const res = await rv.RunView<mjBizAppsAccountingJournalEntryBatchLineDimensionEntity>(
-    { EntityName: JEBLD_ENTITY, ExtraFilter: `JournalEntryBatchLineItemID='${batchLineItemId}'`, ResultType: 'entity_object', BypassCache: true },
+  const res = await rv.RunView<mjBizAppsAccountingJournalEntryLineDimensionEntity>(
+    { EntityName: JELD_ENTITY, ExtraFilter: `JournalEntryLineID='${lineId}'`, ResultType: 'entity_object', BypassCache: true },
     contextUser,
   );
   for (const d of res.Results ?? []) {
-    if (!(await d.Delete())) throw new Error(`clearLineDimensions: delete dim ${d.ID} failed: ${d.LatestResult?.CompleteMessage ?? 'unknown'}`);
+    if (!(await d.Delete())) throw new Error(`deleteLineDimensions: delete dim ${d.ID} failed: ${d.LatestResult?.CompleteMessage ?? 'unknown'}`);
   }
 }
 
@@ -462,9 +508,9 @@ export async function approveBatch(
 export interface SendBatchOptions { gate: BatchApprovalGate; poster?: ErpPoster }
 
 /**
- * Send an APPROVED batch to the ERP. Requires the approval gate + Status='Approved'; then Approved→Sent
- * (50014/50023 verify the summary foots overall AND per company), posts to the ERP (one summary JE per
- * company, all-or-nothing), and on confirmation flips Sent→Posted + the JEs Batched→GLPosted.
+ * Send an APPROVED batch to the ERP. Requires the approval gate + Status='Approved'; then
+ * Approved→Sent, posts the summary JE's lines to the ERP (all-or-nothing), and on confirmation
+ * flips Sent→Posted + the member JEs AND the summary JE Batched→GLPosted.
  */
 export async function sendBatch(batchId: string, contextUser: UserInfo, options: SendBatchOptions): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
   const poster = options.poster ?? mockErpPoster;
@@ -475,22 +521,23 @@ export async function sendBatch(batchId: string, contextUser: UserInfo, options:
 
   await options.gate.assertApproved(batchId, contextUser); // throws if not CFO-approved
 
-  // Approved → Sent: trg_JEBatch_SummaryReconciles verifies the summary foots (50014) + per company (50023).
   batch.Status = 'Sent';
   batch.SentAt = new Date();
-  if (!(await batch.Save())) throw new Error(`sendBatch: Approved→Sent failed (summary must foot — 50014/50023): ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
+  if (!(await batch.Save())) throw new Error(`sendBatch: Approved→Sent failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
 
-  const summaryLines = await loadSummaryLines(batchId, contextUser);
+  const summaryLines = await loadSummaryLines(batch, contextUser);
   const postResult = await poster(batch, summaryLines, contextUser);
   return postResult.success
     ? await markBatchPosted(batch, postResult.externalBatchRef ?? null, contextUser)
     : await failBatch(batch, postResult.error ?? 'ERP post failed');
 }
 
-async function loadSummaryLines(batchId: string, contextUser: UserInfo): Promise<mjBizAppsAccountingJournalEntryBatchLineItemEntity[]> {
+/** The summary JE's lines — what the ERP receives. */
+async function loadSummaryLines(batch: mjBizAppsAccountingJournalEntryBatchEntity, contextUser: UserInfo): Promise<mjBizAppsAccountingJournalEntryLineEntity[]> {
+  if (!batch.SummaryJournalEntryID) return [];
   const rv = new RunView();
-  const res = await rv.RunView<mjBizAppsAccountingJournalEntryBatchLineItemEntity>(
-    { EntityName: JEBLI_ENTITY, ExtraFilter: `BatchID='${batchId}'`, OrderBy: 'LineNumber', ResultType: 'entity_object', BypassCache: true },
+  const res = await rv.RunView<mjBizAppsAccountingJournalEntryLineEntity>(
+    { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID='${batch.SummaryJournalEntryID}'`, OrderBy: 'LineNumber', ResultType: 'entity_object', BypassCache: true },
     contextUser,
   );
   return res.Success ? res.Results : [];
@@ -508,7 +555,7 @@ async function markBatchPosted(
   return batch;
 }
 
-/** JE Batched → GLPosted (only GLPostedAt/GLReferenceID/Status may change on a locked JE). */
+/** Every Batched JE in the batch's orbit (members + summary) → GLPosted (only GL-roundtrip fields may change on a locked JE). */
 async function markJournalEntriesGLPosted(batchId: string, externalBatchRef: string | null, contextUser: UserInfo): Promise<void> {
   const rv = new RunView();
   const res = await rv.RunView<{ ID: string }>(

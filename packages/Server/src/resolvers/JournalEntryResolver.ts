@@ -49,7 +49,7 @@ export class JournalEntryResolver extends ResolverBase {
       const loaded = await je.Load(journalEntryID);
       if (!loaded) return { Success: false, ErrorMessage: `Journal Entry ${journalEntryID} not found.` };
 
-      const reversal = await je.generateReversal(reason, user);
+      const reversal = await je.GenerateReversal(reason, user);
       return { Success: true, ReversalJournalEntryID: reversal.ID, ReversalEntryNumber: reversal.EntryNumber };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

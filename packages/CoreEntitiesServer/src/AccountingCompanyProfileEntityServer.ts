@@ -4,8 +4,9 @@
  * On first save (new record), runs the per-Company initialization that used
  * to live in `spInitializeAccountingCompanyProfile`:
  *   1. Seed the default chart of accounts (10 GLAccount rows; minimal AR-subledger set — see SeedData.ts)
- *   2. Wire the profile's default-account refs (AR, DefRev, SalesTax, FX)
- * (Period generation was RETIRED 2026-07-06 — AccountingPeriod removed; the ERP owns periods. CH-1.)
+ * (Period generation was RETIRED 2026-07-06 — AccountingPeriod removed; the ERP owns periods. CH-1.
+ *  Default-account ref wiring RETIRED 2026-07-23 — the ACP default-account columns were dropped;
+ *  the role-based GLAccountRole/GLAccountLink model replaces them, seeded with the port work.)
  *
  * Every row creation goes through `Metadata.GetEntityObject` + `.Save()`, so
  * `__mj.RecordChange` captures the audit trail for every seeded record.
@@ -34,7 +35,6 @@ import {
 
 import {
   DEFAULT_CHART_OF_ACCOUNTS,
-  DEFAULT_GL_ACCOUNT_REFS,
   SeededGLAccount,
 } from './SeedData.js';
 
@@ -67,11 +67,13 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
   /**
    * One-call initialization that used to be `spInitializeAccountingCompanyProfile`.
    * Each step is idempotent so a failed init can be re-run.
+   * (The former default-account ref wiring was RETIRED 2026-07-23 — the ACP default-account
+   * columns were dropped in the rewritten baseline; the role-based GLAccountRole/GLAccountLink
+   * model replaces them and its seeding lands with the port work.)
    */
   private async initializeProfile(): Promise<void> {
     try {
       await this.seedDefaultChartOfAccounts();
-      await this.wireDefaultGLAccountRefs();
     } catch (error: unknown) {
       LogError(
         `AccountingCompanyProfileEntityServer.initializeProfile failed for CompanyID=${this.ID}: ${error}`,
@@ -143,64 +145,6 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
         `AccountingCompanyProfileEntityServer: failed to seed GLAccount ${seed.code} for CompanyID=${companyId}`,
       );
     }
-  }
-
-  // ─── Wire default GL account refs ─────────────────────────────────────
-
-  private async wireDefaultGLAccountRefs(): Promise<void> {
-    const companyId = this.ID;
-    const codeToId = await this.loadGLAccountIdsByCode(companyId);
-
-    const refs: Array<{ field: string; code: string }> = [
-      { field: 'AROpenGLAccountID',              code: DEFAULT_GL_ACCOUNT_REFS.AROpen },
-      { field: 'DeferredRevenueGLAccountID',     code: DEFAULT_GL_ACCOUNT_REFS.DeferredRevenue },
-      { field: 'SalesTaxPayableGLAccountID',     code: DEFAULT_GL_ACCOUNT_REFS.SalesTaxPayable },
-      { field: 'RealizedFXGainLossGLAccountID',  code: DEFAULT_GL_ACCOUNT_REFS.RealizedFXGainLoss },
-      { field: 'UnrealizedFXGainLossGLAccountID', code: DEFAULT_GL_ACCOUNT_REFS.UnrealizedFXGainLoss },
-    ];
-
-    let touched = false;
-    for (const ref of refs) {
-      if (this.Get(ref.field)) continue; // already set; respect deployment override
-      const accountId = codeToId.get(ref.code);
-      if (!accountId) continue;
-      this.Set(ref.field, accountId);
-      touched = true;
-    }
-
-    if (touched) {
-      // Second Save() to persist the ref wiring. Record Changes will capture
-      // exactly which ref fields moved from NULL → seeded UUIDs.
-      const saved = await super.Save();
-      if (!saved) {
-        LogError(
-          `AccountingCompanyProfileEntityServer: failed to persist default GL-account refs for CompanyID=${companyId}`,
-        );
-      }
-    }
-  }
-
-  private async loadGLAccountIdsByCode(companyId: string): Promise<Map<string, string>> {
-    const rv = new RunView();
-    const result = await rv.RunView<mjBizAppsAccountingGLAccountEntity>(
-      {
-        EntityName: 'MJ_BizApps_Accounting: GL Accounts',
-        ExtraFilter: `CompanyID = '${companyId}'`,
-        ResultType: 'simple',
-        Fields: ['ID', 'Code'],
-      },
-      this.ContextCurrentUser,
-    );
-    if (!result.Success) {
-      LogError(`Failed to load GLAccount IDs by code: ${result.ErrorMessage}`);
-      return new Map();
-    }
-    const map = new Map<string, string>();
-    for (const row of result.Results ?? []) {
-      const r = row as { ID: string; Code: string };
-      map.set(r.Code, r.ID);
-    }
-    return map;
   }
 
 }

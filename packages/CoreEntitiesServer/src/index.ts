@@ -33,8 +33,8 @@ export { getNextJournalEntryNumber, getNextBatchNumber } from './SequenceService
 export { validateJournalEntry, checkBalance } from './JournalEntryValidation.js';
 export type { JournalEntryValidationResult } from './JournalEntryValidation.js';
 
-// S1 — batching engine: net Pending JEs into a MULTI-COMPANY batch (per-company grouping on the
-// line items, AM-4), resolve ERP accounts, lock + dispatch (CFO-approval gate + ERP-post seam).
+// S1 — batching engine: net a company's Pending JEs into a SINGLE-COMPANY batch (D7) whose
+// summary is a BatchSummary JournalEntry, lock + dispatch (CFO-approval gate + ERP-post seam).
 export {
   buildBatch,
   approveBatch,
@@ -62,30 +62,10 @@ export type {
 // production). See TasksAppApprovalGate.ts.
 export { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
 
-// S3 — scheduled-JE schedule CREATION (Block 4). The materializer was retired 2026-07-06 (AM-6):
-// domain entity servers generate the JEs. See ScheduledJournalEntryService.ts.
-export {
-  createScheduledEntries,
-  computeStraightLineSchedule,
-  mapScheduledEntryType,
-} from './ScheduledJournalEntryService.js';
-export type {
-  ScheduledEntryType,
-  JournalEntryType,
-  SchedulePeriod,
-  CreateScheduleSpec,
-} from './ScheduledJournalEntryService.js';
-
-// Block 5 — Chart-of-Accounts mapping approval workflow (propose → approve, strict 1:1). See ChartOfAccountsMappingService.ts.
-export {
-  proposeMapping,
-  approveMapping,
-  rangesOverlap,
-} from './ChartOfAccountsMappingService.js';
-export type {
-  ProposeMappingSpec,
-  ApproveMappingResult,
-} from './ChartOfAccountsMappingService.js';
+// (ScheduledJournalEntryService retired 2026-07-23 — the schedule tables were dropped in the
+//  rewritten baseline (plan D15: rev-rec is REAL forward-dated JEs written at booking).
+//  ChartOfAccountsMappingService retired 2026-07-23 — the mapping table was dropped; the account
+//  Code / GLAccount.ExternalAccountID is the ERP wire identity. Both live in git history.)
 
 // Block 4 — deterministic, idempotent Association demo seed (multi-company AR/DefRev/Tax/Intercompany
 // data so the Explorer GUI + the read-model views have meaningful fixtures). See AssociationDemoSeedData.ts.

@@ -1901,7 +1901,7 @@ VALUES
   '__mj_BizAppsAccounting',
   1, 1000000,
   NULL,
-  'MemberJunction: Common Business App Data',
+  'MemberJunction: Accounting Business App Data',
   'MJ_BizApps_Accounting: ', NULL
 )
 

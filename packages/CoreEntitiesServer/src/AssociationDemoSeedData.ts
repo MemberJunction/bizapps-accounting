@@ -329,14 +329,23 @@ async function makeJE(
   return je.ID;
 }
 
-/** Build + approve + dispatch a batch over ALL Pending JEs → they become GLPosted. */
+/** Build + approve + dispatch one SINGLE-COMPANY batch (D7) per company with Pending JEs → they become GLPosted. */
 async function postPending(contextUser: UserInfo, report: DemoSeedReport): Promise<void> {
-  const built = await buildBatch(TARGET_SYSTEM, contextUser.ID, contextUser, AutoApproveGate);
-  if (built === null) throw new Error('postPending: buildBatch returned null (no pending JEs or all netted to zero).');
-  await approveBatch(built.batchId, contextUser.ID, contextUser);
-  const batch = await sendBatch(built.batchId, contextUser, { gate: AutoApproveGate });
-  if (batch.Status !== 'Posted') throw new Error(`postPending: batch should be Posted, got ${batch.Status}`);
-  report.BatchesPosted += 1;
+  const rv = new RunView();
+  const res = await rv.RunView<{ CompanyID: string }>(
+    { EntityName: JE_ENTITY, ExtraFilter: `Status='Pending' AND EntryType<>'BatchSummary'`, Fields: ['CompanyID'], ResultType: 'simple', BypassCache: true },
+    contextUser,
+  );
+  const companyIds = [...new Set((res.Results ?? []).map(r => r.CompanyID))];
+  if (companyIds.length === 0) throw new Error('postPending: no pending JEs to batch.');
+  for (const companyId of companyIds) {
+    const built = await buildBatch(companyId, TARGET_SYSTEM, contextUser.ID, contextUser, AutoApproveGate);
+    if (built === null) throw new Error(`postPending: buildBatch returned null for company ${companyId} (no pending JEs or all netted to zero).`);
+    await approveBatch(built.batchId, contextUser.ID, contextUser);
+    const batch = await sendBatch(built.batchId, contextUser, { gate: AutoApproveGate });
+    if (batch.Status !== 'Posted') throw new Error(`postPending: batch should be Posted, got ${batch.Status}`);
+    report.BatchesPosted += 1;
+  }
 }
 
 // ─── AR activity (→ vw_AROpenByCustomer, vw_ARAging) ──────────────────────────
