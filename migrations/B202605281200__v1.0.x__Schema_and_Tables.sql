@@ -312,7 +312,10 @@ CREATE TABLE __mj_BizAppsAccounting.JournalEntryBatch (
     CONSTRAINT CK_JournalEntryBatch_Status CHECK (Status IN ('Pending','Approved','Sent','Posted','Failed','Cancelled')),
     CONSTRAINT CK_JournalEntryBatch_Totals CHECK (TotalDebits >= 0 AND TotalCredits >= 0 AND TotalEntries >= 0),
     CONSTRAINT CK_JournalEntryBatch_TargetSystem CHECK (TargetSystem IN ('BusinessCentral','QuickBooks','NetSuite','Sage','Xero','Other')),
-    CONSTRAINT CK_JournalEntryBatch_ApprovalTask CHECK ((ApprovalTaskID IS NULL) = (ApprovalTaskRaisedAt IS NULL))
+    CONSTRAINT CK_JournalEntryBatch_ApprovalTask CHECK (
+        (ApprovalTaskID IS NULL AND ApprovalTaskRaisedAt IS NULL) OR
+        (ApprovalTaskID IS NOT NULL AND ApprovalTaskRaisedAt IS NOT NULL)
+    )
 );
 GO
 
