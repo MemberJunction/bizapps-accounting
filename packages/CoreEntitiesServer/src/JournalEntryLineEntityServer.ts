@@ -5,6 +5,7 @@
 import { BaseEntity, ValidationErrorInfo } from '@memberjunction/core';
 import { RegisterClass } from '@memberjunction/global';
 import { mjBizAppsAccountingJournalEntryLineEntity } from '@mj-biz-apps/accounting-entities';
+import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
 
@@ -20,7 +21,7 @@ export class JournalEntryLineEntityServer extends mjBizAppsAccountingJournalEntr
     return dr - cr;
   }
 
-  /** Validate line-level fields (either Debit XOR Credit set, non-negative values). */
+  /** Validate line-level fields (either Debit XOR Credit set, non-negative values, company & active status). */
   public override Validate() {
     const result = super.Validate();
     const dr = this.DebitAmount;
@@ -82,6 +83,34 @@ export class JournalEntryLineEntityServer extends mjBizAppsAccountingJournalEntr
           null,
         ),
       );
+    }
+
+    // Validation via AccountingEngineBase cache: verify GL Account active status & company alignment
+    if (this.GLAccountID && this.ParentJournalEntry?.CompanyID) {
+      const gl = AccountingEngineBase.Instance.GLAccountByID(this.GLAccountID);
+      if (gl) {
+        if (!gl.IsActive) {
+          result.Success = false;
+          result.Errors.push(
+            new ValidationErrorInfo(
+              'JournalEntryLineEntityServer.Validate',
+              `Line ${this.LineNumber || ''}: GL Account ${gl.Code || gl.ID} is inactive.`,
+              null,
+            ),
+          );
+        }
+
+        if (gl.CompanyID && gl.CompanyID.toLowerCase() !== this.ParentJournalEntry.CompanyID.toLowerCase()) {
+          result.Success = false;
+          result.Errors.push(
+            new ValidationErrorInfo(
+              'JournalEntryLineEntityServer.Validate',
+              `Line ${this.LineNumber || ''}: GL Account ${gl.Code || gl.ID} belongs to company ${gl.CompanyID}, but parent Journal Entry belongs to company ${this.ParentJournalEntry.CompanyID} (single-company isolation rule D3).`,
+              null,
+            ),
+          );
+        }
+      }
     }
 
     return result;

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Metadata, EntityInfo } from '@memberjunction/core';
+import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import { JournalEntryEntityServer } from '../JournalEntryEntityServer.js';
 import { JournalEntryLineEntityServer } from '../JournalEntryLineEntityServer.js';
 
@@ -20,6 +21,7 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
       info.Name = name;
       info.Status = 'Active';
       info.AllowDirectSQL = true;
+
       const fields = fieldNames.map(fn => ({
         Name: fn,
         CodeName: fn,
@@ -37,6 +39,10 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
       });
       Object.defineProperty(info, 'PrimaryKeys', {
         get: () => fields.filter((f: any) => f.IsPrimaryKey),
+        configurable: true,
+      });
+      Object.defineProperty(info, 'HasInactiveFields', {
+        get: () => false,
         configurable: true,
       });
       return info;
@@ -189,19 +195,49 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
       expect(result.Errors.some(e => getErrorText(e).includes('must specify ReversesJournalEntryID'))).toBe(true);
     });
 
-    it('passes validation for a valid, balanced 2-line Journal Entry', () => {
+    it('fails validation when a line GL account belongs to a different company than parent JE', () => {
       const line1 = new JournalEntryLineEntityServer(jelEntityInfo as any);
       line1.NewRecord();
-      line1.GLAccountID = 'GL_1';
+      line1.GLAccountID = 'GL_OTHER_COMPANY';
+      line1.DebitAmount = 100;
+
+      const line2 = new JournalEntryLineEntityServer(jelEntityInfo as any);
+      line2.NewRecord();
+      line2.GLAccountID = 'GL_100';
+      line2.CreditAmount = 100;
+
+      je.AddLine(line1);
+      je.AddLine(line2);
+
+      // Inject mock GL accounts into AccountingEngineBase instance cache
+      (AccountingEngineBase.Instance as any)._glAccounts = [
+        { ID: 'GL_OTHER_COMPANY', CompanyID: 'CO_999', Code: '1001', IsActive: true },
+        { ID: 'GL_100', CompanyID: 'CO_100', Code: '2001', IsActive: true },
+      ];
+
+      const result = je.Validate();
+      expect(result.Success).toBe(false);
+      expect(result.Errors.some(e => getErrorText(e).includes('belongs to company CO_999, but parent Journal Entry belongs to company CO_100'))).toBe(true);
+    });
+
+    it('passes validation for a valid, balanced 2-line Journal Entry with matching company GL accounts', () => {
+      const line1 = new JournalEntryLineEntityServer(jelEntityInfo as any);
+      line1.NewRecord();
+      line1.GLAccountID = 'GL_100_A';
       line1.DebitAmount = 150.50;
 
       const line2 = new JournalEntryLineEntityServer(jelEntityInfo as any);
       line2.NewRecord();
-      line2.GLAccountID = 'GL_2';
+      line2.GLAccountID = 'GL_100_B';
       line2.CreditAmount = 150.50;
 
       je.AddLine(line1);
       je.AddLine(line2);
+
+      (AccountingEngineBase.Instance as any)._glAccounts = [
+        { ID: 'GL_100_A', CompanyID: 'CO_100', Code: '1001', IsActive: true },
+        { ID: 'GL_100_B', CompanyID: 'CO_100', Code: '2001', IsActive: true },
+      ];
 
       const result = je.Validate();
       expect(result.Errors.map(getErrorText)).toEqual([]);
