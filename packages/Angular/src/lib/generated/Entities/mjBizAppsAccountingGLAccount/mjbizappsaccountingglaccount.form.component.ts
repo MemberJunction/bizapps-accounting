@@ -18,8 +18,8 @@ export class mjBizAppsAccountingGLAccountFormComponent extends BaseFormComponent
         this.initSections([
             { sectionKey: 'details', sectionName: 'Details', isExpanded: true },
             { sectionKey: 'mJBizAppsAccountingJournalEntryLines', sectionName: 'Journal Entry Lines', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingGLAccountLinks', sectionName: 'GL Account Links', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingGLAccounts', sectionName: 'GL Accounts', isExpanded: false }
+            { sectionKey: 'mJBizAppsAccountingGLAccounts', sectionName: 'GL Accounts', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingGLAccountLinks', sectionName: 'GL Account Links', isExpanded: false }
         ]);
     }
 }

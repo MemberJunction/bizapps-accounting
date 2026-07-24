@@ -17,7 +17,7 @@ import { MaxLength } from 'class-validator';
 import * as mj_core_schema_server_object_types from '@memberjunction/server'
 
 
-import { mjBizAppsAccountingAccountingCompanyProfileEntity, mjBizAppsAccountingCurrencyEntity, mjBizAppsAccountingCurrencySpotRateEntity, mjBizAppsAccountingCustomerTaxProfileEntity, mjBizAppsAccountingDimensionValueEntity, mjBizAppsAccountingDimensionEntity, mjBizAppsAccountingGLAccountLinkDimensionEntity, mjBizAppsAccountingGLAccountLinkEntity, mjBizAppsAccountingGLAccountRoleEntity, mjBizAppsAccountingGLAccountEntity, mjBizAppsAccountingJournalEntryEntity, mjBizAppsAccountingJournalEntryBatchSequenceEntity, mjBizAppsAccountingJournalEntryBatchEntity, mjBizAppsAccountingJournalEntryLineDimensionEntity, mjBizAppsAccountingJournalEntryLineEntity, mjBizAppsAccountingJournalEntryLinkEntity, mjBizAppsAccountingJournalEntrySequenceEntity, mjBizAppsAccountingTaxAuthorityEntity, mjBizAppsAccountingTaxJurisdictionEntity, mjBizAppsAccountingTaxLiabilityEntity, mjBizAppsAccountingTaxRateEntity, mjBizAppsAccountingTaxRemittanceEntity } from '@mj-biz-apps/accounting-entities';
+import { mjBizAppsAccountingAccountingCompanyProfileEntity, mjBizAppsAccountingCurrencyEntity, mjBizAppsAccountingCurrencySpotRateEntity, mjBizAppsAccountingCustomerTaxProfileEntity, mjBizAppsAccountingDimensionValueEntity, mjBizAppsAccountingDimensionEntity, mjBizAppsAccountingGLAccountLinkDimensionEntity, mjBizAppsAccountingGLAccountLinkEntity, mjBizAppsAccountingGLAccountRoleEntity, mjBizAppsAccountingGLAccountEntity, mjBizAppsAccountingJournalEntryEntity, mjBizAppsAccountingJournalEntryBatchSequenceEntity, mjBizAppsAccountingJournalEntryBatchEntity, mjBizAppsAccountingJournalEntryLineDimensionEntity, mjBizAppsAccountingJournalEntryLineEntity, mjBizAppsAccountingJournalEntrySequenceEntity, mjBizAppsAccountingTaxAuthorityEntity, mjBizAppsAccountingTaxJurisdictionEntity, mjBizAppsAccountingTaxLiabilityEntity, mjBizAppsAccountingTaxRateEntity, mjBizAppsAccountingTaxRemittanceEntity } from '@mj-biz-apps/accounting-entities';
     
 
 //****************************************************************************
@@ -425,17 +425,17 @@ export class mjBizAppsAccountingCurrency_ {
     @Field(() => [mjBizAppsAccountingAccountingCompanyProfile_])
     mjBizAppsAccountingAccountingCompanyProfiles_ReportingCurrencyCodeArray: mjBizAppsAccountingAccountingCompanyProfile_[]; // Link to mjBizAppsAccountingAccountingCompanyProfiles
     
+    @Field(() => [mjBizAppsAccountingGLAccount_])
+    mjBizAppsAccountingGLAccounts_CurrencyCodeArray: mjBizAppsAccountingGLAccount_[]; // Link to mjBizAppsAccountingGLAccounts
+    
+    @Field(() => [mjBizAppsAccountingJournalEntryLine_])
+    mjBizAppsAccountingJournalEntryLines_OriginalCurrencyCodeArray: mjBizAppsAccountingJournalEntryLine_[]; // Link to mjBizAppsAccountingJournalEntryLines
+    
     @Field(() => [mjBizAppsAccountingCurrencySpotRate_])
     mjBizAppsAccountingCurrencySpotRates_FromCurrencyCodeArray: mjBizAppsAccountingCurrencySpotRate_[]; // Link to mjBizAppsAccountingCurrencySpotRates
     
     @Field(() => [mjBizAppsAccountingCurrencySpotRate_])
     mjBizAppsAccountingCurrencySpotRates_ToCurrencyCodeArray: mjBizAppsAccountingCurrencySpotRate_[]; // Link to mjBizAppsAccountingCurrencySpotRates
-    
-    @Field(() => [mjBizAppsAccountingJournalEntryLine_])
-    mjBizAppsAccountingJournalEntryLines_OriginalCurrencyCodeArray: mjBizAppsAccountingJournalEntryLine_[]; // Link to mjBizAppsAccountingJournalEntryLines
-    
-    @Field(() => [mjBizAppsAccountingGLAccount_])
-    mjBizAppsAccountingGLAccounts_CurrencyCodeArray: mjBizAppsAccountingGLAccount_[]; // Link to mjBizAppsAccountingGLAccounts
     
 }
 
@@ -574,6 +574,26 @@ export class mjBizAppsAccountingCurrencyResolver extends ResolverBase {
         return result;
     }
         
+    @FieldResolver(() => [mjBizAppsAccountingGLAccount_])
+    async mjBizAppsAccountingGLAccounts_CurrencyCodeArray(@Root() mjbizappsaccountingcurrency_: mjBizAppsAccountingCurrency_, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine) {
+        this.CheckUserReadPermissions('MJ_BizApps_Accounting: GL Accounts', userPayload);
+        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
+        const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwGLAccounts')} WHERE ${provider.QuoteIdentifier('CurrencyCode')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: GL Accounts', userPayload, EntityPermissionType.Read, 'AND');
+        const rows = await provider.ExecuteSQL(sSQL, [mjbizappsaccountingcurrency_.ID], undefined, this.GetUserFromPayload(userPayload));
+        const result = await this.ArrayMapFieldNamesToCodeNames('MJ_BizApps_Accounting: GL Accounts', rows, this.GetUserFromPayload(userPayload));
+        return result;
+    }
+        
+    @FieldResolver(() => [mjBizAppsAccountingJournalEntryLine_])
+    async mjBizAppsAccountingJournalEntryLines_OriginalCurrencyCodeArray(@Root() mjbizappsaccountingcurrency_: mjBizAppsAccountingCurrency_, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine) {
+        this.CheckUserReadPermissions('MJ_BizApps_Accounting: Journal Entry Lines', userPayload);
+        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
+        const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwJournalEntryLines')} WHERE ${provider.QuoteIdentifier('OriginalCurrencyCode')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: Journal Entry Lines', userPayload, EntityPermissionType.Read, 'AND');
+        const rows = await provider.ExecuteSQL(sSQL, [mjbizappsaccountingcurrency_.ID], undefined, this.GetUserFromPayload(userPayload));
+        const result = await this.ArrayMapFieldNamesToCodeNames('MJ_BizApps_Accounting: Journal Entry Lines', rows, this.GetUserFromPayload(userPayload));
+        return result;
+    }
+        
     @FieldResolver(() => [mjBizAppsAccountingCurrencySpotRate_])
     async mjBizAppsAccountingCurrencySpotRates_FromCurrencyCodeArray(@Root() mjbizappsaccountingcurrency_: mjBizAppsAccountingCurrency_, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine) {
         this.CheckUserReadPermissions('MJ_BizApps_Accounting: Currency Spot Rates', userPayload);
@@ -591,26 +611,6 @@ export class mjBizAppsAccountingCurrencyResolver extends ResolverBase {
         const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwCurrencySpotRates')} WHERE ${provider.QuoteIdentifier('ToCurrencyCode')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: Currency Spot Rates', userPayload, EntityPermissionType.Read, 'AND');
         const rows = await provider.ExecuteSQL(sSQL, [mjbizappsaccountingcurrency_.ID], undefined, this.GetUserFromPayload(userPayload));
         const result = await this.ArrayMapFieldNamesToCodeNames('MJ_BizApps_Accounting: Currency Spot Rates', rows, this.GetUserFromPayload(userPayload));
-        return result;
-    }
-        
-    @FieldResolver(() => [mjBizAppsAccountingJournalEntryLine_])
-    async mjBizAppsAccountingJournalEntryLines_OriginalCurrencyCodeArray(@Root() mjbizappsaccountingcurrency_: mjBizAppsAccountingCurrency_, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine) {
-        this.CheckUserReadPermissions('MJ_BizApps_Accounting: Journal Entry Lines', userPayload);
-        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
-        const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwJournalEntryLines')} WHERE ${provider.QuoteIdentifier('OriginalCurrencyCode')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: Journal Entry Lines', userPayload, EntityPermissionType.Read, 'AND');
-        const rows = await provider.ExecuteSQL(sSQL, [mjbizappsaccountingcurrency_.ID], undefined, this.GetUserFromPayload(userPayload));
-        const result = await this.ArrayMapFieldNamesToCodeNames('MJ_BizApps_Accounting: Journal Entry Lines', rows, this.GetUserFromPayload(userPayload));
-        return result;
-    }
-        
-    @FieldResolver(() => [mjBizAppsAccountingGLAccount_])
-    async mjBizAppsAccountingGLAccounts_CurrencyCodeArray(@Root() mjbizappsaccountingcurrency_: mjBizAppsAccountingCurrency_, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine) {
-        this.CheckUserReadPermissions('MJ_BizApps_Accounting: GL Accounts', userPayload);
-        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
-        const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwGLAccounts')} WHERE ${provider.QuoteIdentifier('CurrencyCode')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: GL Accounts', userPayload, EntityPermissionType.Read, 'AND');
-        const rows = await provider.ExecuteSQL(sSQL, [mjbizappsaccountingcurrency_.ID], undefined, this.GetUserFromPayload(userPayload));
-        const result = await this.ArrayMapFieldNamesToCodeNames('MJ_BizApps_Accounting: GL Accounts', rows, this.GetUserFromPayload(userPayload));
         return result;
     }
         
@@ -1688,7 +1688,7 @@ export class mjBizAppsAccountingGLAccountLink_ {
     @MaxLength(36)
     GLAccountRoleID: string;
         
-    @Field({description: `Polymorphic reference part 1: the MJ Entity of the target record (references __mj.Entity). Same TaggedItem-style pattern as JournalEntryLink.`}) 
+    @Field({description: `Polymorphic reference part 1: the MJ Entity of the target record (references __mj.Entity). Same TaggedItem-style pattern as JournalEntry.LinkedEntityID/LinkedRecordID (plan D25).`}) 
     @MaxLength(36)
     EntityID: string;
         
@@ -2161,11 +2161,11 @@ export class mjBizAppsAccountingGLAccount_ {
     @Field(() => [mjBizAppsAccountingJournalEntryLine_])
     mjBizAppsAccountingJournalEntryLines_GLAccountIDArray: mjBizAppsAccountingJournalEntryLine_[]; // Link to mjBizAppsAccountingJournalEntryLines
     
-    @Field(() => [mjBizAppsAccountingGLAccountLink_])
-    mjBizAppsAccountingGLAccountLinks_GLAccountIDArray: mjBizAppsAccountingGLAccountLink_[]; // Link to mjBizAppsAccountingGLAccountLinks
-    
     @Field(() => [mjBizAppsAccountingGLAccount_])
     mjBizAppsAccountingGLAccounts_ParentGLAccountIDArray: mjBizAppsAccountingGLAccount_[]; // Link to mjBizAppsAccountingGLAccounts
+    
+    @Field(() => [mjBizAppsAccountingGLAccountLink_])
+    mjBizAppsAccountingGLAccountLinks_GLAccountIDArray: mjBizAppsAccountingGLAccountLink_[]; // Link to mjBizAppsAccountingGLAccountLinks
     
 }
 
@@ -2330,16 +2330,6 @@ export class mjBizAppsAccountingGLAccountResolver extends ResolverBase {
         return result;
     }
         
-    @FieldResolver(() => [mjBizAppsAccountingGLAccountLink_])
-    async mjBizAppsAccountingGLAccountLinks_GLAccountIDArray(@Root() mjbizappsaccountingglaccount_: mjBizAppsAccountingGLAccount_, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine) {
-        this.CheckUserReadPermissions('MJ_BizApps_Accounting: GL Account Links', userPayload);
-        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
-        const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwGLAccountLinks')} WHERE ${provider.QuoteIdentifier('GLAccountID')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: GL Account Links', userPayload, EntityPermissionType.Read, 'AND');
-        const rows = await provider.ExecuteSQL(sSQL, [mjbizappsaccountingglaccount_.ID], undefined, this.GetUserFromPayload(userPayload));
-        const result = await this.ArrayMapFieldNamesToCodeNames('MJ_BizApps_Accounting: GL Account Links', rows, this.GetUserFromPayload(userPayload));
-        return result;
-    }
-        
     @FieldResolver(() => [mjBizAppsAccountingGLAccount_])
     async mjBizAppsAccountingGLAccounts_ParentGLAccountIDArray(@Root() mjbizappsaccountingglaccount_: mjBizAppsAccountingGLAccount_, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine) {
         this.CheckUserReadPermissions('MJ_BizApps_Accounting: GL Accounts', userPayload);
@@ -2347,6 +2337,16 @@ export class mjBizAppsAccountingGLAccountResolver extends ResolverBase {
         const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwGLAccounts')} WHERE ${provider.QuoteIdentifier('ParentGLAccountID')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: GL Accounts', userPayload, EntityPermissionType.Read, 'AND');
         const rows = await provider.ExecuteSQL(sSQL, [mjbizappsaccountingglaccount_.ID], undefined, this.GetUserFromPayload(userPayload));
         const result = await this.ArrayMapFieldNamesToCodeNames('MJ_BizApps_Accounting: GL Accounts', rows, this.GetUserFromPayload(userPayload));
+        return result;
+    }
+        
+    @FieldResolver(() => [mjBizAppsAccountingGLAccountLink_])
+    async mjBizAppsAccountingGLAccountLinks_GLAccountIDArray(@Root() mjbizappsaccountingglaccount_: mjBizAppsAccountingGLAccount_, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine) {
+        this.CheckUserReadPermissions('MJ_BizApps_Accounting: GL Account Links', userPayload);
+        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
+        const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwGLAccountLinks')} WHERE ${provider.QuoteIdentifier('GLAccountID')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: GL Account Links', userPayload, EntityPermissionType.Read, 'AND');
+        const rows = await provider.ExecuteSQL(sSQL, [mjbizappsaccountingglaccount_.ID], undefined, this.GetUserFromPayload(userPayload));
+        const result = await this.ArrayMapFieldNamesToCodeNames('MJ_BizApps_Accounting: GL Account Links', rows, this.GetUserFromPayload(userPayload));
         return result;
     }
         
@@ -2410,33 +2410,13 @@ export class mjBizAppsAccountingJournalEntry_ {
     @Field({nullable: true, description: `Free-form human description of the entry.`}) 
     Description?: string;
         
-    @Field({nullable: true, description: `Soft polymorphic ref to a source Order in a downstream app. NO FK. Accounting stores the UUID for audit drill-through but has zero knowledge of Order entities.`}) 
+    @Field({nullable: true, description: `Polymorphic origin part 1 (plan D25): the MJ Entity of the single causal source record for this JE (OrderLine for booking/rev-rec entries, Payment for receipts/refunds, TaxRemittance for remittances, ...). FK to __mj.Entity. NULL (with LinkedRecordID) = manual JE.`}) 
     @MaxLength(36)
-    OrderID?: string;
+    LinkedEntityID?: string;
         
-    @Field({nullable: true, description: `Soft polymorphic ref to a source OrderLine. NO FK.`}) 
-    @MaxLength(36)
-    OrderLineID?: string;
-        
-    @Field({nullable: true, description: `Soft polymorphic ref to a source Subscription. NO FK.`}) 
-    @MaxLength(36)
-    SubscriptionID?: string;
-        
-    @Field({nullable: true, description: `Soft polymorphic ref to a source Payment. NO FK.`}) 
-    @MaxLength(36)
-    PaymentID?: string;
-        
-    @Field({nullable: true, description: `Soft polymorphic ref to a source Contract. NO FK.`}) 
-    @MaxLength(36)
-    ContractID?: string;
-        
-    @Field({nullable: true, description: `Soft polymorphic ref to an IntercompanyFlow record orchestrated upstream. NO FK.`}) 
-    @MaxLength(36)
-    IntercompanyFlowID?: string;
-        
-    @Field({nullable: true, description: `When the JE represents a tax remittance, the remittance record it implements.`}) 
-    @MaxLength(36)
-    TaxRemittanceID?: string;
+    @Field({nullable: true, description: `Polymorphic origin part 2: the source record's primary key (NVARCHAR(400) supports stringified composite keys). Soft by nature — the record lives in a downstream app's schema. Set and NULL together with LinkedEntityID (CK_JournalEntry_LinkedPair).`}) 
+    @MaxLength(400)
+    LinkedRecordID?: string;
         
     @Field({nullable: true, description: `When set, this JE is a reversal of the referenced original JE. EntryType MUST be 'Reversal' (trg_JE_ReversalConsistency).`}) 
     @MaxLength(36)
@@ -2472,6 +2452,10 @@ export class mjBizAppsAccountingJournalEntry_ {
     Company: string;
         
     @Field({nullable: true}) 
+    @MaxLength(255)
+    LinkedEntity?: string;
+        
+    @Field({nullable: true}) 
     @MaxLength(500)
     File?: string;
         
@@ -2483,23 +2467,20 @@ export class mjBizAppsAccountingJournalEntry_ {
     @MaxLength(36)
     RootReversedByJournalEntryID?: string;
         
+    @Field(() => [mjBizAppsAccountingJournalEntryLine_])
+    mjBizAppsAccountingJournalEntryLines_JournalEntryIDArray: mjBizAppsAccountingJournalEntryLine_[]; // Link to mjBizAppsAccountingJournalEntryLines
+    
     @Field(() => [mjBizAppsAccountingJournalEntry_])
     mjBizAppsAccountingJournalEntries_ReversesJournalEntryIDArray: mjBizAppsAccountingJournalEntry_[]; // Link to mjBizAppsAccountingJournalEntries
     
     @Field(() => [mjBizAppsAccountingJournalEntry_])
     mjBizAppsAccountingJournalEntries_ReversedByJournalEntryIDArray: mjBizAppsAccountingJournalEntry_[]; // Link to mjBizAppsAccountingJournalEntries
     
-    @Field(() => [mjBizAppsAccountingJournalEntryLink_])
-    mjBizAppsAccountingJournalEntryLinks_JournalEntryIDArray: mjBizAppsAccountingJournalEntryLink_[]; // Link to mjBizAppsAccountingJournalEntryLinks
-    
     @Field(() => [mjBizAppsAccountingTaxRemittance_])
     mjBizAppsAccountingTaxRemittances_PostedJournalEntryIDArray: mjBizAppsAccountingTaxRemittance_[]; // Link to mjBizAppsAccountingTaxRemittances
     
     @Field(() => [mjBizAppsAccountingJournalEntryBatch_])
     mjBizAppsAccountingJournalEntryBatches_SummaryJournalEntryIDArray: mjBizAppsAccountingJournalEntryBatch_[]; // Link to mjBizAppsAccountingJournalEntryBatches
-    
-    @Field(() => [mjBizAppsAccountingJournalEntryLine_])
-    mjBizAppsAccountingJournalEntryLines_JournalEntryIDArray: mjBizAppsAccountingJournalEntryLine_[]; // Link to mjBizAppsAccountingJournalEntryLines
     
 }
 
@@ -2530,25 +2511,10 @@ export class CreatemjBizAppsAccountingJournalEntryInput {
     Description: string | null;
 
     @Field({ nullable: true })
-    OrderID: string | null;
+    LinkedEntityID: string | null;
 
     @Field({ nullable: true })
-    OrderLineID: string | null;
-
-    @Field({ nullable: true })
-    SubscriptionID: string | null;
-
-    @Field({ nullable: true })
-    PaymentID: string | null;
-
-    @Field({ nullable: true })
-    ContractID: string | null;
-
-    @Field({ nullable: true })
-    IntercompanyFlowID: string | null;
-
-    @Field({ nullable: true })
-    TaxRemittanceID: string | null;
+    LinkedRecordID: string | null;
 
     @Field({ nullable: true })
     ReversesJournalEntryID: string | null;
@@ -2600,25 +2566,10 @@ export class UpdatemjBizAppsAccountingJournalEntryInput {
     Description?: string | null;
 
     @Field({ nullable: true })
-    OrderID?: string | null;
+    LinkedEntityID?: string | null;
 
     @Field({ nullable: true })
-    OrderLineID?: string | null;
-
-    @Field({ nullable: true })
-    SubscriptionID?: string | null;
-
-    @Field({ nullable: true })
-    PaymentID?: string | null;
-
-    @Field({ nullable: true })
-    ContractID?: string | null;
-
-    @Field({ nullable: true })
-    IntercompanyFlowID?: string | null;
-
-    @Field({ nullable: true })
-    TaxRemittanceID?: string | null;
+    LinkedRecordID?: string | null;
 
     @Field({ nullable: true })
     ReversesJournalEntryID?: string | null;
@@ -2702,6 +2653,16 @@ export class mjBizAppsAccountingJournalEntryResolver extends ResolverBase {
         return result;
     }
     
+    @FieldResolver(() => [mjBizAppsAccountingJournalEntryLine_])
+    async mjBizAppsAccountingJournalEntryLines_JournalEntryIDArray(@Root() mjbizappsaccountingjournalentry_: mjBizAppsAccountingJournalEntry_, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine) {
+        this.CheckUserReadPermissions('MJ_BizApps_Accounting: Journal Entry Lines', userPayload);
+        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
+        const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwJournalEntryLines')} WHERE ${provider.QuoteIdentifier('JournalEntryID')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: Journal Entry Lines', userPayload, EntityPermissionType.Read, 'AND');
+        const rows = await provider.ExecuteSQL(sSQL, [mjbizappsaccountingjournalentry_.ID], undefined, this.GetUserFromPayload(userPayload));
+        const result = await this.ArrayMapFieldNamesToCodeNames('MJ_BizApps_Accounting: Journal Entry Lines', rows, this.GetUserFromPayload(userPayload));
+        return result;
+    }
+        
     @FieldResolver(() => [mjBizAppsAccountingJournalEntry_])
     async mjBizAppsAccountingJournalEntries_ReversesJournalEntryIDArray(@Root() mjbizappsaccountingjournalentry_: mjBizAppsAccountingJournalEntry_, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine) {
         this.CheckUserReadPermissions('MJ_BizApps_Accounting: Journal Entries', userPayload);
@@ -2722,16 +2683,6 @@ export class mjBizAppsAccountingJournalEntryResolver extends ResolverBase {
         return result;
     }
         
-    @FieldResolver(() => [mjBizAppsAccountingJournalEntryLink_])
-    async mjBizAppsAccountingJournalEntryLinks_JournalEntryIDArray(@Root() mjbizappsaccountingjournalentry_: mjBizAppsAccountingJournalEntry_, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine) {
-        this.CheckUserReadPermissions('MJ_BizApps_Accounting: Journal Entry Links', userPayload);
-        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
-        const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwJournalEntryLinks')} WHERE ${provider.QuoteIdentifier('JournalEntryID')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: Journal Entry Links', userPayload, EntityPermissionType.Read, 'AND');
-        const rows = await provider.ExecuteSQL(sSQL, [mjbizappsaccountingjournalentry_.ID], undefined, this.GetUserFromPayload(userPayload));
-        const result = await this.ArrayMapFieldNamesToCodeNames('MJ_BizApps_Accounting: Journal Entry Links', rows, this.GetUserFromPayload(userPayload));
-        return result;
-    }
-        
     @FieldResolver(() => [mjBizAppsAccountingTaxRemittance_])
     async mjBizAppsAccountingTaxRemittances_PostedJournalEntryIDArray(@Root() mjbizappsaccountingjournalentry_: mjBizAppsAccountingJournalEntry_, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine) {
         this.CheckUserReadPermissions('MJ_BizApps_Accounting: Tax Remittances', userPayload);
@@ -2749,16 +2700,6 @@ export class mjBizAppsAccountingJournalEntryResolver extends ResolverBase {
         const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwJournalEntryBatches')} WHERE ${provider.QuoteIdentifier('SummaryJournalEntryID')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: Journal Entry Batches', userPayload, EntityPermissionType.Read, 'AND');
         const rows = await provider.ExecuteSQL(sSQL, [mjbizappsaccountingjournalentry_.ID], undefined, this.GetUserFromPayload(userPayload));
         const result = await this.ArrayMapFieldNamesToCodeNames('MJ_BizApps_Accounting: Journal Entry Batches', rows, this.GetUserFromPayload(userPayload));
-        return result;
-    }
-        
-    @FieldResolver(() => [mjBizAppsAccountingJournalEntryLine_])
-    async mjBizAppsAccountingJournalEntryLines_JournalEntryIDArray(@Root() mjbizappsaccountingjournalentry_: mjBizAppsAccountingJournalEntry_, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine) {
-        this.CheckUserReadPermissions('MJ_BizApps_Accounting: Journal Entry Lines', userPayload);
-        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
-        const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwJournalEntryLines')} WHERE ${provider.QuoteIdentifier('JournalEntryID')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: Journal Entry Lines', userPayload, EntityPermissionType.Read, 'AND');
-        const rows = await provider.ExecuteSQL(sSQL, [mjbizappsaccountingjournalentry_.ID], undefined, this.GetUserFromPayload(userPayload));
-        const result = await this.ArrayMapFieldNamesToCodeNames('MJ_BizApps_Accounting: Journal Entry Lines', rows, this.GetUserFromPayload(userPayload));
         return result;
     }
         
@@ -3477,10 +3418,6 @@ export class mjBizAppsAccountingJournalEntryLine_ {
     @Field({nullable: true, description: `Free-form description of the line (memo).`}) 
     Description?: string;
         
-    @Field({nullable: true, description: `Soft polymorphic ref to source OrderLine. NO FK.`}) 
-    @MaxLength(36)
-    OrderLineID?: string;
-        
     @Field({nullable: true, description: `For AR-side lines, the Customer Organization. FK to __mj_BizAppsCommon.Organization.`}) 
     @MaxLength(36)
     CounterpartyOrganizationID?: string;
@@ -3547,9 +3484,6 @@ export class CreatemjBizAppsAccountingJournalEntryLineInput {
     Description: string | null;
 
     @Field({ nullable: true })
-    OrderLineID: string | null;
-
-    @Field({ nullable: true })
     CounterpartyOrganizationID: string | null;
 
     @Field(() => RestoreContextInput, { nullable: true })
@@ -3594,9 +3528,6 @@ export class UpdatemjBizAppsAccountingJournalEntryLineInput {
 
     @Field({ nullable: true })
     Description?: string | null;
-
-    @Field({ nullable: true })
-    OrderLineID?: string | null;
 
     @Field({ nullable: true })
     CounterpartyOrganizationID?: string | null;
@@ -3700,190 +3631,6 @@ export class mjBizAppsAccountingJournalEntryLineResolver extends ResolverBase {
         const provider = GetReadWriteProvider(providers);
         const key = new CompositeKey([{FieldName: 'ID', Value: ID}]);
         return this.DeleteRecord('MJ_BizApps_Accounting: Journal Entry Lines', key, options, provider, userPayload, pubSub);
-    }
-    
-}
-
-//****************************************************************************
-// ENTITY CLASS for MJ_BizApps_Accounting: Journal Entry Links
-//****************************************************************************
-@ObjectType({ description: `Polymorphic link from a JournalEntry to any MJ entity record (order/payment/invoice lineage, supporting documents, etc.). EntityID references __mj.Entity; RecordID is the target primary key (NVARCHAR(400) supports stringified composite keys). Upstream apps populate these; Accounting stores them for lineage/drill-through.` })
-export class mjBizAppsAccountingJournalEntryLink_ {
-    @Field() 
-    @MaxLength(36)
-    ID: string;
-        
-    @Field() 
-    @MaxLength(36)
-    JournalEntryID: string;
-        
-    @Field() 
-    @MaxLength(36)
-    EntityID: string;
-        
-    @Field() 
-    @MaxLength(400)
-    RecordID: string;
-        
-    @Field({nullable: true}) 
-    @MaxLength(50)
-    LinkType?: string;
-        
-    @Field({nullable: true}) 
-    Description?: string;
-        
-    @Field() 
-    _mj__CreatedAt: Date;
-        
-    @Field() 
-    _mj__UpdatedAt: Date;
-        
-    @Field() 
-    @MaxLength(255)
-    Entity: string;
-        
-}
-
-//****************************************************************************
-// INPUT TYPE for MJ_BizApps_Accounting: Journal Entry Links
-//****************************************************************************
-@InputType()
-export class CreatemjBizAppsAccountingJournalEntryLinkInput {
-    @Field({ nullable: true })
-    ID?: string;
-
-    @Field({ nullable: true })
-    JournalEntryID?: string;
-
-    @Field({ nullable: true })
-    EntityID?: string;
-
-    @Field({ nullable: true })
-    RecordID?: string;
-
-    @Field({ nullable: true })
-    LinkType: string | null;
-
-    @Field({ nullable: true })
-    Description: string | null;
-
-    @Field(() => RestoreContextInput, { nullable: true })
-    RestoreContext___?: RestoreContextInput;
-}
-    
-
-//****************************************************************************
-// INPUT TYPE for MJ_BizApps_Accounting: Journal Entry Links
-//****************************************************************************
-@InputType()
-export class UpdatemjBizAppsAccountingJournalEntryLinkInput {
-    @Field()
-    ID: string;
-
-    @Field({ nullable: true })
-    JournalEntryID?: string;
-
-    @Field({ nullable: true })
-    EntityID?: string;
-
-    @Field({ nullable: true })
-    RecordID?: string;
-
-    @Field({ nullable: true })
-    LinkType?: string | null;
-
-    @Field({ nullable: true })
-    Description?: string | null;
-
-    @Field(() => [KeyValuePairInput], { nullable: true })
-    OldValues___?: KeyValuePairInput[];
-
-    @Field(() => RestoreContextInput, { nullable: true })
-    RestoreContext___?: RestoreContextInput;
-}
-    
-//****************************************************************************
-// RESOLVER for MJ_BizApps_Accounting: Journal Entry Links
-//****************************************************************************
-@ObjectType()
-export class RunmjBizAppsAccountingJournalEntryLinkViewResult {
-    @Field(() => [mjBizAppsAccountingJournalEntryLink_])
-    Results: mjBizAppsAccountingJournalEntryLink_[];
-
-    @Field(() => String, {nullable: true})
-    UserViewRunID?: string;
-
-    @Field(() => Int, {nullable: true})
-    RowCount: number;
-
-    @Field(() => Int, {nullable: true})
-    TotalRowCount: number;
-
-    @Field(() => Int, {nullable: true})
-    ExecutionTime: number;
-
-    @Field({nullable: true})
-    ErrorMessage?: string;
-
-    @Field(() => Boolean, {nullable: false})
-    Success: boolean;
-}
-
-@Resolver(mjBizAppsAccountingJournalEntryLink_)
-export class mjBizAppsAccountingJournalEntryLinkResolver extends ResolverBase {
-    @Query(() => RunmjBizAppsAccountingJournalEntryLinkViewResult)
-    async RunmjBizAppsAccountingJournalEntryLinkViewByID(@Arg('input', () => RunViewByIDInput) input: RunViewByIDInput, @Ctx() { providers, userPayload }: AppContext, @PubSub() pubSub: PubSubEngine) {
-        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
-        return super.RunViewByIDGeneric(input, provider, userPayload, pubSub);
-    }
-
-    @Query(() => RunmjBizAppsAccountingJournalEntryLinkViewResult)
-    async RunmjBizAppsAccountingJournalEntryLinkViewByName(@Arg('input', () => RunViewByNameInput) input: RunViewByNameInput, @Ctx() { providers, userPayload }: AppContext, @PubSub() pubSub: PubSubEngine) {
-        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
-        return super.RunViewByNameGeneric(input, provider, userPayload, pubSub);
-    }
-
-    @Query(() => RunmjBizAppsAccountingJournalEntryLinkViewResult)
-    async RunmjBizAppsAccountingJournalEntryLinkDynamicView(@Arg('input', () => RunDynamicViewInput) input: RunDynamicViewInput, @Ctx() { providers, userPayload }: AppContext, @PubSub() pubSub: PubSubEngine) {
-        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
-        input.EntityName = 'MJ_BizApps_Accounting: Journal Entry Links';
-        return super.RunDynamicViewGeneric(input, provider, userPayload, pubSub);
-    }
-    @Query(() => mjBizAppsAccountingJournalEntryLink_, { nullable: true })
-    async mjBizAppsAccountingJournalEntryLink(@Arg('ID', () => String) ID: string, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine): Promise<mjBizAppsAccountingJournalEntryLink_ | null> {
-        this.CheckUserReadPermissions('MJ_BizApps_Accounting: Journal Entry Links', userPayload);
-        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
-        const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwJournalEntryLinks')} WHERE ${provider.QuoteIdentifier('ID')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: Journal Entry Links', userPayload, EntityPermissionType.Read, 'AND');
-        const rows = await provider.ExecuteSQL(sSQL, [ID], undefined, this.GetUserFromPayload(userPayload));
-        const result = await this.MapFieldNamesToCodeNames('MJ_BizApps_Accounting: Journal Entry Links', rows && rows.length > 0 ? rows[0] : null, this.GetUserFromPayload(userPayload));
-        return result;
-    }
-    
-    @Mutation(() => mjBizAppsAccountingJournalEntryLink_)
-    async CreatemjBizAppsAccountingJournalEntryLink(
-        @Arg('input', () => CreatemjBizAppsAccountingJournalEntryLinkInput) input: CreatemjBizAppsAccountingJournalEntryLinkInput,
-        @Ctx() { providers, userPayload }: AppContext,
-        @PubSub() pubSub: PubSubEngine
-    ) {
-        const provider = GetReadWriteProvider(providers);
-        return this.CreateRecord('MJ_BizApps_Accounting: Journal Entry Links', input, provider, userPayload, pubSub)
-    }
-        
-    @Mutation(() => mjBizAppsAccountingJournalEntryLink_)
-    async UpdatemjBizAppsAccountingJournalEntryLink(
-        @Arg('input', () => UpdatemjBizAppsAccountingJournalEntryLinkInput) input: UpdatemjBizAppsAccountingJournalEntryLinkInput,
-        @Ctx() { providers, userPayload }: AppContext,
-        @PubSub() pubSub: PubSubEngine
-    ) {
-        const provider = GetReadWriteProvider(providers);
-        return this.UpdateRecord('MJ_BizApps_Accounting: Journal Entry Links', input, provider, userPayload, pubSub);
-    }
-    
-    @Mutation(() => mjBizAppsAccountingJournalEntryLink_)
-    async DeletemjBizAppsAccountingJournalEntryLink(@Arg('ID', () => String) ID: string, @Arg('options___', () => DeleteOptionsInput) options: DeleteOptionsInput, @Ctx() { providers, userPayload }: AppContext, @PubSub() pubSub: PubSubEngine) {
-        const provider = GetReadWriteProvider(providers);
-        const key = new CompositeKey([{FieldName: 'ID', Value: ID}]);
-        return this.DeleteRecord('MJ_BizApps_Accounting: Journal Entry Links', key, options, provider, userPayload, pubSub);
     }
     
 }
@@ -4071,11 +3818,11 @@ export class mjBizAppsAccountingTaxAuthority_ {
     @Field() 
     _mj__UpdatedAt: Date;
         
-    @Field(() => [mjBizAppsAccountingTaxJurisdiction_])
-    mjBizAppsAccountingTaxJurisdictions_TaxAuthorityIDArray: mjBizAppsAccountingTaxJurisdiction_[]; // Link to mjBizAppsAccountingTaxJurisdictions
-    
     @Field(() => [mjBizAppsAccountingTaxLiability_])
     mjBizAppsAccountingTaxLiabilities_TaxAuthorityIDArray: mjBizAppsAccountingTaxLiability_[]; // Link to mjBizAppsAccountingTaxLiabilities
+    
+    @Field(() => [mjBizAppsAccountingTaxJurisdiction_])
+    mjBizAppsAccountingTaxJurisdictions_TaxAuthorityIDArray: mjBizAppsAccountingTaxJurisdiction_[]; // Link to mjBizAppsAccountingTaxJurisdictions
     
 }
 
@@ -4188,16 +3935,6 @@ export class mjBizAppsAccountingTaxAuthorityResolver extends ResolverBase {
         return result;
     }
     
-    @FieldResolver(() => [mjBizAppsAccountingTaxJurisdiction_])
-    async mjBizAppsAccountingTaxJurisdictions_TaxAuthorityIDArray(@Root() mjbizappsaccountingtaxauthority_: mjBizAppsAccountingTaxAuthority_, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine) {
-        this.CheckUserReadPermissions('MJ_BizApps_Accounting: Tax Jurisdictions', userPayload);
-        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
-        const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwTaxJurisdictions')} WHERE ${provider.QuoteIdentifier('TaxAuthorityID')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: Tax Jurisdictions', userPayload, EntityPermissionType.Read, 'AND');
-        const rows = await provider.ExecuteSQL(sSQL, [mjbizappsaccountingtaxauthority_.ID], undefined, this.GetUserFromPayload(userPayload));
-        const result = await this.ArrayMapFieldNamesToCodeNames('MJ_BizApps_Accounting: Tax Jurisdictions', rows, this.GetUserFromPayload(userPayload));
-        return result;
-    }
-        
     @FieldResolver(() => [mjBizAppsAccountingTaxLiability_])
     async mjBizAppsAccountingTaxLiabilities_TaxAuthorityIDArray(@Root() mjbizappsaccountingtaxauthority_: mjBizAppsAccountingTaxAuthority_, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine) {
         this.CheckUserReadPermissions('MJ_BizApps_Accounting: Tax Liabilities', userPayload);
@@ -4205,6 +3942,16 @@ export class mjBizAppsAccountingTaxAuthorityResolver extends ResolverBase {
         const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwTaxLiabilities')} WHERE ${provider.QuoteIdentifier('TaxAuthorityID')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: Tax Liabilities', userPayload, EntityPermissionType.Read, 'AND');
         const rows = await provider.ExecuteSQL(sSQL, [mjbizappsaccountingtaxauthority_.ID], undefined, this.GetUserFromPayload(userPayload));
         const result = await this.ArrayMapFieldNamesToCodeNames('MJ_BizApps_Accounting: Tax Liabilities', rows, this.GetUserFromPayload(userPayload));
+        return result;
+    }
+        
+    @FieldResolver(() => [mjBizAppsAccountingTaxJurisdiction_])
+    async mjBizAppsAccountingTaxJurisdictions_TaxAuthorityIDArray(@Root() mjbizappsaccountingtaxauthority_: mjBizAppsAccountingTaxAuthority_, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine) {
+        this.CheckUserReadPermissions('MJ_BizApps_Accounting: Tax Jurisdictions', userPayload);
+        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
+        const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwTaxJurisdictions')} WHERE ${provider.QuoteIdentifier('TaxAuthorityID')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: Tax Jurisdictions', userPayload, EntityPermissionType.Read, 'AND');
+        const rows = await provider.ExecuteSQL(sSQL, [mjbizappsaccountingtaxauthority_.ID], undefined, this.GetUserFromPayload(userPayload));
+        const result = await this.ArrayMapFieldNamesToCodeNames('MJ_BizApps_Accounting: Tax Jurisdictions', rows, this.GetUserFromPayload(userPayload));
         return result;
     }
         
@@ -4307,17 +4054,17 @@ export class mjBizAppsAccountingTaxJurisdiction_ {
     @MaxLength(36)
     RootParentTaxJurisdictionID?: string;
         
-    @Field(() => [mjBizAppsAccountingCustomerTaxProfile_])
-    mjBizAppsAccountingCustomerTaxProfiles_TaxJurisdictionIDArray: mjBizAppsAccountingCustomerTaxProfile_[]; // Link to mjBizAppsAccountingCustomerTaxProfiles
-    
     @Field(() => [mjBizAppsAccountingTaxRate_])
     mjBizAppsAccountingTaxRates_TaxJurisdictionIDArray: mjBizAppsAccountingTaxRate_[]; // Link to mjBizAppsAccountingTaxRates
     
-    @Field(() => [mjBizAppsAccountingTaxLiability_])
-    mjBizAppsAccountingTaxLiabilities_TaxJurisdictionIDArray: mjBizAppsAccountingTaxLiability_[]; // Link to mjBizAppsAccountingTaxLiabilities
+    @Field(() => [mjBizAppsAccountingCustomerTaxProfile_])
+    mjBizAppsAccountingCustomerTaxProfiles_TaxJurisdictionIDArray: mjBizAppsAccountingCustomerTaxProfile_[]; // Link to mjBizAppsAccountingCustomerTaxProfiles
     
     @Field(() => [mjBizAppsAccountingTaxJurisdiction_])
     mjBizAppsAccountingTaxJurisdictions_ParentTaxJurisdictionIDArray: mjBizAppsAccountingTaxJurisdiction_[]; // Link to mjBizAppsAccountingTaxJurisdictions
+    
+    @Field(() => [mjBizAppsAccountingTaxLiability_])
+    mjBizAppsAccountingTaxLiabilities_TaxJurisdictionIDArray: mjBizAppsAccountingTaxLiability_[]; // Link to mjBizAppsAccountingTaxLiabilities
     
 }
 
@@ -4472,16 +4219,6 @@ export class mjBizAppsAccountingTaxJurisdictionResolver extends ResolverBase {
         return result;
     }
     
-    @FieldResolver(() => [mjBizAppsAccountingCustomerTaxProfile_])
-    async mjBizAppsAccountingCustomerTaxProfiles_TaxJurisdictionIDArray(@Root() mjbizappsaccountingtaxjurisdiction_: mjBizAppsAccountingTaxJurisdiction_, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine) {
-        this.CheckUserReadPermissions('MJ_BizApps_Accounting: Customer Tax Profiles', userPayload);
-        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
-        const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwCustomerTaxProfiles')} WHERE ${provider.QuoteIdentifier('TaxJurisdictionID')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: Customer Tax Profiles', userPayload, EntityPermissionType.Read, 'AND');
-        const rows = await provider.ExecuteSQL(sSQL, [mjbizappsaccountingtaxjurisdiction_.ID], undefined, this.GetUserFromPayload(userPayload));
-        const result = await this.ArrayMapFieldNamesToCodeNames('MJ_BizApps_Accounting: Customer Tax Profiles', rows, this.GetUserFromPayload(userPayload));
-        return result;
-    }
-        
     @FieldResolver(() => [mjBizAppsAccountingTaxRate_])
     async mjBizAppsAccountingTaxRates_TaxJurisdictionIDArray(@Root() mjbizappsaccountingtaxjurisdiction_: mjBizAppsAccountingTaxJurisdiction_, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine) {
         this.CheckUserReadPermissions('MJ_BizApps_Accounting: Tax Rates', userPayload);
@@ -4492,13 +4229,13 @@ export class mjBizAppsAccountingTaxJurisdictionResolver extends ResolverBase {
         return result;
     }
         
-    @FieldResolver(() => [mjBizAppsAccountingTaxLiability_])
-    async mjBizAppsAccountingTaxLiabilities_TaxJurisdictionIDArray(@Root() mjbizappsaccountingtaxjurisdiction_: mjBizAppsAccountingTaxJurisdiction_, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine) {
-        this.CheckUserReadPermissions('MJ_BizApps_Accounting: Tax Liabilities', userPayload);
+    @FieldResolver(() => [mjBizAppsAccountingCustomerTaxProfile_])
+    async mjBizAppsAccountingCustomerTaxProfiles_TaxJurisdictionIDArray(@Root() mjbizappsaccountingtaxjurisdiction_: mjBizAppsAccountingTaxJurisdiction_, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine) {
+        this.CheckUserReadPermissions('MJ_BizApps_Accounting: Customer Tax Profiles', userPayload);
         const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
-        const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwTaxLiabilities')} WHERE ${provider.QuoteIdentifier('TaxJurisdictionID')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: Tax Liabilities', userPayload, EntityPermissionType.Read, 'AND');
+        const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwCustomerTaxProfiles')} WHERE ${provider.QuoteIdentifier('TaxJurisdictionID')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: Customer Tax Profiles', userPayload, EntityPermissionType.Read, 'AND');
         const rows = await provider.ExecuteSQL(sSQL, [mjbizappsaccountingtaxjurisdiction_.ID], undefined, this.GetUserFromPayload(userPayload));
-        const result = await this.ArrayMapFieldNamesToCodeNames('MJ_BizApps_Accounting: Tax Liabilities', rows, this.GetUserFromPayload(userPayload));
+        const result = await this.ArrayMapFieldNamesToCodeNames('MJ_BizApps_Accounting: Customer Tax Profiles', rows, this.GetUserFromPayload(userPayload));
         return result;
     }
         
@@ -4509,6 +4246,16 @@ export class mjBizAppsAccountingTaxJurisdictionResolver extends ResolverBase {
         const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwTaxJurisdictions')} WHERE ${provider.QuoteIdentifier('ParentTaxJurisdictionID')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: Tax Jurisdictions', userPayload, EntityPermissionType.Read, 'AND');
         const rows = await provider.ExecuteSQL(sSQL, [mjbizappsaccountingtaxjurisdiction_.ID], undefined, this.GetUserFromPayload(userPayload));
         const result = await this.ArrayMapFieldNamesToCodeNames('MJ_BizApps_Accounting: Tax Jurisdictions', rows, this.GetUserFromPayload(userPayload));
+        return result;
+    }
+        
+    @FieldResolver(() => [mjBizAppsAccountingTaxLiability_])
+    async mjBizAppsAccountingTaxLiabilities_TaxJurisdictionIDArray(@Root() mjbizappsaccountingtaxjurisdiction_: mjBizAppsAccountingTaxJurisdiction_, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine) {
+        this.CheckUserReadPermissions('MJ_BizApps_Accounting: Tax Liabilities', userPayload);
+        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
+        const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwTaxLiabilities')} WHERE ${provider.QuoteIdentifier('TaxJurisdictionID')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: Tax Liabilities', userPayload, EntityPermissionType.Read, 'AND');
+        const rows = await provider.ExecuteSQL(sSQL, [mjbizappsaccountingtaxjurisdiction_.ID], undefined, this.GetUserFromPayload(userPayload));
+        const result = await this.ArrayMapFieldNamesToCodeNames('MJ_BizApps_Accounting: Tax Liabilities', rows, this.GetUserFromPayload(userPayload));
         return result;
     }
         
@@ -4999,9 +4746,6 @@ export class mjBizAppsAccountingTaxRemittance_ {
     @Field() 
     _mj__UpdatedAt: Date;
         
-    @Field(() => [mjBizAppsAccountingJournalEntry_])
-    mjBizAppsAccountingJournalEntries_TaxRemittanceIDArray: mjBizAppsAccountingJournalEntry_[]; // Link to mjBizAppsAccountingJournalEntries
-    
 }
 
 //****************************************************************************
@@ -5119,16 +4863,6 @@ export class mjBizAppsAccountingTaxRemittanceResolver extends ResolverBase {
         return result;
     }
     
-    @FieldResolver(() => [mjBizAppsAccountingJournalEntry_])
-    async mjBizAppsAccountingJournalEntries_TaxRemittanceIDArray(@Root() mjbizappsaccountingtaxremittance_: mjBizAppsAccountingTaxRemittance_, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine) {
-        this.CheckUserReadPermissions('MJ_BizApps_Accounting: Journal Entries', userPayload);
-        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
-        const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwJournalEntries')} WHERE ${provider.QuoteIdentifier('TaxRemittanceID')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: Journal Entries', userPayload, EntityPermissionType.Read, 'AND');
-        const rows = await provider.ExecuteSQL(sSQL, [mjbizappsaccountingtaxremittance_.ID], undefined, this.GetUserFromPayload(userPayload));
-        const result = await this.ArrayMapFieldNamesToCodeNames('MJ_BizApps_Accounting: Journal Entries', rows, this.GetUserFromPayload(userPayload));
-        return result;
-    }
-        
     @Mutation(() => mjBizAppsAccountingTaxRemittance_)
     async CreatemjBizAppsAccountingTaxRemittance(
         @Arg('input', () => CreatemjBizAppsAccountingTaxRemittanceInput) input: CreatemjBizAppsAccountingTaxRemittanceInput,

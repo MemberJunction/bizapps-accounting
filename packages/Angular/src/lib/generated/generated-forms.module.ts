@@ -30,7 +30,6 @@ import { mjBizAppsAccountingJournalEntryBatchSequenceFormComponent } from "./Ent
 import { mjBizAppsAccountingJournalEntryBatchFormComponent } from "./Entities/mjBizAppsAccountingJournalEntryBatch/mjbizappsaccountingjournalentrybatch.form.component";
 import { mjBizAppsAccountingJournalEntryLineDimensionFormComponent } from "./Entities/mjBizAppsAccountingJournalEntryLineDimension/mjbizappsaccountingjournalentrylinedimension.form.component";
 import { mjBizAppsAccountingJournalEntryLineFormComponent } from "./Entities/mjBizAppsAccountingJournalEntryLine/mjbizappsaccountingjournalentryline.form.component";
-import { mjBizAppsAccountingJournalEntryLinkFormComponent } from "./Entities/mjBizAppsAccountingJournalEntryLink/mjbizappsaccountingjournalentrylink.form.component";
 import { mjBizAppsAccountingJournalEntrySequenceFormComponent } from "./Entities/mjBizAppsAccountingJournalEntrySequence/mjbizappsaccountingjournalentrysequence.form.component";
 import { mjBizAppsAccountingTaxAuthorityFormComponent } from "./Entities/mjBizAppsAccountingTaxAuthority/mjbizappsaccountingtaxauthority.form.component";
 import { mjBizAppsAccountingTaxJurisdictionFormComponent } from "./Entities/mjBizAppsAccountingTaxJurisdiction/mjbizappsaccountingtaxjurisdiction.form.component";
@@ -56,11 +55,11 @@ declarations: [
     mjBizAppsAccountingJournalEntryBatchFormComponent,
     mjBizAppsAccountingJournalEntryLineDimensionFormComponent,
     mjBizAppsAccountingJournalEntryLineFormComponent,
-    mjBizAppsAccountingJournalEntryLinkFormComponent,
     mjBizAppsAccountingJournalEntrySequenceFormComponent,
     mjBizAppsAccountingTaxAuthorityFormComponent,
     mjBizAppsAccountingTaxJurisdictionFormComponent,
-    mjBizAppsAccountingTaxLiabilityFormComponent],
+    mjBizAppsAccountingTaxLiabilityFormComponent,
+    mjBizAppsAccountingTaxRateFormComponent],
 imports: [
     CommonModule,
     FormsModule,
@@ -77,7 +76,6 @@ export class GeneratedForms_SubModule_0 { }
 
 @NgModule({
 declarations: [
-    mjBizAppsAccountingTaxRateFormComponent,
     mjBizAppsAccountingTaxRemittanceFormComponent],
 imports: [
     CommonModule,
