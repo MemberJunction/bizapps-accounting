@@ -62,6 +62,8 @@ export interface JEValidationError {
   Code: JEErrorCode;
   /** 0-based index into `draft.Lines` when the error is line-scoped. */
   LineIndex?: number;
+  /** 0-based index into `Drafts` when the error is draft-scoped (the SET op). */
+  DraftIndex?: number;
   Message: string;
 }
 
@@ -76,3 +78,24 @@ export interface CreateJournalEntryResult {
 /** Remote-operation I/O aliases ('Accounting.CreateJournalEntry'). */
 export type CreateJournalEntryInput = JournalEntryDraft;
 export type CreateJournalEntryOutput = CreateJournalEntryResult;
+
+// ─── The SET op ('Accounting.CreateJournalEntries') — a MULTI-JE unit of work ──
+// An order Confirm books ONE JE PER ORDER LINE (orders D10) and submits ALL of its drafts in
+// one call: every draft validates first (draft-scoped errors carry DraftIndex), then every JE
+// writes inside ONE provider transaction — all entries or none. A caller composing a larger
+// unit of work (order row + JE set) opens a transaction on ITS provider before calling; the
+// engine's transaction nests (savepoints), so one outer commit covers everything.
+
+export interface CreateJournalEntriesInput {
+  Drafts: JournalEntryDraft[];
+}
+
+export interface CreateJournalEntriesResult {
+  Success: boolean;
+  /** Per-draft results, same order as `Drafts` — present only when Success (all-or-nothing). */
+  Results?: CreateJournalEntryResult[];
+  /** Validation/write errors; draft-scoped entries carry `DraftIndex`. */
+  Errors?: JEValidationError[];
+}
+
+export type CreateJournalEntriesOutput = CreateJournalEntriesResult;

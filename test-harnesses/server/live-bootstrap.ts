@@ -55,6 +55,8 @@ export interface LiveCtx {
   user: UserInfo;
   runTag: string;
   company: LiveCompany;
+  /** A second company — for cross-company invariant cases (e.g. mixed-company draft rollback). */
+  companyB: LiveCompany;
   dimId: string;
   dimValSales: string;
   dimValMktg: string;
@@ -64,8 +66,9 @@ export interface LiveCtx {
   createdBatchIds: string[];
 }
 
+let companyCounter = 0;
 function companyCode(tag: string): string {
-  return `P2${tag.replace(/[^A-Z0-9]/gi, '').slice(-8)}`.toUpperCase().slice(0, 20);
+  return `P2${companyCounter++}${tag.replace(/[^A-Z0-9]/gi, '').slice(-8)}`.toUpperCase().slice(0, 20);
 }
 
 async function connectPool(host: string, port: number, database: string, user: string, password: string): Promise<sql.ConnectionPool> {
@@ -92,7 +95,7 @@ async function assertInvariantTriggers(pool: sql.ConnectionPool): Promise<void> 
   }
 }
 
-async function createCompany(user: UserInfo, runTag: string): Promise<LiveCompany> {
+async function createCompany(user: UserInfo, runTag: string, label = 'Live Harness Co'): Promise<LiveCompany> {
   const md = new Metadata();
   const rv = new RunView();
   const cur = await rv.RunView<{ Code: string }>(
@@ -102,7 +105,7 @@ async function createCompany(user: UserInfo, runTag: string): Promise<LiveCompan
 
   const acp = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, user);
   acp.NewRecord();
-  acp.Name = `${runTag} Live Harness Co`;
+  acp.Name = `${runTag} ${label}`;
   acp.Description = `${runTag} phase-2 live harness fixture (safe to delete)`;
   acp.CompanyCode = companyCode(runTag);
   acp.FunctionalCurrencyCode = currencyCode;
@@ -138,7 +141,8 @@ export async function bootstrapLive(): Promise<LiveCtx> {
   if (!ctxUser) throw new Error('no context user found in UserCache');
 
   const runTag = `P2LIVE-${Date.now().toString(36).toUpperCase()}`;
-  const company = await createCompany(ctxUser, runTag);
+  const company = await createCompany(ctxUser, runTag, 'Live Harness Co A');
+  const companyB = await createCompany(ctxUser, runTag, 'Live Harness Co B');
 
   const dimId = randomUUID(); const dimValSales = randomUUID(); const dimValMktg = randomUUID();
   await pool.request().query(
@@ -147,7 +151,7 @@ export async function bootstrapLive(): Promise<LiveCtx> {
     `INSERT INTO ${SCHEMA}.DimensionValue (ID, DimensionID, Code, Name) VALUES ` +
     `('${dimValSales}','${dimId}','SALES','Sales'),('${dimValMktg}','${dimId}','MKTG','Marketing')`);
 
-  return { pool, teardownPool, user: ctxUser, runTag, company, dimId, dimValSales, dimValMktg, createdJEIds: [], createdBatchIds: [] };
+  return { pool, teardownPool, user: ctxUser, runTag, company, companyB, dimId, dimValSales, dimValMktg, createdJEIds: [], createdBatchIds: [] };
 }
 
 /** FK-aware, trigger-toggling teardown of everything the run created. Warnings, never throws. */
@@ -158,24 +162,25 @@ export async function teardownLive(ctx: LiveCtx): Promise<void> {
   };
   const jeIds = ctx.createdJEIds.map(id => `'${id}'`).join(',');
   const batchIds = ctx.createdBatchIds.map(id => `'${id}'`).join(',');
+  const companyIdList = [ctx.company.id, ctx.companyB.id].map(id => `'${id}'`).join(',');
   const toggled = ['JournalEntryLine', 'JournalEntry', 'JournalEntryBatch'];
   try {
     for (const t of toggled) await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
     // Also sweep by company: locked/summary JEs the tests didn't track individually.
-    await exec(`DELETE d FROM ${SCHEMA}.JournalEntryLineDimension d JOIN ${SCHEMA}.JournalEntryLine l ON l.ID=d.JournalEntryLineID JOIN ${SCHEMA}.JournalEntry j ON j.ID=l.JournalEntryID WHERE j.CompanyID='${ctx.company.id}'${jeIds ? ` OR l.JournalEntryID IN (${jeIds})` : ''}`);
-    await exec(`DELETE l FROM ${SCHEMA}.JournalEntryLine l JOIN ${SCHEMA}.JournalEntry j ON j.ID=l.JournalEntryID WHERE j.CompanyID='${ctx.company.id}'${jeIds ? ` OR l.JournalEntryID IN (${jeIds})` : ''}`);
-    await exec(`UPDATE ${SCHEMA}.JournalEntryBatch SET SummaryJournalEntryID = NULL WHERE CompanyID='${ctx.company.id}'`);
-    await exec(`DELETE FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${ctx.company.id}'${jeIds ? ` OR ID IN (${jeIds})` : ''}`);
-    await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatch WHERE CompanyID='${ctx.company.id}'${batchIds ? ` OR ID IN (${batchIds})` : ''}`);
+    await exec(`DELETE d FROM ${SCHEMA}.JournalEntryLineDimension d JOIN ${SCHEMA}.JournalEntryLine l ON l.ID=d.JournalEntryLineID JOIN ${SCHEMA}.JournalEntry j ON j.ID=l.JournalEntryID WHERE j.CompanyID IN (${companyIdList})${jeIds ? ` OR l.JournalEntryID IN (${jeIds})` : ''}`);
+    await exec(`DELETE l FROM ${SCHEMA}.JournalEntryLine l JOIN ${SCHEMA}.JournalEntry j ON j.ID=l.JournalEntryID WHERE j.CompanyID IN (${companyIdList})${jeIds ? ` OR l.JournalEntryID IN (${jeIds})` : ''}`);
+    await exec(`UPDATE ${SCHEMA}.JournalEntryBatch SET SummaryJournalEntryID = NULL WHERE CompanyID IN (${companyIdList})`);
+    await exec(`DELETE FROM ${SCHEMA}.JournalEntry WHERE CompanyID IN (${companyIdList})${jeIds ? ` OR ID IN (${jeIds})` : ''}`);
+    await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatch WHERE CompanyID IN (${companyIdList})${batchIds ? ` OR ID IN (${batchIds})` : ''}`);
   } finally {
     for (const t of toggled) await exec(`ENABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
   }
   await exec(`DELETE FROM ${SCHEMA}.DimensionValue WHERE DimensionID='${ctx.dimId}'`);
   await exec(`DELETE FROM ${SCHEMA}.Dimension WHERE ID='${ctx.dimId}'`);
-  await exec(`DELETE FROM ${SCHEMA}.JournalEntrySequence WHERE CompanyID='${ctx.company.id}'`);
-  await exec(`DELETE FROM ${SCHEMA}.AccountingCompanyProfile WHERE ID='${ctx.company.id}'`);
-  await exec(`DELETE FROM ${SCHEMA}.GLAccount WHERE CompanyID='${ctx.company.id}'`);
-  await exec(`DELETE FROM __mj.Company WHERE ID='${ctx.company.id}'`);
+  await exec(`DELETE FROM ${SCHEMA}.JournalEntrySequence WHERE CompanyID IN (${companyIdList})`);
+  await exec(`DELETE FROM ${SCHEMA}.AccountingCompanyProfile WHERE ID IN (${companyIdList})`);
+  await exec(`DELETE FROM ${SCHEMA}.GLAccount WHERE CompanyID IN (${companyIdList})`);
+  await exec(`DELETE FROM __mj.Company WHERE ID IN (${companyIdList})`);
 
   // NEVER await a full pool close (it can hang on lingering sockets — donor harness lesson);
   // race it against a short timeout so vitest's forked worker can exit.

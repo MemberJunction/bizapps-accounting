@@ -18,12 +18,15 @@
  *   ENTITY:  'MJ_BizApps_Accounting: Journal Entries' (+ Lines, Line Dimensions)
  *   DOC:     plans/accounting-engine-plan.md §2.2
  */
-import { IMetadataProvider, LogError, UserInfo } from '@memberjunction/core';
+import { DatabaseProviderBase, IMetadataProvider, LogError, UserInfo } from '@memberjunction/core';
 import { BaseSingleton } from '@memberjunction/global';
 import {
   AccountingEngineBase,
   runDraftPipeline,
+  type CreateJournalEntriesInput,
+  type CreateJournalEntriesResult,
   type CreateJournalEntryResult,
+  type JEValidationError,
   type JournalEntryDraft,
   type NormalizedLine,
 } from '@mj-biz-apps/accounting-engine-base';
@@ -81,6 +84,67 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       LogError(`AccountingEngine.CreateJournalEntry failed: ${msg}`);
+      return { Success: false, Errors: [{ Code: 'INTERNAL_ERROR', Message: msg }] };
+    }
+  }
+
+  /**
+   * The SET pipeline ('Accounting.CreateJournalEntries') — a MULTI-JE unit of work: an order
+   * Confirm books one JE per order line and submits ALL of its drafts here. Every draft
+   * validates first (draft-scoped errors carry DraftIndex; nothing writes on any failure),
+   * then every JE writes inside ONE provider transaction — the encapsulated entity Saves nest
+   * as savepoints — so it's all entries or none. A caller composing a larger unit of work
+   * (order row + JE set) opens a transaction on ITS provider first; this one nests inside it.
+   */
+  public async CreateJournalEntries(
+    input: CreateJournalEntriesInput,
+    contextUser: UserInfo,
+    provider: IMetadataProvider,
+  ): Promise<CreateJournalEntriesResult> {
+    try {
+      const drafts = input?.Drafts ?? [];
+      if (drafts.length === 0) {
+        return { Success: false, Errors: [{ Code: 'MALFORMED_DRAFT', Message: 'Drafts must contain at least one journal-entry draft.' }] };
+      }
+
+      await this.Config(false, contextUser, provider);
+      let outcomes = drafts.map(d => runDraftPipeline(d, this.Base.CreatePipelineLookups()));
+      // One bounded staleness refresh for the whole set (same rationale as the single op).
+      const stalenessCodes = new Set(['ACCOUNT_UNKNOWN', 'ACCOUNT_INACTIVE', 'DIMENSION_UNKNOWN', 'DIMENSION_VALUE_UNKNOWN']);
+      if (outcomes.some(o => o.errors.some(e => stalenessCodes.has(e.Code)))) {
+        await this.Config(true, contextUser, provider);
+        outcomes = drafts.map(d => runDraftPipeline(d, this.Base.CreatePipelineLookups()));
+      }
+      const setErrors: JEValidationError[] = outcomes.flatMap((o, i) => o.errors.map(e => ({ ...e, DraftIndex: i })));
+      if (setErrors.length > 0) {
+        return { Success: false, Errors: setErrors };
+      }
+
+      // All drafts valid — write them all inside ONE outer transaction (entity Saves nest).
+      const dbProvider = provider as unknown as DatabaseProviderBase;
+      await dbProvider.BeginTransaction();
+      try {
+        const results: CreateJournalEntryResult[] = [];
+        for (let i = 0; i < drafts.length; i++) {
+          const result = await this.writeJournalEntry(drafts[i], outcomes[i].normalized, contextUser, provider);
+          if (!result.Success) {
+            await dbProvider.RollbackTransaction();
+            return {
+              Success: false,
+              Errors: (result.Errors ?? [{ Code: 'INTERNAL_ERROR', Message: 'draft write failed' }]).map(e => ({ ...e, DraftIndex: i })),
+            };
+          }
+          results.push(result);
+        }
+        await dbProvider.CommitTransaction();
+        return { Success: true, Results: results };
+      } catch (e) {
+        try { await dbProvider.RollbackTransaction(); } catch { /* rollback best-effort */ }
+        throw e;
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      LogError(`AccountingEngine.CreateJournalEntries failed: ${msg}`);
       return { Success: false, Errors: [{ Code: 'INTERNAL_ERROR', Message: msg }] };
     }
   }

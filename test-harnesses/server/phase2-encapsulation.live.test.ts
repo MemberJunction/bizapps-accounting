@@ -27,6 +27,7 @@ import {
   JournalEntryBatchEntityServer,
   GLAccountEntityServer,
   AccountingEngine,
+  CreateJournalEntriesOperation,
   buildBatch,
   approveBatch,
   sendBatch,
@@ -206,6 +207,72 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     born.Status = 'Sent'; // illegal: a batch is born Pending
     const bornSaved = await born.Save();
     expect(bornSaved).toBe(false);
+  });
+
+  it('L9 — SET op (the Orders call shape): N drafts book atomically in ONE call, sequential numbering', async () => {
+    // The exact call site orders-server will use: op.Execute over the injected provider.
+    const op = new CreateJournalEntriesOperation();
+    const result = await op.Execute({
+      Drafts: [
+        {
+          EffectiveDate: new Date().toISOString(), EntryType: 'OrderBooking', Description: `${ctx.runTag} L9 line-1`,
+          Lines: [
+            { GLAccountID: ctx.company.arGL, DebitAmount: 10 },
+            { GLAccountID: ctx.company.revGL, CreditAmount: 10 },
+          ],
+        },
+        {
+          EffectiveDate: new Date().toISOString(), EntryType: 'OrderBooking', Description: `${ctx.runTag} L9 line-2`,
+          Lines: [
+            { GLAccountID: ctx.company.arGL, DebitAmount: 20 },
+            { GLAccountID: ctx.company.revGL, CreditAmount: 20, Dimensions: [{ DimensionID: ctx.dimId, DimensionValueID: ctx.dimValSales }] },
+          ],
+        },
+      ],
+    }, { provider, user: ctx.user });
+    const out = result.Output;
+    expect(out?.Success, JSON.stringify(out?.Errors ?? result.ErrorMessage)).toBe(true);
+    expect(out!.Results).toHaveLength(2);
+    for (const r of out!.Results!) ctx.createdJEIds.push(r.JournalEntryID!);
+
+    // Both persisted; numbering consecutive across the set.
+    const seqOf = (n?: string) => Number((n ?? '').split('-').pop());
+    expect(seqOf(out!.Results![1].EntryNumber)).toBe(seqOf(out!.Results![0].EntryNumber) + 1);
+    const persisted = Number(await scalar(ctx.pool,
+      `SELECT COUNT(*) FROM ${SCHEMA}.JournalEntry WHERE ID IN ('${out!.Results![0].JournalEntryID}','${out!.Results![1].JournalEntryID}')`));
+    expect(persisted).toBe(2);
+    const dims = Number(await scalar(ctx.pool,
+      `SELECT COUNT(*) FROM ${SCHEMA}.JournalEntryLineDimension d JOIN ${SCHEMA}.JournalEntryLine l ON l.ID=d.JournalEntryLineID WHERE l.JournalEntryID='${out!.Results![1].JournalEntryID}'`));
+    expect(dims).toBe(1);
+  });
+
+  it('L10 — SET op is ALL-OR-NOTHING: a write-time failure on draft 2 rolls back draft 1', async () => {
+    const before = Number(await scalar(ctx.pool, `SELECT COUNT(*) FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${ctx.company.id}'`));
+    const out = await AccountingEngine.Instance.CreateJournalEntries({
+      Drafts: [
+        { // valid — would book on its own
+          EffectiveDate: new Date().toISOString(), EntryType: 'OrderBooking', Description: `${ctx.runTag} L10 good`,
+          Lines: [
+            { GLAccountID: ctx.company.arGL, DebitAmount: 33 },
+            { GLAccountID: ctx.company.revGL, CreditAmount: 33 },
+          ],
+        },
+        { // passes the pure pipeline (accounts exist+active, balanced) but MIXES companies —
+          // the single-company rule fails at WRITE time, after draft 1 already wrote.
+          EffectiveDate: new Date().toISOString(), EntryType: 'OrderBooking', Description: `${ctx.runTag} L10 mixed`,
+          Lines: [
+            { GLAccountID: ctx.company.arGL, DebitAmount: 44 },
+            { GLAccountID: ctx.companyB.revGL, CreditAmount: 44 },
+          ],
+        },
+      ],
+    }, ctx.user, provider);
+
+    expect(out.Success).toBe(false);
+    expect(out.Errors?.some(e => e.DraftIndex === 1)).toBe(true);
+    // The rollback proof: draft 1's rows are GONE — nothing partial persisted.
+    const after = Number(await scalar(ctx.pool, `SELECT COUNT(*) FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${ctx.company.id}'`));
+    expect(after).toBe(before);
   });
 
   it('L8 — GLAccount identity lock: Code change rejected once referenced; cosmetic rename still saves', async () => {

@@ -78,3 +78,4 @@ export type { DemoSeedReport } from './AssociationDemoSeedData.js';
 // The contract + pure pipeline types live in @mj-biz-apps/accounting-engine-base — import them from there.
 export { AccountingEngine } from './AccountingEngine.js';
 export { CreateJournalEntryOperation, LoadCreateJournalEntryOperation } from './CreateJournalEntryOperation.js';
+export { CreateJournalEntriesOperation, LoadCreateJournalEntriesOperation } from './CreateJournalEntriesOperation.js';
