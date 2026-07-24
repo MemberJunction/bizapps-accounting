@@ -118,8 +118,8 @@ tags) via the `Accounting.CreateJournalEntry` / `CreateJournalEntries` remote op
 account resolution (`AccountingEngineBase.ResolveLinkedAccount`); AR/balance data via read-model
 views.
 
-**Accounting does NOT:** know about Orders/Subscriptions/Payments as concepts (soft origin refs
-only); generate JEs autonomously; own the ERP connector (dispatch uses the BC REST API — §7.5);
+**Accounting does NOT:** know about Orders/Subscriptions/Payments as concepts (only the generic
+polymorphic origin pair, D25); generate JEs autonomously; own the ERP connector (dispatch uses the BC REST API — §7.5);
 generate intercompany legs (§9); compute FX (§8); calculate tax (§10).
 
 ### Standing migration practice (pre-production)
@@ -160,6 +160,7 @@ The current decision set. Each is the standing ruling — superseded ancestors l
 | D22 | **Forms-first UX:** every core entity gets a first-class MJ Entity Form composed of widgets dashboards embed directly ("truly one UX"); no bespoke pop-ups — modal/slide-in surfaces render the entity form through MJ's form host. | Amith 2026-07-17. Full UX direction §13. |
 | D23 | **UTC everywhere.** Every persisted timestamp is UTC; `OperatingTimeZone` is presentation-only. | Standing convention. |
 | D24 | **Metadata-driven JE generation.** Upstream metadata (product type, roles, links) determines the JE pattern; accounting validates and stores. New rev-rec policies come from metadata, not code changes. | Original principle, unchanged. |
+| D25 | **JE provenance = ONE polymorphic origin pair on the header:** `JournalEntry.LinkedEntityID`/`LinkedRecordID` (nullable TOGETHER — CHECK; NULL = manual JE). Every JE has exactly one causal origin (per-line booking makes JE↔OrderLine 1:1; payment/tax/batch emitters are all single-origin; multi-record relationships like payment→orders live in domain tables such as `PaymentLine`). Replaces BOTH the as-built seven soft-ref columns (`OrderID`, `OrderLineID`, `SubscriptionID`, `PaymentID`, `ContractID`, `IntercompanyFlowID`, `TaxRemittanceID` — "junky duplicative soft fkeys") AND the as-built `JournalEntryLink` table (M:N machinery nothing needs; reintroduce alongside the pair only if a future emitter genuinely needs N links). `JournalEntryLine.OrderLineID` also drops (redundant under 1:1). All via in-place baseline edit. | Amith 2026-07-23. |
 
 ---
 
@@ -252,6 +253,8 @@ erDiagram
         date EffectiveDate
         string EntryType
         string Status "Pending|Batched|GLPosted"
+        uuid LinkedEntityID "Polymorphic origin (D25)"
+        string LinkedRecordID "Polymorphic origin record"
         uuid BatchID FK
     }
     JournalEntryLine {
@@ -422,8 +425,9 @@ __mj_BizAppsAccounting.JournalEntry
                                          -- | 'Refund' | 'Writeoff' | 'Reversal' | 'Manual' | 'BatchSummary' | ...
   Status NVARCHAR(20) NOT NULL,          -- 'Pending' | 'Batched' | 'GLPosted'
   Description NVARCHAR(MAX),
-  -- Polymorphic origin (soft refs — no cross-app FK constraints yet; see §14 sequencing)
-  OrderID, OrderLineID, SubscriptionID, PaymentID UNIQUEIDENTIFIER NULL,
+  -- Polymorphic origin (D25): exactly one causal source record; NULL/NULL = manual JE
+  LinkedEntityID UNIQUEIDENTIFIER NULL,   -- FK → __mj.Entity (OrderLine | Payment | TaxRemittance | ...)
+  LinkedRecordID NVARCHAR(400) NULL,      -- CHECK: both set or both NULL
   -- Reversal chain
   ReversesJournalEntryID UNIQUEIDENTIFIER NULL FK → JournalEntry,
   ReversedByJournalEntryID UNIQUEIDENTIFIER NULL FK → JournalEntry,
@@ -442,7 +446,6 @@ __mj_BizAppsAccounting.JournalEntryLine
   OriginalDebitAmount, OriginalCreditAmount DECIMAL(18,2) NULL,
   ExchangeRateUsed DECIMAL(18,8) NULL,
   Description NVARCHAR(MAX),
-  OrderLineID UNIQUEIDENTIFIER NULL,     -- drill ref
   CounterpartyOrganizationID UNIQUEIDENTIFIER NULL,   -- e.g. the customer, for AR lines
   UNIQUE (JournalEntryID, LineNumber)
 ```
@@ -452,6 +455,12 @@ Notes:
 - **No `AccountingPeriodID`** anywhere (D2). **No `ScheduledJournalEntryID`** — the scheduled-JE
   machinery is retired (D15) and the column drops with it (no lineage worth keeping,
   pre-production — Marcelo 2026-07-21).
+- **No per-entity origin FK columns** (D25): the as-built baseline still carries `OrderID`,
+  `OrderLineID`, `SubscriptionID`, `PaymentID`, `ContractID`, `IntercompanyFlowID`,
+  `TaxRemittanceID` on `JournalEntry`, `OrderLineID` on `JournalEntryLine`, and the
+  `JournalEntryLink` table — all drop via in-place baseline edit, replaced by the single
+  `LinkedEntityID`/`LinkedRecordID` origin pair. With one JE per order line (orders D10) the
+  JE↔line mapping is 1:1, so neither a link table nor a line-level drill ref adds anything.
 - Forward-dated rev-rec JEs are ordinary rows in this table with future `EffectiveDate`s.
 
 ### 5.6 JournalEntryBatch (Simplified Summary Model)
@@ -520,6 +529,7 @@ stands; the chosen engine is a provider implementation.
 | `JournalEntryBatchLineItem.CompanyID` | D7 — the batch header carries the company |
 | `IntercompanyRelationship` wiring | D18 — Payments owns the wiring when built |
 | `Recurring*` template trio | Replaced by the forward-dated-JE model (D15) |
+| `JournalEntry` origin FK columns (`OrderID`, `OrderLineID`, `SubscriptionID`, `PaymentID`, `ContractID`, `IntercompanyFlowID`, `TaxRemittanceID`), `JournalEntryLine.OrderLineID`, and the `JournalEntryLink` table | D25 — provenance is the single polymorphic `LinkedEntityID`/`LinkedRecordID` origin pair on the JE header; all three still in the as-built baseline, drop pending |
 
 ---
 
@@ -576,7 +586,10 @@ stateDiagram-v2
   entries from earlier dates, ascending. A date-only end is inclusive of that whole date.
 - **Forward-dated entries are swept only if the filter reaches that far: default cutoff = today.**
   Building a future-reaching batch requires explicitly setting the filter; batch approval displays
-  the swept date range.
+  the swept date range **and the min/max `EffectiveDate` across the member JEs** — the approver
+  sees exactly what date span they are committing (Amith 2026-07-23). This date-awareness is the
+  only "scheduling" machinery the system has: forward-dated JEs just sit Pending until a window
+  reaches them.
 - **Arbitrary batches via MJ User Views:** build a view of desired records → "generate batch from
   view"; the engine validates the view resolves ONLY unbatched entries (rejects loudly otherwise).
 - The whole batch (header + summary lines + dimensions + control totals + JE locks) commits in
@@ -744,9 +757,9 @@ The accounting-facing shape of the order booking (the orders repo owns its own p
   `OrderLine.JournalEntryID`, and commits — ANY failure rolls back everything (a locked order
   without JEs is an invalid state).
 - **Account resolution** comes from the role/link walk (§5.3) via the orders-side engine cache.
-- **Cross-app reference hardness:** `OrderLine.JournalEntryID` (and the JE origin refs) are **SOFT
-  refs for now** — they become **HARD, nullable FKs** once the MJ CodeGen include-mode work lands
-  (Marcelo owns that PR). The go-forward standard: parent→required-dependency FKs are hard and
+- **Cross-app reference hardness:** `OrderLine.JournalEntryID` is a **SOFT ref for now** — it
+  becomes a **HARD, nullable FK** once the MJ CodeGen include-mode work lands (Marcelo owns that
+  PR). The JE origin pair (D25) is polymorphic and stays soft by nature. The go-forward standard: parent→required-dependency FKs are hard and
   nullable up the tree.
 - Payments (cash application, intercompany clearing legs), subscriptions' correcting-order netting,
   and tax-line recording all flow through the same `CreateJournalEntry` surface as they land.
@@ -793,7 +806,10 @@ thin; Amith reviews the BUILT code.
 2. **Accounting schema cleanup — deferred, notated** (do later, deliberately): drop the 5 ACP
    default-account FK columns (+ build the per-company role→account management UI), drop
    `ChartOfAccountsMapping` (+ remove its page/service/op). Not needed for orders — the resolver
-   reads `GLAccountLink` regardless.
+   reads `GLAccountLink` regardless. **Provenance rework (D25) rides this wave:** drop the seven
+   `JournalEntry` origin FK columns, `JournalEntryLine.OrderLineID`, and the `JournalEntryLink`
+   table; add the `LinkedEntityID`/`LinkedRecordID` pair + both-or-neither CHECK (in-place
+   baseline edit).
 3. **Batch rework slice:** single-company batch header (D7), `PostingDate` (D8), approver
    enforcement, dropping the batch-line `CompanyID` (entangled with the header move — do together).
 4. **Rev-rec rework:** retire the as-built ScheduledJournalEntry trio/materializer in favor of
