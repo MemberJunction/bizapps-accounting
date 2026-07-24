@@ -17,6 +17,10 @@
  *     the decision via TaskOrchestrationService. The shared entry point for BOTH the in-app approve
  *     control and the Tasks inbox.
  *
+ * PROVIDER: the gate is a plain class (no BaseEntity ProviderToUse), so it takes an optional
+ * IMetadataProvider at construction and falls back to the global Metadata.Provider — the MJ
+ * multi-provider rule for code that doesn't own a provider.
+ *
  * CONNECTS TO:
  *   READS:  Journal Entry Batches · Accounting Company Profiles · Task Links · Task Decisions
  *           · Task Decision Outcomes · Task Types
@@ -24,7 +28,7 @@
  *   ENTITY (gated): 'MJ_BizApps_Accounting: Journal Entry Batches'
  *   DOC:    BatchingEngine.ts (BatchApprovalGate seam) · plan §S1 (CFO-approval workflow gate)
  */
-import { Metadata, RunView, UserInfo } from '@memberjunction/core';
+import { IMetadataProvider, IRunViewProvider, Metadata, UserInfo } from '@memberjunction/core';
 import { UUIDsEqual } from '@memberjunction/global';
 import { TaskOrchestrationService, type TaskDecisionOutcomeCode } from '@mj-biz-apps/tasks-core';
 import type {
@@ -58,10 +62,27 @@ const APPROVED_OUTCOME_CODES: ReadonlySet<TaskDecisionOutcomeCode> = new Set(['A
 
 /**
  * Real CFO-approval gate, backed by bizapps-tasks. Stateless — one instance can serve every batch.
- * Resolve the Person EntityID once (lazily) so assignments name the right polymorphic assignee entity.
+ * Optionally bound to a specific IMetadataProvider (defaults to the global Metadata.Provider).
  */
 export class TasksAppApprovalGate implements BatchApprovalGate {
   private readonly orchestration = new TaskOrchestrationService();
+
+  constructor(private readonly _provider?: IMetadataProvider) {}
+
+  /**
+   * The provider this gate uses — the instance-bound provider when one was given at
+   * construction, else the global default. Mirrors BaseEntity/BaseEngine.ProviderToUse.
+   */
+  public get ProviderToUse(): IMetadataProvider {
+    const md = this._provider ?? Metadata.Provider;
+    if (!md) throw new Error('TasksAppApprovalGate: no metadata provider available (Metadata.Provider not initialized)');
+    return md;
+  }
+
+  /** The same provider viewed through its RunView interface (mirrors BaseEngine.RunViewProviderToUse). */
+  public get RunViewProviderToUse(): IRunViewProvider {
+    return this.ProviderToUse as unknown as IRunViewProvider;
+  }
 
   /** Build the approval Task when a batch is built. Throws if the batch's company lacks a CFO. */
   async onBatchBuilt(batchId: string, contextUser: UserInfo): Promise<void> {
@@ -109,8 +130,7 @@ export class TasksAppApprovalGate implements BatchApprovalGate {
   // ─── helpers ───────────────────────────────────────────────────────────────
 
   private async loadBatch(batchId: string, contextUser: UserInfo): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
-    const md = new Metadata();
-    const batch = await md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
+    const batch = await this.ProviderToUse.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
     if (!(await batch.Load(batchId))) throw new Error(`TasksAppApprovalGate: batch ${batchId} not found`);
     return batch;
   }
@@ -120,8 +140,7 @@ export class TasksAppApprovalGate implements BatchApprovalGate {
    * CompanyID). Hard-fail when the company lacks a configured CFO.
    */
   private async resolveCFOUserId(batch: mjBizAppsAccountingJournalEntryBatchEntity, contextUser: UserInfo): Promise<string> {
-    const md = new Metadata();
-    const acp = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, contextUser);
+    const acp = await this.ProviderToUse.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, contextUser);
     if (!(await acp.Load(batch.CompanyID))) throw new Error(`TasksAppApprovalGate: no AccountingCompanyProfile for company ${batch.CompanyID}`);
     const cfo = acp.ApprovalCFOUserID;
     if (!cfo) {
@@ -131,8 +150,7 @@ export class TasksAppApprovalGate implements BatchApprovalGate {
   }
 
   private async resolveApprovalTaskTypeId(contextUser: UserInfo): Promise<string> {
-    const rv = new RunView();
-    const res = await rv.RunView<mjBizAppsTasksTaskTypeEntity>(
+    const res = await this.RunViewProviderToUse.RunView<mjBizAppsTasksTaskTypeEntity>(
       { EntityName: TASK_TYPE_ENTITY, ExtraFilter: `Name='${APPROVAL_REQUEST_TASK_TYPE.replace(/'/g, "''")}'`, MaxRows: 1, ResultType: 'entity_object', BypassCache: true },
       contextUser,
     );
@@ -142,8 +160,7 @@ export class TasksAppApprovalGate implements BatchApprovalGate {
   }
 
   private resolveUserEntityId(): string {
-    const md = new Metadata();
-    const entity = md.EntityByName(USER_ENTITY);
+    const entity = this.ProviderToUse.EntityByName(USER_ENTITY);
     if (!entity) throw new Error(`TasksAppApprovalGate: entity '${USER_ENTITY}' not found in metadata`);
     return entity.ID;
   }
@@ -151,30 +168,26 @@ export class TasksAppApprovalGate implements BatchApprovalGate {
   /** The (single) approval Task linked to this batch via a polymorphic Task Link. */
   private async resolveBatchTask(batchId: string, contextUser: UserInfo): Promise<mjBizAppsTasksTaskEntity | null> {
     const batchEntityId = this.batchEntityId();
-    const rv = new RunView();
-    const linkRes = await rv.RunView<mjBizAppsTasksTaskLinkEntity>(
+    const linkRes = await this.RunViewProviderToUse.RunView<mjBizAppsTasksTaskLinkEntity>(
       { EntityName: TASK_LINK_ENTITY, ExtraFilter: `EntityID='${batchEntityId}' AND RecordID='${batchId}'`, OrderBy: '__mj_CreatedAt DESC', ResultType: 'entity_object', BypassCache: true },
       contextUser,
     );
     const link = linkRes.Results?.[0];
     if (!link) return null;
-    const md = new Metadata();
-    const task = await md.GetEntityObject<mjBizAppsTasksTaskEntity>('MJ_BizApps_Tasks: Tasks', contextUser);
+    const task = await this.ProviderToUse.GetEntityObject<mjBizAppsTasksTaskEntity>('MJ_BizApps_Tasks: Tasks', contextUser);
     return (await task.Load(link.TaskID)) ? task : null;
   }
 
   /** Resolve the Journal Entry Batches EntityID for Task Link filtering. */
   private batchEntityId(): string {
-    const md = new Metadata();
-    const entity = md.EntityByName(BATCH_ENTITY);
+    const entity = this.ProviderToUse.EntityByName(BATCH_ENTITY);
     if (!entity) throw new Error(`TasksAppApprovalGate: entity '${BATCH_ENTITY}' not found in metadata`);
     return entity.ID;
   }
 
   /** True when the Task has at least one terminal decision whose outcome code is Approved/ApprovedWithConditions. */
   private async hasApprovedDecision(taskId: string, contextUser: UserInfo): Promise<boolean> {
-    const rv = new RunView();
-    const decRes = await rv.RunView<mjBizAppsTasksTaskDecisionEntity>(
+    const decRes = await this.RunViewProviderToUse.RunView<mjBizAppsTasksTaskDecisionEntity>(
       { EntityName: TASK_DECISION_ENTITY, ExtraFilter: `TaskID='${taskId}'`, ResultType: 'entity_object', BypassCache: true },
       contextUser,
     );
@@ -186,8 +199,7 @@ export class TasksAppApprovalGate implements BatchApprovalGate {
 
   /** The TaskDecisionOutcome IDs that are BOTH terminal AND an approval (Approved / ApprovedWithConditions). */
   private async loadApprovedTerminalOutcomeIds(contextUser: UserInfo): Promise<string[]> {
-    const rv = new RunView();
-    const res = await rv.RunView<mjBizAppsTasksTaskDecisionOutcomeEntity>(
+    const res = await this.RunViewProviderToUse.RunView<mjBizAppsTasksTaskDecisionOutcomeEntity>(
       { EntityName: TASK_DECISION_OUTCOME_ENTITY, ExtraFilter: `IsTerminal=1`, ResultType: 'entity_object', BypassCache: true },
       contextUser,
     );

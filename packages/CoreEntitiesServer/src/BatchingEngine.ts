@@ -21,6 +21,11 @@
  * The detail (member JournalEntryLines) stays in the subledger for drill-through; the
  * netted summary JE is what the ERP sees, dated the batch's PostingDate.
  *
+ * PROVIDER: these are module functions (no BaseEntity ProviderToUse), so every public
+ * entry point takes an optional IMetadataProvider and falls back to the global
+ * Metadata.Provider — the MJ multi-provider rule for code that doesn't own a provider.
+ * Entities created through the resolved provider carry it for their own saves.
+ *
  * SECURITY MODEL:
  *   - **Financial invariants are DB triggers — un-bypassable even by raw SQL / SA:** JEs must
  *     balance to lock (50001), lines must match the header company (50019), an Approved/Sent/
@@ -40,7 +45,7 @@
  *   ENTITY:       'MJ_BizApps_Accounting: Journal Entry Batches'
  *   DOC:          plans/bizapps-accounting-master.md §7 (lifecycle + batching)
  */
-import { Metadata, RunView, UserInfo } from '@memberjunction/core';
+import { IMetadataProvider, IRunViewProvider, Metadata, UserInfo } from '@memberjunction/core';
 import type {
   mjBizAppsAccountingJournalEntryBatchEntity,
   mjBizAppsAccountingJournalEntryEntity,
@@ -60,6 +65,15 @@ const NET_TOLERANCE = 0.005;
 
 /** The ERP targets the schema's CK_JournalEntryBatch_TargetSystem accepts. */
 export type BatchTargetSystem = 'BusinessCentral' | 'NetSuite' | 'Other' | 'QuickBooks' | 'Sage' | 'Xero';
+
+/** Resolved metadata + view access for one engine call (bound provider or the global default). */
+interface Providers { md: IMetadataProvider; rv: IRunViewProvider }
+
+function resolveProviders(provider?: IMetadataProvider): Providers {
+  const md = provider ?? Metadata.Provider;
+  if (!md) throw new Error('BatchingEngine: no metadata provider available (Metadata.Provider not initialized)');
+  return { md, rv: md as unknown as IRunViewProvider };
+}
 
 export interface DimRef { DimensionID: string; DimensionValueID: string }
 
@@ -153,19 +167,21 @@ export async function buildBatch(
   batchedByUserId: string,
   contextUser: UserInfo,
   gate: BatchApprovalGate = AutoApproveGate,
+  provider?: IMetadataProvider,
 ): Promise<BuildBatchResult | null> {
-  const jeIds = await loadPendingJEIds(companyId, contextUser);
+  const p = resolveProviders(provider);
+  const jeIds = await loadPendingJEIds(companyId, contextUser, p);
   if (jeIds.length === 0) return null;
 
-  const groups = netLines(await loadNettableLines(companyId, jeIds, contextUser));
+  const groups = netLines(await loadNettableLines(companyId, jeIds, contextUser, p));
   if (groups.length === 0) return null; // everything netted to zero
 
-  const batch = await createBatchHeader(companyId, targetSystem, batchedByUserId, jeIds.length, contextUser);
-  const summary = await writeSummaryJournalEntry(batch, groups, contextUser);
+  const batch = await createBatchHeader(companyId, targetSystem, batchedByUserId, jeIds.length, contextUser, p);
+  const summary = await writeSummaryJournalEntry(batch, groups, contextUser, p);
   const { totalDebits, totalCredits } = summaryTotals(groups);
   await setSummaryPointerAndTotals(batch, summary.ID, totalDebits, totalCredits, jeIds.length);
-  await lockJournalEntries(jeIds, batch.ID, contextUser);
-  await raiseApprovalTaskOrReverse(batch.ID, gate, contextUser);
+  await lockJournalEntries(jeIds, batch.ID, contextUser, p);
+  await raiseApprovalTaskOrReverse(batch.ID, gate, contextUser, p);
 
   return { batchId: batch.ID, summaryJournalEntryId: summary.ID, summaryLineCount: groups.length, totalDebits, totalCredits, jeCount: jeIds.length };
 }
@@ -175,46 +191,43 @@ export async function buildBatch(
  * task-less batch stranded — with reversible preliminary locks we cancel it (unlock JEs + Cancelled)
  * and rethrow, so the caller sees the real failure and the candidate pool is intact.
  */
-async function raiseApprovalTaskOrReverse(batchId: string, gate: BatchApprovalGate, contextUser: UserInfo): Promise<void> {
+async function raiseApprovalTaskOrReverse(batchId: string, gate: BatchApprovalGate, contextUser: UserInfo, p: Providers): Promise<void> {
   if (!gate.onBatchBuilt) return;
   try {
     await gate.onBatchBuilt(batchId, contextUser);
   } catch (e) {
-    await cancelBatch(batchId, contextUser);
+    await cancelBatch(batchId, contextUser, p.md);
     throw e;
   }
 }
 
 /** The company's unbatched Pending JEs. BatchSummary JEs are excluded by EntryType (the ruled default exclusion). */
-async function loadPendingJEIds(companyId: string, contextUser: UserInfo): Promise<string[]> {
-  const rv = new RunView();
-  const res = await rv.RunView<{ ID: string }>(
+async function loadPendingJEIds(companyId: string, contextUser: UserInfo, p: Providers): Promise<string[]> {
+  const res = await p.rv.RunView<{ ID: string }>(
     { EntityName: JE_ENTITY, ExtraFilter: `Status='Pending' AND CompanyID='${companyId}' AND EntryType<>'BatchSummary'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true },
     contextUser,
   );
   return (res.Results ?? []).map(r => r.ID);
 }
 
-async function loadNettableLines(companyId: string, jeIds: string[], contextUser: UserInfo): Promise<NettableLine[]> {
-  const rv = new RunView();
+async function loadNettableLines(companyId: string, jeIds: string[], contextUser: UserInfo, p: Providers): Promise<NettableLine[]> {
   const inList = jeIds.map(id => `'${id}'`).join(',');
-  const lineRes = await rv.RunView<{ ID: string; GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null }>(
+  const lineRes = await p.rv.RunView<{ ID: string; GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null }>(
     { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID IN (${inList})`, Fields: ['ID', 'GLAccountID', 'DebitAmount', 'CreditAmount'], ResultType: 'simple', BypassCache: true },
     contextUser,
   );
   const lines = lineRes.Results ?? [];
-  const dimsByLine = await loadDimensionsByLine(lines.map(l => l.ID), contextUser);
+  const dimsByLine = await loadDimensionsByLine(lines.map(l => l.ID), contextUser, p);
   // The line's company IS the parent JE's header company (single-company JE, D3; trigger 50019
   // guarantees every line's GLAccount belongs to it) — and every gathered JE belongs to companyId.
   return lines.map(l => ({ companyId, glAccountId: l.GLAccountID, debit: l.DebitAmount ?? 0, credit: l.CreditAmount ?? 0, dims: dimsByLine.get(l.ID) ?? [] }));
 }
 
-async function loadDimensionsByLine(lineIds: string[], contextUser: UserInfo): Promise<Map<string, DimRef[]>> {
+async function loadDimensionsByLine(lineIds: string[], contextUser: UserInfo, p: Providers): Promise<Map<string, DimRef[]>> {
   const byLine = new Map<string, DimRef[]>();
   if (lineIds.length === 0) return byLine;
-  const rv = new RunView();
   const inList = lineIds.map(id => `'${id}'`).join(',');
-  const res = await rv.RunView<{ JournalEntryLineID: string; DimensionID: string; DimensionValueID: string }>(
+  const res = await p.rv.RunView<{ JournalEntryLineID: string; DimensionID: string; DimensionValueID: string }>(
     { EntityName: JELD_ENTITY, ExtraFilter: `JournalEntryLineID IN (${inList})`, Fields: ['JournalEntryLineID', 'DimensionID', 'DimensionValueID'], ResultType: 'simple', BypassCache: true },
     contextUser,
   );
@@ -232,10 +245,9 @@ function todayUTC(): Date {
 }
 
 async function createBatchHeader(
-  companyId: string, targetSystem: BatchTargetSystem, batchedByUserId: string, jeCount: number, contextUser: UserInfo,
+  companyId: string, targetSystem: BatchTargetSystem, batchedByUserId: string, jeCount: number, contextUser: UserInfo, p: Providers,
 ): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
-  const md = new Metadata();
-  const batch = await md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
+  const batch = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
   batch.NewRecord();
   batch.CompanyID = companyId;
   batch.PostingDate = todayUTC();
@@ -257,10 +269,9 @@ async function createBatchHeader(
  * is the sanctioned preliminary lock; balanced-on-lock 50001 verifies the summary foots).
  */
 async function writeSummaryJournalEntry(
-  batch: mjBizAppsAccountingJournalEntryBatchEntity, groups: NetGroup[], contextUser: UserInfo,
+  batch: mjBizAppsAccountingJournalEntryBatchEntity, groups: NetGroup[], contextUser: UserInfo, p: Providers,
 ): Promise<JournalEntryEntityServer> {
-  const md = new Metadata();
-  const summary = await md.GetEntityObject<JournalEntryEntityServer>(JE_ENTITY, contextUser);
+  const summary = await p.md.GetEntityObject<JournalEntryEntityServer>(JE_ENTITY, contextUser);
   summary.NewRecord();
   summary.CompanyID = batch.CompanyID;
   summary.EffectiveDate = batch.PostingDate;
@@ -279,7 +290,7 @@ async function writeSummaryJournalEntry(
   if (!(await summary.Save())) {
     throw new Error(`buildBatch: summary JE save failed: ${summary.LatestResult?.CompleteMessage ?? 'unknown'}`);
   }
-  await writeSummaryDimensions(summary, groups, contextUser);
+  await writeSummaryDimensions(summary, groups, contextUser, p);
 
   // Preliminary lock: Pending→Batched with BatchID set (reversible while the batch stays Pending).
   summary.Status = 'Batched';
@@ -291,15 +302,14 @@ async function writeSummaryJournalEntry(
 
 /** Tag each summary line with its group's dimension refs (JournalEntryLineDimension rows). */
 async function writeSummaryDimensions(
-  summary: JournalEntryEntityServer, groups: NetGroup[], contextUser: UserInfo,
+  summary: JournalEntryEntityServer, groups: NetGroup[], contextUser: UserInfo, p: Providers,
 ): Promise<void> {
-  const md = new Metadata();
   const lines = summary.Lines;
   for (let i = 0; i < groups.length; i++) {
     const line = lines[i];
     if (!line) throw new Error(`buildBatch: summary line ${i + 1} missing after save`);
     for (const d of groups[i].dims) {
-      const dim = await md.GetEntityObject<mjBizAppsAccountingJournalEntryLineDimensionEntity>(JELD_ENTITY, contextUser);
+      const dim = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryLineDimensionEntity>(JELD_ENTITY, contextUser);
       dim.NewRecord();
       dim.JournalEntryLineID = line.ID;
       dim.DimensionID = d.DimensionID;
@@ -339,10 +349,10 @@ async function setSummaryPointerAndTotals(
  * (the retired batch-line-item snapshot column has no successor yet).
  */
 export async function resolveExternalAccount(
-  glAccountId: string, targetSystem: BatchTargetSystem, contextUser: UserInfo,
+  glAccountId: string, targetSystem: BatchTargetSystem, contextUser: UserInfo, provider?: IMetadataProvider,
 ): Promise<string> {
-  const rv = new RunView();
-  const glRes = await rv.RunView<{ Code: string; ExternalSystem: string | null; ExternalAccountID: string | null }>(
+  const p = resolveProviders(provider);
+  const glRes = await p.rv.RunView<{ Code: string; ExternalSystem: string | null; ExternalAccountID: string | null }>(
     { EntityName: GL_ENTITY, ExtraFilter: `ID='${glAccountId}'`, Fields: ['Code', 'ExternalSystem', 'ExternalAccountID'], ResultType: 'simple', BypassCache: true },
     contextUser,
   );
@@ -353,10 +363,9 @@ export async function resolveExternalAccount(
 }
 
 /** Lock the member JEs: Status → Batched with BatchID (CK_JournalEntry_BatchedHasBatch + the immutability triggers). */
-async function lockJournalEntries(jeIds: string[], batchId: string, contextUser: UserInfo): Promise<void> {
-  const md = new Metadata();
+async function lockJournalEntries(jeIds: string[], batchId: string, contextUser: UserInfo, p: Providers): Promise<void> {
   for (const jeId of jeIds) {
-    const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
+    const je = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
     await je.Load(jeId);
     je.BatchID = batchId;
     je.Status = 'Batched';
@@ -373,15 +382,15 @@ async function lockJournalEntries(jeIds: string[], batchId: string, contextUser:
  * atomicity-safety net for a failed approval-task raise.
  */
 export async function cancelBatch(
-  batchId: string, contextUser: UserInfo,
+  batchId: string, contextUser: UserInfo, provider?: IMetadataProvider,
 ): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
-  const md = new Metadata();
-  const batch = await md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
+  const p = resolveProviders(provider);
+  const batch = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
   if (!(await batch.Load(batchId))) throw new Error(`cancelBatch: batch ${batchId} not found`);
   if (batch.Status !== 'Pending') {
     throw new Error(`cancelBatch: batch ${batchId} is ${batch.Status}; only a Pending (unapproved) batch can be cancelled/reversed`);
   }
-  await tearDownSummaryAndUnlock(batch, contextUser);
+  await tearDownSummaryAndUnlock(batch, contextUser, p);
   batch.Status = 'Cancelled';
   if (!(await batch.Save())) throw new Error(`cancelBatch: Pending→Cancelled failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
   return batch;
@@ -394,27 +403,27 @@ export async function cancelBatch(
  * §7.2 rework — for now it takes everything pending for the company.
  */
 export async function regenerateBatch(
-  batchId: string, targetSystem: BatchTargetSystem, contextUser: UserInfo,
+  batchId: string, targetSystem: BatchTargetSystem, contextUser: UserInfo, provider?: IMetadataProvider,
 ): Promise<BuildBatchResult> {
-  const md = new Metadata();
-  const batch = await md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
+  const p = resolveProviders(provider);
+  const batch = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
   if (!(await batch.Load(batchId))) throw new Error(`regenerateBatch: batch ${batchId} not found`);
   if (batch.Status !== 'Pending') {
     throw new Error(`regenerateBatch: batch ${batchId} is ${batch.Status}; only a Pending batch can be regenerated`);
   }
-  await tearDownSummaryAndUnlock(batch, contextUser);
+  await tearDownSummaryAndUnlock(batch, contextUser, p);
 
-  const jeIds = await loadPendingJEIds(batch.CompanyID, contextUser);
-  const groups = netLines(await loadNettableLines(batch.CompanyID, jeIds, contextUser));
+  const jeIds = await loadPendingJEIds(batch.CompanyID, contextUser, p);
+  const groups = netLines(await loadNettableLines(batch.CompanyID, jeIds, contextUser, p));
   const { totalDebits, totalCredits } = summaryTotals(groups);
   batch.TargetSystem = targetSystem;
   let summaryId = '';
   if (groups.length > 0) {
-    const summary = await writeSummaryJournalEntry(batch, groups, contextUser);
+    const summary = await writeSummaryJournalEntry(batch, groups, contextUser, p);
     summaryId = summary.ID;
   }
   await setSummaryPointerAndTotals(batch, summaryId || null, totalDebits, totalCredits, jeIds.length);
-  await lockJournalEntries(jeIds, batch.ID, contextUser);
+  await lockJournalEntries(jeIds, batch.ID, contextUser, p);
 
   return { batchId: batch.ID, summaryJournalEntryId: summaryId, summaryLineCount: groups.length, totalDebits, totalCredits, jeCount: jeIds.length };
 }
@@ -426,14 +435,14 @@ export async function regenerateBatch(
  *      Pending/BatchID NULL (the sanctioned reversible unlock while the batch is Pending),
  *   3. delete the now-Pending summary JE (dimension tags → lines → header).
  */
-async function tearDownSummaryAndUnlock(batch: mjBizAppsAccountingJournalEntryBatchEntity, contextUser: UserInfo): Promise<void> {
+async function tearDownSummaryAndUnlock(batch: mjBizAppsAccountingJournalEntryBatchEntity, contextUser: UserInfo, p: Providers): Promise<void> {
   const summaryId = batch.SummaryJournalEntryID;
   if (summaryId) {
     batch.SummaryJournalEntryID = null;
     if (!(await batch.Save())) throw new Error(`batch teardown: clearing SummaryJournalEntryID failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
   }
-  await unlockJournalEntries(batch.ID, contextUser);
-  if (summaryId) await deleteSummaryJournalEntry(summaryId, contextUser);
+  await unlockJournalEntries(batch.ID, contextUser, p);
+  if (summaryId) await deleteSummaryJournalEntry(summaryId, contextUser, p);
 }
 
 /**
@@ -441,15 +450,13 @@ async function tearDownSummaryAndUnlock(batch: mjBizAppsAccountingJournalEntryBa
  * Status Batched→Pending, BatchID→NULL. MUST run while the batch is still Pending (the
  * immutability trigger permits the unlock only then).
  */
-async function unlockJournalEntries(batchId: string, contextUser: UserInfo): Promise<void> {
-  const rv = new RunView();
-  const res = await rv.RunView<{ ID: string }>(
+async function unlockJournalEntries(batchId: string, contextUser: UserInfo, p: Providers): Promise<void> {
+  const res = await p.rv.RunView<{ ID: string }>(
     { EntityName: JE_ENTITY, ExtraFilter: `BatchID='${batchId}' AND Status='Batched'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true },
     contextUser,
   );
-  const md = new Metadata();
   for (const row of res.Results ?? []) {
-    const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
+    const je = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
     await je.Load(row.ID);
     je.Status = 'Pending';
     je.BatchID = null;
@@ -458,26 +465,23 @@ async function unlockJournalEntries(batchId: string, contextUser: UserInfo): Pro
 }
 
 /** Delete an unlocked (Pending) BatchSummary JE: dimension tags → lines → header. */
-async function deleteSummaryJournalEntry(summaryJournalEntryId: string, contextUser: UserInfo): Promise<void> {
-  const rv = new RunView();
-  const lineRes = await rv.RunView<mjBizAppsAccountingJournalEntryLineEntity>(
+async function deleteSummaryJournalEntry(summaryJournalEntryId: string, contextUser: UserInfo, p: Providers): Promise<void> {
+  const lineRes = await p.rv.RunView<mjBizAppsAccountingJournalEntryLineEntity>(
     { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID='${summaryJournalEntryId}'`, ResultType: 'entity_object', BypassCache: true },
     contextUser,
   );
   for (const line of lineRes.Results ?? []) {
-    await deleteLineDimensions(line.ID, contextUser);
+    await deleteLineDimensions(line.ID, contextUser, p);
     if (!(await line.Delete())) throw new Error(`deleteSummaryJournalEntry: delete line ${line.ID} failed: ${line.LatestResult?.CompleteMessage ?? 'unknown'}`);
   }
-  const md = new Metadata();
-  const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
+  const je = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
   if (!(await je.Load(summaryJournalEntryId))) throw new Error(`deleteSummaryJournalEntry: summary JE ${summaryJournalEntryId} not found`);
   if (!(await je.Delete())) throw new Error(`deleteSummaryJournalEntry: delete summary JE failed: ${je.LatestResult?.CompleteMessage ?? 'unknown'}`);
 }
 
 /** Delete the dimension tags on a summary JE line (FK children — must go before the line). */
-async function deleteLineDimensions(lineId: string, contextUser: UserInfo): Promise<void> {
-  const rv = new RunView();
-  const res = await rv.RunView<mjBizAppsAccountingJournalEntryLineDimensionEntity>(
+async function deleteLineDimensions(lineId: string, contextUser: UserInfo, p: Providers): Promise<void> {
+  const res = await p.rv.RunView<mjBizAppsAccountingJournalEntryLineDimensionEntity>(
     { EntityName: JELD_ENTITY, ExtraFilter: `JournalEntryLineID='${lineId}'`, ResultType: 'entity_object', BypassCache: true },
     contextUser,
   );
@@ -490,10 +494,10 @@ async function deleteLineDimensions(lineId: string, contextUser: UserInfo): Prom
 
 /** The human sign-off: Pending → Approved (+audit). Content freezes here (trg_JEBatch_Immutability). */
 export async function approveBatch(
-  batchId: string, approvedByUserId: string, contextUser: UserInfo,
+  batchId: string, approvedByUserId: string, contextUser: UserInfo, provider?: IMetadataProvider,
 ): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
-  const md = new Metadata();
-  const batch = await md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
+  const p = resolveProviders(provider);
+  const batch = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
   if (!(await batch.Load(batchId))) throw new Error(`approveBatch: batch ${batchId} not found`);
   if (batch.Status !== 'Pending') throw new Error(`approveBatch: batch ${batchId} is ${batch.Status}, only a Pending batch can be approved`);
   batch.Status = 'Approved';
@@ -505,7 +509,12 @@ export async function approveBatch(
 
 // ─── sendBatch ─────────────────────────────────────────────────────────────
 
-export interface SendBatchOptions { gate: BatchApprovalGate; poster?: ErpPoster }
+export interface SendBatchOptions {
+  gate: BatchApprovalGate;
+  poster?: ErpPoster;
+  /** Provider override for this call — defaults to the global Metadata.Provider. */
+  provider?: IMetadataProvider;
+}
 
 /**
  * Send an APPROVED batch to the ERP. Requires the approval gate + Status='Approved'; then
@@ -513,9 +522,9 @@ export interface SendBatchOptions { gate: BatchApprovalGate; poster?: ErpPoster 
  * flips Sent→Posted + the member JEs AND the summary JE Batched→GLPosted.
  */
 export async function sendBatch(batchId: string, contextUser: UserInfo, options: SendBatchOptions): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
+  const p = resolveProviders(options.provider);
   const poster = options.poster ?? mockErpPoster;
-  const md = new Metadata();
-  const batch = await md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
+  const batch = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
   if (!(await batch.Load(batchId))) throw new Error(`sendBatch: batch ${batchId} not found`);
   if (batch.Status !== 'Approved') throw new Error(`sendBatch: batch ${batchId} is ${batch.Status}, only an Approved batch can be sent`);
 
@@ -525,18 +534,17 @@ export async function sendBatch(batchId: string, contextUser: UserInfo, options:
   batch.SentAt = new Date();
   if (!(await batch.Save())) throw new Error(`sendBatch: Approved→Sent failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
 
-  const summaryLines = await loadSummaryLines(batch, contextUser);
+  const summaryLines = await loadSummaryLines(batch, contextUser, p);
   const postResult = await poster(batch, summaryLines, contextUser);
   return postResult.success
-    ? await markBatchPosted(batch, postResult.externalBatchRef ?? null, contextUser)
+    ? await markBatchPosted(batch, postResult.externalBatchRef ?? null, contextUser, p)
     : await failBatch(batch, postResult.error ?? 'ERP post failed');
 }
 
 /** The summary JE's lines — what the ERP receives. */
-async function loadSummaryLines(batch: mjBizAppsAccountingJournalEntryBatchEntity, contextUser: UserInfo): Promise<mjBizAppsAccountingJournalEntryLineEntity[]> {
+async function loadSummaryLines(batch: mjBizAppsAccountingJournalEntryBatchEntity, contextUser: UserInfo, p: Providers): Promise<mjBizAppsAccountingJournalEntryLineEntity[]> {
   if (!batch.SummaryJournalEntryID) return [];
-  const rv = new RunView();
-  const res = await rv.RunView<mjBizAppsAccountingJournalEntryLineEntity>(
+  const res = await p.rv.RunView<mjBizAppsAccountingJournalEntryLineEntity>(
     { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID='${batch.SummaryJournalEntryID}'`, OrderBy: 'LineNumber', ResultType: 'entity_object', BypassCache: true },
     contextUser,
   );
@@ -545,26 +553,24 @@ async function loadSummaryLines(batch: mjBizAppsAccountingJournalEntryBatchEntit
 
 /** Sent → Posted (the ERP confirmed posting; allowed by 50009) + flip each batched JE Batched→GLPosted. */
 async function markBatchPosted(
-  batch: mjBizAppsAccountingJournalEntryBatchEntity, externalBatchRef: string | null, contextUser: UserInfo,
+  batch: mjBizAppsAccountingJournalEntryBatchEntity, externalBatchRef: string | null, contextUser: UserInfo, p: Providers,
 ): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
   batch.ExternalBatchRef = externalBatchRef;
   batch.PostedAt = new Date();
   batch.Status = 'Posted';
   if (!(await batch.Save())) throw new Error(`sendBatch: Sent→Posted failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
-  await markJournalEntriesGLPosted(batch.ID, externalBatchRef, contextUser);
+  await markJournalEntriesGLPosted(batch.ID, externalBatchRef, contextUser, p);
   return batch;
 }
 
 /** Every Batched JE in the batch's orbit (members + summary) → GLPosted (only GL-roundtrip fields may change on a locked JE). */
-async function markJournalEntriesGLPosted(batchId: string, externalBatchRef: string | null, contextUser: UserInfo): Promise<void> {
-  const rv = new RunView();
-  const res = await rv.RunView<{ ID: string }>(
+async function markJournalEntriesGLPosted(batchId: string, externalBatchRef: string | null, contextUser: UserInfo, p: Providers): Promise<void> {
+  const res = await p.rv.RunView<{ ID: string }>(
     { EntityName: JE_ENTITY, ExtraFilter: `BatchID='${batchId}' AND Status='Batched'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true },
     contextUser,
   );
-  const md = new Metadata();
   for (const row of res.Results ?? []) {
-    const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
+    const je = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
     await je.Load(row.ID);
     je.Status = 'GLPosted';
     je.GLPostedAt = new Date();

@@ -391,7 +391,7 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
     if (Number.isNaN(d.getTime())) {
       throw new Error(`JournalEntryEntityServer.deriveFiscalYear: invalid EffectiveDate value: ${String(effectiveDate)}`);
     }
-    await AccountingEngineBase.Instance.Config(false, this.ContextCurrentUser);
+    await AccountingEngineBase.Instance.ConfigEx({ contextUser: this.ContextCurrentUser, provider: this.ProviderToUse as unknown as IMetadataProvider });
     const acp = AccountingEngineBase.Instance.CompanyProfiles.find(
       p => p.ID?.toLowerCase() === this.CompanyID?.toLowerCase()
     );

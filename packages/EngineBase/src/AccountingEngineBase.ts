@@ -103,30 +103,33 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
   }
 
   // ─── cached collections ────────────────────────────────────────────────────
+  // Getters go through BaseEngine.GetConfigData (MJ doctrine): it throws
+  // PermissionConstrainedError when the property was skipped for lack of read
+  // access, instead of silently serving an empty array.
 
   public get GLAccounts(): mjBizAppsAccountingGLAccountEntity[] {
-    return this._glAccounts;
+    return this.GetConfigData<mjBizAppsAccountingGLAccountEntity>('_glAccounts');
   }
   public get GLAccountRoles(): mjBizAppsAccountingGLAccountRoleEntity[] {
-    return this._glAccountRoles;
+    return this.GetConfigData<mjBizAppsAccountingGLAccountRoleEntity>('_glAccountRoles');
   }
   public get GLAccountLinks(): mjBizAppsAccountingGLAccountLinkEntity[] {
-    return this._glAccountLinks;
+    return this.GetConfigData<mjBizAppsAccountingGLAccountLinkEntity>('_glAccountLinks');
   }
   public get GLAccountLinkDimensions(): mjBizAppsAccountingGLAccountLinkDimensionEntity[] {
-    return this._glAccountLinkDimensions;
+    return this.GetConfigData<mjBizAppsAccountingGLAccountLinkDimensionEntity>('_glAccountLinkDimensions');
   }
   public get Dimensions(): mjBizAppsAccountingDimensionEntity[] {
-    return this._dimensions;
+    return this.GetConfigData<mjBizAppsAccountingDimensionEntity>('_dimensions');
   }
   public get DimensionValues(): mjBizAppsAccountingDimensionValueEntity[] {
-    return this._dimensionValues;
+    return this.GetConfigData<mjBizAppsAccountingDimensionValueEntity>('_dimensionValues');
   }
   public get CompanyProfiles(): mjBizAppsAccountingAccountingCompanyProfileEntity[] {
-    return this._companyProfiles;
+    return this.GetConfigData<mjBizAppsAccountingAccountingCompanyProfileEntity>('_companyProfiles');
   }
   public get Currencies(): mjBizAppsAccountingCurrencyEntity[] {
-    return this._currencies;
+    return this.GetConfigData<mjBizAppsAccountingCurrencyEntity>('_currencies');
   }
 
   // ─── point lookups ─────────────────────────────────────────────────────────

@@ -352,7 +352,7 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
 
   /** Companies come from the shared reference engine (AccountingEngineBase.CompanyProfiles) — no per-page RunView. */
   private async loadCompanies(): Promise<void> {
-    await AccountingEngineBase.Instance.Config(false, this.contextUser(), this.ProviderToUse);
+    await AccountingEngineBase.Instance.ConfigEx({ contextUser: this.contextUser(), provider: this.ProviderToUse });
     const profiles = AccountingEngineBase.Instance.CompanyProfiles;
     this.companyNames = new Map(profiles.map(c => [c.ID, c.Name]));
     this.Companies = profiles
