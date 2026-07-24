@@ -13,9 +13,9 @@
  */
 import {
   Resolver, Mutation, Arg, Ctx, ObjectType, Field, ID,
-  AppContext, ResolverBase,
+  AppContext, ResolverBase, GetReadWriteProvider,
 } from '@memberjunction/server';
-import { LogError, Metadata } from '@memberjunction/core';
+import { LogError } from '@memberjunction/core';
 import { JournalEntryEntityServer } from '@mj-biz-apps/accounting-core-entities-server';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
@@ -37,15 +37,15 @@ export class JournalEntryResolver extends ResolverBase {
   async GenerateJournalEntryReversal(
     @Arg('journalEntryID', () => ID) journalEntryID: string,
     @Arg('reason', () => String) reason: string,
-    @Ctx() { userPayload }: AppContext,
+    @Ctx() { userPayload, providers }: AppContext,
   ): Promise<GenerateReversalResult> {
     try {
       const user = this.GetUserFromPayload(userPayload);
       if (!user) return { Success: false, ErrorMessage: 'No authenticated user.' };
+      const provider = GetReadWriteProvider(providers);
 
-      const md = new Metadata();
-      // GetEntityObject returns the registered JournalEntryEntityServer subclass (which owns generateReversal).
-      const je = await md.GetEntityObject<JournalEntryEntityServer>(JE_ENTITY, user);
+      // GetEntityObject returns the registered JournalEntryEntityServer subclass (which owns GenerateReversal).
+      const je = await provider.GetEntityObject<JournalEntryEntityServer>(JE_ENTITY, user);
       const loaded = await je.Load(journalEntryID);
       if (!loaded) return { Success: false, ErrorMessage: `Journal Entry ${journalEntryID} not found.` };
 

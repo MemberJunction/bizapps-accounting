@@ -21,10 +21,11 @@
  * The detail (member JournalEntryLines) stays in the subledger for drill-through; the
  * netted summary JE is what the ERP sees, dated the batch's PostingDate.
  *
- * PROVIDER: these are module functions (no BaseEntity ProviderToUse), so every public
- * entry point takes an optional IMetadataProvider and falls back to the global
- * Metadata.Provider — the MJ multi-provider rule for code that doesn't own a provider.
- * Entities created through the resolved provider carry it for their own saves.
+ * PROVIDER: these are module functions with no provider of their own, so the correct
+ * IMetadataProvider is INJECTED — required on every public entry point, no global
+ * fallback (the system uses the right provider through correct retrieval or injection
+ * only). Resolvers pass the per-request provider (GetReadWriteProvider); entities
+ * created through it carry it for their own saves.
  *
  * SECURITY MODEL:
  *   - **Financial invariants are DB triggers — un-bypassable even by raw SQL / SA:** JEs must
@@ -45,7 +46,7 @@
  *   ENTITY:       'MJ_BizApps_Accounting: Journal Entry Batches'
  *   DOC:          plans/bizapps-accounting-master.md §7 (lifecycle + batching)
  */
-import { IMetadataProvider, IRunViewProvider, Metadata, UserInfo } from '@memberjunction/core';
+import { IMetadataProvider, IRunViewProvider, UserInfo } from '@memberjunction/core';
 import type {
   mjBizAppsAccountingJournalEntryBatchEntity,
   mjBizAppsAccountingJournalEntryEntity,
@@ -66,13 +67,12 @@ const NET_TOLERANCE = 0.005;
 /** The ERP targets the schema's CK_JournalEntryBatch_TargetSystem accepts. */
 export type BatchTargetSystem = 'BusinessCentral' | 'NetSuite' | 'Other' | 'QuickBooks' | 'Sage' | 'Xero';
 
-/** Resolved metadata + view access for one engine call (bound provider or the global default). */
+/** The injected provider viewed through both interfaces one engine call needs. */
 interface Providers { md: IMetadataProvider; rv: IRunViewProvider }
 
-function resolveProviders(provider?: IMetadataProvider): Providers {
-  const md = provider ?? Metadata.Provider;
-  if (!md) throw new Error('BatchingEngine: no metadata provider available (Metadata.Provider not initialized)');
-  return { md, rv: md as unknown as IRunViewProvider };
+function resolveProviders(provider: IMetadataProvider): Providers {
+  if (!provider) throw new Error('BatchingEngine: an IMetadataProvider must be injected — there is no global fallback');
+  return { md: provider, rv: provider as unknown as IRunViewProvider };
 }
 
 export interface DimRef { DimensionID: string; DimensionValueID: string }
@@ -166,8 +166,8 @@ export async function buildBatch(
   targetSystem: BatchTargetSystem,
   batchedByUserId: string,
   contextUser: UserInfo,
+  provider: IMetadataProvider,
   gate: BatchApprovalGate = AutoApproveGate,
-  provider?: IMetadataProvider,
 ): Promise<BuildBatchResult | null> {
   const p = resolveProviders(provider);
   const jeIds = await loadPendingJEIds(companyId, contextUser, p);
@@ -349,7 +349,7 @@ async function setSummaryPointerAndTotals(
  * (the retired batch-line-item snapshot column has no successor yet).
  */
 export async function resolveExternalAccount(
-  glAccountId: string, targetSystem: BatchTargetSystem, contextUser: UserInfo, provider?: IMetadataProvider,
+  glAccountId: string, targetSystem: BatchTargetSystem, contextUser: UserInfo, provider: IMetadataProvider,
 ): Promise<string> {
   const p = resolveProviders(provider);
   const glRes = await p.rv.RunView<{ Code: string; ExternalSystem: string | null; ExternalAccountID: string | null }>(
@@ -382,7 +382,7 @@ async function lockJournalEntries(jeIds: string[], batchId: string, contextUser:
  * atomicity-safety net for a failed approval-task raise.
  */
 export async function cancelBatch(
-  batchId: string, contextUser: UserInfo, provider?: IMetadataProvider,
+  batchId: string, contextUser: UserInfo, provider: IMetadataProvider,
 ): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
   const p = resolveProviders(provider);
   const batch = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
@@ -403,7 +403,7 @@ export async function cancelBatch(
  * §7.2 rework — for now it takes everything pending for the company.
  */
 export async function regenerateBatch(
-  batchId: string, targetSystem: BatchTargetSystem, contextUser: UserInfo, provider?: IMetadataProvider,
+  batchId: string, targetSystem: BatchTargetSystem, contextUser: UserInfo, provider: IMetadataProvider,
 ): Promise<BuildBatchResult> {
   const p = resolveProviders(provider);
   const batch = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
@@ -494,7 +494,7 @@ async function deleteLineDimensions(lineId: string, contextUser: UserInfo, p: Pr
 
 /** The human sign-off: Pending → Approved (+audit). Content freezes here (trg_JEBatch_Immutability). */
 export async function approveBatch(
-  batchId: string, approvedByUserId: string, contextUser: UserInfo, provider?: IMetadataProvider,
+  batchId: string, approvedByUserId: string, contextUser: UserInfo, provider: IMetadataProvider,
 ): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
   const p = resolveProviders(provider);
   const batch = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
@@ -512,8 +512,8 @@ export async function approveBatch(
 export interface SendBatchOptions {
   gate: BatchApprovalGate;
   poster?: ErpPoster;
-  /** Provider override for this call — defaults to the global Metadata.Provider. */
-  provider?: IMetadataProvider;
+  /** The provider for this call — injected by the caller (required; no global fallback). */
+  provider: IMetadataProvider;
 }
 
 /**
