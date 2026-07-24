@@ -50,6 +50,15 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
   private _deletedLines: JournalEntryLineEntityServer[] = [];
 
   /**
+   * BaseEntity SKIPS ValidateAsync by default (DefaultSkipAsyncValidation = true) — opt in, or
+   * the async invariants below (W9 attachment check, GL active/company alignment) silently
+   * never run on Save. (Found via the live harness's GLAccount identity-lock test.)
+   */
+  public override get DefaultSkipAsyncValidation(): boolean {
+    return false;
+  }
+
+  /**
    * Child JournalEntryLine instances attached to this Journal Entry.
    * Gives full visibility of lines at the Journal Entry header level.
    */
@@ -412,7 +421,12 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
       throw new Error('JournalEntryEntityServer.assignEntryNumber: CompanyID must be set before save (journal entries are single-company, plan D3)');
     }
     const fiscalYear = await this.deriveFiscalYear();
-    this.EntryNumber = await getNextJournalEntryNumber(this.CompanyID, fiscalYear, this.ContextCurrentUser);
+    this.EntryNumber = await getNextJournalEntryNumber(
+      this.CompanyID,
+      fiscalYear,
+      this.ContextCurrentUser,
+      this.ProviderToUse as unknown as IMetadataProvider,
+    );
   }
 
   /**

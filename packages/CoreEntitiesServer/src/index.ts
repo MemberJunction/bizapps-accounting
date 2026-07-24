@@ -17,6 +17,7 @@ export { AccountingCompanyProfileEntityServer } from './AccountingCompanyProfile
 export { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 export { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
 export { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
+export { GLAccountEntityServer } from './GLAccountEntityServer.js';
 // (AccountingPeriodEntityServer removed 2026-07-06 — AccountingPeriod retired, CH-1.)
 
 // Internal helpers exported for use by future EntityServer classes (period
@@ -29,9 +30,9 @@ export {
 export type { SeededGLAccount } from './SeedData.js';
 export { getNextJournalEntryNumber, getNextBatchNumber } from './SequenceService.js';
 
-// F1 — post-time JE validation guard (balance / two-line / period-open / GL-active).
-export { validateJournalEntry, checkBalance } from './JournalEntryValidation.js';
-export type { JournalEntryValidationResult } from './JournalEntryValidation.js';
+// (JournalEntryValidation retired 2026-07-24, phase-2 sweep — its per-record rules live in
+//  JournalEntryEntityServer.Validate/ValidateAsync; nothing consumed the standalone module.
+//  Git history keeps it if a batch-side pre-lock validator is ever wanted again.)
 
 // S1 — batching engine: net a company's Pending JEs into a SINGLE-COMPANY batch (D7) whose
 // summary is a BatchSummary JournalEntry, lock + dispatch (CFO-approval gate + ERP-post seam).
