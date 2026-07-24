@@ -99,17 +99,29 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
     contextUser: UserInfo,
     provider: IMetadataProvider,
   ): Promise<CreateJournalEntryResult> {
+    // Single-company JE (plan D3): the header company is the one company every line's
+    // GLAccount belongs to (trigger 50019 enforces the match at the DB).
+    const companies = [...new Set(normalized.map(l => l.CompanyID.toLowerCase()))];
+    if (companies.length !== 1 || !companies[0]) {
+      return this.writeFailure(`journal entries are single-company (plan D3); draft lines resolve to ${companies.length} companies`, undefined);
+    }
+
     const tg = await provider.CreateTransactionGroup();
 
     // Header. NewRecord mints the UUID client-side, so lines/dimensions can reference it pre-submit.
     // The W2 numbering hook (JournalEntryEntityServer.Save) assigns EntryNumber before the queued save.
     const je = await provider.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
     je.NewRecord();
+    je.CompanyID = normalized[0].CompanyID;
     je.EffectiveDate = new Date(draft.EffectiveDate);
     je.EntryType = draft.EntryType;
     je.Status = 'Pending';
     je.Description = draft.Description ?? null;
-    if (draft.OrderID) je.OrderID = draft.OrderID;
+    // Polymorphic origin pair (plan D25) — both-or-neither (CK_JournalEntry_LinkedPair).
+    if (draft.LinkedEntityID && draft.LinkedRecordID) {
+      je.LinkedEntityID = draft.LinkedEntityID;
+      je.LinkedRecordID = draft.LinkedRecordID;
+    }
     je.TransactionGroup = tg;
     if (!(await je.Save())) {
       return this.writeFailure('journal-entry header failed to queue', je.LatestResult?.CompleteMessage);
@@ -124,7 +136,6 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
       l.DebitAmount = line.DebitAmount;
       l.CreditAmount = line.CreditAmount;
       l.Description = line.Description;
-      if (line.OrderLineID) l.OrderLineID = line.OrderLineID;
       l.TransactionGroup = tg;
       if (!(await l.Save())) {
         return this.writeFailure(`line ${line.LineNumber} failed to queue`, l.LatestResult?.CompleteMessage);

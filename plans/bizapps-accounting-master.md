@@ -154,7 +154,7 @@ The current decision set. Each is the standing ruling — superseded ancestors l
 | D16 | **All FX (realized + unrealized) is computed and posted UPSTREAM** (Orders/Payments). Accounting keeps only account refs, balance validation, and `vw_FxExposure`. FX overall is deferred until multi-currency activates; the responsibility is **unowned until Payments exists** (flagged, accepted). | Amith 2026-06-30. |
 | D17 | **Tax calculation is DELEGATED to a third-party engine** (Stripe Tax / Avalara / Vertex class) behind the `TaxCalculationProvider` seam. We (1) send inputs, (2) record what returns. Our tax tables are **snapshot/reference data** — never a rate authority we maintain or sync. | Robert 2026-07-14. Engine selection + launch timing open (§16). |
 | D18 | **Intercompany: accounting RECEIVES only.** No leg generation, no netting, no wiring table here. Per-company-pair Due-To/Due-From accounts (4 per pair, eager provisioning, unordered pair keyed by direct UUID comparison) is the reserved reference shape; the wiring lives with the Payments subsystem when built. **Intercompany legs arise on the PAYMENT side, not at booking** (Amith 2026-07-21 — re-closure with Robert/Jeremy pending, §17). | Amith 2026-06-28 → 2026-07-21. |
-| D19 | **JE numbering `JE-{CompanyCode}-{FY}-{seq}`** — per company, per fiscal year, gap-free. Batch numbering stays a global sequence (revisit if per-company batch numbering is wanted). | Familiar to accountants; FY from company settings. |
+| D19 | **JE numbering `JE-{CompanyCode}-{FY}-{seq}`** — per company, per fiscal year. Gap-free/consecutive numbering is NOT a requirement (Amith 2026-07-23: no such concept we care about) — the sequence is best-effort; gaps are acceptable. Batch numbering stays a global sequence (revisit if per-company batch numbering is wanted). | Familiar to accountants; FY from company settings. |
 | D20 | **No balance materialization.** Read-model views compute on demand; revisit only if read performance demands it. | Amith ("might kill this for the first version"). |
 | D21 | **Permissions = standard MJ roles + RLS; the app seeds its own roles** (Accounting User / Admin, optionally Manager). Company-scoped access via a `UserCompanyRole` grant table (per-company User/Approver/Admin + unscoped Global Admin). The CFO approver is a designated **`__mj.User`** link (a security identity — no Employee entity exists). | Robert 2026-07-09; mechanism ruled 2026-07-16. |
 | D22 | **Forms-first UX:** every core entity gets a first-class MJ Entity Form composed of widgets dashboards embed directly ("truly one UX"); no bespoke pop-ups — modal/slide-in surfaces render the entity form through MJ's form host. | Amith 2026-07-17. Full UX direction §13. |
@@ -767,7 +767,7 @@ The accounting-facing shape of the order booking (the orders repo owns its own p
 **Engine/API surface (accounting side):** `AccountingEngineBase` (client-safe cache + resolution) /
 `AccountingEngine` (server) · `Accounting.CreateJournalEntry` + atomic `CreateJournalEntries` (one
 TransactionGroup, all-or-none) · JE validation library (balance, single-company, account existence,
-typed errors) · gap-free sequence service. Big work rides **Remote Operations** — never bespoke
+typed errors) · sequence service (gap-free not required, D19). Big work rides **Remote Operations** — never bespoke
 resolvers or client-side multi-save choreography.
 
 ---

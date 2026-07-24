@@ -290,7 +290,9 @@ async function jeExists(contextUser: UserInfo, jeId: string): Promise<boolean> {
 
 /**
  * Create one balanced Pending JE with a deterministic id + balanced lines. Optional EffectiveDate
- * (defaults to now/UTC) and IntercompanyFlowID. Returns the JE id.
+ * (defaults to now/UTC) and a demo intercompany-flow tag (carried on the D25 origin pair as a
+ * soft LinkedRecordID grouping key — there is no IntercompanyFlow entity yet, so LinkedEntityID
+ * stays unset and the tag is demo Description text instead). Returns the JE id.
  */
 async function makeJE(
   contextUser: UserInfo,
@@ -304,11 +306,14 @@ async function makeJE(
   const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
   je.NewRecord();
   je.ID = jeId;
+  je.CompanyID = ctx.companyId; // single-company JE (plan D3)
   je.EffectiveDate = opts.effectiveDate ?? new Date();
   je.EntryType = entryType;
   je.Status = 'Pending';
-  je.Description = 'Association demo seed';
-  if (opts.intercompanyFlowId) je.IntercompanyFlowID = opts.intercompanyFlowId;
+  // The former JE.IntercompanyFlowID column dropped (D25); keep the flow tag readable in the demo.
+  je.Description = opts.intercompanyFlowId
+    ? `Association demo seed (intercompany flow ${opts.intercompanyFlowId})`
+    : 'Association demo seed';
   if (!(await je.Save())) throw new Error(`makeJE save failed (${jeId}): ${je.LatestResult?.CompleteMessage}`);
 
   let lineNo = 0;
