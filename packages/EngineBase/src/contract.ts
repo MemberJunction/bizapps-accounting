@@ -23,8 +23,6 @@ export interface JournalEntryLineDraft {
   DebitAmount?: number;
   CreditAmount?: number;
   Description?: string;
-  /** Lineage soft ref to the originating order line (nullable FK on JournalEntryLine). */
-  OrderLineID?: string;
   /** Pre-existing dimension/value pairs — validate-only, NEVER auto-created (CH-12). */
   Dimensions?: JournalEntryLineDimensionDraft[];
 }
@@ -41,8 +39,13 @@ export interface JournalEntryDraft {
   /** Derived from the generated entity union (rule 2c) — never hand-copied. */
   EntryType: mjBizAppsAccountingJournalEntryEntity['EntryType'];
   Description?: string;
-  /** Lineage soft ref to the originating order (nullable FK on JournalEntry). */
-  OrderID?: string;
+  /**
+   * Polymorphic origin pair (plan D25): the single causal source record for this JE.
+   * LinkedEntityID = the __mj Entity of the source (OrderLine, Payment, ...); LinkedRecordID =
+   * that record's primary key. Set BOTH or NEITHER (CK_JournalEntry_LinkedPair; NULL/NULL = manual).
+   */
+  LinkedEntityID?: string;
+  LinkedRecordID?: string;
   Lines: JournalEntryLineDraft[];
 }
 

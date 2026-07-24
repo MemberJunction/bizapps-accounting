@@ -5,12 +5,12 @@
  * (BatchingEngine.ts) with the bizapps-tasks app so a JE batch can only be sent once a CFO has
  * recorded a terminal Approved / ApprovedWithConditions decision against the linked approval Task.
  *
- *   onBatchBuilt(batchId): batches are MULTI-COMPANY (CH-4) — resolve EVERY company present in the
- *     batch's summary line items → each company's AccountingCompanyProfile.ApprovalCFOPersonID. If ANY
- *     is null, HARD-FAIL (per the per-company-field decision — no role fallback). Then
+ *   onBatchBuilt(batchId): batches are SINGLE-COMPANY (D7) — resolve the batch's CompanyID →
+ *     that company's AccountingCompanyProfile.ApprovalCFOUserID (a __mj.User). If null,
+ *     HARD-FAIL (per the per-company-field decision — no role fallback). Then
  *     CreateApprovalRequest ONE "Approve JE Batch #<BatchNumber>" Task linked to the batch
- *     (polymorphic Task Link), assigned to ALL those CFO Persons. (Interim shape pending the OQ-F /
- *     approval-flow review with Robert — one task, union of CFOs.)
+ *     (polymorphic Task Link), assigned to that CFO User. (Interim shape pending the
+ *     approval-flow review with Robert.)
  *   assertApproved(batchId): find the Task linked to the batch; require a terminal Approved /
  *     ApprovedWithConditions Task Decision; otherwise THROW (blocks the send).
  *   recordDecision(batchId, outcome, decidedByPersonId, notes): resolve the batch's Task and record
@@ -41,7 +41,6 @@ import type {
 import type { BatchApprovalGate } from './BatchingEngine.js';
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
-const JEBLI_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batch Line Items';
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 const TASK_TYPE_ENTITY = 'MJ_BizApps_Tasks: Task Types';
 const TASK_LINK_ENTITY = 'MJ_BizApps_Tasks: Task Links';
@@ -51,8 +50,8 @@ const TASK_DECISION_OUTCOME_ENTITY = 'MJ_BizApps_Tasks: Task Decision Outcomes';
 /** The seeded generic approval TaskType that CreateApprovalRequest expects. */
 const APPROVAL_REQUEST_TASK_TYPE = 'Approval Request';
 
-/** The Person entity that approver assignments reference (the polymorphic assignee entity). */
-const PERSON_ENTITY = 'MJ_BizApps_Common: People';
+/** The approver assignments now reference __mj Users (ApprovalCFOUserID is a User FK). */
+const USER_ENTITY = 'Users';
 
 /** Terminal outcomes that count as "approved to send". */
 const APPROVED_OUTCOME_CODES: ReadonlySet<TaskDecisionOutcomeCode> = new Set(['Approved', 'ApprovedWithConditions']);
@@ -64,14 +63,14 @@ const APPROVED_OUTCOME_CODES: ReadonlySet<TaskDecisionOutcomeCode> = new Set(['A
 export class TasksAppApprovalGate implements BatchApprovalGate {
   private readonly orchestration = new TaskOrchestrationService();
 
-  /** Build the approval Task when a batch is built. Throws if any involved company lacks a CFO. */
+  /** Build the approval Task when a batch is built. Throws if the batch's company lacks a CFO. */
   async onBatchBuilt(batchId: string, contextUser: UserInfo): Promise<void> {
     const batch = await this.loadBatch(batchId, contextUser);
-    const cfoPersonIds = await this.resolveCFOPersonIds(batchId, contextUser);
+    const cfoUserId = await this.resolveCFOUserId(batch, contextUser);
     const typeId = await this.resolveApprovalTaskTypeId(contextUser);
     // Task Link's EntityID / assignee EntityID are UUID FKs to __mj.Entity.ID — resolve names → IDs.
     const batchEntityId = this.batchEntityId();
-    const personEntityId = this.resolvePersonEntityId();
+    const userEntityId = this.resolveUserEntityId();
     await this.orchestration.CreateApprovalRequest({
       Name: `Approve Journal Entry Batch #${batch.BatchNumber}`,
       TypeID: typeId,
@@ -79,8 +78,8 @@ export class TasksAppApprovalGate implements BatchApprovalGate {
       Priority: 'High',
       LinkEntityID: batchEntityId,
       LinkRecordID: batchId,
-      ApproverPersonEntityID: personEntityId,
-      ApproverPersonRecordIDs: cfoPersonIds,
+      ApproverPersonEntityID: userEntityId,
+      ApproverPersonRecordIDs: [cfoUserId],
     }, contextUser);
     // CreateApprovalRequest logs (not throws) on a failed link — verify the link actually persisted,
     // else assertApproved would block the send forever with no recoverable signal.
@@ -117,29 +116,18 @@ export class TasksAppApprovalGate implements BatchApprovalGate {
   }
 
   /**
-   * The CFOs of EVERY company present in the batch (via the summary line items' CompanyID — the batch
-   * header is company-less, CH-4). Hard-fail when any involved company lacks a configured CFO.
+   * The CFO User of the batch's company (batches are single-company, D7 — the header carries
+   * CompanyID). Hard-fail when the company lacks a configured CFO.
    */
-  private async resolveCFOPersonIds(batchId: string, contextUser: UserInfo): Promise<string[]> {
-    const rv = new RunView();
-    const res = await rv.RunView<{ CompanyID: string }>(
-      { EntityName: JEBLI_ENTITY, ExtraFilter: `BatchID='${batchId}'`, Fields: ['CompanyID'], ResultType: 'simple', BypassCache: true },
-      contextUser,
-    );
-    const companyIds = [...new Set((res.Results ?? []).map(r => r.CompanyID))];
-    if (companyIds.length === 0) throw new Error(`TasksAppApprovalGate: batch ${batchId} has no summary line items to resolve companies from`);
+  private async resolveCFOUserId(batch: mjBizAppsAccountingJournalEntryBatchEntity, contextUser: UserInfo): Promise<string> {
     const md = new Metadata();
-    const cfos = new Set<string>();
-    for (const companyId of companyIds) {
-      const acp = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, contextUser);
-      if (!(await acp.Load(companyId))) throw new Error(`TasksAppApprovalGate: no AccountingCompanyProfile for company ${companyId}`);
-      const cfo = acp.ApprovalCFOPersonID;
-      if (!cfo) {
-        throw new Error(`No CFO configured for company ${companyId}; set AccountingCompanyProfile.ApprovalCFOPersonID before batching for approval.`);
-      }
-      cfos.add(cfo);
+    const acp = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, contextUser);
+    if (!(await acp.Load(batch.CompanyID))) throw new Error(`TasksAppApprovalGate: no AccountingCompanyProfile for company ${batch.CompanyID}`);
+    const cfo = acp.ApprovalCFOUserID;
+    if (!cfo) {
+      throw new Error(`No CFO configured for company ${batch.CompanyID}; set AccountingCompanyProfile.ApprovalCFOUserID before batching for approval.`);
     }
-    return [...cfos];
+    return cfo;
   }
 
   private async resolveApprovalTaskTypeId(contextUser: UserInfo): Promise<string> {
@@ -153,10 +141,10 @@ export class TasksAppApprovalGate implements BatchApprovalGate {
     return type.ID;
   }
 
-  private resolvePersonEntityId(): string {
+  private resolveUserEntityId(): string {
     const md = new Metadata();
-    const entity = md.EntityByName(PERSON_ENTITY);
-    if (!entity) throw new Error(`TasksAppApprovalGate: entity '${PERSON_ENTITY}' not found in metadata`);
+    const entity = md.EntityByName(USER_ENTITY);
+    if (!entity) throw new Error(`TasksAppApprovalGate: entity '${USER_ENTITY}' not found in metadata`);
     return entity.ID;
   }
 

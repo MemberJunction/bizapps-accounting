@@ -2,7 +2,7 @@ import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@
 import { BaseDashboard } from '@memberjunction/ng-shared';
 import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
 import { RegisterClass } from '@memberjunction/global';
-import { CompositeKey, RunView } from '@memberjunction/core';
+import { CompositeKey, Metadata, RunView } from '@memberjunction/core';
 import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
 import { ResourceData } from '@memberjunction/core-entities';
 import { mjBizAppsAccountingJournalEntryEntity } from '@mj-biz-apps/accounting-entities';
@@ -10,7 +10,6 @@ import { JournalEntryConsoleClient } from './je-console.client';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JE_LINE_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
-const ORDER_ENTITY = 'MJ_BizApps_Orders: Orders';
 
 /** Status + type unions, derived from the generated entity (rule 2c). */
 type JEStatus = mjBizAppsAccountingJournalEntryEntity['Status'];
@@ -26,7 +25,9 @@ interface JERow {
   Status: JEStatus;
   EffectiveDate: Date | null;
   Description: string | null;
-  OrderID: string | null;
+  /** Polymorphic origin pair (plan D25) — the JE's single causal source record, or null = manual. */
+  LinkedEntityID: string | null;
+  LinkedRecordID: string | null;
   BatchID: string | null;
   ReversedByJournalEntryID: string | null;
   ReversesJournalEntryID: string | null;
@@ -112,11 +113,12 @@ export class JournalEntryConsoleDashboardComponent extends BaseDashboard {
     const rv = new RunView();
     const res = await rv.RunView<{
       ID: string; EntryNumber: string; EntryType: JEType; Status: JEStatus;
-      EffectiveDate: Date | null; Description: string | null; OrderID: string | null;
+      EffectiveDate: Date | null; Description: string | null;
+      LinkedEntityID: string | null; LinkedRecordID: string | null;
       BatchID: string | null; ReversedByJournalEntryID: string | null; ReversesJournalEntryID: string | null;
     }>({
       EntityName: JE_ENTITY,
-      Fields: ['ID', 'EntryNumber', 'EntryType', 'Status', 'EffectiveDate', 'Description', 'OrderID', 'BatchID', 'ReversedByJournalEntryID', 'ReversesJournalEntryID'],
+      Fields: ['ID', 'EntryNumber', 'EntryType', 'Status', 'EffectiveDate', 'Description', 'LinkedEntityID', 'LinkedRecordID', 'BatchID', 'ReversedByJournalEntryID', 'ReversesJournalEntryID'],
       OrderBy: '__mj_CreatedAt DESC',
       MaxRows: 200,
       ResultType: 'simple',
@@ -223,9 +225,14 @@ export class JournalEntryConsoleDashboardComponent extends BaseDashboard {
 
   // ─── actions ──────────────────────────────────────────────────────────────────
 
-  public OpenSourceOrder(row: JERow): void {
-    if (!row.OrderID) return;
-    this.forms.Open({ EntityName: ORDER_ENTITY, PrimaryKey: CompositeKey.FromID(row.OrderID), Presentation: 'dialog', Width: '94vw' });
+  /** Open the JE's origin record — generic over the D25 pair (LinkedEntityID resolves the entity). */
+  public OpenOrigin(row: JERow): void {
+    if (!row.LinkedEntityID || !row.LinkedRecordID) return;
+    const md = new Metadata();
+    const target = row.LinkedEntityID.toLowerCase();
+    const entity = md.Entities.find(e => e.ID.toLowerCase() === target);
+    if (!entity) return;
+    this.forms.Open({ EntityName: entity.Name, PrimaryKey: CompositeKey.FromID(row.LinkedRecordID), Presentation: 'dialog', Width: '94vw' });
   }
 
   public CanReverse(row: JERow): boolean {

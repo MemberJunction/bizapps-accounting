@@ -290,7 +290,9 @@ async function jeExists(contextUser: UserInfo, jeId: string): Promise<boolean> {
 
 /**
  * Create one balanced Pending JE with a deterministic id + balanced lines. Optional EffectiveDate
- * (defaults to now/UTC) and IntercompanyFlowID. Returns the JE id.
+ * (defaults to now/UTC) and a demo intercompany-flow tag (carried on the D25 origin pair as a
+ * soft LinkedRecordID grouping key — there is no IntercompanyFlow entity yet, so LinkedEntityID
+ * stays unset and the tag is demo Description text instead). Returns the JE id.
  */
 async function makeJE(
   contextUser: UserInfo,
@@ -304,11 +306,14 @@ async function makeJE(
   const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
   je.NewRecord();
   je.ID = jeId;
+  je.CompanyID = ctx.companyId; // single-company JE (plan D3)
   je.EffectiveDate = opts.effectiveDate ?? new Date();
   je.EntryType = entryType;
   je.Status = 'Pending';
-  je.Description = 'Association demo seed';
-  if (opts.intercompanyFlowId) je.IntercompanyFlowID = opts.intercompanyFlowId;
+  // The former JE.IntercompanyFlowID column dropped (D25); keep the flow tag readable in the demo.
+  je.Description = opts.intercompanyFlowId
+    ? `Association demo seed (intercompany flow ${opts.intercompanyFlowId})`
+    : 'Association demo seed';
   if (!(await je.Save())) throw new Error(`makeJE save failed (${jeId}): ${je.LatestResult?.CompleteMessage}`);
 
   let lineNo = 0;
@@ -329,14 +334,23 @@ async function makeJE(
   return je.ID;
 }
 
-/** Build + approve + dispatch a batch over ALL Pending JEs → they become GLPosted. */
+/** Build + approve + dispatch one SINGLE-COMPANY batch (D7) per company with Pending JEs → they become GLPosted. */
 async function postPending(contextUser: UserInfo, report: DemoSeedReport): Promise<void> {
-  const built = await buildBatch(TARGET_SYSTEM, contextUser.ID, contextUser, AutoApproveGate);
-  if (built === null) throw new Error('postPending: buildBatch returned null (no pending JEs or all netted to zero).');
-  await approveBatch(built.batchId, contextUser.ID, contextUser);
-  const batch = await sendBatch(built.batchId, contextUser, { gate: AutoApproveGate });
-  if (batch.Status !== 'Posted') throw new Error(`postPending: batch should be Posted, got ${batch.Status}`);
-  report.BatchesPosted += 1;
+  const rv = new RunView();
+  const res = await rv.RunView<{ CompanyID: string }>(
+    { EntityName: JE_ENTITY, ExtraFilter: `Status='Pending' AND EntryType<>'BatchSummary'`, Fields: ['CompanyID'], ResultType: 'simple', BypassCache: true },
+    contextUser,
+  );
+  const companyIds = [...new Set((res.Results ?? []).map(r => r.CompanyID))];
+  if (companyIds.length === 0) throw new Error('postPending: no pending JEs to batch.');
+  for (const companyId of companyIds) {
+    const built = await buildBatch(companyId, TARGET_SYSTEM, contextUser.ID, contextUser, AutoApproveGate);
+    if (built === null) throw new Error(`postPending: buildBatch returned null for company ${companyId} (no pending JEs or all netted to zero).`);
+    await approveBatch(built.batchId, contextUser.ID, contextUser);
+    const batch = await sendBatch(built.batchId, contextUser, { gate: AutoApproveGate });
+    if (batch.Status !== 'Posted') throw new Error(`postPending: batch should be Posted, got ${batch.Status}`);
+    report.BatchesPosted += 1;
+  }
 }
 
 // ─── AR activity (→ vw_AROpenByCustomer, vw_ARAging) ──────────────────────────

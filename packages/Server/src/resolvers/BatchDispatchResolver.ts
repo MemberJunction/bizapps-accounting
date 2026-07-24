@@ -9,8 +9,9 @@
  *   2. delegates to the engine,
  *   3. maps the engine result to a GraphQL `@ObjectType`.
  *
- * Three mutations + one query (multi-company model, CH-3/CH-4/AM-4):
- *   - BuildJEBatch       → buildBatch(...)            (ALL pending JEs → ONE Pending multi-company batch + approval task)
+ * Three mutations + one query (single-company batches, plan D7):
+ *   - BuildJEBatch       → buildBatch(companyId, ...) per company with pending JEs (one Pending
+ *                          single-company batch + approval task each; one run sweeps all companies)
  *   - DispatchJEBatch    → sendBatch(...)             (requires Status=Approved + gate → mock ERP post → Posted)
  *   - RecordJEBatchDecision → gate.recordDecision(...) (in-app CFO approve / reject; an approval also flips
  *                              the batch Pending→Approved via approveBatch so it becomes dispatchable)
@@ -40,6 +41,7 @@ import {
 } from '@mj-biz-apps/accounting-core-entities-server';
 
 const PERSON_ENTITY = 'MJ_BizApps_Common: People';
+const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 
 /** Decision outcomes the in-app CFO control can record. Mirrors tasks-core's TaskDecisionOutcomeCode. */
 type BatchDecisionOutcome = 'Approved' | 'ApprovedWithConditions' | 'Rejected';
@@ -48,13 +50,15 @@ const VALID_DECISIONS: ReadonlySet<string> = new Set(['Approved', 'ApprovedWithC
 @ObjectType()
 export class BuildJEBatchResult {
   @Field() Success: boolean;
-  /** Null when there was nothing pending to batch (engine returned null). */
+  /** The built batch (regenerate / single-company builds). Null when nothing was batched or several batches were built. */
   @Field(() => ID, { nullable: true }) BatchID?: string;
+  /** Every batch built this run — one per company with pending JEs (batches are single-company, D7). */
+  @Field(() => [ID]) BatchIDs: string[];
   @Field(() => Int) SummaryLineCount: number;
   @Field(() => Float) TotalDebits: number;
   @Field(() => Float) TotalCredits: number;
   @Field(() => Int) JECount: number;
-  /** Distinct companies represented in the batch's summary lines (batches are multi-company, CH-4). */
+  /** Number of companies a batch was built for this run (batches are single-company, D7). */
   @Field(() => Int) CompanyCount: number;
   /** True when the engine found nothing to batch (no pending JEs / all netted to zero). */
   @Field() NothingToBatch: boolean;
@@ -86,40 +90,57 @@ export class JEBatchApprovalState {
 
 @Resolver()
 export class BatchDispatchResolver extends ResolverBase {
-  /** Build ONE Pending multi-company batch from ALL pending JEs (raises the CFO approval task via the gate). */
+  /** Build one Pending SINGLE-COMPANY batch per company with pending JEs (raises each CFO approval task via the gate). */
   @Mutation(() => BuildJEBatchResult)
   async BuildJEBatch(
     @Arg('targetSystem', () => String) targetSystem: string,
     @Ctx() { userPayload }: AppContext,
   ): Promise<BuildJEBatchResult> {
-    const empty = { Success: false, SummaryLineCount: 0, TotalDebits: 0, TotalCredits: 0, JECount: 0, CompanyCount: 0, NothingToBatch: false };
+    const empty = { Success: false, BatchIDs: [], SummaryLineCount: 0, TotalDebits: 0, TotalCredits: 0, JECount: 0, CompanyCount: 0, NothingToBatch: false };
     try {
       const user = this.GetUserFromPayload(userPayload);
       if (!user) return { ...empty, ErrorMessage: 'No authenticated user.' };
 
-      const result = await buildBatch(
-        targetSystem as BatchTargetSystem,
-        user.ID,
-        user,
-        new TasksAppApprovalGate(),
-      );
-      if (!result) return { ...empty, Success: true, NothingToBatch: true };
+      const companyIds = await this.companiesWithPendingJEs(user);
+      const results = [];
+      for (const companyId of companyIds) {
+        const result = await buildBatch(
+          companyId,
+          targetSystem as BatchTargetSystem,
+          user.ID,
+          user,
+          new TasksAppApprovalGate(),
+        );
+        if (result) results.push(result);
+      }
+      if (results.length === 0) return { ...empty, Success: true, NothingToBatch: true };
 
       return {
         Success: true,
         NothingToBatch: false,
-        BatchID: result.batchId,
-        SummaryLineCount: result.summaryLineCount,
-        TotalDebits: result.totalDebits,
-        TotalCredits: result.totalCredits,
-        JECount: result.jeCount,
-        CompanyCount: result.companyCount,
+        BatchID: results.length === 1 ? results[0].batchId : undefined,
+        BatchIDs: results.map(r => r.batchId),
+        SummaryLineCount: results.reduce((s, r) => s + r.summaryLineCount, 0),
+        TotalDebits: results.reduce((s, r) => s + r.totalDebits, 0),
+        TotalCredits: results.reduce((s, r) => s + r.totalCredits, 0),
+        JECount: results.reduce((s, r) => s + r.jeCount, 0),
+        CompanyCount: results.length,
       };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       LogError(`BuildJEBatch failed: ${msg}`);
       return { ...empty, ErrorMessage: msg };
     }
+  }
+
+  /** Distinct companies that currently have unbatched Pending JEs (BatchSummary JEs excluded by EntryType). */
+  private async companiesWithPendingJEs(user: UserInfo): Promise<string[]> {
+    const rv = new RunView();
+    const res = await rv.RunView<{ CompanyID: string }>(
+      { EntityName: JE_ENTITY, ExtraFilter: `Status='Pending' AND EntryType<>'BatchSummary'`, Fields: ['CompanyID'], ResultType: 'simple', BypassCache: true },
+      user,
+    );
+    return [...new Set((res.Results ?? []).map(r => r.CompanyID))];
   }
 
   /** Dispatch an Approved batch to the ERP (mock poster for v1). Gate + Status=Approved block otherwise. */
@@ -186,7 +207,7 @@ export class BatchDispatchResolver extends ResolverBase {
     @Arg('targetSystem', () => String) targetSystem: string,
     @Ctx() { userPayload }: AppContext,
   ): Promise<BuildJEBatchResult> {
-    const empty = { Success: false, SummaryLineCount: 0, TotalDebits: 0, TotalCredits: 0, JECount: 0, CompanyCount: 0, NothingToBatch: false };
+    const empty = { Success: false, BatchIDs: [], SummaryLineCount: 0, TotalDebits: 0, TotalCredits: 0, JECount: 0, CompanyCount: 0, NothingToBatch: false };
     try {
       const user = this.GetUserFromPayload(userPayload);
       if (!user) return { ...empty, ErrorMessage: 'No authenticated user.' };
@@ -196,11 +217,12 @@ export class BatchDispatchResolver extends ResolverBase {
         Success: true,
         NothingToBatch: result.jeCount === 0,
         BatchID: result.batchId,
+        BatchIDs: [result.batchId],
         SummaryLineCount: result.summaryLineCount,
         TotalDebits: result.totalDebits,
         TotalCredits: result.totalCredits,
         JECount: result.jeCount,
-        CompanyCount: result.companyCount,
+        CompanyCount: 1,
       };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

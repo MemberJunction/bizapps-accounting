@@ -33,7 +33,10 @@ import {
   mjBizAppsAccountingJournalEntryLineEntity,
 } from '@mj-biz-apps/accounting-entities';
 
+import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
+
 import { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
+import { getNextJournalEntryNumber } from './SequenceService.js';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
@@ -296,6 +299,17 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
   public override async Save(options?: EntitySaveOptions): Promise<boolean> {
     const dbProvider = this.ProviderToUse as unknown as DatabaseProviderBase;
 
+    // W2 numbering (plan D19): assign the per-company, per-FY gap-free EntryNumber
+    // before the header INSERT (EntryNumber is NOT NULL + UNIQUE).
+    if (!this.IsSaved && !this.EntryNumber) {
+      try {
+        await this.assignEntryNumber();
+      } catch (err) {
+        LogError(`JournalEntryEntityServer.Save: EntryNumber assignment failed: ${err}`);
+        return false;
+      }
+    }
+
     try {
       await dbProvider.BeginTransaction();
 
@@ -347,6 +361,46 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
       }
       return false;
     }
+  }
+
+  // ─── W2: numbering (plan D19) ─────────────────────────────────────────────
+
+  private async assignEntryNumber(): Promise<void> {
+    if (!this.ContextCurrentUser) {
+      throw new Error('JournalEntryEntityServer.assignEntryNumber: ContextCurrentUser is required');
+    }
+    if (!this.CompanyID) {
+      throw new Error('JournalEntryEntityServer.assignEntryNumber: CompanyID must be set before save (journal entries are single-company, plan D3)');
+    }
+    const fiscalYear = await this.deriveFiscalYear();
+    this.EntryNumber = await getNextJournalEntryNumber(this.CompanyID, fiscalYear, this.ContextCurrentUser);
+  }
+
+  /**
+   * Fiscal year from the company's ACP settings: the FY containing EffectiveDate,
+   * labeled by the calendar year the fiscal year STARTS in. For the default Jan-1
+   * start this equals the calendar year. All date-part math in UTC (repo convention).
+   */
+  private async deriveFiscalYear(): Promise<number> {
+    const effectiveDate = this.EffectiveDate;
+    if (!effectiveDate) {
+      throw new Error('JournalEntryEntityServer.deriveFiscalYear: EffectiveDate must be set before save (NOT NULL constraint)');
+    }
+    // Defensive: a raw-loaded value can arrive as an ISO string at runtime despite the Date type.
+    const d = effectiveDate instanceof Date ? effectiveDate : new Date(effectiveDate);
+    if (Number.isNaN(d.getTime())) {
+      throw new Error(`JournalEntryEntityServer.deriveFiscalYear: invalid EffectiveDate value: ${String(effectiveDate)}`);
+    }
+    await AccountingEngineBase.Instance.Config(false, this.ContextCurrentUser);
+    const acp = AccountingEngineBase.Instance.CompanyProfiles.find(
+      p => p.ID?.toLowerCase() === this.CompanyID?.toLowerCase()
+    );
+    const startMonth = acp?.FiscalYearStartMonth ?? 1;
+    const startDay = acp?.FiscalYearStartDay ?? 1;
+    const beforeFYStart =
+      d.getUTCMonth() + 1 < startMonth ||
+      (d.getUTCMonth() + 1 === startMonth && d.getUTCDate() < startDay);
+    return beforeFYStart ? d.getUTCFullYear() - 1 : d.getUTCFullYear();
   }
 
   // ─── W9: attachment validation ────────────────────────────────────────────

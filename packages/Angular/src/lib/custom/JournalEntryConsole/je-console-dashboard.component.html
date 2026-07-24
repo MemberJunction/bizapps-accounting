@@ -105,9 +105,9 @@
                     </table>
                     @if (e.Description) { <div class="je-desc">{{ e.Description }}</div> }
                     <div class="je-actions">
-                      @if (e.OrderID) {
-                        <button mjButton variant="flat" size="sm" (click)="OpenSourceOrder(e)">
-                          <i class="fa-solid fa-arrow-up-right-from-square"></i> Source order
+                      @if (e.LinkedEntityID && e.LinkedRecordID) {
+                        <button mjButton variant="flat" size="sm" (click)="OpenOrigin(e)">
+                          <i class="fa-solid fa-arrow-up-right-from-square"></i> Source record
                         </button>
                       }
                       @if (CanReverse(e)) {

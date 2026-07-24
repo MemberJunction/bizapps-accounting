@@ -18,7 +18,6 @@ type TargetSystem = mjBizAppsAccountingJournalEntryBatchEntity['TargetSystem'];
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
-const JEBLI_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batch Line Items';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
 
 /** A journal-entry header inside a batch — drives the inferred date range and points at the lines to fetch. */
@@ -324,13 +323,13 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
 
   private async loadAll(): Promise<void> {
     await this.loadCompanies();
-    const [batches, jeHeaders, batchCompanies] = await Promise.all([
+    const [batches, jeHeaders] = await Promise.all([
       this.loadBatches(),
       this.loadJEHeaders(),
-      this.loadBatchCompanies(),
     ]);
     this.jesByBatch = jeHeaders;
-    this.Batches = batches.map(b => this.toRow(b, jeHeaders.get(b.ID) ?? [], batchCompanies.get(b.ID) ?? []));
+    // Batches are single-company (D7): the company comes straight off the batch header.
+    this.Batches = batches.map(b => this.toRow(b, jeHeaders.get(b.ID) ?? [], b.CompanyID ? [b.CompanyID] : []));
     this.cdr.markForCheck();
   }
 
@@ -361,11 +360,12 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
       .sort((a, b) => a.Name.localeCompare(b.Name));
   }
 
-  private async loadBatches(): Promise<Array<{ ID: string; BatchNumber: string; Status: BatchStatus; TargetSystem: TargetSystem; TotalEntries: number; TotalDebits: number; TotalCredits: number; ExternalBatchRef: string | null; BatchedAt: Date | null }>> {
+  private async loadBatches(): Promise<Array<{ ID: string; BatchNumber: string; Status: BatchStatus; TargetSystem: TargetSystem; CompanyID: string | null; TotalEntries: number; TotalDebits: number; TotalCredits: number; ExternalBatchRef: string | null; BatchedAt: Date | null }>> {
     const res = await this.runView().RunView<mjBizAppsAccountingJournalEntryBatchEntity>(
       { EntityName: BATCH_ENTITY, OrderBy: 'BatchedAt DESC', ResultType: 'simple' }, this.contextUser());
     return (res.Results ?? []).map(b => ({
       ID: b.ID, BatchNumber: b.BatchNumber, Status: b.Status, TargetSystem: b.TargetSystem,
+      CompanyID: b.CompanyID ?? null,
       TotalEntries: b.TotalEntries, TotalDebits: b.TotalDebits, TotalCredits: b.TotalCredits,
       ExternalBatchRef: b.ExternalBatchRef, BatchedAt: b.BatchedAt ? new Date(b.BatchedAt) : null,
     }));
@@ -383,19 +383,6 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
       byBatch.set(je.BatchID, arr);
     }
     return byBatch;
-  }
-
-  /** batch → distinct company IDs (from its summary line items) — drives the company filter. */
-  private async loadBatchCompanies(): Promise<Map<string, string[]>> {
-    const res = await this.runView().RunView<{ BatchID: string; CompanyID: string }>(
-      { EntityName: JEBLI_ENTITY, Fields: ['BatchID', 'CompanyID'], ResultType: 'simple' }, this.contextUser());
-    const byBatch = new Map<string, Set<string>>();
-    for (const li of res.Results ?? []) {
-      const set = byBatch.get(li.BatchID) ?? new Set<string>();
-      set.add(li.CompanyID);
-      byBatch.set(li.BatchID, set);
-    }
-    return new Map([...byBatch].map(([k, v]) => [k, [...v]]));
   }
 
   /** Lazy per-batch detail: load the batch's JE lines and consolidate them into the netted posting. */

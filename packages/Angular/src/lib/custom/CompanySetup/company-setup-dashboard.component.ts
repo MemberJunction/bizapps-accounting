@@ -2,17 +2,12 @@ import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@
 import { BaseDashboard } from '@memberjunction/ng-shared';
 import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
 import { RegisterClass } from '@memberjunction/global';
-import { CompositeKey, Metadata, RunView, UserInfo } from '@memberjunction/core';
+import { CompositeKey, Metadata, RunView } from '@memberjunction/core';
 import { ResourceData } from '@memberjunction/core-entities';
 import { mjBizAppsAccountingAccountingCompanyProfileEntity } from '@mj-biz-apps/accounting-entities';
-import { mjBizAppsCommonPersonEntity } from '@mj-biz-apps/common-entities';
 
 const COMPANY_PROFILE_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
-const PERSON_ENTITY = 'MJ_BizApps_Common: People';
-const GL_ACCOUNT_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
-
-/** The five editable default-account slots on a company profile. */
-type DefaultAccountKey = 'AROpen' | 'DeferredRevenue' | 'SalesTaxPayable' | 'RealizedFX' | 'UnrealizedFX';
+const USER_ENTITY = 'Users'; // __mj.User — the CFO approver FK target (ApprovalCFOUserID)
 
 /** Value-list unions, derived from the generated entity (rule 2c — never hand-copied). */
 type EntityType = mjBizAppsAccountingAccountingCompanyProfileEntity['EntityType'];
@@ -30,44 +25,15 @@ interface CompanyProfileRow {
   FiscalYearStartMonth: number;
   FiscalYearStartDay: number;
   IsActive: boolean;
-  // Default GL accounts — denormalized names + their FK IDs (ID null ⇒ "not set").
-  AROpenGLAccountID: string | null;
-  AROpenGLAccount: string | null;
-  DeferredRevenueGLAccountID: string | null;
-  DeferredRevenueGLAccount: string | null;
-  SalesTaxPayableGLAccountID: string | null;
-  SalesTaxPayableGLAccount: string | null;
-  RealizedFXGainLossGLAccountID: string | null;
-  RealizedFXGainLossGLAccount: string | null;
-  UnrealizedFXGainLossGLAccountID: string | null;
-  UnrealizedFXGainLossGLAccount: string | null;
-  // CFO approver (the bizapps-tasks approval gate assigns batch-approval Tasks to this Person).
-  ApprovalCFOPersonID: string | null;
-  ApprovalCFOPerson: string | null;
+  // CFO approver (the bizapps-tasks approval gate assigns batch-approval Tasks to this __mj User).
+  ApprovalCFOUserID: string | null;
+  ApprovalCFOUser: string | null;
 }
 
-/** A selectable Person for the CFO picker. */
-interface PersonOption {
+/** A selectable __mj User for the CFO picker. */
+interface UserOption {
   ID: string;
   Name: string;
-  LinkedUserID: string | null;
-}
-
-/** One "default GL account" display slot for the detail card. */
-interface DefaultAccountSlot {
-  Key: DefaultAccountKey;
-  Label: string;
-  ID: string | null;
-  Name: string | null;
-  Code: string | null;
-}
-
-/** A GL account option for the company-scoped default-account pickers. */
-interface GLAccountOption {
-  ID: string;
-  Code: string;
-  Name: string;
-  CompanyID: string;
 }
 
 const MONTH_NAMES = [
@@ -78,10 +44,11 @@ const MONTH_NAMES = [
 /**
  * Company Setup — a read-only, navigational hub for the deployment's accounting company profiles.
  *
- * Loads all Accounting Company Profiles, lists them on the left, and shows a read-only detail card on
- * the right for the selected company: identity + fiscal + currency settings and the five default GL
- * accounts (each shown by its denormalized name, or "— not set" when unassigned). An "Open profile"
- * button opens the generated profile form (via OpenEntityRecord) for editing. No inline editing in v1.
+ * Loads all Accounting Company Profiles, lists them on the left, and shows a read-only detail card
+ * on the right for the selected company: identity + fiscal + currency settings and the CFO approver.
+ * An "Open profile" button opens the generated profile form (via OpenEntityRecord) for editing.
+ * (The former default-GL-account slots were retired with the rewritten baseline — the role-based
+ * GLAccountRole/GLAccountLink model replaces them; its UI lands with the port work.)
  */
 @Component({
   standalone: false,
@@ -99,12 +66,10 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
   public LoadError: string | null = null;
 
   public Companies: CompanyProfileRow[] = [];
-  public People: PersonOption[] = [];
-  public GLAccounts: GLAccountOption[] = [];
-  private glByID = new Map<string, GLAccountOption>();
+  public Users: UserOption[] = [];
 
   // ─── CFO assignment state ────────────────────────────────────────────────────
-  public SelectedPersonID = '';
+  public SelectedUserID = '';
   public Saving = false;
   public ActionMessage: string | null = null;
   public ActionIsError = false;
@@ -136,32 +101,24 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
 
   private async loadCompanies(): Promise<void> {
     const rv = new RunView();
-    const [companies, people, accounts] = await rv.RunViews([
+    const [companies, users] = await rv.RunViews([
       {
         EntityName: COMPANY_PROFILE_ENTITY,
         Fields: [
           'ID', 'Name', 'CompanyCode', 'EntityType', 'LegalStructureType',
           'FunctionalCurrencyCode', 'ReportingCurrencyCode', 'FiscalYearStartMonth', 'FiscalYearStartDay', 'IsActive',
-          'AROpenGLAccountID', 'AROpenGLAccount',
-          'DeferredRevenueGLAccountID', 'DeferredRevenueGLAccount',
-          'SalesTaxPayableGLAccountID', 'SalesTaxPayableGLAccount',
-          'RealizedFXGainLossGLAccountID', 'RealizedFXGainLossGLAccount',
-          'UnrealizedFXGainLossGLAccountID', 'UnrealizedFXGainLossGLAccount',
-          'ApprovalCFOPersonID', 'ApprovalCFOPerson',
+          'ApprovalCFOUserID', 'ApprovalCFOUser',
         ],
         OrderBy: 'Name ASC',
         MaxRows: 1000,
         ResultType: 'simple',
       },
-      { EntityName: PERSON_ENTITY, Fields: ['ID', 'DisplayName', 'FirstName', 'LastName', 'LinkedUserID'], OrderBy: 'LastName ASC, FirstName ASC', MaxRows: 500, ResultType: 'simple' },
-      { EntityName: GL_ACCOUNT_ENTITY, ExtraFilter: `IsActive=1`, Fields: ['ID', 'Code', 'Name', 'CompanyID'], OrderBy: 'Code ASC', MaxRows: 5000, ResultType: 'simple' },
+      { EntityName: USER_ENTITY, Fields: ['ID', 'Name'], OrderBy: 'Name ASC', MaxRows: 500, ResultType: 'simple' },
     ]);
     if (!companies.Success) throw new Error(companies.ErrorMessage ?? 'Failed to load company profiles.');
     this.Companies = (companies.Results ?? []) as CompanyProfileRow[];
-    this.People = ((people.Results ?? []) as Array<{ ID: string; DisplayName: string | null; FirstName: string; LastName: string; LinkedUserID: string | null }>)
-      .map(p => ({ ID: p.ID, Name: p.DisplayName?.trim() || `${p.FirstName} ${p.LastName}`.trim(), LinkedUserID: p.LinkedUserID }));
-    this.GLAccounts = (accounts.Results ?? []) as GLAccountOption[];
-    this.glByID = new Map(this.GLAccounts.map(a => [a.ID.toUpperCase(), a]));
+    this.Users = ((users.Results ?? []) as Array<{ ID: string; Name: string }>)
+      .map(u => ({ ID: u.ID, Name: u.Name }));
     this._selectedID = this.Companies.length > 0 ? this.Companies[0].ID : null;
   }
 
@@ -201,70 +158,6 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
     return c.ReportingCurrencyCode ?? `${c.FunctionalCurrencyCode} (same as functional)`;
   }
 
-  /** The five default GL account slots for the selected company. */
-  public get DefaultAccounts(): DefaultAccountSlot[] {
-    const c = this.Selected;
-    if (!c) return [];
-    return [
-      this.slot('AROpen', 'AR Open', c.AROpenGLAccountID, c.AROpenGLAccount),
-      this.slot('DeferredRevenue', 'Deferred Revenue', c.DeferredRevenueGLAccountID, c.DeferredRevenueGLAccount),
-      this.slot('SalesTaxPayable', 'Sales Tax Payable', c.SalesTaxPayableGLAccountID, c.SalesTaxPayableGLAccount),
-      this.slot('RealizedFX', 'Realized FX Gain/Loss', c.RealizedFXGainLossGLAccountID, c.RealizedFXGainLossGLAccount),
-      this.slot('UnrealizedFX', 'Unrealized FX Gain/Loss', c.UnrealizedFXGainLossGLAccountID, c.UnrealizedFXGainLossGLAccount),
-    ];
-  }
-
-  private slot(key: DefaultAccountKey, label: string, id: string | null, name: string | null): DefaultAccountSlot {
-    return { Key: key, Label: label, ID: id, Name: name, Code: id ? this.glByID.get(id.toUpperCase())?.Code ?? null : null };
-  }
-
-  /** GL accounts belonging to the selected company (profile ID == company ID, IsA pattern). */
-  public get AccountsForSelectedCompany(): GLAccountOption[] {
-    const c = this.Selected;
-    if (!c) return [];
-    const target = c.ID.toUpperCase();
-    return this.GLAccounts.filter(a => a.CompanyID.toUpperCase() === target);
-  }
-
-  /** Assign (or clear) a default GL account on the selected company, then reload. */
-  public async SetDefaultAccount(key: DefaultAccountKey, glAccountID: string): Promise<void> {
-    const company = this.Selected;
-    if (!company || this.Saving) return;
-    this.beginSave();
-    try {
-      const md = new Metadata();
-      const acp = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(COMPANY_PROFILE_ENTITY);
-      if (!(await acp.Load(company.ID))) { this.setError('Could not load the company profile.'); return; }
-      const value = glAccountID || null;
-      this.applyDefaultAccount(acp, key, value);
-      if (!(await acp.Save())) { this.setError(`Could not save the account: ${acp.LatestResult?.CompleteMessage ?? 'unknown error'}`); return; }
-      const acct = value ? this.glByID.get(value.toUpperCase()) : null;
-      this.ActionMessage = value ? `Set ${this.labelFor(key)} to ${acct?.Code ?? ''} ${acct?.Name ?? ''}.` : `Cleared ${this.labelFor(key)}.`;
-      this.ActionIsError = false;
-      await this.loadCompanies();
-      this._selectedID = company.ID;
-    } catch (e) {
-      this.setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      this.endSave();
-    }
-  }
-
-  /** Typed writer — sets the specific profile FK for each slot (no stringly-typed .Set()). */
-  private applyDefaultAccount(acp: mjBizAppsAccountingAccountingCompanyProfileEntity, key: DefaultAccountKey, value: string | null): void {
-    switch (key) {
-      case 'AROpen': acp.AROpenGLAccountID = value; break;
-      case 'DeferredRevenue': acp.DeferredRevenueGLAccountID = value; break;
-      case 'SalesTaxPayable': acp.SalesTaxPayableGLAccountID = value; break;
-      case 'RealizedFX': acp.RealizedFXGainLossGLAccountID = value; break;
-      case 'UnrealizedFX': acp.UnrealizedFXGainLossGLAccountID = value; break;
-    }
-  }
-
-  private labelFor(key: DefaultAccountKey): string {
-    return this.DefaultAccounts.find(s => s.Key === key)?.Label ?? key;
-  }
-
   // ─── actions ──────────────────────────────────────────────────────────────────
 
   public OpenProfile(): void {
@@ -277,18 +170,17 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
 
   /** The selected company's current CFO approver name, or null when unassigned. */
   public get CurrentCFO(): string | null {
-    return this.Selected?.ApprovalCFOPerson ?? null;
+    return this.Selected?.ApprovalCFOUser ?? null;
   }
 
   public get CanAssignSelected(): boolean {
-    return !!this.Selected && !!this.SelectedPersonID && !this.Saving;
+    return !!this.Selected && !!this.SelectedUserID && !this.Saving;
   }
 
   /**
    * Make the CURRENT logged-in user the CFO of the selected company — robust to sign-in method
-   * (magic link or otherwise). Finds or creates a Person linked to the current user
-   * (Person.LinkedUserID == user.ID), then assigns it as the company's approver. The server's
-   * approval gate resolves the same link when attributing decisions, so "approve as me" works.
+   * (magic link or otherwise). ApprovalCFOUserID is a __mj.User FK, so the current user's ID
+   * assigns directly.
    */
   public async MakeMeCFO(): Promise<void> {
     const company = this.Selected;
@@ -297,9 +189,7 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
     try {
       const user = this.ProviderToUse.CurrentUser;
       if (!user) { this.setError('No current user is available.'); return; }
-      const personId = await this.findOrCreateSelfPerson(user);
-      if (!personId) return;
-      await this.setCompanyCFO(company.ID, personId, `You are now the CFO approver for ${company.Name}.`);
+      await this.setCompanyCFO(company.ID, user.ID, `You are now the CFO approver for ${company.Name}.`);
     } catch (e) {
       this.setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -307,15 +197,15 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
     }
   }
 
-  /** Assign an existing Person (picked from the dropdown) as the selected company's CFO. */
+  /** Assign an existing __mj User (picked from the dropdown) as the selected company's CFO. */
   public async AssignSelectedCFO(): Promise<void> {
     const company = this.Selected;
-    if (!company || !this.SelectedPersonID || this.Saving) return;
+    if (!company || !this.SelectedUserID || this.Saving) return;
     this.beginSave();
     try {
-      const person = this.People.find(p => p.ID === this.SelectedPersonID);
-      await this.setCompanyCFO(company.ID, this.SelectedPersonID, `CFO approver set to ${person?.Name ?? 'the selected person'} for ${company.Name}.`);
-      this.SelectedPersonID = '';
+      const user = this.Users.find(u => u.ID === this.SelectedUserID);
+      await this.setCompanyCFO(company.ID, this.SelectedUserID, `CFO approver set to ${user?.Name ?? 'the selected user'} for ${company.Name}.`);
+      this.SelectedUserID = '';
     } catch (e) {
       this.setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -337,31 +227,12 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
     }
   }
 
-  /** Find the Person linked to this user (LinkedUserID), or create one from the user's identity. */
-  private async findOrCreateSelfPerson(user: UserInfo): Promise<string | null> {
-    const existing = this.People.find(p => p.LinkedUserID && p.LinkedUserID.toUpperCase() === user.ID.toUpperCase());
-    if (existing) return existing.ID;
-
-    const md = new Metadata();
-    const person = await md.GetEntityObject<mjBizAppsCommonPersonEntity>(PERSON_ENTITY);
-    person.NewRecord();
-    person.FirstName = user.FirstName?.trim() || user.Name?.split(' ')[0]?.trim() || 'Test';
-    person.LastName = user.LastName?.trim() || user.Name?.split(' ').slice(1).join(' ').trim() || 'User';
-    person.Email = user.Email || `${user.ID}@mjdev.local`;
-    person.LinkedUserID = user.ID;
-    if (!(await person.Save())) {
-      this.setError(`Could not create your Person record: ${person.LatestResult?.CompleteMessage ?? 'unknown error'}`);
-      return null;
-    }
-    return person.ID;
-  }
-
-  /** Set (or clear) a company's ApprovalCFOPersonID, then reload so the detail reflects it. */
-  private async setCompanyCFO(companyID: string, personID: string | null, successMessage: string): Promise<void> {
+  /** Set (or clear) a company's ApprovalCFOUserID, then reload so the detail reflects it. */
+  private async setCompanyCFO(companyID: string, userID: string | null, successMessage: string): Promise<void> {
     const md = new Metadata();
     const acp = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(COMPANY_PROFILE_ENTITY);
     if (!(await acp.Load(companyID))) { this.setError('Could not load the company profile.'); return; }
-    acp.ApprovalCFOPersonID = personID;
+    acp.ApprovalCFOUserID = userID;
     if (!(await acp.Save())) {
       this.setError(`Could not save the CFO: ${acp.LatestResult?.CompleteMessage ?? 'unknown error'}`);
       return;
