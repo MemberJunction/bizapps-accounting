@@ -556,7 +556,7 @@ export const mjBizAppsAccountingGLAccountLinkSchema = z.object({
         * * Display Name: Entity ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ: Entities (vwEntities.ID)
-        * * Description: Polymorphic reference part 1: the MJ Entity of the target record (references __mj.Entity). Same TaggedItem-style pattern as JournalEntryLink.`),
+        * * Description: Polymorphic reference part 1: the MJ Entity of the target record (references __mj.Entity). Same TaggedItem-style pattern as JournalEntry.LinkedEntityID/LinkedRecordID (plan D25).`),
     RecordID: z.string().describe(`
         * * Field Name: RecordID
         * * Display Name: Record ID
@@ -836,42 +836,17 @@ export const mjBizAppsAccountingJournalEntrySchema = z.object({
         * * Display Name: Description
         * * SQL Data Type: nvarchar(MAX)
         * * Description: Free-form human description of the entry.`),
-    OrderID: z.string().nullable().describe(`
-        * * Field Name: OrderID
-        * * Display Name: Order ID
+    LinkedEntityID: z.string().nullable().describe(`
+        * * Field Name: LinkedEntityID
+        * * Display Name: Linked Entity ID
         * * SQL Data Type: uniqueidentifier
-        * * Description: Soft polymorphic ref to a source Order in a downstream app. NO FK. Accounting stores the UUID for audit drill-through but has zero knowledge of Order entities.`),
-    OrderLineID: z.string().nullable().describe(`
-        * * Field Name: OrderLineID
-        * * Display Name: Order Line ID
-        * * SQL Data Type: uniqueidentifier
-        * * Description: Soft polymorphic ref to a source OrderLine. NO FK.`),
-    SubscriptionID: z.string().nullable().describe(`
-        * * Field Name: SubscriptionID
-        * * Display Name: Subscription ID
-        * * SQL Data Type: uniqueidentifier
-        * * Description: Soft polymorphic ref to a source Subscription. NO FK.`),
-    PaymentID: z.string().nullable().describe(`
-        * * Field Name: PaymentID
-        * * Display Name: Payment ID
-        * * SQL Data Type: uniqueidentifier
-        * * Description: Soft polymorphic ref to a source Payment. NO FK.`),
-    ContractID: z.string().nullable().describe(`
-        * * Field Name: ContractID
-        * * Display Name: Contract ID
-        * * SQL Data Type: uniqueidentifier
-        * * Description: Soft polymorphic ref to a source Contract. NO FK.`),
-    IntercompanyFlowID: z.string().nullable().describe(`
-        * * Field Name: IntercompanyFlowID
-        * * Display Name: Intercompany Flow ID
-        * * SQL Data Type: uniqueidentifier
-        * * Description: Soft polymorphic ref to an IntercompanyFlow record orchestrated upstream. NO FK.`),
-    TaxRemittanceID: z.string().nullable().describe(`
-        * * Field Name: TaxRemittanceID
-        * * Display Name: Tax Remittance ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Tax Remittances (vwTaxRemittances.ID)
-        * * Description: When the JE represents a tax remittance, the remittance record it implements.`),
+        * * Related Entity/Foreign Key: MJ: Entities (vwEntities.ID)
+        * * Description: Polymorphic origin part 1 (plan D25): the MJ Entity of the single causal source record for this JE (OrderLine for booking/rev-rec entries, Payment for receipts/refunds, TaxRemittance for remittances, ...). FK to __mj.Entity. NULL (with LinkedRecordID) = manual JE.`),
+    LinkedRecordID: z.string().nullable().describe(`
+        * * Field Name: LinkedRecordID
+        * * Display Name: Linked Record ID
+        * * SQL Data Type: nvarchar(400)
+        * * Description: Polymorphic origin part 2: the source record's primary key (NVARCHAR(400) supports stringified composite keys). Soft by nature — the record lives in a downstream app's schema. Set and NULL together with LinkedEntityID (CK_JournalEntry_LinkedPair).`),
     ReversesJournalEntryID: z.string().nullable().describe(`
         * * Field Name: ReversesJournalEntryID
         * * Display Name: Reverses Journal Entry ID
@@ -920,6 +895,10 @@ export const mjBizAppsAccountingJournalEntrySchema = z.object({
         * * Field Name: Company
         * * Display Name: Company
         * * SQL Data Type: nvarchar(50)`),
+    LinkedEntity: z.string().nullable().describe(`
+        * * Field Name: LinkedEntity
+        * * Display Name: Linked Entity
+        * * SQL Data Type: nvarchar(255)`),
     File: z.string().nullable().describe(`
         * * Field Name: File
         * * Display Name: File
@@ -1233,11 +1212,6 @@ export const mjBizAppsAccountingJournalEntryLineSchema = z.object({
         * * Display Name: Description
         * * SQL Data Type: nvarchar(MAX)
         * * Description: Free-form description of the line (memo).`),
-    OrderLineID: z.string().nullable().describe(`
-        * * Field Name: OrderLineID
-        * * Display Name: Order Line ID
-        * * SQL Data Type: uniqueidentifier
-        * * Description: Soft polymorphic ref to source OrderLine. NO FK.`),
     CounterpartyOrganizationID: z.string().nullable().describe(`
         * * Field Name: CounterpartyOrganizationID
         * * Display Name: Counterparty Organization ID
@@ -1269,55 +1243,6 @@ export const mjBizAppsAccountingJournalEntryLineSchema = z.object({
 });
 
 export type mjBizAppsAccountingJournalEntryLineEntityType = z.infer<typeof mjBizAppsAccountingJournalEntryLineSchema>;
-
-/**
- * zod schema definition for the entity MJ_BizApps_Accounting: Journal Entry Links
- */
-export const mjBizAppsAccountingJournalEntryLinkSchema = z.object({
-    ID: z.string().describe(`
-        * * Field Name: ID
-        * * Display Name: ID
-        * * SQL Data Type: uniqueidentifier
-        * * Default Value: newsequentialid()`),
-    JournalEntryID: z.string().describe(`
-        * * Field Name: JournalEntryID
-        * * Display Name: Journal Entry ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entries (vwJournalEntries.ID)`),
-    EntityID: z.string().describe(`
-        * * Field Name: EntityID
-        * * Display Name: Entity ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ: Entities (vwEntities.ID)`),
-    RecordID: z.string().describe(`
-        * * Field Name: RecordID
-        * * Display Name: Record ID
-        * * SQL Data Type: nvarchar(400)`),
-    LinkType: z.string().nullable().describe(`
-        * * Field Name: LinkType
-        * * Display Name: Link Type
-        * * SQL Data Type: nvarchar(50)`),
-    Description: z.string().nullable().describe(`
-        * * Field Name: Description
-        * * Display Name: Description
-        * * SQL Data Type: nvarchar(MAX)`),
-    __mj_CreatedAt: z.date().describe(`
-        * * Field Name: __mj_CreatedAt
-        * * Display Name: Created At
-        * * SQL Data Type: datetimeoffset
-        * * Default Value: getutcdate()`),
-    __mj_UpdatedAt: z.date().describe(`
-        * * Field Name: __mj_UpdatedAt
-        * * Display Name: Updated At
-        * * SQL Data Type: datetimeoffset
-        * * Default Value: getutcdate()`),
-    Entity: z.string().describe(`
-        * * Field Name: Entity
-        * * Display Name: Entity
-        * * SQL Data Type: nvarchar(255)`),
-});
-
-export type mjBizAppsAccountingJournalEntryLinkEntityType = z.infer<typeof mjBizAppsAccountingJournalEntryLinkSchema>;
 
 /**
  * zod schema definition for the entity MJ_BizApps_Accounting: Journal Entry Sequences
@@ -3111,7 +3036,7 @@ export class mjBizAppsAccountingGLAccountLinkEntity extends BaseEntity<mjBizApps
     * * Display Name: Entity ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ: Entities (vwEntities.ID)
-    * * Description: Polymorphic reference part 1: the MJ Entity of the target record (references __mj.Entity). Same TaggedItem-style pattern as JournalEntryLink.
+    * * Description: Polymorphic reference part 1: the MJ Entity of the target record (references __mj.Entity). Same TaggedItem-style pattern as JournalEntry.LinkedEntityID/LinkedRecordID (plan D25).
     */
     get EntityID(): string {
         return this.Get('EntityID');
@@ -3769,95 +3694,30 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     }
 
     /**
-    * * Field Name: OrderID
-    * * Display Name: Order ID
+    * * Field Name: LinkedEntityID
+    * * Display Name: Linked Entity ID
     * * SQL Data Type: uniqueidentifier
-    * * Description: Soft polymorphic ref to a source Order in a downstream app. NO FK. Accounting stores the UUID for audit drill-through but has zero knowledge of Order entities.
+    * * Related Entity/Foreign Key: MJ: Entities (vwEntities.ID)
+    * * Description: Polymorphic origin part 1 (plan D25): the MJ Entity of the single causal source record for this JE (OrderLine for booking/rev-rec entries, Payment for receipts/refunds, TaxRemittance for remittances, ...). FK to __mj.Entity. NULL (with LinkedRecordID) = manual JE.
     */
-    get OrderID(): string | null {
-        return this.Get('OrderID');
+    get LinkedEntityID(): string | null {
+        return this.Get('LinkedEntityID');
     }
-    set OrderID(value: string | null) {
-        this.Set('OrderID', value);
+    set LinkedEntityID(value: string | null) {
+        this.Set('LinkedEntityID', value);
     }
 
     /**
-    * * Field Name: OrderLineID
-    * * Display Name: Order Line ID
-    * * SQL Data Type: uniqueidentifier
-    * * Description: Soft polymorphic ref to a source OrderLine. NO FK.
+    * * Field Name: LinkedRecordID
+    * * Display Name: Linked Record ID
+    * * SQL Data Type: nvarchar(400)
+    * * Description: Polymorphic origin part 2: the source record's primary key (NVARCHAR(400) supports stringified composite keys). Soft by nature — the record lives in a downstream app's schema. Set and NULL together with LinkedEntityID (CK_JournalEntry_LinkedPair).
     */
-    get OrderLineID(): string | null {
-        return this.Get('OrderLineID');
+    get LinkedRecordID(): string | null {
+        return this.Get('LinkedRecordID');
     }
-    set OrderLineID(value: string | null) {
-        this.Set('OrderLineID', value);
-    }
-
-    /**
-    * * Field Name: SubscriptionID
-    * * Display Name: Subscription ID
-    * * SQL Data Type: uniqueidentifier
-    * * Description: Soft polymorphic ref to a source Subscription. NO FK.
-    */
-    get SubscriptionID(): string | null {
-        return this.Get('SubscriptionID');
-    }
-    set SubscriptionID(value: string | null) {
-        this.Set('SubscriptionID', value);
-    }
-
-    /**
-    * * Field Name: PaymentID
-    * * Display Name: Payment ID
-    * * SQL Data Type: uniqueidentifier
-    * * Description: Soft polymorphic ref to a source Payment. NO FK.
-    */
-    get PaymentID(): string | null {
-        return this.Get('PaymentID');
-    }
-    set PaymentID(value: string | null) {
-        this.Set('PaymentID', value);
-    }
-
-    /**
-    * * Field Name: ContractID
-    * * Display Name: Contract ID
-    * * SQL Data Type: uniqueidentifier
-    * * Description: Soft polymorphic ref to a source Contract. NO FK.
-    */
-    get ContractID(): string | null {
-        return this.Get('ContractID');
-    }
-    set ContractID(value: string | null) {
-        this.Set('ContractID', value);
-    }
-
-    /**
-    * * Field Name: IntercompanyFlowID
-    * * Display Name: Intercompany Flow ID
-    * * SQL Data Type: uniqueidentifier
-    * * Description: Soft polymorphic ref to an IntercompanyFlow record orchestrated upstream. NO FK.
-    */
-    get IntercompanyFlowID(): string | null {
-        return this.Get('IntercompanyFlowID');
-    }
-    set IntercompanyFlowID(value: string | null) {
-        this.Set('IntercompanyFlowID', value);
-    }
-
-    /**
-    * * Field Name: TaxRemittanceID
-    * * Display Name: Tax Remittance ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Tax Remittances (vwTaxRemittances.ID)
-    * * Description: When the JE represents a tax remittance, the remittance record it implements.
-    */
-    get TaxRemittanceID(): string | null {
-        return this.Get('TaxRemittanceID');
-    }
-    set TaxRemittanceID(value: string | null) {
-        this.Set('TaxRemittanceID', value);
+    set LinkedRecordID(value: string | null) {
+        this.Set('LinkedRecordID', value);
     }
 
     /**
@@ -3969,6 +3829,15 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     */
     get Company(): string {
         return this.Get('Company');
+    }
+
+    /**
+    * * Field Name: LinkedEntity
+    * * Display Name: Linked Entity
+    * * SQL Data Type: nvarchar(255)
+    */
+    get LinkedEntity(): string | null {
+        return this.Get('LinkedEntity');
     }
 
     /**
@@ -4747,19 +4616,6 @@ export class mjBizAppsAccountingJournalEntryLineEntity extends BaseEntity<mjBizA
     }
 
     /**
-    * * Field Name: OrderLineID
-    * * Display Name: Order Line ID
-    * * SQL Data Type: uniqueidentifier
-    * * Description: Soft polymorphic ref to source OrderLine. NO FK.
-    */
-    get OrderLineID(): string | null {
-        return this.Get('OrderLineID');
-    }
-    set OrderLineID(value: string | null) {
-        this.Set('OrderLineID', value);
-    }
-
-    /**
     * * Field Name: CounterpartyOrganizationID
     * * Display Name: Counterparty Organization ID
     * * SQL Data Type: uniqueidentifier
@@ -4818,142 +4674,6 @@ export class mjBizAppsAccountingJournalEntryLineEntity extends BaseEntity<mjBizA
     */
     get CounterpartyOrganization(): string | null {
         return this.Get('CounterpartyOrganization');
-    }
-}
-
-
-/**
- * MJ_BizApps_Accounting: Journal Entry Links - strongly typed entity sub-class
- * * Schema: __mj_BizAppsAccounting
- * * Base Table: JournalEntryLink
- * * Base View: vwJournalEntryLinks
- * * @description Polymorphic link from a JournalEntry to any MJ entity record (order/payment/invoice lineage, supporting documents, etc.). EntityID references __mj.Entity; RecordID is the target primary key (NVARCHAR(400) supports stringified composite keys). Upstream apps populate these; Accounting stores them for lineage/drill-through.
- * * Primary Key: ID
- * @extends {BaseEntity}
- * @class
- * @public
- */
-@RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Journal Entry Links')
-export class mjBizAppsAccountingJournalEntryLinkEntity extends BaseEntity<mjBizAppsAccountingJournalEntryLinkEntityType> {
-    /**
-    * Loads the MJ_BizApps_Accounting: Journal Entry Links record from the database
-    * @param ID: string - primary key value to load the MJ_BizApps_Accounting: Journal Entry Links record.
-    * @param EntityRelationshipsToLoad - (optional) the relationships to load
-    * @returns {Promise<boolean>} - true if successful, false otherwise
-    * @public
-    * @async
-    * @memberof mjBizAppsAccountingJournalEntryLinkEntity
-    * @method
-    * @override
-    */
-    public async Load(ID: string, EntityRelationshipsToLoad?: string[]) : Promise<boolean> {
-        const compositeKey: CompositeKey = new CompositeKey();
-        compositeKey.KeyValuePairs.push({ FieldName: 'ID', Value: ID });
-        return await super.InnerLoad(compositeKey, EntityRelationshipsToLoad);
-    }
-
-    /**
-    * * Field Name: ID
-    * * Display Name: ID
-    * * SQL Data Type: uniqueidentifier
-    * * Default Value: newsequentialid()
-    */
-    get ID(): string {
-        return this.Get('ID');
-    }
-    set ID(value: string) {
-        this.Set('ID', value);
-    }
-
-    /**
-    * * Field Name: JournalEntryID
-    * * Display Name: Journal Entry ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entries (vwJournalEntries.ID)
-    */
-    get JournalEntryID(): string {
-        return this.Get('JournalEntryID');
-    }
-    set JournalEntryID(value: string) {
-        this.Set('JournalEntryID', value);
-    }
-
-    /**
-    * * Field Name: EntityID
-    * * Display Name: Entity ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ: Entities (vwEntities.ID)
-    */
-    get EntityID(): string {
-        return this.Get('EntityID');
-    }
-    set EntityID(value: string) {
-        this.Set('EntityID', value);
-    }
-
-    /**
-    * * Field Name: RecordID
-    * * Display Name: Record ID
-    * * SQL Data Type: nvarchar(400)
-    */
-    get RecordID(): string {
-        return this.Get('RecordID');
-    }
-    set RecordID(value: string) {
-        this.Set('RecordID', value);
-    }
-
-    /**
-    * * Field Name: LinkType
-    * * Display Name: Link Type
-    * * SQL Data Type: nvarchar(50)
-    */
-    get LinkType(): string | null {
-        return this.Get('LinkType');
-    }
-    set LinkType(value: string | null) {
-        this.Set('LinkType', value);
-    }
-
-    /**
-    * * Field Name: Description
-    * * Display Name: Description
-    * * SQL Data Type: nvarchar(MAX)
-    */
-    get Description(): string | null {
-        return this.Get('Description');
-    }
-    set Description(value: string | null) {
-        this.Set('Description', value);
-    }
-
-    /**
-    * * Field Name: __mj_CreatedAt
-    * * Display Name: Created At
-    * * SQL Data Type: datetimeoffset
-    * * Default Value: getutcdate()
-    */
-    get __mj_CreatedAt(): Date {
-        return this.Get('__mj_CreatedAt');
-    }
-
-    /**
-    * * Field Name: __mj_UpdatedAt
-    * * Display Name: Updated At
-    * * SQL Data Type: datetimeoffset
-    * * Default Value: getutcdate()
-    */
-    get __mj_UpdatedAt(): Date {
-        return this.Get('__mj_UpdatedAt');
-    }
-
-    /**
-    * * Field Name: Entity
-    * * Display Name: Entity
-    * * SQL Data Type: nvarchar(255)
-    */
-    get Entity(): string {
-        return this.Get('Entity');
     }
 }
 

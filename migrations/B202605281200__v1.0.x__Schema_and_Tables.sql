@@ -1879,3 +1879,26880 @@ GO
 -- views, CRUD sprocs, and permissions for this schema, and commit the
 -- regenerated code alongside this migration.
 -- =============================================================================
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-- CodeGen Output
+/* SQL generated to create new entity MJ_BizApps_Accounting: Customer Tax Profiles */
+
+      INSERT INTO [${mjSchema}].[Entity] (
+         [ID],
+         [Name],
+         [DisplayName],
+         [Description],
+         [NameSuffix],
+         [BaseTable],
+         [BaseView],
+         [SchemaName],
+         [IncludeInAPI],
+         [AllowUserSearchAPI],
+         [AllowCaching]
+         , [TrackRecordChanges]
+         , [AuditRecordAccess]
+         , [AuditViewRuns]
+         , [AllowAllRowsAPI]
+         , [AllowCreateAPI]
+         , [AllowUpdateAPI]
+         , [AllowDeleteAPI]
+         , [UserViewMaxRows]
+         , [__mj_CreatedAt]
+         , [__mj_UpdatedAt]
+      )
+      VALUES (
+         '179b2fec-f70f-4c93-8fa0-ae73c957dc13',
+         'MJ_BizApps_Accounting: Customer Tax Profiles',
+         'Customer Tax Profiles',
+         'Taxability profile for an Organization (customer). Captures their tax ID, where they are taxable, and any exemption certificate.',
+         NULL,
+         'CustomerTaxProfile',
+         'vwCustomerTaxProfiles',
+         '${flyway:defaultSchema}',
+         1,
+         1,
+         0
+         , 1
+         , 0
+         , 0
+         , 0
+         , 1
+         , 1
+         , 1
+         , 1000
+         , GETUTCDATE()
+         , GETUTCDATE()
+      );
+
+/* SQL generated to create new application ${flyway:defaultSchema} */
+IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[Application] WHERE [ID] = 'fc91b3cb-1b04-4aa1-abe2-753ae4f272e3'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[Application] (ID, Name, Description, SchemaAutoAddNewEntities, Path, AutoUpdatePath)
+                       VALUES ('fc91b3cb-1b04-4aa1-abe2-753ae4f272e3', '${flyway:defaultSchema}', 'Generated for schema', '${flyway:defaultSchema}', 'mjbizappsaccounting', 1)
+   END;
+
+/* Adding role UI to application ${flyway:defaultSchema} */
+IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[ApplicationRole] WHERE [ApplicationID] = 'fc91b3cb-1b04-4aa1-abe2-753ae4f272e3' AND [RoleID] = 'E0AFCCEC-6A37-EF11-86D4-000D3A4E707E'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[ApplicationRole]
+                                 ([ApplicationID], [RoleID], [CanAccess], [CanAdmin]) VALUES
+                                 ('fc91b3cb-1b04-4aa1-abe2-753ae4f272e3', 'E0AFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 0)
+   END;
+
+/* Adding role Developer to application ${flyway:defaultSchema} */
+IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[ApplicationRole] WHERE [ApplicationID] = 'fc91b3cb-1b04-4aa1-abe2-753ae4f272e3' AND [RoleID] = 'DEAFCCEC-6A37-EF11-86D4-000D3A4E707E'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[ApplicationRole]
+                                 ([ApplicationID], [RoleID], [CanAccess], [CanAdmin]) VALUES
+                                 ('fc91b3cb-1b04-4aa1-abe2-753ae4f272e3', 'DEAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1)
+   END;
+
+/* Adding role Integration to application ${flyway:defaultSchema} */
+IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[ApplicationRole] WHERE [ApplicationID] = 'fc91b3cb-1b04-4aa1-abe2-753ae4f272e3' AND [RoleID] = 'DFAFCCEC-6A37-EF11-86D4-000D3A4E707E'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[ApplicationRole]
+                                 ([ApplicationID], [RoleID], [CanAccess], [CanAdmin]) VALUES
+                                 ('fc91b3cb-1b04-4aa1-abe2-753ae4f272e3', 'DFAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 0)
+   END;
+
+/* SQL generated to add new entity MJ_BizApps_Accounting: Customer Tax Profiles to application ID: 'fc91b3cb-1b04-4aa1-abe2-753ae4f272e3' */
+INSERT INTO [${mjSchema}].[ApplicationEntity]
+                                       ([ApplicationID], [EntityID], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                       ('fc91b3cb-1b04-4aa1-abe2-753ae4f272e3', '179b2fec-f70f-4c93-8fa0-ae73c957dc13', (SELECT COALESCE(MAX([Sequence]),0)+1 FROM [${mjSchema}].[ApplicationEntity] WHERE [ApplicationID] = 'fc91b3cb-1b04-4aa1-abe2-753ae4f272e3'), GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Customer Tax Profiles for role UI */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('179b2fec-f70f-4c93-8fa0-ae73c957dc13', 'E0AFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 0, 0, 0, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Customer Tax Profiles for role Developer */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('179b2fec-f70f-4c93-8fa0-ae73c957dc13', 'DEAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Customer Tax Profiles for role Integration */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('179b2fec-f70f-4c93-8fa0-ae73c957dc13', 'DFAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to create new entity MJ_BizApps_Accounting: Journal Entry Sequences */
+
+      INSERT INTO [${mjSchema}].[Entity] (
+         [ID],
+         [Name],
+         [DisplayName],
+         [Description],
+         [NameSuffix],
+         [BaseTable],
+         [BaseView],
+         [SchemaName],
+         [IncludeInAPI],
+         [AllowUserSearchAPI],
+         [AllowCaching]
+         , [TrackRecordChanges]
+         , [AuditRecordAccess]
+         , [AuditViewRuns]
+         , [AllowAllRowsAPI]
+         , [AllowCreateAPI]
+         , [AllowUpdateAPI]
+         , [AllowDeleteAPI]
+         , [UserViewMaxRows]
+         , [__mj_CreatedAt]
+         , [__mj_UpdatedAt]
+      )
+      VALUES (
+         'e7116785-3d54-415c-981b-0e2d2d3ba793',
+         'MJ_BizApps_Accounting: Journal Entry Sequences',
+         'Journal Entry Sequences',
+         'PER-COMPANY per-fiscal-year counter backing gap-free JournalEntry numbering JE-{CompanyCode}-{FY}-{seq} (plan D19). Consumed only by spAssignNextJournalEntryNumber.',
+         NULL,
+         'JournalEntrySequence',
+         'vwJournalEntrySequences',
+         '${flyway:defaultSchema}',
+         1,
+         1,
+         0
+         , 1
+         , 0
+         , 0
+         , 0
+         , 1
+         , 1
+         , 1
+         , 1000
+         , GETUTCDATE()
+         , GETUTCDATE()
+      );
+
+/* SQL generated to add new entity MJ_BizApps_Accounting: Journal Entry Sequences to application ID: 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3' */
+INSERT INTO [${mjSchema}].[ApplicationEntity]
+                                       ([ApplicationID], [EntityID], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                       ('FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3', 'e7116785-3d54-415c-981b-0e2d2d3ba793', (SELECT COALESCE(MAX([Sequence]),0)+1 FROM [${mjSchema}].[ApplicationEntity] WHERE [ApplicationID] = 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3'), GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Journal Entry Sequences for role UI */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('e7116785-3d54-415c-981b-0e2d2d3ba793', 'E0AFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 0, 0, 0, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Journal Entry Sequences for role Developer */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('e7116785-3d54-415c-981b-0e2d2d3ba793', 'DEAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Journal Entry Sequences for role Integration */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('e7116785-3d54-415c-981b-0e2d2d3ba793', 'DFAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to create new entity MJ_BizApps_Accounting: Journal Entry Batch Sequences */
+
+      INSERT INTO [${mjSchema}].[Entity] (
+         [ID],
+         [Name],
+         [DisplayName],
+         [Description],
+         [NameSuffix],
+         [BaseTable],
+         [BaseView],
+         [SchemaName],
+         [IncludeInAPI],
+         [AllowUserSearchAPI],
+         [AllowCaching]
+         , [TrackRecordChanges]
+         , [AuditRecordAccess]
+         , [AuditViewRuns]
+         , [AllowAllRowsAPI]
+         , [AllowCreateAPI]
+         , [AllowUpdateAPI]
+         , [AllowDeleteAPI]
+         , [UserViewMaxRows]
+         , [__mj_CreatedAt]
+         , [__mj_UpdatedAt]
+      )
+      VALUES (
+         '9773fac6-c410-47db-a7a9-f49886e6b54a',
+         'MJ_BizApps_Accounting: Journal Entry Batch Sequences',
+         'Journal Entry Batch Sequences',
+         'GLOBAL singleton counter backing gap-free JournalEntryBatch numbering (plan D19: batch numbering stays global). One row, ID = 1. Consumed only by spAssignNextBatchNumber.',
+         NULL,
+         'JournalEntryBatchSequence',
+         'vwJournalEntryBatchSequences',
+         '${flyway:defaultSchema}',
+         1,
+         1,
+         0
+         , 1
+         , 0
+         , 0
+         , 0
+         , 1
+         , 1
+         , 1
+         , 1000
+         , GETUTCDATE()
+         , GETUTCDATE()
+      );
+
+/* SQL generated to add new entity MJ_BizApps_Accounting: Journal Entry Batch Sequences to application ID: 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3' */
+INSERT INTO [${mjSchema}].[ApplicationEntity]
+                                       ([ApplicationID], [EntityID], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                       ('FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3', '9773fac6-c410-47db-a7a9-f49886e6b54a', (SELECT COALESCE(MAX([Sequence]),0)+1 FROM [${mjSchema}].[ApplicationEntity] WHERE [ApplicationID] = 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3'), GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Journal Entry Batch Sequences for role UI */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('9773fac6-c410-47db-a7a9-f49886e6b54a', 'E0AFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 0, 0, 0, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Journal Entry Batch Sequences for role Developer */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('9773fac6-c410-47db-a7a9-f49886e6b54a', 'DEAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Journal Entry Batch Sequences for role Integration */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('9773fac6-c410-47db-a7a9-f49886e6b54a', 'DFAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to create new entity MJ_BizApps_Accounting: GL Account Roles */
+
+      INSERT INTO [${mjSchema}].[Entity] (
+         [ID],
+         [Name],
+         [DisplayName],
+         [Description],
+         [NameSuffix],
+         [BaseTable],
+         [BaseView],
+         [SchemaName],
+         [IncludeInAPI],
+         [AllowUserSearchAPI],
+         [AllowCaching]
+         , [TrackRecordChanges]
+         , [AuditRecordAccess]
+         , [AuditViewRuns]
+         , [AllowAllRowsAPI]
+         , [AllowCreateAPI]
+         , [AllowUpdateAPI]
+         , [AllowDeleteAPI]
+         , [UserViewMaxRows]
+         , [__mj_CreatedAt]
+         , [__mj_UpdatedAt]
+      )
+      VALUES (
+         'a2177315-8a92-48b6-a4f8-0865e674c230',
+         'MJ_BizApps_Accounting: GL Account Roles',
+         'GL Account Roles',
+         'The JOB a GL account plays for a linked record (Cash, Accounts Receivable, Inventory, Cost of Goods Sold, Sales, Sales Discounts, Sales Returns and Allowances, Deferred Revenue). Lookup table so roles are additive at runtime; seeded via metadata sync (metadata/gl-account-roles), never SQL. AM-2.',
+         NULL,
+         'GLAccountRole',
+         'vwGLAccountRoles',
+         '${flyway:defaultSchema}',
+         1,
+         1,
+         0
+         , 1
+         , 0
+         , 0
+         , 0
+         , 1
+         , 1
+         , 1
+         , 1000
+         , GETUTCDATE()
+         , GETUTCDATE()
+      );
+
+/* SQL generated to add new entity MJ_BizApps_Accounting: GL Account Roles to application ID: 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3' */
+INSERT INTO [${mjSchema}].[ApplicationEntity]
+                                       ([ApplicationID], [EntityID], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                       ('FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3', 'a2177315-8a92-48b6-a4f8-0865e674c230', (SELECT COALESCE(MAX([Sequence]),0)+1 FROM [${mjSchema}].[ApplicationEntity] WHERE [ApplicationID] = 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3'), GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: GL Account Roles for role UI */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('a2177315-8a92-48b6-a4f8-0865e674c230', 'E0AFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 0, 0, 0, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: GL Account Roles for role Developer */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('a2177315-8a92-48b6-a4f8-0865e674c230', 'DEAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: GL Account Roles for role Integration */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('a2177315-8a92-48b6-a4f8-0865e674c230', 'DFAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to create new entity MJ_BizApps_Accounting: Currencies */
+
+      INSERT INTO [${mjSchema}].[Entity] (
+         [ID],
+         [Name],
+         [DisplayName],
+         [Description],
+         [NameSuffix],
+         [BaseTable],
+         [BaseView],
+         [SchemaName],
+         [IncludeInAPI],
+         [AllowUserSearchAPI],
+         [AllowCaching]
+         , [TrackRecordChanges]
+         , [AuditRecordAccess]
+         , [AuditViewRuns]
+         , [AllowAllRowsAPI]
+         , [AllowCreateAPI]
+         , [AllowUpdateAPI]
+         , [AllowDeleteAPI]
+         , [UserViewMaxRows]
+         , [__mj_CreatedAt]
+         , [__mj_UpdatedAt]
+      )
+      VALUES (
+         'eba7e879-da81-4fcd-8bfa-d6e4ebf92615',
+         'MJ_BizApps_Accounting: Currencies',
+         'Currencies',
+         'ISO-4217 currency reference data owned by BizAppsAccounting; seeded via metadata sync (metadata/currencies). Referenced by GLAccount, AccountingCompanyProfile, JournalEntryLine, and CurrencySpotRate.',
+         NULL,
+         'Currency',
+         'vwCurrencies',
+         '${flyway:defaultSchema}',
+         1,
+         1,
+         0
+         , 1
+         , 0
+         , 0
+         , 0
+         , 1
+         , 1
+         , 1
+         , 1000
+         , GETUTCDATE()
+         , GETUTCDATE()
+      );
+
+/* SQL generated to add new entity MJ_BizApps_Accounting: Currencies to application ID: 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3' */
+INSERT INTO [${mjSchema}].[ApplicationEntity]
+                                       ([ApplicationID], [EntityID], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                       ('FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3', 'eba7e879-da81-4fcd-8bfa-d6e4ebf92615', (SELECT COALESCE(MAX([Sequence]),0)+1 FROM [${mjSchema}].[ApplicationEntity] WHERE [ApplicationID] = 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3'), GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Currencies for role UI */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('eba7e879-da81-4fcd-8bfa-d6e4ebf92615', 'E0AFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 0, 0, 0, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Currencies for role Developer */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('eba7e879-da81-4fcd-8bfa-d6e4ebf92615', 'DEAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Currencies for role Integration */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('eba7e879-da81-4fcd-8bfa-d6e4ebf92615', 'DFAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to create new entity MJ_BizApps_Accounting: GL Account Links */
+
+      INSERT INTO [${mjSchema}].[Entity] (
+         [ID],
+         [Name],
+         [DisplayName],
+         [Description],
+         [NameSuffix],
+         [BaseTable],
+         [BaseView],
+         [SchemaName],
+         [IncludeInAPI],
+         [AllowUserSearchAPI],
+         [AllowCaching]
+         , [TrackRecordChanges]
+         , [AuditRecordAccess]
+         , [AuditViewRuns]
+         , [AllowAllRowsAPI]
+         , [AllowCreateAPI]
+         , [AllowUpdateAPI]
+         , [AllowDeleteAPI]
+         , [UserViewMaxRows]
+         , [__mj_CreatedAt]
+         , [__mj_UpdatedAt]
+      )
+      VALUES (
+         '34f71dbc-c29f-40d3-bb09-db4ec5e7e946',
+         'MJ_BizApps_Accounting: GL Account Links',
+         'GL Account Links',
+         'Polymorphic, role-based, date-effective mapping from ANY record (Company defaults, Product Category, Product, future types) to a GL account. Replaces the ProductGLAccount / ProductCategoryGLAccount / AccountingCompanyProfileGLAccount trio (AM-5). Resolution filters Status=Active and StartedAt/EndedAt covering the as-of date; the caller (e.g. the Orders resolver) walks product -> category tree -> company default.',
+         NULL,
+         'GLAccountLink',
+         'vwGLAccountLinks',
+         '${flyway:defaultSchema}',
+         1,
+         1,
+         0
+         , 1
+         , 0
+         , 0
+         , 0
+         , 1
+         , 1
+         , 1
+         , 1000
+         , GETUTCDATE()
+         , GETUTCDATE()
+      );
+
+/* SQL generated to add new entity MJ_BizApps_Accounting: GL Account Links to application ID: 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3' */
+INSERT INTO [${mjSchema}].[ApplicationEntity]
+                                       ([ApplicationID], [EntityID], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                       ('FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3', '34f71dbc-c29f-40d3-bb09-db4ec5e7e946', (SELECT COALESCE(MAX([Sequence]),0)+1 FROM [${mjSchema}].[ApplicationEntity] WHERE [ApplicationID] = 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3'), GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: GL Account Links for role UI */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('34f71dbc-c29f-40d3-bb09-db4ec5e7e946', 'E0AFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 0, 0, 0, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: GL Account Links for role Developer */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('34f71dbc-c29f-40d3-bb09-db4ec5e7e946', 'DEAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: GL Account Links for role Integration */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('34f71dbc-c29f-40d3-bb09-db4ec5e7e946', 'DFAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to create new entity MJ_BizApps_Accounting: Currency Spot Rates */
+
+      INSERT INTO [${mjSchema}].[Entity] (
+         [ID],
+         [Name],
+         [DisplayName],
+         [Description],
+         [NameSuffix],
+         [BaseTable],
+         [BaseView],
+         [SchemaName],
+         [IncludeInAPI],
+         [AllowUserSearchAPI],
+         [AllowCaching]
+         , [TrackRecordChanges]
+         , [AuditRecordAccess]
+         , [AuditViewRuns]
+         , [AllowAllRowsAPI]
+         , [AllowCreateAPI]
+         , [AllowUpdateAPI]
+         , [AllowDeleteAPI]
+         , [UserViewMaxRows]
+         , [__mj_CreatedAt]
+         , [__mj_UpdatedAt]
+      )
+      VALUES (
+         '808caa0f-c086-467c-8d42-03b203cebdc3',
+         'MJ_BizApps_Accounting: Currency Spot Rates',
+         'Currency Spot Rates',
+         'Spot FX rate: units of ToCurrency per 1 unit of FromCurrency, on RateDate, from Source (ExchangeRate-API | ECB | OpenExchangeRates | Manual). Used for JE booking, period-end revaluation, and realized FX. Spot-only by design.',
+         NULL,
+         'CurrencySpotRate',
+         'vwCurrencySpotRates',
+         '${flyway:defaultSchema}',
+         1,
+         1,
+         0
+         , 1
+         , 0
+         , 0
+         , 0
+         , 1
+         , 1
+         , 1
+         , 1000
+         , GETUTCDATE()
+         , GETUTCDATE()
+      );
+
+/* SQL generated to add new entity MJ_BizApps_Accounting: Currency Spot Rates to application ID: 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3' */
+INSERT INTO [${mjSchema}].[ApplicationEntity]
+                                       ([ApplicationID], [EntityID], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                       ('FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3', '808caa0f-c086-467c-8d42-03b203cebdc3', (SELECT COALESCE(MAX([Sequence]),0)+1 FROM [${mjSchema}].[ApplicationEntity] WHERE [ApplicationID] = 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3'), GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Currency Spot Rates for role UI */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('808caa0f-c086-467c-8d42-03b203cebdc3', 'E0AFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 0, 0, 0, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Currency Spot Rates for role Developer */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('808caa0f-c086-467c-8d42-03b203cebdc3', 'DEAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Currency Spot Rates for role Integration */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('808caa0f-c086-467c-8d42-03b203cebdc3', 'DFAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to create new entity MJ_BizApps_Accounting: GL Account Link Dimensions */
+
+      INSERT INTO [${mjSchema}].[Entity] (
+         [ID],
+         [Name],
+         [DisplayName],
+         [Description],
+         [NameSuffix],
+         [BaseTable],
+         [BaseView],
+         [SchemaName],
+         [IncludeInAPI],
+         [AllowUserSearchAPI],
+         [AllowCaching]
+         , [TrackRecordChanges]
+         , [AuditRecordAccess]
+         , [AuditViewRuns]
+         , [AllowAllRowsAPI]
+         , [AllowCreateAPI]
+         , [AllowUpdateAPI]
+         , [AllowDeleteAPI]
+         , [UserViewMaxRows]
+         , [__mj_CreatedAt]
+         , [__mj_UpdatedAt]
+      )
+      VALUES (
+         '5be1d6e3-2cb3-4c6e-9fa2-592f7b1c65de',
+         'MJ_BizApps_Accounting: GL Account Link Dimensions',
+         'GL Account Link Dimensions',
+         'Which analytical Dimensions apply to journal-entry lines resolved through a GLAccountLink, in display order. Carries the Dimension only — VALUES are supplied from the calling context at entry-build time (OQ-I).',
+         NULL,
+         'GLAccountLinkDimension',
+         'vwGLAccountLinkDimensions',
+         '${flyway:defaultSchema}',
+         1,
+         1,
+         0
+         , 1
+         , 0
+         , 0
+         , 0
+         , 1
+         , 1
+         , 1
+         , 1000
+         , GETUTCDATE()
+         , GETUTCDATE()
+      );
+
+/* SQL generated to add new entity MJ_BizApps_Accounting: GL Account Link Dimensions to application ID: 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3' */
+INSERT INTO [${mjSchema}].[ApplicationEntity]
+                                       ([ApplicationID], [EntityID], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                       ('FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3', '5be1d6e3-2cb3-4c6e-9fa2-592f7b1c65de', (SELECT COALESCE(MAX([Sequence]),0)+1 FROM [${mjSchema}].[ApplicationEntity] WHERE [ApplicationID] = 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3'), GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: GL Account Link Dimensions for role UI */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('5be1d6e3-2cb3-4c6e-9fa2-592f7b1c65de', 'E0AFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 0, 0, 0, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: GL Account Link Dimensions for role Developer */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('5be1d6e3-2cb3-4c6e-9fa2-592f7b1c65de', 'DEAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: GL Account Link Dimensions for role Integration */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('5be1d6e3-2cb3-4c6e-9fa2-592f7b1c65de', 'DFAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to create new entity MJ_BizApps_Accounting: Dimensions */
+
+      INSERT INTO [${mjSchema}].[Entity] (
+         [ID],
+         [Name],
+         [DisplayName],
+         [Description],
+         [NameSuffix],
+         [BaseTable],
+         [BaseView],
+         [SchemaName],
+         [IncludeInAPI],
+         [AllowUserSearchAPI],
+         [AllowCaching]
+         , [TrackRecordChanges]
+         , [AuditRecordAccess]
+         , [AuditViewRuns]
+         , [AllowAllRowsAPI]
+         , [AllowCreateAPI]
+         , [AllowUpdateAPI]
+         , [AllowDeleteAPI]
+         , [UserViewMaxRows]
+         , [__mj_CreatedAt]
+         , [__mj_UpdatedAt]
+      )
+      VALUES (
+         '5b232f88-718a-46d1-8356-a16b172056dd',
+         'MJ_BizApps_Accounting: Dimensions',
+         'Dimensions',
+         'First-class analytical dimension used to tag JE lines (Department, CostCenter, Project, Region, ...). Optional — deployments with no dimensions defined just have a flat chart.',
+         NULL,
+         'Dimension',
+         'vwDimensions',
+         '${flyway:defaultSchema}',
+         1,
+         1,
+         0
+         , 1
+         , 0
+         , 0
+         , 0
+         , 1
+         , 1
+         , 1
+         , 1000
+         , GETUTCDATE()
+         , GETUTCDATE()
+      );
+
+/* SQL generated to add new entity MJ_BizApps_Accounting: Dimensions to application ID: 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3' */
+INSERT INTO [${mjSchema}].[ApplicationEntity]
+                                       ([ApplicationID], [EntityID], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                       ('FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3', '5b232f88-718a-46d1-8356-a16b172056dd', (SELECT COALESCE(MAX([Sequence]),0)+1 FROM [${mjSchema}].[ApplicationEntity] WHERE [ApplicationID] = 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3'), GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Dimensions for role UI */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('5b232f88-718a-46d1-8356-a16b172056dd', 'E0AFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 0, 0, 0, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Dimensions for role Developer */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('5b232f88-718a-46d1-8356-a16b172056dd', 'DEAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Dimensions for role Integration */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('5b232f88-718a-46d1-8356-a16b172056dd', 'DFAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to create new entity MJ_BizApps_Accounting: Dimension Values */
+
+      INSERT INTO [${mjSchema}].[Entity] (
+         [ID],
+         [Name],
+         [DisplayName],
+         [Description],
+         [NameSuffix],
+         [BaseTable],
+         [BaseView],
+         [SchemaName],
+         [IncludeInAPI],
+         [AllowUserSearchAPI],
+         [AllowCaching]
+         , [TrackRecordChanges]
+         , [AuditRecordAccess]
+         , [AuditViewRuns]
+         , [AllowAllRowsAPI]
+         , [AllowCreateAPI]
+         , [AllowUpdateAPI]
+         , [AllowDeleteAPI]
+         , [UserViewMaxRows]
+         , [__mj_CreatedAt]
+         , [__mj_UpdatedAt]
+      )
+      VALUES (
+         'a9ad407b-6624-45e5-bfdd-d6368d85f740',
+         'MJ_BizApps_Accounting: Dimension Values',
+         'Dimension Values',
+         'Hierarchical value within a Dimension. ParentDimensionValueID allows e.g. Region → State → City rollups.',
+         NULL,
+         'DimensionValue',
+         'vwDimensionValues',
+         '${flyway:defaultSchema}',
+         1,
+         1,
+         0
+         , 1
+         , 0
+         , 0
+         , 0
+         , 1
+         , 1
+         , 1
+         , 1000
+         , GETUTCDATE()
+         , GETUTCDATE()
+      );
+
+/* SQL generated to add new entity MJ_BizApps_Accounting: Dimension Values to application ID: 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3' */
+INSERT INTO [${mjSchema}].[ApplicationEntity]
+                                       ([ApplicationID], [EntityID], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                       ('FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3', 'a9ad407b-6624-45e5-bfdd-d6368d85f740', (SELECT COALESCE(MAX([Sequence]),0)+1 FROM [${mjSchema}].[ApplicationEntity] WHERE [ApplicationID] = 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3'), GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Dimension Values for role UI */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('a9ad407b-6624-45e5-bfdd-d6368d85f740', 'E0AFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 0, 0, 0, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Dimension Values for role Developer */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('a9ad407b-6624-45e5-bfdd-d6368d85f740', 'DEAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Dimension Values for role Integration */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('a9ad407b-6624-45e5-bfdd-d6368d85f740', 'DFAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to create new entity MJ_BizApps_Accounting: Tax Authorities */
+
+      INSERT INTO [${mjSchema}].[Entity] (
+         [ID],
+         [Name],
+         [DisplayName],
+         [Description],
+         [NameSuffix],
+         [BaseTable],
+         [BaseView],
+         [SchemaName],
+         [IncludeInAPI],
+         [AllowUserSearchAPI],
+         [AllowCaching]
+         , [TrackRecordChanges]
+         , [AuditRecordAccess]
+         , [AuditViewRuns]
+         , [AllowAllRowsAPI]
+         , [AllowCreateAPI]
+         , [AllowUpdateAPI]
+         , [AllowDeleteAPI]
+         , [UserViewMaxRows]
+         , [__mj_CreatedAt]
+         , [__mj_UpdatedAt]
+      )
+      VALUES (
+         '85303537-672d-4895-b773-a8b923c0f7f9',
+         'MJ_BizApps_Accounting: Tax Authorities',
+         'Tax Authorities',
+         'Taxing body — federal, state, or sub-national authority that levies and collects tax. Examples: US-IRS, CA-BOE, EU-VAT-DE.',
+         NULL,
+         'TaxAuthority',
+         'vwTaxAuthorities',
+         '${flyway:defaultSchema}',
+         1,
+         1,
+         0
+         , 1
+         , 0
+         , 0
+         , 0
+         , 1
+         , 1
+         , 1
+         , 1000
+         , GETUTCDATE()
+         , GETUTCDATE()
+      );
+
+/* SQL generated to add new entity MJ_BizApps_Accounting: Tax Authorities to application ID: 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3' */
+INSERT INTO [${mjSchema}].[ApplicationEntity]
+                                       ([ApplicationID], [EntityID], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                       ('FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3', '85303537-672d-4895-b773-a8b923c0f7f9', (SELECT COALESCE(MAX([Sequence]),0)+1 FROM [${mjSchema}].[ApplicationEntity] WHERE [ApplicationID] = 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3'), GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Tax Authorities for role UI */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('85303537-672d-4895-b773-a8b923c0f7f9', 'E0AFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 0, 0, 0, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Tax Authorities for role Developer */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('85303537-672d-4895-b773-a8b923c0f7f9', 'DEAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Tax Authorities for role Integration */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('85303537-672d-4895-b773-a8b923c0f7f9', 'DFAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to create new entity MJ_BizApps_Accounting: Tax Jurisdictions */
+
+      INSERT INTO [${mjSchema}].[Entity] (
+         [ID],
+         [Name],
+         [DisplayName],
+         [Description],
+         [NameSuffix],
+         [BaseTable],
+         [BaseView],
+         [SchemaName],
+         [IncludeInAPI],
+         [AllowUserSearchAPI],
+         [AllowCaching]
+         , [TrackRecordChanges]
+         , [AuditRecordAccess]
+         , [AuditViewRuns]
+         , [AllowAllRowsAPI]
+         , [AllowCreateAPI]
+         , [AllowUpdateAPI]
+         , [AllowDeleteAPI]
+         , [UserViewMaxRows]
+         , [__mj_CreatedAt]
+         , [__mj_UpdatedAt]
+      )
+      VALUES (
+         '967e7628-ce96-4421-a836-26bbd0bcf564',
+         'MJ_BizApps_Accounting: Tax Jurisdictions',
+         'Tax Jurisdictions',
+         'Geographic scope within a TaxAuthority. May nest (state → county → city) via ParentTaxJurisdictionID. Used to look up the applicable TaxRate for a transaction.',
+         NULL,
+         'TaxJurisdiction',
+         'vwTaxJurisdictions',
+         '${flyway:defaultSchema}',
+         1,
+         1,
+         0
+         , 1
+         , 0
+         , 0
+         , 0
+         , 1
+         , 1
+         , 1
+         , 1000
+         , GETUTCDATE()
+         , GETUTCDATE()
+      );
+
+/* SQL generated to add new entity MJ_BizApps_Accounting: Tax Jurisdictions to application ID: 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3' */
+INSERT INTO [${mjSchema}].[ApplicationEntity]
+                                       ([ApplicationID], [EntityID], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                       ('FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3', '967e7628-ce96-4421-a836-26bbd0bcf564', (SELECT COALESCE(MAX([Sequence]),0)+1 FROM [${mjSchema}].[ApplicationEntity] WHERE [ApplicationID] = 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3'), GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Tax Jurisdictions for role UI */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('967e7628-ce96-4421-a836-26bbd0bcf564', 'E0AFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 0, 0, 0, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Tax Jurisdictions for role Developer */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('967e7628-ce96-4421-a836-26bbd0bcf564', 'DEAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Tax Jurisdictions for role Integration */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('967e7628-ce96-4421-a836-26bbd0bcf564', 'DFAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to create new entity MJ_BizApps_Accounting: Tax Rates */
+
+      INSERT INTO [${mjSchema}].[Entity] (
+         [ID],
+         [Name],
+         [DisplayName],
+         [Description],
+         [NameSuffix],
+         [BaseTable],
+         [BaseView],
+         [SchemaName],
+         [IncludeInAPI],
+         [AllowUserSearchAPI],
+         [AllowCaching]
+         , [TrackRecordChanges]
+         , [AuditRecordAccess]
+         , [AuditViewRuns]
+         , [AllowAllRowsAPI]
+         , [AllowCreateAPI]
+         , [AllowUpdateAPI]
+         , [AllowDeleteAPI]
+         , [UserViewMaxRows]
+         , [__mj_CreatedAt]
+         , [__mj_UpdatedAt]
+      )
+      VALUES (
+         'b1a8af72-ded6-482a-9669-46a9fc30b574',
+         'MJ_BizApps_Accounting: Tax Rates',
+         'Tax Rates',
+         'Rate applicable to a jurisdiction × category × effective range. Populated manually for simple cases or auto-synced from Avalara/TaxJar (per BA-D19).',
+         NULL,
+         'TaxRate',
+         'vwTaxRates',
+         '${flyway:defaultSchema}',
+         1,
+         1,
+         0
+         , 1
+         , 0
+         , 0
+         , 0
+         , 1
+         , 1
+         , 1
+         , 1000
+         , GETUTCDATE()
+         , GETUTCDATE()
+      );
+
+/* SQL generated to add new entity MJ_BizApps_Accounting: Tax Rates to application ID: 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3' */
+INSERT INTO [${mjSchema}].[ApplicationEntity]
+                                       ([ApplicationID], [EntityID], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                       ('FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3', 'b1a8af72-ded6-482a-9669-46a9fc30b574', (SELECT COALESCE(MAX([Sequence]),0)+1 FROM [${mjSchema}].[ApplicationEntity] WHERE [ApplicationID] = 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3'), GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Tax Rates for role UI */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('b1a8af72-ded6-482a-9669-46a9fc30b574', 'E0AFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 0, 0, 0, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Tax Rates for role Developer */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('b1a8af72-ded6-482a-9669-46a9fc30b574', 'DEAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Tax Rates for role Integration */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('b1a8af72-ded6-482a-9669-46a9fc30b574', 'DFAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to create new entity MJ_BizApps_Accounting: Accounting Company Profiles */
+
+      INSERT INTO [${mjSchema}].[Entity] (
+         [ID],
+         [Name],
+         [DisplayName],
+         [Description],
+         [NameSuffix],
+         [BaseTable],
+         [BaseView],
+         [SchemaName],
+         [IncludeInAPI],
+         [AllowUserSearchAPI],
+         [AllowCaching]
+         , [TrackRecordChanges]
+         , [AuditRecordAccess]
+         , [AuditViewRuns]
+         , [AllowAllRowsAPI]
+         , [AllowCreateAPI]
+         , [AllowUpdateAPI]
+         , [AllowDeleteAPI]
+         , [UserViewMaxRows]
+         , [__mj_CreatedAt]
+         , [__mj_UpdatedAt]
+      )
+      VALUES (
+         '6da09dae-3160-42f2-b0ca-6e26013abb60',
+         'MJ_BizApps_Accounting: Accounting Company Profiles',
+         'Accounting Company Profiles',
+         'IsA Disjoint child of ${mjSchema}.Company (same UUID as the parent). Holds all Company-attribute extensions required by Accounting: business profile (EntityType, LegalStructure, jurisdiction, tax ID) and accounting-specific settings (functional currency, fiscal year, default GL accounts). MJ core stays minimal; nothing accounting-flavored leaks into it (BA-D9).',
+         NULL,
+         'AccountingCompanyProfile',
+         'vwAccountingCompanyProfiles',
+         '${flyway:defaultSchema}',
+         1,
+         1,
+         0
+         , 1
+         , 0
+         , 0
+         , 0
+         , 1
+         , 1
+         , 1
+         , 1000
+         , GETUTCDATE()
+         , GETUTCDATE()
+      );
+
+/* SQL generated to add new entity MJ_BizApps_Accounting: Accounting Company Profiles to application ID: 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3' */
+INSERT INTO [${mjSchema}].[ApplicationEntity]
+                                       ([ApplicationID], [EntityID], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                       ('FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3', '6da09dae-3160-42f2-b0ca-6e26013abb60', (SELECT COALESCE(MAX([Sequence]),0)+1 FROM [${mjSchema}].[ApplicationEntity] WHERE [ApplicationID] = 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3'), GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Accounting Company Profiles for role UI */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('6da09dae-3160-42f2-b0ca-6e26013abb60', 'E0AFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 0, 0, 0, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Accounting Company Profiles for role Developer */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('6da09dae-3160-42f2-b0ca-6e26013abb60', 'DEAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Accounting Company Profiles for role Integration */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('6da09dae-3160-42f2-b0ca-6e26013abb60', 'DFAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to create new entity MJ_BizApps_Accounting: GL Accounts */
+
+      INSERT INTO [${mjSchema}].[Entity] (
+         [ID],
+         [Name],
+         [DisplayName],
+         [Description],
+         [NameSuffix],
+         [BaseTable],
+         [BaseView],
+         [SchemaName],
+         [IncludeInAPI],
+         [AllowUserSearchAPI],
+         [AllowCaching]
+         , [TrackRecordChanges]
+         , [AuditRecordAccess]
+         , [AuditViewRuns]
+         , [AllowAllRowsAPI]
+         , [AllowCreateAPI]
+         , [AllowUpdateAPI]
+         , [AllowDeleteAPI]
+         , [UserViewMaxRows]
+         , [__mj_CreatedAt]
+         , [__mj_UpdatedAt]
+      )
+      VALUES (
+         'ee18e4fc-2295-4e9b-9410-a7a9a47a3bb7',
+         'MJ_BizApps_Accounting: GL Accounts',
+         'GL Accounts',
+         'Chart-of-accounts entry. Per-Company; mirrors the ERP''s COA so JE lines have a stable internal reference. Hierarchical via ParentGLAccountID for rollup reporting.',
+         NULL,
+         'GLAccount',
+         'vwGLAccounts',
+         '${flyway:defaultSchema}',
+         1,
+         1,
+         0
+         , 1
+         , 0
+         , 0
+         , 0
+         , 1
+         , 1
+         , 1
+         , 1000
+         , GETUTCDATE()
+         , GETUTCDATE()
+      );
+
+/* SQL generated to add new entity MJ_BizApps_Accounting: GL Accounts to application ID: 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3' */
+INSERT INTO [${mjSchema}].[ApplicationEntity]
+                                       ([ApplicationID], [EntityID], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                       ('FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3', 'ee18e4fc-2295-4e9b-9410-a7a9a47a3bb7', (SELECT COALESCE(MAX([Sequence]),0)+1 FROM [${mjSchema}].[ApplicationEntity] WHERE [ApplicationID] = 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3'), GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: GL Accounts for role UI */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('ee18e4fc-2295-4e9b-9410-a7a9a47a3bb7', 'E0AFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 0, 0, 0, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: GL Accounts for role Developer */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('ee18e4fc-2295-4e9b-9410-a7a9a47a3bb7', 'DEAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: GL Accounts for role Integration */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('ee18e4fc-2295-4e9b-9410-a7a9a47a3bb7', 'DFAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to create new entity MJ_BizApps_Accounting: Journal Entry Batches */
+
+      INSERT INTO [${mjSchema}].[Entity] (
+         [ID],
+         [Name],
+         [DisplayName],
+         [Description],
+         [NameSuffix],
+         [BaseTable],
+         [BaseView],
+         [SchemaName],
+         [IncludeInAPI],
+         [AllowUserSearchAPI],
+         [AllowCaching]
+         , [TrackRecordChanges]
+         , [AuditRecordAccess]
+         , [AuditViewRuns]
+         , [AllowAllRowsAPI]
+         , [AllowCreateAPI]
+         , [AllowUpdateAPI]
+         , [AllowDeleteAPI]
+         , [UserViewMaxRows]
+         , [__mj_CreatedAt]
+         , [__mj_UpdatedAt]
+      )
+      VALUES (
+         '9f6a0506-7d62-4461-9d00-e733692a351b',
+         'MJ_BizApps_Accounting: Journal Entry Batches',
+         'Journal Entry Batches',
+         'Aggregation event that ships Pending JEs to the external ERP for the period. Per BA-D16, batching IS the locking event — JEs cannot be modified after they are referenced by a Batched row.',
+         NULL,
+         'JournalEntryBatch',
+         'vwJournalEntryBatches',
+         '${flyway:defaultSchema}',
+         1,
+         1,
+         0
+         , 1
+         , 0
+         , 0
+         , 0
+         , 1
+         , 1
+         , 1
+         , 1000
+         , GETUTCDATE()
+         , GETUTCDATE()
+      );
+
+/* SQL generated to add new entity MJ_BizApps_Accounting: Journal Entry Batches to application ID: 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3' */
+INSERT INTO [${mjSchema}].[ApplicationEntity]
+                                       ([ApplicationID], [EntityID], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                       ('FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3', '9f6a0506-7d62-4461-9d00-e733692a351b', (SELECT COALESCE(MAX([Sequence]),0)+1 FROM [${mjSchema}].[ApplicationEntity] WHERE [ApplicationID] = 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3'), GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Journal Entry Batches for role UI */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('9f6a0506-7d62-4461-9d00-e733692a351b', 'E0AFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 0, 0, 0, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Journal Entry Batches for role Developer */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('9f6a0506-7d62-4461-9d00-e733692a351b', 'DEAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Journal Entry Batches for role Integration */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('9f6a0506-7d62-4461-9d00-e733692a351b', 'DFAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to create new entity MJ_BizApps_Accounting: Journal Entries */
+
+      INSERT INTO [${mjSchema}].[Entity] (
+         [ID],
+         [Name],
+         [DisplayName],
+         [Description],
+         [NameSuffix],
+         [BaseTable],
+         [BaseView],
+         [SchemaName],
+         [IncludeInAPI],
+         [AllowUserSearchAPI],
+         [AllowCaching]
+         , [TrackRecordChanges]
+         , [AuditRecordAccess]
+         , [AuditViewRuns]
+         , [AllowAllRowsAPI]
+         , [AllowCreateAPI]
+         , [AllowUpdateAPI]
+         , [AllowDeleteAPI]
+         , [UserViewMaxRows]
+         , [__mj_CreatedAt]
+         , [__mj_UpdatedAt]
+      )
+      VALUES (
+         '026f7b4b-64f0-4267-b74e-45c1add32732',
+         'MJ_BizApps_Accounting: Journal Entries',
+         'Journal Entries',
+         'Top-level ledger row. Balanced (Sum Debits = Sum Credits) at the lock event. Immutable after Status transitions to Batched/GLPosted. Lifecycle: Pending → Batched → GLPosted (BA-D6). Reversals happen via NEW Pending JEs with ReversesJournalEntryID set, never by modifying historical rows.',
+         NULL,
+         'JournalEntry',
+         'vwJournalEntries',
+         '${flyway:defaultSchema}',
+         1,
+         1,
+         0
+         , 1
+         , 0
+         , 0
+         , 0
+         , 1
+         , 1
+         , 1
+         , 1000
+         , GETUTCDATE()
+         , GETUTCDATE()
+      );
+
+/* SQL generated to add new entity MJ_BizApps_Accounting: Journal Entries to application ID: 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3' */
+INSERT INTO [${mjSchema}].[ApplicationEntity]
+                                       ([ApplicationID], [EntityID], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                       ('FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3', '026f7b4b-64f0-4267-b74e-45c1add32732', (SELECT COALESCE(MAX([Sequence]),0)+1 FROM [${mjSchema}].[ApplicationEntity] WHERE [ApplicationID] = 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3'), GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Journal Entries for role UI */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('026f7b4b-64f0-4267-b74e-45c1add32732', 'E0AFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 0, 0, 0, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Journal Entries for role Developer */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('026f7b4b-64f0-4267-b74e-45c1add32732', 'DEAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Journal Entries for role Integration */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('026f7b4b-64f0-4267-b74e-45c1add32732', 'DFAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to create new entity MJ_BizApps_Accounting: Journal Entry Lines */
+
+      INSERT INTO [${mjSchema}].[Entity] (
+         [ID],
+         [Name],
+         [DisplayName],
+         [Description],
+         [NameSuffix],
+         [BaseTable],
+         [BaseView],
+         [SchemaName],
+         [IncludeInAPI],
+         [AllowUserSearchAPI],
+         [AllowCaching]
+         , [TrackRecordChanges]
+         , [AuditRecordAccess]
+         , [AuditViewRuns]
+         , [AllowAllRowsAPI]
+         , [AllowCreateAPI]
+         , [AllowUpdateAPI]
+         , [AllowDeleteAPI]
+         , [UserViewMaxRows]
+         , [__mj_CreatedAt]
+         , [__mj_UpdatedAt]
+      )
+      VALUES (
+         '53985d64-da98-4ab5-8281-0927ebe3e0f0',
+         'MJ_BizApps_Accounting: Journal Entry Lines',
+         'Journal Entry Lines',
+         'A debit or credit line under a JournalEntry. Exactly one of DebitAmount/CreditAmount is set per row (CK_JEL_OneSide). Multi-currency aware: OriginalCurrencyCode/OriginalDebit/OriginalCredit/ExchangeRateUsed capture the source-transaction currency when different from the Company''s functional currency.',
+         NULL,
+         'JournalEntryLine',
+         'vwJournalEntryLines',
+         '${flyway:defaultSchema}',
+         1,
+         1,
+         0
+         , 1
+         , 0
+         , 0
+         , 0
+         , 1
+         , 1
+         , 1
+         , 1000
+         , GETUTCDATE()
+         , GETUTCDATE()
+      );
+
+/* SQL generated to add new entity MJ_BizApps_Accounting: Journal Entry Lines to application ID: 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3' */
+INSERT INTO [${mjSchema}].[ApplicationEntity]
+                                       ([ApplicationID], [EntityID], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                       ('FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3', '53985d64-da98-4ab5-8281-0927ebe3e0f0', (SELECT COALESCE(MAX([Sequence]),0)+1 FROM [${mjSchema}].[ApplicationEntity] WHERE [ApplicationID] = 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3'), GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Journal Entry Lines for role UI */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('53985d64-da98-4ab5-8281-0927ebe3e0f0', 'E0AFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 0, 0, 0, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Journal Entry Lines for role Developer */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('53985d64-da98-4ab5-8281-0927ebe3e0f0', 'DEAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Journal Entry Lines for role Integration */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('53985d64-da98-4ab5-8281-0927ebe3e0f0', 'DFAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to create new entity MJ_BizApps_Accounting: Journal Entry Line Dimensions */
+
+      INSERT INTO [${mjSchema}].[Entity] (
+         [ID],
+         [Name],
+         [DisplayName],
+         [Description],
+         [NameSuffix],
+         [BaseTable],
+         [BaseView],
+         [SchemaName],
+         [IncludeInAPI],
+         [AllowUserSearchAPI],
+         [AllowCaching]
+         , [TrackRecordChanges]
+         , [AuditRecordAccess]
+         , [AuditViewRuns]
+         , [AllowAllRowsAPI]
+         , [AllowCreateAPI]
+         , [AllowUpdateAPI]
+         , [AllowDeleteAPI]
+         , [UserViewMaxRows]
+         , [__mj_CreatedAt]
+         , [__mj_UpdatedAt]
+      )
+      VALUES (
+         '1583b525-55c0-4845-bd95-244d6ee239f3',
+         'MJ_BizApps_Accounting: Journal Entry Line Dimensions',
+         'Journal Entry Line Dimensions',
+         'Many-to-many between JournalEntryLine and (Dimension, DimensionValue). Optional — lines without any dimension rows are simply un-tagged. Reports filter and group by dimension via this table.',
+         NULL,
+         'JournalEntryLineDimension',
+         'vwJournalEntryLineDimensions',
+         '${flyway:defaultSchema}',
+         1,
+         1,
+         0
+         , 1
+         , 0
+         , 0
+         , 0
+         , 1
+         , 1
+         , 1
+         , 1000
+         , GETUTCDATE()
+         , GETUTCDATE()
+      );
+
+/* SQL generated to add new entity MJ_BizApps_Accounting: Journal Entry Line Dimensions to application ID: 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3' */
+INSERT INTO [${mjSchema}].[ApplicationEntity]
+                                       ([ApplicationID], [EntityID], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                       ('FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3', '1583b525-55c0-4845-bd95-244d6ee239f3', (SELECT COALESCE(MAX([Sequence]),0)+1 FROM [${mjSchema}].[ApplicationEntity] WHERE [ApplicationID] = 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3'), GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Journal Entry Line Dimensions for role UI */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('1583b525-55c0-4845-bd95-244d6ee239f3', 'E0AFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 0, 0, 0, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Journal Entry Line Dimensions for role Developer */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('1583b525-55c0-4845-bd95-244d6ee239f3', 'DEAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Journal Entry Line Dimensions for role Integration */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('1583b525-55c0-4845-bd95-244d6ee239f3', 'DFAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to create new entity MJ_BizApps_Accounting: Tax Liabilities */
+
+      INSERT INTO [${mjSchema}].[Entity] (
+         [ID],
+         [Name],
+         [DisplayName],
+         [Description],
+         [NameSuffix],
+         [BaseTable],
+         [BaseView],
+         [SchemaName],
+         [IncludeInAPI],
+         [AllowUserSearchAPI],
+         [AllowCaching]
+         , [TrackRecordChanges]
+         , [AuditRecordAccess]
+         , [AuditViewRuns]
+         , [AllowAllRowsAPI]
+         , [AllowCreateAPI]
+         , [AllowUpdateAPI]
+         , [AllowDeleteAPI]
+         , [UserViewMaxRows]
+         , [__mj_CreatedAt]
+         , [__mj_UpdatedAt]
+      )
+      VALUES (
+         '34915759-5587-44ef-a914-230170b3d566',
+         'MJ_BizApps_Accounting: Tax Liabilities',
+         'Tax Liabilities',
+         'Open tax liability balance per (Company × Authority × Jurisdiction × Period). Accrued from JE postings; paid down via TaxRemittance records.',
+         NULL,
+         'TaxLiability',
+         'vwTaxLiabilities',
+         '${flyway:defaultSchema}',
+         1,
+         1,
+         0
+         , 1
+         , 0
+         , 0
+         , 0
+         , 1
+         , 1
+         , 1
+         , 1000
+         , GETUTCDATE()
+         , GETUTCDATE()
+      );
+
+/* SQL generated to add new entity MJ_BizApps_Accounting: Tax Liabilities to application ID: 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3' */
+INSERT INTO [${mjSchema}].[ApplicationEntity]
+                                       ([ApplicationID], [EntityID], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                       ('FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3', '34915759-5587-44ef-a914-230170b3d566', (SELECT COALESCE(MAX([Sequence]),0)+1 FROM [${mjSchema}].[ApplicationEntity] WHERE [ApplicationID] = 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3'), GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Tax Liabilities for role UI */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('34915759-5587-44ef-a914-230170b3d566', 'E0AFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 0, 0, 0, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Tax Liabilities for role Developer */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('34915759-5587-44ef-a914-230170b3d566', 'DEAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Tax Liabilities for role Integration */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('34915759-5587-44ef-a914-230170b3d566', 'DFAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to create new entity MJ_BizApps_Accounting: Tax Remittances */
+
+      INSERT INTO [${mjSchema}].[Entity] (
+         [ID],
+         [Name],
+         [DisplayName],
+         [Description],
+         [NameSuffix],
+         [BaseTable],
+         [BaseView],
+         [SchemaName],
+         [IncludeInAPI],
+         [AllowUserSearchAPI],
+         [AllowCaching]
+         , [TrackRecordChanges]
+         , [AuditRecordAccess]
+         , [AuditViewRuns]
+         , [AllowAllRowsAPI]
+         , [AllowCreateAPI]
+         , [AllowUpdateAPI]
+         , [AllowDeleteAPI]
+         , [UserViewMaxRows]
+         , [__mj_CreatedAt]
+         , [__mj_UpdatedAt]
+      )
+      VALUES (
+         '7700116e-9a6a-43aa-9560-6db59d53890a',
+         'MJ_BizApps_Accounting: Tax Remittances',
+         'Tax Remittances',
+         'A payment made against a TaxLiability. Generates a JE of EntryType=TaxRemittance via PostedJournalEntryID.',
+         NULL,
+         'TaxRemittance',
+         'vwTaxRemittances',
+         '${flyway:defaultSchema}',
+         1,
+         1,
+         0
+         , 1
+         , 0
+         , 0
+         , 0
+         , 1
+         , 1
+         , 1
+         , 1000
+         , GETUTCDATE()
+         , GETUTCDATE()
+      );
+
+/* SQL generated to add new entity MJ_BizApps_Accounting: Tax Remittances to application ID: 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3' */
+INSERT INTO [${mjSchema}].[ApplicationEntity]
+                                       ([ApplicationID], [EntityID], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                       ('FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3', '7700116e-9a6a-43aa-9560-6db59d53890a', (SELECT COALESCE(MAX([Sequence]),0)+1 FROM [${mjSchema}].[ApplicationEntity] WHERE [ApplicationID] = 'FC91B3CB-1B04-4AA1-ABE2-753AE4F272E3'), GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Tax Remittances for role UI */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('7700116e-9a6a-43aa-9560-6db59d53890a', 'E0AFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 0, 0, 0, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Tax Remittances for role Developer */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('7700116e-9a6a-43aa-9560-6db59d53890a', 'DEAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL generated to add new permission for entity MJ_BizApps_Accounting: Tax Remittances for role Integration */
+INSERT INTO [${mjSchema}].[EntityPermission]
+                                                   ([EntityID], [RoleID], [CanRead], [CanCreate], [CanUpdate], [CanDelete], [__mj_CreatedAt], [__mj_UpdatedAt]) VALUES
+                                                   ('7700116e-9a6a-43aa-9560-6db59d53890a', 'DFAFCCEC-6A37-EF11-86D4-000D3A4E707E', 1, 1, 1, 1, GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to update existing entities from schema */
+EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='sys,staging,dbo,${mjSchema},${mjSchema}_BizAppsCommon,${mjSchema}_BizAppsTasks,${mjSchema}_BizAppsCommon,${mjSchema}_BizAppsTasks,${mjSchema}';
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.CurrencySpotRate */
+ALTER TABLE [${flyway:defaultSchema}].[CurrencySpotRate] ADD [__mj_CreatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.CurrencySpotRate */
+UPDATE [${flyway:defaultSchema}].[CurrencySpotRate] SET [__mj_CreatedAt] = GETUTCDATE() WHERE [__mj_CreatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.CurrencySpotRate */
+ALTER TABLE [${flyway:defaultSchema}].[CurrencySpotRate] ALTER COLUMN [__mj_CreatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.CurrencySpotRate */
+ALTER TABLE [${flyway:defaultSchema}].[CurrencySpotRate] ADD CONSTRAINT [DF___mj_BizAppsAccounting_CurrencySpotRate___mj_CreatedAt] DEFAULT GETUTCDATE() FOR [__mj_CreatedAt];
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.CurrencySpotRate */
+ALTER TABLE [${flyway:defaultSchema}].[CurrencySpotRate] ADD [__mj_UpdatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.CurrencySpotRate */
+UPDATE [${flyway:defaultSchema}].[CurrencySpotRate] SET [__mj_UpdatedAt] = GETUTCDATE() WHERE [__mj_UpdatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.CurrencySpotRate */
+ALTER TABLE [${flyway:defaultSchema}].[CurrencySpotRate] ALTER COLUMN [__mj_UpdatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.CurrencySpotRate */
+ALTER TABLE [${flyway:defaultSchema}].[CurrencySpotRate] ADD CONSTRAINT [DF___mj_BizAppsAccounting_CurrencySpotRate___mj_UpdatedAt] DEFAULT GETUTCDATE() FOR [__mj_UpdatedAt];
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.GLAccountRole */
+ALTER TABLE [${flyway:defaultSchema}].[GLAccountRole] ADD [__mj_CreatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.GLAccountRole */
+UPDATE [${flyway:defaultSchema}].[GLAccountRole] SET [__mj_CreatedAt] = GETUTCDATE() WHERE [__mj_CreatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.GLAccountRole */
+ALTER TABLE [${flyway:defaultSchema}].[GLAccountRole] ALTER COLUMN [__mj_CreatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.GLAccountRole */
+ALTER TABLE [${flyway:defaultSchema}].[GLAccountRole] ADD CONSTRAINT [DF___mj_BizAppsAccounting_GLAccountRole___mj_CreatedAt] DEFAULT GETUTCDATE() FOR [__mj_CreatedAt];
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.GLAccountRole */
+ALTER TABLE [${flyway:defaultSchema}].[GLAccountRole] ADD [__mj_UpdatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.GLAccountRole */
+UPDATE [${flyway:defaultSchema}].[GLAccountRole] SET [__mj_UpdatedAt] = GETUTCDATE() WHERE [__mj_UpdatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.GLAccountRole */
+ALTER TABLE [${flyway:defaultSchema}].[GLAccountRole] ALTER COLUMN [__mj_UpdatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.GLAccountRole */
+ALTER TABLE [${flyway:defaultSchema}].[GLAccountRole] ADD CONSTRAINT [DF___mj_BizAppsAccounting_GLAccountRole___mj_UpdatedAt] DEFAULT GETUTCDATE() FOR [__mj_UpdatedAt];
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.JournalEntryLine */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntryLine] ADD [__mj_CreatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.JournalEntryLine */
+UPDATE [${flyway:defaultSchema}].[JournalEntryLine] SET [__mj_CreatedAt] = GETUTCDATE() WHERE [__mj_CreatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.JournalEntryLine */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntryLine] ALTER COLUMN [__mj_CreatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.JournalEntryLine */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntryLine] ADD CONSTRAINT [DF___mj_BizAppsAccounting_JournalEntryLine___mj_CreatedAt] DEFAULT GETUTCDATE() FOR [__mj_CreatedAt];
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.JournalEntryLine */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntryLine] ADD [__mj_UpdatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.JournalEntryLine */
+UPDATE [${flyway:defaultSchema}].[JournalEntryLine] SET [__mj_UpdatedAt] = GETUTCDATE() WHERE [__mj_UpdatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.JournalEntryLine */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntryLine] ALTER COLUMN [__mj_UpdatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.JournalEntryLine */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntryLine] ADD CONSTRAINT [DF___mj_BizAppsAccounting_JournalEntryLine___mj_UpdatedAt] DEFAULT GETUTCDATE() FOR [__mj_UpdatedAt];
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.JournalEntrySequence */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntrySequence] ADD [__mj_CreatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.JournalEntrySequence */
+UPDATE [${flyway:defaultSchema}].[JournalEntrySequence] SET [__mj_CreatedAt] = GETUTCDATE() WHERE [__mj_CreatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.JournalEntrySequence */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntrySequence] ALTER COLUMN [__mj_CreatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.JournalEntrySequence */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntrySequence] ADD CONSTRAINT [DF___mj_BizAppsAccounting_JournalEntrySequence___mj_CreatedAt] DEFAULT GETUTCDATE() FOR [__mj_CreatedAt];
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.JournalEntrySequence */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntrySequence] ADD [__mj_UpdatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.JournalEntrySequence */
+UPDATE [${flyway:defaultSchema}].[JournalEntrySequence] SET [__mj_UpdatedAt] = GETUTCDATE() WHERE [__mj_UpdatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.JournalEntrySequence */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntrySequence] ALTER COLUMN [__mj_UpdatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.JournalEntrySequence */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntrySequence] ADD CONSTRAINT [DF___mj_BizAppsAccounting_JournalEntrySequence___mj_UpdatedAt] DEFAULT GETUTCDATE() FOR [__mj_UpdatedAt];
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.TaxLiability */
+ALTER TABLE [${flyway:defaultSchema}].[TaxLiability] ADD [__mj_CreatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.TaxLiability */
+UPDATE [${flyway:defaultSchema}].[TaxLiability] SET [__mj_CreatedAt] = GETUTCDATE() WHERE [__mj_CreatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.TaxLiability */
+ALTER TABLE [${flyway:defaultSchema}].[TaxLiability] ALTER COLUMN [__mj_CreatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.TaxLiability */
+ALTER TABLE [${flyway:defaultSchema}].[TaxLiability] ADD CONSTRAINT [DF___mj_BizAppsAccounting_TaxLiability___mj_CreatedAt] DEFAULT GETUTCDATE() FOR [__mj_CreatedAt];
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.TaxLiability */
+ALTER TABLE [${flyway:defaultSchema}].[TaxLiability] ADD [__mj_UpdatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.TaxLiability */
+UPDATE [${flyway:defaultSchema}].[TaxLiability] SET [__mj_UpdatedAt] = GETUTCDATE() WHERE [__mj_UpdatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.TaxLiability */
+ALTER TABLE [${flyway:defaultSchema}].[TaxLiability] ALTER COLUMN [__mj_UpdatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.TaxLiability */
+ALTER TABLE [${flyway:defaultSchema}].[TaxLiability] ADD CONSTRAINT [DF___mj_BizAppsAccounting_TaxLiability___mj_UpdatedAt] DEFAULT GETUTCDATE() FOR [__mj_UpdatedAt];
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.JournalEntryLineDimension */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntryLineDimension] ADD [__mj_CreatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.JournalEntryLineDimension */
+UPDATE [${flyway:defaultSchema}].[JournalEntryLineDimension] SET [__mj_CreatedAt] = GETUTCDATE() WHERE [__mj_CreatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.JournalEntryLineDimension */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntryLineDimension] ALTER COLUMN [__mj_CreatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.JournalEntryLineDimension */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntryLineDimension] ADD CONSTRAINT [DF___mj_BizAppsAccounting_JournalEntryLineDimension___mj_CreatedAt] DEFAULT GETUTCDATE() FOR [__mj_CreatedAt];
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.JournalEntryLineDimension */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntryLineDimension] ADD [__mj_UpdatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.JournalEntryLineDimension */
+UPDATE [${flyway:defaultSchema}].[JournalEntryLineDimension] SET [__mj_UpdatedAt] = GETUTCDATE() WHERE [__mj_UpdatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.JournalEntryLineDimension */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntryLineDimension] ALTER COLUMN [__mj_UpdatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.JournalEntryLineDimension */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntryLineDimension] ADD CONSTRAINT [DF___mj_BizAppsAccounting_JournalEntryLineDimension___mj_UpdatedAt] DEFAULT GETUTCDATE() FOR [__mj_UpdatedAt];
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.TaxJurisdiction */
+ALTER TABLE [${flyway:defaultSchema}].[TaxJurisdiction] ADD [__mj_CreatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.TaxJurisdiction */
+UPDATE [${flyway:defaultSchema}].[TaxJurisdiction] SET [__mj_CreatedAt] = GETUTCDATE() WHERE [__mj_CreatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.TaxJurisdiction */
+ALTER TABLE [${flyway:defaultSchema}].[TaxJurisdiction] ALTER COLUMN [__mj_CreatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.TaxJurisdiction */
+ALTER TABLE [${flyway:defaultSchema}].[TaxJurisdiction] ADD CONSTRAINT [DF___mj_BizAppsAccounting_TaxJurisdiction___mj_CreatedAt] DEFAULT GETUTCDATE() FOR [__mj_CreatedAt];
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.TaxJurisdiction */
+ALTER TABLE [${flyway:defaultSchema}].[TaxJurisdiction] ADD [__mj_UpdatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.TaxJurisdiction */
+UPDATE [${flyway:defaultSchema}].[TaxJurisdiction] SET [__mj_UpdatedAt] = GETUTCDATE() WHERE [__mj_UpdatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.TaxJurisdiction */
+ALTER TABLE [${flyway:defaultSchema}].[TaxJurisdiction] ALTER COLUMN [__mj_UpdatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.TaxJurisdiction */
+ALTER TABLE [${flyway:defaultSchema}].[TaxJurisdiction] ADD CONSTRAINT [DF___mj_BizAppsAccounting_TaxJurisdiction___mj_UpdatedAt] DEFAULT GETUTCDATE() FOR [__mj_UpdatedAt];
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.JournalEntry */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntry] ADD [__mj_CreatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.JournalEntry */
+UPDATE [${flyway:defaultSchema}].[JournalEntry] SET [__mj_CreatedAt] = GETUTCDATE() WHERE [__mj_CreatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.JournalEntry */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntry] ALTER COLUMN [__mj_CreatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.JournalEntry */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntry] ADD CONSTRAINT [DF___mj_BizAppsAccounting_JournalEntry___mj_CreatedAt] DEFAULT GETUTCDATE() FOR [__mj_CreatedAt];
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.JournalEntry */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntry] ADD [__mj_UpdatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.JournalEntry */
+UPDATE [${flyway:defaultSchema}].[JournalEntry] SET [__mj_UpdatedAt] = GETUTCDATE() WHERE [__mj_UpdatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.JournalEntry */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntry] ALTER COLUMN [__mj_UpdatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.JournalEntry */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntry] ADD CONSTRAINT [DF___mj_BizAppsAccounting_JournalEntry___mj_UpdatedAt] DEFAULT GETUTCDATE() FOR [__mj_UpdatedAt];
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.TaxRate */
+ALTER TABLE [${flyway:defaultSchema}].[TaxRate] ADD [__mj_CreatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.TaxRate */
+UPDATE [${flyway:defaultSchema}].[TaxRate] SET [__mj_CreatedAt] = GETUTCDATE() WHERE [__mj_CreatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.TaxRate */
+ALTER TABLE [${flyway:defaultSchema}].[TaxRate] ALTER COLUMN [__mj_CreatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.TaxRate */
+ALTER TABLE [${flyway:defaultSchema}].[TaxRate] ADD CONSTRAINT [DF___mj_BizAppsAccounting_TaxRate___mj_CreatedAt] DEFAULT GETUTCDATE() FOR [__mj_CreatedAt];
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.TaxRate */
+ALTER TABLE [${flyway:defaultSchema}].[TaxRate] ADD [__mj_UpdatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.TaxRate */
+UPDATE [${flyway:defaultSchema}].[TaxRate] SET [__mj_UpdatedAt] = GETUTCDATE() WHERE [__mj_UpdatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.TaxRate */
+ALTER TABLE [${flyway:defaultSchema}].[TaxRate] ALTER COLUMN [__mj_UpdatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.TaxRate */
+ALTER TABLE [${flyway:defaultSchema}].[TaxRate] ADD CONSTRAINT [DF___mj_BizAppsAccounting_TaxRate___mj_UpdatedAt] DEFAULT GETUTCDATE() FOR [__mj_UpdatedAt];
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.GLAccountLinkDimension */
+ALTER TABLE [${flyway:defaultSchema}].[GLAccountLinkDimension] ADD [__mj_CreatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.GLAccountLinkDimension */
+UPDATE [${flyway:defaultSchema}].[GLAccountLinkDimension] SET [__mj_CreatedAt] = GETUTCDATE() WHERE [__mj_CreatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.GLAccountLinkDimension */
+ALTER TABLE [${flyway:defaultSchema}].[GLAccountLinkDimension] ALTER COLUMN [__mj_CreatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.GLAccountLinkDimension */
+ALTER TABLE [${flyway:defaultSchema}].[GLAccountLinkDimension] ADD CONSTRAINT [DF___mj_BizAppsAccounting_GLAccountLinkDimension___mj_CreatedAt] DEFAULT GETUTCDATE() FOR [__mj_CreatedAt];
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.GLAccountLinkDimension */
+ALTER TABLE [${flyway:defaultSchema}].[GLAccountLinkDimension] ADD [__mj_UpdatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.GLAccountLinkDimension */
+UPDATE [${flyway:defaultSchema}].[GLAccountLinkDimension] SET [__mj_UpdatedAt] = GETUTCDATE() WHERE [__mj_UpdatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.GLAccountLinkDimension */
+ALTER TABLE [${flyway:defaultSchema}].[GLAccountLinkDimension] ALTER COLUMN [__mj_UpdatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.GLAccountLinkDimension */
+ALTER TABLE [${flyway:defaultSchema}].[GLAccountLinkDimension] ADD CONSTRAINT [DF___mj_BizAppsAccounting_GLAccountLinkDimension___mj_UpdatedAt] DEFAULT GETUTCDATE() FOR [__mj_UpdatedAt];
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.TaxRemittance */
+ALTER TABLE [${flyway:defaultSchema}].[TaxRemittance] ADD [__mj_CreatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.TaxRemittance */
+UPDATE [${flyway:defaultSchema}].[TaxRemittance] SET [__mj_CreatedAt] = GETUTCDATE() WHERE [__mj_CreatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.TaxRemittance */
+ALTER TABLE [${flyway:defaultSchema}].[TaxRemittance] ALTER COLUMN [__mj_CreatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.TaxRemittance */
+ALTER TABLE [${flyway:defaultSchema}].[TaxRemittance] ADD CONSTRAINT [DF___mj_BizAppsAccounting_TaxRemittance___mj_CreatedAt] DEFAULT GETUTCDATE() FOR [__mj_CreatedAt];
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.TaxRemittance */
+ALTER TABLE [${flyway:defaultSchema}].[TaxRemittance] ADD [__mj_UpdatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.TaxRemittance */
+UPDATE [${flyway:defaultSchema}].[TaxRemittance] SET [__mj_UpdatedAt] = GETUTCDATE() WHERE [__mj_UpdatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.TaxRemittance */
+ALTER TABLE [${flyway:defaultSchema}].[TaxRemittance] ALTER COLUMN [__mj_UpdatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.TaxRemittance */
+ALTER TABLE [${flyway:defaultSchema}].[TaxRemittance] ADD CONSTRAINT [DF___mj_BizAppsAccounting_TaxRemittance___mj_UpdatedAt] DEFAULT GETUTCDATE() FOR [__mj_UpdatedAt];
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.AccountingCompanyProfile */
+ALTER TABLE [${flyway:defaultSchema}].[AccountingCompanyProfile] ADD [__mj_CreatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.AccountingCompanyProfile */
+UPDATE [${flyway:defaultSchema}].[AccountingCompanyProfile] SET [__mj_CreatedAt] = GETUTCDATE() WHERE [__mj_CreatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.AccountingCompanyProfile */
+ALTER TABLE [${flyway:defaultSchema}].[AccountingCompanyProfile] ALTER COLUMN [__mj_CreatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.AccountingCompanyProfile */
+ALTER TABLE [${flyway:defaultSchema}].[AccountingCompanyProfile] ADD CONSTRAINT [DF___mj_BizAppsAccounting_AccountingCompanyProfile___mj_CreatedAt] DEFAULT GETUTCDATE() FOR [__mj_CreatedAt];
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.AccountingCompanyProfile */
+ALTER TABLE [${flyway:defaultSchema}].[AccountingCompanyProfile] ADD [__mj_UpdatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.AccountingCompanyProfile */
+UPDATE [${flyway:defaultSchema}].[AccountingCompanyProfile] SET [__mj_UpdatedAt] = GETUTCDATE() WHERE [__mj_UpdatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.AccountingCompanyProfile */
+ALTER TABLE [${flyway:defaultSchema}].[AccountingCompanyProfile] ALTER COLUMN [__mj_UpdatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.AccountingCompanyProfile */
+ALTER TABLE [${flyway:defaultSchema}].[AccountingCompanyProfile] ADD CONSTRAINT [DF___mj_BizAppsAccounting_AccountingCompanyProfile___mj_UpdatedAt] DEFAULT GETUTCDATE() FOR [__mj_UpdatedAt];
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.Dimension */
+ALTER TABLE [${flyway:defaultSchema}].[Dimension] ADD [__mj_CreatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.Dimension */
+UPDATE [${flyway:defaultSchema}].[Dimension] SET [__mj_CreatedAt] = GETUTCDATE() WHERE [__mj_CreatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.Dimension */
+ALTER TABLE [${flyway:defaultSchema}].[Dimension] ALTER COLUMN [__mj_CreatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.Dimension */
+ALTER TABLE [${flyway:defaultSchema}].[Dimension] ADD CONSTRAINT [DF___mj_BizAppsAccounting_Dimension___mj_CreatedAt] DEFAULT GETUTCDATE() FOR [__mj_CreatedAt];
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.Dimension */
+ALTER TABLE [${flyway:defaultSchema}].[Dimension] ADD [__mj_UpdatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.Dimension */
+UPDATE [${flyway:defaultSchema}].[Dimension] SET [__mj_UpdatedAt] = GETUTCDATE() WHERE [__mj_UpdatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.Dimension */
+ALTER TABLE [${flyway:defaultSchema}].[Dimension] ALTER COLUMN [__mj_UpdatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.Dimension */
+ALTER TABLE [${flyway:defaultSchema}].[Dimension] ADD CONSTRAINT [DF___mj_BizAppsAccounting_Dimension___mj_UpdatedAt] DEFAULT GETUTCDATE() FOR [__mj_UpdatedAt];
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.GLAccount */
+ALTER TABLE [${flyway:defaultSchema}].[GLAccount] ADD [__mj_CreatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.GLAccount */
+UPDATE [${flyway:defaultSchema}].[GLAccount] SET [__mj_CreatedAt] = GETUTCDATE() WHERE [__mj_CreatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.GLAccount */
+ALTER TABLE [${flyway:defaultSchema}].[GLAccount] ALTER COLUMN [__mj_CreatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.GLAccount */
+ALTER TABLE [${flyway:defaultSchema}].[GLAccount] ADD CONSTRAINT [DF___mj_BizAppsAccounting_GLAccount___mj_CreatedAt] DEFAULT GETUTCDATE() FOR [__mj_CreatedAt];
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.GLAccount */
+ALTER TABLE [${flyway:defaultSchema}].[GLAccount] ADD [__mj_UpdatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.GLAccount */
+UPDATE [${flyway:defaultSchema}].[GLAccount] SET [__mj_UpdatedAt] = GETUTCDATE() WHERE [__mj_UpdatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.GLAccount */
+ALTER TABLE [${flyway:defaultSchema}].[GLAccount] ALTER COLUMN [__mj_UpdatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.GLAccount */
+ALTER TABLE [${flyway:defaultSchema}].[GLAccount] ADD CONSTRAINT [DF___mj_BizAppsAccounting_GLAccount___mj_UpdatedAt] DEFAULT GETUTCDATE() FOR [__mj_UpdatedAt];
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.TaxAuthority */
+ALTER TABLE [${flyway:defaultSchema}].[TaxAuthority] ADD [__mj_CreatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.TaxAuthority */
+UPDATE [${flyway:defaultSchema}].[TaxAuthority] SET [__mj_CreatedAt] = GETUTCDATE() WHERE [__mj_CreatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.TaxAuthority */
+ALTER TABLE [${flyway:defaultSchema}].[TaxAuthority] ALTER COLUMN [__mj_CreatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.TaxAuthority */
+ALTER TABLE [${flyway:defaultSchema}].[TaxAuthority] ADD CONSTRAINT [DF___mj_BizAppsAccounting_TaxAuthority___mj_CreatedAt] DEFAULT GETUTCDATE() FOR [__mj_CreatedAt];
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.TaxAuthority */
+ALTER TABLE [${flyway:defaultSchema}].[TaxAuthority] ADD [__mj_UpdatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.TaxAuthority */
+UPDATE [${flyway:defaultSchema}].[TaxAuthority] SET [__mj_UpdatedAt] = GETUTCDATE() WHERE [__mj_UpdatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.TaxAuthority */
+ALTER TABLE [${flyway:defaultSchema}].[TaxAuthority] ALTER COLUMN [__mj_UpdatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.TaxAuthority */
+ALTER TABLE [${flyway:defaultSchema}].[TaxAuthority] ADD CONSTRAINT [DF___mj_BizAppsAccounting_TaxAuthority___mj_UpdatedAt] DEFAULT GETUTCDATE() FOR [__mj_UpdatedAt];
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.CustomerTaxProfile */
+ALTER TABLE [${flyway:defaultSchema}].[CustomerTaxProfile] ADD [__mj_CreatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.CustomerTaxProfile */
+UPDATE [${flyway:defaultSchema}].[CustomerTaxProfile] SET [__mj_CreatedAt] = GETUTCDATE() WHERE [__mj_CreatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.CustomerTaxProfile */
+ALTER TABLE [${flyway:defaultSchema}].[CustomerTaxProfile] ALTER COLUMN [__mj_CreatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.CustomerTaxProfile */
+ALTER TABLE [${flyway:defaultSchema}].[CustomerTaxProfile] ADD CONSTRAINT [DF___mj_BizAppsAccounting_CustomerTaxProfile___mj_CreatedAt] DEFAULT GETUTCDATE() FOR [__mj_CreatedAt];
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.CustomerTaxProfile */
+ALTER TABLE [${flyway:defaultSchema}].[CustomerTaxProfile] ADD [__mj_UpdatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.CustomerTaxProfile */
+UPDATE [${flyway:defaultSchema}].[CustomerTaxProfile] SET [__mj_UpdatedAt] = GETUTCDATE() WHERE [__mj_UpdatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.CustomerTaxProfile */
+ALTER TABLE [${flyway:defaultSchema}].[CustomerTaxProfile] ALTER COLUMN [__mj_UpdatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.CustomerTaxProfile */
+ALTER TABLE [${flyway:defaultSchema}].[CustomerTaxProfile] ADD CONSTRAINT [DF___mj_BizAppsAccounting_CustomerTaxProfile___mj_UpdatedAt] DEFAULT GETUTCDATE() FOR [__mj_UpdatedAt];
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.DimensionValue */
+ALTER TABLE [${flyway:defaultSchema}].[DimensionValue] ADD [__mj_CreatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.DimensionValue */
+UPDATE [${flyway:defaultSchema}].[DimensionValue] SET [__mj_CreatedAt] = GETUTCDATE() WHERE [__mj_CreatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.DimensionValue */
+ALTER TABLE [${flyway:defaultSchema}].[DimensionValue] ALTER COLUMN [__mj_CreatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.DimensionValue */
+ALTER TABLE [${flyway:defaultSchema}].[DimensionValue] ADD CONSTRAINT [DF___mj_BizAppsAccounting_DimensionValue___mj_CreatedAt] DEFAULT GETUTCDATE() FOR [__mj_CreatedAt];
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.DimensionValue */
+ALTER TABLE [${flyway:defaultSchema}].[DimensionValue] ADD [__mj_UpdatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.DimensionValue */
+UPDATE [${flyway:defaultSchema}].[DimensionValue] SET [__mj_UpdatedAt] = GETUTCDATE() WHERE [__mj_UpdatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.DimensionValue */
+ALTER TABLE [${flyway:defaultSchema}].[DimensionValue] ALTER COLUMN [__mj_UpdatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.DimensionValue */
+ALTER TABLE [${flyway:defaultSchema}].[DimensionValue] ADD CONSTRAINT [DF___mj_BizAppsAccounting_DimensionValue___mj_UpdatedAt] DEFAULT GETUTCDATE() FOR [__mj_UpdatedAt];
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.Currency */
+ALTER TABLE [${flyway:defaultSchema}].[Currency] ADD [__mj_CreatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.Currency */
+UPDATE [${flyway:defaultSchema}].[Currency] SET [__mj_CreatedAt] = GETUTCDATE() WHERE [__mj_CreatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.Currency */
+ALTER TABLE [${flyway:defaultSchema}].[Currency] ALTER COLUMN [__mj_CreatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.Currency */
+ALTER TABLE [${flyway:defaultSchema}].[Currency] ADD CONSTRAINT [DF___mj_BizAppsAccounting_Currency___mj_CreatedAt] DEFAULT GETUTCDATE() FOR [__mj_CreatedAt];
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.Currency */
+ALTER TABLE [${flyway:defaultSchema}].[Currency] ADD [__mj_UpdatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.Currency */
+UPDATE [${flyway:defaultSchema}].[Currency] SET [__mj_UpdatedAt] = GETUTCDATE() WHERE [__mj_UpdatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.Currency */
+ALTER TABLE [${flyway:defaultSchema}].[Currency] ALTER COLUMN [__mj_UpdatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.Currency */
+ALTER TABLE [${flyway:defaultSchema}].[Currency] ADD CONSTRAINT [DF___mj_BizAppsAccounting_Currency___mj_UpdatedAt] DEFAULT GETUTCDATE() FOR [__mj_UpdatedAt];
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.GLAccountLink */
+ALTER TABLE [${flyway:defaultSchema}].[GLAccountLink] ADD [__mj_CreatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.GLAccountLink */
+UPDATE [${flyway:defaultSchema}].[GLAccountLink] SET [__mj_CreatedAt] = GETUTCDATE() WHERE [__mj_CreatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.GLAccountLink */
+ALTER TABLE [${flyway:defaultSchema}].[GLAccountLink] ALTER COLUMN [__mj_CreatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.GLAccountLink */
+ALTER TABLE [${flyway:defaultSchema}].[GLAccountLink] ADD CONSTRAINT [DF___mj_BizAppsAccounting_GLAccountLink___mj_CreatedAt] DEFAULT GETUTCDATE() FOR [__mj_CreatedAt];
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.GLAccountLink */
+ALTER TABLE [${flyway:defaultSchema}].[GLAccountLink] ADD [__mj_UpdatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.GLAccountLink */
+UPDATE [${flyway:defaultSchema}].[GLAccountLink] SET [__mj_UpdatedAt] = GETUTCDATE() WHERE [__mj_UpdatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.GLAccountLink */
+ALTER TABLE [${flyway:defaultSchema}].[GLAccountLink] ALTER COLUMN [__mj_UpdatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.GLAccountLink */
+ALTER TABLE [${flyway:defaultSchema}].[GLAccountLink] ADD CONSTRAINT [DF___mj_BizAppsAccounting_GLAccountLink___mj_UpdatedAt] DEFAULT GETUTCDATE() FOR [__mj_UpdatedAt];
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.JournalEntryBatch */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntryBatch] ADD [__mj_CreatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.JournalEntryBatch */
+UPDATE [${flyway:defaultSchema}].[JournalEntryBatch] SET [__mj_CreatedAt] = GETUTCDATE() WHERE [__mj_CreatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.JournalEntryBatch */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntryBatch] ALTER COLUMN [__mj_CreatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.JournalEntryBatch */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntryBatch] ADD CONSTRAINT [DF___mj_BizAppsAccounting_JournalEntryBatch___mj_CreatedAt] DEFAULT GETUTCDATE() FOR [__mj_CreatedAt];
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.JournalEntryBatch */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntryBatch] ADD [__mj_UpdatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.JournalEntryBatch */
+UPDATE [${flyway:defaultSchema}].[JournalEntryBatch] SET [__mj_UpdatedAt] = GETUTCDATE() WHERE [__mj_UpdatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.JournalEntryBatch */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntryBatch] ALTER COLUMN [__mj_UpdatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.JournalEntryBatch */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntryBatch] ADD CONSTRAINT [DF___mj_BizAppsAccounting_JournalEntryBatch___mj_UpdatedAt] DEFAULT GETUTCDATE() FOR [__mj_UpdatedAt];
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.JournalEntryBatchSequence */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntryBatchSequence] ADD [__mj_CreatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.JournalEntryBatchSequence */
+UPDATE [${flyway:defaultSchema}].[JournalEntryBatchSequence] SET [__mj_CreatedAt] = GETUTCDATE() WHERE [__mj_CreatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.JournalEntryBatchSequence */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntryBatchSequence] ALTER COLUMN [__mj_CreatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_CreatedAt to entity ${flyway:defaultSchema}.JournalEntryBatchSequence */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntryBatchSequence] ADD CONSTRAINT [DF___mj_BizAppsAccounting_JournalEntryBatchSequence___mj_CreatedAt] DEFAULT GETUTCDATE() FOR [__mj_CreatedAt];
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.JournalEntryBatchSequence */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntryBatchSequence] ADD [__mj_UpdatedAt] DATETIMEOFFSET NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.JournalEntryBatchSequence */
+UPDATE [${flyway:defaultSchema}].[JournalEntryBatchSequence] SET [__mj_UpdatedAt] = GETUTCDATE() WHERE [__mj_UpdatedAt] IS NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.JournalEntryBatchSequence */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntryBatchSequence] ALTER COLUMN [__mj_UpdatedAt] DATETIMEOFFSET NOT NULL;
+GO
+
+/* SQL text to add special date field __mj_UpdatedAt to entity ${flyway:defaultSchema}.JournalEntryBatchSequence */
+ALTER TABLE [${flyway:defaultSchema}].[JournalEntryBatchSequence] ADD CONSTRAINT [DF___mj_BizAppsAccounting_JournalEntryBatchSequence___mj_UpdatedAt] DEFAULT GETUTCDATE() FOR [__mj_UpdatedAt];
+GO
+
+/* SQL text to insert 220 new entity field(s) */
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'af5556ec-ff21-4fbd-b348-baff4e915677' OR (EntityID = '808CAA0F-C086-467C-8D42-03B203CEBDC3' AND Name = 'ID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'af5556ec-ff21-4fbd-b348-baff4e915677',
+            '808CAA0F-C086-467C-8D42-03B203CEBDC3', -- Entity: MJ_BizApps_Accounting: Currency Spot Rates
+            100001,
+            'ID',
+            'ID',
+            NULL,
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            'newsequentialid()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'a3d196b5-5454-4a5d-b673-89883b742ac5' OR (EntityID = '808CAA0F-C086-467C-8D42-03B203CEBDC3' AND Name = 'FromCurrencyCode')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'a3d196b5-5454-4a5d-b673-89883b742ac5',
+            '808CAA0F-C086-467C-8D42-03B203CEBDC3', -- Entity: MJ_BizApps_Accounting: Currency Spot Rates
+            100002,
+            'FromCurrencyCode',
+            'From Currency Code',
+            NULL,
+            'char',
+            3,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            'EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615',
+            'Code',
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '9b7e7916-3fbf-470f-9763-02f2d85a17fb' OR (EntityID = '808CAA0F-C086-467C-8D42-03B203CEBDC3' AND Name = 'ToCurrencyCode')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '9b7e7916-3fbf-470f-9763-02f2d85a17fb',
+            '808CAA0F-C086-467C-8D42-03B203CEBDC3', -- Entity: MJ_BizApps_Accounting: Currency Spot Rates
+            100003,
+            'ToCurrencyCode',
+            'To Currency Code',
+            NULL,
+            'char',
+            3,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            'EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615',
+            'Code',
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'fe89eda9-ef7c-4d60-b221-32f3e478dece' OR (EntityID = '808CAA0F-C086-467C-8D42-03B203CEBDC3' AND Name = 'RateDate')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'fe89eda9-ef7c-4d60-b221-32f3e478dece',
+            '808CAA0F-C086-467C-8D42-03B203CEBDC3', -- Entity: MJ_BizApps_Accounting: Currency Spot Rates
+            100004,
+            'RateDate',
+            'Rate Date',
+            NULL,
+            'date',
+            3,
+            10,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'c715675c-230a-4ce8-b025-d1453af66f21' OR (EntityID = '808CAA0F-C086-467C-8D42-03B203CEBDC3' AND Name = 'Rate')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'c715675c-230a-4ce8-b025-d1453af66f21',
+            '808CAA0F-C086-467C-8D42-03B203CEBDC3', -- Entity: MJ_BizApps_Accounting: Currency Spot Rates
+            100005,
+            'Rate',
+            'Rate',
+            NULL,
+            'decimal',
+            9,
+            18,
+            8,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '00de7c3b-78ca-4954-996b-4f67fe42e655' OR (EntityID = '808CAA0F-C086-467C-8D42-03B203CEBDC3' AND Name = 'Source')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '00de7c3b-78ca-4954-996b-4f67fe42e655',
+            '808CAA0F-C086-467C-8D42-03B203CEBDC3', -- Entity: MJ_BizApps_Accounting: Currency Spot Rates
+            100006,
+            'Source',
+            'Source',
+            NULL,
+            'nvarchar',
+            100,
+            0,
+            0,
+            0,
+            'Manual',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '8ae66722-d640-4ecd-8079-bd41cd4394a6' OR (EntityID = '808CAA0F-C086-467C-8D42-03B203CEBDC3' AND Name = 'IsActive')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '8ae66722-d640-4ecd-8079-bd41cd4394a6',
+            '808CAA0F-C086-467C-8D42-03B203CEBDC3', -- Entity: MJ_BizApps_Accounting: Currency Spot Rates
+            100007,
+            'IsActive',
+            'Is Active',
+            NULL,
+            'bit',
+            1,
+            1,
+            0,
+            0,
+            '(1)',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '78017a69-05fa-499b-b1ba-99d5ce700fbb' OR (EntityID = '808CAA0F-C086-467C-8D42-03B203CEBDC3' AND Name = '__mj_CreatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '78017a69-05fa-499b-b1ba-99d5ce700fbb',
+            '808CAA0F-C086-467C-8D42-03B203CEBDC3', -- Entity: MJ_BizApps_Accounting: Currency Spot Rates
+            100008,
+            '__mj_CreatedAt',
+            'Created At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'a28f73f5-d2fe-41cd-9b90-55e302a1b9bf' OR (EntityID = '808CAA0F-C086-467C-8D42-03B203CEBDC3' AND Name = '__mj_UpdatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'a28f73f5-d2fe-41cd-9b90-55e302a1b9bf',
+            '808CAA0F-C086-467C-8D42-03B203CEBDC3', -- Entity: MJ_BizApps_Accounting: Currency Spot Rates
+            100009,
+            '__mj_UpdatedAt',
+            'Updated At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'aba01617-3f23-4429-9964-8b022543fcb0' OR (EntityID = 'A2177315-8A92-48B6-A4F8-0865E674C230' AND Name = 'ID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'aba01617-3f23-4429-9964-8b022543fcb0',
+            'A2177315-8A92-48B6-A4F8-0865E674C230', -- Entity: MJ_BizApps_Accounting: GL Account Roles
+            100001,
+            'ID',
+            'ID',
+            NULL,
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            'newsequentialid()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'fb11b095-e742-4175-85ad-408a517135d9' OR (EntityID = 'A2177315-8A92-48B6-A4F8-0865E674C230' AND Name = 'Name')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'fb11b095-e742-4175-85ad-408a517135d9',
+            'A2177315-8A92-48B6-A4F8-0865E674C230', -- Entity: MJ_BizApps_Accounting: GL Account Roles
+            100002,
+            'Name',
+            'Name',
+            'Display name of the role; unique.',
+            'nvarchar',
+            200,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            1,
+            1,
+            0,
+            1,
+            0,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '078d80da-fdb4-4a46-b0f4-d6b5723b2a3f' OR (EntityID = 'A2177315-8A92-48B6-A4F8-0865E674C230' AND Name = 'Description')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '078d80da-fdb4-4a46-b0f4-d6b5723b2a3f',
+            'A2177315-8A92-48B6-A4F8-0865E674C230', -- Entity: MJ_BizApps_Accounting: GL Account Roles
+            100003,
+            'Description',
+            'Description',
+            'What entries this role is used for and any guidance for pickers.',
+            'nvarchar',
+            -1,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '766490f5-1981-47b4-9f74-faa3deee8ec2' OR (EntityID = 'A2177315-8A92-48B6-A4F8-0865E674C230' AND Name = 'Status')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '766490f5-1981-47b4-9f74-faa3deee8ec2',
+            'A2177315-8A92-48B6-A4F8-0865E674C230', -- Entity: MJ_BizApps_Accounting: GL Account Roles
+            100004,
+            'Status',
+            'Status',
+            'Active roles are offered in pickers; Inactive roles are retained for history but not selectable.',
+            'nvarchar',
+            20,
+            0,
+            0,
+            0,
+            'Active',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'b6d23948-0d26-4172-81af-8c5892c346f4' OR (EntityID = 'A2177315-8A92-48B6-A4F8-0865E674C230' AND Name = 'Sequence')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'b6d23948-0d26-4172-81af-8c5892c346f4',
+            'A2177315-8A92-48B6-A4F8-0865E674C230', -- Entity: MJ_BizApps_Accounting: GL Account Roles
+            100005,
+            'Sequence',
+            'Sequence',
+            'Intentional display order in pickers (ascending).',
+            'int',
+            4,
+            10,
+            0,
+            0,
+            '(0)',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'ed26ff86-cb85-4112-bd77-6f12b8975c34' OR (EntityID = 'A2177315-8A92-48B6-A4F8-0865E674C230' AND Name = '__mj_CreatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'ed26ff86-cb85-4112-bd77-6f12b8975c34',
+            'A2177315-8A92-48B6-A4F8-0865E674C230', -- Entity: MJ_BizApps_Accounting: GL Account Roles
+            100006,
+            '__mj_CreatedAt',
+            'Created At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '86c31629-97a5-4830-a12a-4a7ca525addc' OR (EntityID = 'A2177315-8A92-48B6-A4F8-0865E674C230' AND Name = '__mj_UpdatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '86c31629-97a5-4830-a12a-4a7ca525addc',
+            'A2177315-8A92-48B6-A4F8-0865E674C230', -- Entity: MJ_BizApps_Accounting: GL Account Roles
+            100007,
+            '__mj_UpdatedAt',
+            'Updated At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '4fd4d42d-858d-4d61-bc05-0dc5b6cdb2c4' OR (EntityID = '53985D64-DA98-4AB5-8281-0927EBE3E0F0' AND Name = 'ID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '4fd4d42d-858d-4d61-bc05-0dc5b6cdb2c4',
+            '53985D64-DA98-4AB5-8281-0927EBE3E0F0', -- Entity: MJ_BizApps_Accounting: Journal Entry Lines
+            100001,
+            'ID',
+            'ID',
+            'Unique identifier.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            'newsequentialid()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '6a947a85-20d7-4924-b4cb-1d72637354f7' OR (EntityID = '53985D64-DA98-4AB5-8281-0927EBE3E0F0' AND Name = 'JournalEntryID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '6a947a85-20d7-4924-b4cb-1d72637354f7',
+            '53985D64-DA98-4AB5-8281-0927EBE3E0F0', -- Entity: MJ_BizApps_Accounting: Journal Entry Lines
+            100002,
+            'JournalEntryID',
+            'Journal Entry ID',
+            'Parent JournalEntry.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            '026F7B4B-64F0-4267-B74E-45C1ADD32732',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'f7792c3e-5a6e-4c31-a5b0-8584d97ee53e' OR (EntityID = '53985D64-DA98-4AB5-8281-0927EBE3E0F0' AND Name = 'LineNumber')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'f7792c3e-5a6e-4c31-a5b0-8584d97ee53e',
+            '53985D64-DA98-4AB5-8281-0927EBE3E0F0', -- Entity: MJ_BizApps_Accounting: Journal Entry Lines
+            100003,
+            'LineNumber',
+            'Line Number',
+            '1-based ordering of lines within the parent JE.',
+            'int',
+            4,
+            10,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'ee0cc03e-d5c8-4543-9c7f-30d0070e3e88' OR (EntityID = '53985D64-DA98-4AB5-8281-0927EBE3E0F0' AND Name = 'GLAccountID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'ee0cc03e-d5c8-4543-9c7f-30d0070e3e88',
+            '53985D64-DA98-4AB5-8281-0927EBE3E0F0', -- Entity: MJ_BizApps_Accounting: Journal Entry Lines
+            100004,
+            'GLAccountID',
+            'GL Account ID',
+            'GLAccount this line posts to.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '6cf4158d-0c57-4623-b6be-4def2b5de468' OR (EntityID = '53985D64-DA98-4AB5-8281-0927EBE3E0F0' AND Name = 'DebitAmount')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '6cf4158d-0c57-4623-b6be-4def2b5de468',
+            '53985D64-DA98-4AB5-8281-0927EBE3E0F0', -- Entity: MJ_BizApps_Accounting: Journal Entry Lines
+            100005,
+            'DebitAmount',
+            'Debit Amount',
+            'Debit amount in the Company''s FUNCTIONAL currency. Mutually exclusive with CreditAmount (CK_JEL_OneSide).',
+            'decimal',
+            9,
+            18,
+            2,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '9c425e70-4196-4902-b1ee-dbb2ddd186f7' OR (EntityID = '53985D64-DA98-4AB5-8281-0927EBE3E0F0' AND Name = 'CreditAmount')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '9c425e70-4196-4902-b1ee-dbb2ddd186f7',
+            '53985D64-DA98-4AB5-8281-0927EBE3E0F0', -- Entity: MJ_BizApps_Accounting: Journal Entry Lines
+            100006,
+            'CreditAmount',
+            'Credit Amount',
+            'Credit amount in the Company''s FUNCTIONAL currency. Mutually exclusive with DebitAmount.',
+            'decimal',
+            9,
+            18,
+            2,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '23f873fc-4f69-4bf9-b794-80a530bfff45' OR (EntityID = '53985D64-DA98-4AB5-8281-0927EBE3E0F0' AND Name = 'OriginalCurrencyCode')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '23f873fc-4f69-4bf9-b794-80a530bfff45',
+            '53985D64-DA98-4AB5-8281-0927EBE3E0F0', -- Entity: MJ_BizApps_Accounting: Journal Entry Lines
+            100007,
+            'OriginalCurrencyCode',
+            'Original Currency Code',
+            'ISO 4217 code of the SOURCE-transaction currency (the customer-facing one). NULL when the source is already the functional currency.',
+            'char',
+            3,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            'EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615',
+            'Code',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '6df0f3c7-e536-4700-bd0b-3f749d906c50' OR (EntityID = '53985D64-DA98-4AB5-8281-0927EBE3E0F0' AND Name = 'OriginalDebitAmount')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '6df0f3c7-e536-4700-bd0b-3f749d906c50',
+            '53985D64-DA98-4AB5-8281-0927EBE3E0F0', -- Entity: MJ_BizApps_Accounting: Journal Entry Lines
+            100008,
+            'OriginalDebitAmount',
+            'Original Debit Amount',
+            'Debit amount in the original currency (paired with OriginalCurrencyCode + ExchangeRateUsed).',
+            'decimal',
+            9,
+            18,
+            2,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '36073314-6169-4c08-98e4-6b065145bef0' OR (EntityID = '53985D64-DA98-4AB5-8281-0927EBE3E0F0' AND Name = 'OriginalCreditAmount')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '36073314-6169-4c08-98e4-6b065145bef0',
+            '53985D64-DA98-4AB5-8281-0927EBE3E0F0', -- Entity: MJ_BizApps_Accounting: Journal Entry Lines
+            100009,
+            'OriginalCreditAmount',
+            'Original Credit Amount',
+            'Credit amount in the original currency.',
+            'decimal',
+            9,
+            18,
+            2,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '948de790-1e3f-4e62-a72a-3c4966e250e7' OR (EntityID = '53985D64-DA98-4AB5-8281-0927EBE3E0F0' AND Name = 'ExchangeRateUsed')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '948de790-1e3f-4e62-a72a-3c4966e250e7',
+            '53985D64-DA98-4AB5-8281-0927EBE3E0F0', -- Entity: MJ_BizApps_Accounting: Journal Entry Lines
+            100010,
+            'ExchangeRateUsed',
+            'Exchange Rate Used',
+            'Exchange rate (functional per 1 original) used at booking time. Required when an original amount is present.',
+            'decimal',
+            9,
+            18,
+            8,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'bf95f106-2519-4d99-8a6b-8903fa87bd85' OR (EntityID = '53985D64-DA98-4AB5-8281-0927EBE3E0F0' AND Name = 'Description')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'bf95f106-2519-4d99-8a6b-8903fa87bd85',
+            '53985D64-DA98-4AB5-8281-0927EBE3E0F0', -- Entity: MJ_BizApps_Accounting: Journal Entry Lines
+            100011,
+            'Description',
+            'Description',
+            'Free-form description of the line (memo).',
+            'nvarchar',
+            -1,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'ced41cac-dc68-4687-81a3-615a7b39e9e0' OR (EntityID = '53985D64-DA98-4AB5-8281-0927EBE3E0F0' AND Name = 'CounterpartyOrganizationID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'ced41cac-dc68-4687-81a3-615a7b39e9e0',
+            '53985D64-DA98-4AB5-8281-0927EBE3E0F0', -- Entity: MJ_BizApps_Accounting: Journal Entry Lines
+            100012,
+            'CounterpartyOrganizationID',
+            'Counterparty Organization ID',
+            'For AR-side lines, the Customer Organization. FK to ${mjSchema}_BizAppsCommon.Organization.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            'C70448F9-9792-41D7-A82C-784B66429D54',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '79b25046-1009-4be7-8fbd-e20e2e5facb0' OR (EntityID = '53985D64-DA98-4AB5-8281-0927EBE3E0F0' AND Name = '__mj_CreatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '79b25046-1009-4be7-8fbd-e20e2e5facb0',
+            '53985D64-DA98-4AB5-8281-0927EBE3E0F0', -- Entity: MJ_BizApps_Accounting: Journal Entry Lines
+            100013,
+            '__mj_CreatedAt',
+            'Created At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '3693813c-6cdb-4249-a4a5-eefb8d432838' OR (EntityID = '53985D64-DA98-4AB5-8281-0927EBE3E0F0' AND Name = '__mj_UpdatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '3693813c-6cdb-4249-a4a5-eefb8d432838',
+            '53985D64-DA98-4AB5-8281-0927EBE3E0F0', -- Entity: MJ_BizApps_Accounting: Journal Entry Lines
+            100014,
+            '__mj_UpdatedAt',
+            'Updated At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'b9fccbe7-e1b5-4bea-9c05-e6e08a2e4013' OR (EntityID = 'E7116785-3D54-415C-981B-0E2D2D3BA793' AND Name = 'CompanyID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'b9fccbe7-e1b5-4bea-9c05-e6e08a2e4013',
+            'E7116785-3D54-415C-981B-0E2D2D3BA793', -- Entity: MJ_BizApps_Accounting: Journal Entry Sequences
+            100001,
+            'CompanyID',
+            'Company ID',
+            NULL,
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            'D4238F34-2837-EF11-86D4-6045BDEE16E6',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            1,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'cfe02d47-69c1-4680-ad70-1361f3cb42fa' OR (EntityID = 'E7116785-3D54-415C-981B-0E2D2D3BA793' AND Name = 'FiscalYear')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'cfe02d47-69c1-4680-ad70-1361f3cb42fa',
+            'E7116785-3D54-415C-981B-0E2D2D3BA793', -- Entity: MJ_BizApps_Accounting: Journal Entry Sequences
+            100002,
+            'FiscalYear',
+            'Fiscal Year',
+            NULL,
+            'int',
+            4,
+            10,
+            0,
+            0,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'cae2c026-b7fa-4382-9909-cedfd7b09ada' OR (EntityID = 'E7116785-3D54-415C-981B-0E2D2D3BA793' AND Name = 'NextSequenceNumber')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'cae2c026-b7fa-4382-9909-cedfd7b09ada',
+            'E7116785-3D54-415C-981B-0E2D2D3BA793', -- Entity: MJ_BizApps_Accounting: Journal Entry Sequences
+            100003,
+            'NextSequenceNumber',
+            'Next Sequence Number',
+            NULL,
+            'int',
+            4,
+            10,
+            0,
+            0,
+            '(1)',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '0776ea93-59c4-497a-a35a-5e2d7106d8a0' OR (EntityID = 'E7116785-3D54-415C-981B-0E2D2D3BA793' AND Name = '__mj_CreatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '0776ea93-59c4-497a-a35a-5e2d7106d8a0',
+            'E7116785-3D54-415C-981B-0E2D2D3BA793', -- Entity: MJ_BizApps_Accounting: Journal Entry Sequences
+            100004,
+            '__mj_CreatedAt',
+            'Created At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '3ca22998-a85b-4335-a20d-b4b2114d1477' OR (EntityID = 'E7116785-3D54-415C-981B-0E2D2D3BA793' AND Name = '__mj_UpdatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '3ca22998-a85b-4335-a20d-b4b2114d1477',
+            'E7116785-3D54-415C-981B-0E2D2D3BA793', -- Entity: MJ_BizApps_Accounting: Journal Entry Sequences
+            100005,
+            '__mj_UpdatedAt',
+            'Updated At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '41bd600d-47e1-46dd-a648-4ef166765287' OR (EntityID = '34915759-5587-44EF-A914-230170B3D566' AND Name = 'ID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '41bd600d-47e1-46dd-a648-4ef166765287',
+            '34915759-5587-44EF-A914-230170B3D566', -- Entity: MJ_BizApps_Accounting: Tax Liabilities
+            100001,
+            'ID',
+            'ID',
+            'Unique identifier.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            'newsequentialid()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '7ec39bf4-8c03-42bc-864f-f16224c6bb41' OR (EntityID = '34915759-5587-44EF-A914-230170B3D566' AND Name = 'CompanyID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '7ec39bf4-8c03-42bc-864f-f16224c6bb41',
+            '34915759-5587-44EF-A914-230170B3D566', -- Entity: MJ_BizApps_Accounting: Tax Liabilities
+            100002,
+            'CompanyID',
+            'Company ID',
+            'Company this liability belongs to.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            'D4238F34-2837-EF11-86D4-6045BDEE16E6',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'b1eb2869-f5e1-4c7e-a6ec-7b5b972f1b09' OR (EntityID = '34915759-5587-44EF-A914-230170B3D566' AND Name = 'TaxAuthorityID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'b1eb2869-f5e1-4c7e-a6ec-7b5b972f1b09',
+            '34915759-5587-44EF-A914-230170B3D566', -- Entity: MJ_BizApps_Accounting: Tax Liabilities
+            100003,
+            'TaxAuthorityID',
+            'Tax Authority ID',
+            'TaxAuthority owed.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            '85303537-672D-4895-B773-A8B923C0F7F9',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '73e28af8-2366-4380-89e1-59141880d9c0' OR (EntityID = '34915759-5587-44EF-A914-230170B3D566' AND Name = 'TaxJurisdictionID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '73e28af8-2366-4380-89e1-59141880d9c0',
+            '34915759-5587-44EF-A914-230170B3D566', -- Entity: MJ_BizApps_Accounting: Tax Liabilities
+            100004,
+            'TaxJurisdictionID',
+            'Tax Jurisdiction ID',
+            'TaxJurisdiction the liability is scoped to.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            '967E7628-CE96-4421-A836-26BBD0BCF564',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '388a9ed6-2fee-4658-90dd-dca39234c144' OR (EntityID = '34915759-5587-44EF-A914-230170B3D566' AND Name = 'AccruedAmount')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '388a9ed6-2fee-4658-90dd-dca39234c144',
+            '34915759-5587-44EF-A914-230170B3D566', -- Entity: MJ_BizApps_Accounting: Tax Liabilities
+            100005,
+            'AccruedAmount',
+            'Accrued Amount',
+            'Total tax accrued during the period (in functional currency).',
+            'decimal',
+            9,
+            18,
+            2,
+            0,
+            '(0)',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '80e92dc5-15a7-46f0-84e5-3a94b8501230' OR (EntityID = '34915759-5587-44EF-A914-230170B3D566' AND Name = 'RemittedAmount')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '80e92dc5-15a7-46f0-84e5-3a94b8501230',
+            '34915759-5587-44EF-A914-230170B3D566', -- Entity: MJ_BizApps_Accounting: Tax Liabilities
+            100006,
+            'RemittedAmount',
+            'Remitted Amount',
+            'Total amount remitted against this liability so far.',
+            'decimal',
+            9,
+            18,
+            2,
+            0,
+            '(0)',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '61a99cbe-1eaa-458e-913d-75e4c4e44c9c' OR (EntityID = '34915759-5587-44EF-A914-230170B3D566' AND Name = 'Status')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '61a99cbe-1eaa-458e-913d-75e4c4e44c9c',
+            '34915759-5587-44EF-A914-230170B3D566', -- Entity: MJ_BizApps_Accounting: Tax Liabilities
+            100007,
+            'Status',
+            'Status',
+            'Lifecycle: Open | Filed | Paid | PartiallyPaid.',
+            'nvarchar',
+            40,
+            0,
+            0,
+            0,
+            'Open',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '756b4028-e10c-4ff8-9472-876e5d5bcecb' OR (EntityID = '34915759-5587-44EF-A914-230170B3D566' AND Name = 'DueDate')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '756b4028-e10c-4ff8-9472-876e5d5bcecb',
+            '34915759-5587-44EF-A914-230170B3D566', -- Entity: MJ_BizApps_Accounting: Tax Liabilities
+            100008,
+            'DueDate',
+            'Due Date',
+            'Statutory due date for filing/remittance.',
+            'date',
+            3,
+            10,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '1d15aedd-ab35-42b3-95a7-af80398b0156' OR (EntityID = '34915759-5587-44EF-A914-230170B3D566' AND Name = 'FilingFrequency')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '1d15aedd-ab35-42b3-95a7-af80398b0156',
+            '34915759-5587-44EF-A914-230170B3D566', -- Entity: MJ_BizApps_Accounting: Tax Liabilities
+            100009,
+            'FilingFrequency',
+            'Filing Frequency',
+            'Filing cadence: Monthly | Quarterly | SemiAnnual | Annual | OnDemand.',
+            'nvarchar',
+            40,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '05f4bc46-e165-471c-b0e5-85f931e02156' OR (EntityID = '34915759-5587-44EF-A914-230170B3D566' AND Name = '__mj_CreatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '05f4bc46-e165-471c-b0e5-85f931e02156',
+            '34915759-5587-44EF-A914-230170B3D566', -- Entity: MJ_BizApps_Accounting: Tax Liabilities
+            100010,
+            '__mj_CreatedAt',
+            'Created At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'cbe0e412-fdc3-4eb2-b488-16d7d88c47b1' OR (EntityID = '34915759-5587-44EF-A914-230170B3D566' AND Name = '__mj_UpdatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'cbe0e412-fdc3-4eb2-b488-16d7d88c47b1',
+            '34915759-5587-44EF-A914-230170B3D566', -- Entity: MJ_BizApps_Accounting: Tax Liabilities
+            100011,
+            '__mj_UpdatedAt',
+            'Updated At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'a70d0c6e-b3d7-4f76-b236-6e2a2d038556' OR (EntityID = '1583B525-55C0-4845-BD95-244D6EE239F3' AND Name = 'ID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'a70d0c6e-b3d7-4f76-b236-6e2a2d038556',
+            '1583B525-55C0-4845-BD95-244D6EE239F3', -- Entity: MJ_BizApps_Accounting: Journal Entry Line Dimensions
+            100001,
+            'ID',
+            'ID',
+            'Unique identifier.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            'newsequentialid()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '5445d278-b19b-4941-8970-35e0d29af8de' OR (EntityID = '1583B525-55C0-4845-BD95-244D6EE239F3' AND Name = 'JournalEntryLineID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '5445d278-b19b-4941-8970-35e0d29af8de',
+            '1583B525-55C0-4845-BD95-244D6EE239F3', -- Entity: MJ_BizApps_Accounting: Journal Entry Line Dimensions
+            100002,
+            'JournalEntryLineID',
+            'Journal Entry Line ID',
+            'JE line being tagged.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            '53985D64-DA98-4AB5-8281-0927EBE3E0F0',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '2fabd266-168c-49ca-90b2-1b258aade7f9' OR (EntityID = '1583B525-55C0-4845-BD95-244D6EE239F3' AND Name = 'DimensionID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '2fabd266-168c-49ca-90b2-1b258aade7f9',
+            '1583B525-55C0-4845-BD95-244D6EE239F3', -- Entity: MJ_BizApps_Accounting: Journal Entry Line Dimensions
+            100003,
+            'DimensionID',
+            'Dimension ID',
+            'Dimension being applied. UNIQUE per (Line, Dimension) so a line cannot have two values for the same dimension.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            '5B232F88-718A-46D1-8356-A16B172056DD',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '88d76153-eae6-4004-bd8c-aa25c0abac1d' OR (EntityID = '1583B525-55C0-4845-BD95-244D6EE239F3' AND Name = 'DimensionValueID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '88d76153-eae6-4004-bd8c-aa25c0abac1d',
+            '1583B525-55C0-4845-BD95-244D6EE239F3', -- Entity: MJ_BizApps_Accounting: Journal Entry Line Dimensions
+            100004,
+            'DimensionValueID',
+            'Dimension Value ID',
+            'Value chosen for the dimension on this line.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            'A9AD407B-6624-45E5-BFDD-D6368D85F740',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'b83ee924-8341-4dcd-8b50-bcebd150b8f8' OR (EntityID = '1583B525-55C0-4845-BD95-244D6EE239F3' AND Name = '__mj_CreatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'b83ee924-8341-4dcd-8b50-bcebd150b8f8',
+            '1583B525-55C0-4845-BD95-244D6EE239F3', -- Entity: MJ_BizApps_Accounting: Journal Entry Line Dimensions
+            100005,
+            '__mj_CreatedAt',
+            'Created At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'f178a3f5-e86a-4381-ae6c-367a9295d121' OR (EntityID = '1583B525-55C0-4845-BD95-244D6EE239F3' AND Name = '__mj_UpdatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'f178a3f5-e86a-4381-ae6c-367a9295d121',
+            '1583B525-55C0-4845-BD95-244D6EE239F3', -- Entity: MJ_BizApps_Accounting: Journal Entry Line Dimensions
+            100006,
+            '__mj_UpdatedAt',
+            'Updated At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'e4a02159-4422-48ce-8bc2-4bf42d6914b2' OR (EntityID = '967E7628-CE96-4421-A836-26BBD0BCF564' AND Name = 'ID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'e4a02159-4422-48ce-8bc2-4bf42d6914b2',
+            '967E7628-CE96-4421-A836-26BBD0BCF564', -- Entity: MJ_BizApps_Accounting: Tax Jurisdictions
+            100001,
+            'ID',
+            'ID',
+            'Unique identifier.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            'newsequentialid()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '6c00cc59-8abf-4973-9f58-a41f8bd81c1b' OR (EntityID = '967E7628-CE96-4421-A836-26BBD0BCF564' AND Name = 'TaxAuthorityID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '6c00cc59-8abf-4973-9f58-a41f8bd81c1b',
+            '967E7628-CE96-4421-A836-26BBD0BCF564', -- Entity: MJ_BizApps_Accounting: Tax Jurisdictions
+            100002,
+            'TaxAuthorityID',
+            'Tax Authority ID',
+            'TaxAuthority this jurisdiction belongs to.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            '85303537-672D-4895-B773-A8B923C0F7F9',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'f83eefd5-bc1b-4b5c-9168-8510e13a5585' OR (EntityID = '967E7628-CE96-4421-A836-26BBD0BCF564' AND Name = 'Code')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'f83eefd5-bc1b-4b5c-9168-8510e13a5585',
+            '967E7628-CE96-4421-A836-26BBD0BCF564', -- Entity: MJ_BizApps_Accounting: Tax Jurisdictions
+            100003,
+            'Code',
+            'Code',
+            'Globally unique jurisdiction code.',
+            'nvarchar',
+            160,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '03793fa4-a5a8-45f9-8596-6f8520cb4610' OR (EntityID = '967E7628-CE96-4421-A836-26BBD0BCF564' AND Name = 'Name')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '03793fa4-a5a8-45f9-8596-6f8520cb4610',
+            '967E7628-CE96-4421-A836-26BBD0BCF564', -- Entity: MJ_BizApps_Accounting: Tax Jurisdictions
+            100004,
+            'Name',
+            'Name',
+            'Display name (e.g. ''California State'', ''Los Angeles County'').',
+            'nvarchar',
+            400,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'a31627b7-f3e0-4d79-b72d-5674d41817c9' OR (EntityID = '967E7628-CE96-4421-A836-26BBD0BCF564' AND Name = 'CountryCode')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'a31627b7-f3e0-4d79-b72d-5674d41817c9',
+            '967E7628-CE96-4421-A836-26BBD0BCF564', -- Entity: MJ_BizApps_Accounting: Tax Jurisdictions
+            100005,
+            'CountryCode',
+            'Country Code',
+            'ISO 3166-1 alpha-2 country code.',
+            'char',
+            2,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '435db43a-5d26-444d-8618-77576ce1f30c' OR (EntityID = '967E7628-CE96-4421-A836-26BBD0BCF564' AND Name = 'RegionCode')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '435db43a-5d26-444d-8618-77576ce1f30c',
+            '967E7628-CE96-4421-A836-26BBD0BCF564', -- Entity: MJ_BizApps_Accounting: Tax Jurisdictions
+            100006,
+            'RegionCode',
+            'Region Code',
+            'State/province sub-national region, free-form (e.g. ''CA'', ''NSW'', ''Bavaria'').',
+            'nvarchar',
+            100,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'b57da91d-6935-4906-b267-d81799372042' OR (EntityID = '967E7628-CE96-4421-A836-26BBD0BCF564' AND Name = 'PostalCode')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'b57da91d-6935-4906-b267-d81799372042',
+            '967E7628-CE96-4421-A836-26BBD0BCF564', -- Entity: MJ_BizApps_Accounting: Tax Jurisdictions
+            100007,
+            'PostalCode',
+            'Postal Code',
+            'Specific postal code scoping (if exact match required).',
+            'nvarchar',
+            40,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '687df40a-facf-42e4-a59f-127f51b345a9' OR (EntityID = '967E7628-CE96-4421-A836-26BBD0BCF564' AND Name = 'PostalCodeStart')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '687df40a-facf-42e4-a59f-127f51b345a9',
+            '967E7628-CE96-4421-A836-26BBD0BCF564', -- Entity: MJ_BizApps_Accounting: Tax Jurisdictions
+            100008,
+            'PostalCodeStart',
+            'Postal Code Start',
+            'Start of postal-code range when the jurisdiction covers a contiguous range.',
+            'nvarchar',
+            40,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '27b6b9cd-ff4e-4588-81d5-0c7591bb5cb9' OR (EntityID = '967E7628-CE96-4421-A836-26BBD0BCF564' AND Name = 'PostalCodeEnd')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '27b6b9cd-ff4e-4588-81d5-0c7591bb5cb9',
+            '967E7628-CE96-4421-A836-26BBD0BCF564', -- Entity: MJ_BizApps_Accounting: Tax Jurisdictions
+            100009,
+            'PostalCodeEnd',
+            'Postal Code End',
+            'End of postal-code range.',
+            'nvarchar',
+            40,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '01bd6e0c-1357-4ae3-9468-b9ad78b6fa3e' OR (EntityID = '967E7628-CE96-4421-A836-26BBD0BCF564' AND Name = 'CityName')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '01bd6e0c-1357-4ae3-9468-b9ad78b6fa3e',
+            '967E7628-CE96-4421-A836-26BBD0BCF564', -- Entity: MJ_BizApps_Accounting: Tax Jurisdictions
+            100010,
+            'CityName',
+            'City Name',
+            'City name scoping (if the jurisdiction is city-specific).',
+            'nvarchar',
+            400,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'b507363b-fdbe-4223-a3bd-4e1b1d32b650' OR (EntityID = '967E7628-CE96-4421-A836-26BBD0BCF564' AND Name = 'ParentTaxJurisdictionID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'b507363b-fdbe-4223-a3bd-4e1b1d32b650',
+            '967E7628-CE96-4421-A836-26BBD0BCF564', -- Entity: MJ_BizApps_Accounting: Tax Jurisdictions
+            100011,
+            'ParentTaxJurisdictionID',
+            'Parent Tax Jurisdiction ID',
+            'Parent jurisdiction for nested scopes (e.g. county inside state).',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            '967E7628-CE96-4421-A836-26BBD0BCF564',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'c62dae1b-1673-4f6b-8ce2-720a04543a6e' OR (EntityID = '967E7628-CE96-4421-A836-26BBD0BCF564' AND Name = 'IsActive')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'c62dae1b-1673-4f6b-8ce2-720a04543a6e',
+            '967E7628-CE96-4421-A836-26BBD0BCF564', -- Entity: MJ_BizApps_Accounting: Tax Jurisdictions
+            100012,
+            'IsActive',
+            'Is Active',
+            'Whether this jurisdiction is currently active.',
+            'bit',
+            1,
+            1,
+            0,
+            0,
+            '(1)',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '22aced5f-3cf0-46bf-b72e-e69c2d51aad3' OR (EntityID = '967E7628-CE96-4421-A836-26BBD0BCF564' AND Name = '__mj_CreatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '22aced5f-3cf0-46bf-b72e-e69c2d51aad3',
+            '967E7628-CE96-4421-A836-26BBD0BCF564', -- Entity: MJ_BizApps_Accounting: Tax Jurisdictions
+            100013,
+            '__mj_CreatedAt',
+            'Created At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '9a150ac1-1173-47b2-b826-65799217e449' OR (EntityID = '967E7628-CE96-4421-A836-26BBD0BCF564' AND Name = '__mj_UpdatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '9a150ac1-1173-47b2-b826-65799217e449',
+            '967E7628-CE96-4421-A836-26BBD0BCF564', -- Entity: MJ_BizApps_Accounting: Tax Jurisdictions
+            100014,
+            '__mj_UpdatedAt',
+            'Updated At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'bf8245d4-e05a-40ba-abf3-6f4936ba57a2' OR (EntityID = '026F7B4B-64F0-4267-B74E-45C1ADD32732' AND Name = 'ID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'bf8245d4-e05a-40ba-abf3-6f4936ba57a2',
+            '026F7B4B-64F0-4267-B74E-45C1ADD32732', -- Entity: MJ_BizApps_Accounting: Journal Entries
+            100001,
+            'ID',
+            'ID',
+            'Unique identifier (UUID per BA-D3).',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            'newsequentialid()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '98cfb6ea-12bc-4eff-827b-45f814eec147' OR (EntityID = '026F7B4B-64F0-4267-B74E-45C1ADD32732' AND Name = 'EntryNumber')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '98cfb6ea-12bc-4eff-827b-45f814eec147',
+            '026F7B4B-64F0-4267-B74E-45C1ADD32732', -- Entity: MJ_BizApps_Accounting: Journal Entries
+            100002,
+            'EntryNumber',
+            'Entry Number',
+            'Gap-free entry number ''JE-{CompanyCode}-{FY}-{seq:000000}'' assigned by spAssignNextJournalEntryNumber (BA-D15).',
+            'nvarchar',
+            80,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'a9e60207-6897-4ed2-a32c-6740c95d232a' OR (EntityID = '026F7B4B-64F0-4267-B74E-45C1ADD32732' AND Name = 'CompanyID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'a9e60207-6897-4ed2-a32c-6740c95d232a',
+            '026F7B4B-64F0-4267-B74E-45C1ADD32732', -- Entity: MJ_BizApps_Accounting: Journal Entries
+            100003,
+            'CompanyID',
+            'Company ID',
+            'The single company this journal entry belongs to (plan D3). Every line''s GLAccount must belong to this company (trigger-enforced).',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            'D4238F34-2837-EF11-86D4-6045BDEE16E6',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'fcb6b5bf-f11c-44c2-9c69-d9ca336f16e1' OR (EntityID = '026F7B4B-64F0-4267-B74E-45C1ADD32732' AND Name = 'EffectiveDate')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'fcb6b5bf-f11c-44c2-9c69-d9ca336f16e1',
+            '026F7B4B-64F0-4267-B74E-45C1ADD32732', -- Entity: MJ_BizApps_Accounting: Journal Entries
+            100004,
+            'EffectiveDate',
+            'Effective Date',
+            'Accounting date for the entry (the ERP assigns its own period at posting).',
+            'date',
+            3,
+            10,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '8b38423a-c7d8-412d-9084-0e42e46aa505' OR (EntityID = '026F7B4B-64F0-4267-B74E-45C1ADD32732' AND Name = 'EntryType')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '8b38423a-c7d8-412d-9084-0e42e46aa505',
+            '026F7B4B-64F0-4267-B74E-45C1ADD32732', -- Entity: MJ_BizApps_Accounting: Journal Entries
+            100005,
+            'EntryType',
+            'Entry Type',
+            'OrderBooking | PaymentReceipt | RevenueRecognition | CommissionAccrual | PartnerRevShare | IntercompanyFlow | WaterfallDistribution | Refund | Writeoff | Reversal | Manual | TaxRemittance | PeriodEndAccrual | FXRevaluation | OpeningBalance | Adjustment.',
+            'nvarchar',
+            80,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '3a66bfb1-4ae8-4272-badc-15a58695878e' OR (EntityID = '026F7B4B-64F0-4267-B74E-45C1ADD32732' AND Name = 'Status')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '3a66bfb1-4ae8-4272-badc-15a58695878e',
+            '026F7B4B-64F0-4267-B74E-45C1ADD32732', -- Entity: MJ_BizApps_Accounting: Journal Entries
+            100006,
+            'Status',
+            'Status',
+            'Lifecycle state: Pending | Batched | GLPosted (BA-D6). Locked after Batched; only GLPosted transition and GL-roundtrip fields may change.',
+            'nvarchar',
+            40,
+            0,
+            0,
+            0,
+            'Pending',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '877e9457-f888-4ef0-90e6-058c8b1a0527' OR (EntityID = '026F7B4B-64F0-4267-B74E-45C1ADD32732' AND Name = 'Description')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '877e9457-f888-4ef0-90e6-058c8b1a0527',
+            '026F7B4B-64F0-4267-B74E-45C1ADD32732', -- Entity: MJ_BizApps_Accounting: Journal Entries
+            100007,
+            'Description',
+            'Description',
+            'Free-form human description of the entry.',
+            'nvarchar',
+            -1,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'd125c043-d840-4ae0-b7e9-d7908e9535db' OR (EntityID = '026F7B4B-64F0-4267-B74E-45C1ADD32732' AND Name = 'LinkedEntityID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'd125c043-d840-4ae0-b7e9-d7908e9535db',
+            '026F7B4B-64F0-4267-B74E-45C1ADD32732', -- Entity: MJ_BizApps_Accounting: Journal Entries
+            100008,
+            'LinkedEntityID',
+            'Linked Entity ID',
+            'Polymorphic origin part 1 (plan D25): the MJ Entity of the single causal source record for this JE (OrderLine for booking/rev-rec entries, Payment for receipts/refunds, TaxRemittance for remittances, ...). FK to ${mjSchema}.Entity. NULL (with LinkedRecordID) = manual JE.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            'E0238F34-2837-EF11-86D4-6045BDEE16E6',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'ccfd4954-ea95-467a-8d9f-37df255a2219' OR (EntityID = '026F7B4B-64F0-4267-B74E-45C1ADD32732' AND Name = 'LinkedRecordID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'ccfd4954-ea95-467a-8d9f-37df255a2219',
+            '026F7B4B-64F0-4267-B74E-45C1ADD32732', -- Entity: MJ_BizApps_Accounting: Journal Entries
+            100009,
+            'LinkedRecordID',
+            'Linked Record ID',
+            'Polymorphic origin part 2: the source record''s primary key (NVARCHAR(400) supports stringified composite keys). Soft by nature — the record lives in a downstream app''s schema. Set and NULL together with LinkedEntityID (CK_JournalEntry_LinkedPair).',
+            'nvarchar',
+            800,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '415384b8-b385-43be-91d0-f38d1bf51465' OR (EntityID = '026F7B4B-64F0-4267-B74E-45C1ADD32732' AND Name = 'ReversesJournalEntryID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '415384b8-b385-43be-91d0-f38d1bf51465',
+            '026F7B4B-64F0-4267-B74E-45C1ADD32732', -- Entity: MJ_BizApps_Accounting: Journal Entries
+            100010,
+            'ReversesJournalEntryID',
+            'Reverses Journal Entry ID',
+            'When set, this JE is a reversal of the referenced original JE. EntryType MUST be ''Reversal'' (trg_JE_ReversalConsistency).',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            '026F7B4B-64F0-4267-B74E-45C1ADD32732',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '9268e7ec-4109-4b71-a206-4def95a9c900' OR (EntityID = '026F7B4B-64F0-4267-B74E-45C1ADD32732' AND Name = 'ReversedByJournalEntryID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '9268e7ec-4109-4b71-a206-4def95a9c900',
+            '026F7B4B-64F0-4267-B74E-45C1ADD32732', -- Entity: MJ_BizApps_Accounting: Journal Entries
+            100011,
+            'ReversedByJournalEntryID',
+            'Reversed By Journal Entry ID',
+            'Back-pointer set on the original JE when a reversal is emitted against it.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            '026F7B4B-64F0-4267-B74E-45C1ADD32732',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'b594bdb4-7a48-4c4f-be6b-e691caf10d20' OR (EntityID = '026F7B4B-64F0-4267-B74E-45C1ADD32732' AND Name = 'BatchID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'b594bdb4-7a48-4c4f-be6b-e691caf10d20',
+            '026F7B4B-64F0-4267-B74E-45C1ADD32732', -- Entity: MJ_BizApps_Accounting: Journal Entries
+            100012,
+            'BatchID',
+            'Batch ID',
+            'Batch that locked this JE (set when Status transitions to Batched).',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            '9F6A0506-7D62-4461-9D00-E733692A351B',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'd24a93af-c2cc-495b-9161-2ba8f6122a22' OR (EntityID = '026F7B4B-64F0-4267-B74E-45C1ADD32732' AND Name = 'GLPostedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'd24a93af-c2cc-495b-9161-2ba8f6122a22',
+            '026F7B4B-64F0-4267-B74E-45C1ADD32732', -- Entity: MJ_BizApps_Accounting: Journal Entries
+            100013,
+            'GLPostedAt',
+            'GL Posted At',
+            'When the ERP acknowledged the consolidated batch (Status transitions to GLPosted).',
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '3f4be349-7f05-423a-960a-fb4202424717' OR (EntityID = '026F7B4B-64F0-4267-B74E-45C1ADD32732' AND Name = 'GLReferenceID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '3f4be349-7f05-423a-960a-fb4202424717',
+            '026F7B4B-64F0-4267-B74E-45C1ADD32732', -- Entity: MJ_BizApps_Accounting: Journal Entries
+            100014,
+            'GLReferenceID',
+            'GL Reference ID',
+            'ERP''s reference back to us for this JE (within the consolidated batch posting).',
+            'nvarchar',
+            200,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '46005831-3d4b-4412-aa2e-40bd72715778' OR (EntityID = '026F7B4B-64F0-4267-B74E-45C1ADD32732' AND Name = 'FileID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '46005831-3d4b-4412-aa2e-40bd72715778',
+            '026F7B4B-64F0-4267-B74E-45C1ADD32732', -- Entity: MJ_BizApps_Accounting: Journal Entries
+            100015,
+            'FileID',
+            'File ID',
+            'Optional attached source document (vendor bill PDF, signed contract, supporting workpaper). FK to ${mjSchema}.File.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            '29248F34-2837-EF11-86D4-6045BDEE16E6',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '6f1e2559-ad16-4110-b339-80b0990e67ba' OR (EntityID = '026F7B4B-64F0-4267-B74E-45C1ADD32732' AND Name = '__mj_CreatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '6f1e2559-ad16-4110-b339-80b0990e67ba',
+            '026F7B4B-64F0-4267-B74E-45C1ADD32732', -- Entity: MJ_BizApps_Accounting: Journal Entries
+            100016,
+            '__mj_CreatedAt',
+            'Created At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'c82fea9b-5510-46a1-a174-ada15c26990e' OR (EntityID = '026F7B4B-64F0-4267-B74E-45C1ADD32732' AND Name = '__mj_UpdatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'c82fea9b-5510-46a1-a174-ada15c26990e',
+            '026F7B4B-64F0-4267-B74E-45C1ADD32732', -- Entity: MJ_BizApps_Accounting: Journal Entries
+            100017,
+            '__mj_UpdatedAt',
+            'Updated At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '445a90a3-a80c-4774-bde4-8173fe1f3511' OR (EntityID = 'B1A8AF72-DED6-482A-9669-46A9FC30B574' AND Name = 'ID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '445a90a3-a80c-4774-bde4-8173fe1f3511',
+            'B1A8AF72-DED6-482A-9669-46A9FC30B574', -- Entity: MJ_BizApps_Accounting: Tax Rates
+            100001,
+            'ID',
+            'ID',
+            'Unique identifier.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            'newsequentialid()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '63137703-e9d4-4c48-910e-b2adc75bd086' OR (EntityID = 'B1A8AF72-DED6-482A-9669-46A9FC30B574' AND Name = 'TaxJurisdictionID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '63137703-e9d4-4c48-910e-b2adc75bd086',
+            'B1A8AF72-DED6-482A-9669-46A9FC30B574', -- Entity: MJ_BizApps_Accounting: Tax Rates
+            100002,
+            'TaxJurisdictionID',
+            'Tax Jurisdiction ID',
+            'Jurisdiction this rate applies to.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            '967E7628-CE96-4421-A836-26BBD0BCF564',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '3582176a-a2fc-4415-8d5e-29d7a265a5e3' OR (EntityID = 'B1A8AF72-DED6-482A-9669-46A9FC30B574' AND Name = 'TaxCategory')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '3582176a-a2fc-4415-8d5e-29d7a265a5e3',
+            'B1A8AF72-DED6-482A-9669-46A9FC30B574', -- Entity: MJ_BizApps_Accounting: Tax Rates
+            100003,
+            'TaxCategory',
+            'Tax Category',
+            'Tax category: Standard | Reduced | Zero | Exempt | Custom.',
+            'nvarchar',
+            100,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '22f6dec2-3e4e-475e-aa26-b93cf4950bff' OR (EntityID = 'B1A8AF72-DED6-482A-9669-46A9FC30B574' AND Name = 'Rate')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '22f6dec2-3e4e-475e-aa26-b93cf4950bff',
+            'B1A8AF72-DED6-482A-9669-46A9FC30B574', -- Entity: MJ_BizApps_Accounting: Tax Rates
+            100004,
+            'Rate',
+            'Rate',
+            'Rate as a decimal fraction. 0.0825 = 8.25%.',
+            'decimal',
+            5,
+            7,
+            4,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '2cf53e59-bd8c-4add-aef4-481f59379c88' OR (EntityID = 'B1A8AF72-DED6-482A-9669-46A9FC30B574' AND Name = 'EffectiveFrom')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '2cf53e59-bd8c-4add-aef4-481f59379c88',
+            'B1A8AF72-DED6-482A-9669-46A9FC30B574', -- Entity: MJ_BizApps_Accounting: Tax Rates
+            100005,
+            'EffectiveFrom',
+            'Effective From',
+            'Earliest date this rate is effective.',
+            'date',
+            3,
+            10,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'c940c6f8-747e-4668-8228-e3dcbb78b644' OR (EntityID = 'B1A8AF72-DED6-482A-9669-46A9FC30B574' AND Name = 'EffectiveTo')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'c940c6f8-747e-4668-8228-e3dcbb78b644',
+            'B1A8AF72-DED6-482A-9669-46A9FC30B574', -- Entity: MJ_BizApps_Accounting: Tax Rates
+            100006,
+            'EffectiveTo',
+            'Effective To',
+            'Last date this rate is effective (NULL = open-ended).',
+            'date',
+            3,
+            10,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '9d1617b4-80eb-4a68-be8b-a6f67eb7e1ea' OR (EntityID = 'B1A8AF72-DED6-482A-9669-46A9FC30B574' AND Name = 'Source')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '9d1617b4-80eb-4a68-be8b-a6f67eb7e1ea',
+            'B1A8AF72-DED6-482A-9669-46A9FC30B574', -- Entity: MJ_BizApps_Accounting: Tax Rates
+            100007,
+            'Source',
+            'Source',
+            'Source of the rate: Avalara | TaxJar | Manual.',
+            'nvarchar',
+            100,
+            0,
+            0,
+            0,
+            'Manual',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '5a1599c9-c5bb-45cc-bcf4-22b79aafefb2' OR (EntityID = 'B1A8AF72-DED6-482A-9669-46A9FC30B574' AND Name = '__mj_CreatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '5a1599c9-c5bb-45cc-bcf4-22b79aafefb2',
+            'B1A8AF72-DED6-482A-9669-46A9FC30B574', -- Entity: MJ_BizApps_Accounting: Tax Rates
+            100008,
+            '__mj_CreatedAt',
+            'Created At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'a52dea61-3ec8-4184-9ac0-0f12d4679394' OR (EntityID = 'B1A8AF72-DED6-482A-9669-46A9FC30B574' AND Name = '__mj_UpdatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'a52dea61-3ec8-4184-9ac0-0f12d4679394',
+            'B1A8AF72-DED6-482A-9669-46A9FC30B574', -- Entity: MJ_BizApps_Accounting: Tax Rates
+            100009,
+            '__mj_UpdatedAt',
+            'Updated At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'f7d5d977-381e-424f-a460-38af83b0ddf8' OR (EntityID = '5BE1D6E3-2CB3-4C6E-9FA2-592F7B1C65DE' AND Name = 'ID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'f7d5d977-381e-424f-a460-38af83b0ddf8',
+            '5BE1D6E3-2CB3-4C6E-9FA2-592F7B1C65DE', -- Entity: MJ_BizApps_Accounting: GL Account Link Dimensions
+            100001,
+            'ID',
+            'ID',
+            NULL,
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            'newsequentialid()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'b4d80113-df82-4701-86a8-4f587bff5c7f' OR (EntityID = '5BE1D6E3-2CB3-4C6E-9FA2-592F7B1C65DE' AND Name = 'GLAccountLinkID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'b4d80113-df82-4701-86a8-4f587bff5c7f',
+            '5BE1D6E3-2CB3-4C6E-9FA2-592F7B1C65DE', -- Entity: MJ_BizApps_Accounting: GL Account Link Dimensions
+            100002,
+            'GLAccountLinkID',
+            'GL Account Link ID',
+            'The link this dimension requirement belongs to.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'ab4d1912-cd5b-422e-80f5-926eec1d8db3' OR (EntityID = '5BE1D6E3-2CB3-4C6E-9FA2-592F7B1C65DE' AND Name = 'DimensionID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'ab4d1912-cd5b-422e-80f5-926eec1d8db3',
+            '5BE1D6E3-2CB3-4C6E-9FA2-592F7B1C65DE', -- Entity: MJ_BizApps_Accounting: GL Account Link Dimensions
+            100003,
+            'DimensionID',
+            'Dimension ID',
+            'The Dimension that applies (validate-only vocabulary — never invented here).',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            '5B232F88-718A-46D1-8356-A16B172056DD',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '0e33db81-633a-41ba-9dea-421ec9ae0a57' OR (EntityID = '5BE1D6E3-2CB3-4C6E-9FA2-592F7B1C65DE' AND Name = 'Sequence')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '0e33db81-633a-41ba-9dea-421ec9ae0a57',
+            '5BE1D6E3-2CB3-4C6E-9FA2-592F7B1C65DE', -- Entity: MJ_BizApps_Accounting: GL Account Link Dimensions
+            100004,
+            'Sequence',
+            'Sequence',
+            'Ordering of the dimensions for this link (ascending).',
+            'int',
+            4,
+            10,
+            0,
+            0,
+            '(0)',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '1680a340-c3e1-4ae9-a5b4-1fb2a28b8580' OR (EntityID = '5BE1D6E3-2CB3-4C6E-9FA2-592F7B1C65DE' AND Name = '__mj_CreatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '1680a340-c3e1-4ae9-a5b4-1fb2a28b8580',
+            '5BE1D6E3-2CB3-4C6E-9FA2-592F7B1C65DE', -- Entity: MJ_BizApps_Accounting: GL Account Link Dimensions
+            100005,
+            '__mj_CreatedAt',
+            'Created At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '54e74483-e802-4128-af86-76d5ba3a1c9a' OR (EntityID = '5BE1D6E3-2CB3-4C6E-9FA2-592F7B1C65DE' AND Name = '__mj_UpdatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '54e74483-e802-4128-af86-76d5ba3a1c9a',
+            '5BE1D6E3-2CB3-4C6E-9FA2-592F7B1C65DE', -- Entity: MJ_BizApps_Accounting: GL Account Link Dimensions
+            100006,
+            '__mj_UpdatedAt',
+            'Updated At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'e676dbbd-7051-4901-8de4-401eb7dd340f' OR (EntityID = '7700116E-9A6A-43AA-9560-6DB59D53890A' AND Name = 'ID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'e676dbbd-7051-4901-8de4-401eb7dd340f',
+            '7700116E-9A6A-43AA-9560-6DB59D53890A', -- Entity: MJ_BizApps_Accounting: Tax Remittances
+            100001,
+            'ID',
+            'ID',
+            'Unique identifier.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            'newsequentialid()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'e1caa222-c4ae-4201-a6d6-3f92a1f776f1' OR (EntityID = '7700116E-9A6A-43AA-9560-6DB59D53890A' AND Name = 'TaxLiabilityID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'e1caa222-c4ae-4201-a6d6-3f92a1f776f1',
+            '7700116E-9A6A-43AA-9560-6DB59D53890A', -- Entity: MJ_BizApps_Accounting: Tax Remittances
+            100002,
+            'TaxLiabilityID',
+            'Tax Liability ID',
+            'Liability this payment is against.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            '34915759-5587-44EF-A914-230170B3D566',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'd799b83a-a397-46cc-a4c4-8378b00c54ac' OR (EntityID = '7700116E-9A6A-43AA-9560-6DB59D53890A' AND Name = 'RemittedAmount')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'd799b83a-a397-46cc-a4c4-8378b00c54ac',
+            '7700116E-9A6A-43AA-9560-6DB59D53890A', -- Entity: MJ_BizApps_Accounting: Tax Remittances
+            100003,
+            'RemittedAmount',
+            'Remitted Amount',
+            'Amount remitted (functional currency).',
+            'decimal',
+            9,
+            18,
+            2,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '0e68c6b2-cc8e-4841-b9d1-1eaa0fc488ac' OR (EntityID = '7700116E-9A6A-43AA-9560-6DB59D53890A' AND Name = 'RemittedDate')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '0e68c6b2-cc8e-4841-b9d1-1eaa0fc488ac',
+            '7700116E-9A6A-43AA-9560-6DB59D53890A', -- Entity: MJ_BizApps_Accounting: Tax Remittances
+            100004,
+            'RemittedDate',
+            'Remitted Date',
+            'Date the remittance was paid.',
+            'date',
+            3,
+            10,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'd01ed26a-b368-43ef-8715-59fede20300e' OR (EntityID = '7700116E-9A6A-43AA-9560-6DB59D53890A' AND Name = 'PaymentReference')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'd01ed26a-b368-43ef-8715-59fede20300e',
+            '7700116E-9A6A-43AA-9560-6DB59D53890A', -- Entity: MJ_BizApps_Accounting: Tax Remittances
+            100005,
+            'PaymentReference',
+            'Payment Reference',
+            'External payment reference (wire ID, check number, confirmation code).',
+            'nvarchar',
+            200,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'e4594885-b05b-4e57-a761-229f53683623' OR (EntityID = '7700116E-9A6A-43AA-9560-6DB59D53890A' AND Name = 'PostedJournalEntryID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'e4594885-b05b-4e57-a761-229f53683623',
+            '7700116E-9A6A-43AA-9560-6DB59D53890A', -- Entity: MJ_BizApps_Accounting: Tax Remittances
+            100006,
+            'PostedJournalEntryID',
+            'Posted Journal Entry ID',
+            'JE that records this remittance.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            '026F7B4B-64F0-4267-B74E-45C1ADD32732',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '14fd21b2-b5d7-4dc6-ad3d-3852b1cc376a' OR (EntityID = '7700116E-9A6A-43AA-9560-6DB59D53890A' AND Name = '__mj_CreatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '14fd21b2-b5d7-4dc6-ad3d-3852b1cc376a',
+            '7700116E-9A6A-43AA-9560-6DB59D53890A', -- Entity: MJ_BizApps_Accounting: Tax Remittances
+            100007,
+            '__mj_CreatedAt',
+            'Created At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '89e0c895-f7d5-40ae-8238-7cd74dc28201' OR (EntityID = '7700116E-9A6A-43AA-9560-6DB59D53890A' AND Name = '__mj_UpdatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '89e0c895-f7d5-40ae-8238-7cd74dc28201',
+            '7700116E-9A6A-43AA-9560-6DB59D53890A', -- Entity: MJ_BizApps_Accounting: Tax Remittances
+            100008,
+            '__mj_UpdatedAt',
+            'Updated At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '7d0c9894-cc76-4750-a480-41ef110d3917' OR (EntityID = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60' AND Name = 'ID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '7d0c9894-cc76-4750-a480-41ef110d3917',
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+            100001,
+            'ID',
+            'ID',
+            'Primary key AND foreign key to ${mjSchema}.Company.ID. Same UUID as the parent Company row — this is the IsA pattern (BA-D9).',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            'D4238F34-2837-EF11-86D4-6045BDEE16E6',
+            'ID',
+            0,
+            1,
+            1,
+            0,
+            1,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'c5e08e77-b550-458a-8983-b3bc18b22201' OR (EntityID = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60' AND Name = 'EntityType')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'c5e08e77-b550-458a-8983-b3bc18b22201',
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+            100002,
+            'EntityType',
+            'Entity Type',
+            'What kind of entity this is in the accounting structure: LegalEntity | Subsidiary | Division | Department | Branch | Partner | JointVenture | CostCenter | Other.',
+            'nvarchar',
+            60,
+            0,
+            0,
+            0,
+            'Subsidiary',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'ba2969e9-96ca-4a1c-8cff-be5e644fc8d6' OR (EntityID = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60' AND Name = 'LegalStructureType')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'ba2969e9-96ca-4a1c-8cff-be5e644fc8d6',
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+            100003,
+            'LegalStructureType',
+            'Legal Structure Type',
+            'Legal structure: LLC | C-Corp | S-Corp | Partnership | SoleProprietorship | NonProfit-501c3 | NonProfit-501c6 | International-Ltd | International-GmbH | International-Pty | International-Other | Other. Only meaningful when EntityType is a legal entity / subsidiary / partner.',
+            'nvarchar',
+            60,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '1e79c4b0-5ecc-4f75-8b1c-137bc2d64b3d' OR (EntityID = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60' AND Name = 'IncorporationDate')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '1e79c4b0-5ecc-4f75-8b1c-137bc2d64b3d',
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+            100004,
+            'IncorporationDate',
+            'Incorporation Date',
+            'Date the entity was legally incorporated/registered.',
+            'date',
+            3,
+            10,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '118bcbc6-8083-4dd0-81a6-d8a4a731838a' OR (EntityID = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60' AND Name = 'JurisdictionCountry')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '118bcbc6-8083-4dd0-81a6-d8a4a731838a',
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+            100005,
+            'JurisdictionCountry',
+            'Jurisdiction Country',
+            'ISO 3166-1 alpha-2 country code where this entity is incorporated. Free-form; not FK-constrained to keep dependency on geography modeling clean.',
+            'char',
+            2,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '95d08888-42ac-4a84-846f-11b0ce9cb860' OR (EntityID = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60' AND Name = 'JurisdictionRegion')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '95d08888-42ac-4a84-846f-11b0ce9cb860',
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+            100006,
+            'JurisdictionRegion',
+            'Jurisdiction Region',
+            'State/province sub-national region, free-form.',
+            'nvarchar',
+            100,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '7df082c2-e27b-4858-97fe-c67982c19917' OR (EntityID = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60' AND Name = 'FederalTaxID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '7df082c2-e27b-4858-97fe-c67982c19917',
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+            100007,
+            'FederalTaxID',
+            'Federal Tax ID',
+            'Federal tax identifier — EIN (US), ABN (Australia), VAT registration (EU), etc.',
+            'nvarchar',
+            80,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '925fdea5-3626-4487-8289-f7480c1bfeed' OR (EntityID = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60' AND Name = 'OperatingTimeZone')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '925fdea5-3626-4487-8289-f7480c1bfeed',
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+            100008,
+            'OperatingTimeZone',
+            'Operating Time Zone',
+            'IANA time-zone name for the company''s operations (e.g. ''America/Chicago''). All timestamps store in UTC/Zulu; period and rev-rec boundaries are evaluated in this zone so a transaction near midnight lands in the right local day/month.',
+            'nvarchar',
+            120,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '8545fa4f-b3e6-404a-a462-e020b869dac7' OR (EntityID = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60' AND Name = 'CompanyCode')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '8545fa4f-b3e6-404a-a462-e020b869dac7',
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+            100009,
+            'CompanyCode',
+            'Company Code',
+            'Short code used in JE numbering (''JE-{CompanyCode}-{FY}-{seq}''). Uppercase alphanumeric + dash/underscore. UNIQUE per deployment (BA-D15).',
+            'nvarchar',
+            40,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'd96d1f56-7349-4905-98fb-f20ba5bd8406' OR (EntityID = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60' AND Name = 'FunctionalCurrencyCode')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'd96d1f56-7349-4905-98fb-f20ba5bd8406',
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+            100010,
+            'FunctionalCurrencyCode',
+            'Functional Currency Code',
+            'ISO 4217 currency code (CHAR(3)) for the functional currency. All JEs post in this currency; original-currency triple on JE lines records the source-transaction currency when different (BA-D10).',
+            'char',
+            3,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            'EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615',
+            'Code',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '1f07a472-71ad-496a-8a2d-0d69739ecd70' OR (EntityID = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60' AND Name = 'ReportingCurrencyCode')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '1f07a472-71ad-496a-8a2d-0d69739ecd70',
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+            100011,
+            'ReportingCurrencyCode',
+            'Reporting Currency Code',
+            'Reporting currency for consolidation. NULL = same as functional currency.',
+            'char',
+            3,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            'EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615',
+            'Code',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'e6e66a6f-a2fc-46f6-90be-2e7a058a164d' OR (EntityID = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60' AND Name = 'FiscalYearStartMonth')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'e6e66a6f-a2fc-46f6-90be-2e7a058a164d',
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+            100012,
+            'FiscalYearStartMonth',
+            'Fiscal Year Start Month',
+            'Calendar month (1-12) when the fiscal year begins. Default 1 (Jan-start calendar).',
+            'tinyint',
+            1,
+            3,
+            0,
+            0,
+            '(1)',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'f73812b1-078b-4392-86e3-472b6cf13d49' OR (EntityID = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60' AND Name = 'FiscalYearStartDay')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'f73812b1-078b-4392-86e3-472b6cf13d49',
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+            100013,
+            'FiscalYearStartDay',
+            'Fiscal Year Start Day',
+            'Calendar day-of-month (1-31) when the fiscal year begins. Default 1.',
+            'tinyint',
+            1,
+            3,
+            0,
+            0,
+            '(1)',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '4b1c80b9-3931-44c5-84c2-d13ad13f6869' OR (EntityID = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60' AND Name = 'ParentAccountingCompanyID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '4b1c80b9-3931-44c5-84c2-d13ad13f6869',
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+            100014,
+            'ParentAccountingCompanyID',
+            'Parent Accounting Company ID',
+            'If set, this profile uses the books (COA, periods, JEs) of the referenced profile (consolidated reporting). Chains are forbidden: the referenced profile must NOT itself have a parent (BA-D9; trigger trg_ACP_NoChains).',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '324be0a9-4573-42f6-ac89-9b268bf08898' OR (EntityID = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60' AND Name = 'DefaultPaymentTermsTypeID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '324be0a9-4573-42f6-ac89-9b268bf08898',
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+            100015,
+            'DefaultPaymentTermsTypeID',
+            'Default Payment Terms Type ID',
+            'Default payment terms type for new orders/invoices. FK delegated to BizAppsOrders.PaymentTermsType (soft ref; no FK constraint).',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'd54d9423-1db4-440c-99ad-48b7806bbe7f' OR (EntityID = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60' AND Name = 'ApprovalCFOUserID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'd54d9423-1db4-440c-99ad-48b7806bbe7f',
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+            100016,
+            'ApprovalCFOUserID',
+            'Approval CFO User ID',
+            'The CFO (an ${mjSchema}.User — a security identity) who must approve a Journal Entry Batch for this company before it dispatches to the ERP. Resolved by the bizapps-tasks approval gate. Nullable: companies without a configured CFO fall back to the role-based resolver.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            'E1238F34-2837-EF11-86D4-6045BDEE16E6',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '28dd5ed5-df9c-475b-986a-e3c00772954c' OR (EntityID = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60' AND Name = 'IsActive')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '28dd5ed5-df9c-475b-986a-e3c00772954c',
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+            100017,
+            'IsActive',
+            'Is Active',
+            'Whether this profile is currently active. Inactive companies cannot have new JEs.',
+            'bit',
+            1,
+            1,
+            0,
+            0,
+            '(1)',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'e6bf633b-3765-4930-893a-f6da92a26bad' OR (EntityID = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60' AND Name = '__mj_CreatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'e6bf633b-3765-4930-893a-f6da92a26bad',
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+            100018,
+            '__mj_CreatedAt',
+            'Created At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '79310ca8-0760-4ba3-9c7c-123310ecb1bb' OR (EntityID = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60' AND Name = '__mj_UpdatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '79310ca8-0760-4ba3-9c7c-123310ecb1bb',
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+            100019,
+            '__mj_UpdatedAt',
+            'Updated At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '06210642-7cac-4122-b05b-78563131b5b5' OR (EntityID = '5B232F88-718A-46D1-8356-A16B172056DD' AND Name = 'ID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '06210642-7cac-4122-b05b-78563131b5b5',
+            '5B232F88-718A-46D1-8356-A16B172056DD', -- Entity: MJ_BizApps_Accounting: Dimensions
+            100001,
+            'ID',
+            'ID',
+            'Unique identifier (UUID per BA-D3).',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            'newsequentialid()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '280356e4-b21d-469c-9875-55eb8290983d' OR (EntityID = '5B232F88-718A-46D1-8356-A16B172056DD' AND Name = 'Code')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '280356e4-b21d-469c-9875-55eb8290983d',
+            '5B232F88-718A-46D1-8356-A16B172056DD', -- Entity: MJ_BizApps_Accounting: Dimensions
+            100002,
+            'Code',
+            'Code',
+            'Short code for the dimension, e.g. ''Department'', ''CostCenter''.',
+            'nvarchar',
+            80,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '40c56bd2-d7ad-40ea-b696-25125f888706' OR (EntityID = '5B232F88-718A-46D1-8356-A16B172056DD' AND Name = 'Name')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '40c56bd2-d7ad-40ea-b696-25125f888706',
+            '5B232F88-718A-46D1-8356-A16B172056DD', -- Entity: MJ_BizApps_Accounting: Dimensions
+            100003,
+            'Name',
+            'Name',
+            'Display name for the dimension.',
+            'nvarchar',
+            200,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '2b8ee831-c280-4b9e-88cd-feb0ea1796dc' OR (EntityID = '5B232F88-718A-46D1-8356-A16B172056DD' AND Name = 'Description')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '2b8ee831-c280-4b9e-88cd-feb0ea1796dc',
+            '5B232F88-718A-46D1-8356-A16B172056DD', -- Entity: MJ_BizApps_Accounting: Dimensions
+            100004,
+            'Description',
+            'Description',
+            'Detailed description of what the dimension tracks and how it is intended to be used in reports.',
+            'nvarchar',
+            -1,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '8cae45da-462e-423a-a2b6-ce7389edfdd6' OR (EntityID = '5B232F88-718A-46D1-8356-A16B172056DD' AND Name = 'DisplayOrder')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '8cae45da-462e-423a-a2b6-ce7389edfdd6',
+            '5B232F88-718A-46D1-8356-A16B172056DD', -- Entity: MJ_BizApps_Accounting: Dimensions
+            100005,
+            'DisplayOrder',
+            'Display Order',
+            'Sort order in dropdowns and report filters. Lower values appear first.',
+            'int',
+            4,
+            10,
+            0,
+            0,
+            '(100)',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'd12bd300-c5cd-41cd-b4a7-c8d01e6a6883' OR (EntityID = '5B232F88-718A-46D1-8356-A16B172056DD' AND Name = 'IsActive')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'd12bd300-c5cd-41cd-b4a7-c8d01e6a6883',
+            '5B232F88-718A-46D1-8356-A16B172056DD', -- Entity: MJ_BizApps_Accounting: Dimensions
+            100006,
+            'IsActive',
+            'Is Active',
+            'Whether this dimension is available for new JE-line tagging. Inactive dimensions stay in historical data but are hidden from selection.',
+            'bit',
+            1,
+            1,
+            0,
+            0,
+            '(1)',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '9f2e922b-80a5-4e5f-badc-35fc5bf985a8' OR (EntityID = '5B232F88-718A-46D1-8356-A16B172056DD' AND Name = '__mj_CreatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '9f2e922b-80a5-4e5f-badc-35fc5bf985a8',
+            '5B232F88-718A-46D1-8356-A16B172056DD', -- Entity: MJ_BizApps_Accounting: Dimensions
+            100007,
+            '__mj_CreatedAt',
+            'Created At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '0b91f59d-5dbf-4e66-92ec-5e92d62e73be' OR (EntityID = '5B232F88-718A-46D1-8356-A16B172056DD' AND Name = '__mj_UpdatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '0b91f59d-5dbf-4e66-92ec-5e92d62e73be',
+            '5B232F88-718A-46D1-8356-A16B172056DD', -- Entity: MJ_BizApps_Accounting: Dimensions
+            100008,
+            '__mj_UpdatedAt',
+            'Updated At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '5d52b71b-6215-4253-83ee-a99ec5fe9d7a' OR (EntityID = 'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7' AND Name = 'ID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '5d52b71b-6215-4253-83ee-a99ec5fe9d7a',
+            'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7', -- Entity: MJ_BizApps_Accounting: GL Accounts
+            100001,
+            'ID',
+            'ID',
+            'Unique identifier.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            'newsequentialid()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '2001b1f5-9004-42e2-91be-a5b4b27a3bd6' OR (EntityID = 'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7' AND Name = 'CompanyID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '2001b1f5-9004-42e2-91be-a5b4b27a3bd6',
+            'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7', -- Entity: MJ_BizApps_Accounting: GL Accounts
+            100002,
+            'CompanyID',
+            'Company ID',
+            'Company that owns this account. UNIQUE (CompanyID, Code) — each company has its own chart.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            'D4238F34-2837-EF11-86D4-6045BDEE16E6',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '2f62ee75-ea18-45ff-99ef-8cc870ad9810' OR (EntityID = 'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7' AND Name = 'Code')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '2f62ee75-ea18-45ff-99ef-8cc870ad9810',
+            'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7', -- Entity: MJ_BizApps_Accounting: GL Accounts
+            100003,
+            'Code',
+            'Code',
+            'Account code matching the ERP COA, e.g. ''11201'' or ''40100-SUB''.',
+            'nvarchar',
+            80,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '2b64853f-b6d0-4be5-b6f2-057416910517' OR (EntityID = 'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7' AND Name = 'Name')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '2b64853f-b6d0-4be5-b6f2-057416910517',
+            'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7', -- Entity: MJ_BizApps_Accounting: GL Accounts
+            100004,
+            'Name',
+            'Name',
+            'Display name for the account.',
+            'nvarchar',
+            400,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '886bf548-db15-4396-a49c-a5a7606ce270' OR (EntityID = 'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7' AND Name = 'AccountType')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '886bf548-db15-4396-a49c-a5a7606ce270',
+            'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7', -- Entity: MJ_BizApps_Accounting: GL Accounts
+            100005,
+            'AccountType',
+            'Account Type',
+            'High-level type: Asset | Liability | Equity | Revenue | Expense (AM-3 five-value enum; contra/statistical variants may return later as a sub-classification).',
+            'nvarchar',
+            30,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'ece549dd-639e-4241-bdc1-c85655e0f708' OR (EntityID = 'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7' AND Name = 'ParentGLAccountID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'ece549dd-639e-4241-bdc1-c85655e0f708',
+            'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7', -- Entity: MJ_BizApps_Accounting: GL Accounts
+            100006,
+            'ParentGLAccountID',
+            'Parent GL Account ID',
+            'Parent account for hierarchical rollup (NULL = top of chart).',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'd1362588-6242-4362-bd4e-d06d75ce1224' OR (EntityID = 'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7' AND Name = 'CurrencyCode')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'd1362588-6242-4362-bd4e-d06d75ce1224',
+            'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7', -- Entity: MJ_BizApps_Accounting: GL Accounts
+            100007,
+            'CurrencyCode',
+            'Currency Code',
+            'Currency denomination of the account (NULL = uses the Company''s functional currency).',
+            'char',
+            3,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            'EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615',
+            'Code',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '5d501fd1-5792-40a4-8d9b-6c8062b50052' OR (EntityID = 'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7' AND Name = 'ExternalSystem')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '5d501fd1-5792-40a4-8d9b-6c8062b50052',
+            'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7', -- Entity: MJ_BizApps_Accounting: GL Accounts
+            100008,
+            'ExternalSystem',
+            'External System',
+            'External system this account synchronizes to: BusinessCentral | QuickBooks | NetSuite | ... NULL if local-only.',
+            'nvarchar',
+            100,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '197f6502-76ae-4c3e-87d9-463a27c0cd0e' OR (EntityID = 'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7' AND Name = 'ExternalAccountID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '197f6502-76ae-4c3e-87d9-463a27c0cd0e',
+            'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7', -- Entity: MJ_BizApps_Accounting: GL Accounts
+            100009,
+            'ExternalAccountID',
+            'External Account ID',
+            'The external system''s identifier for this account, used by sync.',
+            'nvarchar',
+            200,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'e20ded96-f974-48e4-ac80-db68a6c3d186' OR (EntityID = 'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7' AND Name = 'IsActive')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'e20ded96-f974-48e4-ac80-db68a6c3d186',
+            'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7', -- Entity: MJ_BizApps_Accounting: GL Accounts
+            100010,
+            'IsActive',
+            'Is Active',
+            'Whether the account is available for new JE lines. Inactive accounts retain historical data.',
+            'bit',
+            1,
+            1,
+            0,
+            0,
+            '(1)',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '9c0988cf-b1d0-4edc-b44e-765baef40871' OR (EntityID = 'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7' AND Name = 'IsSystemSeeded')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '9c0988cf-b1d0-4edc-b44e-765baef40871',
+            'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7', -- Entity: MJ_BizApps_Accounting: GL Accounts
+            100011,
+            'IsSystemSeeded',
+            'Is System Seeded',
+            'TRUE if the account was created by spSeedDefaultChartOfAccounts. Lets reports distinguish platform-shipped accounts from deployment customizations.',
+            'bit',
+            1,
+            1,
+            0,
+            0,
+            '(0)',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'cc0eee71-b2a8-49ad-86cf-f4e85f0abca1' OR (EntityID = 'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7' AND Name = 'Description')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'cc0eee71-b2a8-49ad-86cf-f4e85f0abca1',
+            'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7', -- Entity: MJ_BizApps_Accounting: GL Accounts
+            100012,
+            'Description',
+            'Description',
+            'Optional description for the account.',
+            'nvarchar',
+            -1,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'baf61175-64b2-430d-8cdd-04783dbf9bbb' OR (EntityID = 'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7' AND Name = '__mj_CreatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'baf61175-64b2-430d-8cdd-04783dbf9bbb',
+            'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7', -- Entity: MJ_BizApps_Accounting: GL Accounts
+            100013,
+            '__mj_CreatedAt',
+            'Created At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'dd9cbac3-0dce-4cc3-a6e2-c09a10b02f3a' OR (EntityID = 'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7' AND Name = '__mj_UpdatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'dd9cbac3-0dce-4cc3-a6e2-c09a10b02f3a',
+            'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7', -- Entity: MJ_BizApps_Accounting: GL Accounts
+            100014,
+            '__mj_UpdatedAt',
+            'Updated At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'a7f8f975-9939-4742-9845-14f58bd689c6' OR (EntityID = '85303537-672D-4895-B773-A8B923C0F7F9' AND Name = 'ID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'a7f8f975-9939-4742-9845-14f58bd689c6',
+            '85303537-672D-4895-B773-A8B923C0F7F9', -- Entity: MJ_BizApps_Accounting: Tax Authorities
+            100001,
+            'ID',
+            'ID',
+            'Unique identifier.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            'newsequentialid()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'f166e351-a812-40d0-9858-1e39c3d8f940' OR (EntityID = '85303537-672D-4895-B773-A8B923C0F7F9' AND Name = 'Code')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'f166e351-a812-40d0-9858-1e39c3d8f940',
+            '85303537-672D-4895-B773-A8B923C0F7F9', -- Entity: MJ_BizApps_Accounting: Tax Authorities
+            100002,
+            'Code',
+            'Code',
+            'Globally unique authority code, e.g. ''US-IRS'', ''CA-BOE'', ''EU-VAT-DE''.',
+            'nvarchar',
+            80,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'dcc8fe2b-5872-4d99-97a2-ac8aaca6ad60' OR (EntityID = '85303537-672D-4895-B773-A8B923C0F7F9' AND Name = 'Name')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'dcc8fe2b-5872-4d99-97a2-ac8aaca6ad60',
+            '85303537-672D-4895-B773-A8B923C0F7F9', -- Entity: MJ_BizApps_Accounting: Tax Authorities
+            100003,
+            'Name',
+            'Name',
+            'Display name for the authority.',
+            'nvarchar',
+            400,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'e9b18323-2931-4427-997a-f44b685f4915' OR (EntityID = '85303537-672D-4895-B773-A8B923C0F7F9' AND Name = 'CountryCode')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'e9b18323-2931-4427-997a-f44b685f4915',
+            '85303537-672D-4895-B773-A8B923C0F7F9', -- Entity: MJ_BizApps_Accounting: Tax Authorities
+            100004,
+            'CountryCode',
+            'Country Code',
+            'ISO 3166-1 alpha-2 country code for the authority''s primary jurisdiction.',
+            'char',
+            2,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'a897c3d0-eb6a-49a6-b14f-03d47d9c46dd' OR (EntityID = '85303537-672D-4895-B773-A8B923C0F7F9' AND Name = 'IsActive')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'a897c3d0-eb6a-49a6-b14f-03d47d9c46dd',
+            '85303537-672D-4895-B773-A8B923C0F7F9', -- Entity: MJ_BizApps_Accounting: Tax Authorities
+            100005,
+            'IsActive',
+            'Is Active',
+            'Whether this authority is currently active.',
+            'bit',
+            1,
+            1,
+            0,
+            0,
+            '(1)',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '2c6b7213-c710-4c08-bf82-27097709192b' OR (EntityID = '85303537-672D-4895-B773-A8B923C0F7F9' AND Name = '__mj_CreatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '2c6b7213-c710-4c08-bf82-27097709192b',
+            '85303537-672D-4895-B773-A8B923C0F7F9', -- Entity: MJ_BizApps_Accounting: Tax Authorities
+            100006,
+            '__mj_CreatedAt',
+            'Created At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'be0dfef7-695b-4a63-9e96-e3fc25e6d9b3' OR (EntityID = '85303537-672D-4895-B773-A8B923C0F7F9' AND Name = '__mj_UpdatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'be0dfef7-695b-4a63-9e96-e3fc25e6d9b3',
+            '85303537-672D-4895-B773-A8B923C0F7F9', -- Entity: MJ_BizApps_Accounting: Tax Authorities
+            100007,
+            '__mj_UpdatedAt',
+            'Updated At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '5ec09195-c74b-4ee2-9e57-af6ee9fdc9ed' OR (EntityID = '179B2FEC-F70F-4C93-8FA0-AE73C957DC13' AND Name = 'ID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '5ec09195-c74b-4ee2-9e57-af6ee9fdc9ed',
+            '179B2FEC-F70F-4C93-8FA0-AE73C957DC13', -- Entity: MJ_BizApps_Accounting: Customer Tax Profiles
+            100001,
+            'ID',
+            'ID',
+            'Unique identifier.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            'newsequentialid()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'ddbf08af-7fa8-4082-9f8a-f59df563aff4' OR (EntityID = '179B2FEC-F70F-4C93-8FA0-AE73C957DC13' AND Name = 'OrganizationID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'ddbf08af-7fa8-4082-9f8a-f59df563aff4',
+            '179B2FEC-F70F-4C93-8FA0-AE73C957DC13', -- Entity: MJ_BizApps_Accounting: Customer Tax Profiles
+            100002,
+            'OrganizationID',
+            'Organization ID',
+            'Customer Organization (FK to ${mjSchema}_BizAppsCommon.Organization).',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            'C70448F9-9792-41D7-A82C-784B66429D54',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '0924123e-762d-425f-92eb-fe71cf29bb79' OR (EntityID = '179B2FEC-F70F-4C93-8FA0-AE73C957DC13' AND Name = 'TaxJurisdictionID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '0924123e-762d-425f-92eb-fe71cf29bb79',
+            '179B2FEC-F70F-4C93-8FA0-AE73C957DC13', -- Entity: MJ_BizApps_Accounting: Customer Tax Profiles
+            100003,
+            'TaxJurisdictionID',
+            'Tax Jurisdiction ID',
+            'Jurisdiction where the customer is taxable (primary).',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            '967E7628-CE96-4421-A836-26BBD0BCF564',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '173b534e-3c7c-4b64-b47a-e0dc6e66c1bf' OR (EntityID = '179B2FEC-F70F-4C93-8FA0-AE73C957DC13' AND Name = 'TaxIDNumber')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '173b534e-3c7c-4b64-b47a-e0dc6e66c1bf',
+            '179B2FEC-F70F-4C93-8FA0-AE73C957DC13', -- Entity: MJ_BizApps_Accounting: Customer Tax Profiles
+            100004,
+            'TaxIDNumber',
+            'Tax ID Number',
+            'Customer''s tax registration number (VAT, EIN, ABN, etc.).',
+            'nvarchar',
+            200,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '6824d09a-a8b6-4668-8a9d-792ea92cd3bf' OR (EntityID = '179B2FEC-F70F-4C93-8FA0-AE73C957DC13' AND Name = 'IsExempt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '6824d09a-a8b6-4668-8a9d-792ea92cd3bf',
+            '179B2FEC-F70F-4C93-8FA0-AE73C957DC13', -- Entity: MJ_BizApps_Accounting: Customer Tax Profiles
+            100005,
+            'IsExempt',
+            'Is Exempt',
+            'Whether the customer is currently tax-exempt.',
+            'bit',
+            1,
+            1,
+            0,
+            0,
+            '(0)',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'c3ac98ee-6206-4927-a3a3-7d87361e58f1' OR (EntityID = '179B2FEC-F70F-4C93-8FA0-AE73C957DC13' AND Name = 'ExemptionCertificateRef')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'c3ac98ee-6206-4927-a3a3-7d87361e58f1',
+            '179B2FEC-F70F-4C93-8FA0-AE73C957DC13', -- Entity: MJ_BizApps_Accounting: Customer Tax Profiles
+            100006,
+            'ExemptionCertificateRef',
+            'Exemption Certificate Ref',
+            'Reference to the exemption certificate (file ref, URL, certificate number). Required when IsExempt=1.',
+            'nvarchar',
+            400,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '19faac43-4a7d-4478-8c4c-36ccc0798310' OR (EntityID = '179B2FEC-F70F-4C93-8FA0-AE73C957DC13' AND Name = 'ExemptionExpiryDate')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '19faac43-4a7d-4478-8c4c-36ccc0798310',
+            '179B2FEC-F70F-4C93-8FA0-AE73C957DC13', -- Entity: MJ_BizApps_Accounting: Customer Tax Profiles
+            100007,
+            'ExemptionExpiryDate',
+            'Exemption Expiry Date',
+            'When the exemption certificate expires.',
+            'date',
+            3,
+            10,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '7e0118ad-2641-49c5-aa6d-e9db2f8d5581' OR (EntityID = '179B2FEC-F70F-4C93-8FA0-AE73C957DC13' AND Name = 'EffectiveFrom')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '7e0118ad-2641-49c5-aa6d-e9db2f8d5581',
+            '179B2FEC-F70F-4C93-8FA0-AE73C957DC13', -- Entity: MJ_BizApps_Accounting: Customer Tax Profiles
+            100008,
+            'EffectiveFrom',
+            'Effective From',
+            'Earliest date this profile is in effect.',
+            'date',
+            3,
+            10,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '285d24d5-723b-469b-8995-09e1abc109ed' OR (EntityID = '179B2FEC-F70F-4C93-8FA0-AE73C957DC13' AND Name = 'EffectiveTo')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '285d24d5-723b-469b-8995-09e1abc109ed',
+            '179B2FEC-F70F-4C93-8FA0-AE73C957DC13', -- Entity: MJ_BizApps_Accounting: Customer Tax Profiles
+            100009,
+            'EffectiveTo',
+            'Effective To',
+            'Last date this profile is in effect (NULL = open-ended).',
+            'date',
+            3,
+            10,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '550cc1a4-251f-47e4-b2aa-24921580ec7a' OR (EntityID = '179B2FEC-F70F-4C93-8FA0-AE73C957DC13' AND Name = '__mj_CreatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '550cc1a4-251f-47e4-b2aa-24921580ec7a',
+            '179B2FEC-F70F-4C93-8FA0-AE73C957DC13', -- Entity: MJ_BizApps_Accounting: Customer Tax Profiles
+            100010,
+            '__mj_CreatedAt',
+            'Created At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '7a3e8761-391d-4429-843d-1ea57e424fd8' OR (EntityID = '179B2FEC-F70F-4C93-8FA0-AE73C957DC13' AND Name = '__mj_UpdatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '7a3e8761-391d-4429-843d-1ea57e424fd8',
+            '179B2FEC-F70F-4C93-8FA0-AE73C957DC13', -- Entity: MJ_BizApps_Accounting: Customer Tax Profiles
+            100011,
+            '__mj_UpdatedAt',
+            'Updated At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '4b4e3486-3829-49ac-a46d-b58671245e19' OR (EntityID = 'A9AD407B-6624-45E5-BFDD-D6368D85F740' AND Name = 'ID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '4b4e3486-3829-49ac-a46d-b58671245e19',
+            'A9AD407B-6624-45E5-BFDD-D6368D85F740', -- Entity: MJ_BizApps_Accounting: Dimension Values
+            100001,
+            'ID',
+            'ID',
+            'Unique identifier.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            'newsequentialid()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'b4dc1e6c-f20b-4d84-9d65-7096b5e53197' OR (EntityID = 'A9AD407B-6624-45E5-BFDD-D6368D85F740' AND Name = 'DimensionID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'b4dc1e6c-f20b-4d84-9d65-7096b5e53197',
+            'A9AD407B-6624-45E5-BFDD-D6368D85F740', -- Entity: MJ_BizApps_Accounting: Dimension Values
+            100002,
+            'DimensionID',
+            'Dimension ID',
+            'Dimension this value belongs to.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            '5B232F88-718A-46D1-8356-A16B172056DD',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '14c9c91d-9d40-407f-a200-e62afdc9caa8' OR (EntityID = 'A9AD407B-6624-45E5-BFDD-D6368D85F740' AND Name = 'Code')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '14c9c91d-9d40-407f-a200-e62afdc9caa8',
+            'A9AD407B-6624-45E5-BFDD-D6368D85F740', -- Entity: MJ_BizApps_Accounting: Dimension Values
+            100003,
+            'Code',
+            'Code',
+            'Code for this value (unique within the dimension). E.g. ''Marketing'', ''WestCoast'', ''ProductLaunch2026''.',
+            'nvarchar',
+            160,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '8a84b661-776d-4b11-ada0-44f75ea68afe' OR (EntityID = 'A9AD407B-6624-45E5-BFDD-D6368D85F740' AND Name = 'Name')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '8a84b661-776d-4b11-ada0-44f75ea68afe',
+            'A9AD407B-6624-45E5-BFDD-D6368D85F740', -- Entity: MJ_BizApps_Accounting: Dimension Values
+            100004,
+            'Name',
+            'Name',
+            'Display name for this value.',
+            'nvarchar',
+            400,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '4ee5b975-ae83-4efc-8187-e5b1f3aba643' OR (EntityID = 'A9AD407B-6624-45E5-BFDD-D6368D85F740' AND Name = 'ParentDimensionValueID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '4ee5b975-ae83-4efc-8187-e5b1f3aba643',
+            'A9AD407B-6624-45E5-BFDD-D6368D85F740', -- Entity: MJ_BizApps_Accounting: Dimension Values
+            100005,
+            'ParentDimensionValueID',
+            'Parent Dimension Value ID',
+            'Parent value for hierarchical dimensions (e.g. Country contains States).',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            'A9AD407B-6624-45E5-BFDD-D6368D85F740',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '37c5c6a1-f147-4e31-8f7d-2c42a16c6182' OR (EntityID = 'A9AD407B-6624-45E5-BFDD-D6368D85F740' AND Name = 'EffectiveFrom')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '37c5c6a1-f147-4e31-8f7d-2c42a16c6182',
+            'A9AD407B-6624-45E5-BFDD-D6368D85F740', -- Entity: MJ_BizApps_Accounting: Dimension Values
+            100006,
+            'EffectiveFrom',
+            'Effective From',
+            'Earliest date this value is selectable (NULL = always).',
+            'date',
+            3,
+            10,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '19db2ffe-ff2b-4f8f-b613-3114ed7e2701' OR (EntityID = 'A9AD407B-6624-45E5-BFDD-D6368D85F740' AND Name = 'EffectiveTo')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '19db2ffe-ff2b-4f8f-b613-3114ed7e2701',
+            'A9AD407B-6624-45E5-BFDD-D6368D85F740', -- Entity: MJ_BizApps_Accounting: Dimension Values
+            100007,
+            'EffectiveTo',
+            'Effective To',
+            'Last date this value is selectable (NULL = never expires).',
+            'date',
+            3,
+            10,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'c0ce7477-3e18-4991-8385-808eadd85188' OR (EntityID = 'A9AD407B-6624-45E5-BFDD-D6368D85F740' AND Name = 'IsActive')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'c0ce7477-3e18-4991-8385-808eadd85188',
+            'A9AD407B-6624-45E5-BFDD-D6368D85F740', -- Entity: MJ_BizApps_Accounting: Dimension Values
+            100008,
+            'IsActive',
+            'Is Active',
+            'Whether this value is available for new tagging.',
+            'bit',
+            1,
+            1,
+            0,
+            0,
+            '(1)',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '057f5775-2426-4ab6-b3ed-7db9dc4402d7' OR (EntityID = 'A9AD407B-6624-45E5-BFDD-D6368D85F740' AND Name = '__mj_CreatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '057f5775-2426-4ab6-b3ed-7db9dc4402d7',
+            'A9AD407B-6624-45E5-BFDD-D6368D85F740', -- Entity: MJ_BizApps_Accounting: Dimension Values
+            100009,
+            '__mj_CreatedAt',
+            'Created At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '713a8fc6-d882-46ac-9d48-813f68471bba' OR (EntityID = 'A9AD407B-6624-45E5-BFDD-D6368D85F740' AND Name = '__mj_UpdatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '713a8fc6-d882-46ac-9d48-813f68471bba',
+            'A9AD407B-6624-45E5-BFDD-D6368D85F740', -- Entity: MJ_BizApps_Accounting: Dimension Values
+            100010,
+            '__mj_UpdatedAt',
+            'Updated At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'b560dba5-71cd-4745-9c0c-6f7f031dd0db' OR (EntityID = 'EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615' AND Name = 'ID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'b560dba5-71cd-4745-9c0c-6f7f031dd0db',
+            'EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615', -- Entity: MJ_BizApps_Accounting: Currencies
+            100001,
+            'ID',
+            'ID',
+            NULL,
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            'newsequentialid()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '3e09a811-5340-4e75-bc9b-456ea1fe52b2' OR (EntityID = 'EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615' AND Name = 'Code')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '3e09a811-5340-4e75-bc9b-456ea1fe52b2',
+            'EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615', -- Entity: MJ_BizApps_Accounting: Currencies
+            100002,
+            'Code',
+            'Code',
+            NULL,
+            'char',
+            3,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '8518e56b-7f98-4c53-9565-60d62805bc38' OR (EntityID = 'EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615' AND Name = 'Name')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '8518e56b-7f98-4c53-9565-60d62805bc38',
+            'EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615', -- Entity: MJ_BizApps_Accounting: Currencies
+            100003,
+            'Name',
+            'Name',
+            NULL,
+            'nvarchar',
+            160,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'aa6562fc-44c5-42d5-9ed1-0b053e948f32' OR (EntityID = 'EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615' AND Name = 'Symbol')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'aa6562fc-44c5-42d5-9ed1-0b053e948f32',
+            'EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615', -- Entity: MJ_BizApps_Accounting: Currencies
+            100004,
+            'Symbol',
+            'Symbol',
+            NULL,
+            'nvarchar',
+            20,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '03182e89-af9a-4798-9a34-7af5072ee3f7' OR (EntityID = 'EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615' AND Name = 'DecimalPlaces')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '03182e89-af9a-4798-9a34-7af5072ee3f7',
+            'EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615', -- Entity: MJ_BizApps_Accounting: Currencies
+            100005,
+            'DecimalPlaces',
+            'Decimal Places',
+            NULL,
+            'tinyint',
+            1,
+            3,
+            0,
+            0,
+            '(2)',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '06bc60cf-765c-4c06-9b8a-f42569f787a5' OR (EntityID = 'EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615' AND Name = 'IsActive')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '06bc60cf-765c-4c06-9b8a-f42569f787a5',
+            'EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615', -- Entity: MJ_BizApps_Accounting: Currencies
+            100006,
+            'IsActive',
+            'Is Active',
+            NULL,
+            'bit',
+            1,
+            1,
+            0,
+            0,
+            '(1)',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '34eff1f9-2a2f-42cd-88e6-3db21dd1989a' OR (EntityID = 'EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615' AND Name = '__mj_CreatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '34eff1f9-2a2f-42cd-88e6-3db21dd1989a',
+            'EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615', -- Entity: MJ_BizApps_Accounting: Currencies
+            100007,
+            '__mj_CreatedAt',
+            'Created At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'a522cf04-b687-46e7-81d2-0c5f6adbf3de' OR (EntityID = 'EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615' AND Name = '__mj_UpdatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'a522cf04-b687-46e7-81d2-0c5f6adbf3de',
+            'EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615', -- Entity: MJ_BizApps_Accounting: Currencies
+            100008,
+            '__mj_UpdatedAt',
+            'Updated At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'a780330a-9ba9-445a-bc40-93a7b0ad9917' OR (EntityID = '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946' AND Name = 'ID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'a780330a-9ba9-445a-bc40-93a7b0ad9917',
+            '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946', -- Entity: MJ_BizApps_Accounting: GL Account Links
+            100001,
+            'ID',
+            'ID',
+            NULL,
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            'newsequentialid()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'a1fdc19c-116d-4ade-ac9c-6be7c0c2bc05' OR (EntityID = '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946' AND Name = 'GLAccountID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'a1fdc19c-116d-4ade-ac9c-6be7c0c2bc05',
+            '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946', -- Entity: MJ_BizApps_Accounting: GL Account Links
+            100002,
+            'GLAccountID',
+            'GL Account ID',
+            'The GL account this link maps its target record to.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '2a1b3331-74fa-472f-8134-c342ecd3f890' OR (EntityID = '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946' AND Name = 'GLAccountRoleID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '2a1b3331-74fa-472f-8134-c342ecd3f890',
+            '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946', -- Entity: MJ_BizApps_Accounting: GL Account Links
+            100003,
+            'GLAccountRoleID',
+            'GL Account Role ID',
+            'The role the account plays for the target record (Sales, AR, ...). Assumed correction OQ-G: absent from the 07-03 field list but required to tell a record''s Revenue link from its AR link.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            'A2177315-8A92-48B6-A4F8-0865E674C230',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'e4c8a16f-a539-4d9f-9fec-af36af17abcb' OR (EntityID = '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946' AND Name = 'EntityID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'e4c8a16f-a539-4d9f-9fec-af36af17abcb',
+            '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946', -- Entity: MJ_BizApps_Accounting: GL Account Links
+            100004,
+            'EntityID',
+            'Entity ID',
+            'Polymorphic reference part 1: the MJ Entity of the target record (references ${mjSchema}.Entity). Same TaggedItem-style pattern as JournalEntry.LinkedEntityID/LinkedRecordID (plan D25).',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            'E0238F34-2837-EF11-86D4-6045BDEE16E6',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'd07fe367-65d8-40e7-bb77-4f34b1b2d275' OR (EntityID = '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946' AND Name = 'RecordID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'd07fe367-65d8-40e7-bb77-4f34b1b2d275',
+            '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946', -- Entity: MJ_BizApps_Accounting: GL Account Links
+            100005,
+            'RecordID',
+            'Record ID',
+            'Polymorphic reference part 2: the target record''s primary key (NVARCHAR(400) supports stringified composite keys).',
+            'nvarchar',
+            800,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '377cc6d9-5418-4d99-8c84-94779e9e549a' OR (EntityID = '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946' AND Name = 'Status')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '377cc6d9-5418-4d99-8c84-94779e9e549a',
+            '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946', -- Entity: MJ_BizApps_Accounting: GL Account Links
+            100006,
+            'Status',
+            'Status',
+            'Pending = entered but not yet in force; Active = used by resolution; Disabled = ignored.',
+            'nvarchar',
+            20,
+            0,
+            0,
+            0,
+            'Pending',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '4561fd5d-3e76-4357-abf3-abb34a0afe7d' OR (EntityID = '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946' AND Name = 'StartedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '4561fd5d-3e76-4357-abf3-abb34a0afe7d',
+            '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946', -- Entity: MJ_BizApps_Accounting: GL Account Links
+            100007,
+            'StartedAt',
+            'Started At',
+            'Start of the date-effective window (NULL = open start). Enables Amith''s "new chart of accounts effective Aug 1" pre-entry: resolution flips automatically on the date; historical JEs are never touched.',
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'ae1229af-2235-43fe-8929-3ec48049a655' OR (EntityID = '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946' AND Name = 'EndedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'ae1229af-2235-43fe-8929-3ec48049a655',
+            '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946', -- Entity: MJ_BizApps_Accounting: GL Account Links
+            100008,
+            'EndedAt',
+            'Ended At',
+            'End of the date-effective window (NULL = open end).',
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '669a692c-4885-4e86-adc2-5de632dd6316' OR (EntityID = '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946' AND Name = 'Comments')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '669a692c-4885-4e86-adc2-5de632dd6316',
+            '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946', -- Entity: MJ_BizApps_Accounting: GL Account Links
+            100009,
+            'Comments',
+            'Comments',
+            'Free-text note on why this mapping exists / changed.',
+            'nvarchar',
+            -1,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '83e6f195-d8a2-4004-834b-76d25664ab47' OR (EntityID = '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946' AND Name = '__mj_CreatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '83e6f195-d8a2-4004-834b-76d25664ab47',
+            '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946', -- Entity: MJ_BizApps_Accounting: GL Account Links
+            100010,
+            '__mj_CreatedAt',
+            'Created At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '1c4775bf-6034-45a9-adaf-215e6e0d2f6f' OR (EntityID = '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946' AND Name = '__mj_UpdatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '1c4775bf-6034-45a9-adaf-215e6e0d2f6f',
+            '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946', -- Entity: MJ_BizApps_Accounting: GL Account Links
+            100011,
+            '__mj_UpdatedAt',
+            'Updated At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '93c8bf27-93c1-4149-9a6b-d9dd1d0b2148' OR (EntityID = '9F6A0506-7D62-4461-9D00-E733692A351B' AND Name = 'ID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '93c8bf27-93c1-4149-9a6b-d9dd1d0b2148',
+            '9F6A0506-7D62-4461-9D00-E733692A351B', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+            100001,
+            'ID',
+            'ID',
+            'Unique identifier.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            'newsequentialid()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '2ed72f86-0397-48b8-8a33-0f5f44513b80' OR (EntityID = '9F6A0506-7D62-4461-9D00-E733692A351B' AND Name = 'BatchNumber')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '2ed72f86-0397-48b8-8a33-0f5f44513b80',
+            '9F6A0506-7D62-4461-9D00-E733692A351B', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+            100002,
+            'BatchNumber',
+            'Batch Number',
+            'Gap-free batch number assigned by spAssignNextBatchNumber. Format ''BATCH-{CompanyCode}-{seq:000000}''.',
+            'nvarchar',
+            80,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '06b8bf16-388e-4955-9cf7-8c090206f5c2' OR (EntityID = '9F6A0506-7D62-4461-9D00-E733692A351B' AND Name = 'CompanyID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '06b8bf16-388e-4955-9cf7-8c090206f5c2',
+            '9F6A0506-7D62-4461-9D00-E733692A351B', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+            100003,
+            'CompanyID',
+            'Company ID',
+            'The single company this batch belongs to (plan D7). One batch per company per run; the batch gathers ONLY this company''s Pending JEs.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            'D4238F34-2837-EF11-86D4-6045BDEE16E6',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'f3aa741a-3ddd-4d78-844b-8441ff3dd872' OR (EntityID = '9F6A0506-7D62-4461-9D00-E733692A351B' AND Name = 'PostingDate')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'f3aa741a-3ddd-4d78-844b-8441ff3dd872',
+            '9F6A0506-7D62-4461-9D00-E733692A351B', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+            100004,
+            'PostingDate',
+            'Posting Date',
+            'Singular, accountant-set posting date chosen at batch build (plan D8). Carried to the GL''s posting date and must match between systems; drives the ERP period. Document dates stay informational.',
+            'date',
+            3,
+            10,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '9ee96a5f-722f-43e2-843d-833f33db7416' OR (EntityID = '9F6A0506-7D62-4461-9D00-E733692A351B' AND Name = 'SummaryJournalEntryID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '9ee96a5f-722f-43e2-843d-833f33db7416',
+            '9F6A0506-7D62-4461-9D00-E733692A351B', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+            100005,
+            'SummaryJournalEntryID',
+            'Summary Journal Entry ID',
+            'The aggregated summary JournalEntry (EntryType=BatchSummary, EffectiveDate=PostingDate) that posts to the GL for this batch (plan D9). Its lines net debits/credits per GLAccount x dimension-combo. The summary carries this batch''s BatchID (same derived lock machinery as members) but is excluded from member/netting/sweep queries by its EntryType.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            '026F7B4B-64F0-4267-B74E-45C1ADD32732',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'fb6bab02-d879-4b7c-8a79-9d9768079721' OR (EntityID = '9F6A0506-7D62-4461-9D00-E733692A351B' AND Name = 'TargetSystem')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'fb6bab02-d879-4b7c-8a79-9d9768079721',
+            '9F6A0506-7D62-4461-9D00-E733692A351B', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+            100006,
+            'TargetSystem',
+            'Target System',
+            'Target ERP for this batch: BusinessCentral | QuickBooks | NetSuite | Sage | Xero | Other.',
+            'nvarchar',
+            100,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'd81566f3-0dd3-4d92-b6f4-c7fef4ed6209' OR (EntityID = '9F6A0506-7D62-4461-9D00-E733692A351B' AND Name = 'BatchedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'd81566f3-0dd3-4d92-b6f4-c7fef4ed6209',
+            '9F6A0506-7D62-4461-9D00-E733692A351B', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+            100007,
+            'BatchedAt',
+            'Batched At',
+            'When the batch was created (Pending JEs flipped to Batched).',
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'sysdatetimeoffset()',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'b2233cd3-cd68-417a-850b-abf726373080' OR (EntityID = '9F6A0506-7D62-4461-9D00-E733692A351B' AND Name = 'BatchedByUserID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'b2233cd3-cd68-417a-850b-abf726373080',
+            '9F6A0506-7D62-4461-9D00-E733692A351B', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+            100008,
+            'BatchedByUserID',
+            'Batched By User ID',
+            'User (or system identity for scheduled runs) that performed the batch.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            'E1238F34-2837-EF11-86D4-6045BDEE16E6',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '271e1145-d405-4351-9105-3bfaf0de9a33' OR (EntityID = '9F6A0506-7D62-4461-9D00-E733692A351B' AND Name = 'Status')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '271e1145-d405-4351-9105-3bfaf0de9a33',
+            '9F6A0506-7D62-4461-9D00-E733692A351B', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+            100009,
+            'Status',
+            'Status',
+            'Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed triggers retry + escalation; Cancelled is terminal from Pending or unsent Approved (trg_JEBatch_Immutability).',
+            'nvarchar',
+            40,
+            0,
+            0,
+            0,
+            'Pending',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '34dc536d-7328-469f-8d3d-73853e76aa2d' OR (EntityID = '9F6A0506-7D62-4461-9D00-E733692A351B' AND Name = 'TotalEntries')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '34dc536d-7328-469f-8d3d-73853e76aa2d',
+            '9F6A0506-7D62-4461-9D00-E733692A351B', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+            100010,
+            'TotalEntries',
+            'Total Entries',
+            'Count of JE rows in this batch (denormalized for fast batch dashboards).',
+            'int',
+            4,
+            10,
+            0,
+            0,
+            '(0)',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '0cb857ee-3496-43c1-aef2-662822f0d77e' OR (EntityID = '9F6A0506-7D62-4461-9D00-E733692A351B' AND Name = 'TotalDebits')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '0cb857ee-3496-43c1-aef2-662822f0d77e',
+            '9F6A0506-7D62-4461-9D00-E733692A351B', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+            100011,
+            'TotalDebits',
+            'Total Debits',
+            'Sum of debits across all JE lines in the batch (functional currency).',
+            'decimal',
+            9,
+            18,
+            2,
+            0,
+            '(0)',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'e003d9cb-cc7d-46fd-8f76-e2118c883f36' OR (EntityID = '9F6A0506-7D62-4461-9D00-E733692A351B' AND Name = 'TotalCredits')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'e003d9cb-cc7d-46fd-8f76-e2118c883f36',
+            '9F6A0506-7D62-4461-9D00-E733692A351B', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+            100012,
+            'TotalCredits',
+            'Total Credits',
+            'Sum of credits across all JE lines in the batch (functional currency).',
+            'decimal',
+            9,
+            18,
+            2,
+            0,
+            '(0)',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '7f69845e-4ff2-417f-9d15-6843cbf838af' OR (EntityID = '9F6A0506-7D62-4461-9D00-E733692A351B' AND Name = 'ExternalBatchRef')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '7f69845e-4ff2-417f-9d15-6843cbf838af',
+            '9F6A0506-7D62-4461-9D00-E733692A351B', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+            100013,
+            'ExternalBatchRef',
+            'External Batch Ref',
+            'ERP''s reference returned on send (used to correlate the consolidated JE posted in the ERP).',
+            'nvarchar',
+            200,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'f0613ea9-ae33-495e-b3db-fb018d157abb' OR (EntityID = '9F6A0506-7D62-4461-9D00-E733692A351B' AND Name = 'ApprovedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'f0613ea9-ae33-495e-b3db-fb018d157abb',
+            '9F6A0506-7D62-4461-9D00-E733692A351B', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+            100014,
+            'ApprovedAt',
+            'Approved At',
+            'When a human approved the batch for dispatch (locks its content; the new Approved status).',
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '880b1644-1b3b-4cdd-80df-a93ecf0aa50a' OR (EntityID = '9F6A0506-7D62-4461-9D00-E733692A351B' AND Name = 'ApprovedByUserID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '880b1644-1b3b-4cdd-80df-a93ecf0aa50a',
+            '9F6A0506-7D62-4461-9D00-E733692A351B', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+            100015,
+            'ApprovedByUserID',
+            'Approved By User ID',
+            'The user who approved the batch (see AccountingCompanyProfile.ApprovalCFOUserID / the bizapps-tasks approval gate).',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            'E1238F34-2837-EF11-86D4-6045BDEE16E6',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '0df1c6b5-5cc1-4128-88d5-f4f8febc0ee3' OR (EntityID = '9F6A0506-7D62-4461-9D00-E733692A351B' AND Name = 'SentAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '0df1c6b5-5cc1-4128-88d5-f4f8febc0ee3',
+            '9F6A0506-7D62-4461-9D00-E733692A351B', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+            100016,
+            'SentAt',
+            'Sent At',
+            'When the batch was sent to the ERP.',
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '2db1b804-5ac5-49b1-9030-9d9cf9ddb48a' OR (EntityID = '9F6A0506-7D62-4461-9D00-E733692A351B' AND Name = 'PostedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '2db1b804-5ac5-49b1-9030-9d9cf9ddb48a',
+            '9F6A0506-7D62-4461-9D00-E733692A351B', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+            100017,
+            'PostedAt',
+            'Posted At',
+            'When the ERP confirmed it posted the batch (Status=Posted; renames the old AcknowledgedAt).',
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'c6db9a58-06b8-401b-b8a5-bd5682f006f7' OR (EntityID = '9F6A0506-7D62-4461-9D00-E733692A351B' AND Name = 'ErrorMessage')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'c6db9a58-06b8-401b-b8a5-bd5682f006f7',
+            '9F6A0506-7D62-4461-9D00-E733692A351B', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+            100018,
+            'ErrorMessage',
+            'Error Message',
+            'Error message from a Failed send. JEs revert to Pending for retry.',
+            'nvarchar',
+            -1,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '7633a137-2e3e-45c9-b3b0-bcc700328286' OR (EntityID = '9F6A0506-7D62-4461-9D00-E733692A351B' AND Name = 'ApprovalTaskID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '7633a137-2e3e-45c9-b3b0-bcc700328286',
+            '9F6A0506-7D62-4461-9D00-E733692A351B', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+            100019,
+            'ApprovalTaskID',
+            'Approval Task ID',
+            'The bizapps-tasks approval Task raised for this batch (plan D10). NO FK by design (cross-app); stamped together with ApprovalTaskRaisedAt in the task-raise transaction (both-or-neither CHECK). NULL = task not yet raised (retryable state).',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '37144e30-814c-4713-990b-6662ece7d3b4' OR (EntityID = '9F6A0506-7D62-4461-9D00-E733692A351B' AND Name = 'ApprovalTaskRaisedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '37144e30-814c-4713-990b-6662ece7d3b4',
+            '9F6A0506-7D62-4461-9D00-E733692A351B', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+            100020,
+            'ApprovalTaskRaisedAt',
+            'Approval Task Raised At',
+            'When the approval task was raised; set together with ApprovalTaskID (both-or-neither CHECK).',
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '09c67127-c14a-422f-9dd6-a848e7ba4bce' OR (EntityID = '9F6A0506-7D62-4461-9D00-E733692A351B' AND Name = '__mj_CreatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '09c67127-c14a-422f-9dd6-a848e7ba4bce',
+            '9F6A0506-7D62-4461-9D00-E733692A351B', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+            100021,
+            '__mj_CreatedAt',
+            'Created At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '76be1e8e-eb16-487e-b46a-7869fd62b611' OR (EntityID = '9F6A0506-7D62-4461-9D00-E733692A351B' AND Name = '__mj_UpdatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '76be1e8e-eb16-487e-b46a-7869fd62b611',
+            '9F6A0506-7D62-4461-9D00-E733692A351B', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+            100022,
+            '__mj_UpdatedAt',
+            'Updated At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'f399d830-66ea-47a6-bc11-9d4aec2b00bb' OR (EntityID = '9773FAC6-C410-47DB-A7A9-F49886E6B54A' AND Name = 'ID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'f399d830-66ea-47a6-bc11-9d4aec2b00bb',
+            '9773FAC6-C410-47DB-A7A9-F49886E6B54A', -- Entity: MJ_BizApps_Accounting: Journal Entry Batch Sequences
+            100001,
+            'ID',
+            'ID',
+            NULL,
+            'int',
+            4,
+            10,
+            0,
+            0,
+            '(1)',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            1,
+            1,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '6632433d-1474-4889-a61c-44238d34fbcc' OR (EntityID = '9773FAC6-C410-47DB-A7A9-F49886E6B54A' AND Name = 'NextSequenceNumber')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '6632433d-1474-4889-a61c-44238d34fbcc',
+            '9773FAC6-C410-47DB-A7A9-F49886E6B54A', -- Entity: MJ_BizApps_Accounting: Journal Entry Batch Sequences
+            100002,
+            'NextSequenceNumber',
+            'Next Sequence Number',
+            NULL,
+            'int',
+            4,
+            10,
+            0,
+            0,
+            '(1)',
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '8074b11d-63d1-4d99-82b6-fb7da3477c3f' OR (EntityID = '9773FAC6-C410-47DB-A7A9-F49886E6B54A' AND Name = '__mj_CreatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '8074b11d-63d1-4d99-82b6-fb7da3477c3f',
+            '9773FAC6-C410-47DB-A7A9-F49886E6B54A', -- Entity: MJ_BizApps_Accounting: Journal Entry Batch Sequences
+            100003,
+            '__mj_CreatedAt',
+            'Created At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '0d8ba91b-78e6-45ac-8ebe-5b2bb7d92d8f' OR (EntityID = '9773FAC6-C410-47DB-A7A9-F49886E6B54A' AND Name = '__mj_UpdatedAt')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '0d8ba91b-78e6-45ac-8ebe-5b2bb7d92d8f',
+            '9773FAC6-C410-47DB-A7A9-F49886E6B54A', -- Entity: MJ_BizApps_Accounting: Journal Entry Batch Sequences
+            100004,
+            '__mj_UpdatedAt',
+            'Updated At',
+            NULL,
+            'datetimeoffset',
+            10,
+            34,
+            7,
+            0,
+            'getutcdate()',
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+/* SQL text to update existing entity fields from schema */
+EXEC [${mjSchema}].[spUpdateExistingEntityFieldsFromSchema] @ExcludedSchemaNames='sys,staging,dbo,${mjSchema},${mjSchema}_BizAppsCommon,${mjSchema}_BizAppsTasks,${mjSchema}_BizAppsCommon,${mjSchema}_BizAppsTasks,${mjSchema}';
+
+/* SQL text to set default column width where needed */
+EXEC [${mjSchema}].[spSetDefaultColumnWidthWhereNeeded] @ExcludedSchemaNames='sys,staging,dbo,${mjSchema},${mjSchema}_BizAppsCommon,${mjSchema}_BizAppsTasks,${mjSchema}_BizAppsCommon,${mjSchema}_BizAppsTasks,${mjSchema}';
+
+/* SQL text to insert entity field value with ID 7d7daf99-b537-4f77-b2de-007d5b36f3af */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('7d7daf99-b537-4f77-b2de-007d5b36f3af', '766490F5-1981-47B4-9F74-FAA3DEEE8EC2', 1, 'Active', 'Active', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID a7374334-26af-4101-b0d2-77bd64ad7619 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('a7374334-26af-4101-b0d2-77bd64ad7619', '766490F5-1981-47B4-9F74-FAA3DEEE8EC2', 2, 'Inactive', 'Inactive', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to update ValueListType for entity field ID 766490F5-1981-47B4-9F74-FAA3DEEE8EC2 */
+UPDATE [${mjSchema}].[EntityField] SET ValueListType='List' WHERE ID='766490F5-1981-47B4-9F74-FAA3DEEE8EC2';
+
+/* SQL text to insert entity field value with ID cd3f006f-3dd0-4b34-a0fd-ea9e140677b6 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('cd3f006f-3dd0-4b34-a0fd-ea9e140677b6', '377CC6D9-5418-4D99-8C84-94779E9E549A', 1, 'Active', 'Active', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 59999f9e-40fc-4150-aa12-957021bca2bd */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('59999f9e-40fc-4150-aa12-957021bca2bd', '377CC6D9-5418-4D99-8C84-94779E9E549A', 2, 'Disabled', 'Disabled', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 3ba006b1-d91a-49d2-a85d-8c7a8c570a04 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('3ba006b1-d91a-49d2-a85d-8c7a8c570a04', '377CC6D9-5418-4D99-8C84-94779E9E549A', 3, 'Pending', 'Pending', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to update ValueListType for entity field ID 377CC6D9-5418-4D99-8C84-94779E9E549A */
+UPDATE [${mjSchema}].[EntityField] SET ValueListType='List' WHERE ID='377CC6D9-5418-4D99-8C84-94779E9E549A';
+
+/* SQL text to insert entity field value with ID 50be0a37-011a-45ce-be4b-b31d2c03345e */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('50be0a37-011a-45ce-be4b-b31d2c03345e', '3582176A-A2FC-4415-8D5E-29D7A265A5E3', 1, 'Custom', 'Custom', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 2d244817-43d2-45ba-beba-031df8560e29 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('2d244817-43d2-45ba-beba-031df8560e29', '3582176A-A2FC-4415-8D5E-29D7A265A5E3', 2, 'Exempt', 'Exempt', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 26a75178-b3a3-4575-ad05-b6b040b3eee1 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('26a75178-b3a3-4575-ad05-b6b040b3eee1', '3582176A-A2FC-4415-8D5E-29D7A265A5E3', 3, 'Reduced', 'Reduced', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 05db596b-ee68-417a-8da3-25afd42c60fc */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('05db596b-ee68-417a-8da3-25afd42c60fc', '3582176A-A2FC-4415-8D5E-29D7A265A5E3', 4, 'Standard', 'Standard', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 766ac834-c46a-4bd0-8ee8-0af1bd69c8dd */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('766ac834-c46a-4bd0-8ee8-0af1bd69c8dd', '3582176A-A2FC-4415-8D5E-29D7A265A5E3', 5, 'Zero', 'Zero', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to update ValueListType for entity field ID 3582176A-A2FC-4415-8D5E-29D7A265A5E3 */
+UPDATE [${mjSchema}].[EntityField] SET ValueListType='List' WHERE ID='3582176A-A2FC-4415-8D5E-29D7A265A5E3';
+
+/* SQL text to insert entity field value with ID 956de587-fc4b-4fcb-8cb2-d0c25a23e122 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('956de587-fc4b-4fcb-8cb2-d0c25a23e122', '9D1617B4-80EB-4A68-BE8B-A6F67EB7E1EA', 1, 'Avalara', 'Avalara', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 783a353e-ebb4-48d7-a835-7986be0fd45e */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('783a353e-ebb4-48d7-a835-7986be0fd45e', '9D1617B4-80EB-4A68-BE8B-A6F67EB7E1EA', 2, 'Manual', 'Manual', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 20ee6890-3218-414e-81d3-3f186bdfa0b5 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('20ee6890-3218-414e-81d3-3f186bdfa0b5', '9D1617B4-80EB-4A68-BE8B-A6F67EB7E1EA', 3, 'TaxJar', 'TaxJar', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to update ValueListType for entity field ID 9D1617B4-80EB-4A68-BE8B-A6F67EB7E1EA */
+UPDATE [${mjSchema}].[EntityField] SET ValueListType='List' WHERE ID='9D1617B4-80EB-4A68-BE8B-A6F67EB7E1EA';
+
+/* SQL text to insert entity field value with ID e6db04e6-3a6b-4db0-a021-7bd2ccab0fdb */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('e6db04e6-3a6b-4db0-a021-7bd2ccab0fdb', 'C5E08E77-B550-458A-8983-B3BC18B22201', 1, 'Branch', 'Branch', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 0c3d2449-4a2d-4b85-a570-0ac3df310a5c */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('0c3d2449-4a2d-4b85-a570-0ac3df310a5c', 'C5E08E77-B550-458A-8983-B3BC18B22201', 2, 'CostCenter', 'CostCenter', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID b8f3ee03-6d3c-4547-a25a-70c4d054df77 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('b8f3ee03-6d3c-4547-a25a-70c4d054df77', 'C5E08E77-B550-458A-8983-B3BC18B22201', 3, 'Department', 'Department', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 4db5cb87-293b-40a6-a714-52d96ea279d6 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('4db5cb87-293b-40a6-a714-52d96ea279d6', 'C5E08E77-B550-458A-8983-B3BC18B22201', 4, 'Division', 'Division', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 7dba37e5-ea8a-44fb-92bc-bccec5034472 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('7dba37e5-ea8a-44fb-92bc-bccec5034472', 'C5E08E77-B550-458A-8983-B3BC18B22201', 5, 'JointVenture', 'JointVenture', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 67b47af7-788c-4008-a02a-f995d139bdbd */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('67b47af7-788c-4008-a02a-f995d139bdbd', 'C5E08E77-B550-458A-8983-B3BC18B22201', 6, 'LegalEntity', 'LegalEntity', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 6a8930a7-8145-425c-813b-a61a1d609bd4 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('6a8930a7-8145-425c-813b-a61a1d609bd4', 'C5E08E77-B550-458A-8983-B3BC18B22201', 7, 'Other', 'Other', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 503a7e9e-b1c7-4a14-896d-6df7fc650a2e */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('503a7e9e-b1c7-4a14-896d-6df7fc650a2e', 'C5E08E77-B550-458A-8983-B3BC18B22201', 8, 'Partner', 'Partner', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID ba4e92bb-aef9-4077-91a3-bee2bb2cd1cb */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('ba4e92bb-aef9-4077-91a3-bee2bb2cd1cb', 'C5E08E77-B550-458A-8983-B3BC18B22201', 9, 'Subsidiary', 'Subsidiary', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to update ValueListType for entity field ID C5E08E77-B550-458A-8983-B3BC18B22201 */
+UPDATE [${mjSchema}].[EntityField] SET ValueListType='List' WHERE ID='C5E08E77-B550-458A-8983-B3BC18B22201';
+
+/* SQL text to insert entity field value with ID f741ff79-f13e-4a85-ba62-3ad38895fb8d */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('f741ff79-f13e-4a85-ba62-3ad38895fb8d', 'BA2969E9-96CA-4A1C-8CFF-BE5E644FC8D6', 1, 'C-Corp', 'C-Corp', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID ca72035d-5afa-4cef-9e91-e5ee8b5ac5e1 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('ca72035d-5afa-4cef-9e91-e5ee8b5ac5e1', 'BA2969E9-96CA-4A1C-8CFF-BE5E644FC8D6', 2, 'International-GmbH', 'International-GmbH', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 1d2c9b39-0c6c-44ba-a3c9-e64ca6e11a09 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('1d2c9b39-0c6c-44ba-a3c9-e64ca6e11a09', 'BA2969E9-96CA-4A1C-8CFF-BE5E644FC8D6', 3, 'International-Ltd', 'International-Ltd', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 77ab2430-6ff1-4b7c-9bba-4991e3a00663 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('77ab2430-6ff1-4b7c-9bba-4991e3a00663', 'BA2969E9-96CA-4A1C-8CFF-BE5E644FC8D6', 4, 'International-Other', 'International-Other', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 4ac0e202-eec1-4bef-a80c-e192a4b889b4 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('4ac0e202-eec1-4bef-a80c-e192a4b889b4', 'BA2969E9-96CA-4A1C-8CFF-BE5E644FC8D6', 5, 'International-Pty', 'International-Pty', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 08504e20-ba91-4fce-bded-ae1e57f93ab8 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('08504e20-ba91-4fce-bded-ae1e57f93ab8', 'BA2969E9-96CA-4A1C-8CFF-BE5E644FC8D6', 6, 'LLC', 'LLC', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID dbc97ef3-d874-4066-a4b9-53afd2d7316e */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('dbc97ef3-d874-4066-a4b9-53afd2d7316e', 'BA2969E9-96CA-4A1C-8CFF-BE5E644FC8D6', 7, 'NonProfit-501c3', 'NonProfit-501c3', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID a5d29d44-f7da-4337-80c2-a9d6a62bc160 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('a5d29d44-f7da-4337-80c2-a9d6a62bc160', 'BA2969E9-96CA-4A1C-8CFF-BE5E644FC8D6', 8, 'NonProfit-501c6', 'NonProfit-501c6', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 48a947de-cdde-410d-bd10-f43475ed98b9 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('48a947de-cdde-410d-bd10-f43475ed98b9', 'BA2969E9-96CA-4A1C-8CFF-BE5E644FC8D6', 9, 'Other', 'Other', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 48a4311d-1eba-44c5-8ff5-7dd6969eb7d1 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('48a4311d-1eba-44c5-8ff5-7dd6969eb7d1', 'BA2969E9-96CA-4A1C-8CFF-BE5E644FC8D6', 10, 'Partnership', 'Partnership', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID a6ced231-05dd-41af-aee0-4039751617c0 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('a6ced231-05dd-41af-aee0-4039751617c0', 'BA2969E9-96CA-4A1C-8CFF-BE5E644FC8D6', 11, 'S-Corp', 'S-Corp', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 026c3569-f896-4497-9b8c-af808a33a7d5 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('026c3569-f896-4497-9b8c-af808a33a7d5', 'BA2969E9-96CA-4A1C-8CFF-BE5E644FC8D6', 12, 'SoleProprietorship', 'SoleProprietorship', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to update ValueListType for entity field ID BA2969E9-96CA-4A1C-8CFF-BE5E644FC8D6 */
+UPDATE [${mjSchema}].[EntityField] SET ValueListType='List' WHERE ID='BA2969E9-96CA-4A1C-8CFF-BE5E644FC8D6';
+
+/* SQL text to insert entity field value with ID 54c7ea34-5c3a-40d9-a187-65f3cee1209b */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('54c7ea34-5c3a-40d9-a187-65f3cee1209b', '886BF548-DB15-4396-A49C-A5A7606CE270', 1, 'Asset', 'Asset', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 84c4039c-8ef4-4ce8-83ef-970d33d72a3c */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('84c4039c-8ef4-4ce8-83ef-970d33d72a3c', '886BF548-DB15-4396-A49C-A5A7606CE270', 2, 'Equity', 'Equity', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID ea2d8a68-46f7-4625-bd7d-68dce518f5a1 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('ea2d8a68-46f7-4625-bd7d-68dce518f5a1', '886BF548-DB15-4396-A49C-A5A7606CE270', 3, 'Expense', 'Expense', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 46d47aa5-6610-472d-96e7-1c80913d21ed */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('46d47aa5-6610-472d-96e7-1c80913d21ed', '886BF548-DB15-4396-A49C-A5A7606CE270', 4, 'Liability', 'Liability', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID db5514cc-6d5e-40ab-84e1-4e486449002e */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('db5514cc-6d5e-40ab-84e1-4e486449002e', '886BF548-DB15-4396-A49C-A5A7606CE270', 5, 'Revenue', 'Revenue', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to update ValueListType for entity field ID 886BF548-DB15-4396-A49C-A5A7606CE270 */
+UPDATE [${mjSchema}].[EntityField] SET ValueListType='List' WHERE ID='886BF548-DB15-4396-A49C-A5A7606CE270';
+
+/* SQL text to insert entity field value with ID 16b2f024-093c-4fdb-b965-3b58f66d4f4f */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('16b2f024-093c-4fdb-b965-3b58f66d4f4f', '271E1145-D405-4351-9105-3BFAF0DE9A33', 1, 'Approved', 'Approved', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID b139f366-3032-409b-b425-33319237e20a */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('b139f366-3032-409b-b425-33319237e20a', '271E1145-D405-4351-9105-3BFAF0DE9A33', 2, 'Cancelled', 'Cancelled', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID a69f7429-41be-4537-9cba-5fb073c561b9 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('a69f7429-41be-4537-9cba-5fb073c561b9', '271E1145-D405-4351-9105-3BFAF0DE9A33', 3, 'Failed', 'Failed', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 3a39de1a-4919-45f5-a107-c9f828f74f9c */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('3a39de1a-4919-45f5-a107-c9f828f74f9c', '271E1145-D405-4351-9105-3BFAF0DE9A33', 4, 'Pending', 'Pending', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 184209b8-c3d5-4586-8c99-25430ed1bef0 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('184209b8-c3d5-4586-8c99-25430ed1bef0', '271E1145-D405-4351-9105-3BFAF0DE9A33', 5, 'Posted', 'Posted', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 99886c86-b9ed-4959-8132-a7549ed64ad0 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('99886c86-b9ed-4959-8132-a7549ed64ad0', '271E1145-D405-4351-9105-3BFAF0DE9A33', 6, 'Sent', 'Sent', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to update ValueListType for entity field ID 271E1145-D405-4351-9105-3BFAF0DE9A33 */
+UPDATE [${mjSchema}].[EntityField] SET ValueListType='List' WHERE ID='271E1145-D405-4351-9105-3BFAF0DE9A33';
+
+/* SQL text to insert entity field value with ID d942c0cd-287e-4fd1-8441-81726a5c3f0a */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('d942c0cd-287e-4fd1-8441-81726a5c3f0a', 'FB6BAB02-D879-4B7C-8A79-9D9768079721', 1, 'BusinessCentral', 'BusinessCentral', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 832fa79d-5d26-4684-bca1-8589166fe78f */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('832fa79d-5d26-4684-bca1-8589166fe78f', 'FB6BAB02-D879-4B7C-8A79-9D9768079721', 2, 'NetSuite', 'NetSuite', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID ae5f87f1-47f5-498f-9e2e-f3b66e3cb189 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('ae5f87f1-47f5-498f-9e2e-f3b66e3cb189', 'FB6BAB02-D879-4B7C-8A79-9D9768079721', 3, 'Other', 'Other', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 08d455a5-a5dd-4377-a252-588ddd124f95 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('08d455a5-a5dd-4377-a252-588ddd124f95', 'FB6BAB02-D879-4B7C-8A79-9D9768079721', 4, 'QuickBooks', 'QuickBooks', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID b109406b-909b-4bc2-92bc-c26d51472e45 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('b109406b-909b-4bc2-92bc-c26d51472e45', 'FB6BAB02-D879-4B7C-8A79-9D9768079721', 5, 'Sage', 'Sage', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 65e76c29-77f4-4403-9343-2c5c9f424152 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('65e76c29-77f4-4403-9343-2c5c9f424152', 'FB6BAB02-D879-4B7C-8A79-9D9768079721', 6, 'Xero', 'Xero', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to update ValueListType for entity field ID FB6BAB02-D879-4B7C-8A79-9D9768079721 */
+UPDATE [${mjSchema}].[EntityField] SET ValueListType='List' WHERE ID='FB6BAB02-D879-4B7C-8A79-9D9768079721';
+
+/* SQL text to insert entity field value with ID 115a1c6c-9905-4882-a07a-8e1d7c2c4573 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('115a1c6c-9905-4882-a07a-8e1d7c2c4573', '3A66BFB1-4AE8-4272-BADC-15A58695878E', 1, 'Batched', 'Batched', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 872d3e5a-943b-4869-963b-4ac1591a83a0 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('872d3e5a-943b-4869-963b-4ac1591a83a0', '3A66BFB1-4AE8-4272-BADC-15A58695878E', 2, 'GLPosted', 'GLPosted', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID f015dadc-6994-421d-a78b-9ad44ee96afe */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('f015dadc-6994-421d-a78b-9ad44ee96afe', '3A66BFB1-4AE8-4272-BADC-15A58695878E', 3, 'Pending', 'Pending', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to update ValueListType for entity field ID 3A66BFB1-4AE8-4272-BADC-15A58695878E */
+UPDATE [${mjSchema}].[EntityField] SET ValueListType='List' WHERE ID='3A66BFB1-4AE8-4272-BADC-15A58695878E';
+
+/* SQL text to insert entity field value with ID e886bb09-c365-490c-9eca-29845f48698a */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('e886bb09-c365-490c-9eca-29845f48698a', '8B38423A-C7D8-412D-9084-0E42E46AA505', 1, 'Adjustment', 'Adjustment', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 03c7e88d-24f2-440e-b08f-a49d6aa7f856 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('03c7e88d-24f2-440e-b08f-a49d6aa7f856', '8B38423A-C7D8-412D-9084-0E42E46AA505', 2, 'BatchSummary', 'BatchSummary', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 122f61cf-e407-4ab4-a06a-7819282722bd */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('122f61cf-e407-4ab4-a06a-7819282722bd', '8B38423A-C7D8-412D-9084-0E42E46AA505', 3, 'CommissionAccrual', 'CommissionAccrual', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 89f05c52-8758-4b10-98d5-b8ee0c4c5492 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('89f05c52-8758-4b10-98d5-b8ee0c4c5492', '8B38423A-C7D8-412D-9084-0E42E46AA505', 4, 'FXRevaluation', 'FXRevaluation', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 19f6687e-f12e-437f-ac45-2c97cb29cdfc */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('19f6687e-f12e-437f-ac45-2c97cb29cdfc', '8B38423A-C7D8-412D-9084-0E42E46AA505', 5, 'IntercompanyFlow', 'IntercompanyFlow', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 19c52b6b-d9b9-4413-8066-206c3634163c */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('19c52b6b-d9b9-4413-8066-206c3634163c', '8B38423A-C7D8-412D-9084-0E42E46AA505', 6, 'Manual', 'Manual', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID eaa34f3c-2135-4496-b81f-c3101ba6c4b9 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('eaa34f3c-2135-4496-b81f-c3101ba6c4b9', '8B38423A-C7D8-412D-9084-0E42E46AA505', 7, 'OpeningBalance', 'OpeningBalance', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID b380e7d5-8ceb-4b15-a41c-6efdb0ebd6b2 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('b380e7d5-8ceb-4b15-a41c-6efdb0ebd6b2', '8B38423A-C7D8-412D-9084-0E42E46AA505', 8, 'OrderBooking', 'OrderBooking', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 30635fb9-ed11-4310-b4b9-154b7ed6bc4a */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('30635fb9-ed11-4310-b4b9-154b7ed6bc4a', '8B38423A-C7D8-412D-9084-0E42E46AA505', 9, 'PartnerRevShare', 'PartnerRevShare', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 62685ec1-65f9-4739-8664-65d7319a1f57 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('62685ec1-65f9-4739-8664-65d7319a1f57', '8B38423A-C7D8-412D-9084-0E42E46AA505', 10, 'PaymentReceipt', 'PaymentReceipt', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID d7181990-1bce-4e03-b051-84a2b10c9793 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('d7181990-1bce-4e03-b051-84a2b10c9793', '8B38423A-C7D8-412D-9084-0E42E46AA505', 11, 'PeriodEndAccrual', 'PeriodEndAccrual', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 6f33c6cf-1f27-4952-912e-bfbe665c0b08 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('6f33c6cf-1f27-4952-912e-bfbe665c0b08', '8B38423A-C7D8-412D-9084-0E42E46AA505', 12, 'Refund', 'Refund', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 3e9dbb8f-4e88-4667-be5c-21cf86c83a5f */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('3e9dbb8f-4e88-4667-be5c-21cf86c83a5f', '8B38423A-C7D8-412D-9084-0E42E46AA505', 13, 'RevenueRecognition', 'RevenueRecognition', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 2973ac08-7af1-4a5d-b6af-ff5161ab2c4e */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('2973ac08-7af1-4a5d-b6af-ff5161ab2c4e', '8B38423A-C7D8-412D-9084-0E42E46AA505', 14, 'Reversal', 'Reversal', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 8c3403f6-2a4f-42fb-8d2b-07625b658213 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('8c3403f6-2a4f-42fb-8d2b-07625b658213', '8B38423A-C7D8-412D-9084-0E42E46AA505', 15, 'TaxRemittance', 'TaxRemittance', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID fa7c8015-7f36-430f-aec2-4302c531fcb7 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('fa7c8015-7f36-430f-aec2-4302c531fcb7', '8B38423A-C7D8-412D-9084-0E42E46AA505', 16, 'WaterfallDistribution', 'WaterfallDistribution', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID a7d25ec2-6ba6-4293-b183-650f2323ca1c */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('a7d25ec2-6ba6-4293-b183-650f2323ca1c', '8B38423A-C7D8-412D-9084-0E42E46AA505', 17, 'Writeoff', 'Writeoff', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to update ValueListType for entity field ID 8B38423A-C7D8-412D-9084-0E42E46AA505 */
+UPDATE [${mjSchema}].[EntityField] SET ValueListType='List' WHERE ID='8B38423A-C7D8-412D-9084-0E42E46AA505';
+
+/* SQL text to insert entity field value with ID e347d137-9a9f-4530-902d-6f12116c1006 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('e347d137-9a9f-4530-902d-6f12116c1006', '61A99CBE-1EAA-458E-913D-75E4C4E44C9C', 1, 'Filed', 'Filed', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 4bce8248-b9aa-4f14-b48e-81449c1191ed */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('4bce8248-b9aa-4f14-b48e-81449c1191ed', '61A99CBE-1EAA-458E-913D-75E4C4E44C9C', 2, 'Open', 'Open', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 96cf7cb4-5715-4752-a449-cb7cdaed8c49 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('96cf7cb4-5715-4752-a449-cb7cdaed8c49', '61A99CBE-1EAA-458E-913D-75E4C4E44C9C', 3, 'Paid', 'Paid', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 5488f36b-daee-4c52-982c-f46656261a52 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('5488f36b-daee-4c52-982c-f46656261a52', '61A99CBE-1EAA-458E-913D-75E4C4E44C9C', 4, 'PartiallyPaid', 'PartiallyPaid', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to update ValueListType for entity field ID 61A99CBE-1EAA-458E-913D-75E4C4E44C9C */
+UPDATE [${mjSchema}].[EntityField] SET ValueListType='List' WHERE ID='61A99CBE-1EAA-458E-913D-75E4C4E44C9C';
+
+/* SQL text to insert entity field value with ID 1072cb89-6542-4348-8e7f-fd0d503b7df6 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('1072cb89-6542-4348-8e7f-fd0d503b7df6', '1D15AEDD-AB35-42B3-95A7-AF80398B0156', 1, 'Annual', 'Annual', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID e2b35468-795d-464f-beb5-749343f33026 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('e2b35468-795d-464f-beb5-749343f33026', '1D15AEDD-AB35-42B3-95A7-AF80398B0156', 2, 'Monthly', 'Monthly', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID cbdd3db2-91ae-48bc-9b78-25d2ee624ddf */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('cbdd3db2-91ae-48bc-9b78-25d2ee624ddf', '1D15AEDD-AB35-42B3-95A7-AF80398B0156', 3, 'OnDemand', 'OnDemand', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 5de0da41-6f15-4a68-a5cd-e17108c1e0ed */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('5de0da41-6f15-4a68-a5cd-e17108c1e0ed', '1D15AEDD-AB35-42B3-95A7-AF80398B0156', 4, 'Quarterly', 'Quarterly', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID f04e88ee-4c52-48a1-a686-aa3236b38eef */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('f04e88ee-4c52-48a1-a686-aa3236b38eef', '1D15AEDD-AB35-42B3-95A7-AF80398B0156', 5, 'SemiAnnual', 'SemiAnnual', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to update ValueListType for entity field ID 1D15AEDD-AB35-42B3-95A7-AF80398B0156 */
+UPDATE [${mjSchema}].[EntityField] SET ValueListType='List' WHERE ID='1D15AEDD-AB35-42B3-95A7-AF80398B0156';
+
+
+/* Create Entity Relationship: MJ_BizApps_Accounting: GL Account Roles -> MJ_BizApps_Accounting: GL Account Links (One To Many via GLAccountRoleID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = 'cc0946e3-5b69-4bdb-9434-4b07d85ea533'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('cc0946e3-5b69-4bdb-9434-4b07d85ea533', 'A2177315-8A92-48B6-A4F8-0865E674C230', '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946', 'GLAccountRoleID', 'One To Many', 1, 1, 1, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ_BizApps_Accounting: Journal Entry Lines -> MJ_BizApps_Accounting: Journal Entry Line Dimensions (One To Many via JournalEntryLineID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '0b366020-931e-4a7f-bc99-78551aac3d01'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('0b366020-931e-4a7f-bc99-78551aac3d01', '53985D64-DA98-4AB5-8281-0927EBE3E0F0', '1583B525-55C0-4845-BD95-244D6EE239F3', 'JournalEntryLineID', 'One To Many', 1, 1, 1, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ_BizApps_Accounting: Tax Liabilities -> MJ_BizApps_Accounting: Tax Remittances (One To Many via TaxLiabilityID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = 'a6281d58-adf7-47b8-922b-33127e7082f0'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('a6281d58-adf7-47b8-922b-33127e7082f0', '34915759-5587-44EF-A914-230170B3D566', '7700116E-9A6A-43AA-9560-6DB59D53890A', 'TaxLiabilityID', 'One To Many', 1, 1, 1, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ_BizApps_Accounting: Tax Jurisdictions -> MJ_BizApps_Accounting: Tax Rates (One To Many via TaxJurisdictionID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '9094aa0f-32a0-4af7-b77f-8f645b93e953'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('9094aa0f-32a0-4af7-b77f-8f645b93e953', '967E7628-CE96-4421-A836-26BBD0BCF564', 'B1A8AF72-DED6-482A-9669-46A9FC30B574', 'TaxJurisdictionID', 'One To Many', 1, 1, 1, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ_BizApps_Accounting: Tax Jurisdictions -> MJ_BizApps_Accounting: Customer Tax Profiles (One To Many via TaxJurisdictionID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = 'e4661e02-5879-4162-9d86-56dcaf2d9c4c'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('e4661e02-5879-4162-9d86-56dcaf2d9c4c', '967E7628-CE96-4421-A836-26BBD0BCF564', '179B2FEC-F70F-4C93-8FA0-AE73C957DC13', 'TaxJurisdictionID', 'One To Many', 1, 1, 2, GETUTCDATE(), GETUTCDATE())
+   END;
+
+
+/* Create Entity Relationship: MJ_BizApps_Accounting: Tax Jurisdictions -> MJ_BizApps_Accounting: Tax Jurisdictions (One To Many via ParentTaxJurisdictionID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '18f414e3-acfd-48fb-aa99-2716a9b30750'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('18f414e3-acfd-48fb-aa99-2716a9b30750', '967E7628-CE96-4421-A836-26BBD0BCF564', '967E7628-CE96-4421-A836-26BBD0BCF564', 'ParentTaxJurisdictionID', 'One To Many', 1, 1, 3, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ_BizApps_Accounting: Tax Jurisdictions -> MJ_BizApps_Accounting: Tax Liabilities (One To Many via TaxJurisdictionID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '7e64cf4b-a366-4fd5-aaab-9963404db79e'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('7e64cf4b-a366-4fd5-aaab-9963404db79e', '967E7628-CE96-4421-A836-26BBD0BCF564', '34915759-5587-44EF-A914-230170B3D566', 'TaxJurisdictionID', 'One To Many', 1, 1, 4, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ_BizApps_Accounting: Journal Entries -> MJ_BizApps_Accounting: Journal Entry Lines (One To Many via JournalEntryID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = 'b420815f-3234-42dd-9a0c-c47ffebbbba6'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('b420815f-3234-42dd-9a0c-c47ffebbbba6', '026F7B4B-64F0-4267-B74E-45C1ADD32732', '53985D64-DA98-4AB5-8281-0927EBE3E0F0', 'JournalEntryID', 'One To Many', 1, 1, 1, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ_BizApps_Accounting: Journal Entries -> MJ_BizApps_Accounting: Journal Entries (One To Many via ReversesJournalEntryID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = 'b6335bff-bc65-4864-b919-d21867d6d787'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('b6335bff-bc65-4864-b919-d21867d6d787', '026F7B4B-64F0-4267-B74E-45C1ADD32732', '026F7B4B-64F0-4267-B74E-45C1ADD32732', 'ReversesJournalEntryID', 'One To Many', 1, 1, 2, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ_BizApps_Accounting: Journal Entries -> MJ_BizApps_Accounting: Journal Entries (One To Many via ReversedByJournalEntryID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '0db1318c-2a30-4ad8-9e03-dd08e1c8e4c2'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('0db1318c-2a30-4ad8-9e03-dd08e1c8e4c2', '026F7B4B-64F0-4267-B74E-45C1ADD32732', '026F7B4B-64F0-4267-B74E-45C1ADD32732', 'ReversedByJournalEntryID', 'One To Many', 1, 1, 3, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ_BizApps_Accounting: Journal Entries -> MJ_BizApps_Accounting: Tax Remittances (One To Many via PostedJournalEntryID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '543ae993-d465-456f-8abf-8f18404a8f58'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('543ae993-d465-456f-8abf-8f18404a8f58', '026F7B4B-64F0-4267-B74E-45C1ADD32732', '7700116E-9A6A-43AA-9560-6DB59D53890A', 'PostedJournalEntryID', 'One To Many', 1, 1, 4, GETUTCDATE(), GETUTCDATE())
+   END;
+
+
+/* Create Entity Relationship: MJ_BizApps_Accounting: Journal Entries -> MJ_BizApps_Accounting: Journal Entry Batches (One To Many via SummaryJournalEntryID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '46636120-662a-4acf-9101-7af421b0d080'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('46636120-662a-4acf-9101-7af421b0d080', '026F7B4B-64F0-4267-B74E-45C1ADD32732', '9F6A0506-7D62-4461-9D00-E733692A351B', 'SummaryJournalEntryID', 'One To Many', 1, 1, 5, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ: Companies -> MJ_BizApps_Accounting: Journal Entry Batches (One To Many via CompanyID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = 'bd8bd535-d149-45e0-983b-369afb4cede8'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('bd8bd535-d149-45e0-983b-369afb4cede8', 'D4238F34-2837-EF11-86D4-6045BDEE16E6', '9F6A0506-7D62-4461-9D00-E733692A351B', 'CompanyID', 'One To Many', 1, 1, 7, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ: Companies -> MJ_BizApps_Accounting: Journal Entries (One To Many via CompanyID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = 'ea75962a-a44f-41f0-a954-0da79117e4d7'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('ea75962a-a44f-41f0-a954-0da79117e4d7', 'D4238F34-2837-EF11-86D4-6045BDEE16E6', '026F7B4B-64F0-4267-B74E-45C1ADD32732', 'CompanyID', 'One To Many', 1, 1, 8, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ: Companies -> MJ_BizApps_Accounting: Accounting Company Profiles (One To Many via ID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '57d15731-f07d-4f76-8c74-cb3efec3d02e'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('57d15731-f07d-4f76-8c74-cb3efec3d02e', 'D4238F34-2837-EF11-86D4-6045BDEE16E6', '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', 'ID', 'One To Many', 1, 1, 9, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ: Companies -> MJ_BizApps_Accounting: GL Accounts (One To Many via CompanyID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '529c6601-2fe0-4f9b-9114-212767f2f678'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('529c6601-2fe0-4f9b-9114-212767f2f678', 'D4238F34-2837-EF11-86D4-6045BDEE16E6', 'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7', 'CompanyID', 'One To Many', 1, 1, 10, GETUTCDATE(), GETUTCDATE())
+   END;
+
+
+/* Create Entity Relationship: MJ: Companies -> MJ_BizApps_Accounting: Tax Liabilities (One To Many via CompanyID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = 'dde7a3d8-d8a7-411b-b540-6602e2acc87e'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('dde7a3d8-d8a7-411b-b540-6602e2acc87e', 'D4238F34-2837-EF11-86D4-6045BDEE16E6', '34915759-5587-44EF-A914-230170B3D566', 'CompanyID', 'One To Many', 1, 1, 11, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ: Companies -> MJ_BizApps_Accounting: Journal Entry Sequences (One To Many via CompanyID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '37ad6e23-1735-4a5d-a9af-c48f2e063872'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('37ad6e23-1735-4a5d-a9af-c48f2e063872', 'D4238F34-2837-EF11-86D4-6045BDEE16E6', 'E7116785-3D54-415C-981B-0E2D2D3BA793', 'CompanyID', 'One To Many', 1, 1, 12, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ: Entities -> MJ_BizApps_Accounting: Journal Entries (One To Many via LinkedEntityID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '17074fb1-4d9b-494e-8694-d3b28b16fc64'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('17074fb1-4d9b-494e-8694-d3b28b16fc64', 'E0238F34-2837-EF11-86D4-6045BDEE16E6', '026F7B4B-64F0-4267-B74E-45C1ADD32732', 'LinkedEntityID', 'One To Many', 1, 1, 75, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ: Entities -> MJ_BizApps_Accounting: GL Account Links (One To Many via EntityID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = 'fc589ed7-a872-49bb-bc36-3e1524c78a74'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('fc589ed7-a872-49bb-bc36-3e1524c78a74', 'E0238F34-2837-EF11-86D4-6045BDEE16E6', '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946', 'EntityID', 'One To Many', 1, 1, 76, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ: Users -> MJ_BizApps_Accounting: Journal Entry Batches (One To Many via BatchedByUserID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '3349d004-1688-42f0-b126-800a2d1acebb'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('3349d004-1688-42f0-b126-800a2d1acebb', 'E1238F34-2837-EF11-86D4-6045BDEE16E6', '9F6A0506-7D62-4461-9D00-E733692A351B', 'BatchedByUserID', 'One To Many', 1, 1, 112, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ: Users -> MJ_BizApps_Accounting: Journal Entry Batches (One To Many via ApprovedByUserID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = 'b96aa0d2-f0b0-4dd7-8acb-eb57bf5ad8b5'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('b96aa0d2-f0b0-4dd7-8acb-eb57bf5ad8b5', 'E1238F34-2837-EF11-86D4-6045BDEE16E6', '9F6A0506-7D62-4461-9D00-E733692A351B', 'ApprovedByUserID', 'One To Many', 1, 1, 113, GETUTCDATE(), GETUTCDATE())
+   END;
+
+
+/* Create Entity Relationship: MJ: Users -> MJ_BizApps_Accounting: Accounting Company Profiles (One To Many via ApprovalCFOUserID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = 'ec049ded-824a-46df-bc5f-8c8387bca964'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('ec049ded-824a-46df-bc5f-8c8387bca964', 'E1238F34-2837-EF11-86D4-6045BDEE16E6', '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', 'ApprovalCFOUserID', 'One To Many', 1, 1, 114, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ: Files -> MJ_BizApps_Accounting: Journal Entries (One To Many via FileID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '5a3cec47-a215-4f95-9188-a7578ff34eac'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('5a3cec47-a215-4f95-9188-a7578ff34eac', '29248F34-2837-EF11-86D4-6045BDEE16E6', '026F7B4B-64F0-4267-B74E-45C1ADD32732', 'FileID', 'One To Many', 1, 1, 9, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ_BizApps_Accounting: Accounting Company Profiles -> MJ_BizApps_Accounting: Accounting Company Profiles (One To Many via ParentAccountingCompanyID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '503cc289-6e80-4564-b92c-9449f05a44e0'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('503cc289-6e80-4564-b92c-9449f05a44e0', '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', 'ParentAccountingCompanyID', 'One To Many', 1, 1, 1, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ_BizApps_Common: Organizations -> MJ_BizApps_Accounting: Customer Tax Profiles (One To Many via OrganizationID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '95bb89bb-11ad-4623-a873-adf9f6239079'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('95bb89bb-11ad-4623-a873-adf9f6239079', 'C70448F9-9792-41D7-A82C-784B66429D54', '179B2FEC-F70F-4C93-8FA0-AE73C957DC13', 'OrganizationID', 'One To Many', 1, 1, 5, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ_BizApps_Common: Organizations -> MJ_BizApps_Accounting: Journal Entry Lines (One To Many via CounterpartyOrganizationID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = 'e41110b6-a028-480d-9173-074c1fe2d3e7'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('e41110b6-a028-480d-9173-074c1fe2d3e7', 'C70448F9-9792-41D7-A82C-784B66429D54', '53985D64-DA98-4AB5-8281-0927EBE3E0F0', 'CounterpartyOrganizationID', 'One To Many', 1, 1, 6, GETUTCDATE(), GETUTCDATE())
+   END;
+
+
+/* Create Entity Relationship: MJ_BizApps_Accounting: Dimensions -> MJ_BizApps_Accounting: Journal Entry Line Dimensions (One To Many via DimensionID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '24f447e3-828b-49c7-80db-b415791fe50a'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('24f447e3-828b-49c7-80db-b415791fe50a', '5B232F88-718A-46D1-8356-A16B172056DD', '1583B525-55C0-4845-BD95-244D6EE239F3', 'DimensionID', 'One To Many', 1, 1, 1, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ_BizApps_Accounting: Dimensions -> MJ_BizApps_Accounting: Dimension Values (One To Many via DimensionID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = 'dea22629-93fd-4a0f-9a43-0eeb71edde84'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('dea22629-93fd-4a0f-9a43-0eeb71edde84', '5B232F88-718A-46D1-8356-A16B172056DD', 'A9AD407B-6624-45E5-BFDD-D6368D85F740', 'DimensionID', 'One To Many', 1, 1, 2, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ_BizApps_Accounting: Dimensions -> MJ_BizApps_Accounting: GL Account Link Dimensions (One To Many via DimensionID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '6dec7245-1dc6-4641-ae25-83431f52ef90'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('6dec7245-1dc6-4641-ae25-83431f52ef90', '5B232F88-718A-46D1-8356-A16B172056DD', '5BE1D6E3-2CB3-4C6E-9FA2-592F7B1C65DE', 'DimensionID', 'One To Many', 1, 1, 3, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ_BizApps_Accounting: GL Accounts -> MJ_BizApps_Accounting: Journal Entry Lines (One To Many via GLAccountID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '2972903b-babf-45a8-816b-bb622e9090d8'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('2972903b-babf-45a8-816b-bb622e9090d8', 'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7', '53985D64-DA98-4AB5-8281-0927EBE3E0F0', 'GLAccountID', 'One To Many', 1, 1, 1, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ_BizApps_Accounting: GL Accounts -> MJ_BizApps_Accounting: GL Accounts (One To Many via ParentGLAccountID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = 'a8f5e9f8-1f27-4430-a1b1-18cac237fee4'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('a8f5e9f8-1f27-4430-a1b1-18cac237fee4', 'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7', 'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7', 'ParentGLAccountID', 'One To Many', 1, 1, 2, GETUTCDATE(), GETUTCDATE())
+   END;
+
+
+/* Create Entity Relationship: MJ_BizApps_Accounting: GL Accounts -> MJ_BizApps_Accounting: GL Account Links (One To Many via GLAccountID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '4c487a72-45a8-461a-a0bc-6ca9c5c6ec92'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('4c487a72-45a8-461a-a0bc-6ca9c5c6ec92', 'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7', '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946', 'GLAccountID', 'One To Many', 1, 1, 3, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ_BizApps_Accounting: Tax Authorities -> MJ_BizApps_Accounting: Tax Liabilities (One To Many via TaxAuthorityID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '83c8cd9f-6601-4ad3-9368-d70e41d608e9'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('83c8cd9f-6601-4ad3-9368-d70e41d608e9', '85303537-672D-4895-B773-A8B923C0F7F9', '34915759-5587-44EF-A914-230170B3D566', 'TaxAuthorityID', 'One To Many', 1, 1, 1, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ_BizApps_Accounting: Tax Authorities -> MJ_BizApps_Accounting: Tax Jurisdictions (One To Many via TaxAuthorityID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = 'd2deb5f7-b6fb-4908-a514-129c0be59398'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('d2deb5f7-b6fb-4908-a514-129c0be59398', '85303537-672D-4895-B773-A8B923C0F7F9', '967E7628-CE96-4421-A836-26BBD0BCF564', 'TaxAuthorityID', 'One To Many', 1, 1, 2, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ_BizApps_Accounting: Dimension Values -> MJ_BizApps_Accounting: Journal Entry Line Dimensions (One To Many via DimensionValueID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '7d25a40f-d94b-4123-a83d-2dfe21547245'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('7d25a40f-d94b-4123-a83d-2dfe21547245', 'A9AD407B-6624-45E5-BFDD-D6368D85F740', '1583B525-55C0-4845-BD95-244D6EE239F3', 'DimensionValueID', 'One To Many', 1, 1, 1, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ_BizApps_Accounting: Dimension Values -> MJ_BizApps_Accounting: Dimension Values (One To Many via ParentDimensionValueID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '2bae600a-a579-463b-a634-75357038e5e9'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('2bae600a-a579-463b-a634-75357038e5e9', 'A9AD407B-6624-45E5-BFDD-D6368D85F740', 'A9AD407B-6624-45E5-BFDD-D6368D85F740', 'ParentDimensionValueID', 'One To Many', 1, 1, 2, GETUTCDATE(), GETUTCDATE())
+   END;
+
+
+/* Create Entity Relationship: MJ_BizApps_Accounting: Currencies -> MJ_BizApps_Accounting: Accounting Company Profiles (One To Many via FunctionalCurrencyCode) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = 'bf67d0b8-ece4-4b50-8a6f-6045acf3a084'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('bf67d0b8-ece4-4b50-8a6f-6045acf3a084', 'EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615', '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', 'FunctionalCurrencyCode', 'One To Many', 1, 1, 1, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ_BizApps_Accounting: Currencies -> MJ_BizApps_Accounting: Accounting Company Profiles (One To Many via ReportingCurrencyCode) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = 'c85ce56e-a055-4703-a30e-a94e171e5127'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('c85ce56e-a055-4703-a30e-a94e171e5127', 'EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615', '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', 'ReportingCurrencyCode', 'One To Many', 1, 1, 2, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ_BizApps_Accounting: Currencies -> MJ_BizApps_Accounting: GL Accounts (One To Many via CurrencyCode) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = 'a7547201-0999-4c93-8bb6-562fe97e4bc4'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('a7547201-0999-4c93-8bb6-562fe97e4bc4', 'EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615', 'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7', 'CurrencyCode', 'One To Many', 1, 1, 3, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ_BizApps_Accounting: Currencies -> MJ_BizApps_Accounting: Journal Entry Lines (One To Many via OriginalCurrencyCode) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '3ace7353-3c28-4e36-a8a6-a3a4f033e23f'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('3ace7353-3c28-4e36-a8a6-a3a4f033e23f', 'EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615', '53985D64-DA98-4AB5-8281-0927EBE3E0F0', 'OriginalCurrencyCode', 'One To Many', 1, 1, 4, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ_BizApps_Accounting: Currencies -> MJ_BizApps_Accounting: Currency Spot Rates (One To Many via FromCurrencyCode) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '4255d542-b267-4d4e-b01b-77c0d8c2ea88'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('4255d542-b267-4d4e-b01b-77c0d8c2ea88', 'EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615', '808CAA0F-C086-467C-8D42-03B203CEBDC3', 'FromCurrencyCode', 'One To Many', 1, 1, 5, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ_BizApps_Accounting: Currencies -> MJ_BizApps_Accounting: Currency Spot Rates (One To Many via ToCurrencyCode) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '58f498ce-f911-4f59-88ee-d6b14267347c'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('58f498ce-f911-4f59-88ee-d6b14267347c', 'EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615', '808CAA0F-C086-467C-8D42-03B203CEBDC3', 'ToCurrencyCode', 'One To Many', 1, 1, 6, GETUTCDATE(), GETUTCDATE())
+   END;
+                    
+/* Create Entity Relationship: MJ_BizApps_Accounting: GL Account Links -> MJ_BizApps_Accounting: GL Account Link Dimensions (One To Many via GLAccountLinkID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '24a4d76d-3d21-4b4b-bf72-44f1f40b8e20'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('24a4d76d-3d21-4b4b-bf72-44f1f40b8e20', '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946', '5BE1D6E3-2CB3-4C6E-9FA2-592F7B1C65DE', 'GLAccountLinkID', 'One To Many', 1, 1, 1, GETUTCDATE(), GETUTCDATE())
+   END;
+
+
+/* Create Entity Relationship: MJ_BizApps_Accounting: Journal Entry Batches -> MJ_BizApps_Accounting: Journal Entries (One To Many via BatchID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '3eb604e5-4c43-4b06-84dd-dc32e6af2854'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('3eb604e5-4c43-4b06-84dd-dc32e6af2854', '9F6A0506-7D62-4461-9D00-E733692A351B', '026F7B4B-64F0-4267-B74E-45C1ADD32732', 'BatchID', 'One To Many', 1, 1, 1, GETUTCDATE(), GETUTCDATE())
+   END;
+
+/* Set IS-A ParentID for "MJ_BizApps_Accounting: Accounting Company Profiles" → "MJ: Companies" */
+UPDATE [${mjSchema}].[Entity]
+                                  SET [__mj_UpdatedAt]=GETUTCDATE(),
+                                      [ParentID] = 'D4238F34-2837-EF11-86D4-6045BDEE16E6'
+                                  WHERE [ID] = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60';
+
+/* SQL text to sync schema info from database schemas */
+EXEC [${mjSchema}].[spUpdateSchemaInfoFromDatabase] @ExcludedSchemaNames='sys,staging,dbo,${mjSchema},${mjSchema}_BizAppsCommon,${mjSchema}_BizAppsTasks,${mjSchema}_BizAppsCommon,${mjSchema}_BizAppsTasks,${mjSchema}';
+
+/* Index for Foreign Keys for AccountingCompanyProfile */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+-- Item: Index for Foreign Keys
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+-- Index for foreign key FunctionalCurrencyCode in table AccountingCompanyProfile
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_FunctionalCurrencyCode' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[AccountingCompanyProfile]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_FunctionalCurrencyCode ON [${flyway:defaultSchema}].[AccountingCompanyProfile] ([FunctionalCurrencyCode]);
+
+-- Index for foreign key ReportingCurrencyCode in table AccountingCompanyProfile
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_ReportingCurrencyCode' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[AccountingCompanyProfile]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_ReportingCurrencyCode ON [${flyway:defaultSchema}].[AccountingCompanyProfile] ([ReportingCurrencyCode]);
+
+-- Index for foreign key ParentAccountingCompanyID in table AccountingCompanyProfile
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_ParentAccountingCompanyID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[AccountingCompanyProfile]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_ParentAccountingCompanyID ON [${flyway:defaultSchema}].[AccountingCompanyProfile] ([ParentAccountingCompanyID]);
+
+-- Index for foreign key ApprovalCFOUserID in table AccountingCompanyProfile
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_ApprovalCFOUserID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[AccountingCompanyProfile]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_AccountingCompanyProfile_ApprovalCFOUserID ON [${flyway:defaultSchema}].[AccountingCompanyProfile] ([ApprovalCFOUserID]);
+
+/* SQL text to update entity field related entity name field map for entity field ID D96D1F56-7349-4905-98FB-F20BA5BD8406 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='D96D1F56-7349-4905-98FB-F20BA5BD8406', @RelatedEntityNameFieldMap='FunctionalCurrencyCode_Virtual';
+
+/* Index for Foreign Keys for Currency */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Currencies
+-- Item: Index for Foreign Keys
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------;
+
+/* Index for Foreign Keys for CurrencySpotRate */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Currency Spot Rates
+-- Item: Index for Foreign Keys
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+-- Index for foreign key FromCurrencyCode in table CurrencySpotRate
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_CurrencySpotRate_FromCurrencyCode' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[CurrencySpotRate]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_CurrencySpotRate_FromCurrencyCode ON [${flyway:defaultSchema}].[CurrencySpotRate] ([FromCurrencyCode]);
+
+-- Index for foreign key ToCurrencyCode in table CurrencySpotRate
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_CurrencySpotRate_ToCurrencyCode' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[CurrencySpotRate]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_CurrencySpotRate_ToCurrencyCode ON [${flyway:defaultSchema}].[CurrencySpotRate] ([ToCurrencyCode]);
+
+/* SQL text to update entity field related entity name field map for entity field ID A3D196B5-5454-4A5D-B673-89883B742AC5 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='A3D196B5-5454-4A5D-B673-89883B742AC5', @RelatedEntityNameFieldMap='FromCurrencyCode_Virtual';
+
+/* Index for Foreign Keys for CustomerTaxProfile */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Customer Tax Profiles
+-- Item: Index for Foreign Keys
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+-- Index for foreign key OrganizationID in table CustomerTaxProfile
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_CustomerTaxProfile_OrganizationID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[CustomerTaxProfile]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_CustomerTaxProfile_OrganizationID ON [${flyway:defaultSchema}].[CustomerTaxProfile] ([OrganizationID]);
+
+-- Index for foreign key TaxJurisdictionID in table CustomerTaxProfile
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_CustomerTaxProfile_TaxJurisdictionID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[CustomerTaxProfile]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_CustomerTaxProfile_TaxJurisdictionID ON [${flyway:defaultSchema}].[CustomerTaxProfile] ([TaxJurisdictionID]);
+
+/* SQL text to update entity field related entity name field map for entity field ID DDBF08AF-7FA8-4082-9F8A-F59DF563AFF4 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='DDBF08AF-7FA8-4082-9F8A-F59DF563AFF4', @RelatedEntityNameFieldMap='Organization';
+
+/* Index for Foreign Keys for DimensionValue */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Dimension Values
+-- Item: Index for Foreign Keys
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+-- Index for foreign key DimensionID in table DimensionValue
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_DimensionValue_DimensionID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[DimensionValue]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_DimensionValue_DimensionID ON [${flyway:defaultSchema}].[DimensionValue] ([DimensionID]);
+
+-- Index for foreign key ParentDimensionValueID in table DimensionValue
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_DimensionValue_ParentDimensionValueID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[DimensionValue]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_DimensionValue_ParentDimensionValueID ON [${flyway:defaultSchema}].[DimensionValue] ([ParentDimensionValueID]);
+
+/* SQL text to update entity field related entity name field map for entity field ID B4DC1E6C-F20B-4D84-9D65-7096B5E53197 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='B4DC1E6C-F20B-4D84-9D65-7096B5E53197', @RelatedEntityNameFieldMap='Dimension';
+
+/* Base View SQL for MJ_BizApps_Accounting: Currencies */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Currencies
+-- Item: vwCurrencies
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- BASE VIEW FOR ENTITY:      MJ_BizApps_Accounting: Currencies
+-----               SCHEMA:      ${flyway:defaultSchema}
+-----               BASE TABLE:  Currency
+-----               PRIMARY KEY: ID
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[vwCurrencies]', 'V') IS NOT NULL
+    DROP VIEW [${flyway:defaultSchema}].[vwCurrencies];
+GO
+
+CREATE VIEW [${flyway:defaultSchema}].[vwCurrencies]
+AS
+SELECT
+    c.*
+FROM
+    [${flyway:defaultSchema}].[Currency] AS c
+GO
+GRANT SELECT ON [${flyway:defaultSchema}].[vwCurrencies] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* Base View Permissions SQL for MJ_BizApps_Accounting: Currencies */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Currencies
+-- Item: Permissions for vwCurrencies
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+GRANT SELECT ON [${flyway:defaultSchema}].[vwCurrencies] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* spCreate SQL for MJ_BizApps_Accounting: Currencies */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Currencies
+-- Item: spCreateCurrency
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- CREATE PROCEDURE FOR Currency
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spCreateCurrency]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spCreateCurrency];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateCurrency]
+    @ID uniqueidentifier = NULL,
+    @Code char(3),
+    @Name nvarchar(80),
+    @Symbol_Clear bit = 0,
+    @Symbol nvarchar(10) = NULL,
+    @DecimalPlaces tinyint = NULL,
+    @IsActive bit = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @InsertedRow TABLE ([ID] UNIQUEIDENTIFIER)
+
+    IF @ID IS NOT NULL
+    BEGIN
+        -- User provided a value, use it
+        INSERT INTO [${flyway:defaultSchema}].[Currency]
+            (
+                [ID],
+                [Code],
+                [Name],
+                [Symbol],
+                [DecimalPlaces],
+                [IsActive]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @ID,
+                @Code,
+                @Name,
+                CASE WHEN @Symbol_Clear = 1 THEN NULL ELSE ISNULL(@Symbol, NULL) END,
+                ISNULL(@DecimalPlaces, 2),
+                ISNULL(@IsActive, 1)
+            )
+    END
+    ELSE
+    BEGIN
+        -- No value provided, let database use its default (e.g., NEWSEQUENTIALID())
+        INSERT INTO [${flyway:defaultSchema}].[Currency]
+            (
+                [Code],
+                [Name],
+                [Symbol],
+                [DecimalPlaces],
+                [IsActive]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @Code,
+                @Name,
+                CASE WHEN @Symbol_Clear = 1 THEN NULL ELSE ISNULL(@Symbol, NULL) END,
+                ISNULL(@DecimalPlaces, 2),
+                ISNULL(@IsActive, 1)
+            )
+    END
+    -- return the new record from the base view, which might have some calculated fields
+    SELECT * FROM [${flyway:defaultSchema}].[vwCurrencies] WHERE [ID] = (SELECT [ID] FROM @InsertedRow)
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateCurrency] TO [cdp_Developer], [cdp_Integration];
+
+/* spCreate Permissions for MJ_BizApps_Accounting: Currencies */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateCurrency] TO [cdp_Developer], [cdp_Integration];
+
+/* spUpdate SQL for MJ_BizApps_Accounting: Currencies */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Currencies
+-- Item: spUpdateCurrency
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- UPDATE PROCEDURE FOR Currency
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spUpdateCurrency]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spUpdateCurrency];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateCurrency]
+    @ID uniqueidentifier,
+    @Code char(3) = NULL,
+    @Name nvarchar(80) = NULL,
+    @Symbol_Clear bit = 0,
+    @Symbol nvarchar(10) = NULL,
+    @DecimalPlaces tinyint = NULL,
+    @IsActive bit = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[Currency]
+    SET
+        [Code] = ISNULL(@Code, [Code]),
+        [Name] = ISNULL(@Name, [Name]),
+        [Symbol] = CASE WHEN @Symbol_Clear = 1 THEN NULL ELSE ISNULL(@Symbol, [Symbol]) END,
+        [DecimalPlaces] = ISNULL(@DecimalPlaces, [DecimalPlaces]),
+        [IsActive] = ISNULL(@IsActive, [IsActive])
+    WHERE
+        [ID] = @ID
+
+    -- Check if the update was successful
+    IF @@ROWCOUNT = 0
+        -- Nothing was updated, return no rows, but column structure from base view intact, semantically correct this way.
+        SELECT TOP 0 * FROM [${flyway:defaultSchema}].[vwCurrencies] WHERE 1=0
+    ELSE
+        -- Return the updated record so the caller can see the updated values and any calculated fields
+        SELECT
+                                        *
+                                    FROM
+                                        [${flyway:defaultSchema}].[vwCurrencies]
+                                    WHERE
+                                        [ID] = @ID
+                                    
+END
+GO
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateCurrency] TO [cdp_Developer], [cdp_Integration]
+GO
+
+------------------------------------------------------------
+----- TRIGGER FOR __mj_UpdatedAt field for the Currency table
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[trgUpdateCurrency]', 'TR') IS NOT NULL
+    DROP TRIGGER [${flyway:defaultSchema}].[trgUpdateCurrency];
+GO
+CREATE TRIGGER [${flyway:defaultSchema}].trgUpdateCurrency
+ON [${flyway:defaultSchema}].[Currency]
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[Currency]
+    SET
+        __mj_UpdatedAt = GETUTCDATE()
+    FROM
+        [${flyway:defaultSchema}].[Currency] AS _organicTable
+    INNER JOIN
+        INSERTED AS I ON
+        _organicTable.[ID] = I.[ID];
+END;
+GO
+
+/* spUpdate Permissions for MJ_BizApps_Accounting: Currencies */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateCurrency] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete SQL for MJ_BizApps_Accounting: Currencies */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Currencies
+-- Item: spDeleteCurrency
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- DELETE PROCEDURE FOR Currency
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spDeleteCurrency]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spDeleteCurrency];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spDeleteCurrency]
+    @ID uniqueidentifier
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DELETE FROM
+        [${flyway:defaultSchema}].[Currency]
+    WHERE
+        [ID] = @ID
+
+
+    -- Check if the delete was successful
+    IF @@ROWCOUNT = 0
+        SELECT NULL AS [ID] -- Return NULL for all primary key fields to indicate no record was deleted
+    ELSE
+        SELECT @ID AS [ID] -- Return the primary key values to indicate we successfully deleted the record
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteCurrency] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete Permissions for MJ_BizApps_Accounting: Currencies */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteCurrency] TO [cdp_Developer], [cdp_Integration];
+
+/* SQL text to update entity field related entity name field map for entity field ID 1F07A472-71AD-496A-8A2D-0D69739ECD70 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='1F07A472-71AD-496A-8A2D-0D69739ECD70', @RelatedEntityNameFieldMap='ReportingCurrencyCode_Virtual';
+
+/* SQL text to update entity field related entity name field map for entity field ID 9B7E7916-3FBF-470F-9763-02F2D85A17FB */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='9B7E7916-3FBF-470F-9763-02F2D85A17FB', @RelatedEntityNameFieldMap='ToCurrencyCode_Virtual';
+
+/* SQL text to update entity field related entity name field map for entity field ID 0924123E-762D-425F-92EB-FE71CF29BB79 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='0924123E-762D-425F-92EB-FE71CF29BB79', @RelatedEntityNameFieldMap='TaxJurisdiction';
+
+/* SQL text to update entity field related entity name field map for entity field ID 4EE5B975-AE83-4EFC-8187-E5B1F3ABA643 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='4EE5B975-AE83-4EFC-8187-E5B1F3ABA643', @RelatedEntityNameFieldMap='ParentDimensionValue';
+
+/* Base View SQL for MJ_BizApps_Accounting: Currency Spot Rates */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Currency Spot Rates
+-- Item: vwCurrencySpotRates
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- BASE VIEW FOR ENTITY:      MJ_BizApps_Accounting: Currency Spot Rates
+-----               SCHEMA:      ${flyway:defaultSchema}
+-----               BASE TABLE:  CurrencySpotRate
+-----               PRIMARY KEY: ID
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[vwCurrencySpotRates]', 'V') IS NOT NULL
+    DROP VIEW [${flyway:defaultSchema}].[vwCurrencySpotRates];
+GO
+
+CREATE VIEW [${flyway:defaultSchema}].[vwCurrencySpotRates]
+AS
+SELECT
+    c.*,
+    mjBizAppsAccountingCurrency_FromCurrencyCode.[Name] AS [FromCurrencyCode_Virtual],
+    mjBizAppsAccountingCurrency_ToCurrencyCode.[Name] AS [ToCurrencyCode_Virtual]
+FROM
+    [${flyway:defaultSchema}].[CurrencySpotRate] AS c
+INNER JOIN
+    [${flyway:defaultSchema}].[Currency] AS mjBizAppsAccountingCurrency_FromCurrencyCode
+  ON
+    [c].[FromCurrencyCode] = mjBizAppsAccountingCurrency_FromCurrencyCode.[Code]
+INNER JOIN
+    [${flyway:defaultSchema}].[Currency] AS mjBizAppsAccountingCurrency_ToCurrencyCode
+  ON
+    [c].[ToCurrencyCode] = mjBizAppsAccountingCurrency_ToCurrencyCode.[Code]
+GO
+GRANT SELECT ON [${flyway:defaultSchema}].[vwCurrencySpotRates] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* Base View Permissions SQL for MJ_BizApps_Accounting: Currency Spot Rates */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Currency Spot Rates
+-- Item: Permissions for vwCurrencySpotRates
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+GRANT SELECT ON [${flyway:defaultSchema}].[vwCurrencySpotRates] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* spCreate SQL for MJ_BizApps_Accounting: Currency Spot Rates */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Currency Spot Rates
+-- Item: spCreateCurrencySpotRate
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- CREATE PROCEDURE FOR CurrencySpotRate
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spCreateCurrencySpotRate]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spCreateCurrencySpotRate];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateCurrencySpotRate]
+    @ID uniqueidentifier = NULL,
+    @FromCurrencyCode char(3),
+    @ToCurrencyCode char(3),
+    @RateDate date,
+    @Rate decimal(18, 8),
+    @Source nvarchar(50) = NULL,
+    @IsActive bit = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @InsertedRow TABLE ([ID] UNIQUEIDENTIFIER)
+
+    IF @ID IS NOT NULL
+    BEGIN
+        -- User provided a value, use it
+        INSERT INTO [${flyway:defaultSchema}].[CurrencySpotRate]
+            (
+                [ID],
+                [FromCurrencyCode],
+                [ToCurrencyCode],
+                [RateDate],
+                [Rate],
+                [Source],
+                [IsActive]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @ID,
+                @FromCurrencyCode,
+                @ToCurrencyCode,
+                @RateDate,
+                @Rate,
+                ISNULL(@Source, 'Manual'),
+                ISNULL(@IsActive, 1)
+            )
+    END
+    ELSE
+    BEGIN
+        -- No value provided, let database use its default (e.g., NEWSEQUENTIALID())
+        INSERT INTO [${flyway:defaultSchema}].[CurrencySpotRate]
+            (
+                [FromCurrencyCode],
+                [ToCurrencyCode],
+                [RateDate],
+                [Rate],
+                [Source],
+                [IsActive]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @FromCurrencyCode,
+                @ToCurrencyCode,
+                @RateDate,
+                @Rate,
+                ISNULL(@Source, 'Manual'),
+                ISNULL(@IsActive, 1)
+            )
+    END
+    -- return the new record from the base view, which might have some calculated fields
+    SELECT * FROM [${flyway:defaultSchema}].[vwCurrencySpotRates] WHERE [ID] = (SELECT [ID] FROM @InsertedRow)
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateCurrencySpotRate] TO [cdp_Developer], [cdp_Integration];
+
+/* spCreate Permissions for MJ_BizApps_Accounting: Currency Spot Rates */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateCurrencySpotRate] TO [cdp_Developer], [cdp_Integration];
+
+/* spUpdate SQL for MJ_BizApps_Accounting: Currency Spot Rates */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Currency Spot Rates
+-- Item: spUpdateCurrencySpotRate
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- UPDATE PROCEDURE FOR CurrencySpotRate
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spUpdateCurrencySpotRate]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spUpdateCurrencySpotRate];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateCurrencySpotRate]
+    @ID uniqueidentifier,
+    @FromCurrencyCode char(3) = NULL,
+    @ToCurrencyCode char(3) = NULL,
+    @RateDate date = NULL,
+    @Rate decimal(18, 8) = NULL,
+    @Source nvarchar(50) = NULL,
+    @IsActive bit = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[CurrencySpotRate]
+    SET
+        [FromCurrencyCode] = ISNULL(@FromCurrencyCode, [FromCurrencyCode]),
+        [ToCurrencyCode] = ISNULL(@ToCurrencyCode, [ToCurrencyCode]),
+        [RateDate] = ISNULL(@RateDate, [RateDate]),
+        [Rate] = ISNULL(@Rate, [Rate]),
+        [Source] = ISNULL(@Source, [Source]),
+        [IsActive] = ISNULL(@IsActive, [IsActive])
+    WHERE
+        [ID] = @ID
+
+    -- Check if the update was successful
+    IF @@ROWCOUNT = 0
+        -- Nothing was updated, return no rows, but column structure from base view intact, semantically correct this way.
+        SELECT TOP 0 * FROM [${flyway:defaultSchema}].[vwCurrencySpotRates] WHERE 1=0
+    ELSE
+        -- Return the updated record so the caller can see the updated values and any calculated fields
+        SELECT
+                                        *
+                                    FROM
+                                        [${flyway:defaultSchema}].[vwCurrencySpotRates]
+                                    WHERE
+                                        [ID] = @ID
+                                    
+END
+GO
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateCurrencySpotRate] TO [cdp_Developer], [cdp_Integration]
+GO
+
+------------------------------------------------------------
+----- TRIGGER FOR __mj_UpdatedAt field for the CurrencySpotRate table
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[trgUpdateCurrencySpotRate]', 'TR') IS NOT NULL
+    DROP TRIGGER [${flyway:defaultSchema}].[trgUpdateCurrencySpotRate];
+GO
+CREATE TRIGGER [${flyway:defaultSchema}].trgUpdateCurrencySpotRate
+ON [${flyway:defaultSchema}].[CurrencySpotRate]
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[CurrencySpotRate]
+    SET
+        __mj_UpdatedAt = GETUTCDATE()
+    FROM
+        [${flyway:defaultSchema}].[CurrencySpotRate] AS _organicTable
+    INNER JOIN
+        INSERTED AS I ON
+        _organicTable.[ID] = I.[ID];
+END;
+GO
+
+/* spUpdate Permissions for MJ_BizApps_Accounting: Currency Spot Rates */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateCurrencySpotRate] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete SQL for MJ_BizApps_Accounting: Currency Spot Rates */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Currency Spot Rates
+-- Item: spDeleteCurrencySpotRate
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- DELETE PROCEDURE FOR CurrencySpotRate
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spDeleteCurrencySpotRate]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spDeleteCurrencySpotRate];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spDeleteCurrencySpotRate]
+    @ID uniqueidentifier
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DELETE FROM
+        [${flyway:defaultSchema}].[CurrencySpotRate]
+    WHERE
+        [ID] = @ID
+
+
+    -- Check if the delete was successful
+    IF @@ROWCOUNT = 0
+        SELECT NULL AS [ID] -- Return NULL for all primary key fields to indicate no record was deleted
+    ELSE
+        SELECT @ID AS [ID] -- Return the primary key values to indicate we successfully deleted the record
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteCurrencySpotRate] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete Permissions for MJ_BizApps_Accounting: Currency Spot Rates */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteCurrencySpotRate] TO [cdp_Developer], [cdp_Integration];
+
+/* SQL text to update entity field related entity name field map for entity field ID D54D9423-1DB4-440C-99AD-48B7806BBE7F */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='D54D9423-1DB4-440C-99AD-48B7806BBE7F', @RelatedEntityNameFieldMap='ApprovalCFOUser';
+
+/* Base View SQL for MJ_BizApps_Accounting: Customer Tax Profiles */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Customer Tax Profiles
+-- Item: vwCustomerTaxProfiles
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- BASE VIEW FOR ENTITY:      MJ_BizApps_Accounting: Customer Tax Profiles
+-----               SCHEMA:      ${flyway:defaultSchema}
+-----               BASE TABLE:  CustomerTaxProfile
+-----               PRIMARY KEY: ID
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[vwCustomerTaxProfiles]', 'V') IS NOT NULL
+    DROP VIEW [${flyway:defaultSchema}].[vwCustomerTaxProfiles];
+GO
+
+CREATE VIEW [${flyway:defaultSchema}].[vwCustomerTaxProfiles]
+AS
+SELECT
+    c.*,
+    mjBizAppsCommonOrganization_OrganizationID.[Name] AS [Organization],
+    mjBizAppsAccountingTaxJurisdiction_TaxJurisdictionID.[Name] AS [TaxJurisdiction]
+FROM
+    [${flyway:defaultSchema}].[CustomerTaxProfile] AS c
+INNER JOIN
+    [${mjSchema}_BizAppsCommon].[Organization] AS mjBizAppsCommonOrganization_OrganizationID
+  ON
+    [c].[OrganizationID] = mjBizAppsCommonOrganization_OrganizationID.[ID]
+LEFT OUTER JOIN
+    [${flyway:defaultSchema}].[TaxJurisdiction] AS mjBizAppsAccountingTaxJurisdiction_TaxJurisdictionID
+  ON
+    [c].[TaxJurisdictionID] = mjBizAppsAccountingTaxJurisdiction_TaxJurisdictionID.[ID]
+GO
+GRANT SELECT ON [${flyway:defaultSchema}].[vwCustomerTaxProfiles] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* Base View Permissions SQL for MJ_BizApps_Accounting: Customer Tax Profiles */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Customer Tax Profiles
+-- Item: Permissions for vwCustomerTaxProfiles
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+GRANT SELECT ON [${flyway:defaultSchema}].[vwCustomerTaxProfiles] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* spCreate SQL for MJ_BizApps_Accounting: Customer Tax Profiles */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Customer Tax Profiles
+-- Item: spCreateCustomerTaxProfile
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- CREATE PROCEDURE FOR CustomerTaxProfile
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spCreateCustomerTaxProfile]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spCreateCustomerTaxProfile];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateCustomerTaxProfile]
+    @ID uniqueidentifier = NULL,
+    @OrganizationID uniqueidentifier,
+    @TaxJurisdictionID_Clear bit = 0,
+    @TaxJurisdictionID uniqueidentifier = NULL,
+    @TaxIDNumber_Clear bit = 0,
+    @TaxIDNumber nvarchar(100) = NULL,
+    @IsExempt bit = NULL,
+    @ExemptionCertificateRef_Clear bit = 0,
+    @ExemptionCertificateRef nvarchar(200) = NULL,
+    @ExemptionExpiryDate_Clear bit = 0,
+    @ExemptionExpiryDate date = NULL,
+    @EffectiveFrom date,
+    @EffectiveTo_Clear bit = 0,
+    @EffectiveTo date = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @InsertedRow TABLE ([ID] UNIQUEIDENTIFIER)
+
+    IF @ID IS NOT NULL
+    BEGIN
+        -- User provided a value, use it
+        INSERT INTO [${flyway:defaultSchema}].[CustomerTaxProfile]
+            (
+                [ID],
+                [OrganizationID],
+                [TaxJurisdictionID],
+                [TaxIDNumber],
+                [IsExempt],
+                [ExemptionCertificateRef],
+                [ExemptionExpiryDate],
+                [EffectiveFrom],
+                [EffectiveTo]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @ID,
+                @OrganizationID,
+                CASE WHEN @TaxJurisdictionID_Clear = 1 THEN NULL ELSE ISNULL(@TaxJurisdictionID, NULL) END,
+                CASE WHEN @TaxIDNumber_Clear = 1 THEN NULL ELSE ISNULL(@TaxIDNumber, NULL) END,
+                ISNULL(@IsExempt, 0),
+                CASE WHEN @ExemptionCertificateRef_Clear = 1 THEN NULL ELSE ISNULL(@ExemptionCertificateRef, NULL) END,
+                CASE WHEN @ExemptionExpiryDate_Clear = 1 THEN NULL ELSE ISNULL(@ExemptionExpiryDate, NULL) END,
+                @EffectiveFrom,
+                CASE WHEN @EffectiveTo_Clear = 1 THEN NULL ELSE ISNULL(@EffectiveTo, NULL) END
+            )
+    END
+    ELSE
+    BEGIN
+        -- No value provided, let database use its default (e.g., NEWSEQUENTIALID())
+        INSERT INTO [${flyway:defaultSchema}].[CustomerTaxProfile]
+            (
+                [OrganizationID],
+                [TaxJurisdictionID],
+                [TaxIDNumber],
+                [IsExempt],
+                [ExemptionCertificateRef],
+                [ExemptionExpiryDate],
+                [EffectiveFrom],
+                [EffectiveTo]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @OrganizationID,
+                CASE WHEN @TaxJurisdictionID_Clear = 1 THEN NULL ELSE ISNULL(@TaxJurisdictionID, NULL) END,
+                CASE WHEN @TaxIDNumber_Clear = 1 THEN NULL ELSE ISNULL(@TaxIDNumber, NULL) END,
+                ISNULL(@IsExempt, 0),
+                CASE WHEN @ExemptionCertificateRef_Clear = 1 THEN NULL ELSE ISNULL(@ExemptionCertificateRef, NULL) END,
+                CASE WHEN @ExemptionExpiryDate_Clear = 1 THEN NULL ELSE ISNULL(@ExemptionExpiryDate, NULL) END,
+                @EffectiveFrom,
+                CASE WHEN @EffectiveTo_Clear = 1 THEN NULL ELSE ISNULL(@EffectiveTo, NULL) END
+            )
+    END
+    -- return the new record from the base view, which might have some calculated fields
+    SELECT * FROM [${flyway:defaultSchema}].[vwCustomerTaxProfiles] WHERE [ID] = (SELECT [ID] FROM @InsertedRow)
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateCustomerTaxProfile] TO [cdp_Developer], [cdp_Integration];
+
+/* spCreate Permissions for MJ_BizApps_Accounting: Customer Tax Profiles */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateCustomerTaxProfile] TO [cdp_Developer], [cdp_Integration];
+
+/* spUpdate SQL for MJ_BizApps_Accounting: Customer Tax Profiles */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Customer Tax Profiles
+-- Item: spUpdateCustomerTaxProfile
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- UPDATE PROCEDURE FOR CustomerTaxProfile
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spUpdateCustomerTaxProfile]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spUpdateCustomerTaxProfile];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateCustomerTaxProfile]
+    @ID uniqueidentifier,
+    @OrganizationID uniqueidentifier = NULL,
+    @TaxJurisdictionID_Clear bit = 0,
+    @TaxJurisdictionID uniqueidentifier = NULL,
+    @TaxIDNumber_Clear bit = 0,
+    @TaxIDNumber nvarchar(100) = NULL,
+    @IsExempt bit = NULL,
+    @ExemptionCertificateRef_Clear bit = 0,
+    @ExemptionCertificateRef nvarchar(200) = NULL,
+    @ExemptionExpiryDate_Clear bit = 0,
+    @ExemptionExpiryDate date = NULL,
+    @EffectiveFrom date = NULL,
+    @EffectiveTo_Clear bit = 0,
+    @EffectiveTo date = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[CustomerTaxProfile]
+    SET
+        [OrganizationID] = ISNULL(@OrganizationID, [OrganizationID]),
+        [TaxJurisdictionID] = CASE WHEN @TaxJurisdictionID_Clear = 1 THEN NULL ELSE ISNULL(@TaxJurisdictionID, [TaxJurisdictionID]) END,
+        [TaxIDNumber] = CASE WHEN @TaxIDNumber_Clear = 1 THEN NULL ELSE ISNULL(@TaxIDNumber, [TaxIDNumber]) END,
+        [IsExempt] = ISNULL(@IsExempt, [IsExempt]),
+        [ExemptionCertificateRef] = CASE WHEN @ExemptionCertificateRef_Clear = 1 THEN NULL ELSE ISNULL(@ExemptionCertificateRef, [ExemptionCertificateRef]) END,
+        [ExemptionExpiryDate] = CASE WHEN @ExemptionExpiryDate_Clear = 1 THEN NULL ELSE ISNULL(@ExemptionExpiryDate, [ExemptionExpiryDate]) END,
+        [EffectiveFrom] = ISNULL(@EffectiveFrom, [EffectiveFrom]),
+        [EffectiveTo] = CASE WHEN @EffectiveTo_Clear = 1 THEN NULL ELSE ISNULL(@EffectiveTo, [EffectiveTo]) END
+    WHERE
+        [ID] = @ID
+
+    -- Check if the update was successful
+    IF @@ROWCOUNT = 0
+        -- Nothing was updated, return no rows, but column structure from base view intact, semantically correct this way.
+        SELECT TOP 0 * FROM [${flyway:defaultSchema}].[vwCustomerTaxProfiles] WHERE 1=0
+    ELSE
+        -- Return the updated record so the caller can see the updated values and any calculated fields
+        SELECT
+                                        *
+                                    FROM
+                                        [${flyway:defaultSchema}].[vwCustomerTaxProfiles]
+                                    WHERE
+                                        [ID] = @ID
+                                    
+END
+GO
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateCustomerTaxProfile] TO [cdp_Developer], [cdp_Integration]
+GO
+
+------------------------------------------------------------
+----- TRIGGER FOR __mj_UpdatedAt field for the CustomerTaxProfile table
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[trgUpdateCustomerTaxProfile]', 'TR') IS NOT NULL
+    DROP TRIGGER [${flyway:defaultSchema}].[trgUpdateCustomerTaxProfile];
+GO
+CREATE TRIGGER [${flyway:defaultSchema}].trgUpdateCustomerTaxProfile
+ON [${flyway:defaultSchema}].[CustomerTaxProfile]
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[CustomerTaxProfile]
+    SET
+        __mj_UpdatedAt = GETUTCDATE()
+    FROM
+        [${flyway:defaultSchema}].[CustomerTaxProfile] AS _organicTable
+    INNER JOIN
+        INSERTED AS I ON
+        _organicTable.[ID] = I.[ID];
+END;
+GO
+
+/* spUpdate Permissions for MJ_BizApps_Accounting: Customer Tax Profiles */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateCustomerTaxProfile] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete SQL for MJ_BizApps_Accounting: Customer Tax Profiles */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Customer Tax Profiles
+-- Item: spDeleteCustomerTaxProfile
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- DELETE PROCEDURE FOR CustomerTaxProfile
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spDeleteCustomerTaxProfile]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spDeleteCustomerTaxProfile];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spDeleteCustomerTaxProfile]
+    @ID uniqueidentifier
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DELETE FROM
+        [${flyway:defaultSchema}].[CustomerTaxProfile]
+    WHERE
+        [ID] = @ID
+
+
+    -- Check if the delete was successful
+    IF @@ROWCOUNT = 0
+        SELECT NULL AS [ID] -- Return NULL for all primary key fields to indicate no record was deleted
+    ELSE
+        SELECT @ID AS [ID] -- Return the primary key values to indicate we successfully deleted the record
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteCustomerTaxProfile] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete Permissions for MJ_BizApps_Accounting: Customer Tax Profiles */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteCustomerTaxProfile] TO [cdp_Developer], [cdp_Integration];
+
+/* Root ID Function SQL for MJ_BizApps_Accounting: Dimension Values.ParentDimensionValueID */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Dimension Values
+-- Item: fnDimensionValueParentDimensionValueID_GetRootID
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+------------------------------------------------------------
+----- ROOT ID FUNCTION FOR: [DimensionValue].[ParentDimensionValueID]
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[fnDimensionValueParentDimensionValueID_GetRootID]', 'IF') IS NOT NULL
+    DROP FUNCTION [${flyway:defaultSchema}].[fnDimensionValueParentDimensionValueID_GetRootID];
+GO
+
+CREATE FUNCTION [${flyway:defaultSchema}].[fnDimensionValueParentDimensionValueID_GetRootID]
+(
+    @RecordID uniqueidentifier,
+    @ParentID uniqueidentifier
+)
+RETURNS TABLE
+AS
+RETURN
+(
+    WITH CTE_RootParent AS (
+        SELECT
+            [ID],
+            [ParentDimensionValueID],
+            [ID] AS [RootParentID],
+            0 AS [Depth]
+        FROM
+            [${flyway:defaultSchema}].[DimensionValue]
+        WHERE
+            [ID] = COALESCE(@ParentID, @RecordID)
+
+        UNION ALL
+
+        SELECT
+            c.[ID],
+            c.[ParentDimensionValueID],
+            c.[ID] AS [RootParentID],
+            p.[Depth] + 1 AS [Depth]
+        FROM
+            [${flyway:defaultSchema}].[DimensionValue] c
+        INNER JOIN
+            CTE_RootParent p ON c.[ID] = p.[ParentDimensionValueID]
+        WHERE
+            p.[Depth] < 100
+    )
+    SELECT TOP 1
+        [RootParentID] AS RootID
+    FROM
+        CTE_RootParent
+    WHERE
+        [ParentDimensionValueID] IS NULL
+    ORDER BY
+        [RootParentID]
+);
+GO
+
+/* Base View SQL for MJ_BizApps_Accounting: Dimension Values */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Dimension Values
+-- Item: vwDimensionValues
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- BASE VIEW FOR ENTITY:      MJ_BizApps_Accounting: Dimension Values
+-----               SCHEMA:      ${flyway:defaultSchema}
+-----               BASE TABLE:  DimensionValue
+-----               PRIMARY KEY: ID
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[vwDimensionValues]', 'V') IS NOT NULL
+    DROP VIEW [${flyway:defaultSchema}].[vwDimensionValues];
+GO
+
+CREATE VIEW [${flyway:defaultSchema}].[vwDimensionValues]
+AS
+SELECT
+    d.*,
+    mjBizAppsAccountingDimension_DimensionID.[Name] AS [Dimension],
+    mjBizAppsAccountingDimensionValue_ParentDimensionValueID.[Name] AS [ParentDimensionValue],
+    root_ParentDimensionValueID.RootID AS [RootParentDimensionValueID]
+FROM
+    [${flyway:defaultSchema}].[DimensionValue] AS d
+INNER JOIN
+    [${flyway:defaultSchema}].[Dimension] AS mjBizAppsAccountingDimension_DimensionID
+  ON
+    [d].[DimensionID] = mjBizAppsAccountingDimension_DimensionID.[ID]
+LEFT OUTER JOIN
+    [${flyway:defaultSchema}].[DimensionValue] AS mjBizAppsAccountingDimensionValue_ParentDimensionValueID
+  ON
+    [d].[ParentDimensionValueID] = mjBizAppsAccountingDimensionValue_ParentDimensionValueID.[ID]
+OUTER APPLY
+    [${flyway:defaultSchema}].[fnDimensionValueParentDimensionValueID_GetRootID]([d].[ID], [d].[ParentDimensionValueID]) AS root_ParentDimensionValueID
+GO
+GRANT SELECT ON [${flyway:defaultSchema}].[vwDimensionValues] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* Base View Permissions SQL for MJ_BizApps_Accounting: Dimension Values */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Dimension Values
+-- Item: Permissions for vwDimensionValues
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+GRANT SELECT ON [${flyway:defaultSchema}].[vwDimensionValues] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* spCreate SQL for MJ_BizApps_Accounting: Dimension Values */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Dimension Values
+-- Item: spCreateDimensionValue
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- CREATE PROCEDURE FOR DimensionValue
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spCreateDimensionValue]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spCreateDimensionValue];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateDimensionValue]
+    @ID uniqueidentifier = NULL,
+    @DimensionID uniqueidentifier,
+    @Code nvarchar(80),
+    @Name nvarchar(200),
+    @ParentDimensionValueID_Clear bit = 0,
+    @ParentDimensionValueID uniqueidentifier = NULL,
+    @EffectiveFrom_Clear bit = 0,
+    @EffectiveFrom date = NULL,
+    @EffectiveTo_Clear bit = 0,
+    @EffectiveTo date = NULL,
+    @IsActive bit = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @InsertedRow TABLE ([ID] UNIQUEIDENTIFIER)
+
+    IF @ID IS NOT NULL
+    BEGIN
+        -- User provided a value, use it
+        INSERT INTO [${flyway:defaultSchema}].[DimensionValue]
+            (
+                [ID],
+                [DimensionID],
+                [Code],
+                [Name],
+                [ParentDimensionValueID],
+                [EffectiveFrom],
+                [EffectiveTo],
+                [IsActive]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @ID,
+                @DimensionID,
+                @Code,
+                @Name,
+                CASE WHEN @ParentDimensionValueID_Clear = 1 THEN NULL ELSE ISNULL(@ParentDimensionValueID, NULL) END,
+                CASE WHEN @EffectiveFrom_Clear = 1 THEN NULL ELSE ISNULL(@EffectiveFrom, NULL) END,
+                CASE WHEN @EffectiveTo_Clear = 1 THEN NULL ELSE ISNULL(@EffectiveTo, NULL) END,
+                ISNULL(@IsActive, 1)
+            )
+    END
+    ELSE
+    BEGIN
+        -- No value provided, let database use its default (e.g., NEWSEQUENTIALID())
+        INSERT INTO [${flyway:defaultSchema}].[DimensionValue]
+            (
+                [DimensionID],
+                [Code],
+                [Name],
+                [ParentDimensionValueID],
+                [EffectiveFrom],
+                [EffectiveTo],
+                [IsActive]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @DimensionID,
+                @Code,
+                @Name,
+                CASE WHEN @ParentDimensionValueID_Clear = 1 THEN NULL ELSE ISNULL(@ParentDimensionValueID, NULL) END,
+                CASE WHEN @EffectiveFrom_Clear = 1 THEN NULL ELSE ISNULL(@EffectiveFrom, NULL) END,
+                CASE WHEN @EffectiveTo_Clear = 1 THEN NULL ELSE ISNULL(@EffectiveTo, NULL) END,
+                ISNULL(@IsActive, 1)
+            )
+    END
+    -- return the new record from the base view, which might have some calculated fields
+    SELECT * FROM [${flyway:defaultSchema}].[vwDimensionValues] WHERE [ID] = (SELECT [ID] FROM @InsertedRow)
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateDimensionValue] TO [cdp_Developer], [cdp_Integration];
+
+/* spCreate Permissions for MJ_BizApps_Accounting: Dimension Values */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateDimensionValue] TO [cdp_Developer], [cdp_Integration];
+
+/* spUpdate SQL for MJ_BizApps_Accounting: Dimension Values */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Dimension Values
+-- Item: spUpdateDimensionValue
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- UPDATE PROCEDURE FOR DimensionValue
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spUpdateDimensionValue]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spUpdateDimensionValue];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateDimensionValue]
+    @ID uniqueidentifier,
+    @DimensionID uniqueidentifier = NULL,
+    @Code nvarchar(80) = NULL,
+    @Name nvarchar(200) = NULL,
+    @ParentDimensionValueID_Clear bit = 0,
+    @ParentDimensionValueID uniqueidentifier = NULL,
+    @EffectiveFrom_Clear bit = 0,
+    @EffectiveFrom date = NULL,
+    @EffectiveTo_Clear bit = 0,
+    @EffectiveTo date = NULL,
+    @IsActive bit = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[DimensionValue]
+    SET
+        [DimensionID] = ISNULL(@DimensionID, [DimensionID]),
+        [Code] = ISNULL(@Code, [Code]),
+        [Name] = ISNULL(@Name, [Name]),
+        [ParentDimensionValueID] = CASE WHEN @ParentDimensionValueID_Clear = 1 THEN NULL ELSE ISNULL(@ParentDimensionValueID, [ParentDimensionValueID]) END,
+        [EffectiveFrom] = CASE WHEN @EffectiveFrom_Clear = 1 THEN NULL ELSE ISNULL(@EffectiveFrom, [EffectiveFrom]) END,
+        [EffectiveTo] = CASE WHEN @EffectiveTo_Clear = 1 THEN NULL ELSE ISNULL(@EffectiveTo, [EffectiveTo]) END,
+        [IsActive] = ISNULL(@IsActive, [IsActive])
+    WHERE
+        [ID] = @ID
+
+    -- Check if the update was successful
+    IF @@ROWCOUNT = 0
+        -- Nothing was updated, return no rows, but column structure from base view intact, semantically correct this way.
+        SELECT TOP 0 * FROM [${flyway:defaultSchema}].[vwDimensionValues] WHERE 1=0
+    ELSE
+        -- Return the updated record so the caller can see the updated values and any calculated fields
+        SELECT
+                                        *
+                                    FROM
+                                        [${flyway:defaultSchema}].[vwDimensionValues]
+                                    WHERE
+                                        [ID] = @ID
+                                    
+END
+GO
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateDimensionValue] TO [cdp_Developer], [cdp_Integration]
+GO
+
+------------------------------------------------------------
+----- TRIGGER FOR __mj_UpdatedAt field for the DimensionValue table
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[trgUpdateDimensionValue]', 'TR') IS NOT NULL
+    DROP TRIGGER [${flyway:defaultSchema}].[trgUpdateDimensionValue];
+GO
+CREATE TRIGGER [${flyway:defaultSchema}].trgUpdateDimensionValue
+ON [${flyway:defaultSchema}].[DimensionValue]
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[DimensionValue]
+    SET
+        __mj_UpdatedAt = GETUTCDATE()
+    FROM
+        [${flyway:defaultSchema}].[DimensionValue] AS _organicTable
+    INNER JOIN
+        INSERTED AS I ON
+        _organicTable.[ID] = I.[ID];
+END;
+GO
+
+/* spUpdate Permissions for MJ_BizApps_Accounting: Dimension Values */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateDimensionValue] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete SQL for MJ_BizApps_Accounting: Dimension Values */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Dimension Values
+-- Item: spDeleteDimensionValue
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- DELETE PROCEDURE FOR DimensionValue
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spDeleteDimensionValue]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spDeleteDimensionValue];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spDeleteDimensionValue]
+    @ID uniqueidentifier
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DELETE FROM
+        [${flyway:defaultSchema}].[DimensionValue]
+    WHERE
+        [ID] = @ID
+
+
+    -- Check if the delete was successful
+    IF @@ROWCOUNT = 0
+        SELECT NULL AS [ID] -- Return NULL for all primary key fields to indicate no record was deleted
+    ELSE
+        SELECT @ID AS [ID] -- Return the primary key values to indicate we successfully deleted the record
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteDimensionValue] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete Permissions for MJ_BizApps_Accounting: Dimension Values */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteDimensionValue] TO [cdp_Developer], [cdp_Integration];
+
+/* Root ID Function SQL for MJ_BizApps_Accounting: Accounting Company Profiles.ParentAccountingCompanyID */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+-- Item: fnAccountingCompanyProfileParentAccountingCompanyID_GetRootID
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+------------------------------------------------------------
+----- ROOT ID FUNCTION FOR: [AccountingCompanyProfile].[ParentAccountingCompanyID]
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[fnAccountingCompanyProfileParentAccountingCompanyID_GetRootID]', 'IF') IS NOT NULL
+    DROP FUNCTION [${flyway:defaultSchema}].[fnAccountingCompanyProfileParentAccountingCompanyID_GetRootID];
+GO
+
+CREATE FUNCTION [${flyway:defaultSchema}].[fnAccountingCompanyProfileParentAccountingCompanyID_GetRootID]
+(
+    @RecordID uniqueidentifier,
+    @ParentID uniqueidentifier
+)
+RETURNS TABLE
+AS
+RETURN
+(
+    WITH CTE_RootParent AS (
+        SELECT
+            [ID],
+            [ParentAccountingCompanyID],
+            [ID] AS [RootParentID],
+            0 AS [Depth]
+        FROM
+            [${flyway:defaultSchema}].[AccountingCompanyProfile]
+        WHERE
+            [ID] = COALESCE(@ParentID, @RecordID)
+
+        UNION ALL
+
+        SELECT
+            c.[ID],
+            c.[ParentAccountingCompanyID],
+            c.[ID] AS [RootParentID],
+            p.[Depth] + 1 AS [Depth]
+        FROM
+            [${flyway:defaultSchema}].[AccountingCompanyProfile] c
+        INNER JOIN
+            CTE_RootParent p ON c.[ID] = p.[ParentAccountingCompanyID]
+        WHERE
+            p.[Depth] < 100
+    )
+    SELECT TOP 1
+        [RootParentID] AS RootID
+    FROM
+        CTE_RootParent
+    WHERE
+        [ParentAccountingCompanyID] IS NULL
+    ORDER BY
+        [RootParentID]
+);
+GO
+
+/* Base View SQL for MJ_BizApps_Accounting: Accounting Company Profiles */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+-- Item: vwAccountingCompanyProfiles
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- BASE VIEW FOR ENTITY:      MJ_BizApps_Accounting: Accounting Company Profiles
+-----               SCHEMA:      ${flyway:defaultSchema}
+-----               BASE TABLE:  AccountingCompanyProfile
+-----               PRIMARY KEY: ID
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[vwAccountingCompanyProfiles]', 'V') IS NOT NULL
+    DROP VIEW [${flyway:defaultSchema}].[vwAccountingCompanyProfiles];
+GO
+
+CREATE VIEW [${flyway:defaultSchema}].[vwAccountingCompanyProfiles]
+AS
+SELECT
+    a.*,
+    ${mjSchema}_isa_p1.[Name],
+    ${mjSchema}_isa_p1.[Description],
+    ${mjSchema}_isa_p1.[Website],
+    ${mjSchema}_isa_p1.[LogoURL],
+    ${mjSchema}_isa_p1.[Domain],
+    mjBizAppsAccountingCurrency_FunctionalCurrencyCode.[Name] AS [FunctionalCurrencyCode_Virtual],
+    mjBizAppsAccountingCurrency_ReportingCurrencyCode.[Name] AS [ReportingCurrencyCode_Virtual],
+    MJUser_ApprovalCFOUserID.[Name] AS [ApprovalCFOUser],
+    root_ParentAccountingCompanyID.RootID AS [RootParentAccountingCompanyID]
+FROM
+    [${flyway:defaultSchema}].[AccountingCompanyProfile] AS a
+INNER JOIN
+    [${mjSchema}].[Company] AS ${mjSchema}_isa_p1
+  ON
+    [a].[ID] = ${mjSchema}_isa_p1.[ID]
+INNER JOIN
+    [${flyway:defaultSchema}].[Currency] AS mjBizAppsAccountingCurrency_FunctionalCurrencyCode
+  ON
+    [a].[FunctionalCurrencyCode] = mjBizAppsAccountingCurrency_FunctionalCurrencyCode.[Code]
+LEFT OUTER JOIN
+    [${flyway:defaultSchema}].[Currency] AS mjBizAppsAccountingCurrency_ReportingCurrencyCode
+  ON
+    [a].[ReportingCurrencyCode] = mjBizAppsAccountingCurrency_ReportingCurrencyCode.[Code]
+LEFT OUTER JOIN
+    [${mjSchema}].[User] AS MJUser_ApprovalCFOUserID
+  ON
+    [a].[ApprovalCFOUserID] = MJUser_ApprovalCFOUserID.[ID]
+OUTER APPLY
+    [${flyway:defaultSchema}].[fnAccountingCompanyProfileParentAccountingCompanyID_GetRootID]([a].[ID], [a].[ParentAccountingCompanyID]) AS root_ParentAccountingCompanyID
+GO
+GRANT SELECT ON [${flyway:defaultSchema}].[vwAccountingCompanyProfiles] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* Base View Permissions SQL for MJ_BizApps_Accounting: Accounting Company Profiles */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+-- Item: Permissions for vwAccountingCompanyProfiles
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+GRANT SELECT ON [${flyway:defaultSchema}].[vwAccountingCompanyProfiles] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* spCreate SQL for MJ_BizApps_Accounting: Accounting Company Profiles */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+-- Item: spCreateAccountingCompanyProfile
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- CREATE PROCEDURE FOR AccountingCompanyProfile
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spCreateAccountingCompanyProfile]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spCreateAccountingCompanyProfile];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateAccountingCompanyProfile]
+    @ID uniqueidentifier = NULL,
+    @EntityType nvarchar(30) = NULL,
+    @LegalStructureType_Clear bit = 0,
+    @LegalStructureType nvarchar(30) = NULL,
+    @IncorporationDate_Clear bit = 0,
+    @IncorporationDate date = NULL,
+    @JurisdictionCountry_Clear bit = 0,
+    @JurisdictionCountry char(2) = NULL,
+    @JurisdictionRegion_Clear bit = 0,
+    @JurisdictionRegion nvarchar(50) = NULL,
+    @FederalTaxID_Clear bit = 0,
+    @FederalTaxID nvarchar(40) = NULL,
+    @OperatingTimeZone_Clear bit = 0,
+    @OperatingTimeZone nvarchar(60) = NULL,
+    @CompanyCode nvarchar(20),
+    @FunctionalCurrencyCode char(3),
+    @ReportingCurrencyCode_Clear bit = 0,
+    @ReportingCurrencyCode char(3) = NULL,
+    @FiscalYearStartMonth tinyint = NULL,
+    @FiscalYearStartDay tinyint = NULL,
+    @ParentAccountingCompanyID_Clear bit = 0,
+    @ParentAccountingCompanyID uniqueidentifier = NULL,
+    @DefaultPaymentTermsTypeID_Clear bit = 0,
+    @DefaultPaymentTermsTypeID uniqueidentifier = NULL,
+    @ApprovalCFOUserID_Clear bit = 0,
+    @ApprovalCFOUserID uniqueidentifier = NULL,
+    @IsActive bit = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @ActualID UNIQUEIDENTIFIER = ISNULL(@ID, NEWID())
+    INSERT INTO
+    [${flyway:defaultSchema}].[AccountingCompanyProfile]
+        (
+            [EntityType],
+                [LegalStructureType],
+                [IncorporationDate],
+                [JurisdictionCountry],
+                [JurisdictionRegion],
+                [FederalTaxID],
+                [OperatingTimeZone],
+                [CompanyCode],
+                [FunctionalCurrencyCode],
+                [ReportingCurrencyCode],
+                [FiscalYearStartMonth],
+                [FiscalYearStartDay],
+                [ParentAccountingCompanyID],
+                [DefaultPaymentTermsTypeID],
+                [ApprovalCFOUserID],
+                [IsActive],
+                [ID]
+        )
+    VALUES
+        (
+            ISNULL(@EntityType, 'Subsidiary'),
+                CASE WHEN @LegalStructureType_Clear = 1 THEN NULL ELSE ISNULL(@LegalStructureType, NULL) END,
+                CASE WHEN @IncorporationDate_Clear = 1 THEN NULL ELSE ISNULL(@IncorporationDate, NULL) END,
+                CASE WHEN @JurisdictionCountry_Clear = 1 THEN NULL ELSE ISNULL(@JurisdictionCountry, NULL) END,
+                CASE WHEN @JurisdictionRegion_Clear = 1 THEN NULL ELSE ISNULL(@JurisdictionRegion, NULL) END,
+                CASE WHEN @FederalTaxID_Clear = 1 THEN NULL ELSE ISNULL(@FederalTaxID, NULL) END,
+                CASE WHEN @OperatingTimeZone_Clear = 1 THEN NULL ELSE ISNULL(@OperatingTimeZone, NULL) END,
+                @CompanyCode,
+                @FunctionalCurrencyCode,
+                CASE WHEN @ReportingCurrencyCode_Clear = 1 THEN NULL ELSE ISNULL(@ReportingCurrencyCode, NULL) END,
+                ISNULL(@FiscalYearStartMonth, 1),
+                ISNULL(@FiscalYearStartDay, 1),
+                CASE WHEN @ParentAccountingCompanyID_Clear = 1 THEN NULL ELSE ISNULL(@ParentAccountingCompanyID, NULL) END,
+                CASE WHEN @DefaultPaymentTermsTypeID_Clear = 1 THEN NULL ELSE ISNULL(@DefaultPaymentTermsTypeID, NULL) END,
+                CASE WHEN @ApprovalCFOUserID_Clear = 1 THEN NULL ELSE ISNULL(@ApprovalCFOUserID, NULL) END,
+                ISNULL(@IsActive, 1),
+                @ActualID
+        )
+    -- return the new record from the base view, which might have some calculated fields
+    SELECT * FROM [${flyway:defaultSchema}].[vwAccountingCompanyProfiles] WHERE [ID] = @ActualID
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateAccountingCompanyProfile] TO [cdp_Developer], [cdp_Integration];
+
+/* spCreate Permissions for MJ_BizApps_Accounting: Accounting Company Profiles */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateAccountingCompanyProfile] TO [cdp_Developer], [cdp_Integration];
+
+/* spUpdate SQL for MJ_BizApps_Accounting: Accounting Company Profiles */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+-- Item: spUpdateAccountingCompanyProfile
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- UPDATE PROCEDURE FOR AccountingCompanyProfile
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spUpdateAccountingCompanyProfile]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spUpdateAccountingCompanyProfile];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateAccountingCompanyProfile]
+    @ID uniqueidentifier,
+    @EntityType nvarchar(30) = NULL,
+    @LegalStructureType_Clear bit = 0,
+    @LegalStructureType nvarchar(30) = NULL,
+    @IncorporationDate_Clear bit = 0,
+    @IncorporationDate date = NULL,
+    @JurisdictionCountry_Clear bit = 0,
+    @JurisdictionCountry char(2) = NULL,
+    @JurisdictionRegion_Clear bit = 0,
+    @JurisdictionRegion nvarchar(50) = NULL,
+    @FederalTaxID_Clear bit = 0,
+    @FederalTaxID nvarchar(40) = NULL,
+    @OperatingTimeZone_Clear bit = 0,
+    @OperatingTimeZone nvarchar(60) = NULL,
+    @CompanyCode nvarchar(20) = NULL,
+    @FunctionalCurrencyCode char(3) = NULL,
+    @ReportingCurrencyCode_Clear bit = 0,
+    @ReportingCurrencyCode char(3) = NULL,
+    @FiscalYearStartMonth tinyint = NULL,
+    @FiscalYearStartDay tinyint = NULL,
+    @ParentAccountingCompanyID_Clear bit = 0,
+    @ParentAccountingCompanyID uniqueidentifier = NULL,
+    @DefaultPaymentTermsTypeID_Clear bit = 0,
+    @DefaultPaymentTermsTypeID uniqueidentifier = NULL,
+    @ApprovalCFOUserID_Clear bit = 0,
+    @ApprovalCFOUserID uniqueidentifier = NULL,
+    @IsActive bit = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[AccountingCompanyProfile]
+    SET
+        [EntityType] = ISNULL(@EntityType, [EntityType]),
+        [LegalStructureType] = CASE WHEN @LegalStructureType_Clear = 1 THEN NULL ELSE ISNULL(@LegalStructureType, [LegalStructureType]) END,
+        [IncorporationDate] = CASE WHEN @IncorporationDate_Clear = 1 THEN NULL ELSE ISNULL(@IncorporationDate, [IncorporationDate]) END,
+        [JurisdictionCountry] = CASE WHEN @JurisdictionCountry_Clear = 1 THEN NULL ELSE ISNULL(@JurisdictionCountry, [JurisdictionCountry]) END,
+        [JurisdictionRegion] = CASE WHEN @JurisdictionRegion_Clear = 1 THEN NULL ELSE ISNULL(@JurisdictionRegion, [JurisdictionRegion]) END,
+        [FederalTaxID] = CASE WHEN @FederalTaxID_Clear = 1 THEN NULL ELSE ISNULL(@FederalTaxID, [FederalTaxID]) END,
+        [OperatingTimeZone] = CASE WHEN @OperatingTimeZone_Clear = 1 THEN NULL ELSE ISNULL(@OperatingTimeZone, [OperatingTimeZone]) END,
+        [CompanyCode] = ISNULL(@CompanyCode, [CompanyCode]),
+        [FunctionalCurrencyCode] = ISNULL(@FunctionalCurrencyCode, [FunctionalCurrencyCode]),
+        [ReportingCurrencyCode] = CASE WHEN @ReportingCurrencyCode_Clear = 1 THEN NULL ELSE ISNULL(@ReportingCurrencyCode, [ReportingCurrencyCode]) END,
+        [FiscalYearStartMonth] = ISNULL(@FiscalYearStartMonth, [FiscalYearStartMonth]),
+        [FiscalYearStartDay] = ISNULL(@FiscalYearStartDay, [FiscalYearStartDay]),
+        [ParentAccountingCompanyID] = CASE WHEN @ParentAccountingCompanyID_Clear = 1 THEN NULL ELSE ISNULL(@ParentAccountingCompanyID, [ParentAccountingCompanyID]) END,
+        [DefaultPaymentTermsTypeID] = CASE WHEN @DefaultPaymentTermsTypeID_Clear = 1 THEN NULL ELSE ISNULL(@DefaultPaymentTermsTypeID, [DefaultPaymentTermsTypeID]) END,
+        [ApprovalCFOUserID] = CASE WHEN @ApprovalCFOUserID_Clear = 1 THEN NULL ELSE ISNULL(@ApprovalCFOUserID, [ApprovalCFOUserID]) END,
+        [IsActive] = ISNULL(@IsActive, [IsActive])
+    WHERE
+        [ID] = @ID
+
+    -- Check if the update was successful
+    IF @@ROWCOUNT = 0
+        -- Nothing was updated, return no rows, but column structure from base view intact, semantically correct this way.
+        SELECT TOP 0 * FROM [${flyway:defaultSchema}].[vwAccountingCompanyProfiles] WHERE 1=0
+    ELSE
+        -- Return the updated record so the caller can see the updated values and any calculated fields
+        SELECT
+                                        *
+                                    FROM
+                                        [${flyway:defaultSchema}].[vwAccountingCompanyProfiles]
+                                    WHERE
+                                        [ID] = @ID
+                                    
+END
+GO
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateAccountingCompanyProfile] TO [cdp_Developer], [cdp_Integration]
+GO
+
+------------------------------------------------------------
+----- TRIGGER FOR __mj_UpdatedAt field for the AccountingCompanyProfile table
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[trgUpdateAccountingCompanyProfile]', 'TR') IS NOT NULL
+    DROP TRIGGER [${flyway:defaultSchema}].[trgUpdateAccountingCompanyProfile];
+GO
+CREATE TRIGGER [${flyway:defaultSchema}].trgUpdateAccountingCompanyProfile
+ON [${flyway:defaultSchema}].[AccountingCompanyProfile]
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[AccountingCompanyProfile]
+    SET
+        __mj_UpdatedAt = GETUTCDATE()
+    FROM
+        [${flyway:defaultSchema}].[AccountingCompanyProfile] AS _organicTable
+    INNER JOIN
+        INSERTED AS I ON
+        _organicTable.[ID] = I.[ID];
+END;
+GO
+
+/* spUpdate Permissions for MJ_BizApps_Accounting: Accounting Company Profiles */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateAccountingCompanyProfile] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete SQL for MJ_BizApps_Accounting: Accounting Company Profiles */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+-- Item: spDeleteAccountingCompanyProfile
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- DELETE PROCEDURE FOR AccountingCompanyProfile
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spDeleteAccountingCompanyProfile]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spDeleteAccountingCompanyProfile];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spDeleteAccountingCompanyProfile]
+    @ID uniqueidentifier
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DELETE FROM
+        [${flyway:defaultSchema}].[AccountingCompanyProfile]
+    WHERE
+        [ID] = @ID
+
+
+    -- Check if the delete was successful
+    IF @@ROWCOUNT = 0
+        SELECT NULL AS [ID] -- Return NULL for all primary key fields to indicate no record was deleted
+    ELSE
+        SELECT @ID AS [ID] -- Return the primary key values to indicate we successfully deleted the record
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteAccountingCompanyProfile] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete Permissions for MJ_BizApps_Accounting: Accounting Company Profiles */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteAccountingCompanyProfile] TO [cdp_Developer], [cdp_Integration];
+
+/* Index for Foreign Keys for Dimension */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Dimensions
+-- Item: Index for Foreign Keys
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------;
+
+/* Index for Foreign Keys for GLAccountLinkDimension */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: GL Account Link Dimensions
+-- Item: Index for Foreign Keys
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+-- Index for foreign key GLAccountLinkID in table GLAccountLinkDimension
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_GLAccountLinkDimension_GLAccountLinkID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[GLAccountLinkDimension]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_GLAccountLinkDimension_GLAccountLinkID ON [${flyway:defaultSchema}].[GLAccountLinkDimension] ([GLAccountLinkID]);
+
+-- Index for foreign key DimensionID in table GLAccountLinkDimension
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_GLAccountLinkDimension_DimensionID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[GLAccountLinkDimension]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_GLAccountLinkDimension_DimensionID ON [${flyway:defaultSchema}].[GLAccountLinkDimension] ([DimensionID]);
+
+/* SQL text to update entity field related entity name field map for entity field ID AB4D1912-CD5B-422E-80F5-926EEC1D8DB3 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='AB4D1912-CD5B-422E-80F5-926EEC1D8DB3', @RelatedEntityNameFieldMap='Dimension';
+
+/* Index for Foreign Keys for GLAccountLink */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: GL Account Links
+-- Item: Index for Foreign Keys
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+-- Index for foreign key GLAccountID in table GLAccountLink
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_GLAccountLink_GLAccountID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[GLAccountLink]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_GLAccountLink_GLAccountID ON [${flyway:defaultSchema}].[GLAccountLink] ([GLAccountID]);
+
+-- Index for foreign key GLAccountRoleID in table GLAccountLink
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_GLAccountLink_GLAccountRoleID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[GLAccountLink]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_GLAccountLink_GLAccountRoleID ON [${flyway:defaultSchema}].[GLAccountLink] ([GLAccountRoleID]);
+
+-- Index for foreign key EntityID in table GLAccountLink
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_GLAccountLink_EntityID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[GLAccountLink]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_GLAccountLink_EntityID ON [${flyway:defaultSchema}].[GLAccountLink] ([EntityID]);
+
+/* SQL text to update entity field related entity name field map for entity field ID A1FDC19C-116D-4ADE-AC9C-6BE7C0C2BC05 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='A1FDC19C-116D-4ADE-AC9C-6BE7C0C2BC05', @RelatedEntityNameFieldMap='GLAccount';
+
+/* Index for Foreign Keys for GLAccountRole */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: GL Account Roles
+-- Item: Index for Foreign Keys
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------;
+
+/* Index for Foreign Keys for GLAccount */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: GL Accounts
+-- Item: Index for Foreign Keys
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+-- Index for foreign key CompanyID in table GLAccount
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_GLAccount_CompanyID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[GLAccount]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_GLAccount_CompanyID ON [${flyway:defaultSchema}].[GLAccount] ([CompanyID]);
+
+-- Index for foreign key ParentGLAccountID in table GLAccount
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_GLAccount_ParentGLAccountID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[GLAccount]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_GLAccount_ParentGLAccountID ON [${flyway:defaultSchema}].[GLAccount] ([ParentGLAccountID]);
+
+-- Index for foreign key CurrencyCode in table GLAccount
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_GLAccount_CurrencyCode' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[GLAccount]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_GLAccount_CurrencyCode ON [${flyway:defaultSchema}].[GLAccount] ([CurrencyCode]);
+
+/* SQL text to update entity field related entity name field map for entity field ID 2001B1F5-9004-42E2-91BE-A5B4B27A3BD6 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='2001B1F5-9004-42E2-91BE-A5B4B27A3BD6', @RelatedEntityNameFieldMap='Company';
+
+/* Base View SQL for MJ_BizApps_Accounting: Dimensions */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Dimensions
+-- Item: vwDimensions
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- BASE VIEW FOR ENTITY:      MJ_BizApps_Accounting: Dimensions
+-----               SCHEMA:      ${flyway:defaultSchema}
+-----               BASE TABLE:  Dimension
+-----               PRIMARY KEY: ID
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[vwDimensions]', 'V') IS NOT NULL
+    DROP VIEW [${flyway:defaultSchema}].[vwDimensions];
+GO
+
+CREATE VIEW [${flyway:defaultSchema}].[vwDimensions]
+AS
+SELECT
+    d.*
+FROM
+    [${flyway:defaultSchema}].[Dimension] AS d
+GO
+GRANT SELECT ON [${flyway:defaultSchema}].[vwDimensions] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* Base View Permissions SQL for MJ_BizApps_Accounting: Dimensions */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Dimensions
+-- Item: Permissions for vwDimensions
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+GRANT SELECT ON [${flyway:defaultSchema}].[vwDimensions] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* spCreate SQL for MJ_BizApps_Accounting: Dimensions */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Dimensions
+-- Item: spCreateDimension
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- CREATE PROCEDURE FOR Dimension
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spCreateDimension]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spCreateDimension];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateDimension]
+    @ID uniqueidentifier = NULL,
+    @Code nvarchar(40),
+    @Name nvarchar(100),
+    @Description_Clear bit = 0,
+    @Description nvarchar(MAX) = NULL,
+    @DisplayOrder int = NULL,
+    @IsActive bit = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @InsertedRow TABLE ([ID] UNIQUEIDENTIFIER)
+
+    IF @ID IS NOT NULL
+    BEGIN
+        -- User provided a value, use it
+        INSERT INTO [${flyway:defaultSchema}].[Dimension]
+            (
+                [ID],
+                [Code],
+                [Name],
+                [Description],
+                [DisplayOrder],
+                [IsActive]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @ID,
+                @Code,
+                @Name,
+                CASE WHEN @Description_Clear = 1 THEN NULL ELSE ISNULL(@Description, NULL) END,
+                ISNULL(@DisplayOrder, 100),
+                ISNULL(@IsActive, 1)
+            )
+    END
+    ELSE
+    BEGIN
+        -- No value provided, let database use its default (e.g., NEWSEQUENTIALID())
+        INSERT INTO [${flyway:defaultSchema}].[Dimension]
+            (
+                [Code],
+                [Name],
+                [Description],
+                [DisplayOrder],
+                [IsActive]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @Code,
+                @Name,
+                CASE WHEN @Description_Clear = 1 THEN NULL ELSE ISNULL(@Description, NULL) END,
+                ISNULL(@DisplayOrder, 100),
+                ISNULL(@IsActive, 1)
+            )
+    END
+    -- return the new record from the base view, which might have some calculated fields
+    SELECT * FROM [${flyway:defaultSchema}].[vwDimensions] WHERE [ID] = (SELECT [ID] FROM @InsertedRow)
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateDimension] TO [cdp_Developer], [cdp_Integration];
+
+/* spCreate Permissions for MJ_BizApps_Accounting: Dimensions */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateDimension] TO [cdp_Developer], [cdp_Integration];
+
+/* spUpdate SQL for MJ_BizApps_Accounting: Dimensions */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Dimensions
+-- Item: spUpdateDimension
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- UPDATE PROCEDURE FOR Dimension
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spUpdateDimension]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spUpdateDimension];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateDimension]
+    @ID uniqueidentifier,
+    @Code nvarchar(40) = NULL,
+    @Name nvarchar(100) = NULL,
+    @Description_Clear bit = 0,
+    @Description nvarchar(MAX) = NULL,
+    @DisplayOrder int = NULL,
+    @IsActive bit = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[Dimension]
+    SET
+        [Code] = ISNULL(@Code, [Code]),
+        [Name] = ISNULL(@Name, [Name]),
+        [Description] = CASE WHEN @Description_Clear = 1 THEN NULL ELSE ISNULL(@Description, [Description]) END,
+        [DisplayOrder] = ISNULL(@DisplayOrder, [DisplayOrder]),
+        [IsActive] = ISNULL(@IsActive, [IsActive])
+    WHERE
+        [ID] = @ID
+
+    -- Check if the update was successful
+    IF @@ROWCOUNT = 0
+        -- Nothing was updated, return no rows, but column structure from base view intact, semantically correct this way.
+        SELECT TOP 0 * FROM [${flyway:defaultSchema}].[vwDimensions] WHERE 1=0
+    ELSE
+        -- Return the updated record so the caller can see the updated values and any calculated fields
+        SELECT
+                                        *
+                                    FROM
+                                        [${flyway:defaultSchema}].[vwDimensions]
+                                    WHERE
+                                        [ID] = @ID
+                                    
+END
+GO
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateDimension] TO [cdp_Developer], [cdp_Integration]
+GO
+
+------------------------------------------------------------
+----- TRIGGER FOR __mj_UpdatedAt field for the Dimension table
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[trgUpdateDimension]', 'TR') IS NOT NULL
+    DROP TRIGGER [${flyway:defaultSchema}].[trgUpdateDimension];
+GO
+CREATE TRIGGER [${flyway:defaultSchema}].trgUpdateDimension
+ON [${flyway:defaultSchema}].[Dimension]
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[Dimension]
+    SET
+        __mj_UpdatedAt = GETUTCDATE()
+    FROM
+        [${flyway:defaultSchema}].[Dimension] AS _organicTable
+    INNER JOIN
+        INSERTED AS I ON
+        _organicTable.[ID] = I.[ID];
+END;
+GO
+
+/* spUpdate Permissions for MJ_BizApps_Accounting: Dimensions */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateDimension] TO [cdp_Developer], [cdp_Integration];
+
+/* Base View SQL for MJ_BizApps_Accounting: GL Account Roles */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: GL Account Roles
+-- Item: vwGLAccountRoles
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- BASE VIEW FOR ENTITY:      MJ_BizApps_Accounting: GL Account Roles
+-----               SCHEMA:      ${flyway:defaultSchema}
+-----               BASE TABLE:  GLAccountRole
+-----               PRIMARY KEY: ID
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[vwGLAccountRoles]', 'V') IS NOT NULL
+    DROP VIEW [${flyway:defaultSchema}].[vwGLAccountRoles];
+GO
+
+CREATE VIEW [${flyway:defaultSchema}].[vwGLAccountRoles]
+AS
+SELECT
+    g.*
+FROM
+    [${flyway:defaultSchema}].[GLAccountRole] AS g
+GO
+GRANT SELECT ON [${flyway:defaultSchema}].[vwGLAccountRoles] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* Base View Permissions SQL for MJ_BizApps_Accounting: GL Account Roles */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: GL Account Roles
+-- Item: Permissions for vwGLAccountRoles
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+GRANT SELECT ON [${flyway:defaultSchema}].[vwGLAccountRoles] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* spCreate SQL for MJ_BizApps_Accounting: GL Account Roles */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: GL Account Roles
+-- Item: spCreateGLAccountRole
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- CREATE PROCEDURE FOR GLAccountRole
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spCreateGLAccountRole]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spCreateGLAccountRole];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateGLAccountRole]
+    @ID uniqueidentifier = NULL,
+    @Name nvarchar(100),
+    @Description_Clear bit = 0,
+    @Description nvarchar(MAX) = NULL,
+    @Status nvarchar(10) = NULL,
+    @Sequence int = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @InsertedRow TABLE ([ID] UNIQUEIDENTIFIER)
+
+    IF @ID IS NOT NULL
+    BEGIN
+        -- User provided a value, use it
+        INSERT INTO [${flyway:defaultSchema}].[GLAccountRole]
+            (
+                [ID],
+                [Name],
+                [Description],
+                [Status],
+                [Sequence]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @ID,
+                @Name,
+                CASE WHEN @Description_Clear = 1 THEN NULL ELSE ISNULL(@Description, NULL) END,
+                ISNULL(@Status, 'Active'),
+                ISNULL(@Sequence, 0)
+            )
+    END
+    ELSE
+    BEGIN
+        -- No value provided, let database use its default (e.g., NEWSEQUENTIALID())
+        INSERT INTO [${flyway:defaultSchema}].[GLAccountRole]
+            (
+                [Name],
+                [Description],
+                [Status],
+                [Sequence]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @Name,
+                CASE WHEN @Description_Clear = 1 THEN NULL ELSE ISNULL(@Description, NULL) END,
+                ISNULL(@Status, 'Active'),
+                ISNULL(@Sequence, 0)
+            )
+    END
+    -- return the new record from the base view, which might have some calculated fields
+    SELECT * FROM [${flyway:defaultSchema}].[vwGLAccountRoles] WHERE [ID] = (SELECT [ID] FROM @InsertedRow)
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateGLAccountRole] TO [cdp_Developer], [cdp_Integration];
+
+/* spCreate Permissions for MJ_BizApps_Accounting: GL Account Roles */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateGLAccountRole] TO [cdp_Developer], [cdp_Integration];
+
+/* spUpdate SQL for MJ_BizApps_Accounting: GL Account Roles */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: GL Account Roles
+-- Item: spUpdateGLAccountRole
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- UPDATE PROCEDURE FOR GLAccountRole
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spUpdateGLAccountRole]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spUpdateGLAccountRole];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateGLAccountRole]
+    @ID uniqueidentifier,
+    @Name nvarchar(100) = NULL,
+    @Description_Clear bit = 0,
+    @Description nvarchar(MAX) = NULL,
+    @Status nvarchar(10) = NULL,
+    @Sequence int = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[GLAccountRole]
+    SET
+        [Name] = ISNULL(@Name, [Name]),
+        [Description] = CASE WHEN @Description_Clear = 1 THEN NULL ELSE ISNULL(@Description, [Description]) END,
+        [Status] = ISNULL(@Status, [Status]),
+        [Sequence] = ISNULL(@Sequence, [Sequence])
+    WHERE
+        [ID] = @ID
+
+    -- Check if the update was successful
+    IF @@ROWCOUNT = 0
+        -- Nothing was updated, return no rows, but column structure from base view intact, semantically correct this way.
+        SELECT TOP 0 * FROM [${flyway:defaultSchema}].[vwGLAccountRoles] WHERE 1=0
+    ELSE
+        -- Return the updated record so the caller can see the updated values and any calculated fields
+        SELECT
+                                        *
+                                    FROM
+                                        [${flyway:defaultSchema}].[vwGLAccountRoles]
+                                    WHERE
+                                        [ID] = @ID
+                                    
+END
+GO
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateGLAccountRole] TO [cdp_Developer], [cdp_Integration]
+GO
+
+------------------------------------------------------------
+----- TRIGGER FOR __mj_UpdatedAt field for the GLAccountRole table
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[trgUpdateGLAccountRole]', 'TR') IS NOT NULL
+    DROP TRIGGER [${flyway:defaultSchema}].[trgUpdateGLAccountRole];
+GO
+CREATE TRIGGER [${flyway:defaultSchema}].trgUpdateGLAccountRole
+ON [${flyway:defaultSchema}].[GLAccountRole]
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[GLAccountRole]
+    SET
+        __mj_UpdatedAt = GETUTCDATE()
+    FROM
+        [${flyway:defaultSchema}].[GLAccountRole] AS _organicTable
+    INNER JOIN
+        INSERTED AS I ON
+        _organicTable.[ID] = I.[ID];
+END;
+GO
+
+/* spUpdate Permissions for MJ_BizApps_Accounting: GL Account Roles */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateGLAccountRole] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete SQL for MJ_BizApps_Accounting: Dimensions */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Dimensions
+-- Item: spDeleteDimension
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- DELETE PROCEDURE FOR Dimension
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spDeleteDimension]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spDeleteDimension];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spDeleteDimension]
+    @ID uniqueidentifier
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DELETE FROM
+        [${flyway:defaultSchema}].[Dimension]
+    WHERE
+        [ID] = @ID
+
+
+    -- Check if the delete was successful
+    IF @@ROWCOUNT = 0
+        SELECT NULL AS [ID] -- Return NULL for all primary key fields to indicate no record was deleted
+    ELSE
+        SELECT @ID AS [ID] -- Return the primary key values to indicate we successfully deleted the record
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteDimension] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete Permissions for MJ_BizApps_Accounting: Dimensions */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteDimension] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete SQL for MJ_BizApps_Accounting: GL Account Roles */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: GL Account Roles
+-- Item: spDeleteGLAccountRole
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- DELETE PROCEDURE FOR GLAccountRole
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spDeleteGLAccountRole]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spDeleteGLAccountRole];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spDeleteGLAccountRole]
+    @ID uniqueidentifier
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DELETE FROM
+        [${flyway:defaultSchema}].[GLAccountRole]
+    WHERE
+        [ID] = @ID
+
+
+    -- Check if the delete was successful
+    IF @@ROWCOUNT = 0
+        SELECT NULL AS [ID] -- Return NULL for all primary key fields to indicate no record was deleted
+    ELSE
+        SELECT @ID AS [ID] -- Return the primary key values to indicate we successfully deleted the record
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteGLAccountRole] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete Permissions for MJ_BizApps_Accounting: GL Account Roles */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteGLAccountRole] TO [cdp_Developer], [cdp_Integration];
+
+/* Base View SQL for MJ_BizApps_Accounting: GL Account Link Dimensions */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: GL Account Link Dimensions
+-- Item: vwGLAccountLinkDimensions
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- BASE VIEW FOR ENTITY:      MJ_BizApps_Accounting: GL Account Link Dimensions
+-----               SCHEMA:      ${flyway:defaultSchema}
+-----               BASE TABLE:  GLAccountLinkDimension
+-----               PRIMARY KEY: ID
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[vwGLAccountLinkDimensions]', 'V') IS NOT NULL
+    DROP VIEW [${flyway:defaultSchema}].[vwGLAccountLinkDimensions];
+GO
+
+CREATE VIEW [${flyway:defaultSchema}].[vwGLAccountLinkDimensions]
+AS
+SELECT
+    g.*,
+    mjBizAppsAccountingDimension_DimensionID.[Name] AS [Dimension]
+FROM
+    [${flyway:defaultSchema}].[GLAccountLinkDimension] AS g
+INNER JOIN
+    [${flyway:defaultSchema}].[Dimension] AS mjBizAppsAccountingDimension_DimensionID
+  ON
+    [g].[DimensionID] = mjBizAppsAccountingDimension_DimensionID.[ID]
+GO
+GRANT SELECT ON [${flyway:defaultSchema}].[vwGLAccountLinkDimensions] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* Base View Permissions SQL for MJ_BizApps_Accounting: GL Account Link Dimensions */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: GL Account Link Dimensions
+-- Item: Permissions for vwGLAccountLinkDimensions
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+GRANT SELECT ON [${flyway:defaultSchema}].[vwGLAccountLinkDimensions] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* spCreate SQL for MJ_BizApps_Accounting: GL Account Link Dimensions */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: GL Account Link Dimensions
+-- Item: spCreateGLAccountLinkDimension
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- CREATE PROCEDURE FOR GLAccountLinkDimension
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spCreateGLAccountLinkDimension]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spCreateGLAccountLinkDimension];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateGLAccountLinkDimension]
+    @ID uniqueidentifier = NULL,
+    @GLAccountLinkID uniqueidentifier,
+    @DimensionID uniqueidentifier,
+    @Sequence int = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @InsertedRow TABLE ([ID] UNIQUEIDENTIFIER)
+
+    IF @ID IS NOT NULL
+    BEGIN
+        -- User provided a value, use it
+        INSERT INTO [${flyway:defaultSchema}].[GLAccountLinkDimension]
+            (
+                [ID],
+                [GLAccountLinkID],
+                [DimensionID],
+                [Sequence]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @ID,
+                @GLAccountLinkID,
+                @DimensionID,
+                ISNULL(@Sequence, 0)
+            )
+    END
+    ELSE
+    BEGIN
+        -- No value provided, let database use its default (e.g., NEWSEQUENTIALID())
+        INSERT INTO [${flyway:defaultSchema}].[GLAccountLinkDimension]
+            (
+                [GLAccountLinkID],
+                [DimensionID],
+                [Sequence]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @GLAccountLinkID,
+                @DimensionID,
+                ISNULL(@Sequence, 0)
+            )
+    END
+    -- return the new record from the base view, which might have some calculated fields
+    SELECT * FROM [${flyway:defaultSchema}].[vwGLAccountLinkDimensions] WHERE [ID] = (SELECT [ID] FROM @InsertedRow)
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateGLAccountLinkDimension] TO [cdp_Developer], [cdp_Integration];
+
+/* spCreate Permissions for MJ_BizApps_Accounting: GL Account Link Dimensions */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateGLAccountLinkDimension] TO [cdp_Developer], [cdp_Integration];
+
+/* spUpdate SQL for MJ_BizApps_Accounting: GL Account Link Dimensions */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: GL Account Link Dimensions
+-- Item: spUpdateGLAccountLinkDimension
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- UPDATE PROCEDURE FOR GLAccountLinkDimension
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spUpdateGLAccountLinkDimension]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spUpdateGLAccountLinkDimension];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateGLAccountLinkDimension]
+    @ID uniqueidentifier,
+    @GLAccountLinkID uniqueidentifier = NULL,
+    @DimensionID uniqueidentifier = NULL,
+    @Sequence int = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[GLAccountLinkDimension]
+    SET
+        [GLAccountLinkID] = ISNULL(@GLAccountLinkID, [GLAccountLinkID]),
+        [DimensionID] = ISNULL(@DimensionID, [DimensionID]),
+        [Sequence] = ISNULL(@Sequence, [Sequence])
+    WHERE
+        [ID] = @ID
+
+    -- Check if the update was successful
+    IF @@ROWCOUNT = 0
+        -- Nothing was updated, return no rows, but column structure from base view intact, semantically correct this way.
+        SELECT TOP 0 * FROM [${flyway:defaultSchema}].[vwGLAccountLinkDimensions] WHERE 1=0
+    ELSE
+        -- Return the updated record so the caller can see the updated values and any calculated fields
+        SELECT
+                                        *
+                                    FROM
+                                        [${flyway:defaultSchema}].[vwGLAccountLinkDimensions]
+                                    WHERE
+                                        [ID] = @ID
+                                    
+END
+GO
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateGLAccountLinkDimension] TO [cdp_Developer], [cdp_Integration]
+GO
+
+------------------------------------------------------------
+----- TRIGGER FOR __mj_UpdatedAt field for the GLAccountLinkDimension table
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[trgUpdateGLAccountLinkDimension]', 'TR') IS NOT NULL
+    DROP TRIGGER [${flyway:defaultSchema}].[trgUpdateGLAccountLinkDimension];
+GO
+CREATE TRIGGER [${flyway:defaultSchema}].trgUpdateGLAccountLinkDimension
+ON [${flyway:defaultSchema}].[GLAccountLinkDimension]
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[GLAccountLinkDimension]
+    SET
+        __mj_UpdatedAt = GETUTCDATE()
+    FROM
+        [${flyway:defaultSchema}].[GLAccountLinkDimension] AS _organicTable
+    INNER JOIN
+        INSERTED AS I ON
+        _organicTable.[ID] = I.[ID];
+END;
+GO
+
+/* spUpdate Permissions for MJ_BizApps_Accounting: GL Account Link Dimensions */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateGLAccountLinkDimension] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete SQL for MJ_BizApps_Accounting: GL Account Link Dimensions */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: GL Account Link Dimensions
+-- Item: spDeleteGLAccountLinkDimension
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- DELETE PROCEDURE FOR GLAccountLinkDimension
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spDeleteGLAccountLinkDimension]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spDeleteGLAccountLinkDimension];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spDeleteGLAccountLinkDimension]
+    @ID uniqueidentifier
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DELETE FROM
+        [${flyway:defaultSchema}].[GLAccountLinkDimension]
+    WHERE
+        [ID] = @ID
+
+
+    -- Check if the delete was successful
+    IF @@ROWCOUNT = 0
+        SELECT NULL AS [ID] -- Return NULL for all primary key fields to indicate no record was deleted
+    ELSE
+        SELECT @ID AS [ID] -- Return the primary key values to indicate we successfully deleted the record
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteGLAccountLinkDimension] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete Permissions for MJ_BizApps_Accounting: GL Account Link Dimensions */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteGLAccountLinkDimension] TO [cdp_Developer], [cdp_Integration];
+
+/* SQL text to update entity field related entity name field map for entity field ID ECE549DD-639E-4241-BDC1-C85655E0F708 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='ECE549DD-639E-4241-BDC1-C85655E0F708', @RelatedEntityNameFieldMap='ParentGLAccount';
+
+/* SQL text to update entity field related entity name field map for entity field ID 2A1B3331-74FA-472F-8134-C342ECD3F890 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='2A1B3331-74FA-472F-8134-C342ECD3F890', @RelatedEntityNameFieldMap='GLAccountRole';
+
+/* SQL text to update entity field related entity name field map for entity field ID E4C8A16F-A539-4D9F-9FEC-AF36AF17ABCB */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='E4C8A16F-A539-4D9F-9FEC-AF36AF17ABCB', @RelatedEntityNameFieldMap='Entity';
+
+/* SQL text to update entity field related entity name field map for entity field ID D1362588-6242-4362-BD4E-D06D75CE1224 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='D1362588-6242-4362-BD4E-D06D75CE1224', @RelatedEntityNameFieldMap='CurrencyCode_Virtual';
+
+/* Base View SQL for MJ_BizApps_Accounting: GL Account Links */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: GL Account Links
+-- Item: vwGLAccountLinks
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- BASE VIEW FOR ENTITY:      MJ_BizApps_Accounting: GL Account Links
+-----               SCHEMA:      ${flyway:defaultSchema}
+-----               BASE TABLE:  GLAccountLink
+-----               PRIMARY KEY: ID
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[vwGLAccountLinks]', 'V') IS NOT NULL
+    DROP VIEW [${flyway:defaultSchema}].[vwGLAccountLinks];
+GO
+
+CREATE VIEW [${flyway:defaultSchema}].[vwGLAccountLinks]
+AS
+SELECT
+    g.*,
+    mjBizAppsAccountingGLAccount_GLAccountID.[Name] AS [GLAccount],
+    mjBizAppsAccountingGLAccountRole_GLAccountRoleID.[Name] AS [GLAccountRole],
+    MJEntity_EntityID.[Name] AS [Entity]
+FROM
+    [${flyway:defaultSchema}].[GLAccountLink] AS g
+INNER JOIN
+    [${flyway:defaultSchema}].[GLAccount] AS mjBizAppsAccountingGLAccount_GLAccountID
+  ON
+    [g].[GLAccountID] = mjBizAppsAccountingGLAccount_GLAccountID.[ID]
+INNER JOIN
+    [${flyway:defaultSchema}].[GLAccountRole] AS mjBizAppsAccountingGLAccountRole_GLAccountRoleID
+  ON
+    [g].[GLAccountRoleID] = mjBizAppsAccountingGLAccountRole_GLAccountRoleID.[ID]
+INNER JOIN
+    [${mjSchema}].[Entity] AS MJEntity_EntityID
+  ON
+    [g].[EntityID] = MJEntity_EntityID.[ID]
+GO
+GRANT SELECT ON [${flyway:defaultSchema}].[vwGLAccountLinks] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* Base View Permissions SQL for MJ_BizApps_Accounting: GL Account Links */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: GL Account Links
+-- Item: Permissions for vwGLAccountLinks
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+GRANT SELECT ON [${flyway:defaultSchema}].[vwGLAccountLinks] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* spCreate SQL for MJ_BizApps_Accounting: GL Account Links */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: GL Account Links
+-- Item: spCreateGLAccountLink
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- CREATE PROCEDURE FOR GLAccountLink
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spCreateGLAccountLink]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spCreateGLAccountLink];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateGLAccountLink]
+    @ID uniqueidentifier = NULL,
+    @GLAccountID uniqueidentifier,
+    @GLAccountRoleID uniqueidentifier,
+    @EntityID uniqueidentifier,
+    @RecordID nvarchar(400),
+    @Status nvarchar(10) = NULL,
+    @StartedAt_Clear bit = 0,
+    @StartedAt datetimeoffset = NULL,
+    @EndedAt_Clear bit = 0,
+    @EndedAt datetimeoffset = NULL,
+    @Comments_Clear bit = 0,
+    @Comments nvarchar(MAX) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @InsertedRow TABLE ([ID] UNIQUEIDENTIFIER)
+
+    IF @ID IS NOT NULL
+    BEGIN
+        -- User provided a value, use it
+        INSERT INTO [${flyway:defaultSchema}].[GLAccountLink]
+            (
+                [ID],
+                [GLAccountID],
+                [GLAccountRoleID],
+                [EntityID],
+                [RecordID],
+                [Status],
+                [StartedAt],
+                [EndedAt],
+                [Comments]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @ID,
+                @GLAccountID,
+                @GLAccountRoleID,
+                @EntityID,
+                @RecordID,
+                ISNULL(@Status, 'Pending'),
+                CASE WHEN @StartedAt_Clear = 1 THEN NULL ELSE ISNULL(@StartedAt, NULL) END,
+                CASE WHEN @EndedAt_Clear = 1 THEN NULL ELSE ISNULL(@EndedAt, NULL) END,
+                CASE WHEN @Comments_Clear = 1 THEN NULL ELSE ISNULL(@Comments, NULL) END
+            )
+    END
+    ELSE
+    BEGIN
+        -- No value provided, let database use its default (e.g., NEWSEQUENTIALID())
+        INSERT INTO [${flyway:defaultSchema}].[GLAccountLink]
+            (
+                [GLAccountID],
+                [GLAccountRoleID],
+                [EntityID],
+                [RecordID],
+                [Status],
+                [StartedAt],
+                [EndedAt],
+                [Comments]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @GLAccountID,
+                @GLAccountRoleID,
+                @EntityID,
+                @RecordID,
+                ISNULL(@Status, 'Pending'),
+                CASE WHEN @StartedAt_Clear = 1 THEN NULL ELSE ISNULL(@StartedAt, NULL) END,
+                CASE WHEN @EndedAt_Clear = 1 THEN NULL ELSE ISNULL(@EndedAt, NULL) END,
+                CASE WHEN @Comments_Clear = 1 THEN NULL ELSE ISNULL(@Comments, NULL) END
+            )
+    END
+    -- return the new record from the base view, which might have some calculated fields
+    SELECT * FROM [${flyway:defaultSchema}].[vwGLAccountLinks] WHERE [ID] = (SELECT [ID] FROM @InsertedRow)
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateGLAccountLink] TO [cdp_Developer], [cdp_Integration];
+
+/* spCreate Permissions for MJ_BizApps_Accounting: GL Account Links */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateGLAccountLink] TO [cdp_Developer], [cdp_Integration];
+
+/* spUpdate SQL for MJ_BizApps_Accounting: GL Account Links */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: GL Account Links
+-- Item: spUpdateGLAccountLink
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- UPDATE PROCEDURE FOR GLAccountLink
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spUpdateGLAccountLink]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spUpdateGLAccountLink];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateGLAccountLink]
+    @ID uniqueidentifier,
+    @GLAccountID uniqueidentifier = NULL,
+    @GLAccountRoleID uniqueidentifier = NULL,
+    @EntityID uniqueidentifier = NULL,
+    @RecordID nvarchar(400) = NULL,
+    @Status nvarchar(10) = NULL,
+    @StartedAt_Clear bit = 0,
+    @StartedAt datetimeoffset = NULL,
+    @EndedAt_Clear bit = 0,
+    @EndedAt datetimeoffset = NULL,
+    @Comments_Clear bit = 0,
+    @Comments nvarchar(MAX) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[GLAccountLink]
+    SET
+        [GLAccountID] = ISNULL(@GLAccountID, [GLAccountID]),
+        [GLAccountRoleID] = ISNULL(@GLAccountRoleID, [GLAccountRoleID]),
+        [EntityID] = ISNULL(@EntityID, [EntityID]),
+        [RecordID] = ISNULL(@RecordID, [RecordID]),
+        [Status] = ISNULL(@Status, [Status]),
+        [StartedAt] = CASE WHEN @StartedAt_Clear = 1 THEN NULL ELSE ISNULL(@StartedAt, [StartedAt]) END,
+        [EndedAt] = CASE WHEN @EndedAt_Clear = 1 THEN NULL ELSE ISNULL(@EndedAt, [EndedAt]) END,
+        [Comments] = CASE WHEN @Comments_Clear = 1 THEN NULL ELSE ISNULL(@Comments, [Comments]) END
+    WHERE
+        [ID] = @ID
+
+    -- Check if the update was successful
+    IF @@ROWCOUNT = 0
+        -- Nothing was updated, return no rows, but column structure from base view intact, semantically correct this way.
+        SELECT TOP 0 * FROM [${flyway:defaultSchema}].[vwGLAccountLinks] WHERE 1=0
+    ELSE
+        -- Return the updated record so the caller can see the updated values and any calculated fields
+        SELECT
+                                        *
+                                    FROM
+                                        [${flyway:defaultSchema}].[vwGLAccountLinks]
+                                    WHERE
+                                        [ID] = @ID
+                                    
+END
+GO
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateGLAccountLink] TO [cdp_Developer], [cdp_Integration]
+GO
+
+------------------------------------------------------------
+----- TRIGGER FOR __mj_UpdatedAt field for the GLAccountLink table
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[trgUpdateGLAccountLink]', 'TR') IS NOT NULL
+    DROP TRIGGER [${flyway:defaultSchema}].[trgUpdateGLAccountLink];
+GO
+CREATE TRIGGER [${flyway:defaultSchema}].trgUpdateGLAccountLink
+ON [${flyway:defaultSchema}].[GLAccountLink]
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[GLAccountLink]
+    SET
+        __mj_UpdatedAt = GETUTCDATE()
+    FROM
+        [${flyway:defaultSchema}].[GLAccountLink] AS _organicTable
+    INNER JOIN
+        INSERTED AS I ON
+        _organicTable.[ID] = I.[ID];
+END;
+GO
+
+/* spUpdate Permissions for MJ_BizApps_Accounting: GL Account Links */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateGLAccountLink] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete SQL for MJ_BizApps_Accounting: GL Account Links */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: GL Account Links
+-- Item: spDeleteGLAccountLink
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- DELETE PROCEDURE FOR GLAccountLink
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spDeleteGLAccountLink]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spDeleteGLAccountLink];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spDeleteGLAccountLink]
+    @ID uniqueidentifier
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DELETE FROM
+        [${flyway:defaultSchema}].[GLAccountLink]
+    WHERE
+        [ID] = @ID
+
+
+    -- Check if the delete was successful
+    IF @@ROWCOUNT = 0
+        SELECT NULL AS [ID] -- Return NULL for all primary key fields to indicate no record was deleted
+    ELSE
+        SELECT @ID AS [ID] -- Return the primary key values to indicate we successfully deleted the record
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteGLAccountLink] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete Permissions for MJ_BizApps_Accounting: GL Account Links */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteGLAccountLink] TO [cdp_Developer], [cdp_Integration];
+
+/* Root ID Function SQL for MJ_BizApps_Accounting: GL Accounts.ParentGLAccountID */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: GL Accounts
+-- Item: fnGLAccountParentGLAccountID_GetRootID
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+------------------------------------------------------------
+----- ROOT ID FUNCTION FOR: [GLAccount].[ParentGLAccountID]
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[fnGLAccountParentGLAccountID_GetRootID]', 'IF') IS NOT NULL
+    DROP FUNCTION [${flyway:defaultSchema}].[fnGLAccountParentGLAccountID_GetRootID];
+GO
+
+CREATE FUNCTION [${flyway:defaultSchema}].[fnGLAccountParentGLAccountID_GetRootID]
+(
+    @RecordID uniqueidentifier,
+    @ParentID uniqueidentifier
+)
+RETURNS TABLE
+AS
+RETURN
+(
+    WITH CTE_RootParent AS (
+        SELECT
+            [ID],
+            [ParentGLAccountID],
+            [ID] AS [RootParentID],
+            0 AS [Depth]
+        FROM
+            [${flyway:defaultSchema}].[GLAccount]
+        WHERE
+            [ID] = COALESCE(@ParentID, @RecordID)
+
+        UNION ALL
+
+        SELECT
+            c.[ID],
+            c.[ParentGLAccountID],
+            c.[ID] AS [RootParentID],
+            p.[Depth] + 1 AS [Depth]
+        FROM
+            [${flyway:defaultSchema}].[GLAccount] c
+        INNER JOIN
+            CTE_RootParent p ON c.[ID] = p.[ParentGLAccountID]
+        WHERE
+            p.[Depth] < 100
+    )
+    SELECT TOP 1
+        [RootParentID] AS RootID
+    FROM
+        CTE_RootParent
+    WHERE
+        [ParentGLAccountID] IS NULL
+    ORDER BY
+        [RootParentID]
+);
+GO
+
+/* Base View SQL for MJ_BizApps_Accounting: GL Accounts */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: GL Accounts
+-- Item: vwGLAccounts
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- BASE VIEW FOR ENTITY:      MJ_BizApps_Accounting: GL Accounts
+-----               SCHEMA:      ${flyway:defaultSchema}
+-----               BASE TABLE:  GLAccount
+-----               PRIMARY KEY: ID
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[vwGLAccounts]', 'V') IS NOT NULL
+    DROP VIEW [${flyway:defaultSchema}].[vwGLAccounts];
+GO
+
+CREATE VIEW [${flyway:defaultSchema}].[vwGLAccounts]
+AS
+SELECT
+    g.*,
+    MJCompany_CompanyID.[Name] AS [Company],
+    mjBizAppsAccountingGLAccount_ParentGLAccountID.[Name] AS [ParentGLAccount],
+    mjBizAppsAccountingCurrency_CurrencyCode.[Name] AS [CurrencyCode_Virtual],
+    root_ParentGLAccountID.RootID AS [RootParentGLAccountID]
+FROM
+    [${flyway:defaultSchema}].[GLAccount] AS g
+INNER JOIN
+    [${mjSchema}].[Company] AS MJCompany_CompanyID
+  ON
+    [g].[CompanyID] = MJCompany_CompanyID.[ID]
+LEFT OUTER JOIN
+    [${flyway:defaultSchema}].[GLAccount] AS mjBizAppsAccountingGLAccount_ParentGLAccountID
+  ON
+    [g].[ParentGLAccountID] = mjBizAppsAccountingGLAccount_ParentGLAccountID.[ID]
+LEFT OUTER JOIN
+    [${flyway:defaultSchema}].[Currency] AS mjBizAppsAccountingCurrency_CurrencyCode
+  ON
+    [g].[CurrencyCode] = mjBizAppsAccountingCurrency_CurrencyCode.[Code]
+OUTER APPLY
+    [${flyway:defaultSchema}].[fnGLAccountParentGLAccountID_GetRootID]([g].[ID], [g].[ParentGLAccountID]) AS root_ParentGLAccountID
+GO
+GRANT SELECT ON [${flyway:defaultSchema}].[vwGLAccounts] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* Base View Permissions SQL for MJ_BizApps_Accounting: GL Accounts */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: GL Accounts
+-- Item: Permissions for vwGLAccounts
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+GRANT SELECT ON [${flyway:defaultSchema}].[vwGLAccounts] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* spCreate SQL for MJ_BizApps_Accounting: GL Accounts */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: GL Accounts
+-- Item: spCreateGLAccount
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- CREATE PROCEDURE FOR GLAccount
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spCreateGLAccount]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spCreateGLAccount];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateGLAccount]
+    @ID uniqueidentifier = NULL,
+    @CompanyID uniqueidentifier,
+    @Code nvarchar(40),
+    @Name nvarchar(200),
+    @AccountType nvarchar(15),
+    @ParentGLAccountID_Clear bit = 0,
+    @ParentGLAccountID uniqueidentifier = NULL,
+    @CurrencyCode_Clear bit = 0,
+    @CurrencyCode char(3) = NULL,
+    @ExternalSystem_Clear bit = 0,
+    @ExternalSystem nvarchar(50) = NULL,
+    @ExternalAccountID_Clear bit = 0,
+    @ExternalAccountID nvarchar(100) = NULL,
+    @IsActive bit = NULL,
+    @IsSystemSeeded bit = NULL,
+    @Description_Clear bit = 0,
+    @Description nvarchar(MAX) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @InsertedRow TABLE ([ID] UNIQUEIDENTIFIER)
+
+    IF @ID IS NOT NULL
+    BEGIN
+        -- User provided a value, use it
+        INSERT INTO [${flyway:defaultSchema}].[GLAccount]
+            (
+                [ID],
+                [CompanyID],
+                [Code],
+                [Name],
+                [AccountType],
+                [ParentGLAccountID],
+                [CurrencyCode],
+                [ExternalSystem],
+                [ExternalAccountID],
+                [IsActive],
+                [IsSystemSeeded],
+                [Description]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @ID,
+                @CompanyID,
+                @Code,
+                @Name,
+                @AccountType,
+                CASE WHEN @ParentGLAccountID_Clear = 1 THEN NULL ELSE ISNULL(@ParentGLAccountID, NULL) END,
+                CASE WHEN @CurrencyCode_Clear = 1 THEN NULL ELSE ISNULL(@CurrencyCode, NULL) END,
+                CASE WHEN @ExternalSystem_Clear = 1 THEN NULL ELSE ISNULL(@ExternalSystem, NULL) END,
+                CASE WHEN @ExternalAccountID_Clear = 1 THEN NULL ELSE ISNULL(@ExternalAccountID, NULL) END,
+                ISNULL(@IsActive, 1),
+                ISNULL(@IsSystemSeeded, 0),
+                CASE WHEN @Description_Clear = 1 THEN NULL ELSE ISNULL(@Description, NULL) END
+            )
+    END
+    ELSE
+    BEGIN
+        -- No value provided, let database use its default (e.g., NEWSEQUENTIALID())
+        INSERT INTO [${flyway:defaultSchema}].[GLAccount]
+            (
+                [CompanyID],
+                [Code],
+                [Name],
+                [AccountType],
+                [ParentGLAccountID],
+                [CurrencyCode],
+                [ExternalSystem],
+                [ExternalAccountID],
+                [IsActive],
+                [IsSystemSeeded],
+                [Description]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @CompanyID,
+                @Code,
+                @Name,
+                @AccountType,
+                CASE WHEN @ParentGLAccountID_Clear = 1 THEN NULL ELSE ISNULL(@ParentGLAccountID, NULL) END,
+                CASE WHEN @CurrencyCode_Clear = 1 THEN NULL ELSE ISNULL(@CurrencyCode, NULL) END,
+                CASE WHEN @ExternalSystem_Clear = 1 THEN NULL ELSE ISNULL(@ExternalSystem, NULL) END,
+                CASE WHEN @ExternalAccountID_Clear = 1 THEN NULL ELSE ISNULL(@ExternalAccountID, NULL) END,
+                ISNULL(@IsActive, 1),
+                ISNULL(@IsSystemSeeded, 0),
+                CASE WHEN @Description_Clear = 1 THEN NULL ELSE ISNULL(@Description, NULL) END
+            )
+    END
+    -- return the new record from the base view, which might have some calculated fields
+    SELECT * FROM [${flyway:defaultSchema}].[vwGLAccounts] WHERE [ID] = (SELECT [ID] FROM @InsertedRow)
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateGLAccount] TO [cdp_Developer], [cdp_Integration];
+
+/* spCreate Permissions for MJ_BizApps_Accounting: GL Accounts */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateGLAccount] TO [cdp_Developer], [cdp_Integration];
+
+/* spUpdate SQL for MJ_BizApps_Accounting: GL Accounts */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: GL Accounts
+-- Item: spUpdateGLAccount
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- UPDATE PROCEDURE FOR GLAccount
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spUpdateGLAccount]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spUpdateGLAccount];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateGLAccount]
+    @ID uniqueidentifier,
+    @CompanyID uniqueidentifier = NULL,
+    @Code nvarchar(40) = NULL,
+    @Name nvarchar(200) = NULL,
+    @AccountType nvarchar(15) = NULL,
+    @ParentGLAccountID_Clear bit = 0,
+    @ParentGLAccountID uniqueidentifier = NULL,
+    @CurrencyCode_Clear bit = 0,
+    @CurrencyCode char(3) = NULL,
+    @ExternalSystem_Clear bit = 0,
+    @ExternalSystem nvarchar(50) = NULL,
+    @ExternalAccountID_Clear bit = 0,
+    @ExternalAccountID nvarchar(100) = NULL,
+    @IsActive bit = NULL,
+    @IsSystemSeeded bit = NULL,
+    @Description_Clear bit = 0,
+    @Description nvarchar(MAX) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[GLAccount]
+    SET
+        [CompanyID] = ISNULL(@CompanyID, [CompanyID]),
+        [Code] = ISNULL(@Code, [Code]),
+        [Name] = ISNULL(@Name, [Name]),
+        [AccountType] = ISNULL(@AccountType, [AccountType]),
+        [ParentGLAccountID] = CASE WHEN @ParentGLAccountID_Clear = 1 THEN NULL ELSE ISNULL(@ParentGLAccountID, [ParentGLAccountID]) END,
+        [CurrencyCode] = CASE WHEN @CurrencyCode_Clear = 1 THEN NULL ELSE ISNULL(@CurrencyCode, [CurrencyCode]) END,
+        [ExternalSystem] = CASE WHEN @ExternalSystem_Clear = 1 THEN NULL ELSE ISNULL(@ExternalSystem, [ExternalSystem]) END,
+        [ExternalAccountID] = CASE WHEN @ExternalAccountID_Clear = 1 THEN NULL ELSE ISNULL(@ExternalAccountID, [ExternalAccountID]) END,
+        [IsActive] = ISNULL(@IsActive, [IsActive]),
+        [IsSystemSeeded] = ISNULL(@IsSystemSeeded, [IsSystemSeeded]),
+        [Description] = CASE WHEN @Description_Clear = 1 THEN NULL ELSE ISNULL(@Description, [Description]) END
+    WHERE
+        [ID] = @ID
+
+    -- Check if the update was successful
+    IF @@ROWCOUNT = 0
+        -- Nothing was updated, return no rows, but column structure from base view intact, semantically correct this way.
+        SELECT TOP 0 * FROM [${flyway:defaultSchema}].[vwGLAccounts] WHERE 1=0
+    ELSE
+        -- Return the updated record so the caller can see the updated values and any calculated fields
+        SELECT
+                                        *
+                                    FROM
+                                        [${flyway:defaultSchema}].[vwGLAccounts]
+                                    WHERE
+                                        [ID] = @ID
+                                    
+END
+GO
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateGLAccount] TO [cdp_Developer], [cdp_Integration]
+GO
+
+------------------------------------------------------------
+----- TRIGGER FOR __mj_UpdatedAt field for the GLAccount table
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[trgUpdateGLAccount]', 'TR') IS NOT NULL
+    DROP TRIGGER [${flyway:defaultSchema}].[trgUpdateGLAccount];
+GO
+CREATE TRIGGER [${flyway:defaultSchema}].trgUpdateGLAccount
+ON [${flyway:defaultSchema}].[GLAccount]
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[GLAccount]
+    SET
+        __mj_UpdatedAt = GETUTCDATE()
+    FROM
+        [${flyway:defaultSchema}].[GLAccount] AS _organicTable
+    INNER JOIN
+        INSERTED AS I ON
+        _organicTable.[ID] = I.[ID];
+END;
+GO
+
+/* spUpdate Permissions for MJ_BizApps_Accounting: GL Accounts */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateGLAccount] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete SQL for MJ_BizApps_Accounting: GL Accounts */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: GL Accounts
+-- Item: spDeleteGLAccount
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- DELETE PROCEDURE FOR GLAccount
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spDeleteGLAccount]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spDeleteGLAccount];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spDeleteGLAccount]
+    @ID uniqueidentifier
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DELETE FROM
+        [${flyway:defaultSchema}].[GLAccount]
+    WHERE
+        [ID] = @ID
+
+
+    -- Check if the delete was successful
+    IF @@ROWCOUNT = 0
+        SELECT NULL AS [ID] -- Return NULL for all primary key fields to indicate no record was deleted
+    ELSE
+        SELECT @ID AS [ID] -- Return the primary key values to indicate we successfully deleted the record
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteGLAccount] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete Permissions for MJ_BizApps_Accounting: GL Accounts */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteGLAccount] TO [cdp_Developer], [cdp_Integration];
+
+/* Index for Foreign Keys for JournalEntry */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entries
+-- Item: Index for Foreign Keys
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+-- Index for foreign key CompanyID in table JournalEntry
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_JournalEntry_CompanyID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[JournalEntry]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_JournalEntry_CompanyID ON [${flyway:defaultSchema}].[JournalEntry] ([CompanyID]);
+
+-- Index for foreign key LinkedEntityID in table JournalEntry
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_JournalEntry_LinkedEntityID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[JournalEntry]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_JournalEntry_LinkedEntityID ON [${flyway:defaultSchema}].[JournalEntry] ([LinkedEntityID]);
+
+-- Index for foreign key ReversesJournalEntryID in table JournalEntry
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_JournalEntry_ReversesJournalEntryID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[JournalEntry]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_JournalEntry_ReversesJournalEntryID ON [${flyway:defaultSchema}].[JournalEntry] ([ReversesJournalEntryID]);
+
+-- Index for foreign key ReversedByJournalEntryID in table JournalEntry
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_JournalEntry_ReversedByJournalEntryID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[JournalEntry]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_JournalEntry_ReversedByJournalEntryID ON [${flyway:defaultSchema}].[JournalEntry] ([ReversedByJournalEntryID]);
+
+-- Index for foreign key BatchID in table JournalEntry
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_JournalEntry_BatchID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[JournalEntry]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_JournalEntry_BatchID ON [${flyway:defaultSchema}].[JournalEntry] ([BatchID]);
+
+-- Index for foreign key FileID in table JournalEntry
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_JournalEntry_FileID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[JournalEntry]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_JournalEntry_FileID ON [${flyway:defaultSchema}].[JournalEntry] ([FileID]);
+
+/* SQL text to update entity field related entity name field map for entity field ID A9E60207-6897-4ED2-A32C-6740C95D232A */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='A9E60207-6897-4ED2-A32C-6740C95D232A', @RelatedEntityNameFieldMap='Company';
+
+/* Index for Foreign Keys for JournalEntryBatchSequence */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Batch Sequences
+-- Item: Index for Foreign Keys
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------;
+
+/* Index for Foreign Keys for JournalEntryBatch */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+-- Item: Index for Foreign Keys
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+-- Index for foreign key CompanyID in table JournalEntryBatch
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_JournalEntryBatch_CompanyID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[JournalEntryBatch]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_JournalEntryBatch_CompanyID ON [${flyway:defaultSchema}].[JournalEntryBatch] ([CompanyID]);
+
+-- Index for foreign key SummaryJournalEntryID in table JournalEntryBatch
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_JournalEntryBatch_SummaryJournalEntryID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[JournalEntryBatch]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_JournalEntryBatch_SummaryJournalEntryID ON [${flyway:defaultSchema}].[JournalEntryBatch] ([SummaryJournalEntryID]);
+
+-- Index for foreign key BatchedByUserID in table JournalEntryBatch
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_JournalEntryBatch_BatchedByUserID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[JournalEntryBatch]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_JournalEntryBatch_BatchedByUserID ON [${flyway:defaultSchema}].[JournalEntryBatch] ([BatchedByUserID]);
+
+-- Index for foreign key ApprovedByUserID in table JournalEntryBatch
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_JournalEntryBatch_ApprovedByUserID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[JournalEntryBatch]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_JournalEntryBatch_ApprovedByUserID ON [${flyway:defaultSchema}].[JournalEntryBatch] ([ApprovedByUserID]);
+
+/* SQL text to update entity field related entity name field map for entity field ID 06B8BF16-388E-4955-9CF7-8C090206F5C2 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='06B8BF16-388E-4955-9CF7-8C090206F5C2', @RelatedEntityNameFieldMap='Company';
+
+/* Index for Foreign Keys for JournalEntryLineDimension */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Line Dimensions
+-- Item: Index for Foreign Keys
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+-- Index for foreign key JournalEntryLineID in table JournalEntryLineDimension
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_JournalEntryLineDimension_JournalEntryLineID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[JournalEntryLineDimension]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_JournalEntryLineDimension_JournalEntryLineID ON [${flyway:defaultSchema}].[JournalEntryLineDimension] ([JournalEntryLineID]);
+
+-- Index for foreign key DimensionID in table JournalEntryLineDimension
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_JournalEntryLineDimension_DimensionID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[JournalEntryLineDimension]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_JournalEntryLineDimension_DimensionID ON [${flyway:defaultSchema}].[JournalEntryLineDimension] ([DimensionID]);
+
+-- Index for foreign key DimensionValueID in table JournalEntryLineDimension
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_JournalEntryLineDimension_DimensionValueID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[JournalEntryLineDimension]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_JournalEntryLineDimension_DimensionValueID ON [${flyway:defaultSchema}].[JournalEntryLineDimension] ([DimensionValueID]);
+
+/* SQL text to update entity field related entity name field map for entity field ID 2FABD266-168C-49CA-90B2-1B258AADE7F9 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='2FABD266-168C-49CA-90B2-1B258AADE7F9', @RelatedEntityNameFieldMap='Dimension';
+
+/* Index for Foreign Keys for JournalEntryLine */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Lines
+-- Item: Index for Foreign Keys
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+-- Index for foreign key JournalEntryID in table JournalEntryLine
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_JournalEntryLine_JournalEntryID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[JournalEntryLine]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_JournalEntryLine_JournalEntryID ON [${flyway:defaultSchema}].[JournalEntryLine] ([JournalEntryID]);
+
+-- Index for foreign key GLAccountID in table JournalEntryLine
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_JournalEntryLine_GLAccountID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[JournalEntryLine]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_JournalEntryLine_GLAccountID ON [${flyway:defaultSchema}].[JournalEntryLine] ([GLAccountID]);
+
+-- Index for foreign key OriginalCurrencyCode in table JournalEntryLine
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_JournalEntryLine_OriginalCurrencyCode' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[JournalEntryLine]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_JournalEntryLine_OriginalCurrencyCode ON [${flyway:defaultSchema}].[JournalEntryLine] ([OriginalCurrencyCode]);
+
+-- Index for foreign key CounterpartyOrganizationID in table JournalEntryLine
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_JournalEntryLine_CounterpartyOrganizationID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[JournalEntryLine]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_JournalEntryLine_CounterpartyOrganizationID ON [${flyway:defaultSchema}].[JournalEntryLine] ([CounterpartyOrganizationID]);
+
+/* SQL text to update entity field related entity name field map for entity field ID EE0CC03E-D5C8-4543-9C7F-30D0070E3E88 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='EE0CC03E-D5C8-4543-9C7F-30D0070E3E88', @RelatedEntityNameFieldMap='GLAccount';
+
+/* Base View SQL for MJ_BizApps_Accounting: Journal Entry Batch Sequences */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Batch Sequences
+-- Item: vwJournalEntryBatchSequences
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- BASE VIEW FOR ENTITY:      MJ_BizApps_Accounting: Journal Entry Batch Sequences
+-----               SCHEMA:      ${flyway:defaultSchema}
+-----               BASE TABLE:  JournalEntryBatchSequence
+-----               PRIMARY KEY: ID
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[vwJournalEntryBatchSequences]', 'V') IS NOT NULL
+    DROP VIEW [${flyway:defaultSchema}].[vwJournalEntryBatchSequences];
+GO
+
+CREATE VIEW [${flyway:defaultSchema}].[vwJournalEntryBatchSequences]
+AS
+SELECT
+    j.*
+FROM
+    [${flyway:defaultSchema}].[JournalEntryBatchSequence] AS j
+GO
+GRANT SELECT ON [${flyway:defaultSchema}].[vwJournalEntryBatchSequences] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* Base View Permissions SQL for MJ_BizApps_Accounting: Journal Entry Batch Sequences */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Batch Sequences
+-- Item: Permissions for vwJournalEntryBatchSequences
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+GRANT SELECT ON [${flyway:defaultSchema}].[vwJournalEntryBatchSequences] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* spCreate SQL for MJ_BizApps_Accounting: Journal Entry Batch Sequences */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Batch Sequences
+-- Item: spCreateJournalEntryBatchSequence
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- CREATE PROCEDURE FOR JournalEntryBatchSequence
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spCreateJournalEntryBatchSequence]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spCreateJournalEntryBatchSequence];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateJournalEntryBatchSequence]
+    @ID int = NULL,
+    @NextSequenceNumber int = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    INSERT INTO
+    [${flyway:defaultSchema}].[JournalEntryBatchSequence]
+        (
+            [NextSequenceNumber],
+                [ID]
+        )
+    VALUES
+        (
+            ISNULL(@NextSequenceNumber, 1),
+                @ID
+        )
+    -- return the new record from the base view, which might have some calculated fields
+    SELECT * FROM [${flyway:defaultSchema}].[vwJournalEntryBatchSequences] WHERE [ID] = @ID
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateJournalEntryBatchSequence] TO [cdp_Developer], [cdp_Integration];
+
+/* spCreate Permissions for MJ_BizApps_Accounting: Journal Entry Batch Sequences */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateJournalEntryBatchSequence] TO [cdp_Developer], [cdp_Integration];
+
+/* spUpdate SQL for MJ_BizApps_Accounting: Journal Entry Batch Sequences */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Batch Sequences
+-- Item: spUpdateJournalEntryBatchSequence
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- UPDATE PROCEDURE FOR JournalEntryBatchSequence
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spUpdateJournalEntryBatchSequence]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spUpdateJournalEntryBatchSequence];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateJournalEntryBatchSequence]
+    @ID int,
+    @NextSequenceNumber int = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[JournalEntryBatchSequence]
+    SET
+        [NextSequenceNumber] = ISNULL(@NextSequenceNumber, [NextSequenceNumber])
+    WHERE
+        [ID] = @ID
+
+    -- Check if the update was successful
+    IF @@ROWCOUNT = 0
+        -- Nothing was updated, return no rows, but column structure from base view intact, semantically correct this way.
+        SELECT TOP 0 * FROM [${flyway:defaultSchema}].[vwJournalEntryBatchSequences] WHERE 1=0
+    ELSE
+        -- Return the updated record so the caller can see the updated values and any calculated fields
+        SELECT
+                                        *
+                                    FROM
+                                        [${flyway:defaultSchema}].[vwJournalEntryBatchSequences]
+                                    WHERE
+                                        [ID] = @ID
+                                    
+END
+GO
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateJournalEntryBatchSequence] TO [cdp_Developer], [cdp_Integration]
+GO
+
+------------------------------------------------------------
+----- TRIGGER FOR __mj_UpdatedAt field for the JournalEntryBatchSequence table
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[trgUpdateJournalEntryBatchSequence]', 'TR') IS NOT NULL
+    DROP TRIGGER [${flyway:defaultSchema}].[trgUpdateJournalEntryBatchSequence];
+GO
+CREATE TRIGGER [${flyway:defaultSchema}].trgUpdateJournalEntryBatchSequence
+ON [${flyway:defaultSchema}].[JournalEntryBatchSequence]
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[JournalEntryBatchSequence]
+    SET
+        __mj_UpdatedAt = GETUTCDATE()
+    FROM
+        [${flyway:defaultSchema}].[JournalEntryBatchSequence] AS _organicTable
+    INNER JOIN
+        INSERTED AS I ON
+        _organicTable.[ID] = I.[ID];
+END;
+GO
+
+/* spUpdate Permissions for MJ_BizApps_Accounting: Journal Entry Batch Sequences */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateJournalEntryBatchSequence] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete SQL for MJ_BizApps_Accounting: Journal Entry Batch Sequences */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Batch Sequences
+-- Item: spDeleteJournalEntryBatchSequence
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- DELETE PROCEDURE FOR JournalEntryBatchSequence
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spDeleteJournalEntryBatchSequence]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spDeleteJournalEntryBatchSequence];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spDeleteJournalEntryBatchSequence]
+    @ID int
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DELETE FROM
+        [${flyway:defaultSchema}].[JournalEntryBatchSequence]
+    WHERE
+        [ID] = @ID
+
+
+    -- Check if the delete was successful
+    IF @@ROWCOUNT = 0
+        SELECT NULL AS [ID] -- Return NULL for all primary key fields to indicate no record was deleted
+    ELSE
+        SELECT @ID AS [ID] -- Return the primary key values to indicate we successfully deleted the record
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntryBatchSequence] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete Permissions for MJ_BizApps_Accounting: Journal Entry Batch Sequences */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntryBatchSequence] TO [cdp_Developer], [cdp_Integration];
+
+/* SQL text to update entity field related entity name field map for entity field ID B2233CD3-CD68-417A-850B-ABF726373080 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='B2233CD3-CD68-417A-850B-ABF726373080', @RelatedEntityNameFieldMap='BatchedByUser';
+
+/* SQL text to update entity field related entity name field map for entity field ID D125C043-D840-4AE0-B7E9-D7908E9535DB */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='D125C043-D840-4AE0-B7E9-D7908E9535DB', @RelatedEntityNameFieldMap='LinkedEntity';
+
+/* SQL text to update entity field related entity name field map for entity field ID 88D76153-EAE6-4004-BD8C-AA25C0ABAC1D */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='88D76153-EAE6-4004-BD8C-AA25C0ABAC1D', @RelatedEntityNameFieldMap='DimensionValue';
+
+/* SQL text to update entity field related entity name field map for entity field ID 23F873FC-4F69-4BF9-B794-80A530BFFF45 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='23F873FC-4F69-4BF9-B794-80A530BFFF45', @RelatedEntityNameFieldMap='OriginalCurrencyCode_Virtual';
+
+/* SQL text to update entity field related entity name field map for entity field ID 46005831-3D4B-4412-AA2E-40BD72715778 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='46005831-3D4B-4412-AA2E-40BD72715778', @RelatedEntityNameFieldMap='File';
+
+/* SQL text to update entity field related entity name field map for entity field ID 880B1644-1B3B-4CDD-80DF-A93ECF0AA50A */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='880B1644-1B3B-4CDD-80DF-A93ECF0AA50A', @RelatedEntityNameFieldMap='ApprovedByUser';
+
+/* SQL text to update entity field related entity name field map for entity field ID CED41CAC-DC68-4687-81A3-615A7B39E9E0 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='CED41CAC-DC68-4687-81A3-615A7B39E9E0', @RelatedEntityNameFieldMap='CounterpartyOrganization';
+
+/* Base View SQL for MJ_BizApps_Accounting: Journal Entry Line Dimensions */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Line Dimensions
+-- Item: vwJournalEntryLineDimensions
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- BASE VIEW FOR ENTITY:      MJ_BizApps_Accounting: Journal Entry Line Dimensions
+-----               SCHEMA:      ${flyway:defaultSchema}
+-----               BASE TABLE:  JournalEntryLineDimension
+-----               PRIMARY KEY: ID
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[vwJournalEntryLineDimensions]', 'V') IS NOT NULL
+    DROP VIEW [${flyway:defaultSchema}].[vwJournalEntryLineDimensions];
+GO
+
+CREATE VIEW [${flyway:defaultSchema}].[vwJournalEntryLineDimensions]
+AS
+SELECT
+    j.*,
+    mjBizAppsAccountingDimension_DimensionID.[Name] AS [Dimension],
+    mjBizAppsAccountingDimensionValue_DimensionValueID.[Name] AS [DimensionValue]
+FROM
+    [${flyway:defaultSchema}].[JournalEntryLineDimension] AS j
+INNER JOIN
+    [${flyway:defaultSchema}].[Dimension] AS mjBizAppsAccountingDimension_DimensionID
+  ON
+    [j].[DimensionID] = mjBizAppsAccountingDimension_DimensionID.[ID]
+INNER JOIN
+    [${flyway:defaultSchema}].[DimensionValue] AS mjBizAppsAccountingDimensionValue_DimensionValueID
+  ON
+    [j].[DimensionValueID] = mjBizAppsAccountingDimensionValue_DimensionValueID.[ID]
+GO
+GRANT SELECT ON [${flyway:defaultSchema}].[vwJournalEntryLineDimensions] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* Base View Permissions SQL for MJ_BizApps_Accounting: Journal Entry Line Dimensions */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Line Dimensions
+-- Item: Permissions for vwJournalEntryLineDimensions
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+GRANT SELECT ON [${flyway:defaultSchema}].[vwJournalEntryLineDimensions] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* spCreate SQL for MJ_BizApps_Accounting: Journal Entry Line Dimensions */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Line Dimensions
+-- Item: spCreateJournalEntryLineDimension
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- CREATE PROCEDURE FOR JournalEntryLineDimension
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spCreateJournalEntryLineDimension]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spCreateJournalEntryLineDimension];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateJournalEntryLineDimension]
+    @ID uniqueidentifier = NULL,
+    @JournalEntryLineID uniqueidentifier,
+    @DimensionID uniqueidentifier,
+    @DimensionValueID uniqueidentifier
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @InsertedRow TABLE ([ID] UNIQUEIDENTIFIER)
+
+    IF @ID IS NOT NULL
+    BEGIN
+        -- User provided a value, use it
+        INSERT INTO [${flyway:defaultSchema}].[JournalEntryLineDimension]
+            (
+                [ID],
+                [JournalEntryLineID],
+                [DimensionID],
+                [DimensionValueID]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @ID,
+                @JournalEntryLineID,
+                @DimensionID,
+                @DimensionValueID
+            )
+    END
+    ELSE
+    BEGIN
+        -- No value provided, let database use its default (e.g., NEWSEQUENTIALID())
+        INSERT INTO [${flyway:defaultSchema}].[JournalEntryLineDimension]
+            (
+                [JournalEntryLineID],
+                [DimensionID],
+                [DimensionValueID]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @JournalEntryLineID,
+                @DimensionID,
+                @DimensionValueID
+            )
+    END
+    -- return the new record from the base view, which might have some calculated fields
+    SELECT * FROM [${flyway:defaultSchema}].[vwJournalEntryLineDimensions] WHERE [ID] = (SELECT [ID] FROM @InsertedRow)
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateJournalEntryLineDimension] TO [cdp_Developer], [cdp_Integration];
+
+/* spCreate Permissions for MJ_BizApps_Accounting: Journal Entry Line Dimensions */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateJournalEntryLineDimension] TO [cdp_Developer], [cdp_Integration];
+
+/* spUpdate SQL for MJ_BizApps_Accounting: Journal Entry Line Dimensions */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Line Dimensions
+-- Item: spUpdateJournalEntryLineDimension
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- UPDATE PROCEDURE FOR JournalEntryLineDimension
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spUpdateJournalEntryLineDimension]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spUpdateJournalEntryLineDimension];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateJournalEntryLineDimension]
+    @ID uniqueidentifier,
+    @JournalEntryLineID uniqueidentifier = NULL,
+    @DimensionID uniqueidentifier = NULL,
+    @DimensionValueID uniqueidentifier = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[JournalEntryLineDimension]
+    SET
+        [JournalEntryLineID] = ISNULL(@JournalEntryLineID, [JournalEntryLineID]),
+        [DimensionID] = ISNULL(@DimensionID, [DimensionID]),
+        [DimensionValueID] = ISNULL(@DimensionValueID, [DimensionValueID])
+    WHERE
+        [ID] = @ID
+
+    -- Check if the update was successful
+    IF @@ROWCOUNT = 0
+        -- Nothing was updated, return no rows, but column structure from base view intact, semantically correct this way.
+        SELECT TOP 0 * FROM [${flyway:defaultSchema}].[vwJournalEntryLineDimensions] WHERE 1=0
+    ELSE
+        -- Return the updated record so the caller can see the updated values and any calculated fields
+        SELECT
+                                        *
+                                    FROM
+                                        [${flyway:defaultSchema}].[vwJournalEntryLineDimensions]
+                                    WHERE
+                                        [ID] = @ID
+                                    
+END
+GO
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateJournalEntryLineDimension] TO [cdp_Developer], [cdp_Integration]
+GO
+
+------------------------------------------------------------
+----- TRIGGER FOR __mj_UpdatedAt field for the JournalEntryLineDimension table
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[trgUpdateJournalEntryLineDimension]', 'TR') IS NOT NULL
+    DROP TRIGGER [${flyway:defaultSchema}].[trgUpdateJournalEntryLineDimension];
+GO
+CREATE TRIGGER [${flyway:defaultSchema}].trgUpdateJournalEntryLineDimension
+ON [${flyway:defaultSchema}].[JournalEntryLineDimension]
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[JournalEntryLineDimension]
+    SET
+        __mj_UpdatedAt = GETUTCDATE()
+    FROM
+        [${flyway:defaultSchema}].[JournalEntryLineDimension] AS _organicTable
+    INNER JOIN
+        INSERTED AS I ON
+        _organicTable.[ID] = I.[ID];
+END;
+GO
+
+/* spUpdate Permissions for MJ_BizApps_Accounting: Journal Entry Line Dimensions */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateJournalEntryLineDimension] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete SQL for MJ_BizApps_Accounting: Journal Entry Line Dimensions */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Line Dimensions
+-- Item: spDeleteJournalEntryLineDimension
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- DELETE PROCEDURE FOR JournalEntryLineDimension
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spDeleteJournalEntryLineDimension]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spDeleteJournalEntryLineDimension];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spDeleteJournalEntryLineDimension]
+    @ID uniqueidentifier
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DELETE FROM
+        [${flyway:defaultSchema}].[JournalEntryLineDimension]
+    WHERE
+        [ID] = @ID
+
+
+    -- Check if the delete was successful
+    IF @@ROWCOUNT = 0
+        SELECT NULL AS [ID] -- Return NULL for all primary key fields to indicate no record was deleted
+    ELSE
+        SELECT @ID AS [ID] -- Return the primary key values to indicate we successfully deleted the record
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntryLineDimension] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete Permissions for MJ_BizApps_Accounting: Journal Entry Line Dimensions */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntryLineDimension] TO [cdp_Developer], [cdp_Integration];
+
+/* Root ID Function SQL for MJ_BizApps_Accounting: Journal Entries.ReversesJournalEntryID */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entries
+-- Item: fnJournalEntryReversesJournalEntryID_GetRootID
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+------------------------------------------------------------
+----- ROOT ID FUNCTION FOR: [JournalEntry].[ReversesJournalEntryID]
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[fnJournalEntryReversesJournalEntryID_GetRootID]', 'IF') IS NOT NULL
+    DROP FUNCTION [${flyway:defaultSchema}].[fnJournalEntryReversesJournalEntryID_GetRootID];
+GO
+
+CREATE FUNCTION [${flyway:defaultSchema}].[fnJournalEntryReversesJournalEntryID_GetRootID]
+(
+    @RecordID uniqueidentifier,
+    @ParentID uniqueidentifier
+)
+RETURNS TABLE
+AS
+RETURN
+(
+    WITH CTE_RootParent AS (
+        SELECT
+            [ID],
+            [ReversesJournalEntryID],
+            [ID] AS [RootParentID],
+            0 AS [Depth]
+        FROM
+            [${flyway:defaultSchema}].[JournalEntry]
+        WHERE
+            [ID] = COALESCE(@ParentID, @RecordID)
+
+        UNION ALL
+
+        SELECT
+            c.[ID],
+            c.[ReversesJournalEntryID],
+            c.[ID] AS [RootParentID],
+            p.[Depth] + 1 AS [Depth]
+        FROM
+            [${flyway:defaultSchema}].[JournalEntry] c
+        INNER JOIN
+            CTE_RootParent p ON c.[ID] = p.[ReversesJournalEntryID]
+        WHERE
+            p.[Depth] < 100
+    )
+    SELECT TOP 1
+        [RootParentID] AS RootID
+    FROM
+        CTE_RootParent
+    WHERE
+        [ReversesJournalEntryID] IS NULL
+    ORDER BY
+        [RootParentID]
+);
+GO
+
+/* Root ID Function SQL for MJ_BizApps_Accounting: Journal Entries.ReversedByJournalEntryID */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entries
+-- Item: fnJournalEntryReversedByJournalEntryID_GetRootID
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+------------------------------------------------------------
+----- ROOT ID FUNCTION FOR: [JournalEntry].[ReversedByJournalEntryID]
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[fnJournalEntryReversedByJournalEntryID_GetRootID]', 'IF') IS NOT NULL
+    DROP FUNCTION [${flyway:defaultSchema}].[fnJournalEntryReversedByJournalEntryID_GetRootID];
+GO
+
+CREATE FUNCTION [${flyway:defaultSchema}].[fnJournalEntryReversedByJournalEntryID_GetRootID]
+(
+    @RecordID uniqueidentifier,
+    @ParentID uniqueidentifier
+)
+RETURNS TABLE
+AS
+RETURN
+(
+    WITH CTE_RootParent AS (
+        SELECT
+            [ID],
+            [ReversedByJournalEntryID],
+            [ID] AS [RootParentID],
+            0 AS [Depth]
+        FROM
+            [${flyway:defaultSchema}].[JournalEntry]
+        WHERE
+            [ID] = COALESCE(@ParentID, @RecordID)
+
+        UNION ALL
+
+        SELECT
+            c.[ID],
+            c.[ReversedByJournalEntryID],
+            c.[ID] AS [RootParentID],
+            p.[Depth] + 1 AS [Depth]
+        FROM
+            [${flyway:defaultSchema}].[JournalEntry] c
+        INNER JOIN
+            CTE_RootParent p ON c.[ID] = p.[ReversedByJournalEntryID]
+        WHERE
+            p.[Depth] < 100
+    )
+    SELECT TOP 1
+        [RootParentID] AS RootID
+    FROM
+        CTE_RootParent
+    WHERE
+        [ReversedByJournalEntryID] IS NULL
+    ORDER BY
+        [RootParentID]
+);
+GO
+
+/* Base View SQL for MJ_BizApps_Accounting: Journal Entries */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entries
+-- Item: vwJournalEntries
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- BASE VIEW FOR ENTITY:      MJ_BizApps_Accounting: Journal Entries
+-----               SCHEMA:      ${flyway:defaultSchema}
+-----               BASE TABLE:  JournalEntry
+-----               PRIMARY KEY: ID
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[vwJournalEntries]', 'V') IS NOT NULL
+    DROP VIEW [${flyway:defaultSchema}].[vwJournalEntries];
+GO
+
+CREATE VIEW [${flyway:defaultSchema}].[vwJournalEntries]
+AS
+SELECT
+    j.*,
+    MJCompany_CompanyID.[Name] AS [Company],
+    MJEntity_LinkedEntityID.[Name] AS [LinkedEntity],
+    MJFile_FileID.[Name] AS [File],
+    root_ReversesJournalEntryID.RootID AS [RootReversesJournalEntryID],
+    root_ReversedByJournalEntryID.RootID AS [RootReversedByJournalEntryID]
+FROM
+    [${flyway:defaultSchema}].[JournalEntry] AS j
+INNER JOIN
+    [${mjSchema}].[Company] AS MJCompany_CompanyID
+  ON
+    [j].[CompanyID] = MJCompany_CompanyID.[ID]
+LEFT OUTER JOIN
+    [${mjSchema}].[Entity] AS MJEntity_LinkedEntityID
+  ON
+    [j].[LinkedEntityID] = MJEntity_LinkedEntityID.[ID]
+LEFT OUTER JOIN
+    [${mjSchema}].[File] AS MJFile_FileID
+  ON
+    [j].[FileID] = MJFile_FileID.[ID]
+OUTER APPLY
+    [${flyway:defaultSchema}].[fnJournalEntryReversesJournalEntryID_GetRootID]([j].[ID], [j].[ReversesJournalEntryID]) AS root_ReversesJournalEntryID
+OUTER APPLY
+    [${flyway:defaultSchema}].[fnJournalEntryReversedByJournalEntryID_GetRootID]([j].[ID], [j].[ReversedByJournalEntryID]) AS root_ReversedByJournalEntryID
+GO
+GRANT SELECT ON [${flyway:defaultSchema}].[vwJournalEntries] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* Base View Permissions SQL for MJ_BizApps_Accounting: Journal Entries */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entries
+-- Item: Permissions for vwJournalEntries
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+GRANT SELECT ON [${flyway:defaultSchema}].[vwJournalEntries] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* spCreate SQL for MJ_BizApps_Accounting: Journal Entries */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entries
+-- Item: spCreateJournalEntry
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- CREATE PROCEDURE FOR JournalEntry
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spCreateJournalEntry]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spCreateJournalEntry];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateJournalEntry]
+    @ID uniqueidentifier = NULL,
+    @EntryNumber nvarchar(40),
+    @CompanyID uniqueidentifier,
+    @EffectiveDate date,
+    @EntryType nvarchar(40),
+    @Status nvarchar(20) = NULL,
+    @Description_Clear bit = 0,
+    @Description nvarchar(MAX) = NULL,
+    @LinkedEntityID_Clear bit = 0,
+    @LinkedEntityID uniqueidentifier = NULL,
+    @LinkedRecordID_Clear bit = 0,
+    @LinkedRecordID nvarchar(400) = NULL,
+    @ReversesJournalEntryID_Clear bit = 0,
+    @ReversesJournalEntryID uniqueidentifier = NULL,
+    @ReversedByJournalEntryID_Clear bit = 0,
+    @ReversedByJournalEntryID uniqueidentifier = NULL,
+    @BatchID_Clear bit = 0,
+    @BatchID uniqueidentifier = NULL,
+    @GLPostedAt_Clear bit = 0,
+    @GLPostedAt datetimeoffset = NULL,
+    @GLReferenceID_Clear bit = 0,
+    @GLReferenceID nvarchar(100) = NULL,
+    @FileID_Clear bit = 0,
+    @FileID uniqueidentifier = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @InsertedRow TABLE ([ID] UNIQUEIDENTIFIER)
+
+    IF @ID IS NOT NULL
+    BEGIN
+        -- User provided a value, use it
+        INSERT INTO [${flyway:defaultSchema}].[JournalEntry]
+            (
+                [ID],
+                [EntryNumber],
+                [CompanyID],
+                [EffectiveDate],
+                [EntryType],
+                [Status],
+                [Description],
+                [LinkedEntityID],
+                [LinkedRecordID],
+                [ReversesJournalEntryID],
+                [ReversedByJournalEntryID],
+                [BatchID],
+                [GLPostedAt],
+                [GLReferenceID],
+                [FileID]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @ID,
+                @EntryNumber,
+                @CompanyID,
+                @EffectiveDate,
+                @EntryType,
+                ISNULL(@Status, 'Pending'),
+                CASE WHEN @Description_Clear = 1 THEN NULL ELSE ISNULL(@Description, NULL) END,
+                CASE WHEN @LinkedEntityID_Clear = 1 THEN NULL ELSE ISNULL(@LinkedEntityID, NULL) END,
+                CASE WHEN @LinkedRecordID_Clear = 1 THEN NULL ELSE ISNULL(@LinkedRecordID, NULL) END,
+                CASE WHEN @ReversesJournalEntryID_Clear = 1 THEN NULL ELSE ISNULL(@ReversesJournalEntryID, NULL) END,
+                CASE WHEN @ReversedByJournalEntryID_Clear = 1 THEN NULL ELSE ISNULL(@ReversedByJournalEntryID, NULL) END,
+                CASE WHEN @BatchID_Clear = 1 THEN NULL ELSE ISNULL(@BatchID, NULL) END,
+                CASE WHEN @GLPostedAt_Clear = 1 THEN NULL ELSE ISNULL(@GLPostedAt, NULL) END,
+                CASE WHEN @GLReferenceID_Clear = 1 THEN NULL ELSE ISNULL(@GLReferenceID, NULL) END,
+                CASE WHEN @FileID_Clear = 1 THEN NULL ELSE ISNULL(@FileID, NULL) END
+            )
+    END
+    ELSE
+    BEGIN
+        -- No value provided, let database use its default (e.g., NEWSEQUENTIALID())
+        INSERT INTO [${flyway:defaultSchema}].[JournalEntry]
+            (
+                [EntryNumber],
+                [CompanyID],
+                [EffectiveDate],
+                [EntryType],
+                [Status],
+                [Description],
+                [LinkedEntityID],
+                [LinkedRecordID],
+                [ReversesJournalEntryID],
+                [ReversedByJournalEntryID],
+                [BatchID],
+                [GLPostedAt],
+                [GLReferenceID],
+                [FileID]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @EntryNumber,
+                @CompanyID,
+                @EffectiveDate,
+                @EntryType,
+                ISNULL(@Status, 'Pending'),
+                CASE WHEN @Description_Clear = 1 THEN NULL ELSE ISNULL(@Description, NULL) END,
+                CASE WHEN @LinkedEntityID_Clear = 1 THEN NULL ELSE ISNULL(@LinkedEntityID, NULL) END,
+                CASE WHEN @LinkedRecordID_Clear = 1 THEN NULL ELSE ISNULL(@LinkedRecordID, NULL) END,
+                CASE WHEN @ReversesJournalEntryID_Clear = 1 THEN NULL ELSE ISNULL(@ReversesJournalEntryID, NULL) END,
+                CASE WHEN @ReversedByJournalEntryID_Clear = 1 THEN NULL ELSE ISNULL(@ReversedByJournalEntryID, NULL) END,
+                CASE WHEN @BatchID_Clear = 1 THEN NULL ELSE ISNULL(@BatchID, NULL) END,
+                CASE WHEN @GLPostedAt_Clear = 1 THEN NULL ELSE ISNULL(@GLPostedAt, NULL) END,
+                CASE WHEN @GLReferenceID_Clear = 1 THEN NULL ELSE ISNULL(@GLReferenceID, NULL) END,
+                CASE WHEN @FileID_Clear = 1 THEN NULL ELSE ISNULL(@FileID, NULL) END
+            )
+    END
+    -- return the new record from the base view, which might have some calculated fields
+    SELECT * FROM [${flyway:defaultSchema}].[vwJournalEntries] WHERE [ID] = (SELECT [ID] FROM @InsertedRow)
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateJournalEntry] TO [cdp_Developer], [cdp_Integration];
+
+/* spCreate Permissions for MJ_BizApps_Accounting: Journal Entries */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateJournalEntry] TO [cdp_Developer], [cdp_Integration];
+
+/* spUpdate SQL for MJ_BizApps_Accounting: Journal Entries */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entries
+-- Item: spUpdateJournalEntry
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- UPDATE PROCEDURE FOR JournalEntry
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spUpdateJournalEntry]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spUpdateJournalEntry];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateJournalEntry]
+    @ID uniqueidentifier,
+    @EntryNumber nvarchar(40) = NULL,
+    @CompanyID uniqueidentifier = NULL,
+    @EffectiveDate date = NULL,
+    @EntryType nvarchar(40) = NULL,
+    @Status nvarchar(20) = NULL,
+    @Description_Clear bit = 0,
+    @Description nvarchar(MAX) = NULL,
+    @LinkedEntityID_Clear bit = 0,
+    @LinkedEntityID uniqueidentifier = NULL,
+    @LinkedRecordID_Clear bit = 0,
+    @LinkedRecordID nvarchar(400) = NULL,
+    @ReversesJournalEntryID_Clear bit = 0,
+    @ReversesJournalEntryID uniqueidentifier = NULL,
+    @ReversedByJournalEntryID_Clear bit = 0,
+    @ReversedByJournalEntryID uniqueidentifier = NULL,
+    @BatchID_Clear bit = 0,
+    @BatchID uniqueidentifier = NULL,
+    @GLPostedAt_Clear bit = 0,
+    @GLPostedAt datetimeoffset = NULL,
+    @GLReferenceID_Clear bit = 0,
+    @GLReferenceID nvarchar(100) = NULL,
+    @FileID_Clear bit = 0,
+    @FileID uniqueidentifier = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[JournalEntry]
+    SET
+        [EntryNumber] = ISNULL(@EntryNumber, [EntryNumber]),
+        [CompanyID] = ISNULL(@CompanyID, [CompanyID]),
+        [EffectiveDate] = ISNULL(@EffectiveDate, [EffectiveDate]),
+        [EntryType] = ISNULL(@EntryType, [EntryType]),
+        [Status] = ISNULL(@Status, [Status]),
+        [Description] = CASE WHEN @Description_Clear = 1 THEN NULL ELSE ISNULL(@Description, [Description]) END,
+        [LinkedEntityID] = CASE WHEN @LinkedEntityID_Clear = 1 THEN NULL ELSE ISNULL(@LinkedEntityID, [LinkedEntityID]) END,
+        [LinkedRecordID] = CASE WHEN @LinkedRecordID_Clear = 1 THEN NULL ELSE ISNULL(@LinkedRecordID, [LinkedRecordID]) END,
+        [ReversesJournalEntryID] = CASE WHEN @ReversesJournalEntryID_Clear = 1 THEN NULL ELSE ISNULL(@ReversesJournalEntryID, [ReversesJournalEntryID]) END,
+        [ReversedByJournalEntryID] = CASE WHEN @ReversedByJournalEntryID_Clear = 1 THEN NULL ELSE ISNULL(@ReversedByJournalEntryID, [ReversedByJournalEntryID]) END,
+        [BatchID] = CASE WHEN @BatchID_Clear = 1 THEN NULL ELSE ISNULL(@BatchID, [BatchID]) END,
+        [GLPostedAt] = CASE WHEN @GLPostedAt_Clear = 1 THEN NULL ELSE ISNULL(@GLPostedAt, [GLPostedAt]) END,
+        [GLReferenceID] = CASE WHEN @GLReferenceID_Clear = 1 THEN NULL ELSE ISNULL(@GLReferenceID, [GLReferenceID]) END,
+        [FileID] = CASE WHEN @FileID_Clear = 1 THEN NULL ELSE ISNULL(@FileID, [FileID]) END
+    WHERE
+        [ID] = @ID
+
+    -- Check if the update was successful
+    IF @@ROWCOUNT = 0
+        -- Nothing was updated, return no rows, but column structure from base view intact, semantically correct this way.
+        SELECT TOP 0 * FROM [${flyway:defaultSchema}].[vwJournalEntries] WHERE 1=0
+    ELSE
+        -- Return the updated record so the caller can see the updated values and any calculated fields
+        SELECT
+                                        *
+                                    FROM
+                                        [${flyway:defaultSchema}].[vwJournalEntries]
+                                    WHERE
+                                        [ID] = @ID
+                                    
+END
+GO
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateJournalEntry] TO [cdp_Developer], [cdp_Integration]
+GO
+
+------------------------------------------------------------
+----- TRIGGER FOR __mj_UpdatedAt field for the JournalEntry table
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[trgUpdateJournalEntry]', 'TR') IS NOT NULL
+    DROP TRIGGER [${flyway:defaultSchema}].[trgUpdateJournalEntry];
+GO
+CREATE TRIGGER [${flyway:defaultSchema}].trgUpdateJournalEntry
+ON [${flyway:defaultSchema}].[JournalEntry]
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[JournalEntry]
+    SET
+        __mj_UpdatedAt = GETUTCDATE()
+    FROM
+        [${flyway:defaultSchema}].[JournalEntry] AS _organicTable
+    INNER JOIN
+        INSERTED AS I ON
+        _organicTable.[ID] = I.[ID];
+END;
+GO
+
+/* spUpdate Permissions for MJ_BizApps_Accounting: Journal Entries */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateJournalEntry] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete SQL for MJ_BizApps_Accounting: Journal Entries */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entries
+-- Item: spDeleteJournalEntry
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- DELETE PROCEDURE FOR JournalEntry
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spDeleteJournalEntry]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spDeleteJournalEntry];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spDeleteJournalEntry]
+    @ID uniqueidentifier
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DELETE FROM
+        [${flyway:defaultSchema}].[JournalEntry]
+    WHERE
+        [ID] = @ID
+
+
+    -- Check if the delete was successful
+    IF @@ROWCOUNT = 0
+        SELECT NULL AS [ID] -- Return NULL for all primary key fields to indicate no record was deleted
+    ELSE
+        SELECT @ID AS [ID] -- Return the primary key values to indicate we successfully deleted the record
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntry] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete Permissions for MJ_BizApps_Accounting: Journal Entries */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntry] TO [cdp_Developer], [cdp_Integration];
+
+/* Base View SQL for MJ_BizApps_Accounting: Journal Entry Lines */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Lines
+-- Item: vwJournalEntryLines
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- BASE VIEW FOR ENTITY:      MJ_BizApps_Accounting: Journal Entry Lines
+-----               SCHEMA:      ${flyway:defaultSchema}
+-----               BASE TABLE:  JournalEntryLine
+-----               PRIMARY KEY: ID
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[vwJournalEntryLines]', 'V') IS NOT NULL
+    DROP VIEW [${flyway:defaultSchema}].[vwJournalEntryLines];
+GO
+
+CREATE VIEW [${flyway:defaultSchema}].[vwJournalEntryLines]
+AS
+SELECT
+    j.*,
+    mjBizAppsAccountingGLAccount_GLAccountID.[Name] AS [GLAccount],
+    mjBizAppsAccountingCurrency_OriginalCurrencyCode.[Name] AS [OriginalCurrencyCode_Virtual],
+    mjBizAppsCommonOrganization_CounterpartyOrganizationID.[Name] AS [CounterpartyOrganization]
+FROM
+    [${flyway:defaultSchema}].[JournalEntryLine] AS j
+INNER JOIN
+    [${flyway:defaultSchema}].[GLAccount] AS mjBizAppsAccountingGLAccount_GLAccountID
+  ON
+    [j].[GLAccountID] = mjBizAppsAccountingGLAccount_GLAccountID.[ID]
+LEFT OUTER JOIN
+    [${flyway:defaultSchema}].[Currency] AS mjBizAppsAccountingCurrency_OriginalCurrencyCode
+  ON
+    [j].[OriginalCurrencyCode] = mjBizAppsAccountingCurrency_OriginalCurrencyCode.[Code]
+LEFT OUTER JOIN
+    [${mjSchema}_BizAppsCommon].[Organization] AS mjBizAppsCommonOrganization_CounterpartyOrganizationID
+  ON
+    [j].[CounterpartyOrganizationID] = mjBizAppsCommonOrganization_CounterpartyOrganizationID.[ID]
+GO
+GRANT SELECT ON [${flyway:defaultSchema}].[vwJournalEntryLines] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* Base View Permissions SQL for MJ_BizApps_Accounting: Journal Entry Lines */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Lines
+-- Item: Permissions for vwJournalEntryLines
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+GRANT SELECT ON [${flyway:defaultSchema}].[vwJournalEntryLines] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* spCreate SQL for MJ_BizApps_Accounting: Journal Entry Lines */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Lines
+-- Item: spCreateJournalEntryLine
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- CREATE PROCEDURE FOR JournalEntryLine
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spCreateJournalEntryLine]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spCreateJournalEntryLine];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateJournalEntryLine]
+    @ID uniqueidentifier = NULL,
+    @JournalEntryID uniqueidentifier,
+    @LineNumber int,
+    @GLAccountID uniqueidentifier,
+    @DebitAmount_Clear bit = 0,
+    @DebitAmount decimal(18, 2) = NULL,
+    @CreditAmount_Clear bit = 0,
+    @CreditAmount decimal(18, 2) = NULL,
+    @OriginalCurrencyCode_Clear bit = 0,
+    @OriginalCurrencyCode char(3) = NULL,
+    @OriginalDebitAmount_Clear bit = 0,
+    @OriginalDebitAmount decimal(18, 2) = NULL,
+    @OriginalCreditAmount_Clear bit = 0,
+    @OriginalCreditAmount decimal(18, 2) = NULL,
+    @ExchangeRateUsed_Clear bit = 0,
+    @ExchangeRateUsed decimal(18, 8) = NULL,
+    @Description_Clear bit = 0,
+    @Description nvarchar(MAX) = NULL,
+    @CounterpartyOrganizationID_Clear bit = 0,
+    @CounterpartyOrganizationID uniqueidentifier = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @InsertedRow TABLE ([ID] UNIQUEIDENTIFIER)
+
+    IF @ID IS NOT NULL
+    BEGIN
+        -- User provided a value, use it
+        INSERT INTO [${flyway:defaultSchema}].[JournalEntryLine]
+            (
+                [ID],
+                [JournalEntryID],
+                [LineNumber],
+                [GLAccountID],
+                [DebitAmount],
+                [CreditAmount],
+                [OriginalCurrencyCode],
+                [OriginalDebitAmount],
+                [OriginalCreditAmount],
+                [ExchangeRateUsed],
+                [Description],
+                [CounterpartyOrganizationID]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @ID,
+                @JournalEntryID,
+                @LineNumber,
+                @GLAccountID,
+                CASE WHEN @DebitAmount_Clear = 1 THEN NULL ELSE ISNULL(@DebitAmount, NULL) END,
+                CASE WHEN @CreditAmount_Clear = 1 THEN NULL ELSE ISNULL(@CreditAmount, NULL) END,
+                CASE WHEN @OriginalCurrencyCode_Clear = 1 THEN NULL ELSE ISNULL(@OriginalCurrencyCode, NULL) END,
+                CASE WHEN @OriginalDebitAmount_Clear = 1 THEN NULL ELSE ISNULL(@OriginalDebitAmount, NULL) END,
+                CASE WHEN @OriginalCreditAmount_Clear = 1 THEN NULL ELSE ISNULL(@OriginalCreditAmount, NULL) END,
+                CASE WHEN @ExchangeRateUsed_Clear = 1 THEN NULL ELSE ISNULL(@ExchangeRateUsed, NULL) END,
+                CASE WHEN @Description_Clear = 1 THEN NULL ELSE ISNULL(@Description, NULL) END,
+                CASE WHEN @CounterpartyOrganizationID_Clear = 1 THEN NULL ELSE ISNULL(@CounterpartyOrganizationID, NULL) END
+            )
+    END
+    ELSE
+    BEGIN
+        -- No value provided, let database use its default (e.g., NEWSEQUENTIALID())
+        INSERT INTO [${flyway:defaultSchema}].[JournalEntryLine]
+            (
+                [JournalEntryID],
+                [LineNumber],
+                [GLAccountID],
+                [DebitAmount],
+                [CreditAmount],
+                [OriginalCurrencyCode],
+                [OriginalDebitAmount],
+                [OriginalCreditAmount],
+                [ExchangeRateUsed],
+                [Description],
+                [CounterpartyOrganizationID]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @JournalEntryID,
+                @LineNumber,
+                @GLAccountID,
+                CASE WHEN @DebitAmount_Clear = 1 THEN NULL ELSE ISNULL(@DebitAmount, NULL) END,
+                CASE WHEN @CreditAmount_Clear = 1 THEN NULL ELSE ISNULL(@CreditAmount, NULL) END,
+                CASE WHEN @OriginalCurrencyCode_Clear = 1 THEN NULL ELSE ISNULL(@OriginalCurrencyCode, NULL) END,
+                CASE WHEN @OriginalDebitAmount_Clear = 1 THEN NULL ELSE ISNULL(@OriginalDebitAmount, NULL) END,
+                CASE WHEN @OriginalCreditAmount_Clear = 1 THEN NULL ELSE ISNULL(@OriginalCreditAmount, NULL) END,
+                CASE WHEN @ExchangeRateUsed_Clear = 1 THEN NULL ELSE ISNULL(@ExchangeRateUsed, NULL) END,
+                CASE WHEN @Description_Clear = 1 THEN NULL ELSE ISNULL(@Description, NULL) END,
+                CASE WHEN @CounterpartyOrganizationID_Clear = 1 THEN NULL ELSE ISNULL(@CounterpartyOrganizationID, NULL) END
+            )
+    END
+    -- return the new record from the base view, which might have some calculated fields
+    SELECT * FROM [${flyway:defaultSchema}].[vwJournalEntryLines] WHERE [ID] = (SELECT [ID] FROM @InsertedRow)
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateJournalEntryLine] TO [cdp_Developer], [cdp_Integration];
+
+/* spCreate Permissions for MJ_BizApps_Accounting: Journal Entry Lines */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateJournalEntryLine] TO [cdp_Developer], [cdp_Integration];
+
+/* spUpdate SQL for MJ_BizApps_Accounting: Journal Entry Lines */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Lines
+-- Item: spUpdateJournalEntryLine
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- UPDATE PROCEDURE FOR JournalEntryLine
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spUpdateJournalEntryLine]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spUpdateJournalEntryLine];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateJournalEntryLine]
+    @ID uniqueidentifier,
+    @JournalEntryID uniqueidentifier = NULL,
+    @LineNumber int = NULL,
+    @GLAccountID uniqueidentifier = NULL,
+    @DebitAmount_Clear bit = 0,
+    @DebitAmount decimal(18, 2) = NULL,
+    @CreditAmount_Clear bit = 0,
+    @CreditAmount decimal(18, 2) = NULL,
+    @OriginalCurrencyCode_Clear bit = 0,
+    @OriginalCurrencyCode char(3) = NULL,
+    @OriginalDebitAmount_Clear bit = 0,
+    @OriginalDebitAmount decimal(18, 2) = NULL,
+    @OriginalCreditAmount_Clear bit = 0,
+    @OriginalCreditAmount decimal(18, 2) = NULL,
+    @ExchangeRateUsed_Clear bit = 0,
+    @ExchangeRateUsed decimal(18, 8) = NULL,
+    @Description_Clear bit = 0,
+    @Description nvarchar(MAX) = NULL,
+    @CounterpartyOrganizationID_Clear bit = 0,
+    @CounterpartyOrganizationID uniqueidentifier = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[JournalEntryLine]
+    SET
+        [JournalEntryID] = ISNULL(@JournalEntryID, [JournalEntryID]),
+        [LineNumber] = ISNULL(@LineNumber, [LineNumber]),
+        [GLAccountID] = ISNULL(@GLAccountID, [GLAccountID]),
+        [DebitAmount] = CASE WHEN @DebitAmount_Clear = 1 THEN NULL ELSE ISNULL(@DebitAmount, [DebitAmount]) END,
+        [CreditAmount] = CASE WHEN @CreditAmount_Clear = 1 THEN NULL ELSE ISNULL(@CreditAmount, [CreditAmount]) END,
+        [OriginalCurrencyCode] = CASE WHEN @OriginalCurrencyCode_Clear = 1 THEN NULL ELSE ISNULL(@OriginalCurrencyCode, [OriginalCurrencyCode]) END,
+        [OriginalDebitAmount] = CASE WHEN @OriginalDebitAmount_Clear = 1 THEN NULL ELSE ISNULL(@OriginalDebitAmount, [OriginalDebitAmount]) END,
+        [OriginalCreditAmount] = CASE WHEN @OriginalCreditAmount_Clear = 1 THEN NULL ELSE ISNULL(@OriginalCreditAmount, [OriginalCreditAmount]) END,
+        [ExchangeRateUsed] = CASE WHEN @ExchangeRateUsed_Clear = 1 THEN NULL ELSE ISNULL(@ExchangeRateUsed, [ExchangeRateUsed]) END,
+        [Description] = CASE WHEN @Description_Clear = 1 THEN NULL ELSE ISNULL(@Description, [Description]) END,
+        [CounterpartyOrganizationID] = CASE WHEN @CounterpartyOrganizationID_Clear = 1 THEN NULL ELSE ISNULL(@CounterpartyOrganizationID, [CounterpartyOrganizationID]) END
+    WHERE
+        [ID] = @ID
+
+    -- Check if the update was successful
+    IF @@ROWCOUNT = 0
+        -- Nothing was updated, return no rows, but column structure from base view intact, semantically correct this way.
+        SELECT TOP 0 * FROM [${flyway:defaultSchema}].[vwJournalEntryLines] WHERE 1=0
+    ELSE
+        -- Return the updated record so the caller can see the updated values and any calculated fields
+        SELECT
+                                        *
+                                    FROM
+                                        [${flyway:defaultSchema}].[vwJournalEntryLines]
+                                    WHERE
+                                        [ID] = @ID
+                                    
+END
+GO
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateJournalEntryLine] TO [cdp_Developer], [cdp_Integration]
+GO
+
+------------------------------------------------------------
+----- TRIGGER FOR __mj_UpdatedAt field for the JournalEntryLine table
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[trgUpdateJournalEntryLine]', 'TR') IS NOT NULL
+    DROP TRIGGER [${flyway:defaultSchema}].[trgUpdateJournalEntryLine];
+GO
+CREATE TRIGGER [${flyway:defaultSchema}].trgUpdateJournalEntryLine
+ON [${flyway:defaultSchema}].[JournalEntryLine]
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[JournalEntryLine]
+    SET
+        __mj_UpdatedAt = GETUTCDATE()
+    FROM
+        [${flyway:defaultSchema}].[JournalEntryLine] AS _organicTable
+    INNER JOIN
+        INSERTED AS I ON
+        _organicTable.[ID] = I.[ID];
+END;
+GO
+
+/* spUpdate Permissions for MJ_BizApps_Accounting: Journal Entry Lines */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateJournalEntryLine] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete SQL for MJ_BizApps_Accounting: Journal Entry Lines */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Lines
+-- Item: spDeleteJournalEntryLine
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- DELETE PROCEDURE FOR JournalEntryLine
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spDeleteJournalEntryLine]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spDeleteJournalEntryLine];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spDeleteJournalEntryLine]
+    @ID uniqueidentifier
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DELETE FROM
+        [${flyway:defaultSchema}].[JournalEntryLine]
+    WHERE
+        [ID] = @ID
+
+
+    -- Check if the delete was successful
+    IF @@ROWCOUNT = 0
+        SELECT NULL AS [ID] -- Return NULL for all primary key fields to indicate no record was deleted
+    ELSE
+        SELECT @ID AS [ID] -- Return the primary key values to indicate we successfully deleted the record
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntryLine] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete Permissions for MJ_BizApps_Accounting: Journal Entry Lines */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntryLine] TO [cdp_Developer], [cdp_Integration];
+
+/* Base View SQL for MJ_BizApps_Accounting: Journal Entry Batches */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+-- Item: vwJournalEntryBatches
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- BASE VIEW FOR ENTITY:      MJ_BizApps_Accounting: Journal Entry Batches
+-----               SCHEMA:      ${flyway:defaultSchema}
+-----               BASE TABLE:  JournalEntryBatch
+-----               PRIMARY KEY: ID
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[vwJournalEntryBatches]', 'V') IS NOT NULL
+    DROP VIEW [${flyway:defaultSchema}].[vwJournalEntryBatches];
+GO
+
+CREATE VIEW [${flyway:defaultSchema}].[vwJournalEntryBatches]
+AS
+SELECT
+    j.*,
+    MJCompany_CompanyID.[Name] AS [Company],
+    MJUser_BatchedByUserID.[Name] AS [BatchedByUser],
+    MJUser_ApprovedByUserID.[Name] AS [ApprovedByUser]
+FROM
+    [${flyway:defaultSchema}].[JournalEntryBatch] AS j
+INNER JOIN
+    [${mjSchema}].[Company] AS MJCompany_CompanyID
+  ON
+    [j].[CompanyID] = MJCompany_CompanyID.[ID]
+INNER JOIN
+    [${mjSchema}].[User] AS MJUser_BatchedByUserID
+  ON
+    [j].[BatchedByUserID] = MJUser_BatchedByUserID.[ID]
+LEFT OUTER JOIN
+    [${mjSchema}].[User] AS MJUser_ApprovedByUserID
+  ON
+    [j].[ApprovedByUserID] = MJUser_ApprovedByUserID.[ID]
+GO
+GRANT SELECT ON [${flyway:defaultSchema}].[vwJournalEntryBatches] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* Base View Permissions SQL for MJ_BizApps_Accounting: Journal Entry Batches */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+-- Item: Permissions for vwJournalEntryBatches
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+GRANT SELECT ON [${flyway:defaultSchema}].[vwJournalEntryBatches] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* spCreate SQL for MJ_BizApps_Accounting: Journal Entry Batches */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+-- Item: spCreateJournalEntryBatch
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- CREATE PROCEDURE FOR JournalEntryBatch
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spCreateJournalEntryBatch]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spCreateJournalEntryBatch];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateJournalEntryBatch]
+    @ID uniqueidentifier = NULL,
+    @BatchNumber nvarchar(40),
+    @CompanyID uniqueidentifier,
+    @PostingDate date,
+    @SummaryJournalEntryID_Clear bit = 0,
+    @SummaryJournalEntryID uniqueidentifier = NULL,
+    @TargetSystem nvarchar(50),
+    @BatchedAt datetimeoffset = NULL,
+    @BatchedByUserID uniqueidentifier,
+    @Status nvarchar(20) = NULL,
+    @TotalEntries int = NULL,
+    @TotalDebits decimal(18, 2) = NULL,
+    @TotalCredits decimal(18, 2) = NULL,
+    @ExternalBatchRef_Clear bit = 0,
+    @ExternalBatchRef nvarchar(100) = NULL,
+    @ApprovedAt_Clear bit = 0,
+    @ApprovedAt datetimeoffset = NULL,
+    @ApprovedByUserID_Clear bit = 0,
+    @ApprovedByUserID uniqueidentifier = NULL,
+    @SentAt_Clear bit = 0,
+    @SentAt datetimeoffset = NULL,
+    @PostedAt_Clear bit = 0,
+    @PostedAt datetimeoffset = NULL,
+    @ErrorMessage_Clear bit = 0,
+    @ErrorMessage nvarchar(MAX) = NULL,
+    @ApprovalTaskID_Clear bit = 0,
+    @ApprovalTaskID uniqueidentifier = NULL,
+    @ApprovalTaskRaisedAt_Clear bit = 0,
+    @ApprovalTaskRaisedAt datetimeoffset = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @InsertedRow TABLE ([ID] UNIQUEIDENTIFIER)
+
+    IF @ID IS NOT NULL
+    BEGIN
+        -- User provided a value, use it
+        INSERT INTO [${flyway:defaultSchema}].[JournalEntryBatch]
+            (
+                [ID],
+                [BatchNumber],
+                [CompanyID],
+                [PostingDate],
+                [SummaryJournalEntryID],
+                [TargetSystem],
+                [BatchedAt],
+                [BatchedByUserID],
+                [Status],
+                [TotalEntries],
+                [TotalDebits],
+                [TotalCredits],
+                [ExternalBatchRef],
+                [ApprovedAt],
+                [ApprovedByUserID],
+                [SentAt],
+                [PostedAt],
+                [ErrorMessage],
+                [ApprovalTaskID],
+                [ApprovalTaskRaisedAt]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @ID,
+                @BatchNumber,
+                @CompanyID,
+                @PostingDate,
+                CASE WHEN @SummaryJournalEntryID_Clear = 1 THEN NULL ELSE ISNULL(@SummaryJournalEntryID, NULL) END,
+                @TargetSystem,
+                ISNULL(@BatchedAt, sysdatetimeoffset()),
+                @BatchedByUserID,
+                ISNULL(@Status, 'Pending'),
+                ISNULL(@TotalEntries, 0),
+                ISNULL(@TotalDebits, 0),
+                ISNULL(@TotalCredits, 0),
+                CASE WHEN @ExternalBatchRef_Clear = 1 THEN NULL ELSE ISNULL(@ExternalBatchRef, NULL) END,
+                CASE WHEN @ApprovedAt_Clear = 1 THEN NULL ELSE ISNULL(@ApprovedAt, NULL) END,
+                CASE WHEN @ApprovedByUserID_Clear = 1 THEN NULL ELSE ISNULL(@ApprovedByUserID, NULL) END,
+                CASE WHEN @SentAt_Clear = 1 THEN NULL ELSE ISNULL(@SentAt, NULL) END,
+                CASE WHEN @PostedAt_Clear = 1 THEN NULL ELSE ISNULL(@PostedAt, NULL) END,
+                CASE WHEN @ErrorMessage_Clear = 1 THEN NULL ELSE ISNULL(@ErrorMessage, NULL) END,
+                CASE WHEN @ApprovalTaskID_Clear = 1 THEN NULL ELSE ISNULL(@ApprovalTaskID, NULL) END,
+                CASE WHEN @ApprovalTaskRaisedAt_Clear = 1 THEN NULL ELSE ISNULL(@ApprovalTaskRaisedAt, NULL) END
+            )
+    END
+    ELSE
+    BEGIN
+        -- No value provided, let database use its default (e.g., NEWSEQUENTIALID())
+        INSERT INTO [${flyway:defaultSchema}].[JournalEntryBatch]
+            (
+                [BatchNumber],
+                [CompanyID],
+                [PostingDate],
+                [SummaryJournalEntryID],
+                [TargetSystem],
+                [BatchedAt],
+                [BatchedByUserID],
+                [Status],
+                [TotalEntries],
+                [TotalDebits],
+                [TotalCredits],
+                [ExternalBatchRef],
+                [ApprovedAt],
+                [ApprovedByUserID],
+                [SentAt],
+                [PostedAt],
+                [ErrorMessage],
+                [ApprovalTaskID],
+                [ApprovalTaskRaisedAt]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @BatchNumber,
+                @CompanyID,
+                @PostingDate,
+                CASE WHEN @SummaryJournalEntryID_Clear = 1 THEN NULL ELSE ISNULL(@SummaryJournalEntryID, NULL) END,
+                @TargetSystem,
+                ISNULL(@BatchedAt, sysdatetimeoffset()),
+                @BatchedByUserID,
+                ISNULL(@Status, 'Pending'),
+                ISNULL(@TotalEntries, 0),
+                ISNULL(@TotalDebits, 0),
+                ISNULL(@TotalCredits, 0),
+                CASE WHEN @ExternalBatchRef_Clear = 1 THEN NULL ELSE ISNULL(@ExternalBatchRef, NULL) END,
+                CASE WHEN @ApprovedAt_Clear = 1 THEN NULL ELSE ISNULL(@ApprovedAt, NULL) END,
+                CASE WHEN @ApprovedByUserID_Clear = 1 THEN NULL ELSE ISNULL(@ApprovedByUserID, NULL) END,
+                CASE WHEN @SentAt_Clear = 1 THEN NULL ELSE ISNULL(@SentAt, NULL) END,
+                CASE WHEN @PostedAt_Clear = 1 THEN NULL ELSE ISNULL(@PostedAt, NULL) END,
+                CASE WHEN @ErrorMessage_Clear = 1 THEN NULL ELSE ISNULL(@ErrorMessage, NULL) END,
+                CASE WHEN @ApprovalTaskID_Clear = 1 THEN NULL ELSE ISNULL(@ApprovalTaskID, NULL) END,
+                CASE WHEN @ApprovalTaskRaisedAt_Clear = 1 THEN NULL ELSE ISNULL(@ApprovalTaskRaisedAt, NULL) END
+            )
+    END
+    -- return the new record from the base view, which might have some calculated fields
+    SELECT * FROM [${flyway:defaultSchema}].[vwJournalEntryBatches] WHERE [ID] = (SELECT [ID] FROM @InsertedRow)
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateJournalEntryBatch] TO [cdp_Developer], [cdp_Integration];
+
+/* spCreate Permissions for MJ_BizApps_Accounting: Journal Entry Batches */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateJournalEntryBatch] TO [cdp_Developer], [cdp_Integration];
+
+/* spUpdate SQL for MJ_BizApps_Accounting: Journal Entry Batches */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+-- Item: spUpdateJournalEntryBatch
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- UPDATE PROCEDURE FOR JournalEntryBatch
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spUpdateJournalEntryBatch]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spUpdateJournalEntryBatch];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateJournalEntryBatch]
+    @ID uniqueidentifier,
+    @BatchNumber nvarchar(40) = NULL,
+    @CompanyID uniqueidentifier = NULL,
+    @PostingDate date = NULL,
+    @SummaryJournalEntryID_Clear bit = 0,
+    @SummaryJournalEntryID uniqueidentifier = NULL,
+    @TargetSystem nvarchar(50) = NULL,
+    @BatchedAt datetimeoffset = NULL,
+    @BatchedByUserID uniqueidentifier = NULL,
+    @Status nvarchar(20) = NULL,
+    @TotalEntries int = NULL,
+    @TotalDebits decimal(18, 2) = NULL,
+    @TotalCredits decimal(18, 2) = NULL,
+    @ExternalBatchRef_Clear bit = 0,
+    @ExternalBatchRef nvarchar(100) = NULL,
+    @ApprovedAt_Clear bit = 0,
+    @ApprovedAt datetimeoffset = NULL,
+    @ApprovedByUserID_Clear bit = 0,
+    @ApprovedByUserID uniqueidentifier = NULL,
+    @SentAt_Clear bit = 0,
+    @SentAt datetimeoffset = NULL,
+    @PostedAt_Clear bit = 0,
+    @PostedAt datetimeoffset = NULL,
+    @ErrorMessage_Clear bit = 0,
+    @ErrorMessage nvarchar(MAX) = NULL,
+    @ApprovalTaskID_Clear bit = 0,
+    @ApprovalTaskID uniqueidentifier = NULL,
+    @ApprovalTaskRaisedAt_Clear bit = 0,
+    @ApprovalTaskRaisedAt datetimeoffset = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[JournalEntryBatch]
+    SET
+        [BatchNumber] = ISNULL(@BatchNumber, [BatchNumber]),
+        [CompanyID] = ISNULL(@CompanyID, [CompanyID]),
+        [PostingDate] = ISNULL(@PostingDate, [PostingDate]),
+        [SummaryJournalEntryID] = CASE WHEN @SummaryJournalEntryID_Clear = 1 THEN NULL ELSE ISNULL(@SummaryJournalEntryID, [SummaryJournalEntryID]) END,
+        [TargetSystem] = ISNULL(@TargetSystem, [TargetSystem]),
+        [BatchedAt] = ISNULL(@BatchedAt, [BatchedAt]),
+        [BatchedByUserID] = ISNULL(@BatchedByUserID, [BatchedByUserID]),
+        [Status] = ISNULL(@Status, [Status]),
+        [TotalEntries] = ISNULL(@TotalEntries, [TotalEntries]),
+        [TotalDebits] = ISNULL(@TotalDebits, [TotalDebits]),
+        [TotalCredits] = ISNULL(@TotalCredits, [TotalCredits]),
+        [ExternalBatchRef] = CASE WHEN @ExternalBatchRef_Clear = 1 THEN NULL ELSE ISNULL(@ExternalBatchRef, [ExternalBatchRef]) END,
+        [ApprovedAt] = CASE WHEN @ApprovedAt_Clear = 1 THEN NULL ELSE ISNULL(@ApprovedAt, [ApprovedAt]) END,
+        [ApprovedByUserID] = CASE WHEN @ApprovedByUserID_Clear = 1 THEN NULL ELSE ISNULL(@ApprovedByUserID, [ApprovedByUserID]) END,
+        [SentAt] = CASE WHEN @SentAt_Clear = 1 THEN NULL ELSE ISNULL(@SentAt, [SentAt]) END,
+        [PostedAt] = CASE WHEN @PostedAt_Clear = 1 THEN NULL ELSE ISNULL(@PostedAt, [PostedAt]) END,
+        [ErrorMessage] = CASE WHEN @ErrorMessage_Clear = 1 THEN NULL ELSE ISNULL(@ErrorMessage, [ErrorMessage]) END,
+        [ApprovalTaskID] = CASE WHEN @ApprovalTaskID_Clear = 1 THEN NULL ELSE ISNULL(@ApprovalTaskID, [ApprovalTaskID]) END,
+        [ApprovalTaskRaisedAt] = CASE WHEN @ApprovalTaskRaisedAt_Clear = 1 THEN NULL ELSE ISNULL(@ApprovalTaskRaisedAt, [ApprovalTaskRaisedAt]) END
+    WHERE
+        [ID] = @ID
+
+    -- Check if the update was successful
+    IF @@ROWCOUNT = 0
+        -- Nothing was updated, return no rows, but column structure from base view intact, semantically correct this way.
+        SELECT TOP 0 * FROM [${flyway:defaultSchema}].[vwJournalEntryBatches] WHERE 1=0
+    ELSE
+        -- Return the updated record so the caller can see the updated values and any calculated fields
+        SELECT
+                                        *
+                                    FROM
+                                        [${flyway:defaultSchema}].[vwJournalEntryBatches]
+                                    WHERE
+                                        [ID] = @ID
+                                    
+END
+GO
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateJournalEntryBatch] TO [cdp_Developer], [cdp_Integration]
+GO
+
+------------------------------------------------------------
+----- TRIGGER FOR __mj_UpdatedAt field for the JournalEntryBatch table
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[trgUpdateJournalEntryBatch]', 'TR') IS NOT NULL
+    DROP TRIGGER [${flyway:defaultSchema}].[trgUpdateJournalEntryBatch];
+GO
+CREATE TRIGGER [${flyway:defaultSchema}].trgUpdateJournalEntryBatch
+ON [${flyway:defaultSchema}].[JournalEntryBatch]
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[JournalEntryBatch]
+    SET
+        __mj_UpdatedAt = GETUTCDATE()
+    FROM
+        [${flyway:defaultSchema}].[JournalEntryBatch] AS _organicTable
+    INNER JOIN
+        INSERTED AS I ON
+        _organicTable.[ID] = I.[ID];
+END;
+GO
+
+/* spUpdate Permissions for MJ_BizApps_Accounting: Journal Entry Batches */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateJournalEntryBatch] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete SQL for MJ_BizApps_Accounting: Journal Entry Batches */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+-- Item: spDeleteJournalEntryBatch
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- DELETE PROCEDURE FOR JournalEntryBatch
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spDeleteJournalEntryBatch]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spDeleteJournalEntryBatch];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spDeleteJournalEntryBatch]
+    @ID uniqueidentifier
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DELETE FROM
+        [${flyway:defaultSchema}].[JournalEntryBatch]
+    WHERE
+        [ID] = @ID
+
+
+    -- Check if the delete was successful
+    IF @@ROWCOUNT = 0
+        SELECT NULL AS [ID] -- Return NULL for all primary key fields to indicate no record was deleted
+    ELSE
+        SELECT @ID AS [ID] -- Return the primary key values to indicate we successfully deleted the record
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntryBatch] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete Permissions for MJ_BizApps_Accounting: Journal Entry Batches */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntryBatch] TO [cdp_Developer], [cdp_Integration];
+
+/* Index for Foreign Keys for JournalEntrySequence */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Sequences
+-- Item: Index for Foreign Keys
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------;
+
+/* SQL text to update entity field related entity name field map for entity field ID B9FCCBE7-E1B5-4BEA-9C05-E6E08A2E4013 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='B9FCCBE7-E1B5-4BEA-9C05-E6E08A2E4013', @RelatedEntityNameFieldMap='Company';
+
+/* Index for Foreign Keys for TaxAuthority */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Authorities
+-- Item: Index for Foreign Keys
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------;
+
+/* Index for Foreign Keys for TaxJurisdiction */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Jurisdictions
+-- Item: Index for Foreign Keys
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+-- Index for foreign key TaxAuthorityID in table TaxJurisdiction
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_TaxJurisdiction_TaxAuthorityID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[TaxJurisdiction]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_TaxJurisdiction_TaxAuthorityID ON [${flyway:defaultSchema}].[TaxJurisdiction] ([TaxAuthorityID]);
+
+-- Index for foreign key ParentTaxJurisdictionID in table TaxJurisdiction
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_TaxJurisdiction_ParentTaxJurisdictionID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[TaxJurisdiction]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_TaxJurisdiction_ParentTaxJurisdictionID ON [${flyway:defaultSchema}].[TaxJurisdiction] ([ParentTaxJurisdictionID]);
+
+/* SQL text to update entity field related entity name field map for entity field ID 6C00CC59-8ABF-4973-9F58-A41F8BD81C1B */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='6C00CC59-8ABF-4973-9F58-A41F8BD81C1B', @RelatedEntityNameFieldMap='TaxAuthority';
+
+/* Index for Foreign Keys for TaxLiability */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Liabilities
+-- Item: Index for Foreign Keys
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+-- Index for foreign key CompanyID in table TaxLiability
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_TaxLiability_CompanyID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[TaxLiability]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_TaxLiability_CompanyID ON [${flyway:defaultSchema}].[TaxLiability] ([CompanyID]);
+
+-- Index for foreign key TaxAuthorityID in table TaxLiability
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_TaxLiability_TaxAuthorityID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[TaxLiability]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_TaxLiability_TaxAuthorityID ON [${flyway:defaultSchema}].[TaxLiability] ([TaxAuthorityID]);
+
+-- Index for foreign key TaxJurisdictionID in table TaxLiability
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_TaxLiability_TaxJurisdictionID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[TaxLiability]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_TaxLiability_TaxJurisdictionID ON [${flyway:defaultSchema}].[TaxLiability] ([TaxJurisdictionID]);
+
+/* SQL text to update entity field related entity name field map for entity field ID 7EC39BF4-8C03-42BC-864F-F16224C6BB41 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='7EC39BF4-8C03-42BC-864F-F16224C6BB41', @RelatedEntityNameFieldMap='Company';
+
+/* Index for Foreign Keys for TaxRate */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Rates
+-- Item: Index for Foreign Keys
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+-- Index for foreign key TaxJurisdictionID in table TaxRate
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_TaxRate_TaxJurisdictionID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[TaxRate]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_TaxRate_TaxJurisdictionID ON [${flyway:defaultSchema}].[TaxRate] ([TaxJurisdictionID]);
+
+/* SQL text to update entity field related entity name field map for entity field ID 63137703-E9D4-4C48-910E-B2ADC75BD086 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='63137703-E9D4-4C48-910E-B2ADC75BD086', @RelatedEntityNameFieldMap='TaxJurisdiction';
+
+/* Base View SQL for MJ_BizApps_Accounting: Tax Authorities */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Authorities
+-- Item: vwTaxAuthorities
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- BASE VIEW FOR ENTITY:      MJ_BizApps_Accounting: Tax Authorities
+-----               SCHEMA:      ${flyway:defaultSchema}
+-----               BASE TABLE:  TaxAuthority
+-----               PRIMARY KEY: ID
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[vwTaxAuthorities]', 'V') IS NOT NULL
+    DROP VIEW [${flyway:defaultSchema}].[vwTaxAuthorities];
+GO
+
+CREATE VIEW [${flyway:defaultSchema}].[vwTaxAuthorities]
+AS
+SELECT
+    t.*
+FROM
+    [${flyway:defaultSchema}].[TaxAuthority] AS t
+GO
+GRANT SELECT ON [${flyway:defaultSchema}].[vwTaxAuthorities] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* Base View Permissions SQL for MJ_BizApps_Accounting: Tax Authorities */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Authorities
+-- Item: Permissions for vwTaxAuthorities
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+GRANT SELECT ON [${flyway:defaultSchema}].[vwTaxAuthorities] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* spCreate SQL for MJ_BizApps_Accounting: Tax Authorities */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Authorities
+-- Item: spCreateTaxAuthority
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- CREATE PROCEDURE FOR TaxAuthority
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spCreateTaxAuthority]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spCreateTaxAuthority];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateTaxAuthority]
+    @ID uniqueidentifier = NULL,
+    @Code nvarchar(40),
+    @Name nvarchar(200),
+    @CountryCode_Clear bit = 0,
+    @CountryCode char(2) = NULL,
+    @IsActive bit = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @InsertedRow TABLE ([ID] UNIQUEIDENTIFIER)
+
+    IF @ID IS NOT NULL
+    BEGIN
+        -- User provided a value, use it
+        INSERT INTO [${flyway:defaultSchema}].[TaxAuthority]
+            (
+                [ID],
+                [Code],
+                [Name],
+                [CountryCode],
+                [IsActive]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @ID,
+                @Code,
+                @Name,
+                CASE WHEN @CountryCode_Clear = 1 THEN NULL ELSE ISNULL(@CountryCode, NULL) END,
+                ISNULL(@IsActive, 1)
+            )
+    END
+    ELSE
+    BEGIN
+        -- No value provided, let database use its default (e.g., NEWSEQUENTIALID())
+        INSERT INTO [${flyway:defaultSchema}].[TaxAuthority]
+            (
+                [Code],
+                [Name],
+                [CountryCode],
+                [IsActive]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @Code,
+                @Name,
+                CASE WHEN @CountryCode_Clear = 1 THEN NULL ELSE ISNULL(@CountryCode, NULL) END,
+                ISNULL(@IsActive, 1)
+            )
+    END
+    -- return the new record from the base view, which might have some calculated fields
+    SELECT * FROM [${flyway:defaultSchema}].[vwTaxAuthorities] WHERE [ID] = (SELECT [ID] FROM @InsertedRow)
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateTaxAuthority] TO [cdp_Developer], [cdp_Integration];
+
+/* spCreate Permissions for MJ_BizApps_Accounting: Tax Authorities */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateTaxAuthority] TO [cdp_Developer], [cdp_Integration];
+
+/* spUpdate SQL for MJ_BizApps_Accounting: Tax Authorities */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Authorities
+-- Item: spUpdateTaxAuthority
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- UPDATE PROCEDURE FOR TaxAuthority
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spUpdateTaxAuthority]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spUpdateTaxAuthority];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateTaxAuthority]
+    @ID uniqueidentifier,
+    @Code nvarchar(40) = NULL,
+    @Name nvarchar(200) = NULL,
+    @CountryCode_Clear bit = 0,
+    @CountryCode char(2) = NULL,
+    @IsActive bit = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[TaxAuthority]
+    SET
+        [Code] = ISNULL(@Code, [Code]),
+        [Name] = ISNULL(@Name, [Name]),
+        [CountryCode] = CASE WHEN @CountryCode_Clear = 1 THEN NULL ELSE ISNULL(@CountryCode, [CountryCode]) END,
+        [IsActive] = ISNULL(@IsActive, [IsActive])
+    WHERE
+        [ID] = @ID
+
+    -- Check if the update was successful
+    IF @@ROWCOUNT = 0
+        -- Nothing was updated, return no rows, but column structure from base view intact, semantically correct this way.
+        SELECT TOP 0 * FROM [${flyway:defaultSchema}].[vwTaxAuthorities] WHERE 1=0
+    ELSE
+        -- Return the updated record so the caller can see the updated values and any calculated fields
+        SELECT
+                                        *
+                                    FROM
+                                        [${flyway:defaultSchema}].[vwTaxAuthorities]
+                                    WHERE
+                                        [ID] = @ID
+                                    
+END
+GO
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateTaxAuthority] TO [cdp_Developer], [cdp_Integration]
+GO
+
+------------------------------------------------------------
+----- TRIGGER FOR __mj_UpdatedAt field for the TaxAuthority table
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[trgUpdateTaxAuthority]', 'TR') IS NOT NULL
+    DROP TRIGGER [${flyway:defaultSchema}].[trgUpdateTaxAuthority];
+GO
+CREATE TRIGGER [${flyway:defaultSchema}].trgUpdateTaxAuthority
+ON [${flyway:defaultSchema}].[TaxAuthority]
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[TaxAuthority]
+    SET
+        __mj_UpdatedAt = GETUTCDATE()
+    FROM
+        [${flyway:defaultSchema}].[TaxAuthority] AS _organicTable
+    INNER JOIN
+        INSERTED AS I ON
+        _organicTable.[ID] = I.[ID];
+END;
+GO
+
+/* spUpdate Permissions for MJ_BizApps_Accounting: Tax Authorities */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateTaxAuthority] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete SQL for MJ_BizApps_Accounting: Tax Authorities */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Authorities
+-- Item: spDeleteTaxAuthority
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- DELETE PROCEDURE FOR TaxAuthority
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spDeleteTaxAuthority]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spDeleteTaxAuthority];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spDeleteTaxAuthority]
+    @ID uniqueidentifier
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DELETE FROM
+        [${flyway:defaultSchema}].[TaxAuthority]
+    WHERE
+        [ID] = @ID
+
+
+    -- Check if the delete was successful
+    IF @@ROWCOUNT = 0
+        SELECT NULL AS [ID] -- Return NULL for all primary key fields to indicate no record was deleted
+    ELSE
+        SELECT @ID AS [ID] -- Return the primary key values to indicate we successfully deleted the record
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteTaxAuthority] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete Permissions for MJ_BizApps_Accounting: Tax Authorities */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteTaxAuthority] TO [cdp_Developer], [cdp_Integration];
+
+/* Base View SQL for MJ_BizApps_Accounting: Journal Entry Sequences */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Sequences
+-- Item: vwJournalEntrySequences
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- BASE VIEW FOR ENTITY:      MJ_BizApps_Accounting: Journal Entry Sequences
+-----               SCHEMA:      ${flyway:defaultSchema}
+-----               BASE TABLE:  JournalEntrySequence
+-----               PRIMARY KEY: CompanyID, FiscalYear
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[vwJournalEntrySequences]', 'V') IS NOT NULL
+    DROP VIEW [${flyway:defaultSchema}].[vwJournalEntrySequences];
+GO
+
+CREATE VIEW [${flyway:defaultSchema}].[vwJournalEntrySequences]
+AS
+SELECT
+    j.*,
+    MJCompany_CompanyID.[Name] AS [Company]
+FROM
+    [${flyway:defaultSchema}].[JournalEntrySequence] AS j
+INNER JOIN
+    [${mjSchema}].[Company] AS MJCompany_CompanyID
+  ON
+    [j].[CompanyID] = MJCompany_CompanyID.[ID]
+GO
+GRANT SELECT ON [${flyway:defaultSchema}].[vwJournalEntrySequences] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* Base View Permissions SQL for MJ_BizApps_Accounting: Journal Entry Sequences */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Sequences
+-- Item: Permissions for vwJournalEntrySequences
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+GRANT SELECT ON [${flyway:defaultSchema}].[vwJournalEntrySequences] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* spCreate SQL for MJ_BizApps_Accounting: Journal Entry Sequences */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Sequences
+-- Item: spCreateJournalEntrySequence
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- CREATE PROCEDURE FOR JournalEntrySequence
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spCreateJournalEntrySequence]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spCreateJournalEntrySequence];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateJournalEntrySequence]
+    @CompanyID uniqueidentifier = NULL,
+    @FiscalYear int = NULL,
+    @NextSequenceNumber int = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    INSERT INTO
+    [${flyway:defaultSchema}].[JournalEntrySequence]
+        (
+            [NextSequenceNumber],
+                [CompanyID],
+                [FiscalYear]
+        )
+    VALUES
+        (
+            ISNULL(@NextSequenceNumber, 1),
+                @CompanyID,
+                @FiscalYear
+        )
+    -- return the new record from the base view, which might have some calculated fields
+    SELECT * FROM [${flyway:defaultSchema}].[vwJournalEntrySequences] WHERE [CompanyID] = @CompanyID AND [FiscalYear] = @FiscalYear
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateJournalEntrySequence] TO [cdp_Developer], [cdp_Integration];
+
+/* spCreate Permissions for MJ_BizApps_Accounting: Journal Entry Sequences */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateJournalEntrySequence] TO [cdp_Developer], [cdp_Integration];
+
+/* spUpdate SQL for MJ_BizApps_Accounting: Journal Entry Sequences */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Sequences
+-- Item: spUpdateJournalEntrySequence
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- UPDATE PROCEDURE FOR JournalEntrySequence
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spUpdateJournalEntrySequence]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spUpdateJournalEntrySequence];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateJournalEntrySequence]
+    @CompanyID uniqueidentifier,
+    @FiscalYear int,
+    @NextSequenceNumber int = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[JournalEntrySequence]
+    SET
+        [NextSequenceNumber] = ISNULL(@NextSequenceNumber, [NextSequenceNumber])
+    WHERE
+        [CompanyID] = @CompanyID AND [FiscalYear] = @FiscalYear
+
+    -- Check if the update was successful
+    IF @@ROWCOUNT = 0
+        -- Nothing was updated, return no rows, but column structure from base view intact, semantically correct this way.
+        SELECT TOP 0 * FROM [${flyway:defaultSchema}].[vwJournalEntrySequences] WHERE 1=0
+    ELSE
+        -- Return the updated record so the caller can see the updated values and any calculated fields
+        SELECT
+                                        *
+                                    FROM
+                                        [${flyway:defaultSchema}].[vwJournalEntrySequences]
+                                    WHERE
+                                        [CompanyID] = @CompanyID AND [FiscalYear] = @FiscalYear
+                                    
+END
+GO
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateJournalEntrySequence] TO [cdp_Developer], [cdp_Integration]
+GO
+
+------------------------------------------------------------
+----- TRIGGER FOR __mj_UpdatedAt field for the JournalEntrySequence table
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[trgUpdateJournalEntrySequence]', 'TR') IS NOT NULL
+    DROP TRIGGER [${flyway:defaultSchema}].[trgUpdateJournalEntrySequence];
+GO
+CREATE TRIGGER [${flyway:defaultSchema}].trgUpdateJournalEntrySequence
+ON [${flyway:defaultSchema}].[JournalEntrySequence]
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[JournalEntrySequence]
+    SET
+        __mj_UpdatedAt = GETUTCDATE()
+    FROM
+        [${flyway:defaultSchema}].[JournalEntrySequence] AS _organicTable
+    INNER JOIN
+        INSERTED AS I ON
+        _organicTable.[CompanyID] = I.[CompanyID] AND _organicTable.[FiscalYear] = I.[FiscalYear];
+END;
+GO
+
+/* spUpdate Permissions for MJ_BizApps_Accounting: Journal Entry Sequences */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateJournalEntrySequence] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete SQL for MJ_BizApps_Accounting: Journal Entry Sequences */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Journal Entry Sequences
+-- Item: spDeleteJournalEntrySequence
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- DELETE PROCEDURE FOR JournalEntrySequence
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spDeleteJournalEntrySequence]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spDeleteJournalEntrySequence];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spDeleteJournalEntrySequence]
+    @CompanyID uniqueidentifier, @FiscalYear int
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DELETE FROM
+        [${flyway:defaultSchema}].[JournalEntrySequence]
+    WHERE
+        [CompanyID] = @CompanyID AND [FiscalYear] = @FiscalYear
+
+
+    -- Check if the delete was successful
+    IF @@ROWCOUNT = 0
+        SELECT NULL AS [CompanyID], NULL AS [FiscalYear] -- Return NULL for all primary key fields to indicate no record was deleted
+    ELSE
+        SELECT @CompanyID AS [CompanyID], @FiscalYear AS [FiscalYear] -- Return the primary key values to indicate we successfully deleted the record
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntrySequence] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete Permissions for MJ_BizApps_Accounting: Journal Entry Sequences */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntrySequence] TO [cdp_Developer], [cdp_Integration];
+
+/* SQL text to update entity field related entity name field map for entity field ID B1EB2869-F5E1-4C7E-A6EC-7B5B972F1B09 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='B1EB2869-F5E1-4C7E-A6EC-7B5B972F1B09', @RelatedEntityNameFieldMap='TaxAuthority';
+
+/* SQL text to update entity field related entity name field map for entity field ID B507363B-FDBE-4223-A3BD-4E1B1D32B650 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='B507363B-FDBE-4223-A3BD-4E1B1D32B650', @RelatedEntityNameFieldMap='ParentTaxJurisdiction';
+
+/* Base View SQL for MJ_BizApps_Accounting: Tax Rates */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Rates
+-- Item: vwTaxRates
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- BASE VIEW FOR ENTITY:      MJ_BizApps_Accounting: Tax Rates
+-----               SCHEMA:      ${flyway:defaultSchema}
+-----               BASE TABLE:  TaxRate
+-----               PRIMARY KEY: ID
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[vwTaxRates]', 'V') IS NOT NULL
+    DROP VIEW [${flyway:defaultSchema}].[vwTaxRates];
+GO
+
+CREATE VIEW [${flyway:defaultSchema}].[vwTaxRates]
+AS
+SELECT
+    t.*,
+    mjBizAppsAccountingTaxJurisdiction_TaxJurisdictionID.[Name] AS [TaxJurisdiction]
+FROM
+    [${flyway:defaultSchema}].[TaxRate] AS t
+INNER JOIN
+    [${flyway:defaultSchema}].[TaxJurisdiction] AS mjBizAppsAccountingTaxJurisdiction_TaxJurisdictionID
+  ON
+    [t].[TaxJurisdictionID] = mjBizAppsAccountingTaxJurisdiction_TaxJurisdictionID.[ID]
+GO
+GRANT SELECT ON [${flyway:defaultSchema}].[vwTaxRates] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* Base View Permissions SQL for MJ_BizApps_Accounting: Tax Rates */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Rates
+-- Item: Permissions for vwTaxRates
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+GRANT SELECT ON [${flyway:defaultSchema}].[vwTaxRates] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* spCreate SQL for MJ_BizApps_Accounting: Tax Rates */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Rates
+-- Item: spCreateTaxRate
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- CREATE PROCEDURE FOR TaxRate
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spCreateTaxRate]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spCreateTaxRate];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateTaxRate]
+    @ID uniqueidentifier = NULL,
+    @TaxJurisdictionID uniqueidentifier,
+    @TaxCategory nvarchar(50),
+    @Rate decimal(7, 4),
+    @EffectiveFrom date,
+    @EffectiveTo_Clear bit = 0,
+    @EffectiveTo date = NULL,
+    @Source nvarchar(50) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @InsertedRow TABLE ([ID] UNIQUEIDENTIFIER)
+
+    IF @ID IS NOT NULL
+    BEGIN
+        -- User provided a value, use it
+        INSERT INTO [${flyway:defaultSchema}].[TaxRate]
+            (
+                [ID],
+                [TaxJurisdictionID],
+                [TaxCategory],
+                [Rate],
+                [EffectiveFrom],
+                [EffectiveTo],
+                [Source]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @ID,
+                @TaxJurisdictionID,
+                @TaxCategory,
+                @Rate,
+                @EffectiveFrom,
+                CASE WHEN @EffectiveTo_Clear = 1 THEN NULL ELSE ISNULL(@EffectiveTo, NULL) END,
+                ISNULL(@Source, 'Manual')
+            )
+    END
+    ELSE
+    BEGIN
+        -- No value provided, let database use its default (e.g., NEWSEQUENTIALID())
+        INSERT INTO [${flyway:defaultSchema}].[TaxRate]
+            (
+                [TaxJurisdictionID],
+                [TaxCategory],
+                [Rate],
+                [EffectiveFrom],
+                [EffectiveTo],
+                [Source]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @TaxJurisdictionID,
+                @TaxCategory,
+                @Rate,
+                @EffectiveFrom,
+                CASE WHEN @EffectiveTo_Clear = 1 THEN NULL ELSE ISNULL(@EffectiveTo, NULL) END,
+                ISNULL(@Source, 'Manual')
+            )
+    END
+    -- return the new record from the base view, which might have some calculated fields
+    SELECT * FROM [${flyway:defaultSchema}].[vwTaxRates] WHERE [ID] = (SELECT [ID] FROM @InsertedRow)
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateTaxRate] TO [cdp_Developer], [cdp_Integration];
+
+/* spCreate Permissions for MJ_BizApps_Accounting: Tax Rates */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateTaxRate] TO [cdp_Developer], [cdp_Integration];
+
+/* spUpdate SQL for MJ_BizApps_Accounting: Tax Rates */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Rates
+-- Item: spUpdateTaxRate
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- UPDATE PROCEDURE FOR TaxRate
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spUpdateTaxRate]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spUpdateTaxRate];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateTaxRate]
+    @ID uniqueidentifier,
+    @TaxJurisdictionID uniqueidentifier = NULL,
+    @TaxCategory nvarchar(50) = NULL,
+    @Rate decimal(7, 4) = NULL,
+    @EffectiveFrom date = NULL,
+    @EffectiveTo_Clear bit = 0,
+    @EffectiveTo date = NULL,
+    @Source nvarchar(50) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[TaxRate]
+    SET
+        [TaxJurisdictionID] = ISNULL(@TaxJurisdictionID, [TaxJurisdictionID]),
+        [TaxCategory] = ISNULL(@TaxCategory, [TaxCategory]),
+        [Rate] = ISNULL(@Rate, [Rate]),
+        [EffectiveFrom] = ISNULL(@EffectiveFrom, [EffectiveFrom]),
+        [EffectiveTo] = CASE WHEN @EffectiveTo_Clear = 1 THEN NULL ELSE ISNULL(@EffectiveTo, [EffectiveTo]) END,
+        [Source] = ISNULL(@Source, [Source])
+    WHERE
+        [ID] = @ID
+
+    -- Check if the update was successful
+    IF @@ROWCOUNT = 0
+        -- Nothing was updated, return no rows, but column structure from base view intact, semantically correct this way.
+        SELECT TOP 0 * FROM [${flyway:defaultSchema}].[vwTaxRates] WHERE 1=0
+    ELSE
+        -- Return the updated record so the caller can see the updated values and any calculated fields
+        SELECT
+                                        *
+                                    FROM
+                                        [${flyway:defaultSchema}].[vwTaxRates]
+                                    WHERE
+                                        [ID] = @ID
+                                    
+END
+GO
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateTaxRate] TO [cdp_Developer], [cdp_Integration]
+GO
+
+------------------------------------------------------------
+----- TRIGGER FOR __mj_UpdatedAt field for the TaxRate table
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[trgUpdateTaxRate]', 'TR') IS NOT NULL
+    DROP TRIGGER [${flyway:defaultSchema}].[trgUpdateTaxRate];
+GO
+CREATE TRIGGER [${flyway:defaultSchema}].trgUpdateTaxRate
+ON [${flyway:defaultSchema}].[TaxRate]
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[TaxRate]
+    SET
+        __mj_UpdatedAt = GETUTCDATE()
+    FROM
+        [${flyway:defaultSchema}].[TaxRate] AS _organicTable
+    INNER JOIN
+        INSERTED AS I ON
+        _organicTable.[ID] = I.[ID];
+END;
+GO
+
+/* spUpdate Permissions for MJ_BizApps_Accounting: Tax Rates */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateTaxRate] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete SQL for MJ_BizApps_Accounting: Tax Rates */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Rates
+-- Item: spDeleteTaxRate
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- DELETE PROCEDURE FOR TaxRate
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spDeleteTaxRate]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spDeleteTaxRate];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spDeleteTaxRate]
+    @ID uniqueidentifier
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DELETE FROM
+        [${flyway:defaultSchema}].[TaxRate]
+    WHERE
+        [ID] = @ID
+
+
+    -- Check if the delete was successful
+    IF @@ROWCOUNT = 0
+        SELECT NULL AS [ID] -- Return NULL for all primary key fields to indicate no record was deleted
+    ELSE
+        SELECT @ID AS [ID] -- Return the primary key values to indicate we successfully deleted the record
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteTaxRate] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete Permissions for MJ_BizApps_Accounting: Tax Rates */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteTaxRate] TO [cdp_Developer], [cdp_Integration];
+
+/* Root ID Function SQL for MJ_BizApps_Accounting: Tax Jurisdictions.ParentTaxJurisdictionID */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Jurisdictions
+-- Item: fnTaxJurisdictionParentTaxJurisdictionID_GetRootID
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+------------------------------------------------------------
+----- ROOT ID FUNCTION FOR: [TaxJurisdiction].[ParentTaxJurisdictionID]
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[fnTaxJurisdictionParentTaxJurisdictionID_GetRootID]', 'IF') IS NOT NULL
+    DROP FUNCTION [${flyway:defaultSchema}].[fnTaxJurisdictionParentTaxJurisdictionID_GetRootID];
+GO
+
+CREATE FUNCTION [${flyway:defaultSchema}].[fnTaxJurisdictionParentTaxJurisdictionID_GetRootID]
+(
+    @RecordID uniqueidentifier,
+    @ParentID uniqueidentifier
+)
+RETURNS TABLE
+AS
+RETURN
+(
+    WITH CTE_RootParent AS (
+        SELECT
+            [ID],
+            [ParentTaxJurisdictionID],
+            [ID] AS [RootParentID],
+            0 AS [Depth]
+        FROM
+            [${flyway:defaultSchema}].[TaxJurisdiction]
+        WHERE
+            [ID] = COALESCE(@ParentID, @RecordID)
+
+        UNION ALL
+
+        SELECT
+            c.[ID],
+            c.[ParentTaxJurisdictionID],
+            c.[ID] AS [RootParentID],
+            p.[Depth] + 1 AS [Depth]
+        FROM
+            [${flyway:defaultSchema}].[TaxJurisdiction] c
+        INNER JOIN
+            CTE_RootParent p ON c.[ID] = p.[ParentTaxJurisdictionID]
+        WHERE
+            p.[Depth] < 100
+    )
+    SELECT TOP 1
+        [RootParentID] AS RootID
+    FROM
+        CTE_RootParent
+    WHERE
+        [ParentTaxJurisdictionID] IS NULL
+    ORDER BY
+        [RootParentID]
+);
+GO
+
+/* Base View SQL for MJ_BizApps_Accounting: Tax Jurisdictions */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Jurisdictions
+-- Item: vwTaxJurisdictions
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- BASE VIEW FOR ENTITY:      MJ_BizApps_Accounting: Tax Jurisdictions
+-----               SCHEMA:      ${flyway:defaultSchema}
+-----               BASE TABLE:  TaxJurisdiction
+-----               PRIMARY KEY: ID
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[vwTaxJurisdictions]', 'V') IS NOT NULL
+    DROP VIEW [${flyway:defaultSchema}].[vwTaxJurisdictions];
+GO
+
+CREATE VIEW [${flyway:defaultSchema}].[vwTaxJurisdictions]
+AS
+SELECT
+    t.*,
+    mjBizAppsAccountingTaxAuthority_TaxAuthorityID.[Name] AS [TaxAuthority],
+    mjBizAppsAccountingTaxJurisdiction_ParentTaxJurisdictionID.[Name] AS [ParentTaxJurisdiction],
+    root_ParentTaxJurisdictionID.RootID AS [RootParentTaxJurisdictionID]
+FROM
+    [${flyway:defaultSchema}].[TaxJurisdiction] AS t
+INNER JOIN
+    [${flyway:defaultSchema}].[TaxAuthority] AS mjBizAppsAccountingTaxAuthority_TaxAuthorityID
+  ON
+    [t].[TaxAuthorityID] = mjBizAppsAccountingTaxAuthority_TaxAuthorityID.[ID]
+LEFT OUTER JOIN
+    [${flyway:defaultSchema}].[TaxJurisdiction] AS mjBizAppsAccountingTaxJurisdiction_ParentTaxJurisdictionID
+  ON
+    [t].[ParentTaxJurisdictionID] = mjBizAppsAccountingTaxJurisdiction_ParentTaxJurisdictionID.[ID]
+OUTER APPLY
+    [${flyway:defaultSchema}].[fnTaxJurisdictionParentTaxJurisdictionID_GetRootID]([t].[ID], [t].[ParentTaxJurisdictionID]) AS root_ParentTaxJurisdictionID
+GO
+GRANT SELECT ON [${flyway:defaultSchema}].[vwTaxJurisdictions] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* Base View Permissions SQL for MJ_BizApps_Accounting: Tax Jurisdictions */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Jurisdictions
+-- Item: Permissions for vwTaxJurisdictions
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+GRANT SELECT ON [${flyway:defaultSchema}].[vwTaxJurisdictions] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* spCreate SQL for MJ_BizApps_Accounting: Tax Jurisdictions */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Jurisdictions
+-- Item: spCreateTaxJurisdiction
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- CREATE PROCEDURE FOR TaxJurisdiction
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spCreateTaxJurisdiction]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spCreateTaxJurisdiction];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateTaxJurisdiction]
+    @ID uniqueidentifier = NULL,
+    @TaxAuthorityID uniqueidentifier,
+    @Code nvarchar(80),
+    @Name nvarchar(200),
+    @CountryCode_Clear bit = 0,
+    @CountryCode char(2) = NULL,
+    @RegionCode_Clear bit = 0,
+    @RegionCode nvarchar(50) = NULL,
+    @PostalCode_Clear bit = 0,
+    @PostalCode nvarchar(20) = NULL,
+    @PostalCodeStart_Clear bit = 0,
+    @PostalCodeStart nvarchar(20) = NULL,
+    @PostalCodeEnd_Clear bit = 0,
+    @PostalCodeEnd nvarchar(20) = NULL,
+    @CityName_Clear bit = 0,
+    @CityName nvarchar(200) = NULL,
+    @ParentTaxJurisdictionID_Clear bit = 0,
+    @ParentTaxJurisdictionID uniqueidentifier = NULL,
+    @IsActive bit = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @InsertedRow TABLE ([ID] UNIQUEIDENTIFIER)
+
+    IF @ID IS NOT NULL
+    BEGIN
+        -- User provided a value, use it
+        INSERT INTO [${flyway:defaultSchema}].[TaxJurisdiction]
+            (
+                [ID],
+                [TaxAuthorityID],
+                [Code],
+                [Name],
+                [CountryCode],
+                [RegionCode],
+                [PostalCode],
+                [PostalCodeStart],
+                [PostalCodeEnd],
+                [CityName],
+                [ParentTaxJurisdictionID],
+                [IsActive]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @ID,
+                @TaxAuthorityID,
+                @Code,
+                @Name,
+                CASE WHEN @CountryCode_Clear = 1 THEN NULL ELSE ISNULL(@CountryCode, NULL) END,
+                CASE WHEN @RegionCode_Clear = 1 THEN NULL ELSE ISNULL(@RegionCode, NULL) END,
+                CASE WHEN @PostalCode_Clear = 1 THEN NULL ELSE ISNULL(@PostalCode, NULL) END,
+                CASE WHEN @PostalCodeStart_Clear = 1 THEN NULL ELSE ISNULL(@PostalCodeStart, NULL) END,
+                CASE WHEN @PostalCodeEnd_Clear = 1 THEN NULL ELSE ISNULL(@PostalCodeEnd, NULL) END,
+                CASE WHEN @CityName_Clear = 1 THEN NULL ELSE ISNULL(@CityName, NULL) END,
+                CASE WHEN @ParentTaxJurisdictionID_Clear = 1 THEN NULL ELSE ISNULL(@ParentTaxJurisdictionID, NULL) END,
+                ISNULL(@IsActive, 1)
+            )
+    END
+    ELSE
+    BEGIN
+        -- No value provided, let database use its default (e.g., NEWSEQUENTIALID())
+        INSERT INTO [${flyway:defaultSchema}].[TaxJurisdiction]
+            (
+                [TaxAuthorityID],
+                [Code],
+                [Name],
+                [CountryCode],
+                [RegionCode],
+                [PostalCode],
+                [PostalCodeStart],
+                [PostalCodeEnd],
+                [CityName],
+                [ParentTaxJurisdictionID],
+                [IsActive]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @TaxAuthorityID,
+                @Code,
+                @Name,
+                CASE WHEN @CountryCode_Clear = 1 THEN NULL ELSE ISNULL(@CountryCode, NULL) END,
+                CASE WHEN @RegionCode_Clear = 1 THEN NULL ELSE ISNULL(@RegionCode, NULL) END,
+                CASE WHEN @PostalCode_Clear = 1 THEN NULL ELSE ISNULL(@PostalCode, NULL) END,
+                CASE WHEN @PostalCodeStart_Clear = 1 THEN NULL ELSE ISNULL(@PostalCodeStart, NULL) END,
+                CASE WHEN @PostalCodeEnd_Clear = 1 THEN NULL ELSE ISNULL(@PostalCodeEnd, NULL) END,
+                CASE WHEN @CityName_Clear = 1 THEN NULL ELSE ISNULL(@CityName, NULL) END,
+                CASE WHEN @ParentTaxJurisdictionID_Clear = 1 THEN NULL ELSE ISNULL(@ParentTaxJurisdictionID, NULL) END,
+                ISNULL(@IsActive, 1)
+            )
+    END
+    -- return the new record from the base view, which might have some calculated fields
+    SELECT * FROM [${flyway:defaultSchema}].[vwTaxJurisdictions] WHERE [ID] = (SELECT [ID] FROM @InsertedRow)
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateTaxJurisdiction] TO [cdp_Developer], [cdp_Integration];
+
+/* spCreate Permissions for MJ_BizApps_Accounting: Tax Jurisdictions */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateTaxJurisdiction] TO [cdp_Developer], [cdp_Integration];
+
+/* spUpdate SQL for MJ_BizApps_Accounting: Tax Jurisdictions */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Jurisdictions
+-- Item: spUpdateTaxJurisdiction
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- UPDATE PROCEDURE FOR TaxJurisdiction
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spUpdateTaxJurisdiction]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spUpdateTaxJurisdiction];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateTaxJurisdiction]
+    @ID uniqueidentifier,
+    @TaxAuthorityID uniqueidentifier = NULL,
+    @Code nvarchar(80) = NULL,
+    @Name nvarchar(200) = NULL,
+    @CountryCode_Clear bit = 0,
+    @CountryCode char(2) = NULL,
+    @RegionCode_Clear bit = 0,
+    @RegionCode nvarchar(50) = NULL,
+    @PostalCode_Clear bit = 0,
+    @PostalCode nvarchar(20) = NULL,
+    @PostalCodeStart_Clear bit = 0,
+    @PostalCodeStart nvarchar(20) = NULL,
+    @PostalCodeEnd_Clear bit = 0,
+    @PostalCodeEnd nvarchar(20) = NULL,
+    @CityName_Clear bit = 0,
+    @CityName nvarchar(200) = NULL,
+    @ParentTaxJurisdictionID_Clear bit = 0,
+    @ParentTaxJurisdictionID uniqueidentifier = NULL,
+    @IsActive bit = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[TaxJurisdiction]
+    SET
+        [TaxAuthorityID] = ISNULL(@TaxAuthorityID, [TaxAuthorityID]),
+        [Code] = ISNULL(@Code, [Code]),
+        [Name] = ISNULL(@Name, [Name]),
+        [CountryCode] = CASE WHEN @CountryCode_Clear = 1 THEN NULL ELSE ISNULL(@CountryCode, [CountryCode]) END,
+        [RegionCode] = CASE WHEN @RegionCode_Clear = 1 THEN NULL ELSE ISNULL(@RegionCode, [RegionCode]) END,
+        [PostalCode] = CASE WHEN @PostalCode_Clear = 1 THEN NULL ELSE ISNULL(@PostalCode, [PostalCode]) END,
+        [PostalCodeStart] = CASE WHEN @PostalCodeStart_Clear = 1 THEN NULL ELSE ISNULL(@PostalCodeStart, [PostalCodeStart]) END,
+        [PostalCodeEnd] = CASE WHEN @PostalCodeEnd_Clear = 1 THEN NULL ELSE ISNULL(@PostalCodeEnd, [PostalCodeEnd]) END,
+        [CityName] = CASE WHEN @CityName_Clear = 1 THEN NULL ELSE ISNULL(@CityName, [CityName]) END,
+        [ParentTaxJurisdictionID] = CASE WHEN @ParentTaxJurisdictionID_Clear = 1 THEN NULL ELSE ISNULL(@ParentTaxJurisdictionID, [ParentTaxJurisdictionID]) END,
+        [IsActive] = ISNULL(@IsActive, [IsActive])
+    WHERE
+        [ID] = @ID
+
+    -- Check if the update was successful
+    IF @@ROWCOUNT = 0
+        -- Nothing was updated, return no rows, but column structure from base view intact, semantically correct this way.
+        SELECT TOP 0 * FROM [${flyway:defaultSchema}].[vwTaxJurisdictions] WHERE 1=0
+    ELSE
+        -- Return the updated record so the caller can see the updated values and any calculated fields
+        SELECT
+                                        *
+                                    FROM
+                                        [${flyway:defaultSchema}].[vwTaxJurisdictions]
+                                    WHERE
+                                        [ID] = @ID
+                                    
+END
+GO
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateTaxJurisdiction] TO [cdp_Developer], [cdp_Integration]
+GO
+
+------------------------------------------------------------
+----- TRIGGER FOR __mj_UpdatedAt field for the TaxJurisdiction table
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[trgUpdateTaxJurisdiction]', 'TR') IS NOT NULL
+    DROP TRIGGER [${flyway:defaultSchema}].[trgUpdateTaxJurisdiction];
+GO
+CREATE TRIGGER [${flyway:defaultSchema}].trgUpdateTaxJurisdiction
+ON [${flyway:defaultSchema}].[TaxJurisdiction]
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[TaxJurisdiction]
+    SET
+        __mj_UpdatedAt = GETUTCDATE()
+    FROM
+        [${flyway:defaultSchema}].[TaxJurisdiction] AS _organicTable
+    INNER JOIN
+        INSERTED AS I ON
+        _organicTable.[ID] = I.[ID];
+END;
+GO
+
+/* spUpdate Permissions for MJ_BizApps_Accounting: Tax Jurisdictions */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateTaxJurisdiction] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete SQL for MJ_BizApps_Accounting: Tax Jurisdictions */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Jurisdictions
+-- Item: spDeleteTaxJurisdiction
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- DELETE PROCEDURE FOR TaxJurisdiction
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spDeleteTaxJurisdiction]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spDeleteTaxJurisdiction];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spDeleteTaxJurisdiction]
+    @ID uniqueidentifier
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DELETE FROM
+        [${flyway:defaultSchema}].[TaxJurisdiction]
+    WHERE
+        [ID] = @ID
+
+
+    -- Check if the delete was successful
+    IF @@ROWCOUNT = 0
+        SELECT NULL AS [ID] -- Return NULL for all primary key fields to indicate no record was deleted
+    ELSE
+        SELECT @ID AS [ID] -- Return the primary key values to indicate we successfully deleted the record
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteTaxJurisdiction] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete Permissions for MJ_BizApps_Accounting: Tax Jurisdictions */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteTaxJurisdiction] TO [cdp_Developer], [cdp_Integration];
+
+/* SQL text to update entity field related entity name field map for entity field ID 73E28AF8-2366-4380-89E1-59141880D9C0 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='73E28AF8-2366-4380-89E1-59141880D9C0', @RelatedEntityNameFieldMap='TaxJurisdiction';
+
+/* Base View SQL for MJ_BizApps_Accounting: Tax Liabilities */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Liabilities
+-- Item: vwTaxLiabilities
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- BASE VIEW FOR ENTITY:      MJ_BizApps_Accounting: Tax Liabilities
+-----               SCHEMA:      ${flyway:defaultSchema}
+-----               BASE TABLE:  TaxLiability
+-----               PRIMARY KEY: ID
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[vwTaxLiabilities]', 'V') IS NOT NULL
+    DROP VIEW [${flyway:defaultSchema}].[vwTaxLiabilities];
+GO
+
+CREATE VIEW [${flyway:defaultSchema}].[vwTaxLiabilities]
+AS
+SELECT
+    t.*,
+    MJCompany_CompanyID.[Name] AS [Company],
+    mjBizAppsAccountingTaxAuthority_TaxAuthorityID.[Name] AS [TaxAuthority],
+    mjBizAppsAccountingTaxJurisdiction_TaxJurisdictionID.[Name] AS [TaxJurisdiction]
+FROM
+    [${flyway:defaultSchema}].[TaxLiability] AS t
+INNER JOIN
+    [${mjSchema}].[Company] AS MJCompany_CompanyID
+  ON
+    [t].[CompanyID] = MJCompany_CompanyID.[ID]
+INNER JOIN
+    [${flyway:defaultSchema}].[TaxAuthority] AS mjBizAppsAccountingTaxAuthority_TaxAuthorityID
+  ON
+    [t].[TaxAuthorityID] = mjBizAppsAccountingTaxAuthority_TaxAuthorityID.[ID]
+INNER JOIN
+    [${flyway:defaultSchema}].[TaxJurisdiction] AS mjBizAppsAccountingTaxJurisdiction_TaxJurisdictionID
+  ON
+    [t].[TaxJurisdictionID] = mjBizAppsAccountingTaxJurisdiction_TaxJurisdictionID.[ID]
+GO
+GRANT SELECT ON [${flyway:defaultSchema}].[vwTaxLiabilities] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* Base View Permissions SQL for MJ_BizApps_Accounting: Tax Liabilities */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Liabilities
+-- Item: Permissions for vwTaxLiabilities
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+GRANT SELECT ON [${flyway:defaultSchema}].[vwTaxLiabilities] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* spCreate SQL for MJ_BizApps_Accounting: Tax Liabilities */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Liabilities
+-- Item: spCreateTaxLiability
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- CREATE PROCEDURE FOR TaxLiability
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spCreateTaxLiability]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spCreateTaxLiability];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateTaxLiability]
+    @ID uniqueidentifier = NULL,
+    @CompanyID uniqueidentifier,
+    @TaxAuthorityID uniqueidentifier,
+    @TaxJurisdictionID uniqueidentifier,
+    @AccruedAmount decimal(18, 2) = NULL,
+    @RemittedAmount decimal(18, 2) = NULL,
+    @Status nvarchar(20) = NULL,
+    @DueDate_Clear bit = 0,
+    @DueDate date = NULL,
+    @FilingFrequency_Clear bit = 0,
+    @FilingFrequency nvarchar(20) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @InsertedRow TABLE ([ID] UNIQUEIDENTIFIER)
+
+    IF @ID IS NOT NULL
+    BEGIN
+        -- User provided a value, use it
+        INSERT INTO [${flyway:defaultSchema}].[TaxLiability]
+            (
+                [ID],
+                [CompanyID],
+                [TaxAuthorityID],
+                [TaxJurisdictionID],
+                [AccruedAmount],
+                [RemittedAmount],
+                [Status],
+                [DueDate],
+                [FilingFrequency]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @ID,
+                @CompanyID,
+                @TaxAuthorityID,
+                @TaxJurisdictionID,
+                ISNULL(@AccruedAmount, 0),
+                ISNULL(@RemittedAmount, 0),
+                ISNULL(@Status, 'Open'),
+                CASE WHEN @DueDate_Clear = 1 THEN NULL ELSE ISNULL(@DueDate, NULL) END,
+                CASE WHEN @FilingFrequency_Clear = 1 THEN NULL ELSE ISNULL(@FilingFrequency, NULL) END
+            )
+    END
+    ELSE
+    BEGIN
+        -- No value provided, let database use its default (e.g., NEWSEQUENTIALID())
+        INSERT INTO [${flyway:defaultSchema}].[TaxLiability]
+            (
+                [CompanyID],
+                [TaxAuthorityID],
+                [TaxJurisdictionID],
+                [AccruedAmount],
+                [RemittedAmount],
+                [Status],
+                [DueDate],
+                [FilingFrequency]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @CompanyID,
+                @TaxAuthorityID,
+                @TaxJurisdictionID,
+                ISNULL(@AccruedAmount, 0),
+                ISNULL(@RemittedAmount, 0),
+                ISNULL(@Status, 'Open'),
+                CASE WHEN @DueDate_Clear = 1 THEN NULL ELSE ISNULL(@DueDate, NULL) END,
+                CASE WHEN @FilingFrequency_Clear = 1 THEN NULL ELSE ISNULL(@FilingFrequency, NULL) END
+            )
+    END
+    -- return the new record from the base view, which might have some calculated fields
+    SELECT * FROM [${flyway:defaultSchema}].[vwTaxLiabilities] WHERE [ID] = (SELECT [ID] FROM @InsertedRow)
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateTaxLiability] TO [cdp_Developer], [cdp_Integration];
+
+/* spCreate Permissions for MJ_BizApps_Accounting: Tax Liabilities */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateTaxLiability] TO [cdp_Developer], [cdp_Integration];
+
+/* spUpdate SQL for MJ_BizApps_Accounting: Tax Liabilities */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Liabilities
+-- Item: spUpdateTaxLiability
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- UPDATE PROCEDURE FOR TaxLiability
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spUpdateTaxLiability]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spUpdateTaxLiability];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateTaxLiability]
+    @ID uniqueidentifier,
+    @CompanyID uniqueidentifier = NULL,
+    @TaxAuthorityID uniqueidentifier = NULL,
+    @TaxJurisdictionID uniqueidentifier = NULL,
+    @AccruedAmount decimal(18, 2) = NULL,
+    @RemittedAmount decimal(18, 2) = NULL,
+    @Status nvarchar(20) = NULL,
+    @DueDate_Clear bit = 0,
+    @DueDate date = NULL,
+    @FilingFrequency_Clear bit = 0,
+    @FilingFrequency nvarchar(20) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[TaxLiability]
+    SET
+        [CompanyID] = ISNULL(@CompanyID, [CompanyID]),
+        [TaxAuthorityID] = ISNULL(@TaxAuthorityID, [TaxAuthorityID]),
+        [TaxJurisdictionID] = ISNULL(@TaxJurisdictionID, [TaxJurisdictionID]),
+        [AccruedAmount] = ISNULL(@AccruedAmount, [AccruedAmount]),
+        [RemittedAmount] = ISNULL(@RemittedAmount, [RemittedAmount]),
+        [Status] = ISNULL(@Status, [Status]),
+        [DueDate] = CASE WHEN @DueDate_Clear = 1 THEN NULL ELSE ISNULL(@DueDate, [DueDate]) END,
+        [FilingFrequency] = CASE WHEN @FilingFrequency_Clear = 1 THEN NULL ELSE ISNULL(@FilingFrequency, [FilingFrequency]) END
+    WHERE
+        [ID] = @ID
+
+    -- Check if the update was successful
+    IF @@ROWCOUNT = 0
+        -- Nothing was updated, return no rows, but column structure from base view intact, semantically correct this way.
+        SELECT TOP 0 * FROM [${flyway:defaultSchema}].[vwTaxLiabilities] WHERE 1=0
+    ELSE
+        -- Return the updated record so the caller can see the updated values and any calculated fields
+        SELECT
+                                        *
+                                    FROM
+                                        [${flyway:defaultSchema}].[vwTaxLiabilities]
+                                    WHERE
+                                        [ID] = @ID
+                                    
+END
+GO
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateTaxLiability] TO [cdp_Developer], [cdp_Integration]
+GO
+
+------------------------------------------------------------
+----- TRIGGER FOR __mj_UpdatedAt field for the TaxLiability table
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[trgUpdateTaxLiability]', 'TR') IS NOT NULL
+    DROP TRIGGER [${flyway:defaultSchema}].[trgUpdateTaxLiability];
+GO
+CREATE TRIGGER [${flyway:defaultSchema}].trgUpdateTaxLiability
+ON [${flyway:defaultSchema}].[TaxLiability]
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[TaxLiability]
+    SET
+        __mj_UpdatedAt = GETUTCDATE()
+    FROM
+        [${flyway:defaultSchema}].[TaxLiability] AS _organicTable
+    INNER JOIN
+        INSERTED AS I ON
+        _organicTable.[ID] = I.[ID];
+END;
+GO
+
+/* spUpdate Permissions for MJ_BizApps_Accounting: Tax Liabilities */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateTaxLiability] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete SQL for MJ_BizApps_Accounting: Tax Liabilities */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Liabilities
+-- Item: spDeleteTaxLiability
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- DELETE PROCEDURE FOR TaxLiability
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spDeleteTaxLiability]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spDeleteTaxLiability];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spDeleteTaxLiability]
+    @ID uniqueidentifier
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DELETE FROM
+        [${flyway:defaultSchema}].[TaxLiability]
+    WHERE
+        [ID] = @ID
+
+
+    -- Check if the delete was successful
+    IF @@ROWCOUNT = 0
+        SELECT NULL AS [ID] -- Return NULL for all primary key fields to indicate no record was deleted
+    ELSE
+        SELECT @ID AS [ID] -- Return the primary key values to indicate we successfully deleted the record
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteTaxLiability] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete Permissions for MJ_BizApps_Accounting: Tax Liabilities */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteTaxLiability] TO [cdp_Developer], [cdp_Integration];
+
+/* Index for Foreign Keys for TaxRemittance */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Remittances
+-- Item: Index for Foreign Keys
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+-- Index for foreign key TaxLiabilityID in table TaxRemittance
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_TaxRemittance_TaxLiabilityID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[TaxRemittance]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_TaxRemittance_TaxLiabilityID ON [${flyway:defaultSchema}].[TaxRemittance] ([TaxLiabilityID]);
+
+-- Index for foreign key PostedJournalEntryID in table TaxRemittance
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_TaxRemittance_PostedJournalEntryID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[TaxRemittance]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_TaxRemittance_PostedJournalEntryID ON [${flyway:defaultSchema}].[TaxRemittance] ([PostedJournalEntryID]);
+
+/* Base View SQL for MJ_BizApps_Accounting: Tax Remittances */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Remittances
+-- Item: vwTaxRemittances
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- BASE VIEW FOR ENTITY:      MJ_BizApps_Accounting: Tax Remittances
+-----               SCHEMA:      ${flyway:defaultSchema}
+-----               BASE TABLE:  TaxRemittance
+-----               PRIMARY KEY: ID
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[vwTaxRemittances]', 'V') IS NOT NULL
+    DROP VIEW [${flyway:defaultSchema}].[vwTaxRemittances];
+GO
+
+CREATE VIEW [${flyway:defaultSchema}].[vwTaxRemittances]
+AS
+SELECT
+    t.*
+FROM
+    [${flyway:defaultSchema}].[TaxRemittance] AS t
+GO
+GRANT SELECT ON [${flyway:defaultSchema}].[vwTaxRemittances] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* Base View Permissions SQL for MJ_BizApps_Accounting: Tax Remittances */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Remittances
+-- Item: Permissions for vwTaxRemittances
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+GRANT SELECT ON [${flyway:defaultSchema}].[vwTaxRemittances] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
+
+/* spCreate SQL for MJ_BizApps_Accounting: Tax Remittances */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Remittances
+-- Item: spCreateTaxRemittance
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- CREATE PROCEDURE FOR TaxRemittance
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spCreateTaxRemittance]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spCreateTaxRemittance];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateTaxRemittance]
+    @ID uniqueidentifier = NULL,
+    @TaxLiabilityID uniqueidentifier,
+    @RemittedAmount decimal(18, 2),
+    @RemittedDate date,
+    @PaymentReference_Clear bit = 0,
+    @PaymentReference nvarchar(100) = NULL,
+    @PostedJournalEntryID_Clear bit = 0,
+    @PostedJournalEntryID uniqueidentifier = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @InsertedRow TABLE ([ID] UNIQUEIDENTIFIER)
+
+    IF @ID IS NOT NULL
+    BEGIN
+        -- User provided a value, use it
+        INSERT INTO [${flyway:defaultSchema}].[TaxRemittance]
+            (
+                [ID],
+                [TaxLiabilityID],
+                [RemittedAmount],
+                [RemittedDate],
+                [PaymentReference],
+                [PostedJournalEntryID]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @ID,
+                @TaxLiabilityID,
+                @RemittedAmount,
+                @RemittedDate,
+                CASE WHEN @PaymentReference_Clear = 1 THEN NULL ELSE ISNULL(@PaymentReference, NULL) END,
+                CASE WHEN @PostedJournalEntryID_Clear = 1 THEN NULL ELSE ISNULL(@PostedJournalEntryID, NULL) END
+            )
+    END
+    ELSE
+    BEGIN
+        -- No value provided, let database use its default (e.g., NEWSEQUENTIALID())
+        INSERT INTO [${flyway:defaultSchema}].[TaxRemittance]
+            (
+                [TaxLiabilityID],
+                [RemittedAmount],
+                [RemittedDate],
+                [PaymentReference],
+                [PostedJournalEntryID]
+            )
+        OUTPUT INSERTED.[ID] INTO @InsertedRow
+        VALUES
+            (
+                @TaxLiabilityID,
+                @RemittedAmount,
+                @RemittedDate,
+                CASE WHEN @PaymentReference_Clear = 1 THEN NULL ELSE ISNULL(@PaymentReference, NULL) END,
+                CASE WHEN @PostedJournalEntryID_Clear = 1 THEN NULL ELSE ISNULL(@PostedJournalEntryID, NULL) END
+            )
+    END
+    -- return the new record from the base view, which might have some calculated fields
+    SELECT * FROM [${flyway:defaultSchema}].[vwTaxRemittances] WHERE [ID] = (SELECT [ID] FROM @InsertedRow)
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateTaxRemittance] TO [cdp_Developer], [cdp_Integration];
+
+/* spCreate Permissions for MJ_BizApps_Accounting: Tax Remittances */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateTaxRemittance] TO [cdp_Developer], [cdp_Integration];
+
+/* spUpdate SQL for MJ_BizApps_Accounting: Tax Remittances */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Remittances
+-- Item: spUpdateTaxRemittance
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- UPDATE PROCEDURE FOR TaxRemittance
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spUpdateTaxRemittance]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spUpdateTaxRemittance];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateTaxRemittance]
+    @ID uniqueidentifier,
+    @TaxLiabilityID uniqueidentifier = NULL,
+    @RemittedAmount decimal(18, 2) = NULL,
+    @RemittedDate date = NULL,
+    @PaymentReference_Clear bit = 0,
+    @PaymentReference nvarchar(100) = NULL,
+    @PostedJournalEntryID_Clear bit = 0,
+    @PostedJournalEntryID uniqueidentifier = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[TaxRemittance]
+    SET
+        [TaxLiabilityID] = ISNULL(@TaxLiabilityID, [TaxLiabilityID]),
+        [RemittedAmount] = ISNULL(@RemittedAmount, [RemittedAmount]),
+        [RemittedDate] = ISNULL(@RemittedDate, [RemittedDate]),
+        [PaymentReference] = CASE WHEN @PaymentReference_Clear = 1 THEN NULL ELSE ISNULL(@PaymentReference, [PaymentReference]) END,
+        [PostedJournalEntryID] = CASE WHEN @PostedJournalEntryID_Clear = 1 THEN NULL ELSE ISNULL(@PostedJournalEntryID, [PostedJournalEntryID]) END
+    WHERE
+        [ID] = @ID
+
+    -- Check if the update was successful
+    IF @@ROWCOUNT = 0
+        -- Nothing was updated, return no rows, but column structure from base view intact, semantically correct this way.
+        SELECT TOP 0 * FROM [${flyway:defaultSchema}].[vwTaxRemittances] WHERE 1=0
+    ELSE
+        -- Return the updated record so the caller can see the updated values and any calculated fields
+        SELECT
+                                        *
+                                    FROM
+                                        [${flyway:defaultSchema}].[vwTaxRemittances]
+                                    WHERE
+                                        [ID] = @ID
+                                    
+END
+GO
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateTaxRemittance] TO [cdp_Developer], [cdp_Integration]
+GO
+
+------------------------------------------------------------
+----- TRIGGER FOR __mj_UpdatedAt field for the TaxRemittance table
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[trgUpdateTaxRemittance]', 'TR') IS NOT NULL
+    DROP TRIGGER [${flyway:defaultSchema}].[trgUpdateTaxRemittance];
+GO
+CREATE TRIGGER [${flyway:defaultSchema}].trgUpdateTaxRemittance
+ON [${flyway:defaultSchema}].[TaxRemittance]
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE
+        [${flyway:defaultSchema}].[TaxRemittance]
+    SET
+        __mj_UpdatedAt = GETUTCDATE()
+    FROM
+        [${flyway:defaultSchema}].[TaxRemittance] AS _organicTable
+    INNER JOIN
+        INSERTED AS I ON
+        _organicTable.[ID] = I.[ID];
+END;
+GO
+
+/* spUpdate Permissions for MJ_BizApps_Accounting: Tax Remittances */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateTaxRemittance] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete SQL for MJ_BizApps_Accounting: Tax Remittances */
+-----------------------------------------------------------------
+-- SQL Code Generation
+-- Entity: MJ_BizApps_Accounting: Tax Remittances
+-- Item: spDeleteTaxRemittance
+--
+-- This was generated by the MemberJunction CodeGen tool.
+-- This file should NOT be edited by hand.
+-----------------------------------------------------------------
+
+------------------------------------------------------------
+----- DELETE PROCEDURE FOR TaxRemittance
+------------------------------------------------------------
+IF OBJECT_ID('[${flyway:defaultSchema}].[spDeleteTaxRemittance]', 'P') IS NOT NULL
+    DROP PROCEDURE [${flyway:defaultSchema}].[spDeleteTaxRemittance];
+GO
+
+CREATE PROCEDURE [${flyway:defaultSchema}].[spDeleteTaxRemittance]
+    @ID uniqueidentifier
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DELETE FROM
+        [${flyway:defaultSchema}].[TaxRemittance]
+    WHERE
+        [ID] = @ID
+
+
+    -- Check if the delete was successful
+    IF @@ROWCOUNT = 0
+        SELECT NULL AS [ID] -- Return NULL for all primary key fields to indicate no record was deleted
+    ELSE
+        SELECT @ID AS [ID] -- Return the primary key values to indicate we successfully deleted the record
+END
+GO
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteTaxRemittance] TO [cdp_Developer], [cdp_Integration];
+
+/* spDelete Permissions for MJ_BizApps_Accounting: Tax Remittances */
+
+GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteTaxRemittance] TO [cdp_Developer], [cdp_Integration];
+
+/* SQL text to delete unneeded entity fields (21 scoped entities) */
+EXEC [${mjSchema}].[spDeleteUnneededEntityFields] @ExcludedSchemaNames='sys,staging,dbo,${mjSchema},${mjSchema}_BizAppsCommon,${mjSchema}_BizAppsTasks,${mjSchema}_BizAppsCommon,${mjSchema}_BizAppsTasks,${mjSchema}', @EntityIDs='179B2FEC-F70F-4C93-8FA0-AE73C957DC13,E7116785-3D54-415C-981B-0E2D2D3BA793,9773FAC6-C410-47DB-A7A9-F49886E6B54A,A2177315-8A92-48B6-A4F8-0865E674C230,EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615,34F71DBC-C29F-40D3-BB09-DB4EC5E7E946,808CAA0F-C086-467C-8D42-03B203CEBDC3,5BE1D6E3-2CB3-4C6E-9FA2-592F7B1C65DE,5B232F88-718A-46D1-8356-A16B172056DD,A9AD407B-6624-45E5-BFDD-D6368D85F740,85303537-672D-4895-B773-A8B923C0F7F9,967E7628-CE96-4421-A836-26BBD0BCF564,B1A8AF72-DED6-482A-9669-46A9FC30B574,6DA09DAE-3160-42F2-B0CA-6E26013ABB60,EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7,9F6A0506-7D62-4461-9D00-E733692A351B,026F7B4B-64F0-4267-B74E-45C1ADD32732,53985D64-DA98-4AB5-8281-0927EBE3E0F0,1583B525-55C0-4845-BD95-244D6EE239F3,34915759-5587-44EF-A914-230170B3D566,7700116E-9A6A-43AA-9560-6DB59D53890A';
+
+/* SQL text to insert 45 new entity field(s) */
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'd7225243-13e1-4811-887a-7819e322d93a' OR (EntityID = '808CAA0F-C086-467C-8D42-03B203CEBDC3' AND Name = 'FromCurrencyCode_Virtual')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'd7225243-13e1-4811-887a-7819e322d93a',
+            '808CAA0F-C086-467C-8D42-03B203CEBDC3', -- Entity: MJ_BizApps_Accounting: Currency Spot Rates
+            100019,
+            'FromCurrencyCode_Virtual',
+            'From Currency Code Virtual',
+            NULL,
+            'nvarchar',
+            160,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '0aeb1a87-0d9a-46ab-ad7d-550005781221' OR (EntityID = '808CAA0F-C086-467C-8D42-03B203CEBDC3' AND Name = 'ToCurrencyCode_Virtual')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '0aeb1a87-0d9a-46ab-ad7d-550005781221',
+            '808CAA0F-C086-467C-8D42-03B203CEBDC3', -- Entity: MJ_BizApps_Accounting: Currency Spot Rates
+            100020,
+            'ToCurrencyCode_Virtual',
+            'To Currency Code Virtual',
+            NULL,
+            'nvarchar',
+            160,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '89c9a0c0-92aa-4e7f-a0d1-7dd6ae036ae8' OR (EntityID = '53985D64-DA98-4AB5-8281-0927EBE3E0F0' AND Name = 'GLAccount')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '89c9a0c0-92aa-4e7f-a0d1-7dd6ae036ae8',
+            '53985D64-DA98-4AB5-8281-0927EBE3E0F0', -- Entity: MJ_BizApps_Accounting: Journal Entry Lines
+            100029,
+            'GLAccount',
+            'GL Account',
+            NULL,
+            'nvarchar',
+            400,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '83b18a69-61ad-40e1-8377-022366ae2a27' OR (EntityID = '53985D64-DA98-4AB5-8281-0927EBE3E0F0' AND Name = 'OriginalCurrencyCode_Virtual')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '83b18a69-61ad-40e1-8377-022366ae2a27',
+            '53985D64-DA98-4AB5-8281-0927EBE3E0F0', -- Entity: MJ_BizApps_Accounting: Journal Entry Lines
+            100030,
+            'OriginalCurrencyCode_Virtual',
+            'Original Currency Code Virtual',
+            NULL,
+            'nvarchar',
+            160,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '565bea05-be2d-471a-a6c3-f9c9b93984c3' OR (EntityID = '53985D64-DA98-4AB5-8281-0927EBE3E0F0' AND Name = 'CounterpartyOrganization')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '565bea05-be2d-471a-a6c3-f9c9b93984c3',
+            '53985D64-DA98-4AB5-8281-0927EBE3E0F0', -- Entity: MJ_BizApps_Accounting: Journal Entry Lines
+            100031,
+            'CounterpartyOrganization',
+            'Counterparty Organization',
+            NULL,
+            'nvarchar',
+            510,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'cba3e043-590a-4244-a0b1-89c18b522cb0' OR (EntityID = 'E7116785-3D54-415C-981B-0E2D2D3BA793' AND Name = 'Company')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'cba3e043-590a-4244-a0b1-89c18b522cb0',
+            'E7116785-3D54-415C-981B-0E2D2D3BA793', -- Entity: MJ_BizApps_Accounting: Journal Entry Sequences
+            100011,
+            'Company',
+            'Company',
+            NULL,
+            'nvarchar',
+            100,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'c3e15d48-08b3-411c-9633-98c9021f9685' OR (EntityID = '34915759-5587-44EF-A914-230170B3D566' AND Name = 'Company')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'c3e15d48-08b3-411c-9633-98c9021f9685',
+            '34915759-5587-44EF-A914-230170B3D566', -- Entity: MJ_BizApps_Accounting: Tax Liabilities
+            100023,
+            'Company',
+            'Company',
+            NULL,
+            'nvarchar',
+            100,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '4bada0d6-82a0-40e2-8fe5-3028fb3577ff' OR (EntityID = '34915759-5587-44EF-A914-230170B3D566' AND Name = 'TaxAuthority')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '4bada0d6-82a0-40e2-8fe5-3028fb3577ff',
+            '34915759-5587-44EF-A914-230170B3D566', -- Entity: MJ_BizApps_Accounting: Tax Liabilities
+            100024,
+            'TaxAuthority',
+            'Tax Authority',
+            NULL,
+            'nvarchar',
+            400,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '4509f1ef-fcbe-4510-833c-5b633f6a7bc7' OR (EntityID = '34915759-5587-44EF-A914-230170B3D566' AND Name = 'TaxJurisdiction')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '4509f1ef-fcbe-4510-833c-5b633f6a7bc7',
+            '34915759-5587-44EF-A914-230170B3D566', -- Entity: MJ_BizApps_Accounting: Tax Liabilities
+            100025,
+            'TaxJurisdiction',
+            'Tax Jurisdiction',
+            NULL,
+            'nvarchar',
+            400,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '0eace524-c37f-46cd-b200-7c0b601a4c35' OR (EntityID = '1583B525-55C0-4845-BD95-244D6EE239F3' AND Name = 'Dimension')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '0eace524-c37f-46cd-b200-7c0b601a4c35',
+            '1583B525-55C0-4845-BD95-244D6EE239F3', -- Entity: MJ_BizApps_Accounting: Journal Entry Line Dimensions
+            100013,
+            'Dimension',
+            'Dimension',
+            NULL,
+            'nvarchar',
+            200,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '1d4653c5-5096-466c-9551-5731f8a33d8d' OR (EntityID = '1583B525-55C0-4845-BD95-244D6EE239F3' AND Name = 'DimensionValue')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '1d4653c5-5096-466c-9551-5731f8a33d8d',
+            '1583B525-55C0-4845-BD95-244D6EE239F3', -- Entity: MJ_BizApps_Accounting: Journal Entry Line Dimensions
+            100014,
+            'DimensionValue',
+            'Dimension Value',
+            NULL,
+            'nvarchar',
+            400,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '12d666bc-7d42-401d-bd42-f40ded4aeb9d' OR (EntityID = '967E7628-CE96-4421-A836-26BBD0BCF564' AND Name = 'TaxAuthority')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '12d666bc-7d42-401d-bd42-f40ded4aeb9d',
+            '967E7628-CE96-4421-A836-26BBD0BCF564', -- Entity: MJ_BizApps_Accounting: Tax Jurisdictions
+            100029,
+            'TaxAuthority',
+            'Tax Authority',
+            NULL,
+            'nvarchar',
+            400,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '04a75c3d-30d6-4360-8254-aec1e63d5794' OR (EntityID = '967E7628-CE96-4421-A836-26BBD0BCF564' AND Name = 'ParentTaxJurisdiction')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '04a75c3d-30d6-4360-8254-aec1e63d5794',
+            '967E7628-CE96-4421-A836-26BBD0BCF564', -- Entity: MJ_BizApps_Accounting: Tax Jurisdictions
+            100030,
+            'ParentTaxJurisdiction',
+            'Parent Tax Jurisdiction',
+            NULL,
+            'nvarchar',
+            400,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '765f8559-f8b7-47ae-93e1-70e7b4cf15ce' OR (EntityID = '967E7628-CE96-4421-A836-26BBD0BCF564' AND Name = 'RootParentTaxJurisdictionID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '765f8559-f8b7-47ae-93e1-70e7b4cf15ce',
+            '967E7628-CE96-4421-A836-26BBD0BCF564', -- Entity: MJ_BizApps_Accounting: Tax Jurisdictions
+            100031,
+            'RootParentTaxJurisdictionID',
+            'Root Parent Tax Jurisdiction ID',
+            NULL,
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'dca8bca1-db0b-4864-bafb-094df0349632' OR (EntityID = '026F7B4B-64F0-4267-B74E-45C1ADD32732' AND Name = 'Company')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'dca8bca1-db0b-4864-bafb-094df0349632',
+            '026F7B4B-64F0-4267-B74E-45C1ADD32732', -- Entity: MJ_BizApps_Accounting: Journal Entries
+            100035,
+            'Company',
+            'Company',
+            NULL,
+            'nvarchar',
+            100,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '20dbd4d3-2514-4727-96e2-f4725fc67c0f' OR (EntityID = '026F7B4B-64F0-4267-B74E-45C1ADD32732' AND Name = 'LinkedEntity')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '20dbd4d3-2514-4727-96e2-f4725fc67c0f',
+            '026F7B4B-64F0-4267-B74E-45C1ADD32732', -- Entity: MJ_BizApps_Accounting: Journal Entries
+            100036,
+            'LinkedEntity',
+            'Linked Entity',
+            NULL,
+            'nvarchar',
+            510,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'd67278d6-a898-47d3-919a-effd0eb78bf8' OR (EntityID = '026F7B4B-64F0-4267-B74E-45C1ADD32732' AND Name = 'File')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'd67278d6-a898-47d3-919a-effd0eb78bf8',
+            '026F7B4B-64F0-4267-B74E-45C1ADD32732', -- Entity: MJ_BizApps_Accounting: Journal Entries
+            100037,
+            'File',
+            'File',
+            NULL,
+            'nvarchar',
+            1000,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '890e3656-ada7-4f9f-84c8-43e73c771745' OR (EntityID = '026F7B4B-64F0-4267-B74E-45C1ADD32732' AND Name = 'RootReversesJournalEntryID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '890e3656-ada7-4f9f-84c8-43e73c771745',
+            '026F7B4B-64F0-4267-B74E-45C1ADD32732', -- Entity: MJ_BizApps_Accounting: Journal Entries
+            100038,
+            'RootReversesJournalEntryID',
+            'Root Reverses Journal Entry ID',
+            NULL,
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'ad509238-6899-4de6-bfd5-caeb22f7551f' OR (EntityID = '026F7B4B-64F0-4267-B74E-45C1ADD32732' AND Name = 'RootReversedByJournalEntryID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'ad509238-6899-4de6-bfd5-caeb22f7551f',
+            '026F7B4B-64F0-4267-B74E-45C1ADD32732', -- Entity: MJ_BizApps_Accounting: Journal Entries
+            100039,
+            'RootReversedByJournalEntryID',
+            'Root Reversed By Journal Entry ID',
+            NULL,
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '0e3804d6-bfad-41fa-8468-1e02ab7c9b28' OR (EntityID = 'B1A8AF72-DED6-482A-9669-46A9FC30B574' AND Name = 'TaxJurisdiction')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '0e3804d6-bfad-41fa-8468-1e02ab7c9b28',
+            'B1A8AF72-DED6-482A-9669-46A9FC30B574', -- Entity: MJ_BizApps_Accounting: Tax Rates
+            100019,
+            'TaxJurisdiction',
+            'Tax Jurisdiction',
+            NULL,
+            'nvarchar',
+            400,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '16a416a6-eb86-4961-b9a9-b903f16b9db7' OR (EntityID = '5BE1D6E3-2CB3-4C6E-9FA2-592F7B1C65DE' AND Name = 'Dimension')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '16a416a6-eb86-4961-b9a9-b903f16b9db7',
+            '5BE1D6E3-2CB3-4C6E-9FA2-592F7B1C65DE', -- Entity: MJ_BizApps_Accounting: GL Account Link Dimensions
+            100013,
+            'Dimension',
+            'Dimension',
+            NULL,
+            'nvarchar',
+            200,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '3462b968-eded-40b1-8212-1671eca80798' OR (EntityID = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60' AND Name = 'Name')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '3462b968-eded-40b1-8212-1671eca80798',
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+            100039,
+            'Name',
+            'Name',
+            NULL,
+            'nvarchar',
+            100,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'bd8af35e-cda3-46ab-a08f-9f05a443aa99' OR (EntityID = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60' AND Name = 'Description')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'bd8af35e-cda3-46ab-a08f-9f05a443aa99',
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+            100040,
+            'Description',
+            'Description',
+            NULL,
+            'nvarchar',
+            400,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'b94ad33b-48d6-451a-83b0-49f88847a11b' OR (EntityID = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60' AND Name = 'Website')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'b94ad33b-48d6-451a-83b0-49f88847a11b',
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+            100041,
+            'Website',
+            'Website',
+            NULL,
+            'nvarchar',
+            200,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '3f1940e6-3f00-4576-b316-7117e30b0f3c' OR (EntityID = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60' AND Name = 'LogoURL')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '3f1940e6-3f00-4576-b316-7117e30b0f3c',
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+            100042,
+            'LogoURL',
+            'Logo URL',
+            NULL,
+            'nvarchar',
+            1000,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '96aa5edc-96d6-4e10-b5e0-d5280b162d0b' OR (EntityID = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60' AND Name = 'Domain')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '96aa5edc-96d6-4e10-b5e0-d5280b162d0b',
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+            100043,
+            'Domain',
+            'Domain',
+            NULL,
+            'nvarchar',
+            510,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '32de3aa7-8c8c-415d-bf47-5e29234212b3' OR (EntityID = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60' AND Name = 'FunctionalCurrencyCode_Virtual')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '32de3aa7-8c8c-415d-bf47-5e29234212b3',
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+            100044,
+            'FunctionalCurrencyCode_Virtual',
+            'Functional Currency Code Virtual',
+            NULL,
+            'nvarchar',
+            160,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '71e8a3ca-7aab-4a51-9741-0db27f61ba4c' OR (EntityID = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60' AND Name = 'ReportingCurrencyCode_Virtual')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '71e8a3ca-7aab-4a51-9741-0db27f61ba4c',
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+            100045,
+            'ReportingCurrencyCode_Virtual',
+            'Reporting Currency Code Virtual',
+            NULL,
+            'nvarchar',
+            160,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'b1421afb-de1b-4818-abaf-f812ffc828fc' OR (EntityID = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60' AND Name = 'ApprovalCFOUser')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'b1421afb-de1b-4818-abaf-f812ffc828fc',
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+            100046,
+            'ApprovalCFOUser',
+            'Approval CFO User',
+            NULL,
+            'nvarchar',
+            200,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '83a437cd-ad98-4b56-a2f6-9bbe41737ded' OR (EntityID = '6DA09DAE-3160-42F2-B0CA-6E26013ABB60' AND Name = 'RootParentAccountingCompanyID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '83a437cd-ad98-4b56-a2f6-9bbe41737ded',
+            '6DA09DAE-3160-42F2-B0CA-6E26013ABB60', -- Entity: MJ_BizApps_Accounting: Accounting Company Profiles
+            100047,
+            'RootParentAccountingCompanyID',
+            'Root Parent Accounting Company ID',
+            NULL,
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '209505d5-c276-4876-84c9-4888bffdcfac' OR (EntityID = 'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7' AND Name = 'Company')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '209505d5-c276-4876-84c9-4888bffdcfac',
+            'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7', -- Entity: MJ_BizApps_Accounting: GL Accounts
+            100029,
+            'Company',
+            'Company',
+            NULL,
+            'nvarchar',
+            100,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '4c1b2636-64dd-44e5-bd36-e943b0e16c09' OR (EntityID = 'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7' AND Name = 'ParentGLAccount')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '4c1b2636-64dd-44e5-bd36-e943b0e16c09',
+            'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7', -- Entity: MJ_BizApps_Accounting: GL Accounts
+            100030,
+            'ParentGLAccount',
+            'Parent GL Account',
+            NULL,
+            'nvarchar',
+            400,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'e5381a1d-cfe1-4d76-95ac-8d0884bba06d' OR (EntityID = 'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7' AND Name = 'CurrencyCode_Virtual')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'e5381a1d-cfe1-4d76-95ac-8d0884bba06d',
+            'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7', -- Entity: MJ_BizApps_Accounting: GL Accounts
+            100031,
+            'CurrencyCode_Virtual',
+            'Currency Code Virtual',
+            NULL,
+            'nvarchar',
+            160,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'd22730cd-48e5-4c6a-858a-f85e2110f0ba' OR (EntityID = 'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7' AND Name = 'RootParentGLAccountID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'd22730cd-48e5-4c6a-858a-f85e2110f0ba',
+            'EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7', -- Entity: MJ_BizApps_Accounting: GL Accounts
+            100032,
+            'RootParentGLAccountID',
+            'Root Parent GL Account ID',
+            NULL,
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '60d9cad7-f3fb-4b74-8252-da0381948ec2' OR (EntityID = '179B2FEC-F70F-4C93-8FA0-AE73C957DC13' AND Name = 'Organization')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '60d9cad7-f3fb-4b74-8252-da0381948ec2',
+            '179B2FEC-F70F-4C93-8FA0-AE73C957DC13', -- Entity: MJ_BizApps_Accounting: Customer Tax Profiles
+            100023,
+            'Organization',
+            'Organization',
+            NULL,
+            'nvarchar',
+            510,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '64725302-a227-46ab-b5bd-780527986b69' OR (EntityID = '179B2FEC-F70F-4C93-8FA0-AE73C957DC13' AND Name = 'TaxJurisdiction')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '64725302-a227-46ab-b5bd-780527986b69',
+            '179B2FEC-F70F-4C93-8FA0-AE73C957DC13', -- Entity: MJ_BizApps_Accounting: Customer Tax Profiles
+            100024,
+            'TaxJurisdiction',
+            'Tax Jurisdiction',
+            NULL,
+            'nvarchar',
+            400,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '4e16783b-75c0-4f8e-a954-a5f2120c6a19' OR (EntityID = 'A9AD407B-6624-45E5-BFDD-D6368D85F740' AND Name = 'Dimension')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '4e16783b-75c0-4f8e-a954-a5f2120c6a19',
+            'A9AD407B-6624-45E5-BFDD-D6368D85F740', -- Entity: MJ_BizApps_Accounting: Dimension Values
+            100021,
+            'Dimension',
+            'Dimension',
+            NULL,
+            'nvarchar',
+            200,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '125557e1-e07d-47c5-8d3c-c80c50a18af0' OR (EntityID = 'A9AD407B-6624-45E5-BFDD-D6368D85F740' AND Name = 'ParentDimensionValue')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '125557e1-e07d-47c5-8d3c-c80c50a18af0',
+            'A9AD407B-6624-45E5-BFDD-D6368D85F740', -- Entity: MJ_BizApps_Accounting: Dimension Values
+            100022,
+            'ParentDimensionValue',
+            'Parent Dimension Value',
+            NULL,
+            'nvarchar',
+            400,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '1b0ae9dc-70f8-4de0-990c-6e694933e68f' OR (EntityID = 'A9AD407B-6624-45E5-BFDD-D6368D85F740' AND Name = 'RootParentDimensionValueID')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '1b0ae9dc-70f8-4de0-990c-6e694933e68f',
+            'A9AD407B-6624-45E5-BFDD-D6368D85F740', -- Entity: MJ_BizApps_Accounting: Dimension Values
+            100023,
+            'RootParentDimensionValueID',
+            'Root Parent Dimension Value ID',
+            NULL,
+            'uniqueidentifier',
+            16,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '4f2037c0-5134-4f45-8f01-b8fac5e9a31a' OR (EntityID = '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946' AND Name = 'GLAccount')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '4f2037c0-5134-4f45-8f01-b8fac5e9a31a',
+            '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946', -- Entity: MJ_BizApps_Accounting: GL Account Links
+            100023,
+            'GLAccount',
+            'GL Account',
+            NULL,
+            'nvarchar',
+            400,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '45c86a15-d1ef-4f28-a890-764f7e3b145d' OR (EntityID = '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946' AND Name = 'GLAccountRole')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '45c86a15-d1ef-4f28-a890-764f7e3b145d',
+            '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946', -- Entity: MJ_BizApps_Accounting: GL Account Links
+            100024,
+            'GLAccountRole',
+            'GL Account Role',
+            NULL,
+            'nvarchar',
+            200,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'a06089d3-ed48-4312-b229-03d73575ed5c' OR (EntityID = '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946' AND Name = 'Entity')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'a06089d3-ed48-4312-b229-03d73575ed5c',
+            '34F71DBC-C29F-40D3-BB09-DB4EC5E7E946', -- Entity: MJ_BizApps_Accounting: GL Account Links
+            100025,
+            'Entity',
+            'Entity',
+            NULL,
+            'nvarchar',
+            510,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '2c6e2698-a5aa-441b-927f-1e670d7c8ad4' OR (EntityID = '9F6A0506-7D62-4461-9D00-E733692A351B' AND Name = 'Company')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '2c6e2698-a5aa-441b-927f-1e670d7c8ad4',
+            '9F6A0506-7D62-4461-9D00-E733692A351B', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+            100045,
+            'Company',
+            'Company',
+            NULL,
+            'nvarchar',
+            100,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '001cf80f-d4e8-47de-9b8c-ab10ec0db236' OR (EntityID = '9F6A0506-7D62-4461-9D00-E733692A351B' AND Name = 'BatchedByUser')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '001cf80f-d4e8-47de-9b8c-ab10ec0db236',
+            '9F6A0506-7D62-4461-9D00-E733692A351B', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+            100046,
+            'BatchedByUser',
+            'Batched By User',
+            NULL,
+            'nvarchar',
+            200,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'cfed123e-0f48-44e7-9831-03bc711af10f' OR (EntityID = '9F6A0506-7D62-4461-9D00-E733692A351B' AND Name = 'ApprovedByUser')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'cfed123e-0f48-44e7-9831-03bc711af10f',
+            '9F6A0506-7D62-4461-9D00-E733692A351B', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+            100047,
+            'ApprovedByUser',
+            'Approved By User',
+            NULL,
+            'nvarchar',
+            200,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+/* SQL text to update existing entity fields from schema (21 scoped entities) */
+EXEC [${mjSchema}].[spUpdateExistingEntityFieldsFromSchema] @ExcludedSchemaNames='sys,staging,dbo,${mjSchema},${mjSchema}_BizAppsCommon,${mjSchema}_BizAppsTasks,${mjSchema}_BizAppsCommon,${mjSchema}_BizAppsTasks,${mjSchema}', @EntityIDs='179B2FEC-F70F-4C93-8FA0-AE73C957DC13,E7116785-3D54-415C-981B-0E2D2D3BA793,9773FAC6-C410-47DB-A7A9-F49886E6B54A,A2177315-8A92-48B6-A4F8-0865E674C230,EBA7E879-DA81-4FCD-8BFA-D6E4EBF92615,34F71DBC-C29F-40D3-BB09-DB4EC5E7E946,808CAA0F-C086-467C-8D42-03B203CEBDC3,5BE1D6E3-2CB3-4C6E-9FA2-592F7B1C65DE,5B232F88-718A-46D1-8356-A16B172056DD,A9AD407B-6624-45E5-BFDD-D6368D85F740,85303537-672D-4895-B773-A8B923C0F7F9,967E7628-CE96-4421-A836-26BBD0BCF564,B1A8AF72-DED6-482A-9669-46A9FC30B574,6DA09DAE-3160-42F2-B0CA-6E26013ABB60,EE18E4FC-2295-4E9B-9410-A7A9A47A3BB7,9F6A0506-7D62-4461-9D00-E733692A351B,026F7B4B-64F0-4267-B74E-45C1ADD32732,53985D64-DA98-4AB5-8281-0927EBE3E0F0,1583B525-55C0-4845-BD95-244D6EE239F3,34915759-5587-44EF-A914-230170B3D566,7700116E-9A6A-43AA-9560-6DB59D53890A';
+
+/* Update IS-A parent field Name on MJ_BizApps_Accounting: Accounting Company Profiles */
+UPDATE [${mjSchema}].[EntityField]
+                  SET IsVirtual=1,
+                      Type='nvarchar',
+                      Length=100,
+                      Precision=0,
+                      Scale=0,
+                      AllowsNull=0,
+                      AllowUpdateAPI=1
+                  WHERE ID='3462B968-EDED-40B1-8212-1671ECA80798';
+
+/* Update IS-A parent field Description on MJ_BizApps_Accounting: Accounting Company Profiles */
+UPDATE [${mjSchema}].[EntityField]
+                  SET IsVirtual=1,
+                      Type='nvarchar',
+                      Length=400,
+                      Precision=0,
+                      Scale=0,
+                      AllowsNull=0,
+                      AllowUpdateAPI=1
+                  WHERE ID='BD8AF35E-CDA3-46AB-A08F-9F05A443AA99';
+
+/* Update IS-A parent field Website on MJ_BizApps_Accounting: Accounting Company Profiles */
+UPDATE [${mjSchema}].[EntityField]
+                  SET IsVirtual=1,
+                      Type='nvarchar',
+                      Length=200,
+                      Precision=0,
+                      Scale=0,
+                      AllowsNull=1,
+                      AllowUpdateAPI=1
+                  WHERE ID='B94AD33B-48D6-451A-83B0-49F88847A11B';
+
+/* Update IS-A parent field LogoURL on MJ_BizApps_Accounting: Accounting Company Profiles */
+UPDATE [${mjSchema}].[EntityField]
+                  SET IsVirtual=1,
+                      Type='nvarchar',
+                      Length=1000,
+                      Precision=0,
+                      Scale=0,
+                      AllowsNull=1,
+                      AllowUpdateAPI=1
+                  WHERE ID='3F1940E6-3F00-4576-B316-7117E30B0F3C';
+
+/* Update IS-A parent field Domain on MJ_BizApps_Accounting: Accounting Company Profiles */
+UPDATE [${mjSchema}].[EntityField]
+                  SET IsVirtual=1,
+                      Type='nvarchar',
+                      Length=510,
+                      Precision=0,
+                      Scale=0,
+                      AllowsNull=1,
+                      AllowUpdateAPI=1
+                  WHERE ID='96AA5EDC-96D6-4E10-B5E0-D5280B162D0B';
+
+/* Update entity timestamp for MJ_BizApps_Accounting: Accounting Company Profiles after IS-A field sync */
+UPDATE [${mjSchema}].[Entity] SET [__mj_UpdatedAt]=GETUTCDATE() WHERE ID='6DA09DAE-3160-42F2-B0CA-6E26013ABB60';
+
+/* SQL text to set default column width where needed */
+EXEC [${mjSchema}].[spSetDefaultColumnWidthWhereNeeded] @ExcludedSchemaNames='sys,staging,dbo,${mjSchema},${mjSchema}_BizAppsCommon,${mjSchema}_BizAppsTasks,${mjSchema}_BizAppsCommon,${mjSchema}_BizAppsTasks,${mjSchema}';
+
+-- CodeGen Output — Run #2 (regenerated after `mj sync push` applied metadata config)
+/* SQL text to update existing entities from schema */
+EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='sys,staging,dbo,${mjSchema},${mjSchema}_BizAppsCommon,${mjSchema}_BizAppsTasks,${mjSchema}_BizAppsCommon,${mjSchema}_BizAppsTasks,${mjSchema}';
+
+/* SQL text to update existing entity fields from schema */
+EXEC [${mjSchema}].[spUpdateExistingEntityFieldsFromSchema] @ExcludedSchemaNames='sys,staging,dbo,${mjSchema},${mjSchema}_BizAppsCommon,${mjSchema}_BizAppsTasks,${mjSchema}_BizAppsCommon,${mjSchema}_BizAppsTasks,${mjSchema}';
+
+/* SQL text to set default column width where needed */
+EXEC [${mjSchema}].[spSetDefaultColumnWidthWhereNeeded] @ExcludedSchemaNames='sys,staging,dbo,${mjSchema},${mjSchema}_BizAppsCommon,${mjSchema}_BizAppsTasks,${mjSchema}_BizAppsCommon,${mjSchema}_BizAppsTasks,${mjSchema}';
+
+/* SQL text to sync schema info from database schemas */
+EXEC [${mjSchema}].[spUpdateSchemaInfoFromDatabase] @ExcludedSchemaNames='sys,staging,dbo,${mjSchema},${mjSchema}_BizAppsCommon,${mjSchema}_BizAppsTasks,${mjSchema}_BizAppsCommon,${mjSchema}_BizAppsTasks,${mjSchema}';
+

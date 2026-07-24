@@ -132,6 +132,56 @@
         }
     </mj-collapsible-panel>
 
+    <!-- GL Accounts Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingGLAccounts"
+        SectionName="GL Accounts"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingGLAccounts')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: GL Accounts','CurrencyCode')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: GL Accounts')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingGLAccounts')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingGLAccounts', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- Journal Entry Lines Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingJournalEntryLines"
+        SectionName="Journal Entry Lines"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingJournalEntryLines')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entry Lines','OriginalCurrencyCode')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entry Lines')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntryLines')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntryLines', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
     <!-- Currency Spot Rates (From Currency Code) Section -->
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingCurrencySpotRatesFromCurrencyCode"
@@ -176,56 +226,6 @@
                 [ShowToolbar]="false"
                 (Navigate)="OnFormNavigate($event)"
                 (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingCurrencySpotRatesToCurrencyCode', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
-    <!-- Journal Entry Lines Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingJournalEntryLines"
-        SectionName="Journal Entry Lines"
-        Icon="fa fa-table"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingJournalEntryLines')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entry Lines','OriginalCurrencyCode')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entry Lines')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntryLines')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntryLines', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
-    <!-- GL Accounts Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingGLAccounts"
-        SectionName="GL Accounts"
-        Icon="fa fa-table"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingGLAccounts')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: GL Accounts','CurrencyCode')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: GL Accounts')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingGLAccounts')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingGLAccounts', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>
