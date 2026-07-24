@@ -30,7 +30,7 @@ import {
 import { RegisterClass } from '@memberjunction/global';
 import {
   mjBizAppsAccountingJournalEntryEntity,
-  mjBizAppsAccountingJournalEntryLineEntity,
+  mjBizAppsAccountingJournalEntryLineDimensionEntity,
 } from '@mj-biz-apps/accounting-entities';
 
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
@@ -40,6 +40,7 @@ import { getNextJournalEntryNumber } from './SequenceService.js';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
+const JELD_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Line Dimensions';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
 const FILE_ENTITY = 'Files'; // __mj.File
 
@@ -55,6 +56,8 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
   get Lines(): JournalEntryLineEntityServer[] {
     return this._lines;
   }
+
+  // ─── Line Collection ─────────────────────────────────────────────────────────
 
   /** Appends a line to this Journal Entry and sets its parent reference. */
   public AddLine(line: JournalEntryLineEntityServer): void {
@@ -107,7 +110,7 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
     return line;
   }
 
-  /** Loads child lines from database for this Journal Entry if saved. */
+  /** Loads child lines (and their dimension tags — ONE bulk query) from database for this Journal Entry if saved. */
   public async LoadLines(user?: UserInfo): Promise<JournalEntryLineEntityServer[]> {
     if (!this.IsSaved || !this.ID) {
       return this._lines;
@@ -122,14 +125,50 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
       },
       user ?? this.ContextCurrentUser,
     );
-    if (res.Success && res.Results) {
-      this._lines = res.Results;
-      for (const line of this._lines) {
-        line.ParentJournalEntry = this;
-      }
-      this._deletedLines = [];
+    // A failed LOAD must be loud — silently returning an empty Lines collection would make a
+    // real JE look line-less (and a reversal built from it would be wrong). Only saves use the
+    // boolean-return convention.
+    if (!res.Success) {
+      throw new Error(`JournalEntryEntityServer.LoadLines: failed to load lines for JE ${this.ID}: ${res.ErrorMessage ?? 'unknown error'}`);
     }
+    this._lines = res.Results ?? [];
+    for (const line of this._lines) {
+      line.ParentJournalEntry = this;
+    }
+    this._deletedLines = [];
+    await this.hydrateLineDimensions(user);
     return this._lines;
+  }
+
+  /** One bulk JournalEntryLineDimension query for ALL lines, distributed onto each line's collection. */
+  private async hydrateLineDimensions(user?: UserInfo): Promise<void> {
+    const lineIds = this._lines.map(l => l.ID).filter(Boolean);
+    if (lineIds.length === 0) return;
+    const provider = this.ProviderToUse as unknown as IRunViewProvider;
+    const inList = lineIds.map(id => `'${id}'`).join(',');
+    const res = await provider.RunView<mjBizAppsAccountingJournalEntryLineDimensionEntity>(
+      {
+        EntityName: JELD_ENTITY,
+        ExtraFilter: `JournalEntryLineID IN (${inList})`,
+        ResultType: 'entity_object',
+      },
+      user ?? this.ContextCurrentUser,
+    );
+    // Loud on failure: treating a failed query as "no dimensions" would silently strip tags
+    // from everything that reads the hydrated collection (reversals, dispatch, UI).
+    if (!res.Success) {
+      throw new Error(`JournalEntryEntityServer.hydrateLineDimensions: failed to load dimension tags for JE ${this.ID}: ${res.ErrorMessage ?? 'unknown error'}`);
+    }
+    const byLine = new Map<string, mjBizAppsAccountingJournalEntryLineDimensionEntity[]>();
+    for (const dim of res.Results ?? []) {
+      const key = dim.JournalEntryLineID.toLowerCase();
+      const arr = byLine.get(key) ?? [];
+      arr.push(dim);
+      byLine.set(key, arr);
+    }
+    for (const line of this._lines) {
+      line.SetLoadedDimensions(byLine.get(line.ID.toLowerCase()) ?? []);
+    }
   }
 
   // ─── Load Overrides ─────────────────────────────────────────────────────────
@@ -420,7 +459,11 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
 
   // ─── W6: reversal generation ──────────────────────────────────────────────
 
-  /** Create a new Pending JE that reverses this one (Dr/Cr swapped), back-referenced both ways. */
+  /**
+   * Create a new Pending JE that reverses this one (Dr/Cr swapped, dimension tags carried),
+   * back-referenced both ways. Uses the encapsulated pattern: the reversal is assembled as a
+   * JournalEntryEntityServer with Lines + Dimensions and persisted in ONE transactional Save().
+   */
   public async GenerateReversal(
     reason: string,
     contextUser?: UserInfo,
@@ -429,18 +472,14 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
       throw new Error('GenerateReversal: the JournalEntry must be saved before it can be reversed.');
     }
     const user = contextUser ?? this.ContextCurrentUser;
-    const reversal = await this.BuildReversalHeader(reason, user);
-    await this.CopySwappedLines(reversal.ID, user);
-    await this.BackReferenceReversal(reversal.ID);
-    return reversal;
-  }
-
-  private async BuildReversalHeader(
-    reason: string,
-    user: UserInfo | undefined,
-  ): Promise<mjBizAppsAccountingJournalEntryEntity> {
     const provider = this.ProviderToUse as unknown as IMetadataProvider;
-    const reversal = await provider.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
+
+    // Make sure this JE's own lines (+ dimension tags) are hydrated to copy from.
+    if (this._lines.length === 0) {
+      await this.LoadLines(user);
+    }
+
+    const reversal = await provider.GetEntityObject<JournalEntryEntityServer>(JE_ENTITY, user);
     reversal.NewRecord();
     reversal.CompanyID = this.CompanyID;
     reversal.EffectiveDate = new Date();
@@ -448,38 +487,25 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
     reversal.Status = 'Pending';
     reversal.Description = `Reversal of ${this.EntryNumber}: ${reason}`;
     reversal.ReversesJournalEntryID = this.ID;
-    const saved = await reversal.Save();
-    if (!saved) {
-      throw new Error(`GenerateReversal: failed to save reversal header: ${reversal.LatestResult?.CompleteMessage ?? 'unknown'}`);
-    }
-    return reversal;
-  }
 
-  private async CopySwappedLines(reversalId: string, user: UserInfo | undefined): Promise<void> {
-    const viewProvider = this.ProviderToUse as unknown as IRunViewProvider;
-    const metaProvider = this.ProviderToUse as unknown as IMetadataProvider;
-
-    const res = await viewProvider.RunView<mjBizAppsAccountingJournalEntryLineEntity>(
-      { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID='${this.ID}'`, OrderBy: 'LineNumber ASC', ResultType: 'entity_object' },
-      user,
-    );
-    if (!res.Success) {
-      throw new Error(`GenerateReversal: failed to load original lines: ${res.ErrorMessage}`);
-    }
-    for (const orig of res.Results) {
-      const line = await metaProvider.GetEntityObject<mjBizAppsAccountingJournalEntryLineEntity>(JEL_ENTITY, user);
-      line.NewRecord();
-      line.JournalEntryID = reversalId;
-      line.LineNumber = orig.LineNumber;
+    for (const orig of this._lines) {
+      const line = await reversal.CreateLine(user);
       line.GLAccountID = orig.GLAccountID;
       line.DebitAmount = orig.CreditAmount; // SWAP
       line.CreditAmount = orig.DebitAmount; // SWAP
       line.Description = `Reversal of line ${orig.LineNumber}`;
-      const ok = await line.Save();
-      if (!ok) {
-        throw new Error(`GenerateReversal: failed to save reversed line ${orig.LineNumber}: ${line.LatestResult?.CompleteMessage ?? 'unknown'}`);
+      for (const origDim of orig.Dimensions) {
+        const dim = await line.CreateDimension(user);
+        dim.DimensionID = origDim.DimensionID;
+        dim.DimensionValueID = origDim.DimensionValueID;
       }
     }
+
+    if (!(await reversal.Save())) {
+      throw new Error(`GenerateReversal: failed to save reversal: ${reversal.LatestResult?.CompleteMessage ?? 'unknown'}`);
+    }
+    await this.BackReferenceReversal(reversal.ID);
+    return reversal;
   }
 
   private async BackReferenceReversal(reversalId: string): Promise<void> {

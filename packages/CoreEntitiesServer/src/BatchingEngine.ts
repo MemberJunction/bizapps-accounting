@@ -51,7 +51,6 @@ import type {
   mjBizAppsAccountingJournalEntryBatchEntity,
   mjBizAppsAccountingJournalEntryEntity,
   mjBizAppsAccountingJournalEntryLineEntity,
-  mjBizAppsAccountingJournalEntryLineDimensionEntity,
 } from '@mj-biz-apps/accounting-entities';
 import { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 
@@ -264,9 +263,9 @@ async function createBatchHeader(
 
 /**
  * Write the netted summary as a BatchSummary JournalEntry: header + one JournalEntryLine per net
- * group (via the encapsulated JournalEntryEntityServer — lines save transactionally with the
- * header), then the dimension tags, then flip it to Batched (BatchID is already set, so the flip
- * is the sanctioned preliminary lock; balanced-on-lock 50001 verifies the summary foots).
+ * group with its dimension tags — assembled in memory and persisted in ONE transactional Save()
+ * via the encapsulated JournalEntryEntityServer — then flip it to Batched (BatchID is already
+ * set, so the flip is the sanctioned preliminary lock; balanced-on-lock 50001 verifies footing).
  */
 async function writeSummaryJournalEntry(
   batch: mjBizAppsAccountingJournalEntryBatchEntity, groups: NetGroup[], contextUser: UserInfo, p: Providers,
@@ -286,11 +285,15 @@ async function writeSummaryJournalEntry(
     if (g.side === 'Debit') line.DebitAmount = g.net;
     else line.CreditAmount = -g.net;
     line.Description = `Netted from ${g.sourceLineCount} source line(s)`;
+    for (const d of g.dims) {
+      const dim = await line.CreateDimension(contextUser);
+      dim.DimensionID = d.DimensionID;
+      dim.DimensionValueID = d.DimensionValueID;
+    }
   }
   if (!(await summary.Save())) {
     throw new Error(`buildBatch: summary JE save failed: ${summary.LatestResult?.CompleteMessage ?? 'unknown'}`);
   }
-  await writeSummaryDimensions(summary, groups, contextUser, p);
 
   // Preliminary lock: Pending→Batched with BatchID set (reversible while the batch stays Pending).
   summary.Status = 'Batched';
@@ -298,25 +301,6 @@ async function writeSummaryJournalEntry(
     throw new Error(`buildBatch: summary JE lock (Pending→Batched) failed — the summary must foot (50001): ${summary.LatestResult?.CompleteMessage ?? 'unknown'}`);
   }
   return summary;
-}
-
-/** Tag each summary line with its group's dimension refs (JournalEntryLineDimension rows). */
-async function writeSummaryDimensions(
-  summary: JournalEntryEntityServer, groups: NetGroup[], contextUser: UserInfo, p: Providers,
-): Promise<void> {
-  const lines = summary.Lines;
-  for (let i = 0; i < groups.length; i++) {
-    const line = lines[i];
-    if (!line) throw new Error(`buildBatch: summary line ${i + 1} missing after save`);
-    for (const d of groups[i].dims) {
-      const dim = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryLineDimensionEntity>(JELD_ENTITY, contextUser);
-      dim.NewRecord();
-      dim.JournalEntryLineID = line.ID;
-      dim.DimensionID = d.DimensionID;
-      dim.DimensionValueID = d.DimensionValueID;
-      if (!(await dim.Save())) throw new Error(`buildBatch: summary dimension save failed: ${dim.LatestResult?.CompleteMessage ?? 'unknown'}`);
-    }
-  }
 }
 
 function summaryTotals(groups: NetGroup[]): { totalDebits: number; totalCredits: number } {
@@ -464,30 +448,21 @@ async function unlockJournalEntries(batchId: string, contextUser: UserInfo, p: P
   }
 }
 
-/** Delete an unlocked (Pending) BatchSummary JE: dimension tags → lines → header. */
+/**
+ * Delete an unlocked (Pending) BatchSummary JE. The encapsulated line server cascades each
+ * line's dimension tags on Delete(), so this only walks lines → header.
+ */
 async function deleteSummaryJournalEntry(summaryJournalEntryId: string, contextUser: UserInfo, p: Providers): Promise<void> {
   const lineRes = await p.rv.RunView<mjBizAppsAccountingJournalEntryLineEntity>(
     { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID='${summaryJournalEntryId}'`, ResultType: 'entity_object', BypassCache: true },
     contextUser,
   );
   for (const line of lineRes.Results ?? []) {
-    await deleteLineDimensions(line.ID, contextUser, p);
     if (!(await line.Delete())) throw new Error(`deleteSummaryJournalEntry: delete line ${line.ID} failed: ${line.LatestResult?.CompleteMessage ?? 'unknown'}`);
   }
   const je = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
   if (!(await je.Load(summaryJournalEntryId))) throw new Error(`deleteSummaryJournalEntry: summary JE ${summaryJournalEntryId} not found`);
   if (!(await je.Delete())) throw new Error(`deleteSummaryJournalEntry: delete summary JE failed: ${je.LatestResult?.CompleteMessage ?? 'unknown'}`);
-}
-
-/** Delete the dimension tags on a summary JE line (FK children — must go before the line). */
-async function deleteLineDimensions(lineId: string, contextUser: UserInfo, p: Providers): Promise<void> {
-  const res = await p.rv.RunView<mjBizAppsAccountingJournalEntryLineDimensionEntity>(
-    { EntityName: JELD_ENTITY, ExtraFilter: `JournalEntryLineID='${lineId}'`, ResultType: 'entity_object', BypassCache: true },
-    contextUser,
-  );
-  for (const d of res.Results ?? []) {
-    if (!(await d.Delete())) throw new Error(`deleteLineDimensions: delete dim ${d.ID} failed: ${d.LatestResult?.CompleteMessage ?? 'unknown'}`);
-  }
 }
 
 // ─── approveBatch ────────────────────────────────────────────────────────────

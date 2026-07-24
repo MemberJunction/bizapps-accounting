@@ -2,15 +2,15 @@
  * AccountingEngine — the server write path (plan §2.2, CH-11; the AIEngine-pattern wrapper over
  * the browser-safe AccountingEngineBase cache).
  *
- * `CreateJournalEntry(draft, user, provider)` runs the 7-stage pipeline:
- *   stages 1-5 (shape → accounts → dimensions → normalize → balance overall + per company) are the
- *   PURE pipeline from @mj-biz-apps/accounting-engine-base, fed by the engine caches;
- *   stage 6 writes the JE header + lines + line-dimensions in ONE TransactionGroup (all rows or
- *   none); stage 7 shapes the typed result. Logical failures NEVER throw (remote-op convention) —
- *   inspect `Success` / `Errors`.
+ * `CreateJournalEntry(draft, user, provider)` runs the pipeline:
+ *   stages 1-5 (shape → accounts → dimensions → normalize → balance) are the PURE pipeline from
+ *   @mj-biz-apps/accounting-engine-base, fed by the engine caches; stage 6 ASSEMBLES the
+ *   encapsulated JournalEntryEntityServer (header + Lines + Dimensions) and persists it with ONE
+ *   transactional Save() — the entity owns numbering, validation, and atomicity (phase 2: the
+ *   entity is THE creation path; this engine is a thin draft-to-entity adapter over it).
+ *   Logical failures NEVER throw (remote-op convention) — inspect `Success` / `Errors`.
  *
- * Numbering rides the existing JournalEntryEntityServer W2 hook (global per-FY sequence, D-SEQ);
- * the DB triggers (50001/50019 balanced-on-lock) remain the un-bypassable floor at lock time.
+ * The DB triggers (50001/50019 balanced-on-lock) remain the un-bypassable floor at lock time.
  *
  * CONNECTS TO:
  *   BASE:    AccountingEngineBase (@mj-biz-apps/accounting-engine-base) — caches + pure pipeline
@@ -27,15 +27,9 @@ import {
   type JournalEntryDraft,
   type NormalizedLine,
 } from '@mj-biz-apps/accounting-engine-base';
-import type {
-  mjBizAppsAccountingJournalEntryEntity,
-  mjBizAppsAccountingJournalEntryLineEntity,
-  mjBizAppsAccountingJournalEntryLineDimensionEntity,
-} from '@mj-biz-apps/accounting-entities';
+import { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
-const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
-const JELD_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Line Dimensions';
 
 export class AccountingEngine extends BaseSingleton<AccountingEngine> {
   public static get Instance(): AccountingEngine {
@@ -82,7 +76,7 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
         return { Success: false, Errors: outcome.errors };
       }
 
-      // Stage 6 — atomic write (one TransactionGroup: all rows or none).
+      // Stage 6 — assemble the encapsulated entity; ONE transactional Save() persists everything.
       return await this.writeJournalEntry(draft, outcome.normalized, contextUser, provider);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -106,11 +100,9 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
       return this.writeFailure(`journal entries are single-company (plan D3); draft lines resolve to ${companies.length} companies`, undefined);
     }
 
-    const tg = await provider.CreateTransactionGroup();
-
-    // Header. NewRecord mints the UUID client-side, so lines/dimensions can reference it pre-submit.
-    // The W2 numbering hook (JournalEntryEntityServer.Save) assigns EntryNumber before the queued save.
-    const je = await provider.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
+    // Assemble the encapsulated entity: header + Lines + Dimensions in memory, then ONE
+    // transactional Save() — the entity owns numbering (W2 hook), validation, and atomicity.
+    const je = await provider.GetEntityObject<JournalEntryEntityServer>(JE_ENTITY, contextUser);
     je.NewRecord();
     je.CompanyID = normalized[0].CompanyID;
     je.EffectiveDate = new Date(draft.EffectiveDate);
@@ -122,42 +114,23 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
       je.LinkedEntityID = draft.LinkedEntityID;
       je.LinkedRecordID = draft.LinkedRecordID;
     }
-    je.TransactionGroup = tg;
-    if (!(await je.Save())) {
-      return this.writeFailure('journal-entry header failed to queue', je.LatestResult?.CompleteMessage);
-    }
 
+    // Pipeline stage 4 already ordered/merged the lines; CreateLine assigns the same 1..n numbers.
     for (const line of normalized) {
-      const l = await provider.GetEntityObject<mjBizAppsAccountingJournalEntryLineEntity>(JEL_ENTITY, contextUser);
-      l.NewRecord();
-      l.JournalEntryID = je.ID;
-      l.LineNumber = line.LineNumber;
+      const l = await je.CreateLine(contextUser);
       l.GLAccountID = line.GLAccountID;
       l.DebitAmount = line.DebitAmount;
       l.CreditAmount = line.CreditAmount;
       l.Description = line.Description;
-      l.TransactionGroup = tg;
-      if (!(await l.Save())) {
-        return this.writeFailure(`line ${line.LineNumber} failed to queue`, l.LatestResult?.CompleteMessage);
-      }
       for (const dim of line.Dimensions) {
-        const d = await provider.GetEntityObject<mjBizAppsAccountingJournalEntryLineDimensionEntity>(JELD_ENTITY, contextUser);
-        d.NewRecord();
-        d.JournalEntryLineID = l.ID;
+        const d = await l.CreateDimension(contextUser);
         d.DimensionID = dim.DimensionID;
         d.DimensionValueID = dim.DimensionValueID;
-        d.TransactionGroup = tg;
-        if (!(await d.Save())) {
-          return this.writeFailure(`line ${line.LineNumber} dimension failed to queue`, d.LatestResult?.CompleteMessage);
-        }
       }
     }
 
-    const committed = await tg.Submit();
-    if (!committed) {
-      // Full rollback happened inside the transaction — surface the first per-entity message.
-      const detail = je.LatestResult?.CompleteMessage ?? 'transaction group rolled back';
-      return this.writeFailure('atomic write rolled back', detail);
+    if (!(await je.Save())) {
+      return this.writeFailure('journal entry save failed (rolled back)', je.LatestResult?.CompleteMessage);
     }
 
     return {
