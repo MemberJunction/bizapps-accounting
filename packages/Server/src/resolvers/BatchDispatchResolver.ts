@@ -26,9 +26,9 @@
 // a direct dependency of this package, so we import the decorators from the server barrel.
 import {
   Resolver, Mutation, Query, Arg, Ctx, ObjectType, Field, ID, Int, Float,
-  AppContext, ResolverBase,
+  AppContext, ResolverBase, GetReadOnlyProvider, GetReadWriteProvider,
 } from '@memberjunction/server';
-import { LogError, RunView, UserInfo } from '@memberjunction/core';
+import { IMetadataProvider, IRunViewProvider, LogError, RunView, UserInfo } from '@memberjunction/core';
 import {
   buildBatch,
   approveBatch,
@@ -94,14 +94,15 @@ export class BatchDispatchResolver extends ResolverBase {
   @Mutation(() => BuildJEBatchResult)
   async BuildJEBatch(
     @Arg('targetSystem', () => String) targetSystem: string,
-    @Ctx() { userPayload }: AppContext,
+    @Ctx() { userPayload, providers }: AppContext,
   ): Promise<BuildJEBatchResult> {
     const empty = { Success: false, BatchIDs: [], SummaryLineCount: 0, TotalDebits: 0, TotalCredits: 0, JECount: 0, CompanyCount: 0, NothingToBatch: false };
     try {
       const user = this.GetUserFromPayload(userPayload);
       if (!user) return { ...empty, ErrorMessage: 'No authenticated user.' };
+      const provider: IMetadataProvider = GetReadWriteProvider(providers);
 
-      const companyIds = await this.companiesWithPendingJEs(user);
+      const companyIds = await this.companiesWithPendingJEs(user, provider);
       const results = [];
       for (const companyId of companyIds) {
         const result = await buildBatch(
@@ -109,7 +110,8 @@ export class BatchDispatchResolver extends ResolverBase {
           targetSystem as BatchTargetSystem,
           user.ID,
           user,
-          new TasksAppApprovalGate(),
+          provider,
+          new TasksAppApprovalGate(provider),
         );
         if (result) results.push(result);
       }
@@ -134,8 +136,8 @@ export class BatchDispatchResolver extends ResolverBase {
   }
 
   /** Distinct companies that currently have unbatched Pending JEs (BatchSummary JEs excluded by EntryType). */
-  private async companiesWithPendingJEs(user: UserInfo): Promise<string[]> {
-    const rv = new RunView();
+  private async companiesWithPendingJEs(user: UserInfo, provider: IMetadataProvider): Promise<string[]> {
+    const rv = new RunView(provider as unknown as IRunViewProvider);
     const res = await rv.RunView<{ CompanyID: string }>(
       { EntityName: JE_ENTITY, ExtraFilter: `Status='Pending' AND EntryType<>'BatchSummary'`, Fields: ['CompanyID'], ResultType: 'simple', BypassCache: true },
       user,
@@ -147,13 +149,14 @@ export class BatchDispatchResolver extends ResolverBase {
   @Mutation(() => DispatchJEBatchResult)
   async DispatchJEBatch(
     @Arg('batchID', () => ID) batchID: string,
-    @Ctx() { userPayload }: AppContext,
+    @Ctx() { userPayload, providers }: AppContext,
   ): Promise<DispatchJEBatchResult> {
     try {
       const user = this.GetUserFromPayload(userPayload);
       if (!user) return { Success: false, ErrorMessage: 'No authenticated user.' };
+      const provider: IMetadataProvider = GetReadWriteProvider(providers);
 
-      const batch = await sendBatch(batchID, user, { gate: new TasksAppApprovalGate(), poster: mockErpPoster });
+      const batch = await sendBatch(batchID, user, { gate: new TasksAppApprovalGate(provider), poster: mockErpPoster, provider });
       return { Success: true, Status: batch.Status, ExternalBatchRef: batch.ExternalBatchRef ?? undefined };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -168,7 +171,7 @@ export class BatchDispatchResolver extends ResolverBase {
     @Arg('batchID', () => ID) batchID: string,
     @Arg('decision', () => String) decision: string,
     @Arg('notes', () => String, { nullable: true }) notes: string | undefined,
-    @Ctx() { userPayload }: AppContext,
+    @Ctx() { userPayload, providers }: AppContext,
   ): Promise<RecordJEBatchDecisionResult> {
     try {
       const user = this.GetUserFromPayload(userPayload);
@@ -176,17 +179,18 @@ export class BatchDispatchResolver extends ResolverBase {
       if (!VALID_DECISIONS.has(decision)) {
         return { Success: false, ErrorMessage: `Invalid decision '${decision}'. Expected Approved | ApprovedWithConditions | Rejected.` };
       }
+      const provider: IMetadataProvider = GetReadWriteProvider(providers);
 
-      const personId = await this.resolveCurrentPersonId(user);
-      await new TasksAppApprovalGate().recordDecision(batchID, decision as BatchDecisionOutcome, personId, notes, user);
+      const personId = await this.resolveCurrentPersonId(user, provider);
+      await new TasksAppApprovalGate(provider).recordDecision(batchID, decision as BatchDecisionOutcome, personId, notes, user);
       // An approval decision also flips the batch Pending→Approved (content freeze + dispatchable state).
       if (decision === 'Approved' || decision === 'ApprovedWithConditions') {
-        await approveBatch(batchID, user.ID, user);
+        await approveBatch(batchID, user.ID, user, provider);
       }
       // A rejection REVERSES the (still-preliminary) lock: the batch is Cancelled and its journal entries
       // return to the candidate pool (task #12 — reject now has a visible financial effect, not a dead no-op).
       if (decision === 'Rejected') {
-        await cancelBatch(batchID, user);
+        await cancelBatch(batchID, user, provider);
       }
       return { Success: true };
     } catch (e) {
@@ -205,14 +209,15 @@ export class BatchDispatchResolver extends ResolverBase {
   async RegenerateJEBatch(
     @Arg('batchID', () => ID) batchID: string,
     @Arg('targetSystem', () => String) targetSystem: string,
-    @Ctx() { userPayload }: AppContext,
+    @Ctx() { userPayload, providers }: AppContext,
   ): Promise<BuildJEBatchResult> {
     const empty = { Success: false, BatchIDs: [], SummaryLineCount: 0, TotalDebits: 0, TotalCredits: 0, JECount: 0, CompanyCount: 0, NothingToBatch: false };
     try {
       const user = this.GetUserFromPayload(userPayload);
       if (!user) return { ...empty, ErrorMessage: 'No authenticated user.' };
+      const provider: IMetadataProvider = GetReadWriteProvider(providers);
 
-      const result = await regenerateBatch(batchID, targetSystem as BatchTargetSystem, user);
+      const result = await regenerateBatch(batchID, targetSystem as BatchTargetSystem, user, provider);
       return {
         Success: true,
         NothingToBatch: result.jeCount === 0,
@@ -235,15 +240,17 @@ export class BatchDispatchResolver extends ResolverBase {
   @Query(() => JEBatchApprovalState)
   async JEBatchApprovalState(
     @Arg('batchID', () => ID) batchID: string,
-    @Ctx() { userPayload }: AppContext,
+    @Ctx() { userPayload, providers }: AppContext,
   ): Promise<JEBatchApprovalState> {
     try {
       const user = this.GetUserFromPayload(userPayload);
       if (!user) return { Success: false, Approved: false, Reason: 'No authenticated user.' };
+      // Read-only probe — prefer the read-only provider when the deployment has one.
+      const provider: IMetadataProvider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
 
       // assertApproved throws when not approved — turn that into a boolean for the UI.
       try {
-        await new TasksAppApprovalGate().assertApproved(batchID, user);
+        await new TasksAppApprovalGate(provider).assertApproved(batchID, user);
         return { Success: true, Approved: true };
       } catch (notApproved) {
         const reason = notApproved instanceof Error ? notApproved.message : String(notApproved);
@@ -263,8 +270,8 @@ export class BatchDispatchResolver extends ResolverBase {
    * recorded decision is attributed to the right approver Person. Returns undefined when no Person is
    * linked (the gate / TaskOrchestrationService.RecordDecision treats DecidedByPersonID as optional).
    */
-  private async resolveCurrentPersonId(user: UserInfo): Promise<string | undefined> {
-    const rv = new RunView();
+  private async resolveCurrentPersonId(user: UserInfo, provider: IMetadataProvider): Promise<string | undefined> {
+    const rv = new RunView(provider as unknown as IRunViewProvider);
     const res = await rv.RunView<{ ID: string }>(
       { EntityName: PERSON_ENTITY, ExtraFilter: `LinkedUserID='${user.ID}'`, Fields: ['ID'], MaxRows: 1, ResultType: 'simple', BypassCache: true },
       user,

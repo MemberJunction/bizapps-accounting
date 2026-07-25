@@ -126,7 +126,7 @@ export class ChartOfAccountsDashboardComponent extends BaseDashboard {
   private async loadAll(): Promise<void> {
     // GL Accounts + Company Profiles come from the shared reactive reference engine (AccountingEngineBase),
     // not a per-page RunView — so every page shares one cache and edits/creates propagate automatically.
-    await AccountingEngineBase.Instance.Config(false, this.ProviderToUse.CurrentUser, this.ProviderToUse);
+    await AccountingEngineBase.Instance.ConfigEx({ contextUser: this.ProviderToUse.CurrentUser, provider: this.ProviderToUse });
     this.loadAccountTypeOptions();
     this.hydrateFromEngine();
     // Default the company scope to the first company (single, clean chart) — else show all.

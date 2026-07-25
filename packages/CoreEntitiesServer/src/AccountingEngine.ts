@@ -2,15 +2,15 @@
  * AccountingEngine — the server write path (plan §2.2, CH-11; the AIEngine-pattern wrapper over
  * the browser-safe AccountingEngineBase cache).
  *
- * `CreateJournalEntry(draft, user, provider)` runs the 7-stage pipeline:
- *   stages 1-5 (shape → accounts → dimensions → normalize → balance overall + per company) are the
- *   PURE pipeline from @mj-biz-apps/accounting-engine-base, fed by the engine caches;
- *   stage 6 writes the JE header + lines + line-dimensions in ONE TransactionGroup (all rows or
- *   none); stage 7 shapes the typed result. Logical failures NEVER throw (remote-op convention) —
- *   inspect `Success` / `Errors`.
+ * `CreateJournalEntry(draft, user, provider)` runs the pipeline:
+ *   stages 1-5 (shape → accounts → dimensions → normalize → balance) are the PURE pipeline from
+ *   @mj-biz-apps/accounting-engine-base, fed by the engine caches; stage 6 ASSEMBLES the
+ *   encapsulated JournalEntryEntityServer (header + Lines + Dimensions) and persists it with ONE
+ *   transactional Save() — the entity owns numbering, validation, and atomicity (phase 2: the
+ *   entity is THE creation path; this engine is a thin draft-to-entity adapter over it).
+ *   Logical failures NEVER throw (remote-op convention) — inspect `Success` / `Errors`.
  *
- * Numbering rides the existing JournalEntryEntityServer W2 hook (global per-FY sequence, D-SEQ);
- * the DB triggers (50001/50019 balanced-on-lock) remain the un-bypassable floor at lock time.
+ * The DB triggers (50001/50019 balanced-on-lock) remain the un-bypassable floor at lock time.
  *
  * CONNECTS TO:
  *   BASE:    AccountingEngineBase (@mj-biz-apps/accounting-engine-base) — caches + pure pipeline
@@ -18,24 +18,21 @@
  *   ENTITY:  'MJ_BizApps_Accounting: Journal Entries' (+ Lines, Line Dimensions)
  *   DOC:     plans/accounting-engine-plan.md §2.2
  */
-import { IMetadataProvider, LogError, UserInfo } from '@memberjunction/core';
+import { DatabaseProviderBase, IMetadataProvider, LogError, UserInfo } from '@memberjunction/core';
 import { BaseSingleton } from '@memberjunction/global';
 import {
   AccountingEngineBase,
   runDraftPipeline,
+  type CreateJournalEntriesInput,
+  type CreateJournalEntriesResult,
   type CreateJournalEntryResult,
+  type JEValidationError,
   type JournalEntryDraft,
   type NormalizedLine,
 } from '@mj-biz-apps/accounting-engine-base';
-import type {
-  mjBizAppsAccountingJournalEntryEntity,
-  mjBizAppsAccountingJournalEntryLineEntity,
-  mjBizAppsAccountingJournalEntryLineDimensionEntity,
-} from '@mj-biz-apps/accounting-entities';
+import { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
-const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
-const JELD_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Line Dimensions';
 
 export class AccountingEngine extends BaseSingleton<AccountingEngine> {
   public static get Instance(): AccountingEngine {
@@ -82,11 +79,72 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
         return { Success: false, Errors: outcome.errors };
       }
 
-      // Stage 6 — atomic write (one TransactionGroup: all rows or none).
+      // Stage 6 — assemble the encapsulated entity; ONE transactional Save() persists everything.
       return await this.writeJournalEntry(draft, outcome.normalized, contextUser, provider);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       LogError(`AccountingEngine.CreateJournalEntry failed: ${msg}`);
+      return { Success: false, Errors: [{ Code: 'INTERNAL_ERROR', Message: msg }] };
+    }
+  }
+
+  /**
+   * The SET pipeline ('Accounting.CreateJournalEntries') — a MULTI-JE unit of work: an order
+   * Confirm books one JE per order line and submits ALL of its drafts here. Every draft
+   * validates first (draft-scoped errors carry DraftIndex; nothing writes on any failure),
+   * then every JE writes inside ONE provider transaction — the encapsulated entity Saves nest
+   * as savepoints — so it's all entries or none. A caller composing a larger unit of work
+   * (order row + JE set) opens a transaction on ITS provider first; this one nests inside it.
+   */
+  public async CreateJournalEntries(
+    input: CreateJournalEntriesInput,
+    contextUser: UserInfo,
+    provider: IMetadataProvider,
+  ): Promise<CreateJournalEntriesResult> {
+    try {
+      const drafts = input?.Drafts ?? [];
+      if (drafts.length === 0) {
+        return { Success: false, Errors: [{ Code: 'MALFORMED_DRAFT', Message: 'Drafts must contain at least one journal-entry draft.' }] };
+      }
+
+      await this.Config(false, contextUser, provider);
+      let outcomes = drafts.map(d => runDraftPipeline(d, this.Base.CreatePipelineLookups()));
+      // One bounded staleness refresh for the whole set (same rationale as the single op).
+      const stalenessCodes = new Set(['ACCOUNT_UNKNOWN', 'ACCOUNT_INACTIVE', 'DIMENSION_UNKNOWN', 'DIMENSION_VALUE_UNKNOWN']);
+      if (outcomes.some(o => o.errors.some(e => stalenessCodes.has(e.Code)))) {
+        await this.Config(true, contextUser, provider);
+        outcomes = drafts.map(d => runDraftPipeline(d, this.Base.CreatePipelineLookups()));
+      }
+      const setErrors: JEValidationError[] = outcomes.flatMap((o, i) => o.errors.map(e => ({ ...e, DraftIndex: i })));
+      if (setErrors.length > 0) {
+        return { Success: false, Errors: setErrors };
+      }
+
+      // All drafts valid — write them all inside ONE outer transaction (entity Saves nest).
+      const dbProvider = provider as unknown as DatabaseProviderBase;
+      await dbProvider.BeginTransaction();
+      try {
+        const results: CreateJournalEntryResult[] = [];
+        for (let i = 0; i < drafts.length; i++) {
+          const result = await this.writeJournalEntry(drafts[i], outcomes[i].normalized, contextUser, provider);
+          if (!result.Success) {
+            await dbProvider.RollbackTransaction();
+            return {
+              Success: false,
+              Errors: (result.Errors ?? [{ Code: 'INTERNAL_ERROR', Message: 'draft write failed' }]).map(e => ({ ...e, DraftIndex: i })),
+            };
+          }
+          results.push(result);
+        }
+        await dbProvider.CommitTransaction();
+        return { Success: true, Results: results };
+      } catch (e) {
+        try { await dbProvider.RollbackTransaction(); } catch { /* rollback best-effort */ }
+        throw e;
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      LogError(`AccountingEngine.CreateJournalEntries failed: ${msg}`);
       return { Success: false, Errors: [{ Code: 'INTERNAL_ERROR', Message: msg }] };
     }
   }
@@ -106,11 +164,9 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
       return this.writeFailure(`journal entries are single-company (plan D3); draft lines resolve to ${companies.length} companies`, undefined);
     }
 
-    const tg = await provider.CreateTransactionGroup();
-
-    // Header. NewRecord mints the UUID client-side, so lines/dimensions can reference it pre-submit.
-    // The W2 numbering hook (JournalEntryEntityServer.Save) assigns EntryNumber before the queued save.
-    const je = await provider.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
+    // Assemble the encapsulated entity: header + Lines + Dimensions in memory, then ONE
+    // transactional Save() — the entity owns numbering (W2 hook), validation, and atomicity.
+    const je = await provider.GetEntityObject<JournalEntryEntityServer>(JE_ENTITY, contextUser);
     je.NewRecord();
     je.CompanyID = normalized[0].CompanyID;
     je.EffectiveDate = new Date(draft.EffectiveDate);
@@ -122,42 +178,23 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
       je.LinkedEntityID = draft.LinkedEntityID;
       je.LinkedRecordID = draft.LinkedRecordID;
     }
-    je.TransactionGroup = tg;
-    if (!(await je.Save())) {
-      return this.writeFailure('journal-entry header failed to queue', je.LatestResult?.CompleteMessage);
-    }
 
+    // Pipeline stage 4 already ordered/merged the lines; CreateLine assigns the same 1..n numbers.
     for (const line of normalized) {
-      const l = await provider.GetEntityObject<mjBizAppsAccountingJournalEntryLineEntity>(JEL_ENTITY, contextUser);
-      l.NewRecord();
-      l.JournalEntryID = je.ID;
-      l.LineNumber = line.LineNumber;
+      const l = await je.CreateLine(contextUser);
       l.GLAccountID = line.GLAccountID;
       l.DebitAmount = line.DebitAmount;
       l.CreditAmount = line.CreditAmount;
       l.Description = line.Description;
-      l.TransactionGroup = tg;
-      if (!(await l.Save())) {
-        return this.writeFailure(`line ${line.LineNumber} failed to queue`, l.LatestResult?.CompleteMessage);
-      }
       for (const dim of line.Dimensions) {
-        const d = await provider.GetEntityObject<mjBizAppsAccountingJournalEntryLineDimensionEntity>(JELD_ENTITY, contextUser);
-        d.NewRecord();
-        d.JournalEntryLineID = l.ID;
+        const d = await l.CreateDimension(contextUser);
         d.DimensionID = dim.DimensionID;
         d.DimensionValueID = dim.DimensionValueID;
-        d.TransactionGroup = tg;
-        if (!(await d.Save())) {
-          return this.writeFailure(`line ${line.LineNumber} dimension failed to queue`, d.LatestResult?.CompleteMessage);
-        }
       }
     }
 
-    const committed = await tg.Submit();
-    if (!committed) {
-      // Full rollback happened inside the transaction — surface the first per-entity message.
-      const detail = je.LatestResult?.CompleteMessage ?? 'transaction group rolled back';
-      return this.writeFailure('atomic write rolled back', detail);
+    if (!(await je.Save())) {
+      return this.writeFailure('journal entry save failed (rolled back)', je.LatestResult?.CompleteMessage);
     }
 
     return {

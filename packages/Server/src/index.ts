@@ -13,7 +13,7 @@ import '@mj-biz-apps/accounting-actions';
 // Server-side entity subclasses — must come after accounting-entities so
 // @RegisterClass auto-increment gives these higher priority
 import '@mj-biz-apps/accounting-core-entities-server';
-import { LoadCreateJournalEntryOperation } from '@mj-biz-apps/accounting-core-entities-server';
+import { LoadCreateJournalEntriesOperation, LoadCreateJournalEntryOperation } from '@mj-biz-apps/accounting-core-entities-server';
 
 // Import generated GraphQL resolvers
 import './generated/generated.js';
@@ -55,4 +55,5 @@ export function LoadBizAppsAccountingServer(): void {
     // Static imports above ensure all classes are registered.
     // This function exists as the startupExport entry point for DynamicPackageLoader.
     LoadCreateJournalEntryOperation(); // tree-shaking anchor for 'Accounting.CreateJournalEntry'
+    LoadCreateJournalEntriesOperation(); // tree-shaking anchor for 'Accounting.CreateJournalEntries' (the SET op)
 }

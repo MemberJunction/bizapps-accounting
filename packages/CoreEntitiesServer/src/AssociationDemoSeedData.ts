@@ -38,7 +38,7 @@
  *   PLAN:     §Block 4 (MH: AssociationDemoSeedData)
  */
 
-import { Metadata, RunView, UserInfo } from '@memberjunction/core';
+import { IMetadataProvider, IRunViewProvider, Metadata, RunView, UserInfo } from '@memberjunction/core';
 import {
   mjBizAppsAccountingAccountingCompanyProfileEntity,
   mjBizAppsAccountingGLAccountEntity,
@@ -143,7 +143,7 @@ interface LineSpec {
  * duplicating (everything is keyed by the static UUIDs above). Returns a structured report of what
  * was created vs. reused.
  */
-export async function seedAssociationDemo(contextUser: UserInfo): Promise<DemoSeedReport> {
+export async function seedAssociationDemo(contextUser: UserInfo, provider: IMetadataProvider): Promise<DemoSeedReport> {
   const report: DemoSeedReport = {
     Companies: [],
     Customers: [],
@@ -173,10 +173,10 @@ export async function seedAssociationDemo(contextUser: UserInfo): Promise<DemoSe
   await ensureGLMapping(contextUser, co3);
 
   // 4. The transactional demos. Each is guarded by a sentinel JE id so a re-run posts nothing twice.
-  await seedArActivity(contextUser, co1, report);
-  await seedDeferredRevenue(contextUser, co1, report);
+  await seedArActivity(contextUser, co1, report, provider);
+  await seedDeferredRevenue(contextUser, co1, report, provider);
   await seedSalesTax(contextUser, co1, report);
-  await seedIntercompany(contextUser, co2, co3, report);
+  await seedIntercompany(contextUser, co2, co3, report, provider);
 
   return report;
 }
@@ -335,8 +335,8 @@ async function makeJE(
 }
 
 /** Build + approve + dispatch one SINGLE-COMPANY batch (D7) per company with Pending JEs → they become GLPosted. */
-async function postPending(contextUser: UserInfo, report: DemoSeedReport): Promise<void> {
-  const rv = new RunView();
+async function postPending(contextUser: UserInfo, report: DemoSeedReport, provider: IMetadataProvider): Promise<void> {
+  const rv = new RunView(provider as unknown as IRunViewProvider);
   const res = await rv.RunView<{ CompanyID: string }>(
     { EntityName: JE_ENTITY, ExtraFilter: `Status='Pending' AND EntryType<>'BatchSummary'`, Fields: ['CompanyID'], ResultType: 'simple', BypassCache: true },
     contextUser,
@@ -344,10 +344,10 @@ async function postPending(contextUser: UserInfo, report: DemoSeedReport): Promi
   const companyIds = [...new Set((res.Results ?? []).map(r => r.CompanyID))];
   if (companyIds.length === 0) throw new Error('postPending: no pending JEs to batch.');
   for (const companyId of companyIds) {
-    const built = await buildBatch(companyId, TARGET_SYSTEM, contextUser.ID, contextUser, AutoApproveGate);
+    const built = await buildBatch(companyId, TARGET_SYSTEM, contextUser.ID, contextUser, provider, AutoApproveGate);
     if (built === null) throw new Error(`postPending: buildBatch returned null for company ${companyId} (no pending JEs or all netted to zero).`);
-    await approveBatch(built.batchId, contextUser.ID, contextUser);
-    const batch = await sendBatch(built.batchId, contextUser, { gate: AutoApproveGate });
+    await approveBatch(built.batchId, contextUser.ID, contextUser, provider);
+    const batch = await sendBatch(built.batchId, contextUser, { gate: AutoApproveGate, provider });
     if (batch.Status !== 'Posted') throw new Error(`postPending: batch should be Posted, got ${batch.Status}`);
     report.BatchesPosted += 1;
   }
@@ -357,12 +357,12 @@ async function postPending(contextUser: UserInfo, report: DemoSeedReport): Promi
 // Open-balance demo lives in monthPeriods[0]; aging spread in monthPeriods[1]. Each period posts
 // once. A sentinel JE id guards the whole phase per period so re-runs do nothing.
 
-async function seedArActivity(contextUser: UserInfo, ctx: CompanyContext, report: DemoSeedReport): Promise<void> {
-  await seedArOpenBalances(contextUser, ctx, report);
-  await seedArAging(contextUser, ctx, report);
+async function seedArActivity(contextUser: UserInfo, ctx: CompanyContext, report: DemoSeedReport, provider: IMetadataProvider): Promise<void> {
+  await seedArOpenBalances(contextUser, ctx, report, provider);
+  await seedArAging(contextUser, ctx, report, provider);
 }
 
-async function seedArOpenBalances(contextUser: UserInfo, ctx: CompanyContext, report: DemoSeedReport): Promise<void> {
+async function seedArOpenBalances(contextUser: UserInfo, ctx: CompanyContext, report: DemoSeedReport, provider: IMetadataProvider): Promise<void> {
   if (await jeExists(contextUser, JE_AR_PARTIAL_CHARGE)) {
     report.JournalEntriesSkipped += 5;
     report.Notes.push('AR open-balance JEs already present — skipped (idempotent).');
@@ -376,11 +376,11 @@ async function seedArOpenBalances(contextUser: UserInfo, ctx: CompanyContext, re
   // Initech: charge 400 + pay 400 → net 0 → absent from vw_AROpenByCustomer (HAVING).
   await makeJE(contextUser, ctx, JE_AR_SETTLED_CHARGE, 'OrderBooking', [{ glCode: GL_AR, debit: 400, counterparty: CUST_SETTLED }, { glCode: GL_REVENUE, credit: 400 }]);
   await makeJE(contextUser, ctx, JE_AR_SETTLED_PAY, 'PaymentReceipt', [{ glCode: GL_CASH, debit: 400 }, { glCode: GL_AR, credit: 400, counterparty: CUST_SETTLED }]);
-  await postPending(contextUser, report);
+  await postPending(contextUser, report, provider);
   report.JournalEntriesCreated += 5;
 }
 
-async function seedArAging(contextUser: UserInfo, ctx: CompanyContext, report: DemoSeedReport): Promise<void> {
+async function seedArAging(contextUser: UserInfo, ctx: CompanyContext, report: DemoSeedReport, provider: IMetadataProvider): Promise<void> {
   if (await jeExists(contextUser, JE_AGE_15)) {
     report.JournalEntriesSkipped += 4;
     report.Notes.push('AR aging JEs already present — skipped (idempotent).');
@@ -391,7 +391,7 @@ async function seedArAging(contextUser: UserInfo, ctx: CompanyContext, report: D
   await makeJE(contextUser, ctx, JE_AGE_45, 'OrderBooking', [{ glCode: GL_AR, debit: 200, counterparty: CUST_AGING }, { glCode: GL_REVENUE, credit: 200 }], { effectiveDate: daysAgoUtc(45) });
   await makeJE(contextUser, ctx, JE_AGE_75, 'OrderBooking', [{ glCode: GL_AR, debit: 300, counterparty: CUST_AGING }, { glCode: GL_REVENUE, credit: 300 }], { effectiveDate: daysAgoUtc(75) });
   await makeJE(contextUser, ctx, JE_AGE_120, 'OrderBooking', [{ glCode: GL_AR, debit: 400, counterparty: CUST_AGING }, { glCode: GL_REVENUE, credit: 400 }], { effectiveDate: daysAgoUtc(120) });
-  await postPending(contextUser, report);
+  await postPending(contextUser, report, provider);
   report.JournalEntriesCreated += 4;
 }
 
@@ -399,7 +399,7 @@ async function seedArAging(contextUser: UserInfo, ctx: CompanyContext, report: D
 // Defer 300 ~60 days ago (Cr DefRev), release 120 ~30 days ago (Dr DefRev) — the view is
 // month-grained on EffectiveDate, so the two land in different months.
 
-async function seedDeferredRevenue(contextUser: UserInfo, ctx: CompanyContext, report: DemoSeedReport): Promise<void> {
+async function seedDeferredRevenue(contextUser: UserInfo, ctx: CompanyContext, report: DemoSeedReport, provider: IMetadataProvider): Promise<void> {
   if (await jeExists(contextUser, JE_DEFER)) {
     report.JournalEntriesSkipped += 2;
     report.Notes.push('Deferred-revenue waterfall JEs already present — skipped (idempotent).');
@@ -407,10 +407,10 @@ async function seedDeferredRevenue(contextUser: UserInfo, ctx: CompanyContext, r
   }
   // Defer: Dr Cash 300 / Cr DefRev 300 (~60 days ago).
   await makeJE(contextUser, ctx, JE_DEFER, 'RevenueRecognition', [{ glCode: GL_CASH, debit: 300 }, { glCode: GL_DEFERRED, credit: 300 }], { effectiveDate: daysAgoUtc(60) });
-  await postPending(contextUser, report);
+  await postPending(contextUser, report, provider);
   // Release: Dr DefRev 120 / Cr Revenue 120 (~30 days ago).
   await makeJE(contextUser, ctx, JE_RELEASE, 'RevenueRecognition', [{ glCode: GL_DEFERRED, debit: 120 }, { glCode: GL_REVENUE, credit: 120 }], { effectiveDate: daysAgoUtc(30) });
-  await postPending(contextUser, report);
+  await postPending(contextUser, report, provider);
   report.JournalEntriesCreated += 2;
 }
 
@@ -493,6 +493,7 @@ async function seedIntercompany(
   co2: CompanyContext,
   co3: CompanyContext,
   report: DemoSeedReport,
+  provider: IMetadataProvider,
 ): Promise<void> {
   if (await jeExists(contextUser, JE_IC_CO2)) {
     report.JournalEntriesSkipped += 2;
@@ -501,10 +502,10 @@ async function seedIntercompany(
   }
   // CO2 leg: Dr AR 250 (counterparty = CO3's customer-ish org) / Cr Rev 250.
   await makeJE(contextUser, co2, JE_IC_CO2, 'IntercompanyFlow', [{ glCode: GL_AR, debit: 250, counterparty: CUST_OPEN }, { glCode: GL_REVENUE, credit: 250 }], { intercompanyFlowId: IC_FLOW });
-  await postPending(contextUser, report);
+  await postPending(contextUser, report, provider);
   // CO3 leg: Dr Cash 250 / Cr AR 250 (counterparty).
   await makeJE(contextUser, co3, JE_IC_CO3, 'IntercompanyFlow', [{ glCode: GL_CASH, debit: 250 }, { glCode: GL_AR, credit: 250, counterparty: CUST_PARTIAL }], { intercompanyFlowId: IC_FLOW });
-  await postPending(contextUser, report);
+  await postPending(contextUser, report, provider);
   report.JournalEntriesCreated += 2;
 }
 

@@ -7,9 +7,13 @@
  * intentionally kept at DB level because they require atomic
  * HOLDLOCK+UPDLOCK read-modify-write semantics that don't translate to
  * app-level code under concurrency. Everything else moves to TypeScript.
+ *
+ * PROVIDER: injected, required — no global fallback. Callers are the entity
+ * servers, which pass their own ProviderToUse (so the sproc call rides the
+ * same connection context as the save it numbers).
  */
 
-import { LogError, Metadata, UserInfo } from '@memberjunction/core';
+import { IMetadataProvider, UserInfo } from '@memberjunction/core';
 import { SQLServerDataProvider } from '@memberjunction/sqlserver-dataprovider';
 
 const ACCOUNTING_SCHEMA = '__mj_BizAppsAccounting';
@@ -23,8 +27,9 @@ export async function getNextJournalEntryNumber(
   companyId: string,
   fiscalYear: number,
   contextUser: UserInfo,
+  provider: IMetadataProvider,
 ): Promise<string> {
-  const provider = getSqlServerProvider();
+  const sqlProvider = getSqlServerProvider(provider);
   const sql = `
     DECLARE @entryNumber NVARCHAR(40);
     EXEC ${ACCOUNTING_SCHEMA}.spAssignNextJournalEntryNumber
@@ -36,7 +41,7 @@ export async function getNextJournalEntryNumber(
   // ExecuteSQL binds an OBJECT of parameters BY NAME (@CompanyID / @FiscalYear). An array
   // is treated as positional (p0) — which would neither match the named @-params in the SQL
   // above nor bind correctly (it would try to bind the element object itself). Pass an object.
-  const rows = await provider.ExecuteSQL(
+  const rows = await sqlProvider.ExecuteSQL(
     sql,
     { CompanyID: companyId, FiscalYear: fiscalYear },
     { isMutation: true, description: 'spAssignNextJournalEntryNumber' },
@@ -57,15 +62,16 @@ export async function getNextJournalEntryNumber(
  */
 export async function getNextBatchNumber(
   contextUser: UserInfo,
+  provider: IMetadataProvider,
 ): Promise<string> {
-  const provider = getSqlServerProvider();
+  const sqlProvider = getSqlServerProvider(provider);
   const sql = `
     DECLARE @batchNumber NVARCHAR(40);
     EXEC ${ACCOUNTING_SCHEMA}.spAssignNextBatchNumber
         @BatchNumber  = @batchNumber OUTPUT;
     SELECT @batchNumber AS BatchNumber;
   `;
-  const rows = await provider.ExecuteSQL(
+  const rows = await sqlProvider.ExecuteSQL(
     sql,
     {},
     { isMutation: true, description: 'spAssignNextBatchNumber' },
@@ -80,11 +86,9 @@ export async function getNextBatchNumber(
   return value;
 }
 
-function getSqlServerProvider(): SQLServerDataProvider {
-  const provider = Metadata.Provider;
+function getSqlServerProvider(provider: IMetadataProvider): SQLServerDataProvider {
   if (!provider) {
-    LogError('SequenceService: Metadata.Provider is not initialized');
-    throw new Error('Metadata.Provider not initialized');
+    throw new Error('SequenceService: an IMetadataProvider must be injected — there is no global fallback');
   }
   return provider as SQLServerDataProvider;
 }
