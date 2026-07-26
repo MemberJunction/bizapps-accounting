@@ -17,20 +17,33 @@ import sql from 'mssql';
  * trgUpdate*). 2026-07-06 rework: trg_JournalEntry_PeriodClose + trg_AccountingPeriod_NoOverlap
  * were RETIRED with the AccountingPeriod removal (the ERP owns periods — engine-meeting CH-1);
  * BalancedOnLock/RecheckParentBalance now ALSO enforce AM-4 per-company balance (THROW 50019/50022).
+ *
+ * CORRECTED 2026-07-26. This list had drifted badly from the schema and was checked against the
+ * live DB: it named FIVE triggers that no longer exist (trg_JEBLI_Immutability,
+ * trg_JEBatch_SummaryReconciles, trg_JEBLDimension_Immutability, trg_SJE_Immutability,
+ * trg_SJELI_Immutability — retired with the batch-line-item and scheduled-JE tables in the
+ * 2026-07-22 baseline rewrite, one of them merely RENAMED to SummaryCoherence) while omitting
+ * THREE that do (trg_JEL_CompanyMatch, trg_JE_CompanyMatch, trg_JEBatch_SummaryCoherence).
+ *
+ * That inverted the guard's purpose twice over: it would abort every live harness at bootstrap
+ * with a false "Missing (5/12)", and the single-company enforcement triggers it failed to name
+ * could have been dropped or disabled without this noticing.
  */
 export const INVARIANT_TRIGGERS = [
   'trg_JournalEntry_BalancedOnLock',
   'trg_JEL_RecheckParentBalance',
   'trg_JournalEntry_Immutability',
   'trg_JEL_Immutability',
+  'trg_JEL_CompanyMatch',
+  'trg_JE_CompanyMatch',
   'trg_JEBatch_Immutability',
+  'trg_JEBatch_SummaryCoherence',
   'trg_ACP_NoChains',
   'trg_JE_ReversalConsistency',
-  'trg_JEBLI_Immutability',
-  'trg_JEBatch_SummaryReconciles',
-  'trg_JEBLDimension_Immutability',
-  'trg_SJE_Immutability',
-  'trg_SJELI_Immutability',
+  // Intercompany pair integrity (BA-D26). Belongs in this floor for the same reason as the rest:
+  // a mis-oriented pair still BALANCES, so nothing downstream would report it.
+  'trg_IAM_AccountIntegrity',
+  'trg_IAMD_DimensionValueBelongs',
 ] as const;
 
 /**

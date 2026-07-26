@@ -10,11 +10,11 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Details Section -->
+    <!-- Journal Entry Details Section -->
     <mj-collapsible-panel
-        SectionKey="details"
-        SectionName="Details"
-        Icon="fa fa-align-left"
+        SectionKey="journalEntryDetails"
+        SectionName="Journal Entry Details"
+        Icon="fa fa-info-circle"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -53,53 +53,28 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="Status"
-            Type="select"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
             FieldName="Description"
             Type="textarea"
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- Lifecycle and Posting Section -->
+    <mj-collapsible-panel
+        SectionKey="lifecycleAndPosting"
+        SectionName="Lifecycle and Posting"
+        Icon="fa fa-check-circle"
+        [Form]="this"
+        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="LinkedEntityID"
-            Type="textbox"
+            FieldName="Status"
+            Type="select"
             [EditMode]="EditMode"
             [FormContext]="formContext"
-            LinkType="Record"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="LinkedRecordID"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="ReversesJournalEntryID"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-            LinkType="Record"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="ReversedByJournalEntryID"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-            LinkType="Record"
         ></mj-form-field>
         <mj-form-field 
             [Record]="record"
@@ -126,6 +101,33 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- Source Documentation Section -->
+    <mj-collapsible-panel
+        SectionKey="sourceDocumentation"
+        SectionName="Source Documentation"
+        Icon="fa fa-file-alt"
+        [Form]="this"
+        [FormContext]="formContext">
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="LinkedEntityID"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+            LinkType="Record"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="LinkedRecordID"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -135,21 +137,33 @@
             [FormContext]="formContext"
             LinkType="Record"
         ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- Reversal Details Section -->
+    <mj-collapsible-panel
+        SectionKey="reversalDetails"
+        SectionName="Reversal Details"
+        Icon="fa fa-undo"
+        [Form]="this"
+        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="__mj_CreatedAt"
+            FieldName="ReversesJournalEntryID"
             Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
+            LinkType="Record"
         ></mj-form-field>
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="__mj_UpdatedAt"
+            FieldName="ReversedByJournalEntryID"
             Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
+            LinkType="Record"
         ></mj-form-field>
         <mj-form-field 
             [Record]="record"
@@ -170,6 +184,32 @@
 
     </mj-collapsible-panel>
 
+    <!-- System Metadata Section -->
+    <mj-collapsible-panel
+        SectionKey="systemMetadata"
+        SectionName="System Metadata"
+        Icon="fa fa-cog"
+        [Form]="this"
+        [FormContext]="formContext">
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="__mj_CreatedAt"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="__mj_UpdatedAt"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+
+    </mj-collapsible-panel>
+
     <mj-form-panel-slot Entity="{{record.EntityInfo.Name}}" Slot="after-fields" [Record]="record" [FormComponent]="this" [FormContext]="formContext"></mj-form-panel-slot>
 
     <!-- ========================================
@@ -180,7 +220,7 @@
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingJournalEntryLines"
         SectionName="Journal Entry Lines"
-        Icon="fa fa-table"
+        Icon="fa fa-book"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"
@@ -201,36 +241,11 @@
         }
     </mj-collapsible-panel>
 
-    <!-- Journal Entries (Reverses Journal Entry ID) Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingJournalEntriesReversesJournalEntryID"
-        SectionName="Journal Entries (Reverses Journal Entry ID)"
-        Icon="fa fa-table"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingJournalEntriesReversesJournalEntryID')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entries','ReversesJournalEntryID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entries')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntriesReversesJournalEntryID')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntriesReversesJournalEntryID', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
     <!-- Journal Entries (Reversed By Journal Entry ID) Section -->
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingJournalEntriesReversedByJournalEntryID"
         SectionName="Journal Entries (Reversed By Journal Entry ID)"
-        Icon="fa fa-table"
+        Icon="fa fa-book"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"
@@ -251,25 +266,25 @@
         }
     </mj-collapsible-panel>
 
-    <!-- Tax Remittances Section -->
+    <!-- Journal Entries (Reverses Journal Entry ID) Section -->
     <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingTaxRemittances"
-        SectionName="Tax Remittances"
-        Icon="fa fa-table"
+        SectionKey="mJBizAppsAccountingJournalEntriesReversesJournalEntryID"
+        SectionName="Journal Entries (Reverses Journal Entry ID)"
+        Icon="fa fa-book"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingTaxRemittances')"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingJournalEntriesReversesJournalEntryID')"
         [DefaultExpanded]="false">
         @if (record.IsSaved) {
         <div>
             <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Tax Remittances','PostedJournalEntryID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Tax Remittances')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingTaxRemittances')"
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entries','ReversesJournalEntryID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entries')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntriesReversesJournalEntryID')"
                 [ShowToolbar]="false"
                 (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingTaxRemittances', $event.totalRowCount)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntriesReversesJournalEntryID', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>
@@ -280,7 +295,7 @@
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingJournalEntryBatches"
         SectionName="Journal Entry Batches"
-        Icon="fa fa-table"
+        Icon="fa fa-file-invoice-dollar"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"
@@ -295,6 +310,31 @@
                 [ShowToolbar]="false"
                 (Navigate)="OnFormNavigate($event)"
                 (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntryBatches', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- Tax Remittances Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingTaxRemittances"
+        SectionName="Tax Remittances"
+        Icon="fa fa-money-check-alt"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingTaxRemittances')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Tax Remittances','PostedJournalEntryID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Tax Remittances')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingTaxRemittances')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingTaxRemittances', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>

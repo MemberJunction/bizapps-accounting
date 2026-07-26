@@ -25,6 +25,8 @@ import { mjBizAppsAccountingGLAccountLinkDimensionFormComponent } from "./Entiti
 import { mjBizAppsAccountingGLAccountLinkFormComponent } from "./Entities/mjBizAppsAccountingGLAccountLink/mjbizappsaccountingglaccountlink.form.component";
 import { mjBizAppsAccountingGLAccountRoleFormComponent } from "./Entities/mjBizAppsAccountingGLAccountRole/mjbizappsaccountingglaccountrole.form.component";
 import { mjBizAppsAccountingGLAccountFormComponent } from "./Entities/mjBizAppsAccountingGLAccount/mjbizappsaccountingglaccount.form.component";
+import { mjBizAppsAccountingIntercompanyAccountMatchDimensionFormComponent } from "./Entities/mjBizAppsAccountingIntercompanyAccountMatchDimension/mjbizappsaccountingintercompanyaccountmatchdimension.form.component";
+import { mjBizAppsAccountingIntercompanyAccountMatchFormComponent } from "./Entities/mjBizAppsAccountingIntercompanyAccountMatch/mjbizappsaccountingintercompanyaccountmatch.form.component";
 import { mjBizAppsAccountingJournalEntryFormComponent } from "./Entities/mjBizAppsAccountingJournalEntry/mjbizappsaccountingjournalentry.form.component";
 import { mjBizAppsAccountingJournalEntryBatchSequenceFormComponent } from "./Entities/mjBizAppsAccountingJournalEntryBatchSequence/mjbizappsaccountingjournalentrybatchsequence.form.component";
 import { mjBizAppsAccountingJournalEntryBatchFormComponent } from "./Entities/mjBizAppsAccountingJournalEntryBatch/mjbizappsaccountingjournalentrybatch.form.component";
@@ -50,6 +52,8 @@ declarations: [
     mjBizAppsAccountingGLAccountLinkFormComponent,
     mjBizAppsAccountingGLAccountRoleFormComponent,
     mjBizAppsAccountingGLAccountFormComponent,
+    mjBizAppsAccountingIntercompanyAccountMatchDimensionFormComponent,
+    mjBizAppsAccountingIntercompanyAccountMatchFormComponent,
     mjBizAppsAccountingJournalEntryFormComponent,
     mjBizAppsAccountingJournalEntryBatchSequenceFormComponent,
     mjBizAppsAccountingJournalEntryBatchFormComponent,
@@ -57,9 +61,7 @@ declarations: [
     mjBizAppsAccountingJournalEntryLineFormComponent,
     mjBizAppsAccountingJournalEntrySequenceFormComponent,
     mjBizAppsAccountingTaxAuthorityFormComponent,
-    mjBizAppsAccountingTaxJurisdictionFormComponent,
-    mjBizAppsAccountingTaxLiabilityFormComponent,
-    mjBizAppsAccountingTaxRateFormComponent],
+    mjBizAppsAccountingTaxJurisdictionFormComponent],
 imports: [
     CommonModule,
     FormsModule,
@@ -76,6 +78,8 @@ export class GeneratedForms_SubModule_0 { }
 
 @NgModule({
 declarations: [
+    mjBizAppsAccountingTaxLiabilityFormComponent,
+    mjBizAppsAccountingTaxRateFormComponent,
     mjBizAppsAccountingTaxRemittanceFormComponent],
 imports: [
     CommonModule,

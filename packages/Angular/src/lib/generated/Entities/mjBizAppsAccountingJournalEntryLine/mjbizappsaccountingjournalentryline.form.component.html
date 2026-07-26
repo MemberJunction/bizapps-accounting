@@ -10,11 +10,11 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Details Section -->
+    <!-- Journal Entry Context Section -->
     <mj-collapsible-panel
-        SectionKey="details"
-        SectionName="Details"
-        Icon="fa fa-align-left"
+        SectionKey="journalEntryContext"
+        SectionName="Journal Entry Context"
+        Icon="fa fa-file-invoice"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -43,6 +43,16 @@
             [FormContext]="formContext"
             LinkType="Record"
         ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- Financial Amounts Section -->
+    <mj-collapsible-panel
+        SectionKey="financialAmounts"
+        SectionName="Financial Amounts"
+        Icon="fa fa-dollar-sign"
+        [Form]="this"
+        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -59,6 +69,16 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- Multi-Currency Details Section -->
+    <mj-collapsible-panel
+        SectionKey="multiCurrencyDetails"
+        SectionName="Multi-Currency Details"
+        Icon="fa fa-globe"
+        [Form]="this"
+        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -92,6 +112,16 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- Transaction Details Section -->
+    <mj-collapsible-panel
+        SectionKey="transactionDetails"
+        SectionName="Transaction Details"
+        Icon="fa fa-align-left"
+        [Form]="this"
+        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -109,6 +139,16 @@
             [FormContext]="formContext"
             LinkType="Record"
         ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- System Metadata Section -->
+    <mj-collapsible-panel
+        SectionKey="systemMetadata"
+        SectionName="System Metadata"
+        Icon="fa fa-cog"
+        [Form]="this"
+        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -138,7 +178,7 @@
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingJournalEntryLineDimensions"
         SectionName="Journal Entry Line Dimensions"
-        Icon="fa fa-table"
+        Icon="fa fa-tags"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"

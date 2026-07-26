@@ -18,6 +18,7 @@ export { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 export { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
 export { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
 export { GLAccountEntityServer } from './GLAccountEntityServer.js';
+export { IntercompanyAccountMatchEntityServer } from './IntercompanyAccountMatchEntityServer.js';
 // (AccountingPeriodEntityServer removed 2026-07-06 — AccountingPeriod retired, CH-1.)
 
 // Internal helpers exported for use by future EntityServer classes (period

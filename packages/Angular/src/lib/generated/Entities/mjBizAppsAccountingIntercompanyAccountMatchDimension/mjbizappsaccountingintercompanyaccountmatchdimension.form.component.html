@@ -10,36 +10,26 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Tax Jurisdiction Section -->
+    <!-- Intercompany Configuration Section -->
     <mj-collapsible-panel
-        SectionKey="taxJurisdiction"
-        SectionName="Tax Jurisdiction"
-        Icon="fa fa-map-marker-alt"
+        SectionKey="intercompanyConfiguration"
+        SectionName="Intercompany Configuration"
+        Icon="fa fa-cogs"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
-            [ShowLabel]="false"
-            FieldName="TaxJurisdictionID"
+            [ShowLabel]="true"
+            FieldName="IntercompanyAccountMatchID"
             Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
             LinkType="Record"
         ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Tax Rate Configuration Section -->
-    <mj-collapsible-panel
-        SectionKey="taxRateConfiguration"
-        SectionName="Tax Rate Configuration"
-        Icon="fa fa-percent"
-        [Form]="this"
-        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="TaxCategory"
+            FieldName="Side"
             Type="select"
             [EditMode]="EditMode"
             [FormContext]="formContext"
@@ -47,44 +37,38 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="Rate"
+            FieldName="Sequence"
             Type="number"
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="Source"
-            Type="select"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
 
     </mj-collapsible-panel>
 
-    <!-- Validity Period Section -->
+    <!-- Dimension Mapping Section -->
     <mj-collapsible-panel
-        SectionKey="validityPeriod"
-        SectionName="Validity Period"
-        Icon="fa fa-calendar-alt"
+        SectionKey="dimensionMapping"
+        SectionName="Dimension Mapping"
+        Icon="fa fa-tags"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="EffectiveFrom"
-            Type="datepicker"
+            FieldName="DimensionID"
+            Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
+            LinkType="Record"
         ></mj-form-field>
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="EffectiveTo"
-            Type="datepicker"
+            FieldName="DimensionValueID"
+            Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
+            LinkType="Record"
         ></mj-form-field>
 
     </mj-collapsible-panel>
