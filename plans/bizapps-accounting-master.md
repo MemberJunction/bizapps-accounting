@@ -153,7 +153,7 @@ The current decision set. Each is the standing ruling — superseded ancestors l
 | D15 | **Deferred revenue = REAL forward-dated JEs written at booking.** No schedule tables, no materializer, no daily job (Robert: a wake-up job is "fragile — just create them"). A 12-month $1,200 sub → 12 × $100 Dr DefRev / Cr Revenue JEs, each with its own EffectiveDate. Changes/cancellations produce **correcting orders whose entries NET against what's staged** — staged entries are never edited or deleted. | Robert's model + Jeremy sign-off ("cleaner model than what I had in mind"). |
 | D16 | **All FX (realized + unrealized) is computed and posted UPSTREAM** (Orders/Payments). Accounting keeps only account refs, balance validation, and `vw_FxExposure`. FX overall is deferred until multi-currency activates; the responsibility is **unowned until Payments exists** (flagged, accepted). | Amith 2026-06-30. |
 | D17 | **Tax calculation is DELEGATED to a third-party engine** (Stripe Tax / Avalara / Vertex class) behind the `TaxCalculationProvider` seam. We (1) send inputs, (2) record what returns. Our tax tables are **snapshot/reference data** — never a rate authority we maintain or sync. | Robert 2026-07-14. Engine selection + launch timing open (§16). |
-| D18 | **Intercompany: accounting RECEIVES only.** No leg generation, no netting, no wiring table here. Per-company-pair Due-To/Due-From accounts (4 per pair, eager provisioning, unordered pair keyed by direct UUID comparison) is the reserved reference shape; the wiring lives with the Payments subsystem when built. **Intercompany legs arise on the PAYMENT side, not at booking** (Amith 2026-07-21 — re-closure with Robert/Jeremy pending, §17). | Amith 2026-06-28 → 2026-07-21. |
+| D18 | **Intercompany: accounting still GENERATES no legs — but it now owns the LOOKUP.** No leg generation, no netting, no settlement here; the emitter (Payments, in bizapps-orders) builds the entries. What changed 2026-07-26: the per-company-pair account mapping lives in THIS repo as `IntercompanyAccountMatch` (BA-D26), because it maps GL accounts and dimensions — accounting's own vocabulary — and every future consumer (AP as well as AR) needs the same answer. The reserved "4 accounts per unordered pair" shape is **superseded** by ordered pairs (BA-D27). **Intercompany legs arise on the PAYMENT side, not at booking** (Amith 2026-07-21). | Amith 2026-06-28 → 2026-07-21 → 2026-07-26. |
 | D19 | **JE numbering `JE-{CompanyCode}-{FY}-{seq}`** — per company, per fiscal year. Gap-free/consecutive numbering is NOT a requirement (Amith 2026-07-23: no such concept we care about) — the sequence is best-effort; gaps are acceptable. Batch numbering stays a global sequence (revisit if per-company batch numbering is wanted). | Familiar to accountants; FY from company settings. |
 | D20 | **No balance materialization.** Read-model views compute on demand; revisit only if read performance demands it. | Amith ("might kill this for the first version"). |
 | D21 | **Permissions = standard MJ roles + RLS; the app seeds its own roles** (Accounting User / Admin, optionally Manager). Company-scoped access via a `UserCompanyRole` grant table (per-company User/Approver/Admin + unscoped Global Admin). The CFO approver is a designated **`__mj.User`** link (a security identity — no Employee entity exists). | Robert 2026-07-09; mechanism ruled 2026-07-16. |
@@ -161,6 +161,9 @@ The current decision set. Each is the standing ruling — superseded ancestors l
 | D23 | **UTC everywhere.** Every persisted timestamp is UTC; `OperatingTimeZone` is presentation-only. | Standing convention. |
 | D24 | **Metadata-driven JE generation.** Upstream metadata (product type, roles, links) determines the JE pattern; accounting validates and stores. New rev-rec policies come from metadata, not code changes. | Original principle, unchanged. |
 | D25 | **JE provenance = ONE polymorphic origin pair on the header:** `JournalEntry.LinkedEntityID`/`LinkedRecordID` (nullable TOGETHER — CHECK; NULL = manual JE). Every JE has exactly one causal origin (per-line booking makes JE↔OrderLine 1:1; payment/tax/batch emitters are all single-origin; multi-record relationships like payment→orders live in domain tables such as `PaymentLine`). Replaces BOTH the as-built seven soft-ref columns (`OrderID`, `OrderLineID`, `SubscriptionID`, `PaymentID`, `ContractID`, `IntercompanyFlowID`, `TaxRemittanceID` — "junky duplicative soft fkeys") AND the as-built `JournalEntryLink` table (M:N machinery nothing needs; reintroduce alongside the pair only if a future emitter genuinely needs N links). `JournalEntryLine.OrderLineID` also drops (redundant under 1:1). All via in-place baseline edit. | Amith 2026-07-23. |
+| BA-D26 | **`IntercompanyAccountMatch` lives in accounting.** A per-company-pair lookup answering "when Source collects cash settling Target's line, which two accounts carry the obligation?" — `SourceCompanyID`, `TargetCompanyID`, `DueToGLAccountID`, `DueFromGLAccountID`, date-effective (`Status`/`StartedAt`/`EndedAt`) with GLAccountLink's exact resolution rule. Child `IntercompanyAccountMatchDimension` carries `Side` + `DimensionID` + **nullable `DimensionValueID`**. It is here rather than in orders because it maps GL accounts and dimensions, and a future AP app needs the identical lookup. Resolution: `AccountingEngineBase.ResolveIntercompanyAccounts`. | Amith 2026-07-26; design in bizapps-orders `plans/intercompany-balancing.md`. |
+| BA-D27 | **Pairs are ORDERED, not symmetric.** A row means "Source owes Target"; the reverse direction is a SEPARATE row. Supersedes D18's "4 accounts in one unordered row". Two reasons: the directions routinely use different accounts and are configured at different times, and a symmetric row is easy to read backwards — **and a backwards pair still BALANCES**, so no downstream check would ever report it. That same invisibility is why the orientation rules are enforced by DB trigger (50024/50025), the account-type rules too (50026), and why `ResolveIntercompanyAccounts` returns two named, company-stamped legs instead of the raw row. | Amith 2026-07-26. |
+| BA-D28 | **No `GLAccountRole` for intercompany.** Roles resolve per-RECORD (this product's revenue account); an intercompany account is per-company-PAIR and cannot be expressed that way. `IntercompanyAccountMatch` is the sole resolution path rather than a second competing one. A missing pair is a HARD failure at emit time — never a fallback to a default account, because a guessed account still balances. | Amith 2026-07-26. |
 
 ---
 
@@ -645,17 +648,56 @@ member JEs unlock back to the candidate pool). Closed-period rejections HOLD-and
 
 ## 9. Intercompany
 
-- **Accounting's posture: RECEIVE-only.** No leg generation, no netting, no wiring table (D18).
+- **Accounting generates no legs, but owns the lookup** (D18, BA-D26). The emitter — the payment
+  path in bizapps-orders — builds the entries; this repo answers *which accounts*.
 - **Booking JEs carry NO intercompany legs** (Amith 2026-07-21): an order books one JE per order
-  line under the line's company (§14). Intercompany balancing arises on the **payment side** — when
-  cash lands with the seller of record, the due-to/due-from legs clear sibling companies. Design
-  detail lands with the Payments subsystem. ⚠ The earlier seller-of-record booking-leg model
-  (Robert, 2026-07-20) is superseded by this; **re-closure with Robert + Jeremy is a HIGH-priority
-  open item** (§17) — we proceed on Amith's shape meanwhile.
-- **Reserved reference shape** for wherever the wiring lands: per-company-pair accounts, 4 per pair
-  (A-due-to-B, A-due-from-B, B-due-to-A, B-due-from-A), one row per unordered pair (canonical order
-  = direct UUID comparison), **eager** provisioning per pair. The per-pair GL accounts themselves
-  will be `GLAccount` rows (accounting owns COA storage); Payments defines/drives them.
+  line under the line's company (§14). Intercompany balancing arises on the **payment side**, when
+  cash collected by one entity settles a line owned by another.
+- **AR grain is settled** (Amith, 2026-07-26): A/R is **per company, per line**. The earlier
+  seller-of-record booking-leg model (Robert, 2026-07-20) is **withdrawn, not deferred** — it is no
+  longer an open item and no longer gates this work.
+
+### 9.1 `IntercompanyAccountMatch` (built 2026-07-26)
+
+| Column | Meaning |
+|---|---|
+| `SourceCompanyID` | The company that COLLECTED the cash and therefore owes. |
+| `TargetCompanyID` | The company that OWNS the line the cash settled, and is therefore owed. |
+| `DueToGLAccountID` | Intercompany **payable** — a **Liability** on Source's books. |
+| `DueFromGLAccountID` | Intercompany **receivable** — an **Asset** on Target's books. |
+| `Status` / `StartedAt` / `EndedAt` | Date-effective, resolved exactly as `GLAccountLink` is. |
+
+Child `IntercompanyAccountMatchDimension` adds `Side` (`DueTo`/`DueFrom`), `DimensionID`,
+`DimensionValueID` (**nullable**) and `Sequence`. The nullable value is the one real departure from
+`GLAccountLinkDimension`, which carries the Dimension alone because a transaction supplies the value
+from context. An intercompany leg has no such context — it is raised to balance *another* company's
+revenue, with no originating record to read a department from — so a value can be pinned here, and
+NULL keeps the take-it-from-context behaviour. `Side` exists because the two legs sit on different
+companies' books and routinely tag different values for the same Dimension.
+
+**Ordered, not symmetric** (BA-D27). One row is one direction.
+
+**Why the enforcement is heavier than it looks like it needs to be.** Every rule here guards a
+single failure mode: a mis-oriented or mis-typed pair still produces a **perfectly balanced**
+journal entry. It posts, every balance assertion passes, and the only symptom is two companies'
+balance sheets disagreeing months later. So:
+
+- `trg_IAM_AccountIntegrity` (50024/50025/50026) enforces in the DB, unbypassable, that DueTo
+  belongs to Source and is a Liability, and DueFrom belongs to Target and is an Asset.
+- `trg_IAMD_DimensionValueBelongs` (50027) keeps a pinned value inside its Dimension — these rows
+  are configuration and never pass through the draft pipeline that checks this for JE lines.
+- `IntercompanyAccountMatchEntityServer` repeats the orientation/type rules for a readable message,
+  and adds the one rule only it can: **two Active rows for the same pair sharing a `StartedAt` are
+  refused**. Overlapping windows are legitimate (that is how a mapping is superseded), but a tie
+  makes resolution arbitrary — the tie-break is a strict `>` — and both candidates balance.
+- `ResolveIntercompanyAccounts` returns two **named, company-stamped legs**, so a caller cannot
+  re-derive the orientation wrongly.
+
+Covered by `test-harnesses/server/intercompany-runtime.ts` (17 checks across all three layers) and
+16 mutation-verified unit tests in `packages/EngineBase`.
+
+**Settlement is named, not built.** These balances accumulate; clearing them when entities actually
+move money is a deliberate follow-on, and should be a decision rather than a surprise.
 
 ---
 
@@ -829,10 +871,23 @@ thin; Amith reviews the BUILT code.
 Only genuine unresolved tensions inside the architecture itself. Where we have a defensible
 default we proceed on it and the answer adjusts course.
 
-1. **Intercompany model re-closure:** Amith's 2026-07-21 ruling moved intercompany off the booking
-   JEs entirely (per-line single-company booking; IC clears on the payment side). Robert's earlier
-   seller-of-record booking-leg model and Jeremy's finance sign-off were given against the prior
-   shape — both need to re-confirm under the new one. Proceeding on Amith's shape meanwhile.
+1. **The live server harnesses are stale and have been silently non-functional** (found
+   2026-07-26). `trigger-preflight.ts` listed FIVE triggers retired in the 2026-07-22 baseline
+   rewrite, so `assertInvariantTriggers` aborted every harness at bootstrap with a false
+   "Missing (5/12)" — which in turn hid that the harnesses themselves had drifted from the
+   rewritten schema. The list is now correct; the drift underneath it is not fixed, because two of
+   the three failures need a ruling rather than a patch:
+   - **`block0` / `engine-runtime`: JE numbering contradicts itself.** `SequenceService` produces
+     `JE-{CompanyCode}-{FY}-{seq}` per D19 (per-company); the harnesses assert the GLOBAL
+     `JE-{FY}-{seq}` per D-SEQ. One of the two decisions has to give. **Marcelo owns this.**
+   - **`block2`: asserts against `ChartOfAccountsMapping`**, a table DROPPED in the rewrite (its
+     service was retired 2026-07-23). That harness needs rewriting against the current design, not
+     repairing.
+   - **`block1`: bootstraps a `JournalEntryBatch` without `CompanyID`**, which the rewrite made
+     required (D7, single-company batches). Mechanical.
+   Deliberately not fixed here: the numbering contradiction is a plan-level decision, and rewriting
+   block2 overlaps active work in this area. `intercompany-runtime.ts` is currently the only green
+   live harness.
 2. **Immutable ledger vs mutable account classification:** `GLAccount.AccountType` can change
    after JEs reference the account, silently reclassifying locked history. Direction ruled
    (lock-on-first-use + a retirement date); the enforcement mechanism lands with the schema-cleanup
