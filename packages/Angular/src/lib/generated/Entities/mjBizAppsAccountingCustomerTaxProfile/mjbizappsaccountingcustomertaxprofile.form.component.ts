@@ -15,7 +15,11 @@ export class mjBizAppsAccountingCustomerTaxProfileFormComponent extends BaseForm
     override async ngOnInit() {
         await super.ngOnInit();
         this.initSections([
-            { sectionKey: 'details', sectionName: 'Details', isExpanded: true }
+            { sectionKey: 'customerProfile', sectionName: 'Customer Profile', isExpanded: true },
+            { sectionKey: 'taxationDetails', sectionName: 'Taxation Details', isExpanded: true },
+            { sectionKey: 'exemptionDetails', sectionName: 'Exemption Details', isExpanded: true },
+            { sectionKey: 'validityPeriod', sectionName: 'Validity Period', isExpanded: true },
+            { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false }
         ]);
     }
 }

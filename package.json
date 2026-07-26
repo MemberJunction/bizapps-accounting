@@ -8,7 +8,7 @@
     "packages/*"
   ],
   "scripts": {
-    "prebuild": "node -e \"try { require.resolve('turbo') } catch (e) { console.error('\\n❌ Dependencies not installed. Run: npm install\\n'); process.exit(1); }\"",
+    "prebuild": "node -e \"try { require.resolve('turbo') } catch (e) { console.error('\\n\u274c Dependencies not installed. Run: npm install\\n'); process.exit(1); }\"",
     "build": "npm run build:stream",
     "build:stream": "turbo --log-order=stream build",
     "build:generated": "turbo --log-order=stream build --filter=\"@mj-biz-apps/accounting-entities\" --filter=\"@mj-biz-apps/accounting-actions\"",
@@ -18,16 +18,18 @@
     "start": "turbo start --filter=mj_explorer --filter=mj_api",
     "start:api": "turbo start --filter=mj_api",
     "start:explorer": "turbo start --filter=mj_explorer",
-    "mj": "node apps/MJAPI/node_modules/@memberjunction/cli/bin/run.js",
-    "mj:migrate": "node apps/MJAPI/node_modules/@memberjunction/cli/bin/run.js migrate",
-    "mj:codegen": "node apps/MJAPI/node_modules/@memberjunction/cli/bin/run.js codegen",
+    "mj": "node node_modules/@memberjunction/cli/bin/run.js",
+    "mj:migrate": "node node_modules/@memberjunction/cli/bin/run.js migrate",
+    "mj:codegen": "node node_modules/@memberjunction/cli/bin/run.js codegen",
     "install:deps": "npm install",
     "setup": "echo 'Please run: npm run mj:migrate && npm run mj:codegen && npm run build'",
     "change": "changeset",
     "version": "changeset version",
     "commitpush": "node ci/commit_push.mjs",
     "mergemain": "node ci/merge_main.mjs",
-    "mergemain:update-lock": "node ci/merge_main_and_update_lock.mjs"
+    "mergemain:update-lock": "node ci/merge_main_and_update_lock.mjs",
+    "db:rebuild": "scripts/rebuild-db.sh",
+    "db:append-codegen": "scripts/append-codegen.sh"
   },
   "repository": {
     "type": "git",
@@ -36,6 +38,7 @@
   "packageManager": "npm@10.5.0",
   "devDependencies": {
     "@changesets/cli": "^2.29.8",
+    "@memberjunction/cli": "5.49.0",
     "beasties": "0.3.5",
     "mrmime": "2.0.1",
     "rolldown": "1.0.0-beta.58",
