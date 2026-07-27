@@ -23,7 +23,7 @@
               "src/staticwebapp.config.json",
               {
                 "glob": "**/*",
-                "input": "../../node_modules/@memberjunction/ng-explorer-app/dist/assets",
+                "input": "node_modules/@memberjunction/ng-explorer-app/dist/assets",
                 "output": "/assets"
               }
             ],
@@ -135,7 +135,7 @@
               "src/assets",
               {
                 "glob": "**/*",
-                "input": "../../node_modules/@memberjunction/ng-explorer-app/dist/assets",
+                "input": "node_modules/@memberjunction/ng-explorer-app/dist/assets",
                 "output": "/assets"
               }
             ],
