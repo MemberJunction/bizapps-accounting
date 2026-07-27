@@ -15,9 +15,7 @@ export class mjBizAppsAccountingJournalEntryLineDimensionFormComponent extends B
     override async ngOnInit() {
         await super.ngOnInit();
         this.initSections([
-            { sectionKey: 'journalEntryMapping', sectionName: 'Journal Entry Mapping', isExpanded: true },
-            { sectionKey: 'dimensionDetails', sectionName: 'Dimension Details', isExpanded: true },
-            { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false }
+            { sectionKey: 'details', sectionName: 'Details', isExpanded: true }
         ]);
     }
 }

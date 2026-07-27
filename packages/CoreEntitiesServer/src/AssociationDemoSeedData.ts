@@ -1,4 +1,11 @@
 /**
+ * ⛔ TRIPWIRE — DEV/TEST ONLY, MUST NOT SHIP (ruled by Marcelo 2026-07-27): demo seed data does
+ * not belong in a production server package. Remove this file (and its `seedAssociationDemo`
+ * export in index.ts + `demo-seed-tripwire.test.ts`) before any PR targeting `main`. The
+ * mechanical guard is `__tests__/demo-seed-tripwire.test.ts`, which fails when GITHUB_BASE_REF
+ * (or TARGET_BRANCH) is 'main' while this file exists — note CI does not run vitest on PRs
+ * today, so the release PR author must run `npm test` (tracked in the PR checklist).
+ *
  * AssociationDemoSeedData.ts — deterministic, idempotent demo seed (master-plan Block 4).
  *
  * Populates realistic multi-company AR-subledger data so the Explorer GUI (and the upcoming
@@ -44,6 +51,7 @@ import {
   mjBizAppsAccountingGLAccountEntity,
   mjBizAppsAccountingJournalEntryEntity,
   mjBizAppsAccountingJournalEntryLineEntity,
+  mjBizAppsAccountingJournalEntryTypeEntity,
   mjBizAppsAccountingTaxAuthorityEntity,
   mjBizAppsAccountingTaxJurisdictionEntity,
   mjBizAppsAccountingTaxLiabilityEntity,
@@ -51,12 +59,14 @@ import {
 import type { mjBizAppsCommonOrganizationEntity } from '@mj-biz-apps/common-entities';
 
 import { buildBatch, approveBatch, sendBatch, AutoApproveGate } from './BatchingEngine.js';
+import { GetBatchSummaryEntryType, LookupJournalEntryTypeByCode } from './JournalEntryTypes.js';
 
 // ─── Entity name constants ───────────────────────────────────────────────────
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
+const JET_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Types';
 const CURRENCY_ENTITY = 'MJ_BizApps_Accounting: Currencies';
 const TAX_AUTH_ENTITY = 'MJ_BizApps_Accounting: Tax Authorities';
 const TAX_JUR_ENTITY = 'MJ_BizApps_Accounting: Tax Jurisdictions';
@@ -111,8 +121,18 @@ const GL_DEFERRED = '21301';
 
 const TARGET_SYSTEM = 'BusinessCentral' as const;
 
-/** The JournalEntry.EntryType union (subset used by this seed; keep in sync with the generated entity). */
-type JEEntryType = mjBizAppsAccountingJournalEntryEntity['EntryType'];
+/**
+ * Demo-seeded JournalEntryType rows (issue #24): the demo simulates ORDERS activity, and the
+ * domain types (OrderBooking, PaymentReceipt) are orders' metadata to seed — so this demo
+ * provisions them itself, idempotently, BY CODE (create-if-missing; if orders' own seed already
+ * created the Code, its row is reused — never a duplicate, UQ Code guards it).
+ */
+const DEMO_ENTRY_TYPES: { code: string; name: string; description: string }[] = [
+  { code: 'OrderBooking', name: 'Order Booking', description: 'Association demo seed (orders-domain type; bizapps-orders owns this row in production — issue #24).' },
+  { code: 'PaymentReceipt', name: 'Payment Receipt', description: 'Association demo seed (orders-domain type; bizapps-orders owns this row in production — issue #24).' },
+];
+/** Populated by ensureDemoEntryTypes each run: type Code → ID. */
+let entryTypeIdByCode = new Map<string, string>();
 
 // ─── Result reporting ─────────────────────────────────────────────────────────
 export interface DemoSeedReport {
@@ -166,6 +186,9 @@ export async function seedAssociationDemo(contextUser: UserInfo, provider: IMeta
   await ensureOrganization(contextUser, CUST_OPEN, 'Assoc Demo Customer — Globex Open', report);
   await ensureOrganization(contextUser, CUST_SETTLED, 'Assoc Demo Customer — Initech Settled', report);
   await ensureOrganization(contextUser, CUST_AGING, 'Assoc Demo Customer — Umbrella Aging', report);
+
+  // 2b. Ensure the orders-domain JournalEntryType rows this demo books with exist (issue #24).
+  await ensureDemoEntryTypes(contextUser, provider);
 
   // 3. Ensure each company's GL accounts carry an inline ERP mapping so buildBatch can post.
   await ensureGLMapping(contextUser, co1);
@@ -289,6 +312,33 @@ async function jeExists(contextUser: UserInfo, jeId: string): Promise<boolean> {
 }
 
 /**
+ * Ensure the demo's orders-domain JournalEntryType rows exist (create-if-missing BY CODE) and
+ * refresh the Code→ID map makeJE resolves through. Reuses an existing row when the owning app
+ * (orders) has already seeded the Code.
+ */
+async function ensureDemoEntryTypes(contextUser: UserInfo, provider: IMetadataProvider): Promise<void> {
+  const map = new Map<string, string>();
+  for (const t of DEMO_ENTRY_TYPES) {
+    const existing = await LookupJournalEntryTypeByCode(t.code, contextUser, provider);
+    if (existing) {
+      map.set(t.code, existing.ID);
+      continue;
+    }
+    const row = await provider.GetEntityObject<mjBizAppsAccountingJournalEntryTypeEntity>(JET_ENTITY, contextUser);
+    row.NewRecord();
+    row.Code = t.code;
+    row.Name = t.name;
+    row.Description = t.description;
+    row.IsSystem = false;
+    row.IsBatchSummary = false;
+    row.IsActive = true;
+    if (!(await row.Save())) throw new Error(`ensureDemoEntryTypes: save failed for '${t.code}': ${row.LatestResult?.CompleteMessage}`);
+    map.set(t.code, row.ID);
+  }
+  entryTypeIdByCode = map;
+}
+
+/**
  * Create one balanced Pending JE with a deterministic id + balanced lines. Optional EffectiveDate
  * (defaults to now/UTC) and a demo intercompany-flow tag (carried on the D25 origin pair as a
  * soft LinkedRecordID grouping key — there is no IntercompanyFlow entity yet, so LinkedEntityID
@@ -298,17 +348,19 @@ async function makeJE(
   contextUser: UserInfo,
   ctx: CompanyContext,
   jeId: string,
-  entryType: JEEntryType,
+  entryType: string,
   lines: LineSpec[],
   opts: { effectiveDate?: Date; intercompanyFlowId?: string } = {},
 ): Promise<string> {
+  const entryTypeId = entryTypeIdByCode.get(entryType);
+  if (!entryTypeId) throw new Error(`makeJE: JournalEntryType '${entryType}' was not provisioned by ensureDemoEntryTypes.`);
   const md = new Metadata();
   const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
   je.NewRecord();
   je.ID = jeId;
   je.CompanyID = ctx.companyId; // single-company JE (plan D3)
   je.EffectiveDate = opts.effectiveDate ?? new Date();
-  je.EntryType = entryType;
+  je.EntryTypeID = entryTypeId;
   je.Status = 'Pending';
   // The former JE.IntercompanyFlowID column dropped (D25); keep the flow tag readable in the demo.
   je.Description = opts.intercompanyFlowId
@@ -336,9 +388,10 @@ async function makeJE(
 
 /** Build + approve + dispatch one SINGLE-COMPANY batch (D7) per company with Pending JEs → they become GLPosted. */
 async function postPending(contextUser: UserInfo, report: DemoSeedReport, provider: IMetadataProvider): Promise<void> {
+  const summaryType = await GetBatchSummaryEntryType(contextUser, provider);
   const rv = new RunView(provider as unknown as IRunViewProvider);
   const res = await rv.RunView<{ CompanyID: string }>(
-    { EntityName: JE_ENTITY, ExtraFilter: `Status='Pending' AND EntryType<>'BatchSummary'`, Fields: ['CompanyID'], ResultType: 'simple', BypassCache: true },
+    { EntityName: JE_ENTITY, ExtraFilter: `Status='Pending' AND EntryTypeID<>'${summaryType.ID}'`, Fields: ['CompanyID'], ResultType: 'simple', BypassCache: true },
     contextUser,
   );
   const companyIds = [...new Set((res.Results ?? []).map(r => r.CompanyID))];

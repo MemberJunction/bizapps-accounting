@@ -5,7 +5,9 @@
  * a draft with the same code the server enforces).
  *
  *   1. validateDraftShape   — ≥2 lines, ≥1 debit + ≥1 credit, exactly one side > 0 per line,
- *                             valid EffectiveDate + EntryType → MALFORMED_DRAFT
+ *                             valid EffectiveDate + non-empty EntryType code → MALFORMED_DRAFT
+ *   1b. validateEntryType   — the EntryType CODE resolves to an existing, active
+ *                             JournalEntryType row (issue #24) → ENTRY_TYPE_UNKNOWN / _INACTIVE
  *   2. validateAccounts     — every GLAccountID exists → ACCOUNT_UNKNOWN; active → ACCOUNT_INACTIVE
  *   3. validateDimensions   — every DimensionID/DimensionValueID pre-exists and the value belongs
  *                             to the dimension (validate-only, NEVER auto-create — CH-12)
@@ -24,7 +26,6 @@
  *   DB FLOOR: trg_JournalEntry_BalancedOnLock 50001/50019 re-enforce balance at lock time
  *   DOC:     plans/accounting-engine-plan.md §2.2
  */
-import { mjBizAppsAccountingJournalEntrySchema } from '@mj-biz-apps/accounting-entities';
 import type {
   JournalEntryDraft,
   JournalEntryLineDraft,
@@ -41,10 +42,20 @@ export interface AccountLookup {
   IsActive: boolean;
 }
 
+/** What the pipeline needs to know about a JournalEntryType (issue #24 — the extensible lookup). */
+export interface EntryTypeLookup {
+  ID: string;
+  Code: string;
+  IsActive: boolean;
+  IsBatchSummary: boolean;
+}
+
 /** Caller-supplied lookups — the engine backs these with its caches; unit tests use plain Maps. */
 export interface PipelineLookups {
   /** Resolve a GL account by ID (case-insensitive on the UUID). Undefined = unknown account. */
   accountByID: (glAccountId: string) => AccountLookup | undefined;
+  /** Resolve a JournalEntryType by its Code (case-insensitive). Undefined = unknown type. */
+  entryTypeByCode: (code: string) => EntryTypeLookup | undefined;
   /** Does a Dimension with this ID exist? */
   dimensionExists: (dimensionId: string) => boolean;
   /** Does this DimensionValue exist AND belong to this Dimension? */
@@ -82,10 +93,10 @@ export function validateDraftShape(draft: JournalEntryDraft): JEValidationError[
   if (!draft.EffectiveDate || Number.isNaN(effective.getTime())) {
     errors.push({ Code: 'MALFORMED_DRAFT', Message: `EffectiveDate '${draft.EffectiveDate}' is not a valid ISO date` });
   }
-  // EntryType against the generated Zod union — tracks the DB CHECK via CodeGen (rule 2c).
-  const entryType = mjBizAppsAccountingJournalEntrySchema.shape.EntryType.safeParse(draft.EntryType);
-  if (!entryType.success) {
-    errors.push({ Code: 'MALFORMED_DRAFT', Message: `EntryType '${String(draft.EntryType)}' is not a valid journal-entry type` });
+  // EntryType is a JournalEntryType CODE (issue #24) — shape check only here; existence /
+  // active status validate against live reference data in validateEntryType (stage 1b).
+  if (typeof draft.EntryType !== 'string' || draft.EntryType.trim().length === 0) {
+    errors.push({ Code: 'MALFORMED_DRAFT', Message: 'draft must carry a non-empty EntryType code' });
   }
   let debits = 0;
   let credits = 0;
@@ -112,6 +123,19 @@ export function validateDraftShape(draft: JournalEntryDraft): JEValidationError[
     errors.push({ Code: 'MALFORMED_DRAFT', Message: 'a journal entry needs at least one debit AND one credit line' });
   }
   return errors;
+}
+
+// ─── Stage 1b — entry type (issue #24: validated against the lookup, not a TS union) ─
+
+export function validateEntryType(draft: JournalEntryDraft, lookups: PipelineLookups): JEValidationError[] {
+  const type = lookups.entryTypeByCode(draft.EntryType);
+  if (!type) {
+    return [{ Code: 'ENTRY_TYPE_UNKNOWN', Message: `journal-entry type '${String(draft.EntryType)}' does not exist — its owning app must seed it first (issue #24)` }];
+  }
+  if (!type.IsActive) {
+    return [{ Code: 'ENTRY_TYPE_INACTIVE', Message: `journal-entry type '${draft.EntryType}' is inactive` }];
+  }
+  return [];
 }
 
 // ─── Stage 2 — accounts ──────────────────────────────────────────────────────
@@ -245,6 +269,8 @@ export interface DraftPipelineOutcome {
 export function runDraftPipeline(draft: JournalEntryDraft, lookups: PipelineLookups): DraftPipelineOutcome {
   const shape = validateDraftShape(draft);
   if (shape.length > 0) return { errors: shape, normalized: [] };
+  const entryType = validateEntryType(draft, lookups);
+  if (entryType.length > 0) return { errors: entryType, normalized: [] };
   const accounts = validateAccounts(draft, lookups);
   if (accounts.length > 0) return { errors: accounts, normalized: [] };
   const dims = validateDimensions(draft, lookups);

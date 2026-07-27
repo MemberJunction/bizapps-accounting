@@ -50,7 +50,7 @@ async function createJE(withDim: boolean, amount: number, description: string): 
   je.NewRecord();
   je.CompanyID = ctx.company.id;
   je.EffectiveDate = new Date();
-  je.EntryType = 'Manual';
+  je.EntryTypeID = ctx.entryTypes.get('Manual')!;
   je.Status = 'Pending';
   je.Description = `${ctx.runTag} ${description}`;
   const l1 = await je.CreateLine(ctx.user);
@@ -123,7 +123,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     const reversal = await reloaded.GenerateReversal('live-harness L4', ctx.user);
     ctx.createdJEIds.push(reversal.ID);
 
-    expect(reversal.EntryType).toBe('Reversal');
+    expect(reversal.EntryTypeID.toLowerCase()).toBe(ctx.entryTypes.get('Reversal')!.toLowerCase());
     const backRef = await scalar(ctx.pool, `SELECT ReversedByJournalEntryID FROM ${SCHEMA}.JournalEntry WHERE ID='${firstJE.ID}'`);
     expect(String(backRef).toLowerCase()).toBe(reversal.ID.toLowerCase());
     // Swapped: the original's 125.50 DEBIT on AR comes back as a CREDIT on AR.
@@ -157,7 +157,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     // Netting on AR: +125.5(L1... L1 is Pending too!) — compute expected from raw SQL instead of hand-math:
     const rawDr = Number(await scalar(ctx.pool,
       `SELECT SUM(l.DebitAmount) FROM ${SCHEMA}.JournalEntryLine l JOIN ${SCHEMA}.JournalEntry j ON j.ID=l.JournalEntryID
-       WHERE j.CompanyID='${ctx.company.id}' AND j.Status='Pending' AND j.EntryType<>'BatchSummary'`));
+       WHERE j.CompanyID='${ctx.company.id}' AND j.Status='Pending' AND j.EntryTypeID<>'${ctx.batchSummaryTypeId}'`));
 
     const result = await buildBatch(ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, AutoApproveGate);
     expect(result, 'buildBatch returned null — expected pending JEs to batch').not.toBeNull();
@@ -165,8 +165,8 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
 
     // Summary JE: exists, right shape, rides the lock machinery.
     const summary = (await ctx.pool.request().query(
-      `SELECT EntryType, Status, CompanyID, BatchID FROM ${SCHEMA}.JournalEntry WHERE ID='${result!.summaryJournalEntryId}'`)).recordset[0];
-    expect(summary.EntryType).toBe('BatchSummary');
+      `SELECT EntryTypeID, Status, CompanyID, BatchID FROM ${SCHEMA}.JournalEntry WHERE ID='${result!.summaryJournalEntryId}'`)).recordset[0];
+    expect(String(summary.EntryTypeID).toLowerCase()).toBe(ctx.batchSummaryTypeId.toLowerCase());
     expect(summary.Status).toBe('Batched');
     expect(String(summary.BatchID).toLowerCase()).toBe(result!.batchId.toLowerCase());
 

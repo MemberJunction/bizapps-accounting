@@ -1,8 +1,9 @@
 /**
  * BatchingEngine — the core subledger→ERP dispatch process (plan §7).
  * REWORKED 2026-07-23 for the rewritten baseline: batches are SINGLE-COMPANY (D7)
- * and the netted summary is an ORDINARY JournalEntry (EntryType='BatchSummary')
- * instead of the retired JournalEntryBatchLineItem tables (Amith's summary-JE model).
+ * and the netted summary is an ORDINARY JournalEntry (typed with the IsBatchSummary-flagged
+ * JournalEntryType — issue #24) instead of the retired JournalEntryBatchLineItem tables
+ * (Amith's summary-JE model).
  *
  *   buildBatch(companyId, …): gather that company's Pending JEs → ONE JournalEntryBatch
  *     (one batch per company per run, D7), net their lines to consolidated summary groups
@@ -53,6 +54,7 @@ import type {
   mjBizAppsAccountingJournalEntryLineEntity,
 } from '@mj-biz-apps/accounting-entities';
 import { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
+import { GetBatchSummaryEntryType } from './JournalEntryTypes.js';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
@@ -200,10 +202,14 @@ async function raiseApprovalTaskOrReverse(batchId: string, gate: BatchApprovalGa
   }
 }
 
-/** The company's unbatched Pending JEs. BatchSummary JEs are excluded by EntryType (the ruled default exclusion). */
+/**
+ * The company's unbatched Pending JEs. Summary JEs are excluded via their type's IsBatchSummary
+ * flag (issue #24 — a flag join, not the former 'BatchSummary' magic-string match).
+ */
 async function loadPendingJEIds(companyId: string, contextUser: UserInfo, p: Providers): Promise<string[]> {
+  const summaryType = await GetBatchSummaryEntryType(contextUser, p.md);
   const res = await p.rv.RunView<{ ID: string }>(
-    { EntityName: JE_ENTITY, ExtraFilter: `Status='Pending' AND CompanyID='${companyId}' AND EntryType<>'BatchSummary'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true },
+    { EntityName: JE_ENTITY, ExtraFilter: `Status='Pending' AND CompanyID='${companyId}' AND EntryTypeID<>'${summaryType.ID}'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true },
     contextUser,
   );
   return (res.Results ?? []).map(r => r.ID);
@@ -274,7 +280,7 @@ async function writeSummaryJournalEntry(
   summary.NewRecord();
   summary.CompanyID = batch.CompanyID;
   summary.EffectiveDate = batch.PostingDate;
-  summary.EntryType = 'BatchSummary';
+  summary.EntryTypeID = (await GetBatchSummaryEntryType(contextUser, p.md)).ID;
   summary.Status = 'Pending';
   summary.BatchID = batch.ID;
   summary.Description = `Netted summary for batch ${batch.BatchNumber}`;

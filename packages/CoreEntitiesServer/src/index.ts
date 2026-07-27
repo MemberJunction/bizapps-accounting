@@ -19,6 +19,7 @@ export { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js'
 export { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
 export { GLAccountEntityServer } from './GLAccountEntityServer.js';
 export { IntercompanyAccountMatchEntityServer } from './IntercompanyAccountMatchEntityServer.js';
+export { JournalEntryTypeEntityServer, LoadJournalEntryTypeEntityServer } from './JournalEntryTypeEntityServer.js';
 // (AccountingPeriodEntityServer removed 2026-07-06 — AccountingPeriod retired, CH-1.)
 
 // Internal helpers exported for use by future EntityServer classes (period
@@ -30,6 +31,13 @@ export {
 } from './SeedData.js';
 export type { SeededGLAccount } from './SeedData.js';
 export { getNextJournalEntryNumber, getNextBatchNumber } from './SequenceService.js';
+export {
+  LookupJournalEntryTypeByCode,
+  LookupJournalEntryTypeByID,
+  RequireJournalEntryTypeID,
+  GetBatchSummaryEntryType,
+} from './JournalEntryTypes.js';
+export type { JournalEntryTypeRow } from './JournalEntryTypes.js';
 
 // (JournalEntryValidation retired 2026-07-24, phase-2 sweep — its per-record rules live in
 //  JournalEntryEntityServer.Validate/ValidateAsync; nothing consumed the standalone module.

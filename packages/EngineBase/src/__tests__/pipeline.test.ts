@@ -17,6 +17,7 @@ import {
   validateAccounts,
   validateDimensions,
   validateDraftShape,
+  validateEntryType,
   type PipelineLookups,
 } from '../pipeline.js';
 
@@ -34,6 +35,11 @@ const CO_B = 'cb000000-0000-4000-8000-000000000001';
 const DIM_DEPT = 'd1000000-0000-4000-8000-000000000001';
 const DIMVAL_SALES = 'd1000000-0000-4000-8000-0000000000v1';
 
+const JET = {
+  manual: 'e1000000-0000-4000-8000-000000000001',
+  retired: 'e1000000-0000-4000-8000-000000000002',
+};
+
 const lookups: PipelineLookups = {
   accountByID: (id) => {
     const k = id.toLowerCase();
@@ -42,6 +48,12 @@ const lookups: PipelineLookups = {
     if (k === GL.aDead) return { ID: GL.aDead, CompanyID: CO_A, IsActive: false };
     if (k === GL.bAR) return { ID: GL.bAR, CompanyID: CO_B, IsActive: true };
     if (k === GL.bRev) return { ID: GL.bRev, CompanyID: CO_B, IsActive: true };
+    return undefined;
+  },
+  entryTypeByCode: (code) => {
+    const k = (code ?? '').trim().toLowerCase();
+    if (k === 'manual') return { ID: JET.manual, Code: 'Manual', IsActive: true, IsBatchSummary: false };
+    if (k === 'retiredtype') return { ID: JET.retired, Code: 'RetiredType', IsActive: false, IsBatchSummary: false };
     return undefined;
   },
   dimensionExists: (id) => id.toLowerCase() === DIM_DEPT,
@@ -110,12 +122,27 @@ describe('validateDraftShape (stage 1 — MALFORMED_DRAFT)', () => {
     expect(errs.some(e => /EffectiveDate/.test(e.Message))).toBe(true);
   });
 
-  it('rejects an EntryType outside the generated union (tracks the DB CHECK via CodeGen)', () => {
-    const draft = balancedDraft();
-    // Simulate an untyped caller (JSON over the wire) sending a bad value.
-    (draft as { EntryType: string }).EntryType = 'NotARealType';
-    const errs = validateDraftShape(draft);
+  it('rejects an empty EntryType code (shape only — existence is stage 1b)', () => {
+    const errs = validateDraftShape(balancedDraft({ EntryType: '  ' }));
     expect(errs.some(e => /EntryType/.test(e.Message))).toBe(true);
+  });
+});
+
+// ─── stage 1b: entry type (issue #24 — validated against the lookup) ─────────
+
+describe('validateEntryType', () => {
+  it('accepts a known active type code (case-insensitive)', () => {
+    expect(validateEntryType(balancedDraft({ EntryType: 'manual' }), lookups)).toEqual([]);
+  });
+
+  it('rejects an unknown type code with ENTRY_TYPE_UNKNOWN', () => {
+    const errs = validateEntryType(balancedDraft({ EntryType: 'NotARealType' }), lookups);
+    expect(errs).toEqual([expect.objectContaining({ Code: 'ENTRY_TYPE_UNKNOWN' })]);
+  });
+
+  it('rejects an inactive type code with ENTRY_TYPE_INACTIVE', () => {
+    const errs = validateEntryType(balancedDraft({ EntryType: 'RetiredType' }), lookups);
+    expect(errs).toEqual([expect.objectContaining({ Code: 'ENTRY_TYPE_INACTIVE' })]);
   });
 });
 
