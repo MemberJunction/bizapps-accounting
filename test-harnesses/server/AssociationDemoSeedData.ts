@@ -1,10 +1,7 @@
 /**
- * ⛔ TRIPWIRE — DEV/TEST ONLY, MUST NOT SHIP (ruled by Marcelo 2026-07-27): demo seed data does
- * not belong in a production server package. Remove this file (and its `seedAssociationDemo`
- * export in index.ts + `demo-seed-tripwire.test.ts`) before any PR targeting `main`. The
- * mechanical guard is `__tests__/demo-seed-tripwire.test.ts`, which fails when GITHUB_BASE_REF
- * (or TARGET_BRANCH) is 'main' while this file exists — note CI does not run vitest on PRs
- * today, so the release PR author must run `npm test` (tracked in the PR checklist).
+ * DEV/TEST FIXTURE — lives in test-harnesses/ ON PURPOSE (ruled by Marcelo 2026-07-27): demo
+ * seed data must not ship in a production package, so this module sits OUTSIDE every package
+ * build (never compiled into a dist/, never published; consumed only by seed-demo.ts via tsx).
  *
  * AssociationDemoSeedData.ts — deterministic, idempotent demo seed (master-plan Block 4).
  *
@@ -58,8 +55,10 @@ import {
 } from '@mj-biz-apps/accounting-entities';
 import type { mjBizAppsCommonOrganizationEntity } from '@mj-biz-apps/common-entities';
 
-import { buildBatch, approveBatch, sendBatch, AutoApproveGate } from './BatchingEngine.js';
-import { GetBatchSummaryEntryType, LookupJournalEntryTypeByCode } from './JournalEntryTypes.js';
+import {
+  buildBatch, approveBatch, sendBatch, AutoApproveGate,
+  GetBatchSummaryEntryType, LookupJournalEntryTypeByCode,
+} from '@mj-biz-apps/accounting-core-entities-server';
 
 // ─── Entity name constants ───────────────────────────────────────────────────
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';

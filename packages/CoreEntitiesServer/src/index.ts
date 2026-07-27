@@ -77,10 +77,8 @@ export { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
 //  ChartOfAccountsMappingService retired 2026-07-23 — the mapping table was dropped; the account
 //  Code / GLAccount.ExternalAccountID is the ERP wire identity. Both live in git history.)
 
-// Block 4 — deterministic, idempotent Association demo seed (multi-company AR/DefRev/Tax/Intercompany
-// data so the Explorer GUI + the read-model views have meaningful fixtures). See AssociationDemoSeedData.ts.
-export { seedAssociationDemo } from './AssociationDemoSeedData.js';
-export type { DemoSeedReport } from './AssociationDemoSeedData.js';
+// (AssociationDemoSeedData moved to test-harnesses/server/ 2026-07-27 — demo fixtures are dev/test
+//  assets and must not ship in this package; seed-demo.ts consumes it locally via tsx.)
 
 // The accounting ENGINE (plan §2.2-2.3): server write path over the browser-safe cache, plus the
 // Accounting.CreateJournalEntry remotable op (code-only — registered via LoadCreateJournalEntryOperation).
