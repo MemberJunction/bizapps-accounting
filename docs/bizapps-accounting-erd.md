@@ -17,7 +17,11 @@
 > - **`IntercompanyAccountMatch` + `IntercompanyAccountMatchDimension`** (BA-D26..D28,
 >   merged 2026-07-26) — the ordered per-company-pair Due To / Due From lookup.
 >
-> **How to read this:** a relationship line / `FK` = enforced foreign key. Cross-app references
+> **How to read this:** a relationship line / `FK` = enforced foreign key. **IS-A** (subtype)
+> relationships are explicitly labeled `IS-A Disjoint - same UUID` — the child row shares the
+> parent's primary key (one table today: `AccountingCompanyProfile` IS-A `__mj.Company`; never
+> insert the child without its parent). Everything else, including every `*Dimension` child
+> table, is plain composition — a child/config row REFERENCING its parents, not a subtype. Cross-app references
 > point UP the dependency graph only and are REAL FKs (issue #22); the ONE sanctioned downstream
 > lineage is the polymorphic D25 origin pair (`LinkedEntityID` hard-FK to `__mj.Entity` +
 > `LinkedRecordID`, soft by nature). External (not this schema): `Company`, `User`, `File`,
@@ -86,7 +90,7 @@ flowchart TD
         end
     end
 
-    Company -->|IsA - same UUID| ACP
+    Company -->|IS-A Disjoint - same UUID| ACP
     User -->|ApprovalCFOUserID| ACP
     Currency --> ACP
     Currency --> CSR
@@ -139,7 +143,7 @@ flowchart TD
 %%{init: {"er": {"layoutDirection": "TB"}} }%%
 erDiagram
     %% ---- company / profile / currency ----
-    Company ||--o| AccountingCompanyProfile : "IsA - same UUID"
+    Company ||--o| AccountingCompanyProfile : "IS-A Disjoint - same UUID"
     User ||--o{ AccountingCompanyProfile : "ApprovalCFOUserID"
     Currency ||--o{ AccountingCompanyProfile : "Functional / Reporting"
     AccountingCompanyProfile |o--o{ AccountingCompanyProfile : "uses books of (no chains)"
@@ -171,6 +175,24 @@ erDiagram
     GLAccount ||--o{ IntercompanyAccountMatch : "DueTo (Source's liability) / DueFrom (Target's asset)"
     IntercompanyAccountMatch ||--o{ IntercompanyAccountMatchDimension : "per-Side dimension pins"
     Dimension ||--o{ IntercompanyAccountMatchDimension : ""
+    IntercompanyAccountMatch {
+        uuid ID PK
+        uuid SourceCompanyID FK "ORDERED - Source owes Target (BA-D27)"
+        uuid TargetCompanyID FK "reverse direction = a SEPARATE row"
+        uuid DueToGLAccountID FK "Source's LIABILITY (trg 50024/50026)"
+        uuid DueFromGLAccountID FK "Target's ASSET (trg 50025/50026)"
+        string Status "Active | Inactive"
+        datetimeoffset StartedAt "latest wins; Active tie refused (entity server)"
+        datetimeoffset EndedAt "nullable - open window"
+    }
+    IntercompanyAccountMatchDimension {
+        uuid ID PK
+        uuid IntercompanyAccountMatchID FK
+        string Side "DueTo | DueFrom - legs sit on different books"
+        uuid DimensionID FK
+        uuid DimensionValueID FK "nullable - NULL = value from context (trg 50027)"
+        int Sequence
+    }
     %% ---- batching ----
     Company ||--o{ JournalEntryBatch : "single-company (D7)"
     JournalEntryBatch ||--o{ JournalEntry : "BatchID (members + summary, by IsBatchSummary type)"
@@ -194,7 +216,7 @@ erDiagram
     Role ||--o{ UserCompanyRole : "per-company User | Approver | Admin"
 
     AccountingCompanyProfile {
-        uuid ID PK "same UUID as Company"
+        uuid ID PK "IS-A: same UUID as parent Company (no own PK gen)"
         string CompanyCode UK
         string EntityType
         string LegalStructureType
@@ -378,11 +400,11 @@ erDiagram
     TaxRate {
         uuid ID PK
         uuid TaxJurisdictionID FK
-        string TaxCategory
-        decimal Rate
+        string TaxCategory "Standard | Reduced | Zero | Exempt | Custom"
+        decimal Rate "0..1"
         date EffectiveFrom
         date EffectiveTo
-        string Source
+        string Source "Avalara | TaxJar | Manual"
     }
     TaxLiability {
         uuid ID PK
@@ -429,13 +451,13 @@ erDiagram
 
 ```mermaid
 erDiagram
-    Company ||--o| AccountingCompanyProfile : "IsA Disjoint - same UUID"
+    Company ||--o| AccountingCompanyProfile : "IS-A Disjoint - same UUID"
     User ||--o{ AccountingCompanyProfile : "ApprovalCFOUserID"
     Currency ||--o{ AccountingCompanyProfile : "Functional / Reporting currency"
     AccountingCompanyProfile |o--o{ AccountingCompanyProfile : "ParentAccountingCompanyID - uses books of, no chains"
 
     AccountingCompanyProfile {
-        uuid ID PK "same UUID as parent Company"
+        uuid ID PK "IS-A: same UUID as parent Company (no own PK gen)"
         string CompanyCode UK "JE numbering, uppercase"
         string EntityType "LegalEntity | Subsidiary | Division | ..."
         string LegalStructureType "nullable"
@@ -741,28 +763,42 @@ erDiagram
         uuid ID PK
         string Code UK
         string Name
-        string CountryCode
+        string CountryCode "nullable, CHAR(2)"
+        bool IsActive
+    }
+    TaxJurisdiction {
+        uuid ID PK
+        uuid TaxAuthorityID FK
+        string Code UK
+        string Name
+        string CountryCode "nullable"
+        string RegionCode "nullable"
+        string PostalCode "nullable - exact match"
+        string PostalCodeStart "nullable - range match"
+        string PostalCodeEnd "nullable"
+        string CityName "nullable"
+        uuid ParentTaxJurisdictionID FK "nullable - state > county > city nesting"
         bool IsActive
     }
     TaxRate {
         uuid ID PK
         uuid TaxJurisdictionID FK
-        string TaxCategory
-        decimal Rate
+        string TaxCategory "Standard | Reduced | Zero | Exempt | Custom"
+        decimal Rate "DECIMAL(7,4), 0..1"
         date EffectiveFrom
-        date EffectiveTo "nullable"
-        string Source
+        date EffectiveTo "nullable, >= From"
+        string Source "Avalara | TaxJar | Manual (default Manual)"
     }
     TaxLiability {
         uuid ID PK
         uuid CompanyID FK
         uuid TaxAuthorityID FK
         uuid TaxJurisdictionID FK
-        decimal AccruedAmount
-        decimal RemittedAmount
+        decimal AccruedAmount ">= 0"
+        decimal RemittedAmount ">= 0"
         string Status "Open | Filed | Paid | PartiallyPaid"
         date DueDate "nullable"
-        string FilingFrequency "nullable"
+        string FilingFrequency "Monthly | Quarterly | SemiAnnual | Annual | OnDemand (nullable)"
     }
     TaxRemittance {
         uuid ID PK
@@ -770,12 +806,41 @@ erDiagram
         decimal RemittedAmount "> 0"
         date RemittedDate
         string PaymentReference "nullable"
-        uuid PostedJournalEntryID FK "nullable - the remittance JE"
+        uuid PostedJournalEntryID FK "nullable - the remittance JE (JournalEntryType boundary: issue #24)"
     }
 ```
 
-`CustomerTaxProfile` (→ common Organization; exemption certs, jurisdiction, date-windowed)
-completes the family. Calculation is delegated (D17); these tables record, never author, rates.
+### 7b. CustomerTaxProfile — the BUYER's taxability
+
+```mermaid
+erDiagram
+    Organization ||--o{ CustomerTaxProfile : "OrganizationID (common Organization)"
+    TaxJurisdiction |o--o{ CustomerTaxProfile : "nullable - NULL = all jurisdictions"
+
+    CustomerTaxProfile {
+        uuid ID PK
+        uuid OrganizationID FK
+        uuid TaxJurisdictionID FK "nullable - NULL means everywhere"
+        string TaxIDNumber "nullable"
+        bool IsExempt "exempt REQUIRES a certificate ref (CK)"
+        string ExemptionCertificateRef "nullable - the audit evidence"
+        date ExemptionExpiryDate "nullable"
+        date EffectiveFrom
+        date EffectiveTo "nullable, >= From"
+    }
+```
+
+Calculation is delegated (D17); these tables record, never author, rates. The two parties are
+deliberately separate: `TaxLiability`/`TaxRemittance` and the (planned) nexus are about the
+**seller** (our company's obligation to collect + what it owes); `CustomerTaxProfile` is about the
+**buyer** (this customer's exemption privilege, certificate-backed — `IsExempt=1` requires
+`ExemptionCertificateRef`, CHECK-enforced).
+
+> **Planned, NOT in schema (orders pricing design §6, phase 4):** `CompanyTaxNexus`
+> (Company × TaxJurisdiction + registration number + dates — the seller-side "must company C
+> collect in jurisdiction J?" gate) and a tax-category scope on `CustomerTaxProfile` (keyed by an
+> accounting-owned tax category, never an orders product reference — BA-D30). Recorded here so the
+> gap list has one home; neither exists until its own baseline pass.
 
 ---
 
