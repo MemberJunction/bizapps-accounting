@@ -207,13 +207,25 @@ CREATE TABLE __mj_BizAppsAccounting.TaxRate (
     ID UNIQUEIDENTIFIER NOT NULL DEFAULT NEWSEQUENTIALID(),
     TaxJurisdictionID UNIQUEIDENTIFIER NOT NULL,
     TaxCategory NVARCHAR(50) NOT NULL,
-    Rate DECIMAL(7,4) NOT NULL,
+    -- DECIMAL(9,6), NOT (7,4). Four decimal places cannot hold a real US rate: San Mateo County is
+    -- 9.375% (0.09375) and rounds to 0.0938, San Francisco 8.625% to 0.0863, New York City 8.875%
+    -- to 0.0888. California district taxes come in 0.125% increments, so component rates need five
+    -- places on their own. Orders' OrderCharge.Rate is already DECIMAL(9,6), so the narrower type
+    -- here meant orders could record a rate accounting could not store.
+    Rate DECIMAL(9,6) NOT NULL,
     EffectiveFrom DATE NOT NULL,
     EffectiveTo DATE NULL,
     Source NVARCHAR(50) NOT NULL DEFAULT 'Manual',
     CONSTRAINT PK_TaxRate PRIMARY KEY (ID),
     CONSTRAINT CK_TaxRate_Category CHECK (TaxCategory IN ('Standard','Reduced','Zero','Exempt','Custom')),
-    CONSTRAINT CK_TaxRate_Source CHECK (Source IN ('Avalara','TaxJar','Manual')),
+    -- NO CHECK on Source, deliberately. Enumerating providers in DDL makes every new rate feed a
+    -- migration, which is the opposite of a plug-in architecture — and the original list named
+    -- TaxJar, which Stripe has visibly deprioritised since acquiring it. Free sources matter more
+    -- than the commercial ones here: the Streamlined Sales Tax rate files carry STATUTORY
+    -- hold-harmless relief in their 24 member states, and that relief attaches to the state's own
+    -- artifact rather than to the technique, so recording WHICH source a rate came from is an audit
+    -- fact rather than a label.
+
     CONSTRAINT CK_TaxRate_Range CHECK (EffectiveTo IS NULL OR EffectiveTo >= EffectiveFrom),
     CONSTRAINT CK_TaxRate_Rate CHECK (Rate >= 0 AND Rate <= 1)
 );
