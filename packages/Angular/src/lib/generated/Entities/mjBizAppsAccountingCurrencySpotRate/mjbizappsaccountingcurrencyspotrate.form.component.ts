@@ -16,7 +16,7 @@ export class mjBizAppsAccountingCurrencySpotRateFormComponent extends BaseFormCo
         await super.ngOnInit();
         this.initSections([
             { sectionKey: 'exchangeRateDetails', sectionName: 'Exchange Rate Details', isExpanded: true },
-            { sectionKey: 'configuration', sectionName: 'Configuration', isExpanded: true },
+            { sectionKey: 'virtualAttributes', sectionName: 'Virtual Attributes', isExpanded: true },
             { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false }
         ]);
     }

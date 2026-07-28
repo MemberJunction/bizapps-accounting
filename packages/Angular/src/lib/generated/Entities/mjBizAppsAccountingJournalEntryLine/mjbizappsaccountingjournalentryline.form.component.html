@@ -10,11 +10,11 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Journal Entry Context Section -->
+    <!-- Journal Entry Details Section -->
     <mj-collapsible-panel
-        SectionKey="journalEntryContext"
-        SectionName="Journal Entry Context"
-        Icon="fa fa-file-invoice"
+        SectionKey="journalEntryDetails"
+        SectionName="Journal Entry Details"
+        Icon="fa fa-book"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -43,6 +43,14 @@
             [FormContext]="formContext"
             LinkType="Record"
         ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="Description"
+            Type="textarea"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
 
     </mj-collapsible-panel>
 
@@ -50,7 +58,7 @@
     <mj-collapsible-panel
         SectionKey="financialAmounts"
         SectionName="Financial Amounts"
-        Icon="fa fa-dollar-sign"
+        Icon="fa fa-money-bill-wave"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -115,24 +123,16 @@
 
     </mj-collapsible-panel>
 
-    <!-- Transaction Details Section -->
+    <!-- Counterparty Information Section -->
     <mj-collapsible-panel
-        SectionKey="transactionDetails"
-        SectionName="Transaction Details"
-        Icon="fa fa-align-left"
+        SectionKey="counterpartyInformation"
+        SectionName="Counterparty Information"
+        Icon="fa fa-building"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
-            [ShowLabel]="true"
-            FieldName="Description"
-            Type="textarea"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
+            [ShowLabel]="false"
             FieldName="CounterpartyOrganizationID"
             Type="textbox"
             [EditMode]="EditMode"

@@ -10,10 +10,10 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Tax Jurisdiction Section -->
+    <!-- Jurisdiction Details Section -->
     <mj-collapsible-panel
-        SectionKey="taxJurisdiction"
-        SectionName="Tax Jurisdiction"
+        SectionKey="jurisdictionDetails"
+        SectionName="Jurisdiction Details"
         Icon="fa fa-map-marker-alt"
         [Form]="this"
         [FormContext]="formContext">
@@ -33,7 +33,7 @@
     <mj-collapsible-panel
         SectionKey="taxRateConfiguration"
         SectionName="Tax Rate Configuration"
-        Icon="fa fa-percent"
+        Icon="fa fa-percentage"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -56,7 +56,7 @@
             [Record]="record"
             [ShowLabel]="true"
             FieldName="Source"
-            Type="select"
+            Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>

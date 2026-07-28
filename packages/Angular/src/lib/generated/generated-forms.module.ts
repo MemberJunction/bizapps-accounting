@@ -16,9 +16,9 @@ import { LinkDirectivesModule } from '@memberjunction/ng-link-directives';
 
 // Import Generated Components
 import { mjBizAppsAccountingAccountingCompanyProfileFormComponent } from "./Entities/mjBizAppsAccountingAccountingCompanyProfile/mjbizappsaccountingaccountingcompanyprofile.form.component";
+import { mjBizAppsAccountingCompanyTaxNexusFormComponent } from "./Entities/mjBizAppsAccountingCompanyTaxNexus/mjbizappsaccountingcompanytaxnexus.form.component";
 import { mjBizAppsAccountingCurrencyFormComponent } from "./Entities/mjBizAppsAccountingCurrency/mjbizappsaccountingcurrency.form.component";
 import { mjBizAppsAccountingCurrencySpotRateFormComponent } from "./Entities/mjBizAppsAccountingCurrencySpotRate/mjbizappsaccountingcurrencyspotrate.form.component";
-import { mjBizAppsAccountingCustomerTaxProfileFormComponent } from "./Entities/mjBizAppsAccountingCustomerTaxProfile/mjbizappsaccountingcustomertaxprofile.form.component";
 import { mjBizAppsAccountingDimensionValueFormComponent } from "./Entities/mjBizAppsAccountingDimensionValue/mjbizappsaccountingdimensionvalue.form.component";
 import { mjBizAppsAccountingDimensionFormComponent } from "./Entities/mjBizAppsAccountingDimension/mjbizappsaccountingdimension.form.component";
 import { mjBizAppsAccountingGLAccountLinkDimensionFormComponent } from "./Entities/mjBizAppsAccountingGLAccountLinkDimension/mjbizappsaccountingglaccountlinkdimension.form.component";
@@ -43,9 +43,9 @@ import { mjBizAppsAccountingTaxRemittanceFormComponent } from "./Entities/mjBizA
 @NgModule({
 declarations: [
     mjBizAppsAccountingAccountingCompanyProfileFormComponent,
+    mjBizAppsAccountingCompanyTaxNexusFormComponent,
     mjBizAppsAccountingCurrencyFormComponent,
     mjBizAppsAccountingCurrencySpotRateFormComponent,
-    mjBizAppsAccountingCustomerTaxProfileFormComponent,
     mjBizAppsAccountingDimensionValueFormComponent,
     mjBizAppsAccountingDimensionFormComponent,
     mjBizAppsAccountingGLAccountLinkDimensionFormComponent,

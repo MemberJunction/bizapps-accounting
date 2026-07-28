@@ -19,7 +19,8 @@ export class mjBizAppsAccountingJournalEntryBatchFormComponent extends BaseFormC
             { sectionKey: 'batchDetails', sectionName: 'Batch Details', isExpanded: true },
             { sectionKey: 'financialSummary', sectionName: 'Financial Summary', isExpanded: true },
             { sectionKey: 'lifecycleAndStatus', sectionName: 'Lifecycle and Status', isExpanded: true },
-            { sectionKey: 'approvalAndDispatch', sectionName: 'Approval and Dispatch', isExpanded: true },
+            { sectionKey: 'eRPIntegration', sectionName: 'ERP Integration', isExpanded: true },
+            { sectionKey: 'approvalWorkflow', sectionName: 'Approval Workflow', isExpanded: true },
             { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingJournalEntries', sectionName: 'Journal Entries', isExpanded: false }
         ]);

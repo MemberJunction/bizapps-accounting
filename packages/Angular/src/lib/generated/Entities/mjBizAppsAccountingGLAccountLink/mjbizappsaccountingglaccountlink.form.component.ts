@@ -16,10 +16,9 @@ export class mjBizAppsAccountingGLAccountLinkFormComponent extends BaseFormCompo
     override async ngOnInit() {
         await super.ngOnInit();
         this.initSections([
-            { sectionKey: 'gLMapping', sectionName: 'GL Mapping', isExpanded: true },
-            { sectionKey: 'recordReference', sectionName: 'Record Reference', isExpanded: true },
-            { sectionKey: 'configuration', sectionName: 'Configuration', isExpanded: true },
-            { sectionKey: 'displayLabels', sectionName: 'Display Labels', isExpanded: true },
+            { sectionKey: 'accountingMapping', sectionName: 'Accounting Mapping', isExpanded: true },
+            { sectionKey: 'targetRecordReference', sectionName: 'Target Record Reference', isExpanded: true },
+            { sectionKey: 'configurationAndTimeline', sectionName: 'Configuration and Timeline', isExpanded: true },
             { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingGLAccountLinkDimensions', sectionName: 'GL Account Link Dimensions', isExpanded: false }
         ]);

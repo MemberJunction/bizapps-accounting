@@ -59,24 +59,24 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Configuration Section -->
-    <mj-collapsible-panel
-        SectionKey="configuration"
-        SectionName="Configuration"
-        Icon="fa fa-sliders-h"
-        [Form]="this"
-        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
-            [ShowLabel]="false"
+            [ShowLabel]="true"
             FieldName="IsActive"
             Type="checkbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- Virtual Attributes Section -->
+    <mj-collapsible-panel
+        SectionKey="virtualAttributes"
+        SectionName="Virtual Attributes"
+        Icon="fa fa-magic"
+        [Form]="this"
+        [FormContext]="formContext">
 
     </mj-collapsible-panel>
 

@@ -10,11 +10,11 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Tax Scope Section -->
+    <!-- Tax Liability Context Section -->
     <mj-collapsible-panel
-        SectionKey="taxScope"
-        SectionName="Tax Scope"
-        Icon="fa fa-map-marked-alt"
+        SectionKey="taxLiabilityContext"
+        SectionName="Tax Liability Context"
+        Icon="fa fa-building"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -47,11 +47,11 @@
 
     </mj-collapsible-panel>
 
-    <!-- Financials Section -->
+    <!-- Financial Balances Section -->
     <mj-collapsible-panel
-        SectionKey="financials"
-        SectionName="Financials"
-        Icon="fa fa-money-bill-wave"
+        SectionKey="financialBalances"
+        SectionName="Financial Balances"
+        Icon="fa fa-dollar-sign"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -73,10 +73,10 @@
 
     </mj-collapsible-panel>
 
-    <!-- Lifecycle and Timing Section -->
+    <!-- Lifecycle and Scheduling Section -->
     <mj-collapsible-panel
-        SectionKey="lifecycleAndTiming"
-        SectionName="Lifecycle and Timing"
+        SectionKey="lifecycleAndScheduling"
+        SectionName="Lifecycle and Scheduling"
         Icon="fa fa-calendar-alt"
         [Form]="this"
         [FormContext]="formContext">
@@ -143,7 +143,7 @@
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingTaxRemittances"
         SectionName="Tax Remittances"
-        Icon="fa fa-money-check-alt"
+        Icon="fa fa-hand-holding-usd"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"

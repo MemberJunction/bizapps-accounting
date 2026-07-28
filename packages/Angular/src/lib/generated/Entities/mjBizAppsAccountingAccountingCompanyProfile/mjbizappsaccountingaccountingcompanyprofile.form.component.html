@@ -10,11 +10,11 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Accounting Profile Section -->
+    <!-- Accounting Profile Settings Section -->
     <mj-collapsible-panel
-        SectionKey="accountingProfile"
-        SectionName="Accounting Profile"
-        Icon="fa fa-id-card"
+        SectionKey="accountingProfileSettings"
+        SectionName="Accounting Profile Settings"
+        Icon="fa fa-file-invoice"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -73,16 +73,6 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Accounting Settings Section -->
-    <mj-collapsible-panel
-        SectionKey="accountingSettings"
-        SectionName="Accounting Settings"
-        Icon="fa fa-sliders-h"
-        [Form]="this"
-        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -91,6 +81,16 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- Financial Configuration Section -->
+    <mj-collapsible-panel
+        SectionKey="financialConfiguration"
+        SectionName="Financial Configuration"
+        Icon="fa fa-dollar-sign"
+        [Form]="this"
+        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -128,24 +128,6 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="IsActive"
-            Type="checkbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Entity Relationships Section -->
-    <mj-collapsible-panel
-        SectionKey="entityRelationships"
-        SectionName="Entity Relationships"
-        Icon="fa fa-link"
-        [Form]="this"
-        [FormContext]="formContext">
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
             FieldName="ParentAccountingCompanyID"
             Type="textbox"
             [EditMode]="EditMode"
@@ -168,6 +150,14 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
             LinkType="Record"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="IsActive"
+            Type="checkbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
         ></mj-form-field>
         <mj-form-field 
             [Record]="record"
@@ -296,7 +286,7 @@
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingAccountingCompanyProfiles"
         SectionName="Accounting Company Profiles"
-        Icon="fa fa-building"
+        Icon="fa fa-balance-scale"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"

@@ -61,11 +61,11 @@
 
     </mj-collapsible-panel>
 
-    <!-- Lifecycle and Posting Section -->
+    <!-- Lifecycle and Status Section -->
     <mj-collapsible-panel
-        SectionKey="lifecycleAndPosting"
-        SectionName="Lifecycle and Posting"
-        Icon="fa fa-check-circle"
+        SectionKey="lifecycleAndStatus"
+        SectionName="Lifecycle and Status"
+        Icon="fa fa-sync-alt"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -108,7 +108,7 @@
     <mj-collapsible-panel
         SectionKey="sourceDocumentation"
         SectionName="Source Documentation"
-        Icon="fa fa-file-alt"
+        Icon="fa fa-link"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -140,10 +140,10 @@
 
     </mj-collapsible-panel>
 
-    <!-- Reversal Details Section -->
+    <!-- Reversals Section -->
     <mj-collapsible-panel
-        SectionKey="reversalDetails"
-        SectionName="Reversal Details"
+        SectionKey="reversals"
+        SectionName="Reversals"
         Icon="fa fa-undo"
         [Form]="this"
         [FormContext]="formContext">
@@ -216,31 +216,6 @@
          RELATED ENTITY PANELS
          ======================================== -->
 
-    <!-- Journal Entry Lines Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingJournalEntryLines"
-        SectionName="Journal Entry Lines"
-        Icon="fa fa-book"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingJournalEntryLines')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entry Lines','JournalEntryID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entry Lines')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntryLines')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntryLines', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
     <!-- Journal Entries (Reversed By Journal Entry ID) Section -->
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingJournalEntriesReversedByJournalEntryID"
@@ -291,6 +266,31 @@
         }
     </mj-collapsible-panel>
 
+    <!-- Tax Remittances Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingTaxRemittances"
+        SectionName="Tax Remittances"
+        Icon="fa fa-hand-holding-usd"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingTaxRemittances')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Tax Remittances','PostedJournalEntryID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Tax Remittances')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingTaxRemittances')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingTaxRemittances', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
     <!-- Journal Entry Batches Section -->
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingJournalEntryBatches"
@@ -316,25 +316,25 @@
         }
     </mj-collapsible-panel>
 
-    <!-- Tax Remittances Section -->
+    <!-- Journal Entry Lines Section -->
     <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingTaxRemittances"
-        SectionName="Tax Remittances"
-        Icon="fa fa-money-check-alt"
+        SectionKey="mJBizAppsAccountingJournalEntryLines"
+        SectionName="Journal Entry Lines"
+        Icon="fa fa-file-invoice-dollar"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingTaxRemittances')"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingJournalEntryLines')"
         [DefaultExpanded]="false">
         @if (record.IsSaved) {
         <div>
             <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Tax Remittances','PostedJournalEntryID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Tax Remittances')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingTaxRemittances')"
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entry Lines','JournalEntryID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entry Lines')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntryLines')"
                 [ShowToolbar]="false"
                 (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingTaxRemittances', $event.totalRowCount)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntryLines', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>

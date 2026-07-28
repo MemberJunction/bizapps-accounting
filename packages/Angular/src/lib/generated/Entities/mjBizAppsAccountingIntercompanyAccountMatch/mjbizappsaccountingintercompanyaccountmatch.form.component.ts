@@ -17,7 +17,7 @@ export class mjBizAppsAccountingIntercompanyAccountMatchFormComponent extends Ba
         await super.ngOnInit();
         this.initSections([
             { sectionKey: 'intercompanyMapping', sectionName: 'Intercompany Mapping', isExpanded: true },
-            { sectionKey: 'accountingConfiguration', sectionName: 'Accounting Configuration', isExpanded: true },
+            { sectionKey: 'financialAccounts', sectionName: 'Financial Accounts', isExpanded: true },
             { sectionKey: 'lifecycleAndNotes', sectionName: 'Lifecycle and Notes', isExpanded: true },
             { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingIntercompanyAccountMatchDimensions', sectionName: 'Intercompany Account Match Dimensions', isExpanded: false }
