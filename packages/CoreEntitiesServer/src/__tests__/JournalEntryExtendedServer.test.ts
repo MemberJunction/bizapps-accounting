@@ -136,6 +136,53 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
       expect(result.Errors.some(e => getErrorText(e).includes('Unbalanced Journal Entry'))).toBe(true);
     });
 
+    it('accepts a four-line entry whose credits accumulate past the penny in binary floating point', () => {
+      // Dr AR 302.59 / Cr 233.51 + 25.30 + 43.78 — the real shape from bizapps-orders, where one
+      // order line carries goods, tax and shipping. The credit side sums to 302.59000000000003 in
+      // IEEE-754, and exact equality rejected it while printing BOTH sides as "302.59".
+      expect(233.51 + 25.30 + 43.78).not.toBe(302.59); // the premise, stated rather than assumed
+
+      const mk = (debit: number, credit: number, gl: string) => {
+        const l = new JournalEntryLineEntityServer(jelEntityInfo as any);
+        l.NewRecord();
+        l.GLAccountID = gl;
+        if (debit) l.DebitAmount = debit;
+        if (credit) l.CreditAmount = credit;
+        return l;
+      };
+      je.AddLine(mk(302.59, 0, 'GL_AR'));
+      je.AddLine(mk(0, 233.51, 'GL_SALES'));
+      je.AddLine(mk(0, 25.30, 'GL_TAX'));
+      je.AddLine(mk(0, 43.78, 'GL_SHIP'));
+
+      const result = je.Validate();
+      expect(
+        result.Errors.some(e => getErrorText(e).includes('Unbalanced Journal Entry')),
+      ).toBe(false);
+    });
+
+    it('still rejects an entry that is out by a whole penny', () => {
+      // The tolerance must not become a licence. A penny is the smallest storable discrepancy —
+      // DebitAmount is DECIMAL(18,2) — and is two hundred times the epsilon, so a real imbalance
+      // can never be mistaken for summation noise.
+      const line1 = new JournalEntryLineEntityServer(jelEntityInfo as any);
+      line1.NewRecord();
+      line1.GLAccountID = 'GL_1';
+      line1.DebitAmount = 100.0;
+
+      const line2 = new JournalEntryLineEntityServer(jelEntityInfo as any);
+      line2.NewRecord();
+      line2.GLAccountID = 'GL_2';
+      line2.CreditAmount = 99.99;
+
+      je.AddLine(line1);
+      je.AddLine(line2);
+
+      const result = je.Validate();
+      expect(result.Success).toBe(false);
+      expect(result.Errors.some(e => getErrorText(e).includes('Unbalanced Journal Entry'))).toBe(true);
+    });
+
     it('fails validation when a line specifies both Debit and Credit amounts', () => {
       const line1 = new JournalEntryLineEntityServer(jelEntityInfo as any);
       line1.NewRecord();
@@ -155,6 +202,7 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
       expect(result.Success).toBe(false);
       expect(result.Errors.some(e => getErrorText(e).includes('Cannot specify both DebitAmount'))).toBe(true);
     });
+
 
     it('fails validation when a line specifies negative amounts', () => {
       const line1 = new JournalEntryLineEntityServer(jelEntityInfo as any);

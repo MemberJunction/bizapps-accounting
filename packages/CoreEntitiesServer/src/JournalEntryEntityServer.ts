@@ -217,10 +217,26 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
       );
     }
 
-    // Rule 2: Equal debits and credits overall (exact balance required)
+    // Rule 2: Equal debits and credits overall, compared AT PENNY PRECISION.
+    //
+    // This was `totalDebits !== totalCredits` — exact float equality on accumulated sums — and it
+    // rejected entries that balance perfectly. A four-line entry of
+    //
+    //     Dr AR 302.59  /  Cr Sales 233.51 + Cr Tax 25.30 + Cr Shipping 43.78
+    //
+    // sums on the credit side to 302.59000000000003 in IEEE-754, so the comparison failed while the
+    // error message printed both sides as "302.59" — telling the caller two identical numbers were
+    // unequal. It stayed latent while entries had two or three lines and friendly amounts; the
+    // first four-line entry from bizapps-orders (goods, tax and shipping on one line) hit it.
+    //
+    // DebitAmount and CreditAmount are DECIMAL(18,2), so a penny IS the unit of account here and
+    // anything finer is an artefact of summing in binary floating point. Half a penny is therefore
+    // the correct tolerance: tight enough that no real imbalance passes — the smallest storable
+    // discrepancy is a whole penny, two hundred times the epsilon — and loose enough that
+    // accumulation order cannot decide whether a balanced entry is accepted.
     const totalDebits = lines.reduce((sum, l) => sum + (l.DebitAmount ?? 0), 0);
     const totalCredits = lines.reduce((sum, l) => sum + (l.CreditAmount ?? 0), 0);
-    if (totalDebits !== totalCredits) {
+    if (Math.abs(totalDebits - totalCredits) >= 0.005) {
       result.Success = false;
       result.Errors.push(
         new ValidationErrorInfo(
