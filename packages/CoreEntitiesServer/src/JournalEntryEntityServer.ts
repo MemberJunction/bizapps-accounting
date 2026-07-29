@@ -506,6 +506,17 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
     const user = contextUser ?? this.ContextCurrentUser;
     const provider = this.ProviderToUse as unknown as IMetadataProvider;
 
+    // Guards (defense-in-depth; the UI also hides the action): a reversal entry cannot itself be
+    // reversed (an ever-growing reverse-the-reverse chain), and an already-reversed entry cannot
+    // be reversed again (double-reversing would orphan the back-pointer).
+    const reversalTypeId = await RequireJournalEntryTypeID('Reversal', user, provider);
+    if (this.EntryTypeID?.toLowerCase() === reversalTypeId.toLowerCase() || this.ReversesJournalEntryID) {
+      throw new Error('GenerateReversal: a reversal entry cannot itself be reversed.');
+    }
+    if (this.ReversedByJournalEntryID) {
+      throw new Error(`GenerateReversal: ${this.EntryNumber} has already been reversed (by JE ${this.ReversedByJournalEntryID}).`);
+    }
+
     // Make sure this JE's own lines (+ dimension tags) are hydrated to copy from.
     if (this._lines.length === 0) {
       await this.LoadLines(user);
@@ -515,7 +526,7 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
     reversal.NewRecord();
     reversal.CompanyID = this.CompanyID;
     reversal.EffectiveDate = new Date();
-    reversal.EntryTypeID = await RequireJournalEntryTypeID('Reversal', user, provider);
+    reversal.EntryTypeID = reversalTypeId;
     reversal.Status = 'Pending';
     reversal.Description = `Reversal of ${this.EntryNumber}: ${reason}`;
     reversal.ReversesJournalEntryID = this.ID;
@@ -525,6 +536,7 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
       line.GLAccountID = orig.GLAccountID;
       line.DebitAmount = orig.CreditAmount; // SWAP
       line.CreditAmount = orig.DebitAmount; // SWAP
+      line.CounterpartyOrganizationID = orig.CounterpartyOrganizationID; // the reversal reverses the SAME counterparty's balance
       line.Description = `Reversal of line ${orig.LineNumber}`;
       for (const origDim of orig.Dimensions) {
         const dim = await line.CreateDimension(user);

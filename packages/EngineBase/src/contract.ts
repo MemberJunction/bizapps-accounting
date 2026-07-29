@@ -6,8 +6,11 @@
  * ZERO server dependencies. The server engine (`AccountingEngine` in
  * `@mj-biz-apps/accounting-core-entities-server`) and the remotable op both use these exact types.
  *
- * Notes (plan §3): NO CompanyID anywhere (multi-company — company derives per line from
- * GLAccount.CompanyID, CH-2); NO period fields (CH-1); NO FX fields in v1 (deferred).
+ * Notes: the draft carries NO CompanyID field — the engine derives the (single) company from the
+ * lines' GLAccount.CompanyID and stamps JournalEntry.CompanyID (plan D3: journal entries are
+ * single-company). A draft whose lines resolve to MORE than one company is rejected with
+ * MULTI_COMPANY_DRAFT — callers split per company upstream (orders books one JE per order line).
+ * NO period fields; NO FX fields in v1 (deferred).
  *
  * CONNECTS TO:
  *   PIPELINE:  ./pipeline.ts (the pure validation/normalization stages over this contract)
@@ -21,6 +24,10 @@ export interface JournalEntryLineDraft {
   DebitAmount?: number;
   CreditAmount?: number;
   Description?: string;
+  /** The customer/counterparty this line's receivable-or-payable belongs to (AR-by-customer).
+   *  Set on the AR line by order booking + payment capture; carried by reversals. Soft-optional —
+   *  omitted for lines with no counterparty (revenue, cash, tax). FK to bizapps-common Organization. */
+  CounterpartyOrganizationID?: string;
   /** Pre-existing dimension/value pairs — validate-only, NEVER auto-created (CH-12). */
   Dimensions?: JournalEntryLineDimensionDraft[];
 }
@@ -61,6 +68,7 @@ export type JEErrorCode =
   | 'DIMENSION_UNKNOWN'
   | 'DIMENSION_VALUE_UNKNOWN'
   | 'UNBALANCED'
+  | 'MULTI_COMPANY_DRAFT'
   | 'INTERNAL_ERROR';
 
 export interface JEValidationError {

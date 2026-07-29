@@ -18,6 +18,7 @@ export { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 export { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
 export { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
 export { GLAccountEntityServer } from './GLAccountEntityServer.js';
+export { GLAccountLinkEntityServer, LoadGLAccountLinkEntityServer } from './GLAccountLinkEntityServer.js';
 export { IntercompanyAccountMatchEntityServer } from './IntercompanyAccountMatchEntityServer.js';
 export { JournalEntryTypeEntityServer, LoadJournalEntryTypeEntityServer } from './JournalEntryTypeEntityServer.js';
 // (AccountingPeriodEntityServer removed 2026-07-06 — AccountingPeriod retired, CH-1.)
@@ -47,6 +48,16 @@ export type { JournalEntryTypeRow } from './JournalEntryTypes.js';
 // summary is a BatchSummary JournalEntry, lock + dispatch (CFO-approval gate + ERP-post seam).
 export {
   buildBatch,
+  buildBatchFromExplicitIds,
+  buildBatchFromView,
+  classifyViewEntries,
+  previewBatch,
+  pendingCandidateFilter,
+  outOfOrderSkipCount,
+  perCompanySubtotals,
+  pendingCompanies,
+  EmptyBatchError,
+  BatchFromViewError,
   approveBatch,
   sendBatch,
   cancelBatch,
@@ -62,6 +73,11 @@ export type {
   NettableLine,
   NetGroup,
   BuildBatchResult,
+  BuildBatchOptions,
+  BuildBatchFromViewOptions,
+  BatchPreviewEntry,
+  AffectedAccount,
+  BatchPreviewResult,
   ErpPostResult,
   ErpPoster,
   BatchApprovalGate,
@@ -86,3 +102,30 @@ export { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
 export { AccountingEngine } from './AccountingEngine.js';
 export { CreateJournalEntryOperation, LoadCreateJournalEntryOperation } from './CreateJournalEntryOperation.js';
 export { CreateJournalEntriesOperation, LoadCreateJournalEntriesOperation } from './CreateJournalEntriesOperation.js';
+export {
+  GenerateReversalOperation,
+  LoadGenerateReversalOperation,
+  type GenerateReversalInput,
+  type GenerateReversalOutput,
+} from './GenerateReversalOperation.js';
+export {
+  BuildBatchOperation,
+  PreviewBatchOperation,
+  RegenerateBatchOperation,
+  DispatchBatchOperation,
+  RecordBatchDecisionOperation,
+  GetBatchApprovalStateOperation,
+  LoadBatchOperations,
+  type BatchCriteriaInput,
+  type PreviewBatchInput,
+  type BuildBatchInput,
+  type BuildBatchOutput,
+  type RegenerateBatchInput,
+  type DispatchBatchInput,
+  type DispatchBatchOutput,
+  type BatchDecisionOutcome,
+  type RecordBatchDecisionInput,
+  type RecordBatchDecisionOutput,
+  type GetBatchApprovalStateInput,
+  type GetBatchApprovalStateOutput,
+} from './BatchOperations.js';

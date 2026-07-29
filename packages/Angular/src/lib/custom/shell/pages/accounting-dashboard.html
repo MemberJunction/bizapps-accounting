@@ -1,0 +1,150 @@
+<!-- Shared template for the category dashboards (§8.6 step 6). Cheap reads only — §0.
+     The stat strip is driven by `Stats`, the composition bars by `Breakdowns`, the lists by `Lists`,
+     so the two pages differ only in what they put in those three arrays.
+
+     CARD LANGUAGE: this deliberately copies MJ Explorer's **Credentials** dashboard
+     (packages/Angular/Explorer/dashboards/src/Credentials/) rather than inventing a card style —
+     the tinted `icon-wrapper` chip above a label-over-value, the 16px radius + lift-on-hover
+     surface, the `section-header` + `section-title` card head, and the `activity-item` row (rounded
+     icon chip · details · status pill). Same idiom, MJ tokens only. -->
+<!-- [actions] is the verbs slot (chrome conventions §10). The ONE refresh control lives in the shell
+     header — deliberately not repeated here — so this slot carries only the section's create verb.
+     The page cannot navigate itself (Explorer resources are not routed), so the button emits
+     CreateRequested and the hosting shell decides what "create" does. -->
+<mj-page-header-interior>
+  @if (CreateLabel) {
+    <div actions>
+      <button mjButton variant="primary" size="sm" (click)="RequestCreate()">
+        <i class="fa-solid fa-plus" aria-hidden="true"></i>
+        <span>{{ CreateLabel }}</span>
+      </button>
+    </div>
+  }
+</mj-page-header-interior>
+
+<!-- The scrollable body MUST be <mj-page-body-interior>: it is the interior primitive
+     <mj-left-nav-content> expects, and it owns the padding that keeps content off the rail. Bare
+     divs here sat flush against the nav rail — the header card only looked right because it
+     supplies its own margin.
+     It is display:BLOCK — never size a child here with `flex: 1` (a no-op that collapses to zero
+     height). Everything below sizes from its own content or an explicit min-height. -->
+<mj-page-body-interior>
+  @if (LoadError) {
+    <mj-alert Variant="error" [Message]="LoadError"></mj-alert>
+  }
+
+  <!-- Stat strip — the Credentials `stat-card`: tinted icon chip, then label, then the big value. -->
+  <div class="dash-stats">
+    @for (s of Stats; track s.Id) {
+      <div class="dash-stat" [class.dash-stat--warn]="s.Warn" [title]="s.Tooltip">
+        <span class="dash-stat__icon"><i [class]="s.Icon" aria-hidden="true"></i></span>
+        <span class="dash-stat__label">{{ s.Label }}</span>
+        <span class="dash-stat__value">{{ StatValue(s) }}</span>
+      </div>
+    } @empty {
+      @if (!IsLoading) {
+        <mj-empty-state Icon="fa-solid fa-chart-simple" Title="No stats to show" Message="Nothing could be counted for the current scope."></mj-empty-state>
+      }
+    }
+  </div>
+
+  <!-- Composition cards. These cost NOTHING: every segment is a count the page already fetched for
+       the stat strip, restacked into a proportional bar (see dashboard-breakdown.ts). This is the
+       answer to "a row of counters isn't worth opening" that §0 actually permits — shape, not just
+       totals, with no extra read. -->
+  @if (Breakdowns.length) {
+    <div class="dash-breakdowns">
+      @for (b of Breakdowns; track b.Id) {
+        <section class="dash-card">
+          <header class="dash-card__header">
+            <span class="dash-card__head-icon"><i [class]="b.Icon" aria-hidden="true"></i></span>
+            <span class="dash-card__titles">
+              <span class="dash-card__title">{{ b.Title }}</span>
+              <span class="dash-card__caption">{{ b.Caption }}</span>
+            </span>
+            <span class="dash-card__count">{{ BreakdownTotal(b) }}</span>
+          </header>
+          <div class="dash-card__body">
+            @if (BreakdownTotal(b) === 0) {
+              @if (!IsLoading) {
+                <p class="dash-card__empty">{{ b.EmptyMessage }}</p>
+              }
+            } @else {
+              <!-- The bar is aria-hidden because it is a REDUNDANT visual encoding of the legend
+                   below — a screen reader gets the same numbers, named and exact, from the legend
+                   rows. Announcing both would read every figure twice. -->
+              <div class="dash-bar" aria-hidden="true">
+                @for (s of b.Segments; track s.Id) {
+                  @if (s.Value > 0) {
+                    <span
+                      [class]="'dash-bar__seg dash-tone--' + s.Tone"
+                      [style.width.%]="BreakdownPercent(b, s)"
+                    ></span>
+                  }
+                }
+              </div>
+              <ul class="dash-legend">
+                @for (s of b.Segments; track s.Id) {
+                  <li class="dash-legend__row" [title]="s.Tooltip">
+                    <span [class]="'dash-legend__dot dash-tone--' + s.Tone"></span>
+                    <span class="dash-legend__label">{{ s.Label }}</span>
+                    <span class="dash-legend__value">{{ s.Value }}</span>
+                    <span class="dash-legend__pct">{{ BreakdownPercent(b, s) | number: '1.0-0' }}%</span>
+                  </li>
+                }
+              </ul>
+            }
+          </div>
+        </section>
+      }
+    </div>
+  }
+
+  <!-- List cards: each list gets its OWN card (small header + the rows within), so the page answers
+       "what should I look at?" and not just "how many are there?". -->
+  <div class="dash-lists">
+    @for (l of Lists; track l.Id) {
+      <section class="dash-card">
+        <!-- Credentials-dashboard card idiom: a small header (icon chip + title + count), then the
+             content within the card. Same markup as the Orders/Payments cards, so a card reads
+             identically in both apps. -->
+        <header class="dash-card__header">
+          <span class="dash-card__head-icon"><i [class]="l.Icon" aria-hidden="true"></i></span>
+          <span class="dash-card__title">{{ l.Title }}</span>
+          <!-- A count that could not be read renders "—". A fabricated 0 would read as "all clear". -->
+          <span class="dash-card__count">{{ l.Count === null ? '—' : l.Count }}</span>
+        </header>
+        <div class="dash-card__body">
+          @for (i of l.Items; track i.Id) {
+            <div class="dash-item" [class.dash-item--warn]="i.Warn">
+              <div class="dash-item__info">
+                <div class="dash-item__title">{{ i.Title }}</div>
+                <div class="dash-item__meta">
+                  <span class="dash-item__status">{{ i.Status }}</span>
+                  <span class="dash-item__detail">{{ i.Detail }}</span>
+                </div>
+              </div>
+              <span class="dash-item__when">
+                @if (i.WhenIsDateOnly) {
+                  <!-- DATE column — the 'UTC' arg is REQUIRED, or users west of UTC see the day before. -->
+                  {{ i.When | date: 'mediumDate' : 'UTC' }}
+                } @else {
+                  <!-- An instant — the browser zone is the correct rendering. -->
+                  {{ i.When | date: 'MMM d, h:mm a' }}
+                }
+              </span>
+            </div>
+          } @empty {
+            @if (!IsLoading) {
+              <p class="dash-card__empty">{{ l.EmptyMessage }}</p>
+            }
+          }
+        </div>
+      </section>
+    }
+  </div>
+
+  @if (IsLoading) {
+    <mj-loading text="Loading…"></mj-loading>
+  }
+</mj-page-body-interior>

@@ -199,6 +199,8 @@ export async function teardownLive(ctx: LiveCtx): Promise<void> {
   } finally {
     for (const t of toggled) await exec(`ENABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
   }
+  // GL account links created by the tie-guard specs — company-rooted through the account FK.
+  await exec(`DELETE lk FROM ${SCHEMA}.GLAccountLink lk JOIN ${SCHEMA}.GLAccount gl ON gl.ID=lk.GLAccountID WHERE gl.CompanyID IN (${companyIdList})`);
   await exec(`DELETE FROM ${SCHEMA}.DimensionValue WHERE DimensionID='${ctx.dimId}'`);
   await exec(`DELETE FROM ${SCHEMA}.Dimension WHERE ID='${ctx.dimId}'`);
   await exec(`DELETE FROM ${SCHEMA}.JournalEntrySequence WHERE CompanyID IN (${companyIdList})`);

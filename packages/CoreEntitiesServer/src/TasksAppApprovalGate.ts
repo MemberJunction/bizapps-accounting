@@ -55,8 +55,10 @@ const TASK_DECISION_OUTCOME_ENTITY = 'MJ_BizApps_Tasks: Task Decision Outcomes';
 /** The seeded generic approval TaskType that CreateApprovalRequest expects. */
 const APPROVAL_REQUEST_TASK_TYPE = 'Approval Request';
 
-/** The approver assignments now reference __mj Users (ApprovalCFOUserID is a User FK). */
-const USER_ENTITY = 'Users';
+/** The approver assignments now reference __mj Users (ApprovalCFOUserID is a User FK).
+ *  NB: MJ 5.x core entity names carry the 'MJ: ' prefix — bare 'Users' resolves to nothing
+ *  (latent bug caught by live spec L13, 2026-07-29). */
+const USER_ENTITY = 'MJ: Users';
 
 /** Terminal outcomes that count as "approved to send". */
 const APPROVED_OUTCOME_CODES: ReadonlySet<TaskDecisionOutcomeCode> = new Set(['Approved', 'ApprovedWithConditions']);
@@ -77,10 +79,22 @@ export class TasksAppApprovalGate implements BatchApprovalGate {
     return this.provider as unknown as IRunViewProvider;
   }
 
-  /** Build the approval Task when a batch is built. Throws if the batch's company lacks a CFO. */
-  async onBatchBuilt(batchId: string, contextUser: UserInfo): Promise<void> {
+  /**
+   * PRECONDITION (D10 rev. 2026-07-29): run by the engine BEFORE any batch write. A company with
+   * no configured CFO could never approve a batch, so the build fails fast, before a row exists.
+   */
+  async assertCanRaise(companyId: string, contextUser: UserInfo): Promise<void> {
+    await this.resolveCFOUserIdForCompany(companyId, contextUser);
+  }
+
+  /**
+   * Build the approval Task when a batch is built and return its ID (stamped onto
+   * `JournalEntryBatch.ApprovalTaskID` by the engine, inside the same build transaction —
+   * D10 rev. 2026-07-29). Throws if the batch's company lacks a CFO.
+   */
+  async onBatchBuilt(batchId: string, contextUser: UserInfo): Promise<string | null> {
     const batch = await this.loadBatch(batchId, contextUser);
-    const cfoUserId = await this.resolveCFOUserId(batch, contextUser);
+    const cfoUserId = await this.resolveCFOUserIdForCompany(batch.CompanyID, contextUser);
     const typeId = await this.resolveApprovalTaskTypeId(contextUser);
     // Task Link's EntityID / assignee EntityID are UUID FKs to __mj.Entity.ID — resolve names → IDs.
     const batchEntityId = this.batchEntityId();
@@ -96,10 +110,15 @@ export class TasksAppApprovalGate implements BatchApprovalGate {
       ApproverPersonRecordIDs: [cfoUserId],
     }, contextUser);
     // CreateApprovalRequest logs (not throws) on a failed link — verify the link actually persisted,
-    // else assertApproved would block the send forever with no recoverable signal.
-    if (!(await this.resolveBatchTask(batchId, contextUser))) {
+    // else assertApproved would block the send forever with no recoverable signal. (This read runs
+    // on the same provider as the open build transaction, so it sees the uncommitted Task.)
+    const task = await this.resolveBatchTask(batchId, contextUser);
+    if (!task) {
       throw new Error(`Approval Task for batch ${batchId} was created but its Task Link did not persist — check tasks-app schema/permissions.`);
     }
+    // Hand the ID back so the engine stamps JournalEntryBatch.ApprovalTaskID in the build
+    // transaction — "does this batch have a task?" becomes a column read, not a Task-Link walk.
+    return task.ID;
   }
 
   /** Block the send unless the batch's Task carries a terminal Approved/ApprovedWithConditions decision. */
@@ -113,7 +132,7 @@ export class TasksAppApprovalGate implements BatchApprovalGate {
 
   /** Record an approve/reject decision on the batch's Task. Used by the in-app control AND the Tasks inbox. */
   async recordDecision(
-    batchId: string, outcome: TaskDecisionOutcomeCode, decidedByPersonId: string, notes: string | undefined, contextUser: UserInfo,
+    batchId: string, outcome: TaskDecisionOutcomeCode, decidedByPersonId: string | undefined, notes: string | undefined, contextUser: UserInfo,
   ): Promise<void> {
     const task = await this.resolveBatchTask(batchId, contextUser);
     if (!task) throw new Error(`Batch ${batchId} has no approval Task to record a decision against.`);
@@ -129,15 +148,16 @@ export class TasksAppApprovalGate implements BatchApprovalGate {
   }
 
   /**
-   * The CFO User of the batch's company (batches are single-company, D7 — the header carries
-   * CompanyID). Hard-fail when the company lacks a configured CFO.
+   * The CFO User of a company (batches are single-company, D7 — the header carries CompanyID).
+   * Hard-fail when the company lacks a configured CFO. Shared by the pre-write `assertCanRaise`
+   * precondition and the in-transaction `onBatchBuilt`.
    */
-  private async resolveCFOUserId(batch: mjBizAppsAccountingJournalEntryBatchEntity, contextUser: UserInfo): Promise<string> {
+  private async resolveCFOUserIdForCompany(companyId: string, contextUser: UserInfo): Promise<string> {
     const acp = await this.provider.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, contextUser);
-    if (!(await acp.Load(batch.CompanyID))) throw new Error(`TasksAppApprovalGate: no AccountingCompanyProfile for company ${batch.CompanyID}`);
+    if (!(await acp.Load(companyId))) throw new Error(`TasksAppApprovalGate: no AccountingCompanyProfile for company ${companyId}`);
     const cfo = acp.ApprovalCFOUserID;
     if (!cfo) {
-      throw new Error(`No CFO configured for company ${batch.CompanyID}; set AccountingCompanyProfile.ApprovalCFOUserID before batching for approval.`);
+      throw new Error(`No CFO configured for company ${companyId}; set AccountingCompanyProfile.ApprovalCFOUserID before batching for approval.`);
     }
     return cfo;
   }

@@ -17,8 +17,8 @@ export class mjBizAppsAccountingDimensionValueFormComponent extends BaseFormComp
         await super.ngOnInit();
         this.initSections([
             { sectionKey: 'details', sectionName: 'Details', isExpanded: true },
-            { sectionKey: 'mJBizAppsAccountingIntercompanyAccountMatchDimensions', sectionName: 'Intercompany Account Match Dimensions', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingJournalEntryLineDimensions', sectionName: 'Journal Entry Line Dimensions', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingIntercompanyAccountMatchDimensions', sectionName: 'Intercompany Account Match Dimensions', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingDimensionValues', sectionName: 'Dimension Values', isExpanded: false }
         ]);
     }

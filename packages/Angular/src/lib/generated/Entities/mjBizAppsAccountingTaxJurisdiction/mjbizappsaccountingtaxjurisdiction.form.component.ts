@@ -18,8 +18,8 @@ export class mjBizAppsAccountingTaxJurisdictionFormComponent extends BaseFormCom
         this.initSections([
             { sectionKey: 'details', sectionName: 'Details', isExpanded: true },
             { sectionKey: 'mJBizAppsAccountingTaxJurisdictions', sectionName: 'Tax Jurisdictions', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingTaxLiabilities', sectionName: 'Tax Liabilities', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingCustomerTaxProfiles', sectionName: 'Customer Tax Profiles', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingTaxLiabilities', sectionName: 'Tax Liabilities', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingTaxRates', sectionName: 'Tax Rates', isExpanded: false }
         ]);
     }

@@ -108,31 +108,6 @@
          RELATED ENTITY PANELS
          ======================================== -->
 
-    <!-- Intercompany Account Match Dimensions Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingIntercompanyAccountMatchDimensions"
-        SectionName="Intercompany Account Match Dimensions"
-        Icon="fa fa-table"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingIntercompanyAccountMatchDimensions')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Intercompany Account Match Dimensions','DimensionValueID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Intercompany Account Match Dimensions')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingIntercompanyAccountMatchDimensions')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingIntercompanyAccountMatchDimensions', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
     <!-- Journal Entry Line Dimensions Section -->
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingJournalEntryLineDimensions"
@@ -152,6 +127,31 @@
                 [ShowToolbar]="false"
                 (Navigate)="OnFormNavigate($event)"
                 (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntryLineDimensions', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- Intercompany Account Match Dimensions Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingIntercompanyAccountMatchDimensions"
+        SectionName="Intercompany Account Match Dimensions"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingIntercompanyAccountMatchDimensions')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Intercompany Account Match Dimensions','DimensionValueID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Intercompany Account Match Dimensions')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingIntercompanyAccountMatchDimensions')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingIntercompanyAccountMatchDimensions', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>

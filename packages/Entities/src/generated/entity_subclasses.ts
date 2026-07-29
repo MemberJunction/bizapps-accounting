@@ -971,7 +971,7 @@ export const mjBizAppsAccountingJournalEntrySchema = z.object({
         * * Display Name: Linked Entity ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ: Entities (vwEntities.ID)
-        * * Description: Polymorphic origin part 1 (plan D25): the MJ Entity of the single causal source record for this JE (OrderLine for booking/rev-rec entries, Payment for receipts/refunds, TaxRemittance for remittances, ...). FK to __mj.Entity. NULL (with LinkedRecordID) = manual JE.`),
+        * * Description: Polymorphic origin part 1 (plan D25): the MJ Entity of the single causal source record for this JE (OrderLine for booking/rev-rec entries, Payment for receipts/refunds, ...). FK to __mj.Entity. NULL (with LinkedRecordID) = manual JE.`),
     LinkedRecordID: z.string().nullable().describe(`
         * * Field Name: LinkedRecordID
         * * Display Name: Linked Record ID
@@ -1775,57 +1775,6 @@ export const mjBizAppsAccountingTaxRateSchema = z.object({
 });
 
 export type mjBizAppsAccountingTaxRateEntityType = z.infer<typeof mjBizAppsAccountingTaxRateSchema>;
-
-/**
- * zod schema definition for the entity MJ_BizApps_Accounting: Tax Remittances
- */
-export const mjBizAppsAccountingTaxRemittanceSchema = z.object({
-    ID: z.string().describe(`
-        * * Field Name: ID
-        * * Display Name: ID
-        * * SQL Data Type: uniqueidentifier
-        * * Default Value: newsequentialid()
-        * * Description: Unique identifier.`),
-    TaxLiabilityID: z.string().describe(`
-        * * Field Name: TaxLiabilityID
-        * * Display Name: Tax Liability ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Tax Liabilities (vwTaxLiabilities.ID)
-        * * Description: Liability this payment is against.`),
-    RemittedAmount: z.number().describe(`
-        * * Field Name: RemittedAmount
-        * * Display Name: Remitted Amount
-        * * SQL Data Type: decimal(18, 2)
-        * * Description: Amount remitted (functional currency).`),
-    RemittedDate: z.date().describe(`
-        * * Field Name: RemittedDate
-        * * Display Name: Remitted Date
-        * * SQL Data Type: date
-        * * Description: Date the remittance was paid.`),
-    PaymentReference: z.string().nullable().describe(`
-        * * Field Name: PaymentReference
-        * * Display Name: Payment Reference
-        * * SQL Data Type: nvarchar(100)
-        * * Description: External payment reference (wire ID, check number, confirmation code).`),
-    PostedJournalEntryID: z.string().nullable().describe(`
-        * * Field Name: PostedJournalEntryID
-        * * Display Name: Posted Journal Entry ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entries (vwJournalEntries.ID)
-        * * Description: JE that records this remittance.`),
-    __mj_CreatedAt: z.date().describe(`
-        * * Field Name: __mj_CreatedAt
-        * * Display Name: Created At
-        * * SQL Data Type: datetimeoffset
-        * * Default Value: getutcdate()`),
-    __mj_UpdatedAt: z.date().describe(`
-        * * Field Name: __mj_UpdatedAt
-        * * Display Name: Updated At
-        * * SQL Data Type: datetimeoffset
-        * * Default Value: getutcdate()`),
-});
-
-export type mjBizAppsAccountingTaxRemittanceEntityType = z.infer<typeof mjBizAppsAccountingTaxRemittanceSchema>;
  
  
 
@@ -4228,7 +4177,7 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     * * Display Name: Linked Entity ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ: Entities (vwEntities.ID)
-    * * Description: Polymorphic origin part 1 (plan D25): the MJ Entity of the single causal source record for this JE (OrderLine for booking/rev-rec entries, Payment for receipts/refunds, TaxRemittance for remittances, ...). FK to __mj.Entity. NULL (with LinkedRecordID) = manual JE.
+    * * Description: Polymorphic origin part 1 (plan D25): the MJ Entity of the single causal source record for this JE (OrderLine for booking/rev-rec entries, Payment for receipts/refunds, ...). FK to __mj.Entity. NULL (with LinkedRecordID) = manual JE.
     */
     get LinkedEntityID(): string | null {
         return this.Get('LinkedEntityID');
@@ -5827,7 +5776,7 @@ export class mjBizAppsAccountingTaxJurisdictionEntity extends BaseEntity<mjBizAp
  * * Schema: __mj_BizAppsAccounting
  * * Base Table: TaxLiability
  * * Base View: vwTaxLiabilities
- * * @description Open tax liability balance per (Company × Authority × Jurisdiction × Period). Accrued from JE postings; paid down via TaxRemittance records.
+ * * @description Open tax liability balance per (Company × Authority × Jurisdiction × Period). Accrued from JE postings; remitted to the authority in the ERP (no remittance table here — ERP/GL concern).
  * * Primary Key: ID
  * @extends {BaseEntity}
  * @class
@@ -6201,138 +6150,5 @@ export class mjBizAppsAccountingTaxRateEntity extends BaseEntity<mjBizAppsAccoun
     */
     get TaxJurisdiction(): string {
         return this.Get('TaxJurisdiction');
-    }
-}
-
-
-/**
- * MJ_BizApps_Accounting: Tax Remittances - strongly typed entity sub-class
- * * Schema: __mj_BizAppsAccounting
- * * Base Table: TaxRemittance
- * * Base View: vwTaxRemittances
- * * @description A payment made against a TaxLiability. Generates a JE via PostedJournalEntryID (typed with the 'TaxRemittance' JournalEntryType — see issue #24 on which app seeds that type).
- * * Primary Key: ID
- * @extends {BaseEntity}
- * @class
- * @public
- */
-@RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Tax Remittances')
-export class mjBizAppsAccountingTaxRemittanceEntity extends BaseEntity<mjBizAppsAccountingTaxRemittanceEntityType> {
-    /**
-    * Loads the MJ_BizApps_Accounting: Tax Remittances record from the database
-    * @param ID: string - primary key value to load the MJ_BizApps_Accounting: Tax Remittances record.
-    * @param EntityRelationshipsToLoad - (optional) the relationships to load
-    * @returns {Promise<boolean>} - true if successful, false otherwise
-    * @public
-    * @async
-    * @memberof mjBizAppsAccountingTaxRemittanceEntity
-    * @method
-    * @override
-    */
-    public async Load(ID: string, EntityRelationshipsToLoad?: string[]) : Promise<boolean> {
-        const compositeKey: CompositeKey = new CompositeKey();
-        compositeKey.KeyValuePairs.push({ FieldName: 'ID', Value: ID });
-        return await super.InnerLoad(compositeKey, EntityRelationshipsToLoad);
-    }
-
-    /**
-    * * Field Name: ID
-    * * Display Name: ID
-    * * SQL Data Type: uniqueidentifier
-    * * Default Value: newsequentialid()
-    * * Description: Unique identifier.
-    */
-    get ID(): string {
-        return this.Get('ID');
-    }
-    set ID(value: string) {
-        this.Set('ID', value);
-    }
-
-    /**
-    * * Field Name: TaxLiabilityID
-    * * Display Name: Tax Liability ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Tax Liabilities (vwTaxLiabilities.ID)
-    * * Description: Liability this payment is against.
-    */
-    get TaxLiabilityID(): string {
-        return this.Get('TaxLiabilityID');
-    }
-    set TaxLiabilityID(value: string) {
-        this.Set('TaxLiabilityID', value);
-    }
-
-    /**
-    * * Field Name: RemittedAmount
-    * * Display Name: Remitted Amount
-    * * SQL Data Type: decimal(18, 2)
-    * * Description: Amount remitted (functional currency).
-    */
-    get RemittedAmount(): number {
-        return this.Get('RemittedAmount');
-    }
-    set RemittedAmount(value: number) {
-        this.Set('RemittedAmount', value);
-    }
-
-    /**
-    * * Field Name: RemittedDate
-    * * Display Name: Remitted Date
-    * * SQL Data Type: date
-    * * Description: Date the remittance was paid.
-    */
-    get RemittedDate(): Date {
-        return this.Get('RemittedDate');
-    }
-    set RemittedDate(value: Date) {
-        this.Set('RemittedDate', value);
-    }
-
-    /**
-    * * Field Name: PaymentReference
-    * * Display Name: Payment Reference
-    * * SQL Data Type: nvarchar(100)
-    * * Description: External payment reference (wire ID, check number, confirmation code).
-    */
-    get PaymentReference(): string | null {
-        return this.Get('PaymentReference');
-    }
-    set PaymentReference(value: string | null) {
-        this.Set('PaymentReference', value);
-    }
-
-    /**
-    * * Field Name: PostedJournalEntryID
-    * * Display Name: Posted Journal Entry ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entries (vwJournalEntries.ID)
-    * * Description: JE that records this remittance.
-    */
-    get PostedJournalEntryID(): string | null {
-        return this.Get('PostedJournalEntryID');
-    }
-    set PostedJournalEntryID(value: string | null) {
-        this.Set('PostedJournalEntryID', value);
-    }
-
-    /**
-    * * Field Name: __mj_CreatedAt
-    * * Display Name: Created At
-    * * SQL Data Type: datetimeoffset
-    * * Default Value: getutcdate()
-    */
-    get __mj_CreatedAt(): Date {
-        return this.Get('__mj_CreatedAt');
-    }
-
-    /**
-    * * Field Name: __mj_UpdatedAt
-    * * Display Name: Updated At
-    * * SQL Data Type: datetimeoffset
-    * * Default Value: getutcdate()
-    */
-    get __mj_UpdatedAt(): Date {
-        return this.Get('__mj_UpdatedAt');
     }
 }

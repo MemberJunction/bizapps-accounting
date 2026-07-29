@@ -1,0 +1,38 @@
+<!-- The rail column: MJ's nav (scrolls) above a toggle that never does.
+
+     The toggle sits OUTSIDE <mj-left-nav> on purpose. MJ's [footer] slot renders INSIDE the rail's
+     `overflow-y: auto` box, so a footer scrolls away with the items — an affordance you have to go
+     find is not an affordance. Out here it is always on screen, and it carries its own right border
+     so the rail's edge line runs unbroken to the bottom rather than stopping where MJ's <aside> ends. -->
+<!-- .sr--collapsed (icons-only) applies only when truly collapsed AND not hover-peeking: peeking shows
+     the full expanded rail (labels + wide) so the words come back exactly as on click-expand. -->
+<div class="sr" [class.sr--collapsed]="Collapsed && !HoverExpanded">
+  <mj-left-nav
+    class="sr__nav"
+    [Sections]="Sections"
+    [ActiveId]="ActiveId"
+    [MobileTitle]="MobileTitle"
+    [Width]="RailWidth"
+    (ItemClicked)="onItemClicked($event)">
+
+    <!-- The toggle lives INSIDE the nav via MJ's [header] slot (Marcelo 2026-07-21): being in the SAME
+         container as the nav items, it inherits the nav's padding + icon column, so it aligns and spaces
+         identically by construction (no hand-matching). It's styled to match a nav item row (rounded
+         hover, same padding). At the TOP so it's dock/taskbar-safe. fa-bars collapsed (click to open),
+         fa-outdent — the hamburger-with-left-arrow close glyph — expanded (click to collapse). -->
+    <button
+      header
+      type="button"
+      class="sr__toggle"
+      [attr.aria-label]="ToggleLabel"
+      [attr.aria-expanded]="!Collapsed"
+      [title]="ToggleLabel"
+      (click)="Toggle()">
+      <i
+        class="fa-solid sr__toggle-icon"
+        [class.fa-bars]="Collapsed"
+        [class.fa-outdent]="!Collapsed"
+        aria-hidden="true"></i>
+    </button>
+  </mj-left-nav>
+</div>

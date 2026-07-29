@@ -1,0 +1,586 @@
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, OnInit, OnDestroy } from '@angular/core';
+import { UUIDsEqual, NormalizeUUID } from '@memberjunction/global';
+import { BaseAngularComponent } from '@memberjunction/ng-base-types';
+import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
+import { CompanyScopeService } from '../../shared/company-scope.service';
+import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
+import type { mjBizAppsAccountingGLAccountEntity } from '@mj-biz-apps/accounting-entities';
+
+const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
+
+/** Derived from the entity — a widened CHECK constraint breaks the build here, by design. */
+type AccountType = mjBizAppsAccountingGLAccountEntity['AccountType'];
+type ParentID = mjBizAppsAccountingGLAccountEntity['ParentGLAccountID'];
+
+/** The four account-type values, for the filter + the editor. Derived, never hand-listed as a type. */
+const ACCOUNT_TYPES: readonly AccountType[] = ['Asset', 'Liability', 'Equity', 'Revenue', 'Expense'];
+
+/**
+ * One row of the chart, already positioned in its company's rollup tree.
+ *
+ * `Depth` is what makes `ParentGLAccountID` — otherwise an invisible uniqueidentifier — legible:
+ * a child is indented under its parent. `IsOrphan` / `InCycle` mark rows whose parent pointer is
+ * broken; they are surfaced as roots WITH a marker rather than dropped, because a dropped row is a
+ * chart that silently lies about its own contents.
+ */
+interface AccountRow {
+  ID: string;
+  CompanyID: string;
+  Company: string;
+  Code: string;
+  Name: string;
+  AccountType: AccountType;
+  ParentGLAccountID: ParentID;
+  ParentLabel: string | null;
+  CurrencyCode: string | null;
+  ExternalSystem: string | null;
+  ExternalAccountID: string | null;
+  IsActive: boolean;
+  IsSystemSeeded: boolean;
+  Description: string | null;
+  Depth: number;
+  /** Parent pointer names an account that isn't in this chart (or isn't visible). */
+  IsOrphan: boolean;
+  /** Parent chain loops back on itself — bad data; shown as a root so the page cannot hang. */
+  InCycle: boolean;
+}
+
+/** The editor's working copy. Kept separate from the entity so a cancel is a genuine no-op. */
+interface AccountDraft {
+  ID: string | null;
+  CompanyID: string;
+  Code: string;
+  Name: string;
+  AccountType: AccountType;
+  ParentGLAccountID: string;
+  CurrencyCode: string;
+  ExternalSystem: string;
+  ExternalAccountID: string;
+  IsActive: boolean;
+  Description: string;
+}
+
+/** Filter option for the company drop-down. */
+interface CompanyOption {
+  ID: string;
+  Name: string;
+}
+
+/** The parent picker's options — one company's own chart, self + descendants removed. */
+interface ParentOption {
+  ID: string;
+  Label: string;
+}
+
+/**
+ * GL accounts — view and manage every account, across every company the user can see.
+ *
+ * **The shape this page has to make legible (Marcelo 2026-07-16 expected something different):**
+ * `GLAccount.CompanyID` is **NOT NULL** with **UNIQUE (CompanyID, Code)** — "each company has its
+ * own chart" (the field's own description). There is **no global pool of unowned accounts** that
+ * you then "hook to companies": an account is born inside exactly one company's chart, seeded by
+ * `spSeedDefaultChartOfAccounts` (which is what `IsSystemSeeded` distinguishes from deployment
+ * customizations). So this page is "every account, GROUPED BY COMPANY" — the Company column is
+ * first, the company drop-down narrows rather than assigns, and creating an account REQUIRES
+ * picking the company that will own it. That per-company reality is surfaced, not hidden. Whether
+ * a shared/global pool is ever wanted is Q29 in plans/QUESTIONS.md — and it would be a migration,
+ * not a UI change.
+ *
+ * **ERP direction is OUTBOUND.** `ExternalSystem` + `ExternalAccountID` map MJ's account OUT to the
+ * ERP's account: MJ's copy is the record, the ERP is the mirror target. The two columns sit
+ * together so "which system is this connected to?" reads at a glance.
+ *
+ * **Parent = rollup within ONE company's own chart** ("Parent account for hierarchical rollup
+ * (NULL = top of chart)"), e.g. 11200 Cash parents 11201 Cash — Operating. The picker therefore
+ * offers only the same company's accounts, minus the account itself and its own descendants (a
+ * cycle would break rollup), and the list indents children under parents so the structure is
+ * visible without opening anything.
+ *
+ * Data comes from `AccountingEngineBase`'s cache (`Config` is a no-op once loaded) — never one
+ * query per row.
+ */
+@Component({
+  standalone: false,
+  selector: 'mj-gl-accounts-page',
+  templateUrl: './gl-accounts.page.html',
+  styleUrls: ['./shell-table.css', './gl-accounts.page.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class GLAccountsPageComponent extends BaseAngularComponent implements OnInit, OnDestroy {
+  private cdr = inject(ChangeDetectorRef);
+  /** The shell header's Refresh reaches this page while it is the mounted one — the page adds none of its own. */
+  private pageRefresh = inject(PageRefreshService);
+  private refreshSub: { unsubscribe: () => void } | null = null;
+
+  /** The app-wide company scope (the rail-top chip) — the shared source, not a new one. */
+  public Scope = inject(CompanyScopeService);
+
+  public Rows: AccountRow[] = [];
+  public CompanyOptions: CompanyOption[] = [];
+  public CurrencyOptions: Array<{ Code: string; Name: string }> = [];
+  public AccountTypes = ACCOUNT_TYPES;
+
+  public IsLoading = false;
+  public LoadError: string | null = null;
+
+  // --- filters (one line; search sits to the right of the drop-downs) ---
+  public FilterCompanyID = '';
+  public FilterAccountType = '';
+  /** '' = any, 'Active' | 'Inactive'. */
+  public FilterActive = '';
+  /** '' = any, 'Seeded' = platform-shipped, 'Custom' = deployment customization. */
+  public FilterSource = '';
+  public SearchText = '';
+
+  // --- editor ---
+  public Draft: AccountDraft | null = null;
+  public IsSaving = false;
+  public EditorError: string | null = null;
+  /** The account being edited was seeded by the platform — worth knowing before you rename it. */
+  public EditingSeeded = false;
+
+  ngOnInit(): void {
+    this.refreshSub = this.pageRefresh.OnRefresh(() => this.Refresh());
+    void this.load();
+  }
+
+  ngOnDestroy(): void {
+    // A destroyed page stops answering the header's Refresh — that's what makes it page-aware.
+    this.refreshSub?.unsubscribe();
+  }
+
+  public Refresh(): void {
+    void this.load(true);
+  }
+
+  // ------------------------------------------------------------------ filtering
+
+  public get Filtered(): AccountRow[] {
+    const q = this.SearchText.trim().toLowerCase();
+    return this.Rows.filter((r) => this.matchesFilters(r, q));
+  }
+
+  /**
+   * Search covers Name, Code AND ID. Humans search by name and code; the ID stays searchable (and
+   * visible) so an ID pasted from a log or a deep link still finds its row.
+   */
+  private matchesFilters(r: AccountRow, q: string): boolean {
+    if (this.FilterCompanyID && !UUIDsEqual(r.CompanyID, this.FilterCompanyID)) return false;
+    if (this.FilterAccountType && r.AccountType !== this.FilterAccountType) return false;
+    if (this.FilterActive === 'Active' && !r.IsActive) return false;
+    if (this.FilterActive === 'Inactive' && r.IsActive) return false;
+    if (this.FilterSource === 'Seeded' && !r.IsSystemSeeded) return false;
+    if (this.FilterSource === 'Custom' && r.IsSystemSeeded) return false;
+    if (!q) return true;
+    return r.Name.toLowerCase().includes(q) || r.Code.toLowerCase().includes(q) || r.ID.toLowerCase().includes(q);
+  }
+
+  public ClearFilters(): void {
+    this.FilterCompanyID = '';
+    this.FilterAccountType = '';
+    this.FilterActive = '';
+    this.FilterSource = '';
+    this.SearchText = '';
+    this.cdr.markForCheck();
+  }
+
+  public get OrphanCount(): number {
+    return this.Rows.filter((r) => r.IsOrphan || r.InCycle).length;
+  }
+
+  /** Indentation is the rollup — one step per level of parentage. */
+  public IndentFor(r: AccountRow): string {
+    return `${r.Depth * 18}px`;
+  }
+
+  // ------------------------------------------------------------------ editor
+
+  public StartCreate(): void {
+    // An account cannot exist outside a company's chart, so the company is a REQUIRED first choice,
+    // not an optional afterthought. Pre-pick only when the choice is unambiguous.
+    const only = this.CompanyOptions.length === 1 ? this.CompanyOptions[0].ID : '';
+    this.Draft = {
+      ID: null,
+      CompanyID: this.FilterCompanyID || only,
+      Code: '',
+      Name: '',
+      AccountType: 'Asset',
+      ParentGLAccountID: '',
+      CurrencyCode: '',
+      ExternalSystem: '',
+      ExternalAccountID: '',
+      IsActive: true,
+      Description: '',
+    };
+    this.EditingSeeded = false;
+    this.EditorError = null;
+    this.cdr.markForCheck();
+  }
+
+  public StartEdit(r: AccountRow): void {
+    this.Draft = {
+      ID: r.ID,
+      CompanyID: r.CompanyID,
+      Code: r.Code,
+      Name: r.Name,
+      AccountType: r.AccountType,
+      ParentGLAccountID: r.ParentGLAccountID ?? '',
+      CurrencyCode: r.CurrencyCode ?? '',
+      ExternalSystem: r.ExternalSystem ?? '',
+      ExternalAccountID: r.ExternalAccountID ?? '',
+      IsActive: r.IsActive,
+      Description: r.Description ?? '',
+    };
+    this.EditingSeeded = r.IsSystemSeeded;
+    this.EditorError = null;
+    this.cdr.markForCheck();
+  }
+
+  public CancelEdit(): void {
+    this.Draft = null;
+    this.EditorError = null;
+    this.cdr.markForCheck();
+  }
+
+  /**
+   * The parent picker for the draft: **only the draft company's own chart** (that is what a rollup
+   * parent IS), minus the account itself and its own descendants — a cycle would break rollup and
+   * is exactly the bad data this page has to guard the tree against.
+   */
+  public get ParentOptions(): ParentOption[] {
+    const d = this.Draft;
+    if (!d?.CompanyID) return [];
+    const excluded = d.ID ? this.selfAndDescendants(d.ID) : new Set<string>();
+    return this.Rows.filter((r) => UUIDsEqual(r.CompanyID, d.CompanyID) && !excluded.has(NormalizeUUID(r.ID)))
+      .map((r) => ({ ID: r.ID, Label: `${r.Code} — ${r.Name}` }))
+      .sort((a, b) => a.Label.localeCompare(b.Label));
+  }
+
+  /** The id set that may not be a parent of `id`: itself plus everything beneath it. */
+  private selfAndDescendants(id: string): Set<string> {
+    const childrenByParent = this.buildChildIndex();
+    const out = new Set<string>([NormalizeUUID(id)]);
+    const queue = [NormalizeUUID(id)];
+    while (queue.length > 0) {
+      const current = queue.shift() as string;
+      for (const child of childrenByParent.get(current) ?? []) {
+        const key = NormalizeUUID(child.ID);
+        // The visited set doubles as the cycle guard: already-seen ids are never re-queued.
+        if (out.has(key)) continue;
+        out.add(key);
+        queue.push(key);
+      }
+    }
+    return out;
+  }
+
+  private buildChildIndex(): Map<string, AccountRow[]> {
+    const index = new Map<string, AccountRow[]>();
+    for (const r of this.Rows) {
+      if (!r.ParentGLAccountID) continue;
+      const key = NormalizeUUID(r.ParentGLAccountID);
+      const bucket = index.get(key);
+      if (bucket) bucket.push(r);
+      else index.set(key, [r]);
+    }
+    return index;
+  }
+
+  public async Save(): Promise<void> {
+    const d = this.Draft;
+    if (!d) return;
+
+    const invalid = this.validateDraft(d);
+    if (invalid) {
+      this.EditorError = invalid;
+      this.cdr.markForCheck();
+      return;
+    }
+
+    this.IsSaving = true;
+    this.EditorError = null;
+    this.cdr.markForCheck();
+    try {
+      const entity = await this.ProviderToUse.GetEntityObject<mjBizAppsAccountingGLAccountEntity>(GL_ENTITY, this.ProviderToUse.CurrentUser);
+      if (d.ID) {
+        const loaded = await entity.Load(d.ID);
+        if (!loaded) throw new Error(`Could not load account ${d.ID} to edit.`);
+      } else {
+        entity.NewRecord();
+      }
+      this.applyDraft(entity, d);
+
+      // Save() returns a boolean and does NOT throw on a logical failure (a UNIQUE violation, a
+      // permission denial) — reading the return value is the only way to know it worked.
+      const saved = await entity.Save();
+      if (!saved) {
+        this.EditorError = entity.LatestResult?.CompleteMessage ?? 'The account could not be saved.';
+        return;
+      }
+
+      this.Draft = null;
+      await this.load(true);
+    } catch (e) {
+      this.EditorError = e instanceof Error ? e.message : String(e);
+    } finally {
+      this.IsSaving = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  /**
+   * Client-side guards, so the common mistakes read as sentences rather than as an opaque SQL
+   * constraint error. `UNIQUE (CompanyID, Code)` is the one that bites: a duplicate code inside one
+   * company is legal-looking and fails at the DB. The DB stays the authority — `Save()`'s return is
+   * still checked — this just gets there first with a message a human can act on.
+   */
+  private validateDraft(d: AccountDraft): string | null {
+    if (!d.CompanyID) return 'Pick the company that will own this account — every account lives in exactly one company’s chart.';
+    if (!d.Code.trim()) return 'Code is required.';
+    if (!d.Name.trim()) return 'Name is required.';
+
+    const code = d.Code.trim().toLowerCase();
+    const clash = this.Rows.find(
+      (r) => UUIDsEqual(r.CompanyID, d.CompanyID) && r.Code.trim().toLowerCase() === code && !(d.ID && UUIDsEqual(r.ID, d.ID)),
+    );
+    if (clash) {
+      const company = this.CompanyOptions.find((c) => UUIDsEqual(c.ID, d.CompanyID))?.Name ?? 'this company';
+      return `${company} already has an account with code ${clash.Code} (“${clash.Name}”). Each company’s chart requires a unique code.`;
+    }
+
+    if (d.ParentGLAccountID) {
+      const parent = this.Rows.find((r) => UUIDsEqual(r.ID, d.ParentGLAccountID));
+      if (!parent) return 'The selected parent account no longer exists — pick another.';
+      if (!UUIDsEqual(parent.CompanyID, d.CompanyID)) {
+        return 'A parent account must belong to the same company — rollup happens inside one company’s chart.';
+      }
+      if (d.ID && this.selfAndDescendants(d.ID).has(NormalizeUUID(d.ParentGLAccountID))) {
+        return 'That account sits beneath this one — making it the parent would create a loop in the rollup.';
+      }
+    }
+    return null;
+  }
+
+  /** Typed generated properties only — never .Get()/.Set(). Empty strings become NULL. */
+  private applyDraft(entity: mjBizAppsAccountingGLAccountEntity, d: AccountDraft): void {
+    entity.CompanyID = d.CompanyID;
+    entity.Code = d.Code.trim();
+    entity.Name = d.Name.trim();
+    entity.AccountType = d.AccountType;
+    entity.ParentGLAccountID = d.ParentGLAccountID ? d.ParentGLAccountID : null;
+    entity.CurrencyCode = d.CurrencyCode ? d.CurrencyCode : null;
+    entity.ExternalSystem = d.ExternalSystem.trim() ? d.ExternalSystem.trim() : null;
+    entity.ExternalAccountID = d.ExternalAccountID.trim() ? d.ExternalAccountID.trim() : null;
+    entity.IsActive = d.IsActive;
+    entity.Description = d.Description.trim() ? d.Description.trim() : null;
+    // IsSystemSeeded is deliberately NOT written here. It records that
+    // `spSeedDefaultChartOfAccounts` created the row — a fact about provenance, not a user
+    // preference. Letting the UI set it would let a deployment customization claim to be
+    // platform-shipped, which is precisely the distinction the flag exists to preserve.
+  }
+
+  /**
+   * **Retire, don't delete — deliberate.** There is no Delete on this page. An account referenced
+   * by a journal-entry line or a GLAccountLink cannot be deleted (FK), so a delete button would be
+   * a button that fails with an opaque constraint error on exactly the accounts people most want to
+   * clean up. The schema names the intended path itself: IsActive is "whether the account is
+   * available for new JE lines. **Inactive accounts retain historical data.**" So retiring an
+   * account = clearing IsActive, which is safe for every account, keeps the history readable, and
+   * never produces an error we'd have to translate.
+   */
+  public async ToggleActive(r: AccountRow): Promise<void> {
+    this.IsSaving = true;
+    this.cdr.markForCheck();
+    try {
+      const entity = await this.ProviderToUse.GetEntityObject<mjBizAppsAccountingGLAccountEntity>(GL_ENTITY, this.ProviderToUse.CurrentUser);
+      const loaded = await entity.Load(r.ID);
+      if (!loaded) throw new Error(`Could not load account ${r.Code}.`);
+      entity.IsActive = !r.IsActive;
+      const saved = await entity.Save();
+      if (!saved) {
+        this.LoadError = entity.LatestResult?.CompleteMessage ?? `Could not update ${r.Code}.`;
+        return;
+      }
+      await this.load(true);
+    } catch (e) {
+      this.LoadError = e instanceof Error ? e.message : String(e);
+    } finally {
+      this.IsSaving = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  // ------------------------------------------------------------------ loading
+
+  private async load(forceRefresh = false): Promise<void> {
+    this.IsLoading = true;
+    this.LoadError = null;
+    this.cdr.markForCheck();
+    try {
+      const user = this.ProviderToUse.CurrentUser;
+      await AccountingEngineBase.Instance.Config(forceRefresh, user, this.ProviderToUse);
+      await this.Scope.Load(user, this.ProviderToUse);
+
+      const engine = AccountingEngineBase.Instance;
+      this.CurrencyOptions = engine.Currencies.map((c) => ({ Code: c.Code, Name: c.Name })).sort((a, b) => a.Code.localeCompare(b.Code));
+
+      const scoped = this.scopedAccounts(engine.GLAccounts);
+      this.CompanyOptions = this.companyOptionsFor(scoped);
+      this.Rows = this.buildRollup(scoped);
+    } catch (e) {
+      this.LoadError = e instanceof Error ? e.message : String(e);
+      this.Rows = [];
+    } finally {
+      this.IsLoading = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  /**
+   * The company scope narrows the chart; empty scope = every company (the service's rule, applied
+   * through the service so it lives in one place). Permission-based narrowing lands here later —
+   * "eventually we will limit with what a person has permissions and access to see."
+   */
+  private scopedAccounts(all: mjBizAppsAccountingGLAccountEntity[]): mjBizAppsAccountingGLAccountEntity[] {
+    if (this.Scope.IsAllCompanies) return all;
+    const selected = new Set(this.Scope.SelectedIDs.map((id) => NormalizeUUID(id)));
+    return all.filter((a) => selected.has(NormalizeUUID(a.CompanyID)));
+  }
+
+  private companyOptionsFor(accounts: mjBizAppsAccountingGLAccountEntity[]): CompanyOption[] {
+    const byID = new Map<string, CompanyOption>();
+    for (const a of accounts) {
+      // NormalizeUUID for the map key: SQL Server hands UUIDs back uppercase, so a raw string key
+      // would split one company into two buckets the moment a casing differs.
+      byID.set(NormalizeUUID(a.CompanyID), { ID: a.CompanyID, Name: a.Company });
+    }
+    return [...byID.values()].sort((a, b) => a.Name.localeCompare(b.Name));
+  }
+
+  /**
+   * Order the chart company-by-company, each company's accounts walked as a rollup tree so children
+   * sit under their parents with a `Depth` the template turns into indentation.
+   *
+   * Two data hazards are handled rather than ignored: a parent that isn't in the set (**orphan**)
+   * and a parent chain that loops (**cycle**). Both are promoted to roots and flagged — a cycle
+   * that hung the walk would blank the page, and a dropped orphan would be a chart quietly missing
+   * accounts.
+   */
+  private buildRollup(accounts: mjBizAppsAccountingGLAccountEntity[]): AccountRow[] {
+    const byID = new Map<string, mjBizAppsAccountingGLAccountEntity>();
+    for (const a of accounts) byID.set(NormalizeUUID(a.ID), a);
+
+    const cyclic = this.findCyclicIDs(accounts, byID);
+    const children = new Map<string, mjBizAppsAccountingGLAccountEntity[]>();
+    const roots: mjBizAppsAccountingGLAccountEntity[] = [];
+
+    for (const a of accounts) {
+      const parentKey = a.ParentGLAccountID ? NormalizeUUID(a.ParentGLAccountID) : null;
+      const attachable = parentKey !== null && byID.has(parentKey) && !cyclic.has(NormalizeUUID(a.ID));
+      if (!attachable) {
+        roots.push(a);
+        continue;
+      }
+      const bucket = children.get(parentKey as string);
+      if (bucket) bucket.push(a);
+      else children.set(parentKey as string, [a]);
+    }
+
+    const byCode = (x: mjBizAppsAccountingGLAccountEntity, y: mjBizAppsAccountingGLAccountEntity) => x.Code.localeCompare(y.Code);
+    const rootsByCompany = new Map<string, mjBizAppsAccountingGLAccountEntity[]>();
+    for (const r of roots) {
+      const key = NormalizeUUID(r.CompanyID);
+      const bucket = rootsByCompany.get(key);
+      if (bucket) bucket.push(r);
+      else rootsByCompany.set(key, [r]);
+    }
+
+    const companies = [...rootsByCompany.entries()].sort((a, b) => {
+      const an = byID.get(NormalizeUUID(a[1][0].ID))?.Company ?? '';
+      const bn = byID.get(NormalizeUUID(b[1][0].ID))?.Company ?? '';
+      return an.localeCompare(bn);
+    });
+
+    const out: AccountRow[] = [];
+    const emitted = new Set<string>();
+    for (const [, companyRoots] of companies) {
+      for (const root of [...companyRoots].sort(byCode)) {
+        this.walk(root, 0, children, byID, cyclic, emitted, out, byCode);
+      }
+    }
+    return out;
+  }
+
+  /** Depth-first emit. `emitted` is the belt-and-braces guard: no id is ever walked twice. */
+  private walk(
+    node: mjBizAppsAccountingGLAccountEntity,
+    depth: number,
+    children: Map<string, mjBizAppsAccountingGLAccountEntity[]>,
+    byID: Map<string, mjBizAppsAccountingGLAccountEntity>,
+    cyclic: Set<string>,
+    emitted: Set<string>,
+    out: AccountRow[],
+    byCode: (x: mjBizAppsAccountingGLAccountEntity, y: mjBizAppsAccountingGLAccountEntity) => number,
+  ): void {
+    const key = NormalizeUUID(node.ID);
+    if (emitted.has(key)) return;
+    emitted.add(key);
+    out.push(this.toRow(node, depth, byID, cyclic));
+    for (const child of [...(children.get(key) ?? [])].sort(byCode)) {
+      this.walk(child, depth + 1, children, byID, cyclic, emitted, out, byCode);
+    }
+  }
+
+  /**
+   * Every id whose parent chain loops. Walked per-node with a local visited set and a hard step cap,
+   * so bad data costs a bounded amount of work instead of hanging the page.
+   */
+  private findCyclicIDs(accounts: mjBizAppsAccountingGLAccountEntity[], byID: Map<string, mjBizAppsAccountingGLAccountEntity>): Set<string> {
+    const cyclic = new Set<string>();
+    for (const start of accounts) {
+      const seen = new Set<string>([NormalizeUUID(start.ID)]);
+      let current = start;
+      let steps = 0;
+      while (current.ParentGLAccountID && steps++ <= accounts.length) {
+        const parent = byID.get(NormalizeUUID(current.ParentGLAccountID));
+        if (!parent) break;
+        const parentKey = NormalizeUUID(parent.ID);
+        if (seen.has(parentKey)) {
+          cyclic.add(NormalizeUUID(start.ID));
+          break;
+        }
+        seen.add(parentKey);
+        current = parent;
+      }
+    }
+    return cyclic;
+  }
+
+  private toRow(
+    a: mjBizAppsAccountingGLAccountEntity,
+    depth: number,
+    byID: Map<string, mjBizAppsAccountingGLAccountEntity>,
+    cyclic: Set<string>,
+  ): AccountRow {
+    const parent = a.ParentGLAccountID ? byID.get(NormalizeUUID(a.ParentGLAccountID)) : undefined;
+    return {
+      ID: a.ID,
+      CompanyID: a.CompanyID,
+      Company: a.Company,
+      Code: a.Code,
+      Name: a.Name,
+      AccountType: a.AccountType,
+      ParentGLAccountID: a.ParentGLAccountID,
+      ParentLabel: parent ? `${parent.Code} — ${parent.Name}` : a.ParentGLAccount,
+      CurrencyCode: a.CurrencyCode,
+      ExternalSystem: a.ExternalSystem,
+      ExternalAccountID: a.ExternalAccountID,
+      IsActive: a.IsActive,
+      IsSystemSeeded: a.IsSystemSeeded,
+      Description: a.Description,
+      Depth: depth,
+      IsOrphan: !!a.ParentGLAccountID && !parent,
+      InCycle: cyclic.has(NormalizeUUID(a.ID)),
+    };
+  }
+}

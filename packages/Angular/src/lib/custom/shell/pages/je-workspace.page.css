@@ -1,0 +1,254 @@
+/* JE workspace (§8.1). Adapted from the approved mockup's .x-* stand-ins — design tokens only.
+   Height chain: this page is switched into <mj-left-nav-content>, so it declares its own
+   flex-column host (see all-journal-entries.page.css for why that is load-bearing). */
+
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+/* The body primitive is display:block and owns the page gutters — we do NOT change that. We only
+   make it a flex ITEM that fills the host, which gives it a resolved height. That height is what
+   the card's height:100% (and therefore the card's internal scroll) hangs off. A `flex:1` on a
+   child INSIDE it would be a no-op and collapse to zero — the card must size with height. */
+mj-page-body-interior {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* The card CHROME (surface, tab-strip row, scrollable body) now lives in the reusable
+   <mj-workspace-card> (transfer-pending/workspace-tabs/workspace-card.component). This page keeps only
+   its own content styles + the two identity-band label styles it projects into the card header. */
+.jew__identity {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--mj-text-primary);
+}
+
+.jew__session {
+  margin: 0;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--mj-text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Header form. */
+.jew__form {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+/* Laptop-width tolerance (§0). */
+@media (max-width: 1100px) {
+  .jew__form {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.jew__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--mj-text-secondary);
+  min-width: 0;
+}
+.jew__field--wide {
+  grid-column: span 2;
+}
+/* A derived value the operator cannot set (entry type, functional currency) — styled to read as
+   settled fact, deliberately NOT as a disabled input the user might try to fight. */
+.jew__readonly {
+  padding: 7px 0;
+  font-size: 13px;
+  color: var(--mj-text-primary);
+  font-weight: 600;
+}
+
+/* Line editor. It's a FEW-ROW editor, not a data grid — so override the shared shell-table's fixed
+   min(68vh,900px) height (which left a huge empty box for a 2-line entry): grow with the rows, cap
+   with a max-height + scroll only when there are many lines (Marcelo 2026-07-21). Border/radius come
+   from the shared .mjsh-tablewrap. */
+.jew__gridwrap.mjsh-tablewrap {
+  /* CONSTANT default size (Marcelo 2026-07-21): starts at a comfortable ~5-6 rows and STAYS there —
+     it does NOT grow as rows are added (rows scroll WITHIN it), so the card never gets forced into a
+     scroll. Sized by the CONTAINER (cqh — relative to the workspace card, a window/pane, NOT the
+     viewport; the design rule). Want more visible rows? Drag the bottom bar out (below). */
+  height: 38cqh;
+  min-height: 150px;   /* drag floor ≈ 2–3 rows (you can shrink it that small, not smaller) */
+  flex: none;
+  /* Reserve the gutter ALWAYS + a THIN scrollbar, so data never sits under the scrollbar and adding/
+     removing rows never pops a bar in/out that shifts the grid (reduce footprint AND reserve space). */
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+.jew__gridwrap.mjsh-tablewrap::-webkit-scrollbar { width: 9px; height: 9px; }
+.jew__gridwrap.mjsh-tablewrap::-webkit-scrollbar-thumb {
+  background: var(--mj-border-strong, var(--mj-border-default));
+  border-radius: 999px;
+}
+
+/* Full-width drag bar with a CENTRAL grip — resizes the grid vertically (the corner handle implied
+   both-axis resize, which is wrong; this is vertical-only, grabbable anywhere along the bottom edge). */
+.jew__resize {
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+}
+.jew__resize-grip {
+  width: 46px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--mj-border-strong, var(--mj-border-default));
+  transition: background 120ms;
+}
+.jew__resize:hover .jew__resize-grip {
+  background: var(--mj-brand-primary);
+}
+.jew__grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  /* Fixed layout: column widths come from the header row, NOT the cells' content. Without this, auto
+     layout re-measured the account/counterparty <select>s when their options populated on company
+     select — widening the columns and shifting the whole grid. Fixed pins the layout so picking a
+     company no longer moves anything (Marcelo 2026-07-21). */
+  table-layout: fixed;
+}
+.jew__grid th {
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mj-text-muted);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--mj-border-default);
+  white-space: nowrap;
+}
+.jew__grid td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--mj-border-subtle);
+  vertical-align: middle;
+}
+.jew__grid th.num,
+.jew__grid td.num {
+  text-align: right;
+  width: 150px;
+}
+.jew__grid input.num {
+  text-align: right;
+}
+.jew__grid .mj-input {
+  width: 100%;
+}
+.jew__rowact {
+  width: 44px;
+  text-align: center;
+  vertical-align: middle;
+}
+/* Center the trash button vertically in the row (the input cells make the row taller than the button). */
+.jew__rowact button {
+  vertical-align: middle;
+}
+.jew__row--bad td {
+  background: color-mix(in srgb, var(--mj-status-warning) 7%, transparent);
+}
+.jew__issuerow td {
+  padding: 4px 10px 8px;
+  font-size: 12px;
+  color: var(--mj-status-warning-text);
+  background: color-mix(in srgb, var(--mj-status-warning) 7%, transparent);
+  border-bottom: 1px solid var(--mj-border-subtle);
+}
+.jew__addline {
+  align-self: flex-start;
+}
+
+/* Balance strip. */
+.jew__balance {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border: 1px solid var(--mj-border-default);
+  border-radius: 10px;
+  background: var(--mj-bg-surface-card);
+  font-size: 12.5px;
+}
+.jew__balance b {
+  font-size: 14px;
+  color: var(--mj-text-primary);
+}
+.jew__balancenote {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--mj-text-muted);
+}
+
+.jew__errors {
+  border: 1px solid var(--mj-status-error-border);
+  background: var(--mj-status-error-bg);
+  color: var(--mj-status-error-text);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+}
+.jew__errors p {
+  margin: 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+/* Verbs. */
+.jew__footer {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.jew__footnote {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--mj-text-muted);
+  max-width: 46ch;
+}
+
+.jew__hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--mj-text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Memo, relocated below the balance strip — full width, its input fills the row. */
+.jew__memo {
+  width: 100%;
+}
+.jew__memo .mj-input {
+  width: 100%;
+}
+
+.jew__msg {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--mj-text-secondary);
+}
+.jew__msg--error {
+  color: var(--mj-status-error-text);
+}

@@ -1,0 +1,278 @@
+/* Batch workspace (§8.2). Adapted from the approved mockup's .x-* stand-ins — design tokens only.
+   Height chain: this page is switched into <mj-left-nav-content>, so it declares its own
+   flex-column host (see all-journal-entries.page.css for why that is load-bearing). */
+
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  gap: 10px;
+}
+
+/* The body primitive is display:block and owns the page gutters — we do NOT change that. We only
+   make it a flex ITEM that fills the host, which gives it a resolved height. That height is what
+   the card's height:100% (and therefore the card's internal scroll) hangs off. A `flex:1` on a
+   child INSIDE it would be a no-op and collapse to zero — the card must size with height.
+
+   Scoped through :host to WIN specificity. MJ sets these in the component's own `:host` rule
+   (0,1,0); a bare `mj-page-body-interior` element selector (0,0,1) LOSES to it and is silently
+   inert — these happen to restate MJ's own values, which is why that went unnoticed. */
+:host mj-page-body-interior {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ─── The backing card ────────────────────────────────────────────────────────
+   The card surface + pinned tab strip + scrollable body now come from the SHARED reusable
+   <mj-workspace-card> (transfer-pending/workspace-tabs/workspace-card.component) — same as the JE
+   workspace — so the old bespoke .bw / .bw-head / .bw-headmeta / .bw-body chrome is gone. What
+   remains here is only batch-specific CONTENT styling (identity band spans, criteria/preview cols),
+   projected into the card's [workspaceHeader] + default slots. */
+.bw-identity {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--mj-text-primary);
+}
+.bw-sessionnote {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--mj-text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Criteria left, preview right. (The card's own body — .ws-card__body — is the flex-column scroller
+   that used to be .bw-body: same padding 0 14px 14px, gap, and flex:1, so .bw-cols fills it as before.) */
+.bw-cols {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+}
+/* Laptop-width tolerance (§0): stack rather than crush the preview grid. */
+@media (max-width: 1100px) {
+  .bw-cols {
+    grid-template-columns: 1fr;
+  }
+}
+
+.bw-crit {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--mj-border-default);
+  border-radius: 10px;
+  background: var(--mj-bg-surface-card);
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.bw-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--mj-text-primary);
+}
+.bw-card-title--sub {
+  margin-top: 8px;
+}
+.bw-card-title .bw-muted {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.bw-muted {
+  color: var(--mj-text-muted);
+}
+
+.bw-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--mj-text-secondary);
+}
+.bw-hint {
+  font-size: 11px;
+  color: var(--mj-text-muted);
+}
+
+.bw-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.bw-chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mj-brand-primary) 10%, transparent);
+  color: var(--mj-brand-primary);
+  white-space: nowrap;
+}
+
+.bw-accounts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.bw-account {
+  color: var(--mj-text-secondary);
+}
+.bw-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.bw-preview {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 10px;
+}
+
+.bw-warn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--mj-status-warning) 10%, var(--mj-bg-surface));
+  border: 1px solid color-mix(in srgb, var(--mj-status-warning) 40%, transparent);
+  font-size: 12.5px;
+  color: var(--mj-text-primary);
+}
+.bw-warn i {
+  color: var(--mj-status-warning);
+}
+
+.bw-sumstrip {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  padding: 10px 14px;
+  border: 1px solid var(--mj-border-default);
+  border-radius: 10px;
+  background: var(--mj-bg-surface-card);
+  font-size: 12.5px;
+  flex-wrap: wrap;
+}
+.bw-sumstrip b {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+/* An unbalanced selection would be rejected by the ledger's own trigger — say so before Build. */
+.bw-unbalanced {
+  color: var(--mj-status-error-text, var(--mj-status-error));
+  font-weight: 600;
+}
+
+.bw-tablewrap {
+  border: 1px solid var(--mj-border-default);
+  border-radius: 10px;
+  background: var(--mj-bg-surface);
+}
+
+.bw-grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.bw-grid th,
+.bw-grid td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--mj-border-subtle, var(--mj-border-default));
+  text-align: left;
+  white-space: nowrap;
+}
+.bw-grid thead th {
+  position: sticky;
+  top: 0;
+  background: var(--mj-bg-surface-card);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--mj-text-muted);
+  z-index: 1;
+}
+.bw-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.bw-tick {
+  width: 34px;
+}
+
+/* An excluded row stays visible but reads as struck-out — the operator must still SEE what they
+   dropped (that is the point of the preview), not have it vanish. */
+.bw-excl td {
+  opacity: 0.42;
+  text-decoration: line-through;
+}
+
+.bw-empty {
+  padding: 20px;
+  text-align: center;
+  color: var(--mj-text-muted);
+  font-style: italic;
+}
+
+.bw-footer {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.bw-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Deferred-query controls (Marcelo 2026-07-21): Apply = the query trigger; the empty-state Load
+   prompt; the stale-filters hint. */
+.bw-apply {
+  align-self: flex-start;
+  margin-top: 4px;
+}
+.bw-stale {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--mj-status-warning-text, var(--mj-text-secondary));
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.bw-loadprompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 100%;
+  min-height: 220px;
+  padding: 24px;
+  text-align: center;
+  color: var(--mj-text-muted);
+}
+.bw-loadprompt > i {
+  font-size: 30px;
+  color: var(--mj-border-strong, var(--mj-border-default));
+}
+.bw-loadprompt p {
+  margin: 0;
+  max-width: 42ch;
+  font-size: 13px;
+}

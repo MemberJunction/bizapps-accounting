@@ -38,7 +38,6 @@ import { mjBizAppsAccountingTaxAuthorityFormComponent } from "./Entities/mjBizAp
 import { mjBizAppsAccountingTaxJurisdictionFormComponent } from "./Entities/mjBizAppsAccountingTaxJurisdiction/mjbizappsaccountingtaxjurisdiction.form.component";
 import { mjBizAppsAccountingTaxLiabilityFormComponent } from "./Entities/mjBizAppsAccountingTaxLiability/mjbizappsaccountingtaxliability.form.component";
 import { mjBizAppsAccountingTaxRateFormComponent } from "./Entities/mjBizAppsAccountingTaxRate/mjbizappsaccountingtaxrate.form.component";
-import { mjBizAppsAccountingTaxRemittanceFormComponent } from "./Entities/mjBizAppsAccountingTaxRemittance/mjbizappsaccountingtaxremittance.form.component";
    
 
 @NgModule({
@@ -81,8 +80,7 @@ export class GeneratedForms_SubModule_0 { }
 declarations: [
     mjBizAppsAccountingTaxJurisdictionFormComponent,
     mjBizAppsAccountingTaxLiabilityFormComponent,
-    mjBizAppsAccountingTaxRateFormComponent,
-    mjBizAppsAccountingTaxRemittanceFormComponent],
+    mjBizAppsAccountingTaxRateFormComponent],
 imports: [
     CommonModule,
     FormsModule,

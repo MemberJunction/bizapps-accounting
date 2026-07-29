@@ -13,9 +13,46 @@ create + open questions for the human, recorded so dev can roll through and circ
 Tiers: **1** Vitest (unit) · **2** server (tsx, in-process direct SQL) · **3** API (GraphQL→MJAPI) ·
 **4** GUI/DOM (no-browser — parked, mjdev overlay) · **5** Playwright (browser e2e, pre-PR only).
 
+## ⭐ CURRENT STATE — 2026-07-29 harness modernization (the donor-port test line)
+
+The suite was modernized with the S-A/S-B/S-C port (see `plans/donor-audit.md`). **Dead harnesses
+were REMOVED** — they tested retired systems and could never run against the realigned schema:
+`block2` (old batch-line-item model) · `block4` (ScheduledJE/materializer, dead per D15) · `block5`
+(ChartOfAccountsMapping, dead per D13) · `block6` (the removed `vw_*` views) ·
+`batching-multicompany` (multi-company batches, superseded by single-company D7) · api
+`readmodels-api` / `batch-dispatch-api` / `batching-scenarios-api` (dropped views + the deleted
+BatchDispatchResolver). Their live coverage now lives in the modernized set below (integration-style
+flows with exact-value asserts, mirroring the orders headless-E2E pattern).
+
+**Current inventory + verified results (2026-07-29, instance accounting-revamp — API :4180):**
+
+| Tier | Harness | Covers | Last run |
+|---|---|---|---|
+| 1 | `packages/CoreEntitiesServer/src/__tests__/` (vitest) | seeds, types, batch/JE invariants, dims | **42/42** |
+| 1 | `packages/EngineBase/src/__tests__/` (vitest) | pipeline stages 1–5 incl. `MULTI_COMPANY_DRAFT` + counterparty carry, link picker | **59/59** |
+| 2 | `test-harnesses/server/phase2-encapsulation.live.test.ts` (vitest, live DB) | L1–L16: encapsulated JE save/load/reversal (+guards L14, counterparty L15), engine set-op atomicity, ONE-transaction batch build + task stamp (L11–L13), GLAccount immediate lock (L8), link tie guard + forCompanyID (L16) | **16/16** |
+| 2 | `test-harnesses/server/block0-runtime.ts` (tsx) | W1 seeding, per-company JE numbering (BA-D31), batch numbering (DR-5 noted) | **10/10** |
+| 2 | `test-harnesses/server/block1-runtime.ts` (tsx) | REWRITTEN 2026-07-29: raw-SQL bypass proofs of the JE floor (50001/50003/50004/50006/50019/50022/50012), reversal via entity, entity double-entry validation | **11/11** |
+| 2 | `test-harnesses/server/engine-runtime.ts` (tsx) | engine typed error codes live (incl. MULTI_COMPANY_DRAFT), atomic rollback, ResolveLinkedAccount windows | **12/12** |
+| 2 | `test-harnesses/server/intercompany-runtime.ts` (tsx) | BA-D26/27 IAM resolution + triggers | **17/17** |
+| 3 | `test-harnesses/api/engine-op-api.ts` (tsx) | 'Accounting.CreateJournalEntry' over ExecuteRemoteOperation (per-company EntryNumber asserted) | **8/8** |
+| 3 | `test-harnesses/api/batch-ops-api.ts` (tsx, NEW) | the 5 batch remote ops end-to-end over the wire: build (netted 600-not-800 + stamped task), approval-state flip, dispatch→Posted, reject→Cancelled+pool-return, loud EmptyBatch | **23/23** |
+| 5 | `test-harnesses/playwright/` | browser e2e (specs largely target the pre-rebuild dashboards — rides the UI port) | not re-run (UI port pending) |
+
+Shared fixture `playwright/lib/batching-fixture.ts` modernized: encapsulated JE saves, EntryTypeID
+lookup, User-based CFO (ApprovalCFOUserID), company-rooted teardown, per-company isolation (the
+global stray-Pending fail-fast is gone — builds are per-company now).
+
+---
+
 ## Coverage matrix (✓ = real-value/exact · ⚠ = intentional, see register · ✗ = GAP, fill it)
 
-_Reworked 2026-07-06 for the engine-meeting rulings: AccountingPeriod/AccountBalance retired (CH-1),
+> ⚠ **HISTORICAL (2026-07-06 era — pre-rebuild).** Rows below reference retired features
+> (multi-company JEs/batches, COAMapping, SJE, read-model views) and removed harnesses. Kept as
+> the record of what the donor-era suite covered; the CURRENT STATE section above is the live
+> inventory. A fresh matrix gets rebuilt when the UI port lands (tier 4/5 columns change shape).
+
+_Historical matrix, reworked 2026-07-06: AccountingPeriod/AccountBalance retired (CH-1),
 multi-company JEs + GLOBAL multi-company batches (CH-4/AM-4), batch lifecycle
 Pending→Approved→Sent→Posted, ERP resolution falls back to the account Code (AM-4), the SJE
 materializer retired (AM-6 — domain servers generate). W4 routing + period-close rows are gone
