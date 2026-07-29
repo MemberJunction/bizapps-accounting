@@ -26,7 +26,7 @@ import '@memberjunction/server-bootstrap-lite';
 import '@mj-biz-apps/common-entities';
 import '@mj-biz-apps/accounting-entities';
 import '@mj-biz-apps/accounting-core-entities-server';
-import { seedAssociationDemo, DemoSeedReport } from '@mj-biz-apps/accounting-core-entities-server';
+import { seedAssociationDemo, DemoSeedReport } from './AssociationDemoSeedData.js';
 
 const SCHEMA = '__mj_BizAppsAccounting';
 

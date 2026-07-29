@@ -36,6 +36,7 @@ import {
   cancelBatch,
   regenerateBatch,
   mockErpPoster,
+  GetBatchSummaryEntryType,
   TasksAppApprovalGate,
   type BatchTargetSystem,
 } from '@mj-biz-apps/accounting-core-entities-server';
@@ -135,11 +136,12 @@ export class BatchDispatchResolver extends ResolverBase {
     }
   }
 
-  /** Distinct companies that currently have unbatched Pending JEs (BatchSummary JEs excluded by EntryType). */
+  /** Distinct companies that currently have unbatched Pending JEs (summary JEs excluded via their type's IsBatchSummary flag — issue #24). */
   private async companiesWithPendingJEs(user: UserInfo, provider: IMetadataProvider): Promise<string[]> {
+    const summaryType = await GetBatchSummaryEntryType(user, provider);
     const rv = new RunView(provider as unknown as IRunViewProvider);
     const res = await rv.RunView<{ CompanyID: string }>(
-      { EntityName: JE_ENTITY, ExtraFilter: `Status='Pending' AND EntryType<>'BatchSummary'`, Fields: ['CompanyID'], ResultType: 'simple', BypassCache: true },
+      { EntityName: JE_ENTITY, ExtraFilter: `Status='Pending' AND EntryTypeID<>'${summaryType.ID}'`, Fields: ['CompanyID'], ResultType: 'simple', BypassCache: true },
       user,
     );
     return [...new Set((res.Results ?? []).map(r => r.CompanyID))];

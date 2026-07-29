@@ -19,6 +19,7 @@ export { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js'
 export { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
 export { GLAccountEntityServer } from './GLAccountEntityServer.js';
 export { IntercompanyAccountMatchEntityServer } from './IntercompanyAccountMatchEntityServer.js';
+export { JournalEntryTypeEntityServer, LoadJournalEntryTypeEntityServer } from './JournalEntryTypeEntityServer.js';
 // (AccountingPeriodEntityServer removed 2026-07-06 — AccountingPeriod retired, CH-1.)
 
 // Internal helpers exported for use by future EntityServer classes (period
@@ -30,6 +31,13 @@ export {
 } from './SeedData.js';
 export type { SeededGLAccount } from './SeedData.js';
 export { getNextJournalEntryNumber, getNextBatchNumber } from './SequenceService.js';
+export {
+  LookupJournalEntryTypeByCode,
+  LookupJournalEntryTypeByID,
+  RequireJournalEntryTypeID,
+  GetBatchSummaryEntryType,
+} from './JournalEntryTypes.js';
+export type { JournalEntryTypeRow } from './JournalEntryTypes.js';
 
 // (JournalEntryValidation retired 2026-07-24, phase-2 sweep — its per-record rules live in
 //  JournalEntryEntityServer.Validate/ValidateAsync; nothing consumed the standalone module.
@@ -69,10 +77,8 @@ export { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
 //  ChartOfAccountsMappingService retired 2026-07-23 — the mapping table was dropped; the account
 //  Code / GLAccount.ExternalAccountID is the ERP wire identity. Both live in git history.)
 
-// Block 4 — deterministic, idempotent Association demo seed (multi-company AR/DefRev/Tax/Intercompany
-// data so the Explorer GUI + the read-model views have meaningful fixtures). See AssociationDemoSeedData.ts.
-export { seedAssociationDemo } from './AssociationDemoSeedData.js';
-export type { DemoSeedReport } from './AssociationDemoSeedData.js';
+// (AssociationDemoSeedData moved to test-harnesses/server/ 2026-07-27 — demo fixtures are dev/test
+//  assets and must not ship in this package; seed-demo.ts consumes it locally via tsx.)
 
 // The accounting ENGINE (plan §2.2-2.3): server write path over the browser-safe cache, plus the
 // Accounting.CreateJournalEntry remotable op (code-only — registered via LoadCreateJournalEntryOperation).

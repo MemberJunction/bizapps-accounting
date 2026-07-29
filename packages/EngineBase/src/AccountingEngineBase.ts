@@ -37,6 +37,7 @@ import type {
   mjBizAppsAccountingGLAccountRoleEntity,
   mjBizAppsAccountingIntercompanyAccountMatchDimensionEntity,
   mjBizAppsAccountingIntercompanyAccountMatchEntity,
+  mjBizAppsAccountingJournalEntryTypeEntity,
 } from '@mj-biz-apps/accounting-entities';
 import type { PipelineLookups } from './pipeline.js';
 
@@ -138,6 +139,7 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
       { PropertyName: '_dimensionValues', EntityName: 'MJ_BizApps_Accounting: Dimension Values' },
       { PropertyName: '_companyProfiles', EntityName: 'MJ_BizApps_Accounting: Accounting Company Profiles' },
       { PropertyName: '_currencies', EntityName: 'MJ_BizApps_Accounting: Currencies' },
+      { PropertyName: '_journalEntryTypes', EntityName: 'MJ_BizApps_Accounting: Journal Entry Types' },
       { PropertyName: '_intercompanyMatches', EntityName: 'MJ_BizApps_Accounting: Intercompany Account Matches' },
       {
         PropertyName: '_intercompanyMatchDimensions',
@@ -176,6 +178,9 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
   }
   public get Currencies(): mjBizAppsAccountingCurrencyEntity[] {
     return this.GetConfigData<mjBizAppsAccountingCurrencyEntity>('_currencies');
+  }
+  public get JournalEntryTypes(): mjBizAppsAccountingJournalEntryTypeEntity[] {
+    return this.GetConfigData<mjBizAppsAccountingJournalEntryTypeEntity>('_journalEntryTypes');
   }
   public get IntercompanyAccountMatches(): mjBizAppsAccountingIntercompanyAccountMatchEntity[] {
     return this.GetConfigData<mjBizAppsAccountingIntercompanyAccountMatchEntity>('_intercompanyMatches');
@@ -299,9 +304,21 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
 
   // ─── pipeline adapter ──────────────────────────────────────────────────────
 
+  /** Point lookup: the JournalEntryType with this Code (case-insensitive), or undefined. */
+  public JournalEntryTypeByCode(code: string): mjBizAppsAccountingJournalEntryTypeEntity | undefined {
+    const key = (code ?? '').trim().toLowerCase();
+    return this.JournalEntryTypes.find(t => t.Code.trim().toLowerCase() === key);
+  }
+
+  /** The single IsBatchSummary=1 type row (filtered unique index guarantees at most one). */
+  public get BatchSummaryEntryType(): mjBizAppsAccountingJournalEntryTypeEntity | undefined {
+    return this.JournalEntryTypes.find(t => t.IsBatchSummary);
+  }
+
   /** Cache-backed lookups for the pure draft pipeline (./pipeline.ts). */
   public CreatePipelineLookups(): PipelineLookups {
     const accounts = new Map(this.GLAccounts.map(a => [uuidKey(a.ID), a]));
+    const entryTypes = new Map(this.JournalEntryTypes.map(t => [t.Code.trim().toLowerCase(), t]));
     const dimensions = new Set(this.Dimensions.map(d => uuidKey(d.ID)));
     const valuesByDimension = new Map<string, Set<string>>();
     for (const v of this.DimensionValues) {
@@ -314,6 +331,10 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
       accountByID: (id) => {
         const a = accounts.get(uuidKey(id));
         return a ? { ID: a.ID, CompanyID: a.CompanyID, IsActive: a.IsActive } : undefined;
+      },
+      entryTypeByCode: (code) => {
+        const t = entryTypes.get((code ?? '').trim().toLowerCase());
+        return t ? { ID: t.ID, Code: t.Code, IsActive: t.IsActive, IsBatchSummary: t.IsBatchSummary } : undefined;
       },
       dimensionExists: (id) => dimensions.has(uuidKey(id)),
       dimensionValueBelongs: (dimensionId, valueId) => valuesByDimension.get(uuidKey(dimensionId))?.has(uuidKey(valueId)) ?? false,

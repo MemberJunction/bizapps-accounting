@@ -6,7 +6,7 @@
  *
  * Per the MJ Transport-Layer guide the business logic lives in the engine/entity-server
  * (`generateReversal` on `JournalEntryEntityServer` — W6: a NEW Pending JE with Dr/Cr swapped,
- * EntryType='Reversal', back-referenced both ways; never mutates the historical row). This
+ * typed JournalEntryType Code='Reversal', back-referenced both ways; never mutates the historical row). This
  * resolver only: (1) extracts the per-request user, (2) loads the JE via the metadata system
  * (which returns the registered `JournalEntryEntityServer` subclass), (3) calls the method,
  * (4) maps the new reversal to a typed result.
