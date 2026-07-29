@@ -105,7 +105,6 @@ flowchart TD
     JournalEntry --> JournalEntryLine
     GLAccount -->|company-match| JournalEntryLine
     Currency -->|original ccy| JournalEntryLine
-    Organization -->|counterparty| JournalEntryLine
     JournalEntry -.->|Reverses / ReversedBy| JournalEntry
     JournalEntryLine --> JELD
     DimensionValue --> JELD
@@ -159,7 +158,6 @@ erDiagram
     JournalEntry ||--|{ JournalEntryLine : "balanced on lock"
     GLAccount ||--o{ JournalEntryLine : "company-match trigger"
     Currency ||--o{ JournalEntryLine : "OriginalCurrencyCode"
-    Organization ||--o{ JournalEntryLine : "CounterpartyOrganizationID"
     JournalEntry |o--o| JournalEntry : "Reverses / ReversedBy"
     JournalEntryType ||--o{ JournalEntry : "EntryTypeID (BA-D29)"
     JournalEntryLine ||--o{ JournalEntryLineDimension : ""
@@ -335,7 +333,6 @@ erDiagram
         decimal OriginalCreditAmount
         decimal ExchangeRateUsed
         string Description
-        uuid CounterpartyOrganizationID FK
     }
     JournalEntryLineDimension {
         uuid ID PK
@@ -611,7 +608,6 @@ erDiagram
         decimal OriginalCreditAmount "nullable"
         decimal ExchangeRateUsed "nullable"
         string Description
-        uuid CounterpartyOrganizationID FK "customer on AR lines"
     }
     JournalEntryLineDimension {
         uuid ID PK

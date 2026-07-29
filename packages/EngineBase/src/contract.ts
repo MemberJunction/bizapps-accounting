@@ -24,10 +24,6 @@ export interface JournalEntryLineDraft {
   DebitAmount?: number;
   CreditAmount?: number;
   Description?: string;
-  /** The customer/counterparty this line's receivable-or-payable belongs to (AR-by-customer).
-   *  Set on the AR line by order booking + payment capture; carried by reversals. Soft-optional —
-   *  omitted for lines with no counterparty (revenue, cash, tax). FK to bizapps-common Organization. */
-  CounterpartyOrganizationID?: string;
   /** Pre-existing dimension/value pairs — validate-only, NEVER auto-created (CH-12). */
   Dimensions?: JournalEntryLineDimensionDraft[];
 }

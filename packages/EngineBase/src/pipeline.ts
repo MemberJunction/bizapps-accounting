@@ -72,8 +72,6 @@ export interface NormalizedLine {
   DebitAmount: number | null;
   CreditAmount: number | null;
   Description: string | null;
-  /** The counterparty carried from the draft line (first non-null wins on a merge). */
-  CounterpartyOrganizationID: string | null;
   Dimensions: { DimensionID: string; DimensionValueID: string }[];
   /** 0-based indexes of the draft lines merged into this one (for error/lineage reporting). */
   SourceLineIndexes: number[];
@@ -202,7 +200,6 @@ export function normalizeLines(draft: JournalEntryDraft, lookups: PipelineLookup
       if (side === 'D') existing.line.DebitAmount = round2((existing.line.DebitAmount ?? 0) + amount);
       else existing.line.CreditAmount = round2((existing.line.CreditAmount ?? 0) + amount);
       existing.line.Description = existing.line.Description ?? line.Description ?? null;
-      existing.line.CounterpartyOrganizationID = existing.line.CounterpartyOrganizationID ?? line.CounterpartyOrganizationID ?? null;
       existing.line.SourceLineIndexes.push(i);
       return;
     }
@@ -216,7 +213,6 @@ export function normalizeLines(draft: JournalEntryDraft, lookups: PipelineLookup
         DebitAmount: side === 'D' ? amount : null,
         CreditAmount: side === 'C' ? amount : null,
         Description: line.Description ?? null,
-        CounterpartyOrganizationID: line.CounterpartyOrganizationID ?? null,
         Dimensions: dims,
         SourceLineIndexes: [i],
       },

@@ -220,28 +220,6 @@ describe('normalizeLines (stage 4 — merge, order, number)', () => {
     expect(lines[0]).toMatchObject({ GLAccountID: GL.aAR, DebitAmount: 100, CreditAmount: null, SourceLineIndexes: [0, 1] });
   });
 
-  it('carries CounterpartyOrganizationID through normalization (AR-by-customer, P-5)', () => {
-    const org = '11111111-2222-3333-4444-555555555555';
-    const draft = balancedDraft({ Lines: [
-      { GLAccountID: GL.aAR, DebitAmount: 100, CounterpartyOrganizationID: org },
-      { GLAccountID: GL.aRev, CreditAmount: 100 },
-    ] });
-    const lines = normalizeLines(draft, lookups);
-    expect(lines[0].CounterpartyOrganizationID).toBe(org);
-    expect(lines[1].CounterpartyOrganizationID).toBeNull();
-  });
-
-  it('a merge coalesces CounterpartyOrganizationID first-non-null', () => {
-    const org = '11111111-2222-3333-4444-555555555555';
-    const draft = balancedDraft({ Lines: [
-      { GLAccountID: GL.aAR, DebitAmount: 60 },
-      { GLAccountID: GL.aAR, DebitAmount: 40, CounterpartyOrganizationID: org },
-      { GLAccountID: GL.aRev, CreditAmount: 100 },
-    ] });
-    const lines = normalizeLines(draft, lookups);
-    expect(lines[0]).toMatchObject({ DebitAmount: 100, CounterpartyOrganizationID: org });
-  });
-
   it('does NOT merge across different dimension sets on the same account', () => {
     const draft = balancedDraft({ Lines: [
       { GLAccountID: GL.aRev, CreditAmount: 60, Dimensions: [{ DimensionID: DIM_DEPT, DimensionValueID: DIMVAL_SALES }] },

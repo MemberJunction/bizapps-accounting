@@ -15,7 +15,7 @@
  *   • 3 "Assoc Demo" companies (AccountingCompanyProfile) — each new profile fires W1
  *     (AccountingCompanyProfileEntityServer.Save) → its ~10-account COA.
  *     (Periods retired 2026-07-06 — CH-1; temporal placement is by EffectiveDate.)
- *   • 4 customer Organizations (MJ_BizApps_Common) used as JournalEntryLine.CounterpartyOrganizationID.
+ *   • 4 customer Organizations (MJ_BizApps_Common) formerly used for line counterparty tagging (column REMOVED 2026-07-29, Amith — orders-side concern); kept as demo Organizations.
  *   • Company 1 — AR activity (→ vw_AROpenByCustomer, vw_ARAging): balanced JEs across the aging
  *     buckets (~15/45/75/120 days), a partial payment (one customer partially open), and a fully
  *     settled customer (absent from vw_AROpenByCustomer by its HAVING <> 0).
@@ -379,7 +379,6 @@ async function makeJE(
     l.GLAccountID = glId;
     l.DebitAmount = spec.debit ?? null;
     l.CreditAmount = spec.credit ?? null;
-    if (spec.counterparty) l.CounterpartyOrganizationID = spec.counterparty;
     if (!(await l.Save())) throw new Error(`makeJE line ${lineNo} save failed (${jeId}): ${l.LatestResult?.CompleteMessage}`);
   }
   return je.ID;

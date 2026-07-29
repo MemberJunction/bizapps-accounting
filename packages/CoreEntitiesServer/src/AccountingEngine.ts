@@ -194,7 +194,6 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
       l.DebitAmount = line.DebitAmount;
       l.CreditAmount = line.CreditAmount;
       l.Description = line.Description;
-      l.CounterpartyOrganizationID = line.CounterpartyOrganizationID; // AR-by-customer attribution (P-5)
       for (const dim of line.Dimensions) {
         const d = await l.CreateDimension(contextUser);
         d.DimensionID = dim.DimensionID;

@@ -1346,12 +1346,6 @@ export const mjBizAppsAccountingJournalEntryLineSchema = z.object({
         * * Display Name: Description
         * * SQL Data Type: nvarchar(MAX)
         * * Description: Free-form description of the line (memo).`),
-    CounterpartyOrganizationID: z.string().nullable().describe(`
-        * * Field Name: CounterpartyOrganizationID
-        * * Display Name: Counterparty Organization ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Common: Organizations (vwOrganizations.ID)
-        * * Description: For AR-side lines, the Customer Organization. FK to __mj_BizAppsCommon.Organization.`),
     __mj_CreatedAt: z.date().describe(`
         * * Field Name: __mj_CreatedAt
         * * Display Name: Created At
@@ -1370,10 +1364,6 @@ export const mjBizAppsAccountingJournalEntryLineSchema = z.object({
         * * Field Name: OriginalCurrencyCode_Virtual
         * * Display Name: Original Currency Code Virtual
         * * SQL Data Type: nvarchar(80)`),
-    CounterpartyOrganization: z.string().nullable().describe(`
-        * * Field Name: CounterpartyOrganization
-        * * Display Name: Counterparty Organization
-        * * SQL Data Type: nvarchar(255)`),
 });
 
 export type mjBizAppsAccountingJournalEntryLineEntityType = z.infer<typeof mjBizAppsAccountingJournalEntryLineSchema>;
@@ -5104,20 +5094,6 @@ export class mjBizAppsAccountingJournalEntryLineEntity extends BaseEntity<mjBizA
     }
 
     /**
-    * * Field Name: CounterpartyOrganizationID
-    * * Display Name: Counterparty Organization ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Common: Organizations (vwOrganizations.ID)
-    * * Description: For AR-side lines, the Customer Organization. FK to __mj_BizAppsCommon.Organization.
-    */
-    get CounterpartyOrganizationID(): string | null {
-        return this.Get('CounterpartyOrganizationID');
-    }
-    set CounterpartyOrganizationID(value: string | null) {
-        this.Set('CounterpartyOrganizationID', value);
-    }
-
-    /**
     * * Field Name: __mj_CreatedAt
     * * Display Name: Created At
     * * SQL Data Type: datetimeoffset
@@ -5153,15 +5129,6 @@ export class mjBizAppsAccountingJournalEntryLineEntity extends BaseEntity<mjBizA
     */
     get OriginalCurrencyCode_Virtual(): string | null {
         return this.Get('OriginalCurrencyCode_Virtual');
-    }
-
-    /**
-    * * Field Name: CounterpartyOrganization
-    * * Display Name: Counterparty Organization
-    * * SQL Data Type: nvarchar(255)
-    */
-    get CounterpartyOrganization(): string | null {
-        return this.Get('CounterpartyOrganization');
     }
 }
 

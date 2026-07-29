@@ -38,7 +38,6 @@ import {
   type BatchApprovalGate,
 } from '@mj-biz-apps/accounting-core-entities-server';
 import type { mjBizAppsAccountingAccountingCompanyProfileEntity } from '@mj-biz-apps/accounting-entities';
-import type { mjBizAppsCommonOrganizationEntity } from '@mj-biz-apps/common-entities';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import { bootstrapLive, teardownLive, scalar, SCHEMA, type LiveCtx } from './live-bootstrap.js';
 
@@ -86,14 +85,8 @@ beforeAll(async () => {
   await AccountingEngineBase.Instance.ConfigEx({ forceRefresh: true, contextUser: ctx.user, provider });
 });
 
-let counterpartyOrgId = '';
-
 afterAll(async () => {
   if (ctx) await teardownLive(ctx);
-  // The L15 counterparty Organization can only go AFTER the JE lines referencing it are gone.
-  if (ctx && counterpartyOrgId) {
-    await ctx.pool.request().query(`DELETE FROM __mj_BizAppsCommon.Organization WHERE ID='${counterpartyOrgId}'`).catch(() => undefined);
-  }
 });
 
 describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
@@ -385,7 +378,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     }
   });
 
-  // ─── S-C: reversal guards + counterparty (P-3 / P-5) ────────────────────────
+  // ─── S-C: reversal guards (P-3; the counterparty column was killed 2026-07-29, Amith) ──
 
   it('L14 — reversal guards: no double-reverse; a reversal cannot itself be reversed', async () => {
     // L4 already reversed firstJE — a second reversal must be refused.
@@ -400,40 +393,6 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     await expect(reversal.GenerateReversal('L14 reverse-a-reversal attempt', ctx.user)).rejects.toThrow(/cannot itself be reversed/);
   });
 
-  it('L15 — CounterpartyOrganizationID: draft carries it, the writer stamps it, the reversal copies it (P-5)', async () => {
-    const org = await provider.GetEntityObject<mjBizAppsCommonOrganizationEntity>('MJ_BizApps_Common: Organizations', ctx.user);
-    org.NewRecord();
-    org.Name = `${ctx.runTag} Counterparty Org`;
-    expect(await org.Save(), `org save: ${org.LatestResult?.CompleteMessage}`).toBe(true);
-    counterpartyOrgId = org.ID;
-
-    const out = await AccountingEngine.Instance.CreateJournalEntry({
-      EffectiveDate: new Date().toISOString(),
-      EntryType: 'OrderBooking',
-      Description: `${ctx.runTag} L15 counterparty`,
-      Lines: [
-        { GLAccountID: ctx.company.arGL, DebitAmount: 25, CounterpartyOrganizationID: counterpartyOrgId },
-        { GLAccountID: ctx.company.revGL, CreditAmount: 25 },
-      ],
-    }, ctx.user, provider);
-    expect(out.Success, JSON.stringify(out.Errors)).toBe(true);
-
-    // Raw-SQL: the AR line carries the counterparty; the revenue line does not.
-    const arCp = await scalar(ctx.pool,
-      `SELECT CounterpartyOrganizationID FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID='${out.JournalEntryID}' AND GLAccountID='${ctx.company.arGL}'`);
-    expect(String(arCp).toLowerCase()).toBe(counterpartyOrgId.toLowerCase());
-    const revCp = await scalar(ctx.pool,
-      `SELECT CounterpartyOrganizationID FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID='${out.JournalEntryID}' AND GLAccountID='${ctx.company.revGL}'`);
-    expect(revCp).toBeNull();
-
-    // The reversal carries the SAME counterparty on the swapped line.
-    const je = await provider.GetEntityObject<JournalEntryEntityServer>(JE_ENTITY, ctx.user);
-    expect(await je.Load(out.JournalEntryID as string)).toBe(true);
-    const reversal = await je.GenerateReversal('L15 counterparty carry', ctx.user);
-    const revLineCp = await scalar(ctx.pool,
-      `SELECT CounterpartyOrganizationID FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID='${reversal.ID}' AND GLAccountID='${ctx.company.arGL}'`);
-    expect(String(revLineCp).toLowerCase()).toBe(counterpartyOrgId.toLowerCase());
-  });
 
   // ─── GLAccountLink tie guard + forCompanyID (BA-D32 rev. 2026-07-29) ────────
 

@@ -454,7 +454,8 @@ __mj_BizAppsAccounting.JournalEntryLine
   OriginalDebitAmount, OriginalCreditAmount DECIMAL(18,2) NULL,
   ExchangeRateUsed DECIMAL(18,8) NULL,
   Description NVARCHAR(MAX),
-  CounterpartyOrganizationID UNIQUEIDENTIFIER NULL,   -- e.g. the customer, for AR lines
+  -- (CounterpartyOrganizationID REMOVED 2026-07-29, Amith: customer attribution is handled at
+  --  the business-logic level in ORDERS — an unneeded appendage at the accounting level.)
   UNIQUE (JournalEntryID, LineNumber)
 ```
 

@@ -536,7 +536,6 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
       line.GLAccountID = orig.GLAccountID;
       line.DebitAmount = orig.CreditAmount; // SWAP
       line.CreditAmount = orig.DebitAmount; // SWAP
-      line.CounterpartyOrganizationID = orig.CounterpartyOrganizationID; // the reversal reverses the SAME counterparty's balance
       line.Description = `Reversal of line ${orig.LineNumber}`;
       for (const origDim of orig.Dimensions) {
         const dim = await line.CreateDimension(user);

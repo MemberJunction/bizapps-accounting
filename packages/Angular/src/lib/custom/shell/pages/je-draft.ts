@@ -33,8 +33,6 @@ export interface JEDraftLine {
    * null ⇒ not sent. Order booking + payment capture set it on the AR line automatically; this is
    * the manual-entry equivalent. Flows straight through the CreateJournalEntry contract to the
    * engine's atomic write — NOT a frontend-set field.
-   */
-  CounterpartyOrganizationID: string | null;
   /** DimensionID → DimensionValueID. Only pre-existing values are ever sent (CH-12: never auto-create). */
   DimensionValueIDs: Record<string, string | null>;
 }
@@ -57,7 +55,7 @@ export interface JEDraftState {
 }
 
 export function newDraftLine(key: string): JEDraftLine {
-  return { Key: key, GLAccountID: null, Debit: '', Credit: '', Description: '', CounterpartyOrganizationID: null, DimensionValueIDs: {} };
+  return { Key: key, GLAccountID: null, Debit: '', Credit: '', Description: '', DimensionValueIDs: {} };
 }
 
 /**
@@ -146,7 +144,6 @@ export function toCreateInput(state: JEDraftState): CreateJournalEntryInput {
     if (debit > 0) line.DebitAmount = debit;
     if (credit > 0) line.CreditAmount = credit;
     if (l.Description.trim()) line.Description = l.Description.trim();
-    if (l.CounterpartyOrganizationID) line.CounterpartyOrganizationID = l.CounterpartyOrganizationID;
     if (dimensions.length) line.Dimensions = dimensions;
     return line;
   });

@@ -74,31 +74,6 @@
          RELATED ENTITY PANELS
          ======================================== -->
 
-    <!-- Tax Liabilities Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingTaxLiabilities"
-        SectionName="Tax Liabilities"
-        Icon="fa fa-table"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingTaxLiabilities')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Tax Liabilities','TaxAuthorityID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Tax Liabilities')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingTaxLiabilities')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingTaxLiabilities', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
     <!-- Tax Jurisdictions Section -->
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingTaxJurisdictions"
@@ -118,6 +93,31 @@
                 [ShowToolbar]="false"
                 (Navigate)="OnFormNavigate($event)"
                 (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingTaxJurisdictions', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- Tax Liabilities Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingTaxLiabilities"
+        SectionName="Tax Liabilities"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingTaxLiabilities')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Tax Liabilities','TaxAuthorityID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Tax Liabilities')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingTaxLiabilities')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingTaxLiabilities', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>
