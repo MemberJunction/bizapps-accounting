@@ -217,8 +217,34 @@ async function main(): Promise<void> {
     const jeRow = (await wireRows<JERow>(apiKey, JE_ENTITY, `ID='${jeOut.JournalEntryID}'`, ['ID', 'Status', 'BatchID']))[0];
     check('rejected JE returned to the candidate pool (Pending, BatchID NULL)', jeRow?.Status === 'Pending' && jeRow?.BatchID === null, JSON.stringify(jeRow));
 
-    // 7. Empty build is LOUD on the wire (EmptyBatchError → failed op, never a silent no-op batch).
-    console.log('\n7. Empty explicit build fails loudly:');
+    // 8. REGENERATE over the wire (added 2026-07-30 — was tier-5-only): re-gather a Pending
+    // batch in place after a late candidate lands. Exact values: 50 → 161 (50 + 111), 1 → 2 JEs.
+    console.log('\n8. Accounting.RegenerateBatch (late candidate re-gathered, exact totals):');
+    const build3 = opOutput<BuildOutputWire>(await executeOp(apiKey, 'Accounting.BuildBatch',
+      { TargetSystem: 'BusinessCentral', Source: 'Explicit', JournalEntryIDs: [jeOut.JournalEntryID] }));
+    const b3 = build3.Batches?.[0];
+    check('regen setup: rebuilt the pool JE into a fresh Pending batch', b3?.jeCount === 1 && b3?.totalDebits === 50, JSON.stringify(build3).slice(0, 200));
+    const lateDraft: JournalEntryDraft = {
+      EffectiveDate: new Date().toISOString(), EntryType: 'Manual', Description: `${fx.runTag} late candidate for regenerate`,
+      Lines: [{ GLAccountID: arGL as string, DebitAmount: 111 }, { GLAccountID: revGL as string, CreditAmount: 111 }],
+    };
+    const lateOut = opOutput<CreateJournalEntryOutput>(await executeOp(apiKey, 'Accounting.CreateJournalEntry', lateDraft));
+    check('late candidate booked over the wire', lateOut.Success === true, JSON.stringify(lateOut.Errors));
+    // regenerateBatch returns a FLAT single-batch result (it rebuilds ONE batch in place),
+    // unlike BuildBatch's per-company Batches[] envelope.
+    const rb = opOutput<{ batchId: string; jeCount: number; totalDebits: number; totalCredits: number; summaryLineCount: number }>(
+      await executeOp(apiKey, 'Accounting.RegenerateBatch', { BatchID: b3?.batchId, TargetSystem: 'BusinessCentral' }));
+    check('regenerate re-gathered BOTH JEs in the SAME batch with the exact netted total (161 = 50 + 111)',
+      String(rb?.batchId ?? '').toLowerCase() === String(b3?.batchId ?? '').toLowerCase() && rb?.jeCount === 2 && rb?.totalDebits === 161 && rb?.totalCredits === 161,
+      JSON.stringify(rb).slice(0, 250));
+    const lateRow = (await wireRows<JERow>(apiKey, JE_ENTITY, `ID='${lateOut.JournalEntryID}'`, ['ID', 'Status', 'BatchID']))[0];
+    check('the late JE is now a locked member of the SAME batch',
+      lateRow?.Status === 'Batched' && String(lateRow?.BatchID ?? '').toLowerCase() === String(b3?.batchId ?? '').toLowerCase(), JSON.stringify(lateRow));
+    const rej3 = await executeOp(apiKey, 'Accounting.RecordBatchDecision', { BatchID: b3?.batchId, Decision: 'Rejected', Notes: `${fx.runTag} tier-3 regen cleanup` });
+    check('regen batch rejected (pool restored for teardown)', rej3.success === true, `${rej3.resultCode} ${rej3.errorMessage ?? ''}`);
+
+    // 7→9. Empty build is LOUD on the wire (EmptyBatchError → failed op, never a silent no-op batch).
+    console.log('\n9. Empty explicit build fails loudly:');
     const emptyRes = await executeOp(apiKey, 'Accounting.BuildBatch', { TargetSystem: 'BusinessCentral', CompanyID: randomUUID() });
     check('op failed with the Nothing-to-batch message', emptyRes.success === false && /nothing to batch/i.test(emptyRes.errorMessage ?? ''), JSON.stringify(emptyRes).slice(0, 250));
   } catch (e) {

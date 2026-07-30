@@ -8,13 +8,13 @@ import { test, expect, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { loginViaMagicLink } from '../lib/auth';
-import { openAccountingApp, openNavItem, captureConsoleErrors, expectNoConsoleErrors, resetCompanyScopeToAll } from '../lib/explorer';
+import { openAccountingApp, openNavItem, captureConsoleErrors, expectNoConsoleErrors, resetCompanyScopeToAll, scopeToCompany } from '../lib/explorer';
 import { HARNESS_DIR } from '../lib/env';
 
 const WORKTREE_ROOT = path.resolve(HARNESS_DIR, '..', '..', '..', '..', '..');
 const TSX = path.resolve(WORKTREE_ROOT, 'node_modules', '.bin', 'tsx');
 const FIXTURE = path.resolve(HARNESS_DIR, 'lib', 'batching-fixture.ts');
-let fx: { companyId: string; cfoPersonId: string } | null = null;
+let fx: { companyId: string; companyName: string; cfoPersonId: string } | null = null;
 
 test.beforeAll(() => {
   const out = execFileSync(TSX, [FIXTURE, 'setup'], { cwd: WORKTREE_ROOT, encoding: 'utf8', timeout: 180_000 });
@@ -28,7 +28,10 @@ test.afterAll(() => {
 
 async function railItem(page: Page, category: string, item: string): Promise<void> {
   await openNavItem(page, category);
-  await page.getByRole('button', { name: item }).first().click();
+  // EXACT name: substring matching made { name: 'Companies' } hit the scope chip's
+  // "Scope: All companies" accessible name (earlier in DOM) and open its menu over the page.
+  await page.getByRole('button', { name: item, exact: true }).first().click();
+  await page.mouse.move(820, 480); // park away from the rail so its hover-peek overlay retracts
   await page.waitForTimeout(3500);
 }
 
@@ -39,6 +42,9 @@ test('Batches → build → Batch approvals → Reject cancels the batch (new na
   // The batch workspace inherits the global company scope into its build criteria; reset it to All so
   // the fixture's isolated company is in scope (an ambient narrow scope otherwise empties the preview).
   await resetCompanyScopeToAll(page);
+  // Scope to the FIXTURE company only: builds sweep every company in scope (and require each
+  // company's CFO), so All would drag demo/other data into this spec's batch.
+  await scopeToCompany(page, fx!.companyName);
 
   // 1. Build a batch on the Batch workspace.
   await railItem(page, 'Batches', 'Batch workspace');

@@ -161,6 +161,33 @@ async function setup(p: Pools): Promise<void> {
   console.log(`FIXTURE_JSON ${JSON.stringify({ companyId, companyName: `${RUN_TAG} GUI Batch Co`, runTag: RUN_TAG, cfoPersonId: '', jeId: firstJeId, jeEntryNumber: firstJeNumber, expected })}`);
 }
 
+/**
+ * add-je <companyId> — add ONE balanced Pending JE (AR 111 Dr / Revenue 111 Cr) to an existing
+ * fixture company. Used by the regenerate spec: build a batch, add a late candidate, Regenerate
+ * re-gathers it. Prints FIXTURE_JSON { jeId, jeNumber }.
+ */
+async function addJe(p: Pools, companyId: string): Promise<void> {
+  const { user } = p;
+  const rv = new RunView();
+  const glRes = await rv.RunView<{ ID: string; Code: string }>({ EntityName: GL_ENTITY, ExtraFilter: `CompanyID='${companyId}'`, Fields: ['ID', 'Code'], ResultType: 'simple' }, user);
+  const byCode = new Map((glRes.Results ?? []).map((r) => [r.Code, r.ID]));
+  const ar = byCode.get('11201');
+  const rev = byCode.get('40100');
+  if (!ar || !rev) throw new Error(`add-je: AR/Revenue accounts not found for company ${companyId}`);
+  const md = new Metadata();
+  const je = await md.GetEntityObject<JournalEntryEntityServer>(JE_ENTITY, user);
+  je.NewRecord();
+  je.CompanyID = companyId;
+  je.EffectiveDate = new Date();
+  je.EntryTypeID = await RequireJournalEntryTypeID('Manual', user, Metadata.Provider);
+  je.Status = 'Pending';
+  je.Description = `${RUN_TAG} late candidate for regenerate`;
+  const l1 = await je.CreateLine(user); l1.GLAccountID = ar; l1.DebitAmount = 111;
+  const l2 = await je.CreateLine(user); l2.GLAccountID = rev; l2.CreditAmount = 111;
+  if (!(await je.Save())) throw new Error(`add-je save failed: ${je.LatestResult?.CompleteMessage}`);
+  console.log('FIXTURE_JSON ' + JSON.stringify({ jeId: je.ID, jeNumber: je.EntryNumber }));
+}
+
 async function teardown(p: Pools, companyId: string, cfoPersonId?: string): Promise<void> {
   const exec = async (q: string) => { try { await p.teardownPool.request().query(q); } catch (e) { console.log(`  teardown warn: ${(e instanceof Error ? e.message : String(e)).split('\n')[0]}`); } };
 
@@ -208,10 +235,13 @@ async function main(): Promise<void> {
   try { pools = await connect(); } catch (e) { console.error('FIXTURE BOOTSTRAP ERROR:', e instanceof Error ? (e.stack ?? e.message) : String(e)); process.exit(2); }
   try {
     if (cmd === 'setup') await setup(pools);
-    else if (cmd === 'teardown') {
+    else if (cmd === 'add-je') {
+      if (!arg1) throw new Error('add-je requires <companyId>');
+      await addJe(pools, arg1);
+    } else if (cmd === 'teardown') {
       if (!arg1) throw new Error('teardown requires <companyId> [cfoPersonId]');
       await teardown(pools, arg1, arg2);
-    } else throw new Error(`unknown command '${cmd}'. Use: setup | teardown <companyId> [cfoPersonId]`);
+    } else throw new Error(`unknown command '${cmd}'. Use: setup | add-je <companyId> | teardown <companyId> [cfoPersonId]`);
   } catch (e) {
     console.error('FIXTURE ERROR:', e instanceof Error ? (e.stack ?? e.message) : String(e));
     finishAndExit('fixture failed', 2, pools.pool, pools.teardownPool);

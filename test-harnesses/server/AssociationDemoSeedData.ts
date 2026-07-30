@@ -199,6 +199,13 @@ export async function seedAssociationDemo(contextUser: UserInfo, provider: IMeta
   await ensureOrganization(contextUser, CUST_SETTLED, 'Assoc Demo Customer — Initech Settled', report);
   await ensureOrganization(contextUser, CUST_AGING, 'Assoc Demo Customer — Umbrella Aging', report);
 
+  // 1b. Every demo company gets a CFO approver (the seed user). Without one, ANY scope-All UI
+  // batch build fails the TasksAppApprovalGate precondition the moment a demo company has a
+  // Pending JE — this is what let the dimension-tagged demo JE break every batch spec 2026-07-30.
+  await ensureCompanyCFO(contextUser, CO1);
+  await ensureCompanyCFO(contextUser, CO2);
+  await ensureCompanyCFO(contextUser, CO3);
+
   // 2b. Ensure the orders-domain JournalEntryType rows this demo books with exist (issue #24).
   await ensureDemoEntryTypes(contextUser, provider);
 
@@ -217,6 +224,16 @@ export async function seedAssociationDemo(contextUser: UserInfo, provider: IMeta
   await seedDimensions(contextUser, co1, report);
 
   return report;
+}
+
+/** Idempotent: set the company's CFO approver to the seed user when unset. */
+async function ensureCompanyCFO(contextUser: UserInfo, companyId: string): Promise<void> {
+  const md = new Metadata();
+  const acp = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, contextUser);
+  if (!(await acp.Load(companyId))) return;
+  if (acp.ApprovalCFOUserID) return;
+  acp.ApprovalCFOUserID = contextUser.ID;
+  if (!(await acp.Save())) throw new Error(`ensureCompanyCFO: ${acp.LatestResult?.CompleteMessage ?? 'save failed'}`);
 }
 
 // ─── Dimensions (global reference data + one tagged Pending JE) ──────────────
