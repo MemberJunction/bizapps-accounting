@@ -109,7 +109,12 @@ async function bootstrap(): Promise<Ctx> {
   await UserCache.Instance.Refresh(pool);
   const ctxUser = UserCache.Users.find(u => u?.Type?.trim().toLowerCase() === 'owner') ?? UserCache.Users[0];
   if (!ctxUser) throw new Error('No context user found.');
-  const stray = (await pool.request().query(`SELECT COUNT(*) n FROM ${SCHEMA}.JournalEntry WHERE Status='Pending'`)).recordset[0].n;
+  // Company-scoped since 2026-07-30: builds and the engine's cross-checks are per-company (D3/D7),
+  // and the DEMO seed legitimately keeps Pending JEs (the dimension-tagged workspace candidate) —
+  // a GLOBAL stray guard now false-fails on a populated instance. Only THIS harness's own company
+  // matters, and it is created fresh below, so the pre-existing-strays check narrows to leftovers
+  // from a prior crashed run of THIS harness (its deterministic company name).
+  const stray = (await pool.request().query(`SELECT COUNT(*) n FROM ${SCHEMA}.JournalEntry je JOIN ${SCHEMA}.AccountingCompanyProfile c ON c.ID=je.CompanyID JOIN __mj.Company co ON co.ID=c.ID WHERE je.Status='Pending' AND co.Name LIKE 'ENGINE-%'`)).recordset[0].n;
   if (Number(stray) > 0) throw new Error(`${stray} stray Pending JE(s) exist — clean them up before running engine-runtime.`);
   const rv = new RunView();
   const cur = await rv.RunView<{ Code: string }>({ EntityName: CURRENCY_ENTITY, Fields: ['Code'], MaxRows: 1, ResultType: 'simple' }, ctxUser);

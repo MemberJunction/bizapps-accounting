@@ -13,7 +13,50 @@ create + open questions for the human, recorded so dev can roll through and circ
 Tiers: **1** Vitest (unit) · **2** server (tsx, in-process direct SQL) · **3** API (GraphQL→MJAPI) ·
 **4** GUI/DOM (no-browser — parked, mjdev overlay) · **5** Playwright (browser e2e, pre-PR only).
 
-## ⭐ CURRENT STATE — 2026-07-29 harness modernization (the donor-port test line)
+## ⭐ CURRENT STATE — 2026-07-30 FULL-COVERAGE OVERNIGHT RUN (all tiers + orders integration)
+
+**Final battery (2026-07-30, everything re-run after the night's metadata/view changes):**
+
+| Tier | Suite | Result |
+|---|---|---|
+| 1 | EngineBase units | **57/57** |
+| 1 | CoreEntitiesServer units | **42/42** |
+| 1 | Angular units | **125/125** |
+| 2 | live vitest (phase2 17 + batch-workspace pure 8) | **25/25** |
+| 2 | block0 / block1 / engine-runtime / intercompany (tsx) | **10/10 · 11/11 · 12/12 · 17/17** |
+| 3 | engine-op-api / batch-ops-api (incl. NEW regenerate wire section) | **11/11 · 37/37** |
+| 4 | gui dom suite (company-setup, je-dashboard, gl-accounts, batch-workspace + smoke) | **9/9** |
+| 5 | playwright: accounts-manage(2) · batch approve/reject/regenerate · je-reversal · company-create · je-create · shell-smoke | **9/9 specs green** |
+| X-app | Amith's orders integration suite (15 bundles) vs our HEAD | **177/177** |
+| X-app | cross-app-batching.mjs (order→JE→batch→approve→dispatch→GLPosted, committed flow) | **9/9** |
+
+**Named-flow coverage (Marcelo's 2026-07-29 sweep) — all browser-proven:** create JEs (workspace) ·
+batch build/approve/reject/REGENERATE · JE reversal · account create/rename/identity-lock ·
+dimensions render · company COA render · company creation (affordance+cancel; full dialog save =
+CODED GAP 5x, generated forms lack stable locators — upstream ask filed) · orders→accounting
+booking + batching end to end.
+
+**Known gaps / blocked (all coded + filed):**
+- 5x company-create dialog SAVE (upstream: generated-form locators; entity path covered tiers 2-4).
+- 4x tier-4 per-page floor: all-journal-entries, dispatch-status, account-links, dimensions,
+  je-approvals, je-workspace dom specs not yet authored (pattern established; direct-declaration).
+- 5y orders-product-catalog spec: orders@next ships NO nav-app metadata yet (blocked upstream).
+- TX-class finding: TaxRate.Rate unit/precision contract (fraction vs percent) — scaffolded
+  locally to DECIMAL(9,6); needs the real cross-app contract decision.
+- Metadata drift vs committed baseline (deliberate, needs a baseline pass to adopt): JE
+  EntryNumber IsNameField=1 (+ the 4 virtual name-fields it emits), Refund JournalEntryType in
+  the seed, CompanyTaxNexus scaffold table (accounting's plan owns the real one).
+
+**Environment lesson bank (tonight):** collapsed-rail hover-peek intercepts content clicks (park
+the mouse after rail nav; chip menus close on a NEUTRAL spot, never x<60) · getByRole name
+matching is SUBSTRING by default (the scope chip's "Scope: All companies" swallowed
+{name:'Companies'} — always exact:true on rail items) · batch specs must scopeToCompany (builds
+sweep every company in scope and the CFO gate must hold for each) · engine-runtime's stray-guard
+is company-scoped now (demo data legitimately keeps Pending JEs).
+
+---
+
+## ⭐ PRIOR STATE — 2026-07-29 harness modernization (the donor-port test line)
 
 The suite was modernized with the S-A/S-B/S-C port (see `plans/donor-audit.md`). **Dead harnesses
 were REMOVED** — they tested retired systems and could never run against the realigned schema:

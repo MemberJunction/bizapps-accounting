@@ -140,6 +140,7 @@ const DEMO_ENTRY_TYPES: { code: string; name: string; description: string }[] = 
   { code: 'PaymentReceipt', name: 'Payment Receipt', description: 'Association demo seed (orders-domain type; bizapps-orders owns this row in production — issue #24).' },
   { code: 'RevenueRecognition', name: 'Revenue Recognition', description: 'Association demo seed (orders-domain type; bizapps-orders owns this row in production — issue #24).' },
   { code: 'IntercompanyFlow', name: 'Intercompany Flow', description: 'Association demo seed (payments-domain type; the emitting app owns this row in production — issue #24).' },
+  { code: 'Refund', name: 'Refund', description: 'Orders-domain type (PaymentJournalEntryFactory books reversals with it; orders owns this row in production — issue #24, gap filed upstream 2026-07-30).' },
 ];
 /** Populated by ensureDemoEntryTypes each run: type Code → ID. */
 let entryTypeIdByCode = new Map<string, string>();
