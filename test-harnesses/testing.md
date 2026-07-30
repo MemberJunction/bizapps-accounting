@@ -29,6 +29,7 @@ flows with exact-value asserts, mirroring the orders headless-E2E pattern).
 | Tier | Harness | Covers | Last run |
 |---|---|---|---|
 | 1 | `packages/CoreEntitiesServer/src/__tests__/` (vitest) | seeds, types, batch/JE invariants, dims | **42/42** |
+| 1 | `test-harnesses/server/batch-workspace.pure.test.ts` (vitest, no DB) | pure batch-workspace machinery via the built package surface: outOfOrderSkipCount, classifyViewEntries, perCompanySubtotals — housed in the HARNESS (not package src) so engine-internal test scaffolding never ships | **8/8** |
 | 1 | `packages/EngineBase/src/__tests__/` (vitest) | pipeline stages 1–5 incl. `MULTI_COMPANY_DRAFT` + counterparty carry, link picker | **59/59** |
 | 2 | `test-harnesses/server/phase2-encapsulation.live.test.ts` (vitest, live DB) | L1–L16: encapsulated JE save/load/reversal (+guards L14, counterparty L15), engine set-op atomicity, ONE-transaction batch build + task stamp (L11–L13), GLAccount immediate lock (L8), link tie guard + forCompanyID (L16) | **16/16** |
 | 2 | `test-harnesses/server/block0-runtime.ts` (tsx) | W1 seeding, per-company JE numbering (BA-D31), batch numbering (DR-5 noted) | **10/10** |
@@ -37,11 +38,30 @@ flows with exact-value asserts, mirroring the orders headless-E2E pattern).
 | 2 | `test-harnesses/server/intercompany-runtime.ts` (tsx) | BA-D26/27 IAM resolution + triggers | **17/17** |
 | 3 | `test-harnesses/api/engine-op-api.ts` (tsx) | 'Accounting.CreateJournalEntry' over ExecuteRemoteOperation (per-company EntryNumber asserted) | **8/8** |
 | 3 | `test-harnesses/api/batch-ops-api.ts` (tsx, NEW) | the 5 batch remote ops end-to-end over the wire: build (netted 600-not-800 + stamped task), approval-state flip, dispatch→Posted, reject→Cancelled+pool-return, loud EmptyBatch | **23/23** |
-| 5 | `test-harnesses/playwright/` | browser e2e (specs largely target the pre-rebuild dashboards — rides the UI port) | not re-run (UI port pending) |
+| 5 | `test-harnesses/playwright/specs/*-newnav` | REAL-BROWSER behavior flows on the rebuilt shell: batch build→approve→dispatch to Posted · batch reject (JEs return to pool) · JE reversal from All journal entries (build→dispatch→GLPosted→Reverse), each self-seeding via the fixture + console-error keystone | **3/3** (2026-07-29) |
+| 5 | `test-harnesses/playwright/shell-smoke.ts` (standalone tsx) | 5-category nav walk + shells mount + keystone | **ALL PASSED** (2026-07-29; one transient `ERR_CONNECTION_REFUSED` keystone hit on an earlier run — not reproduced with request-URL capture, watching) |
+| 5 | `specs/orders-product-catalog.spec.ts` | orders app UI — BLOCKED on the orders migrate (mjdev per-file-transaction fix) | not run |
 
 Shared fixture `playwright/lib/batching-fixture.ts` modernized: encapsulated JE saves, EntryTypeID
 lookup, User-based CFO (ApprovalCFOUserID), company-rooted teardown, per-company isolation (the
 global stray-Pending fail-fast is gone — builds are per-company now).
+
+**2026-07-29 tier-5 modernization notes:** `lib/explorer.ts` gained `resetCompanyScopeToAll`
+(the ported batch specs imported it but the ported lib lacked it — specs wouldn't load); the
+je-reversal spec was updated to the rebuilt workspace's sequence (scope reset + the deferred-query
+"Load entries" click before Build enables — the donor-era sequence left Build disabled). Also
+fixed: sub-page `mj-page-header`s painted OVER the category header + scope dropdown (same-z later
+DOM) — `category-shell.css` now isolates `mj-left-nav-content`'s stacking context; verified by
+headless hit-testing of the open scope menu. Proper chrome fix (pages → `mj-page-header-interior`
+per conventions §10) tracked for the hardening pass.
+
+**2026-07-29 shipping-hygiene fix (Amith/Marcelo PR review):** CoreEntitiesServer's tsconfig was
+missing the `src/**/__tests__/**` build exclude (EngineBase/Angular already had it), so compiled
+test files were landing in `dist/` — which `files: ['/dist']` would have PUBLISHED. Exclude added,
+dist rebuilt clean. The pure engine-internals spec (`BatchWorkspacePure`) moved to
+`test-harnesses/server/batch-workspace.pure.test.ts` (runs under the tier-2 vitest config, needs no
+DB, imports the built package surface). Verified after the change: CES units 42/42 · full tier-2
+vitest harness 25/25 (17 live + 8 pure) · no `__tests__` output in any package dist.
 
 ---
 

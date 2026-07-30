@@ -18,7 +18,6 @@ import {
 } from './dashboard-breakdown';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
-const SJE_ENTITY = 'MJ_BizApps_Accounting: Scheduled Journal Entries';
 
 /**
  * The read shape of a journal-entry list row. Picked off the ENTITY type so the value-list unions
@@ -56,7 +55,6 @@ interface JeCounts {
   batched: number;
   glPosted: number;
   awaiting: number;
-  scheduledDue: number;
 }
 
 /** The rows behind the three list cards — fetched in one batched RunViews call. */
@@ -155,17 +153,18 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
     const monthStart = this.monthStartUTC();
     const scoped = (own: string | null): string => this.Scope.ComposeFilter(own);
 
-    const [thisMonth, pending, batched, glPosted, awaiting, scheduledDue] = await Promise.all([
+    // NO scheduled-entries count: the ScheduledJournalEntry system was retired (D15) — its count
+    // here made the WHOLE dashboard load reject with "entity not found" (red LoadError card).
+    const [thisMonth, pending, batched, glPosted, awaiting] = await Promise.all([
       this.count({ EntityName: JE_ENTITY, ExtraFilter: scoped(`EffectiveDate >= '${monthStart}'`) }),
       this.count({ EntityName: JE_ENTITY, ExtraFilter: scoped(`Status='Pending'`) }),
       this.count({ EntityName: JE_ENTITY, ExtraFilter: scoped(`Status='Batched'`) }),
       this.count({ EntityName: JE_ENTITY, ExtraFilter: scoped(`Status='GLPosted'`) }),
       // C.8: a Pending MANUAL entry is sitting behind the CFO gate — it will not be batched.
       this.count({ EntityName: JE_ENTITY, ExtraFilter: scoped(`Status='Pending' AND EntryType='Manual'`) }),
-      this.count({ EntityName: SJE_ENTITY, ExtraFilter: `Status='Scheduled' AND ScheduledEffectiveDate <= '${this.todayUTC()}'` }),
     ]);
 
-    return { thisMonth, pending, batched, glPosted, awaiting, scheduledDue };
+    return { thisMonth, pending, batched, glPosted, awaiting };
   }
 
   /**
@@ -185,8 +184,6 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
       { Id: 'awaiting', Label: 'Awaiting CFO approval', Value: c.awaiting, Icon: 'fa-solid fa-user-check',
         GoTo: 'approvals', Warn: c.awaiting > 0,
         Tooltip: 'Pending MANUAL entries. They are excluded from batching until approved (C.8) — this is why an entry can look "stuck".' },
-      { Id: 'due', Label: 'Scheduled entries due', Value: c.scheduledDue, Icon: 'fa-regular fa-calendar-days', GoTo: 'scheduled',
-        Tooltip: 'Scheduled entries whose date has arrived and which have not materialised yet.' },
     ];
   }
 
@@ -302,7 +299,4 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
     };
   }
 
-  private todayUTC(): string {
-    return new Date().toISOString().slice(0, 10);
-  }
 }

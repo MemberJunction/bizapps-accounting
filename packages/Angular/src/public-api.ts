@@ -80,7 +80,7 @@ export { CompanyScopeChipComponent } from './lib/custom/shared/company-scope-chi
 // (common -> accounting -> orders) and orders must import accounting-homed surfaces regardless
 // (the GL-resolution preview above, and the Customer A/R base view). CategoryShellBase's only
 // app-specific binding is CompanyScopeService, which orders shares.
-export { CategoryShellBase, type ShellHeaderStat } from './lib/custom/shell/category-shell.base';
+export { CategoryShellBase } from './lib/custom/shell/category-shell.base';
 // The category-dashboard base (cheap filtered COUNTS only — the §0 no-heavy-aggregates ruling).
 // Its `count()` helper + stat shape are app-agnostic despite the historical name; orders' dashboards
 // extend it so the "MaxRows 1 + TotalRowCount" discipline exists once. Their ~25-line stat-grid

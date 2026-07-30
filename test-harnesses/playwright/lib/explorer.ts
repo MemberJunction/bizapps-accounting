@@ -84,6 +84,25 @@ export async function openNavItem(page: Page, label: string): Promise<void> {
   await page.waitForTimeout(4500);
 }
 
+/**
+ * Reset the header company-scope chip to "All companies" (idempotent). The scope persists
+ * per user, so a previous session's narrowing (e.g. a human clicking around) would otherwise
+ * hide the fixture company's rows from every list page and the spec would fail on an empty
+ * grid. SelectAll() does NOT close the menu (it closes on outside click), so we click the
+ * page body afterwards.
+ */
+export async function resetCompanyScopeToAll(page: Page): Promise<void> {
+  const chip = page.locator('.scope-chip__btn').first();
+  await chip.waitFor({ state: 'visible', timeout: 20_000 });
+  if (/all companies/i.test((await chip.textContent()) ?? '')) return;
+  await chip.click();
+  const all = page.locator('.scope-chip__all').first();
+  await all.waitFor({ state: 'visible', timeout: 10_000 });
+  await all.click();
+  await page.locator('body').click({ position: { x: 4, y: 400 } });
+  await page.waitForTimeout(3000); // pages re-query on scope change
+}
+
 /** The company <select> options (excludes disabled placeholders). */
 export async function companyOptions(page: Page): Promise<string[]> {
   return page.evaluate(() =>

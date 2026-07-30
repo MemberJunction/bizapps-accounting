@@ -45,9 +45,9 @@
 import { IMetadataProvider, IRunViewProvider, Metadata, RunView, UserInfo } from '@memberjunction/core';
 import {
   mjBizAppsAccountingAccountingCompanyProfileEntity,
+  mjBizAppsAccountingDimensionEntity,
+  mjBizAppsAccountingDimensionValueEntity,
   mjBizAppsAccountingGLAccountEntity,
-  mjBizAppsAccountingJournalEntryEntity,
-  mjBizAppsAccountingJournalEntryLineEntity,
   mjBizAppsAccountingJournalEntryTypeEntity,
   mjBizAppsAccountingTaxAuthorityEntity,
   mjBizAppsAccountingTaxJurisdictionEntity,
@@ -57,7 +57,7 @@ import type { mjBizAppsCommonOrganizationEntity } from '@mj-biz-apps/common-enti
 
 import {
   buildBatch, approveBatch, sendBatch, AutoApproveGate,
-  GetBatchSummaryEntryType, LookupJournalEntryTypeByCode,
+  GetBatchSummaryEntryType, LookupJournalEntryTypeByCode, JournalEntryEntityServer,
 } from '@mj-biz-apps/accounting-core-entities-server';
 
 // ─── Entity name constants ───────────────────────────────────────────────────
@@ -92,6 +92,15 @@ const TAX_LIAB_FULL = 'a55c0de1-7a00-4000-8000-000000000012';    // accrued 500 
 
 // Intercompany flow id (shared across CO2 + CO3 JEs).
 const IC_FLOW = 'a55c0de1-1c00-4000-8000-000000000001';
+
+// Dimensions (global reference data) + a dimension-tagged Pending JE (added 2026-07-29 so the
+// Dimensions pages and the workspace's dimension drill have demo data).
+const DIM_DEPT = 'a55c0de1-d100-4000-8000-000000000001';
+const DIM_PROGRAM = 'a55c0de1-d100-4000-8000-000000000002';
+const DIMVAL_DEPT_MEMBERSHIP = 'a55c0de1-d1a0-4000-8000-000000000001';
+const DIMVAL_DEPT_EVENTS = 'a55c0de1-d1a0-4000-8000-000000000002';
+const DIMVAL_PROG_ANNUAL = 'a55c0de1-d1a0-4000-8000-000000000003';
+const JE_DIMENSIONED = 'a55c0de1-1e00-4000-8000-000000000041';
 
 // Journal entries — static so a re-run detects "already seeded" and skips the (now-locked) JEs.
 // Company 1 AR:
@@ -129,6 +138,8 @@ const TARGET_SYSTEM = 'BusinessCentral' as const;
 const DEMO_ENTRY_TYPES: { code: string; name: string; description: string }[] = [
   { code: 'OrderBooking', name: 'Order Booking', description: 'Association demo seed (orders-domain type; bizapps-orders owns this row in production — issue #24).' },
   { code: 'PaymentReceipt', name: 'Payment Receipt', description: 'Association demo seed (orders-domain type; bizapps-orders owns this row in production — issue #24).' },
+  { code: 'RevenueRecognition', name: 'Revenue Recognition', description: 'Association demo seed (orders-domain type; bizapps-orders owns this row in production — issue #24).' },
+  { code: 'IntercompanyFlow', name: 'Intercompany Flow', description: 'Association demo seed (payments-domain type; the emitting app owns this row in production — issue #24).' },
 ];
 /** Populated by ensureDemoEntryTypes each run: type Code → ID. */
 let entryTypeIdByCode = new Map<string, string>();
@@ -155,6 +166,8 @@ interface LineSpec {
   debit?: number;
   credit?: number;
   counterparty?: string;
+  /** Optional dimension tags — composed via the line's CreateDimension (encapsulated model). */
+  dims?: { dimensionId: string; valueId: string }[];
 }
 
 /**
@@ -200,7 +213,62 @@ export async function seedAssociationDemo(contextUser: UserInfo, provider: IMeta
   await seedSalesTax(contextUser, co1, report);
   await seedIntercompany(contextUser, co2, co3, report, provider);
 
+  // 5. Dimensions + a tagged Pending JE — AFTER the batching phases so it STAYS Pending.
+  await seedDimensions(contextUser, co1, report);
+
   return report;
+}
+
+// ─── Dimensions (global reference data + one tagged Pending JE) ──────────────
+
+async function ensureDimension(contextUser: UserInfo, id: string, code: string, name: string, order: number): Promise<void> {
+  const md = new Metadata();
+  const dim = await md.GetEntityObject<mjBizAppsAccountingDimensionEntity>('MJ_BizApps_Accounting: Dimensions', contextUser);
+  if (await dim.Load(id)) return;
+  dim.NewRecord();
+  dim.ID = id;
+  dim.Code = code;
+  dim.Name = name;
+  dim.DisplayOrder = order;
+  dim.IsActive = true;
+  if (!(await dim.Save())) throw new Error(`ensureDimension: save failed for ${code}: ${dim.LatestResult?.CompleteMessage ?? 'unknown'}`);
+}
+
+async function ensureDimensionValue(contextUser: UserInfo, id: string, dimensionId: string, code: string, name: string): Promise<void> {
+  const md = new Metadata();
+  const v = await md.GetEntityObject<mjBizAppsAccountingDimensionValueEntity>('MJ_BizApps_Accounting: Dimension Values', contextUser);
+  if (await v.Load(id)) return;
+  v.NewRecord();
+  v.ID = id;
+  v.DimensionID = dimensionId;
+  v.Code = code;
+  v.Name = name;
+  v.IsActive = true;
+  if (!(await v.Save())) throw new Error(`ensureDimensionValue: save failed for ${code}: ${v.LatestResult?.CompleteMessage ?? 'unknown'}`);
+}
+
+/**
+ * Seed 2 dimensions (Department, Program) + 3 values, and ONE dimension-tagged Pending JE in CO1.
+ * The JE deliberately stays Pending (runs AFTER the batching phases): it feeds the workspace's
+ * candidate pool and the dimension drill. Guarded by its static ID like every other phase.
+ */
+async function seedDimensions(contextUser: UserInfo, ctx: CompanyContext, report: DemoSeedReport): Promise<void> {
+  await ensureDimension(contextUser, DIM_DEPT, 'DEPT', 'Department', 1);
+  await ensureDimension(contextUser, DIM_PROGRAM, 'PROG', 'Program', 2);
+  await ensureDimensionValue(contextUser, DIMVAL_DEPT_MEMBERSHIP, DIM_DEPT, 'MEMB', 'Membership');
+  await ensureDimensionValue(contextUser, DIMVAL_DEPT_EVENTS, DIM_DEPT, 'EVTS', 'Events');
+  await ensureDimensionValue(contextUser, DIMVAL_PROG_ANNUAL, DIM_PROGRAM, 'ANNUAL', 'Annual Conference');
+
+  if (await jeExists(contextUser, JE_DIMENSIONED)) {
+    report.Notes.push('Dimension-tagged JE already present — skipped (idempotent).');
+    return;
+  }
+  await makeJE(contextUser, ctx, JE_DIMENSIONED, 'OrderBooking', [
+    { glCode: GL_AR, debit: 350, dims: [ { dimensionId: DIM_DEPT, valueId: DIMVAL_DEPT_MEMBERSHIP }, { dimensionId: DIM_PROGRAM, valueId: DIMVAL_PROG_ANNUAL } ] },
+    { glCode: GL_REVENUE, credit: 350, dims: [ { dimensionId: DIM_DEPT, valueId: DIMVAL_DEPT_EVENTS } ] },
+  ]);
+  report.JournalEntriesCreated += 1;
+  report.Notes.push('Dimension-tagged Pending JE created (workspace candidate + dimension drill demo).');
 }
 
 // ─── Currency ──────────────────────────────────────────────────────────────
@@ -353,8 +421,11 @@ async function makeJE(
 ): Promise<string> {
   const entryTypeId = entryTypeIdByCode.get(entryType);
   if (!entryTypeId) throw new Error(`makeJE: JournalEntryType '${entryType}' was not provisioned by ensureDemoEntryTypes.`);
+  // PHASE-2 ENCAPSULATED MODEL (modernized 2026-07-29): lines are composed on the entity BEFORE
+  // the single transactional Save() — the entity's Validate() rejects a header without >= 2 lines,
+  // which is exactly what broke the old header-then-lines pattern here.
   const md = new Metadata();
-  const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
+  const je = await md.GetEntityObject<JournalEntryEntityServer>(JE_ENTITY, contextUser);
   je.NewRecord();
   je.ID = jeId;
   je.CompanyID = ctx.companyId; // single-company JE (plan D3)
@@ -365,22 +436,20 @@ async function makeJE(
   je.Description = opts.intercompanyFlowId
     ? `Association demo seed (intercompany flow ${opts.intercompanyFlowId})`
     : 'Association demo seed';
-  if (!(await je.Save())) throw new Error(`makeJE save failed (${jeId}): ${je.LatestResult?.CompleteMessage}`);
-
-  let lineNo = 0;
   for (const spec of lines) {
-    lineNo += 1;
     const glId = ctx.glByCode.get(spec.glCode);
     if (!glId) throw new Error(`makeJE: GL code ${spec.glCode} not found for company ${ctx.companyId}`);
-    const l = await md.GetEntityObject<mjBizAppsAccountingJournalEntryLineEntity>(JEL_ENTITY, contextUser);
-    l.NewRecord();
-    l.JournalEntryID = je.ID;
-    l.LineNumber = lineNo;
+    const l = await je.CreateLine(contextUser); // assigns LineNumber 1..n itself
     l.GLAccountID = glId;
-    l.DebitAmount = spec.debit ?? null;
-    l.CreditAmount = spec.credit ?? null;
-    if (!(await l.Save())) throw new Error(`makeJE line ${lineNo} save failed (${jeId}): ${l.LatestResult?.CompleteMessage}`);
+    if (spec.debit != null) l.DebitAmount = spec.debit;
+    if (spec.credit != null) l.CreditAmount = spec.credit;
+    for (const dim of spec.dims ?? []) {
+      const d = await l.CreateDimension(contextUser);
+      d.DimensionID = dim.dimensionId;
+      d.DimensionValueID = dim.valueId;
+    }
   }
+  if (!(await je.Save())) throw new Error(`makeJE save failed (${jeId}): ${je.LatestResult?.CompleteMessage}`);
   return je.ID;
 }
 

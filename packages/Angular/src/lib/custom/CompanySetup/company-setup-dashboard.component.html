@@ -9,6 +9,9 @@
     </div>
 
     <div actions>
+      <button mjButton variant="primary" size="sm" (click)="NewCompany()">
+        <i class="fa-solid fa-plus"></i> New company
+      </button>
       <mj-refresh-button [Loading]="IsBusy" (Clicked)="loadData()"></mj-refresh-button>
     </div>
   </mj-page-header>
@@ -25,7 +28,8 @@
 
       @if (Companies.length === 0) {
         <mj-empty-state Icon="fa-solid fa-building" Title="No company profiles yet"
-          Message="Create an Accounting Company Profile to configure a company's fiscal year, currencies, and CFO approver.">
+          Message="Create an Accounting Company Profile to configure a company's fiscal year, currencies, and CFO approver."
+          ActionText="New company" ActionIcon="fa-solid fa-plus" (Action)="NewCompany()">
         </mj-empty-state>
       } @else {
         <div class="cs-layout">

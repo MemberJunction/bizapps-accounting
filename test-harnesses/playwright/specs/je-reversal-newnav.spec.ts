@@ -9,7 +9,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { loginViaMagicLink } from '../lib/auth';
-import { openAccountingApp, openNavItem, captureConsoleErrors, expectNoConsoleErrors } from '../lib/explorer';
+import { openAccountingApp, openNavItem, captureConsoleErrors, expectNoConsoleErrors, resetCompanyScopeToAll } from '../lib/explorer';
 import { HARNESS_DIR } from '../lib/env';
 
 const WORKTREE_ROOT = path.resolve(HARNESS_DIR, '..', '..', '..', '..', '..');
@@ -37,11 +37,18 @@ test('Build→approve→dispatch, then Reverse the GLPosted JE from All journal 
   const sink = captureConsoleErrors(page);
   await loginViaMagicLink(page);
   await openAccountingApp(page);
+  // Scope + deferred-query sequence, same as the batch specs: reset the persisted company scope
+  // (a prior session/spec may have narrowed it to a company that no longer exists) and Load the
+  // workspace's deferred candidate query (e38fdda) — Build stays disabled until entries load.
+  await resetCompanyScopeToAll(page);
 
   // 1. Build → approve → dispatch, so the fixture's JEs become GLPosted (reversible).
   await railItem(page, 'Batches', 'Batch workspace');
+  const loadBtn = page.getByRole('button', { name: /Load entries/i }).first();
+  await expect(loadBtn, 'the deferred-query Load-entries button').toBeVisible({ timeout: 30_000 });
+  await loadBtn.click();
   const buildBtn = page.getByRole('button', { name: /Build batch/i }).first();
-  await expect(buildBtn).toBeVisible({ timeout: 30_000 });
+  await expect(buildBtn, 'Build batch enables once candidates load').toBeEnabled({ timeout: 30_000 });
   await buildBtn.click();
   await page.waitForTimeout(2000);
   const confirmBuild = page.getByRole('button', { name: /Build batch \(\d+\)/i }).first();

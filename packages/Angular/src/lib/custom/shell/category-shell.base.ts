@@ -1,17 +1,8 @@
 import { Directive, ChangeDetectorRef, inject } from '@angular/core';
 import { BaseDashboard } from '@memberjunction/ng-shared';
-import { MJLeftNavItem, MJLeftNavSection, MJStatBadgeVariant } from '@memberjunction/ng-ui-components';
+import { MJLeftNavItem, MJLeftNavSection } from '@memberjunction/ng-ui-components';
 import { CompanyScopeService } from '../shared/company-scope.service';
 import { PageRefreshService } from '../../transfer-pending/shell-refresh/page-refresh.service';
-
-/** One composite, category-level stat chip in the shell header. */
-export interface ShellHeaderStat {
-  Label: string;
-  Icon?: string;
-  Variant?: MJStatBadgeVariant;
-  /** Says what the number MEANS — the chip alone is just a figure. */
-  Tooltip?: string;
-}
 
 /**
  * Shared behaviour for the five category shells (UI plan §8.0).
@@ -131,15 +122,12 @@ export abstract class CategoryShellBase extends BaseDashboard {
    * name is already the rail's active item, inches away, so restating it bought nothing. The
    * category is the one piece of context NOT otherwise on screen once you are deep in a page.
    *
-   * That frees the header to be useful rather than decorative: it carries the company scope and
-   * per-category COMPOSITE STATS — a "through line" that stays meaningful across every sub-page —
-   * plus the refresh, which belongs in one reliable place rather than repeated in every body.
+   * NO header stat capsules (Marcelo 2026-07-29 — the former `HeaderStats` chip row is REMOVED):
+   * live state under the title made the header busy, misaligned it against stat-less categories,
+   * and duplicated the rail badges. Live state belongs on the RAIL as actionable-only count
+   * badges (shown only when action is needed; absence = healthy). The header carries only the
+   * company scope + refresh — controls, not state.
    */
-
-  /** Subclasses override to give their category a through-line stat set. Empty = no chips. */
-  public get HeaderStats(): ShellHeaderStat[] {
-    return [];
-  }
 
   /** The category's icon — subclasses override; used when a page has none. */
   public get CategoryIcon(): string {

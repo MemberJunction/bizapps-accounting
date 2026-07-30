@@ -4,7 +4,7 @@ import { BaseDashboard } from '@memberjunction/ng-shared';
 import { ResourceData } from '@memberjunction/core-entities';
 import { RunView } from '@memberjunction/core';
 import { MJLeftNavSection } from '@memberjunction/ng-ui-components';
-import { CategoryShellBase, type ShellHeaderStat } from './category-shell.base';
+import { CategoryShellBase } from './category-shell.base';
 import { PageRefreshService } from '../../transfer-pending/shell-refresh/page-refresh.service';
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
@@ -38,50 +38,17 @@ export class BatchesCategoryComponent extends CategoryShellBase {
 
   /** Cheap filtered count for the rail badge — never an on-demand heavy aggregate (§0). */
   public AwaitingApprovalCount = 0;
-  public FailedCount = 0;
 
-  /**
-   * The category's through-line: what is waiting on a human, and what the ERP rejected. Batches are
-   * multi-company (CH-4) so these are deliberately UNSCOPED — scoping them by the chip would hide a
-   * batch that merely touches another company.
-   */
-  public override get HeaderStats(): ShellHeaderStat[] {
-    const stats: ShellHeaderStat[] = [];
-    if (this.AwaitingApprovalCount > 0) {
-      stats.push({
-        Label: `${this.AwaitingApprovalCount} awaiting approval`,
-        Icon: 'fa-solid fa-user-check',
-        Variant: 'warning',
-        Tooltip: 'Built batches that cannot dispatch until a CFO approves them.',
-      });
-    }
-    if (this.FailedCount > 0) {
-      stats.push({
-        Label: `${this.FailedCount} dispatch failed`,
-        Icon: 'fa-solid fa-circle-exclamation',
-        Variant: 'error',
-        Tooltip: 'The ERP rejected these. They are retryable from Dispatch status.',
-      });
-    }
-    if (stats.length === 0) {
-      stats.push({ Label: 'Nothing waiting', Icon: 'fa-solid fa-check', Variant: 'success', Tooltip: 'No batch is awaiting approval or has a failed dispatch.' });
-    }
-    return stats;
-  }
 
   public get RailSections(): MJLeftNavSection[] {
     return [
       {
-        label: 'MAIN',
+        // ONE flat, unlabeled group (Marcelo 2026-07-29): section labels were filler ('MAIN'/'WORK'
+        // carried no information); all five category rails standardize on a single flat group.
         items: [
           { id: 'dashboard', label: 'Dashboard', icon: 'fa-solid fa-gauge-high' },
           { id: 'all-batches', label: 'All batches', icon: 'fa-solid fa-layer-group' },
           { id: 'workspace', label: 'Batch workspace', icon: 'fa-solid fa-diagram-project' },
-        ],
-      },
-      {
-        label: 'WORK',
-        items: [
           {
             id: 'approvals',
             label: 'Batch approvals',

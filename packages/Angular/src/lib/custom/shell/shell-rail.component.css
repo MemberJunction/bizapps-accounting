@@ -163,3 +163,14 @@
     display: none;
   }
 }
+
+/* ── Toggle divider (Marcelo 2026-07-29) ──────────────────────────────────────
+   A wordless hairline separating the collapse toggle from the nav items — symmetric margins on
+   both sides, no label padding (there is no label). Present identically in collapsed, expanded,
+   and hover-peek modes, so it adds the same constant height everywhere and item positions never
+   shift between modes (the no-shift north star). */
+.sr__divider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--mj-border-default);
+}

@@ -34,5 +34,9 @@
         [class.fa-outdent]="!Collapsed"
         aria-hidden="true"></i>
     </button>
+    <!-- Wordless divider between the toggle and the nav items (Marcelo 2026-07-29): the toggle is
+         deliberately styled as a nav row, so without a boundary it reads as a destination. Projected
+         into the same [header] slot so it renders directly under the toggle in every mode. -->
+    <div header class="sr__divider" aria-hidden="true"></div>
   </mj-left-nav>
 </div>
