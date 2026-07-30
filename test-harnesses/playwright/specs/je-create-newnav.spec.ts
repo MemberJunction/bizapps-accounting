@@ -30,7 +30,10 @@ test.afterAll(() => {
 
 async function railItem(page: Page, category: string, item: string): Promise<void> {
   await openNavItem(page, category);
-  await page.getByRole('button', { name: item, exact: true }).first().click();
+  // Anchored regex, not exact:true (2026-07-30): rail badges fold their count into the button's
+  // accessible name ("Batch approvals 2"), so exact broke once a count rendered; the anchors
+  // still block the substring collision exact was guarding (the scope chip name).
+  await page.getByRole('button', { name: new RegExp('^' + item + '( \\d+)?$') }).first().click();
   await page.mouse.move(820, 480); // hover-peek retract
   await page.waitForTimeout(3500);
 }
@@ -42,7 +45,14 @@ test('JE workspace: balanced 2-line draft → Create entry → Pending JE confir
   await resetCompanyScopeToAll(page);
   await scopeToCompany(page, fx!.companyName);
 
-  await railItem(page, 'Journal Entries', 'JE workspace');
+  // Enter the workspace THROUGH the All-journal-entries "New journal entry" header button
+  // (Marcelo 2026-07-30) — proves the list page's create verb is present AND lands on the
+  // workspace, then the rest of the flow proves the workspace works from that entry path.
+  await railItem(page, 'Journal Entries', 'All journal entries');
+  const newJe = page.getByRole('button', { name: /New journal entry/i }).first();
+  await expect(newJe, 'All journal entries carries the New-journal-entry verb').toBeVisible({ timeout: 30_000 });
+  await newJe.click();
+  await expect(page.getByRole('button', { name: /Create entry/i }).first(), 'create verb landed on the JE workspace').toBeVisible({ timeout: 30_000 });
 
   // Header: pick the fixture company (label-wrapped select → getByLabel works).
   const company = page.getByLabel(/Company/i).first();

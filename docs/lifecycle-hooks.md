@@ -21,7 +21,7 @@ friendly thing happen; the trigger is the floor that catches anything — even r
 
 | # | Hook | Entity | What causes it to fire | How | Status |
 |---|---|---|---|---|---|
-| **W1** | Profile init (seed) | `AccountingCompanyProfile` | a **new** profile is saved (`!IsSaved`) | auto · `Save()` | ✅ |
+| **W1** | Profile init (TZ default; COA seed = explicit only, 2026-07-30) | `AccountingCompanyProfile` | a **new** profile is saved (`!IsSaved`) | TZ auto · seed via explicit `SeedDefaultChartOfAccounts()` | ✅ |
 | **W2** | JE numbering (GLOBAL) | `JournalEntry` | a **new** JE is saved with **no `EntryNumber`** | auto · `Save()` | ✅ |
 | **W3** | Batch numbering (GLOBAL) | `JournalEntryBatch` | a **new** batch is saved with **no `BatchNumber`** | auto · `Save()` | ✅ |
 | **W4** | Adjusting-entry routing | — | — | — | 🚫 retired 2026-07-06 (periods removed, CH-1) |
@@ -36,12 +36,16 @@ friendly thing happen; the trigger is the floor that catches anything — even r
 
 ## 1. The hooks in detail
 
-### W1 — Profile init *(✅ `AccountingCompanyProfileEntityServer.ts`)*
-**Fires:** automatically on the **first save of a new profile** (idempotent — later saves skip it).
-**Does:** the per-company setup, all via `BaseEntity.Save()` so every seeded row is audited:
-- Seeds the **minimal starter chart of accounts** (the **10**-account AR-subledger set — AD-8 + §C1).
-- Wires the profile's **5 default GL-account refs** (AR / Deferred Revenue / Sales Tax / Realized FX / Unrealized FX).
-- Defaults **`OperatingTimeZone = 'UTC'`**.
+### W1 — Profile init *(✅ `AccountingCompanyProfileEntityServer.ts` — auto-seed RETIRED 2026-07-30)*
+**Fires:** the only remaining automatic behavior on a new profile's first save is the
+**`OperatingTimeZone = 'UTC'`** default. **The COA auto-seed no longer fires on create** (Marcelo
+ruling 2026-07-30): a new company starts with an **EMPTY chart** — auto-seeding collided with the
+**L8 immediate identity lock**, forcing ten locked-identity accounts on every company.
+**Explicit capability instead:** `SeedDefaultChartOfAccounts()` (public, idempotent — existing codes
+skipped, every row via `BaseEntity.Save()` so it stays audit-by-construction) seeds the 10-account
+AR-subledger set (AD-8 + §C1) **when deliberately invoked** — fixtures, demo seeds, or a future
+"seed standard chart" UI affordance.
+- *(The profile's 5 default GL-account refs were RETIRED 2026-07-23 — role/link model replaces them.)*
 - *(Period generation was REMOVED 2026-07-06 — no `AccountingPeriod` rows exist to create.)*
 
 ### W2 — JE numbering *(✅ `JournalEntryEntityServer.ts` + `SequenceService.ts`)*

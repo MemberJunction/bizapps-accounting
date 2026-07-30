@@ -37,7 +37,10 @@ async function railItem(page: Page, category: string, item: string): Promise<voi
   await openNavItem(page, category);
   // EXACT name: substring matching made { name: 'Companies' } hit the scope chip's
   // "Scope: All companies" accessible name (earlier in DOM) and open its menu over the page.
-  await page.getByRole('button', { name: item, exact: true }).first().click();
+  // Anchored regex, not exact:true (2026-07-30): rail badges fold their count into the button's
+  // accessible name ("Batch approvals 2"), so exact broke once a count rendered; the anchors
+  // still block the substring collision exact was guarding (the scope chip name).
+  await page.getByRole('button', { name: new RegExp('^' + item + '( \\d+)?$') }).first().click();
   await page.mouse.move(820, 480); // let the collapsed rail's hover-peek retract (see accounts spec)
   await page.waitForTimeout(3500);
 }

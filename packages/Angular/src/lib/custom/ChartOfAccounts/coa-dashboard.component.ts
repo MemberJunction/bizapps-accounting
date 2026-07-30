@@ -85,6 +85,14 @@ export class ChartOfAccountsDashboardComponent extends BaseDashboard {
   public Model: AccountEditModel = this.blankModel();
   /** The valid AccountType values, sourced from entity metadata (rule 2c — not a hand-copied union). */
   public AccountTypeOptions: AccountType[] = [];
+  /** Seeded currency roster for the editor's searchable combobox (Marcelo 2026-07-30: free-text
+   *  invited typos the DB then rejected). Label = "CODE — Name" so the combobox's contains-filter
+   *  matches typing either the actual code ("USD") or the name ("dollar"). */
+  public get CurrencyOptions(): Array<{ Code: string; Name: string; Label: string }> {
+    return AccountingEngineBase.Instance.Currencies
+      .map((c) => ({ Code: c.Code, Name: c.Name, Label: `${c.Code} — ${c.Name}` }))
+      .sort((a, b) => a.Code.localeCompare(b.Code));
+  }
   /** Snapshot taken when opening an existing account, so Cancel can revert edits back to the view. */
   private savedModel: AccountEditModel | null = null;
   /** One-time guard for the reactive engine subscription. */
@@ -334,7 +342,7 @@ export class ChartOfAccountsDashboardComponent extends BaseDashboard {
       entity.AccountType = this.Model.AccountType;
       entity.CompanyID = this.Model.CompanyID;
       entity.ParentGLAccountID = this.Model.ParentGLAccountID || null;
-      entity.CurrencyCode = this.Model.CurrencyCode.trim() || null;
+      entity.CurrencyCode = (this.Model.CurrencyCode ?? '').trim() || null; // combobox clear can write null
       entity.IsActive = this.Model.IsActive;
       entity.Description = this.Model.Description.trim() || null;
       if (!(await entity.Save())) throw new Error(entity.LatestResult?.CompleteMessage ?? 'Save failed.');

@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, OnInit, OnDestroy } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef, EventEmitter, inject, OnInit, OnDestroy, Output } from '@angular/core';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
 import { RunViewParams, CompositeKey, Metadata, RunView } from '@memberjunction/core';
 import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
@@ -55,6 +55,17 @@ const DAY_MS = 24 * 60 * 60 * 1000;
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
+  /**
+   * The section's create verb (Marcelo 2026-07-30) — same contract as the dashboards'
+   * AccountingDashboardBase: the page cannot navigate itself (Explorer resources are not routed),
+   * so the header button emits the intent and the hosting shell decides what "create" does
+   * (today: GoToPage('workspace')).
+   */
+  @Output() CreateRequested = new EventEmitter<void>();
+  public RequestCreate(): void {
+    this.CreateRequested.emit();
+  }
+
   private cdr = inject(ChangeDetectorRef);
   /** The shell header's Refresh reaches this page only while it is the mounted one. */
   private pageRefresh = inject(PageRefreshService);

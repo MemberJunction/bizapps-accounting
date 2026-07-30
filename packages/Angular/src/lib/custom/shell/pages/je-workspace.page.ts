@@ -1,7 +1,7 @@
 import { Component, ChangeDetectionStrategy, ChangeDetectorRef, ElementRef, ViewChild, inject, OnInit } from '@angular/core';
 import { RunView, type IRemoteOperationProvider } from '@memberjunction/core';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
-import { UUIDsEqual } from '@memberjunction/global';
+import { NormalizeUUID, UUIDsEqual } from '@memberjunction/global';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import type { JEValidationError } from '@mj-biz-apps/accounting-engine-base';
 import { CompanyScopeService } from '../../shared/company-scope.service';
@@ -186,10 +186,15 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
   public get AccountOptions(): AccountOption[] {
     const companyId = this.Draft?.CompanyID;
     if (!companyId) return [];
-    return AccountingEngineBase.Instance.GLAccounts
-      .filter((a) => UUIDsEqual(a.CompanyID, companyId) && a.IsActive)
-      .map((a) => ({ ID: a.ID, Label: `${a.Code} · ${a.Name}` }))
-      .sort((a, b) => a.Label.localeCompare(b.Label));
+    // Dedupe by normalized ID (2026-07-30): the engine cache can hold a client-created row AND its
+    // server-refreshed case-variant copy until the upstream BaseEngine `===`-PK fix lands
+    // (MJ-UPSTREAM.md). Last copy wins (the freshest upsert).
+    const byId = new Map<string, AccountOption>();
+    for (const a of AccountingEngineBase.Instance.GLAccounts) {
+      if (!UUIDsEqual(a.CompanyID, companyId) || !a.IsActive) continue;
+      byId.set(NormalizeUUID(a.ID), { ID: a.ID, Label: `${a.Code} · ${a.Name}` });
+    }
+    return [...byId.values()].sort((a, b) => a.Label.localeCompare(b.Label));
   }
 
   /** The chosen account's full "Code · Name" — bound to the select's title so the full name shows on
@@ -214,6 +219,9 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
       }));
   }
 
+  /** Companies whose empty cached chart we already re-checked against the server this session. */
+  private accountsRechecked = new Set<string>();
+
   public OnCompanyChanged(): void {
     const d = this.Draft;
     if (!d) return;
@@ -221,6 +229,23 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
     // draft the engine rejects. Clear the selections, keep everything the operator typed.
     for (const line of d.Lines) line.GLAccountID = null;
     this.touch();
+    void this.recheckAccountsIfCacheEmpty(d.CompanyID);
+  }
+
+  /**
+   * Staleness self-heal (Marcelo 2026-07-30): the picker reads the client engine cache, but a
+   * company's chart can be created SERVER-side (seed hooks, another user, the accounts editor in
+   * another tab) — the cache never hears about those rows. An empty cached chart for a picked
+   * company is therefore suspect: force ONE engine refresh for it per session before trusting
+   * "no accounts". Genuinely empty companies cost one extra read, then stay marked as checked.
+   */
+  private async recheckAccountsIfCacheEmpty(companyId: string | null): Promise<void> {
+    if (!companyId || this.AccountOptions.length > 0) return;
+    const key = NormalizeUUID(companyId);
+    if (this.accountsRechecked.has(key)) return;
+    this.accountsRechecked.add(key);
+    await AccountingEngineBase.Instance.Config(true, this.ProviderToUse.CurrentUser, this.ProviderToUse);
+    this.cdr.markForCheck();
   }
 
   // ─── lines ─────────────────────────────────────────────────────────────────

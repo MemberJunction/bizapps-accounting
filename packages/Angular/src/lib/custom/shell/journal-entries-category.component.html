@@ -42,7 +42,7 @@
           <mj-je-dashboard-page (CreateRequested)="GoToPage('workspace')"></mj-je-dashboard-page>
         }
         @case ('all-entries') {
-          <mj-all-journal-entries-page></mj-all-journal-entries-page>
+          <mj-all-journal-entries-page (CreateRequested)="GoToPage('workspace')"></mj-all-journal-entries-page>
         }
         @case ('workspace') {
           <mj-je-workspace-page></mj-je-workspace-page>

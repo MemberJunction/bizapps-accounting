@@ -30,7 +30,7 @@ import '@memberjunction/server-bootstrap-lite';
 import '@mj-biz-apps/common-entities';
 import '@mj-biz-apps/accounting-entities';
 import '@mj-biz-apps/accounting-core-entities-server';
-import { RequireJournalEntryTypeID, JournalEntryEntityServer } from '@mj-biz-apps/accounting-core-entities-server';
+import { RequireJournalEntryTypeID, JournalEntryEntityServer, AccountingCompanyProfileEntityServer } from '@mj-biz-apps/accounting-core-entities-server';
 import type { mjBizAppsAccountingAccountingCompanyProfileEntity } from '@mj-biz-apps/accounting-entities';
 // These shared server-harness helpers live two dirs up. Because the playwright/ folder has its own
 // `"type":"module"` package.json while the server/ folder does not, tsx interprets the server .ts
@@ -100,6 +100,9 @@ async function setup(p: Pools): Promise<void> {
   acp.EntityType = 'Subsidiary';
   const companyId = acp.ID;
   if (!(await acp.Save())) throw new Error(`ACP save failed: ${acp.LatestResult?.CompleteMessage ?? 'unknown'}`);
+  // EXPLICIT seed (2026-07-30): companies are born with an EMPTY chart now (Marcelo ruling — the
+  // W1 auto-hook is retired), so the fixture seeds the starter chart it depends on (11201/40100).
+  await (acp as AccountingCompanyProfileEntityServer).SeedDefaultChartOfAccounts();
 
   // Map every GL account to a BusinessCentral external account = its Code (so buildBatch can resolve).
   await pool.request().query(`UPDATE ${SCHEMA}.GLAccount SET ExternalSystem='BusinessCentral', ExternalAccountID=Code WHERE CompanyID='${companyId}'`);

@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
+import { NormalizeUUID } from '@memberjunction/global';
 import { IMetadataProvider, UserInfo } from '@memberjunction/core';
 import { UserInfoEngine } from '@memberjunction/core-entities';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
@@ -66,14 +67,25 @@ export class CompanyScopeService {
     this.loaded = true;
 
     await AccountingEngineBase.Instance.Config(false, contextUser, provider);
-    const companies: ScopeCompany[] = AccountingEngineBase.Instance.CompanyProfiles.map((p) => ({
-      ID: p.ID,
-      Name: p.Name,
-      CompanyCode: p.CompanyCode,
-    })).sort((a, b) => a.Name.localeCompare(b.Name));
-    this.companies$.next(companies);
+    // REACTIVE roster, not a one-shot snapshot (Marcelo 2026-07-30 — the stale-company-picker/FK
+    // ghost fix): ObserveProperty emits the current array on subscribe AND re-emits on every
+    // client-side ACP save/delete, so a company created in the New-company dialog appears in the
+    // scope chip and every picker fed from this service immediately. (The service is a root
+    // singleton living for the app session, so the subscription is deliberately never torn down.)
+    AccountingEngineBase.Instance
+      .ObserveProperty<InstanceType<typeof AccountingEngineBase>['CompanyProfiles'][number]>('_companyProfiles')
+      .subscribe((profiles) => {
+        // DEDUPE by normalized ID (Marcelo 2026-07-30): MJ-core's BaseEngine event-upsert compares
+        // PKs with raw `===`, so a client-created row (lowercase UUID) and its server-refreshed
+        // copy (uppercase) can BOTH sit in the engine array — filed upstream (MJ-UPSTREAM.md,
+        // GH-likely); until that lands we keep the LAST copy (the freshest upsert) per company.
+        const byId = new Map<string, ScopeCompany>();
+        for (const p of profiles) byId.set(NormalizeUUID(p.ID), { ID: p.ID, Name: p.Name, CompanyCode: p.CompanyCode });
+        const companies: ScopeCompany[] = [...byId.values()].sort((a, b) => a.Name.localeCompare(b.Name));
+        this.companies$.next(companies);
+      });
 
-    this.selectedIDs$.next(this.readPersistedScope(companies));
+    this.selectedIDs$.next(this.readPersistedScope(this.companies$.value));
   }
 
   /** Replace the scope. Pass [] for "all companies". */

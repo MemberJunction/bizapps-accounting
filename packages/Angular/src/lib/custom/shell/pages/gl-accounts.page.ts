@@ -314,14 +314,16 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
       // permission denial) — reading the return value is the only way to know it worked.
       const saved = await entity.Save();
       if (!saved) {
-        this.EditorError = entity.LatestResult?.CompleteMessage ?? 'The account could not be saved.';
+        // MJ core already console-logs the full failure (SQL included) — here we only present the
+        // human sentence; adding our own console.error would double-log and trip the test keystone.
+        this.EditorError = this.friendlySaveError(entity.LatestResult?.CompleteMessage, 'The account could not be saved.');
         return;
       }
 
       this.Draft = null;
       await this.load(true);
     } catch (e) {
-      this.EditorError = e instanceof Error ? e.message : String(e);
+      this.EditorError = this.friendlySaveError(e instanceof Error ? e.message : String(e), 'The account could not be saved.');
     } finally {
       this.IsSaving = false;
       this.cdr.markForCheck();
@@ -398,7 +400,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
       entity.IsActive = !r.IsActive;
       const saved = await entity.Save();
       if (!saved) {
-        this.LoadError = entity.LatestResult?.CompleteMessage ?? `Could not update ${r.Code}.`;
+        this.LoadError = this.friendlySaveError(entity.LatestResult?.CompleteMessage, `Could not update ${r.Code}.`);
         return;
       }
       await this.load(true);
@@ -425,7 +427,13 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
       this.CurrencyOptions = engine.Currencies.map((c) => ({ Code: c.Code, Name: c.Name })).sort((a, b) => a.Code.localeCompare(b.Code));
 
       const scoped = this.scopedAccounts(engine.GLAccounts);
-      this.CompanyOptions = this.companyOptionsFor(scoped);
+      // Companies come from the SCOPE service (ACP-backed, reactive) — NOT derived from cached GL
+      // account rows (Marcelo 2026-07-30). The old derivation had two failure modes: a freshly
+      // created company (whose W1 chart was seeded SERVER-side, so no client entity events) never
+      // appeared, and companies deleted out-of-band lingered as ghosts — picking one produced a raw
+      // FK_GLAccount_Company error at save. The scope roster tracks ACP saves live, and a company
+      // with no accounts yet is exactly the one you create the first account FOR.
+      this.CompanyOptions = this.Scope.Companies.map((c) => ({ ID: c.ID, Name: `${c.Name} (${c.CompanyCode})` }));
       this.Rows = this.buildRollup(scoped);
     } catch (e) {
       this.LoadError = e instanceof Error ? e.message : String(e);
@@ -447,14 +455,20 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
     return all.filter((a) => selected.has(NormalizeUUID(a.CompanyID)));
   }
 
-  private companyOptionsFor(accounts: mjBizAppsAccountingGLAccountEntity[]): CompanyOption[] {
-    const byID = new Map<string, CompanyOption>();
-    for (const a of accounts) {
-      // NormalizeUUID for the map key: SQL Server hands UUIDs back uppercase, so a raw string key
-      // would split one company into two buckets the moment a casing differs.
-      byID.set(NormalizeUUID(a.CompanyID), { ID: a.CompanyID, Name: a.Company });
+  /**
+   * Present a save failure as a human sentence, never a raw SQL dump (Marcelo 2026-07-30 — the
+   * FK-ghost incident leaked a full spCreate batch into the editor). MJ's CompleteMessage appends
+   * the executed SQL after "Query:"; everything from there down is log material, not UI copy. The
+   * one constraint a user can actually hit from this editor gets a specific, actionable message.
+   */
+  private friendlySaveError(raw: string | null | undefined, fallback: string): string {
+    if (!raw) return fallback;
+    const beforeQuery = raw.split(/\bQuery:/)[0].trim();
+    if (/FK_GLAccount_Company/i.test(beforeQuery)) {
+      return 'The selected owning company no longer exists — it may have been removed since this page loaded. Refresh and choose again.';
     }
-    return [...byID.values()].sort((a, b) => a.Name.localeCompare(b.Name));
+    const firstLine = beforeQuery.split('\n').map((l) => l.trim()).find((l) => l.length > 0);
+    return firstLine ?? fallback;
   }
 
   /**

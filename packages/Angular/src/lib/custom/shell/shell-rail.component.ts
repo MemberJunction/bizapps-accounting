@@ -80,7 +80,12 @@ export class ShellRailComponent implements OnInit, OnDestroy {
    * body never shifts. Transient (not persisted): mouse-only, desktop-only (the mobile drawer is its own
    * thing). Superseded the earlier no-hover ruling now that overlay + delay remove the "moves the target
    * you were aiming at" problem the old instant-hover would have had.
+   *
+   * OFF BY DEFAULT (Marcelo 2026-07-30): the machinery stays (cleanly gated here), but no shell opts in
+   * today — the toggle is the affordance. Re-enable per-shell with `[HoverPeek]="true"` if it earns its
+   * way back.
    */
+  @Input() HoverPeek = false;
   public HoverExpanded = false;
   private enterTimer: ReturnType<typeof setTimeout> | null = null;
   private leaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -104,6 +109,7 @@ export class ShellRailComponent implements OnInit, OnDestroy {
 
   @HostListener('mouseenter')
   onRailEnter(): void {
+    if (!this.HoverPeek) return; // feature gated off by default (Marcelo 2026-07-30)
     if (!this.Collapsed) return; // expanded rail has nothing to peek
     this.clearTimers();
     this.enterTimer = setTimeout(() => { this.HoverExpanded = true; this.cdr.markForCheck(); }, HOVER_EXPAND_DELAY_MS);

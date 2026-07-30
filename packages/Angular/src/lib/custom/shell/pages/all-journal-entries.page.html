@@ -19,6 +19,13 @@
   <div actions>
     <!-- The ONE refresh control per list (§8 dispatch refresh policy). Deleting this seam is how
          live push lands later — there is deliberately no polling and no per-button wiring. -->
+    <!-- The section's create verb (Marcelo 2026-07-30) — same contract as the dashboards: the page
+         cannot navigate itself (Explorer resources are not routed), so it emits CreateRequested and
+         the hosting shell sends it to the JE workspace. -->
+    <button mjButton variant="primary" size="sm" (click)="RequestCreate()">
+      <i class="fa-solid fa-plus" aria-hidden="true"></i>
+      <span>New journal entry</span>
+    </button>
   </div>
 
   <!-- The All-batches filter setup, applied here verbatim in idiom: status toggles + company +

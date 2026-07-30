@@ -13,7 +13,38 @@ create + open questions for the human, recorded so dev can roll through and circ
 Tiers: **1** Vitest (unit) · **2** server (tsx, in-process direct SQL) · **3** API (GraphQL→MJAPI) ·
 **4** GUI/DOM (no-browser — parked, mjdev overlay) · **5** Playwright (browser e2e, pre-PR only).
 
-## ⭐ CURRENT STATE — 2026-07-30 FULL-COVERAGE OVERNIGHT RUN (all tiers + orders integration)
+## ⭐ CURRENT STATE — 2026-07-30 DEMO-GATE RUN (Amith's demo flow, pre-PR-merge gate)
+
+Gate scope (Amith 2026-07-30): prove the full demo flow — company profile setup → GL accounts →
+JE/Lines → batching — before the PR merges. Company-create browser SAVE stays a **waived** gap
+(5x; Marcelo ruling 2026-07-30: that dialog will be rebuilt as an app-owned form-based dialog).
+
+| What ran | Result |
+|---|---|
+| Tier-5 playwright suite (fresh run vs pushed HEAD) | **8/8 demo-relevant specs green** (10.2m). 9th spec = `orders-product-catalog`, failed as pre-known 5y blocker (orders@next ships no nav app) — NOT a regression |
+| **NEW** `test-harnesses/api/full-flow-api.ts` — the demo journey as ONE chain on a FRESH company, all over the wire (the exact calls the UI buttons make): ACP "New company" save → IS-A parent + W1 COA (10 accts, 11201/40100) → 3 JEs via `Accounting.CreateJournalEntry` (merge shape, entry-number format) → Preview/Build netted 600/600 → approval flip → Approve → Dispatch (Posted + MOCK ref) → JEs GLPosted via the dashboards' dynamic-view read path → **C2 dimension-split consolidation** (Marcelo ruling 2026-07-30: prove company × GLAccount × dimension-combo split on the PERSISTED summary, not just tier-1 pure netting): same-account/different-dims lines refuse to merge at creation (LineCount 3), batch collapse nets ACROSS JEs per dim group (AR×SALES 140 = 100+40, AR×MKTG 60 split, REV 200 untagged), summaryLineCount 3, each summary line re-tagged with exactly its combo — all read back over the wire → fixture teardown | **24/24, first run** |
+| Amith's orders integration suite (15 bundles) re-run vs pushed HEAD | **177/177** |
+| `cross-app-batching.mjs` — now +2 checks reading the order-JEs/batch back through the accounting dashboards' wire view path (the "API in orders → UI in accounting" closure) | **11/11** |
+
+**W1 auto-seed RETIRED (Marcelo ruling 2026-07-30, live UI session):** new companies start with an
+EMPTY chart (auto-seed collided with the L8 identity lock); `SeedDefaultChartOfAccounts()` stays as
+an explicit public capability. Contract re-pinned and re-proven: block0 W1.2 now asserts BOTH halves
+(empty on create + 10 accounts on explicit call) — **10/10**; full-flow-api asserts empty-start over
+the wire then creates its own AR/Revenue accounts — **24/24**; batching-fixture seeds explicitly —
+batch-reject spec re-proven **1/1**; CES units **42/42**. Amith's integration fixtures are unaffected
+by design (they seed directly, fixture.ts:270). Flagged to Amith via instance QUESTIONS.md (W1 was a
+master-plan item). `docs/lifecycle-hooks.md` updated.
+
+**Residue finding + sweep (2026-07-30):** the orders integration suite's bundle teardown LEAKS the
+accounting companies it provisions (63 IT-ORD ACP+Company rows + ~250 orders-schema rows from one
+run) and the cross-app teardown ran without CODEGEN creds (no ALTER for DISABLE TRIGGER) → 13
+orphan GLPosted JEs + 3 orphan batches. Fixed/handled: cross-app teardown now uses the CODEGEN
+pool; new `server/_maint-clean-test-residue.ts` + `_maint-clean-test-residue2.ts` (generic
+FK-driven, tag-scoped sweep, constraints re-verified WITH CHECK) ran to zero — instance now holds
+exactly the 3 Assoc Demo companies (verified over the UI's read path post-API-restart). Suite-leak
+finding filed to `~/MJDev/MJ-UPSTREAM.md` for the orders app.
+
+## ⭐ PRIOR STATE — 2026-07-30 FULL-COVERAGE OVERNIGHT RUN (all tiers + orders integration)
 
 **Final battery (2026-07-30, everything re-run after the night's metadata/view changes):**
 

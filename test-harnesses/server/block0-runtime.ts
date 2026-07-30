@@ -201,7 +201,15 @@ async function main(): Promise<void> {
     assert(ok, `Save failed: ${acp.LatestResult?.CompleteMessage ?? 'unknown'}`);
   });
 
-  await test('W1.2 seeds EXACTLY the 10 minimal GL accounts (IsSystemSeeded), correct codes', async () => {
+  // 2026-07-30 (Marcelo ruling): the W1 AUTO-hook is retired — a new company starts with an
+  // EMPTY chart (auto-seeding + the L8 identity lock forced ten locked accounts on everyone).
+  // Seeding is now an EXPLICIT capability. W1.2 pins BOTH halves of the new contract.
+  await test('W1.2 create leaves the chart EMPTY; explicit SeedDefaultChartOfAccounts() seeds the 10', async () => {
+    const preN = await scalar(pool, `SELECT COUNT(*) AS n FROM ${GL_TABLE} WHERE CompanyID=@id`, acpId);
+    assert(preN === 0, `expected an EMPTY chart on create (auto-seed retired), got ${preN} accounts`);
+    const acp = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, user);
+    assert(await acp.Load(acpId), 'ACP reload failed');
+    await (acp as unknown as { SeedDefaultChartOfAccounts(): Promise<void> }).SeedDefaultChartOfAccounts();
     const rv = new RunView();
     const res = await rv.RunView<{ ID: string; Code: string; IsSystemSeeded: boolean }>(
       { EntityName: GL_ENTITY, ExtraFilter: `CompanyID='${acpId}'`, Fields: ['ID', 'Code', 'IsSystemSeeded'], ResultType: 'simple' }, user);

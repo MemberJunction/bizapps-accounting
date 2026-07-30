@@ -61,7 +61,10 @@
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  width: 100%;
+  /* fit-content, NOT 100% (Marcelo 2026-07-30): the hover highlight must hug the BUTTON, not paint
+     the full rail-width row like a nav item. The 12px side padding keeps the icon on the shared
+     optical icon column, so alignment with the items below is unchanged. */
+  width: fit-content;
   padding: 10px 12px;
   border: none;
   border-radius: 8px;
@@ -123,6 +126,8 @@
   .sr--collapsed .sr__toggle {
     justify-content: center;
     gap: 0;
+    /* fit-content chip centred in the 60px rail (was width:100% + centred content). */
+    margin-inline: auto;
   }
 
   /* SECTION labels (MAIN / WORK / VIEWS) become a small centred DIVIDER LINE when collapsed, keeping the
@@ -173,4 +178,59 @@
   height: 1px;
   margin: 4px 0;
   background: var(--mj-border-default);
+}
+
+/* ── Rail count badges — ZERO layout influence (Marcelo 2026-07-30) ───────────
+   MJ renders the badge as a flex sibling at the row end (`margin-left:auto`, in flow), so a pill
+   taller than the label line grew the row and its appearance nudged siblings. Ruling: the badge
+   must never change the item's size, and the icon must never move.
+   EXPANDED — keep MJ's row-end idiom but take the pill OUT OF FLOW: absolutely pinned to the
+   row's right edge, vertically centred. The row sizes exactly as if the badge did not exist.
+   COLLAPSED — no row edge exists at 60px; the badge becomes a compact count docked on the icon's
+   top-right corner (activity-bar idiom). The centred icon is untouched either way. */
+mj-shell-rail ::ng-deep .mj-left-nav__item {
+  position: relative;
+}
+mj-shell-rail ::ng-deep .mj-left-nav__badge {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: 0;
+  align-self: auto;
+  line-height: 1;
+  white-space: nowrap;
+}
+/* Keep a long label from running under the out-of-flow pill (modern-Chrome :has, fine here —
+   Explorer ships on Chrome; without :has the label merely underlaps, nothing breaks). */
+mj-shell-rail ::ng-deep .mj-left-nav__item:has(.mj-left-nav__badge) .mj-left-nav__label {
+  padding-right: 34px;
+}
+
+@media (min-width: 701px) {
+  .sr--collapsed ::ng-deep .mj-left-nav__item:has(.mj-left-nav__badge) .mj-left-nav__label {
+    padding-right: 0; /* label is visually hidden when collapsed; no reserve needed */
+  }
+  .sr--collapsed ::ng-deep .mj-left-nav__badge {
+    /* Corner-of-icon: icon is 18px, centred → its right edge sits at 50% + 9px. Overlap the pill's
+       centre onto that corner, clear of the row's top padding. Attention colour: presence = action
+       needed (absence = healthy), so it reads as a notification, not a grey ornament. */
+    right: auto;
+    left: calc(50% + 4px);
+    top: 4px;
+    transform: none;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    background: var(--mj-brand-primary);
+    color: var(--mj-text-inverse);
+  }
+  .sr--collapsed ::ng-deep .mj-left-nav__item--active .mj-left-nav__badge {
+    background: var(--mj-brand-primary);
+    color: var(--mj-text-inverse);
+  }
 }
