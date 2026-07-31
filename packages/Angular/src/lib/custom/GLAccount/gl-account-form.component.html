@@ -1,0 +1,97 @@
+@if (record) {
+<mj-record-form-container [Record]="record" [FormComponent]="this"
+    (Navigate)="OnFormNavigate($event)"
+    (DeleteRequested)="OnDeleteRequested()"
+    (FavoriteToggled)="OnFavoriteToggled()"
+    (HistoryRequested)="OnHistoryRequested()"
+    (ListManagementRequested)="OnListManagementRequested()">
+
+  <!-- ── Details (key fields) ──────────────────────────────────────────────── -->
+  <mj-collapsible-panel SectionKey="details" SectionName="Details" Icon="fa fa-align-left"
+      [Form]="this" [FormContext]="formContext">
+    <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="Code" Type="textbox"
+        [EditMode]="EditMode" [FormContext]="formContext"></mj-form-field>
+    <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="Name" Type="textbox"
+        [EditMode]="EditMode" [FormContext]="formContext"></mj-form-field>
+    <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="AccountType" Type="textbox"
+        [EditMode]="EditMode" [FormContext]="formContext"></mj-form-field>
+    <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="ParentGLAccountID" Type="textbox"
+        [EditMode]="EditMode" [FormContext]="formContext" LinkType="Record"></mj-form-field>
+    <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="IsActive" Type="checkbox"
+        [EditMode]="EditMode" [FormContext]="formContext"></mj-form-field>
+    <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="Description" Type="textarea"
+        [EditMode]="EditMode" [FormContext]="formContext"></mj-form-field>
+  </mj-collapsible-panel>
+
+  <!-- ── Chart-of-accounts tree ────────────────────────────────────────────── -->
+  <mj-collapsible-panel SectionKey="coa-tree" SectionName="Chart of Accounts" Icon="fa fa-sitemap"
+      [Form]="this" [FormContext]="formContext">
+
+    <div class="gl-toolbar">
+      <label class="gl-field">
+        <span class="gl-field__label">Company</span>
+        <select class="mj-input" [value]="SelectedCompanyID ?? ''"
+                (change)="OnCompanyChange($any($event.target).value)">
+          @for (co of Companies; track co.ID) {
+            <option [value]="co.ID">{{ co.Name }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="gl-field">
+        <span class="gl-field__label">Type</span>
+        <select class="mj-input" [value]="TypeFilter" (change)="OnTypeFilterChange($any($event.target).value)">
+          <option value="all">All types</option>
+          @for (t of AccountTypes; track t) {
+            <option [value]="t">{{ t }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="gl-field">
+        <span class="gl-field__label">Status</span>
+        <select class="mj-input" [value]="StatusFilter" (change)="OnStatusFilterChange($any($event.target).value)">
+          <option value="all">All</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
+      </label>
+    </div>
+
+    @if (TreeLoading) {
+      <mj-loading text="Loading chart of accounts…" size="small"></mj-loading>
+    } @else if (TreeError) {
+      <div class="gl-banner gl-banner--error" role="alert">
+        <i class="fa-solid fa-triangle-exclamation"></i> {{ TreeError }}
+      </div>
+    } @else if (VisibleNodes.length === 0) {
+      <mj-empty-state Icon="fa-solid fa-inbox" Title="No matching accounts"
+        Message="No GL accounts match the current filters for this company.">
+      </mj-empty-state>
+    } @else {
+      <ul class="gl-tree" role="tree">
+        @for (node of VisibleNodes; track node.ID) {
+          <li class="gl-node" role="treeitem" [class.gl-node--current]="node.IsCurrent"
+              [style.padding-left.px]="12 + node.Depth * 20">
+            @if (node.Children.length) {
+              <button class="gl-node__toggle" type="button" (click)="ToggleNode(node)"
+                      [attr.aria-expanded]="node.Expanded" aria-label="Toggle children">
+                <i class="fa-solid" [class.fa-chevron-down]="node.Expanded" [class.fa-chevron-right]="!node.Expanded"></i>
+              </button>
+            } @else {
+              <span class="gl-node__leaf"><i class="fa-solid fa-circle"></i></span>
+            }
+            <span class="gl-node__code">{{ node.Code }}</span>
+            <span class="gl-node__name">{{ node.Name }}</span>
+            <span class="gl-node__type">{{ node.AccountType }}</span>
+            @if (!node.IsActive) {
+              <span class="gl-node__inactive"><i class="fa-solid fa-ban"></i> inactive</span>
+            }
+          </li>
+        }
+      </ul>
+    }
+  </mj-collapsible-panel>
+
+</mj-record-form-container>
+}

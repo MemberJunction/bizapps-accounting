@@ -10,11 +10,11 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Exchange Rate Details Section -->
+    <!-- Details Section -->
     <mj-collapsible-panel
-        SectionKey="exchangeRateDetails"
-        SectionName="Exchange Rate Details"
-        Icon="fa fa-chart-line"
+        SectionKey="details"
+        SectionName="Details"
+        Icon="fa fa-align-left"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -67,26 +67,6 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Display Information Section -->
-    <mj-collapsible-panel
-        SectionKey="displayInformation"
-        SectionName="Display Information"
-        Icon="fa fa-info-circle"
-        [Form]="this"
-        [FormContext]="formContext">
-
-    </mj-collapsible-panel>
-
-    <!-- System Metadata Section -->
-    <mj-collapsible-panel
-        SectionKey="systemMetadata"
-        SectionName="System Metadata"
-        Icon="fa fa-cog"
-        [Form]="this"
-        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"

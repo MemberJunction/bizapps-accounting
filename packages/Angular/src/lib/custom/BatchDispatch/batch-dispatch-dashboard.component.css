@@ -1,0 +1,148 @@
+:host {
+  display: block;
+  height: 100%;
+}
+
+/* Toolbar selectors (company / period / target). */
+.bd-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 180px;
+}
+
+.bd-field__label {
+  font-size: var(--mj-text-xs);
+  color: var(--mj-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Status / action banners. */
+.bd-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--mj-radius-md);
+  border: 1px solid var(--mj-border-default);
+  background: var(--mj-bg-surface-card);
+  color: var(--mj-text-primary);
+  margin-bottom: 16px;
+  font-size: var(--mj-text-sm);
+}
+
+.bd-banner--success {
+  background: var(--mj-status-success-bg);
+  border-color: var(--mj-status-success-border);
+  color: var(--mj-status-success-text);
+}
+
+.bd-banner--error {
+  background: var(--mj-status-error-bg);
+  border-color: var(--mj-status-error-border);
+  color: var(--mj-status-error-text);
+}
+
+/* Batch list. */
+.bd-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bd-card {
+  border: 1px solid var(--mj-border-default);
+  border-radius: var(--mj-radius-lg);
+  background: var(--mj-bg-surface);
+  padding: 16px 18px;
+  box-shadow: var(--mj-shadow-sm);
+}
+
+.bd-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.bd-card__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--mj-text-primary);
+}
+
+.bd-card__number {
+  font-weight: var(--mj-font-semibold);
+  font-size: var(--mj-text-base);
+}
+
+.bd-card__target {
+  color: var(--mj-text-secondary);
+  font-size: var(--mj-text-sm);
+}
+
+.bd-card__badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bd-card__metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin-top: 14px;
+}
+
+.bd-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bd-metric__label {
+  font-size: var(--mj-text-xs);
+  color: var(--mj-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.bd-metric__value {
+  font-size: var(--mj-text-base);
+  font-weight: var(--mj-font-medium);
+  color: var(--mj-text-primary);
+}
+
+.bd-card__error {
+  margin-top: 14px;
+  margin-bottom: 0;
+}
+
+.bd-card__hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: var(--mj-text-sm);
+  color: var(--mj-text-secondary);
+}
+
+.bd-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.bd-card__busy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--mj-text-sm);
+  color: var(--mj-text-muted);
+}

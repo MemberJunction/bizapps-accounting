@@ -13,5 +13,8 @@
     "strictTemplates": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules"]
+  // Tests are NOT part of the shipped library: they'd drag node: built-ins (the purity guard reads
+  // the source tree) and vitest types into an Angular package build. Vitest type-checks them via
+  // its own config/run instead.
+  "exclude": ["node_modules", "src/__tests__/**", "src/**/*.test.ts", "src/**/*.dom.test.ts"]
 }

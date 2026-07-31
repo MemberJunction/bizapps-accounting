@@ -7,7 +7,7 @@ This is a **MemberJunction Open App** built on top of the [MemberJunction](https
 
 This repo depends on [bizapps-common](https://github.com/MemberJunction/bizapps-common) for shared entities (Currency, Organization, Address) and extends `__mj.Company` with an `AccountingCompanyProfile` (IsA Disjoint child).
 
-See `plans/bizapps-accounting-master.md` for the full design and `BA-D1`..`BA-D24` decision log.
+See `plans/bizapps-accounting-master.md` for the full design and current decision log — the single source of truth.
 
 ## Repository Structure
 
@@ -321,6 +321,10 @@ This repo uses MemberJunction's CodeGen system to generate entity and action sub
 - Never include `__mj_CreatedAt`/`__mj_UpdatedAt` columns in CREATE TABLE - CodeGen handles them
 - Never create indexes for foreign key columns - CodeGen creates them automatically
 
+### Keep the ERD + docs current (convention)
+- **After any schema change** (new/edited migration, new entity, new column) **update `docs/bizapps-accounting-erd.md` in the same change** — the ERD is the at-a-glance schema reference and must not drift from the migrations.
+- Likewise update `docs/lifecycle-hooks.md` when a `BaseEntity.Save()` hook changes, and `docs/ARCHITECTURE.md` as each build block lands. Treat these three docs as part of every change's Definition of Done.
+
 ### SQL Server is the source of truth; PostgreSQL is converted
 - Write all migrations as **T-SQL** in `migrations/` (`V<TS>__v<X.Y.x>__<description>.sql`).
 - The PostgreSQL counterparts in `migrations-pg/` are produced by the MJ converter (`@memberjunction/sql-converter`) via `npx mj sql-convert <file> --from tsql --to postgres --output migrations-pg/<file>.pg.sql --schema __mj_BizAppsAccounting`. PG-only patches use the `.pg-only.sql` extension.
@@ -328,11 +332,17 @@ This repo uses MemberJunction's CodeGen system to generate entity and action sub
 - CI runs `.github/workflows/pg-migrations.yml` on PRs that touch migrations or the converter to validate the PG output still applies cleanly to a fresh PG 17 database.
 - See `migrations-pg/README.md` for the conversion workflow and the MJ repo's `/pg-migrate` slash command for the deeper toolchain.
 
-### Accounting-specific schema invariants (see `plans/bizapps-accounting-master.md` §5)
+### Accounting-specific schema invariants (see `plans/bizapps-accounting-master.md` §6)
 - Balanced-JE invariant enforced via DEFERRABLE constraint trigger — never UPDATE/DELETE around it.
 - JE immutability after `Status ∈ {Batched, GLPosted}` enforced by trigger — only `GLPostedAt`/`GLReferenceID`/`Status` may change after lock.
 - Period-close trigger blocks JE inserts into a closed `AccountingPeriod` unless `OriginalAccountingPeriodID` is set (adjusting entry pattern).
 - `AccountingCompanyProfile` is an IsA Disjoint child of `__mj.Company` — same UUID as the parent row, never INSERT a Profile without a matching Company.
+
+### Time is ALWAYS stored in UTC (convention)
+Every timestamp this app persists is **UTC** — no exceptions, no local-time storage.
+- **Code writes UTC instants:** use `new Date()` (a JS Date is a UTC instant; the mssql driver persists it to `DATETIMEOFFSET` as `+00:00`), `new Date().toISOString().slice(0,10)` for `DATE` values, and `getUTC*()` for any date-part math (e.g. fiscal year). **Never** use local-time getters (`getFullYear()`, `getMonth()`, `toLocaleString()`, `toDateString()`) for a value that gets stored or compared — they introduce the runner's local zone.
+- **DB defaults are UTC:** the SQL Server container runs at `+00:00`, so `SYSDATETIMEOFFSET()` / `GETUTCDATE()` defaults (and CodeGen's `__mj_CreatedAt`/`__mj_UpdatedAt`) are UTC. Verify with `SELECT DATENAME(TZOFFSET, SYSDATETIMEOFFSET())` → must be `+00:00`. If a deployment's server is NOT UTC, fix the server/container TZ — do not paper over it in code.
+- **Display/zone is a presentation concern:** `AccountingCompanyProfile.OperatingTimeZone` (defaults `'UTC'`, W1) is for *rendering* dates to a company's users; storage stays UTC regardless.
 
 ---
 
@@ -383,7 +393,7 @@ This repository provides the **AR subsidiary ledger of record + journal-entry pr
 4. `JournalEntry` / `JournalEntryLine` / `JournalEntryBatch` with balanced-JE + immutability invariants enforced at the DB level
 5. `Dimension` / `DimensionValue` / `JournalEntryLineDimension` for analytical tagging
 6. `ChartOfAccountsMapping` for ERP roundtrip
-7. Tax entities (`TaxAuthority`, `TaxJurisdiction`, `TaxRate`, `TaxLiability`, `TaxRemittance`, `CustomerTaxProfile`) + pluggable `TaxCalculationProvider`
+7. Tax entities (`TaxAuthority`, `TaxJurisdiction`, `TaxRate`, `TaxLiability`, `CustomerTaxProfile`) + pluggable `TaxCalculationProvider` — accounting keeps the tax ACCRUAL only; remitting to the authority is an ERP/GL concern (TaxRemittance removed 2026-07-29, Amith PR-27 review)
 8. Recurring JE templates (FX revaluation, depreciation, prepaid amortization, sales-tax snapshot)
 9. Account balance materialization for closed periods
 10. Read-model views (`vw_TrialBalance_AR`, `vw_AROpenByCustomer`, `vw_DefRevRollforward`, etc.) for Skip-generated reports

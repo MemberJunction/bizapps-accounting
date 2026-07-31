@@ -1,0 +1,57 @@
+{
+  "fields": {
+    "Name": "Accounting",
+    "Description": "AR subledger, journal entries, and JE batch dispatch to the ERP",
+    "Icon": "fa-solid fa-book",
+    "DefaultForNewUser": false,
+    "Color": "#0076b6",
+    "DefaultSequence": 2010,
+    "DefaultNavItems": [
+      {
+        "Label": "Journal Entries",
+        "Icon": "fa-solid fa-book-open",
+        "ResourceType": "Custom",
+        "DriverClass": "JournalEntriesCategoryResource",
+        "isDefault": true
+      },
+      {
+        "Label": "Batches",
+        "Icon": "fa-solid fa-layer-group",
+        "ResourceType": "Custom",
+        "DriverClass": "BatchesCategoryResource",
+        "isDefault": false
+      },
+      {
+        "Label": "Accounts",
+        "Icon": "fa-solid fa-sitemap",
+        "ResourceType": "Custom",
+        "DriverClass": "AccountsCategoryResource",
+        "isDefault": false
+      },
+      {
+        "Label": "Reports",
+        "Icon": "fa-solid fa-chart-column",
+        "ResourceType": "Custom",
+        "DriverClass": "ReportsCategoryResource",
+        "isDefault": false
+      },
+      {
+        "Label": "Configuration",
+        "Icon": "fa-solid fa-gear",
+        "ResourceType": "Custom",
+        "DriverClass": "ConfigurationCategoryResource",
+        "isDefault": false
+      }
+    ]
+  },
+  "relatedEntities": {
+    "MJ: Application Entities": []
+  },
+  "primaryKey": {
+    "ID": "08B5D905-6FB3-438B-94E5-2C5FF021B794"
+  },
+  "sync": {
+    "lastModified": "2026-07-29T20:30:05.004Z",
+    "checksum": "2eace700a7640584d6cf068a7a3de24fed2e8addb75ab2d6de4763a6bf69f750"
+  }
+}

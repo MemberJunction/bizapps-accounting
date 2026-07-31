@@ -1,0 +1,17 @@
+/* GL-resolution preview. Design tokens only. Shared with orders (accounting-domain component). */
+.glr { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--mj-border-default); border-radius: 8px; background: var(--mj-bg-surface-card); font-size: 12.5px; }
+.glr--unresolved { border-color: color-mix(in srgb, var(--mj-status-warning) 45%, transparent); background: color-mix(in srgb, var(--mj-status-warning) 7%, var(--mj-bg-surface-card)); }
+.glr__headline { margin: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; color: var(--mj-text-primary); }
+.glr__headline i { color: var(--mj-brand-primary); }
+.glr__role { font-weight: 700; }
+.glr__none { color: var(--mj-status-warning-text, var(--mj-status-warning)); }
+.glr__mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.glr__chain { list-style: none; margin: 0; padding: 0 0 0 4px; display: flex; flex-direction: column; gap: 3px; }
+.glr__step { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; color: var(--mj-text-muted); font-size: 12px; }
+/* The winning step is the answer to "why is this booking to 4000?" — it must stand out. */
+.glr__step--won { color: var(--mj-text-primary); font-weight: 600; }
+.glr__step--miss { opacity: 0.7; }
+.glr__scope { min-width: 130px; }
+.glr__badge { font-size: 10px; padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, var(--mj-status-success) 16%, transparent); color: var(--mj-status-success-text, var(--mj-status-success)); font-weight: 700; }
+.glr__skipped { font-style: italic; }
+.glr__dims { font-size: 11px; color: var(--mj-text-muted); font-weight: 400; }

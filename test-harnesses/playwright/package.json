@@ -1,0 +1,19 @@
+{
+  "name": "@mj-biz-apps/accounting-playwright-harness",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Kept Playwright GUI harness for bizapps-accounting — drives the instance's MJExplorer (presence + behavior).",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:dashboards": "playwright test specs/dashboards.spec.ts",
+    "test:batching": "playwright test specs/batching.spec.ts",
+    "report": "playwright show-report"
+  },
+  "comment": "Playwright + tsx are resolved from the hoisted MJ workspace root (packages/dev-apps/bizapps-accounting depends on the instance worktree). No local install is needed; if running outside the instance, `npm i -D @playwright/test tsx` here.",
+  "devDependencies": {
+    "@playwright/test": "*",
+    "tsx": "*"
+  }
+}

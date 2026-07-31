@@ -1,0 +1,137 @@
+/* Chart of Accounts — company-scoped, indented GL account tree. Design-token-only. */
+
+/* ─── toolbar / filters ─────────────────────────────────────────────────────── */
+.coa-filters {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+.coa-companyselect { flex: 0 0 auto; min-width: 220px; }
+.coa-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.coa-chip {
+  padding: 5px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--mj-border-default);
+  background: var(--mj-bg-surface);
+  color: var(--mj-text-secondary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.coa-chip:hover { background: var(--mj-bg-surface-hover); }
+.coa-chip--on { border-color: var(--mj-brand-primary); background: color-mix(in srgb, var(--mj-brand-primary) 12%, var(--mj-bg-surface)); color: var(--mj-text-primary); font-weight: 600; }
+.coa-chip[data-variant="success"].coa-chip--on { border-color: var(--mj-status-success); background: color-mix(in srgb, var(--mj-status-success) 14%, var(--mj-bg-surface)); }
+.coa-chip[data-variant="info"].coa-chip--on { border-color: var(--mj-status-info); background: color-mix(in srgb, var(--mj-status-info) 14%, var(--mj-bg-surface)); }
+.coa-chip[data-variant="warning"].coa-chip--on { border-color: var(--mj-status-warning); background: color-mix(in srgb, var(--mj-status-warning) 14%, var(--mj-bg-surface)); }
+.coa-chip[data-variant="error"].coa-chip--on { border-color: var(--mj-status-error); background: color-mix(in srgb, var(--mj-status-error) 14%, var(--mj-bg-surface)); }
+.coa-searchbox {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 200px;
+  flex: 0 1 280px;
+}
+.coa-searchbox i {
+  position: absolute;
+  left: 12px;
+  color: var(--mj-text-muted);
+  pointer-events: none;
+}
+.coa-searchbox .mj-input { width: 100%; padding-left: 32px; }
+
+/* ─── banner ─────────────────────────────────────────────────────────────────── */
+.coa-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+}
+.coa-banner--error { background: var(--mj-status-error-bg); color: var(--mj-status-error-text); border: 1px solid var(--mj-status-error-border); }
+
+/* ─── tree rows ─────────────────────────────────────────────────────────────── */
+.coa-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--mj-border-default);
+  border-radius: 10px;
+  background: var(--mj-bg-surface);
+  padding: 8px;
+}
+.coa-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.coa-row:hover { background: var(--mj-bg-surface-hover); }
+.coa-code {
+  font-weight: 700;
+  color: var(--mj-text-primary);
+  font-variant-numeric: tabular-nums;
+  min-width: 72px;
+}
+.coa-name { color: var(--mj-text-primary); }
+.coa-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.coa-pill[data-variant="success"] { background: var(--mj-status-success-bg); color: var(--mj-status-success-text); }
+.coa-pill[data-variant="info"] { background: var(--mj-status-info-bg); color: var(--mj-status-info-text); }
+.coa-pill[data-variant="warning"] { background: var(--mj-status-warning-bg); color: var(--mj-status-warning-text); }
+.coa-pill[data-variant="error"] { background: var(--mj-status-error-bg); color: var(--mj-status-error-text); }
+.coa-pill[data-variant="default"] { background: var(--mj-bg-surface-sunken); color: var(--mj-text-secondary); }
+.coa-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.coa-tag--muted { background: var(--mj-bg-surface-sunken); color: var(--mj-text-muted); }
+.coa-spacer { flex: 1 1 auto; }
+.coa-ccy { font-size: 0.78rem; color: var(--mj-text-muted); font-variant-numeric: tabular-nums; }
+.coa-open { color: var(--mj-text-disabled); font-size: 0.78rem; }
+.coa-row:hover .coa-open { color: var(--mj-brand-primary); }
+
+/* ── account dialog (view / edit / create) ── */
+.coa-dlg { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.coa-dlg .coa-banner { margin: 0; }
+
+/* read-only view: a clean label/value definition list */
+.coa-view { display: flex; flex-direction: column; gap: 0; margin: 0; }
+.coa-view__row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 12px;
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--mj-border-subtle);
+}
+.coa-view__row:last-child { border-bottom: none; }
+.coa-view__row dt { color: var(--mj-text-muted); font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+.coa-view__row dd { margin: 0; color: var(--mj-text-primary); word-break: break-word; }
+
+/* edit/create form */
+.coa-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; }
+.coa-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.coa-field--full { grid-column: 1 / -1; }
+.coa-field__label { font-size: 0.75rem; font-weight: 600; color: var(--mj-text-secondary); text-transform: uppercase; letter-spacing: 0.02em; }
+.coa-req { color: var(--mj-status-error-text); }
+.coa-field--check { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 8px; color: var(--mj-text-primary); font-size: 0.9rem; }

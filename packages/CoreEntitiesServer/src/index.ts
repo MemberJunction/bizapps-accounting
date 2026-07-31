@@ -15,7 +15,13 @@
  */
 export { AccountingCompanyProfileEntityServer } from './AccountingCompanyProfileEntityServer.js';
 export { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
+export { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
 export { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
+export { GLAccountEntityServer } from './GLAccountEntityServer.js';
+export { GLAccountLinkEntityServer, LoadGLAccountLinkEntityServer } from './GLAccountLinkEntityServer.js';
+export { IntercompanyAccountMatchEntityServer } from './IntercompanyAccountMatchEntityServer.js';
+export { JournalEntryTypeEntityServer, LoadJournalEntryTypeEntityServer } from './JournalEntryTypeEntityServer.js';
+// (AccountingPeriodEntityServer removed 2026-07-06 — AccountingPeriod retired, CH-1.)
 
 // Internal helpers exported for use by future EntityServer classes (period
 // close, FX revaluation, etc.) and by the AccountingService façade in
@@ -26,3 +32,100 @@ export {
 } from './SeedData.js';
 export type { SeededGLAccount } from './SeedData.js';
 export { getNextJournalEntryNumber, getNextBatchNumber } from './SequenceService.js';
+export {
+  LookupJournalEntryTypeByCode,
+  LookupJournalEntryTypeByID,
+  RequireJournalEntryTypeID,
+  GetBatchSummaryEntryType,
+} from './JournalEntryTypes.js';
+export type { JournalEntryTypeRow } from './JournalEntryTypes.js';
+
+// (JournalEntryValidation retired 2026-07-24, phase-2 sweep — its per-record rules live in
+//  JournalEntryEntityServer.Validate/ValidateAsync; nothing consumed the standalone module.
+//  Git history keeps it if a batch-side pre-lock validator is ever wanted again.)
+
+// S1 — batching engine: net a company's Pending JEs into a SINGLE-COMPANY batch (D7) whose
+// summary is a BatchSummary JournalEntry, lock + dispatch (CFO-approval gate + ERP-post seam).
+export {
+  buildBatch,
+  buildBatchFromExplicitIds,
+  buildBatchFromView,
+  classifyViewEntries,
+  previewBatch,
+  pendingCandidateFilter,
+  outOfOrderSkipCount,
+  perCompanySubtotals,
+  pendingCompanies,
+  EmptyBatchError,
+  BatchFromViewError,
+  approveBatch,
+  sendBatch,
+  cancelBatch,
+  regenerateBatch,
+  netLines,
+  resolveExternalAccount,
+  mockErpPoster,
+  AutoApproveGate,
+} from './BatchingEngine.js';
+export type {
+  BatchTargetSystem,
+  DimRef,
+  NettableLine,
+  NetGroup,
+  BuildBatchResult,
+  BuildBatchOptions,
+  BuildBatchFromViewOptions,
+  BatchPreviewEntry,
+  AffectedAccount,
+  BatchPreviewResult,
+  ErpPostResult,
+  ErpPoster,
+  BatchApprovalGate,
+  SendBatchOptions,
+} from './BatchingEngine.js';
+
+// S1 — the REAL CFO-approval gate, backed by the bizapps-tasks app (replaces AutoApproveGate in
+// production). See TasksAppApprovalGate.ts.
+export { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
+
+// (ScheduledJournalEntryService retired 2026-07-23 — the schedule tables were dropped in the
+//  rewritten baseline (plan D15: rev-rec is REAL forward-dated JEs written at booking).
+//  ChartOfAccountsMappingService retired 2026-07-23 — the mapping table was dropped; the account
+//  Code / GLAccount.ExternalAccountID is the ERP wire identity. Both live in git history.)
+
+// (AssociationDemoSeedData moved to test-harnesses/server/ 2026-07-27 — demo fixtures are dev/test
+//  assets and must not ship in this package; seed-demo.ts consumes it locally via tsx.)
+
+// The accounting ENGINE (plan §2.2-2.3): server write path over the browser-safe cache, plus the
+// Accounting.CreateJournalEntry remotable op (code-only — registered via LoadCreateJournalEntryOperation).
+// The contract + pure pipeline types live in @mj-biz-apps/accounting-engine-base — import them from there.
+export { AccountingEngine } from './AccountingEngine.js';
+export { CreateJournalEntryOperation, LoadCreateJournalEntryOperation } from './CreateJournalEntryOperation.js';
+export { CreateJournalEntriesOperation, LoadCreateJournalEntriesOperation } from './CreateJournalEntriesOperation.js';
+export {
+  GenerateReversalOperation,
+  LoadGenerateReversalOperation,
+  type GenerateReversalInput,
+  type GenerateReversalOutput,
+} from './GenerateReversalOperation.js';
+export {
+  BuildBatchOperation,
+  PreviewBatchOperation,
+  RegenerateBatchOperation,
+  DispatchBatchOperation,
+  RecordBatchDecisionOperation,
+  GetBatchApprovalStateOperation,
+  LoadBatchOperations,
+  type BatchCriteriaInput,
+  type PreviewBatchInput,
+  type BuildBatchInput,
+  type BuildBatchOutput,
+  type RegenerateBatchInput,
+  type DispatchBatchInput,
+  type DispatchBatchOutput,
+  type BatchDecisionOutcome,
+  type RecordBatchDecisionInput,
+  type RecordBatchDecisionOutput,
+  type GetBatchApprovalStateInput,
+  type GetBatchApprovalStateOutput,
+} from './BatchOperations.js';

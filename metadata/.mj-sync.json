@@ -6,12 +6,18 @@
   "directoryOrder": [
     "schema-info",
     "entities",
-    "currencies"
+    "currencies",
+    "journal-entry-types",
+    "gl-account-roles",
+    "applications"
   ],
   "sqlLogging": {
     "enabled": true,
     "outputDirectory": "./sql_logging",
-    "filterPatterns": ["*spCreateAIPromptRun*", "*spUpdateAIPromptRun*"],
+    "filterPatterns": [
+      "*spCreateAIPromptRun*",
+      "*spUpdateAIPromptRun*"
+    ],
     "filterType": "exclude",
     "formatAsMigration": false
   },

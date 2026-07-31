@@ -1,0 +1,184 @@
+/* Journal Entry custom form — design tokens only (no hardcoded colors). */
+
+/* Header: status timeline + reversal affordance. */
+.je-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 12px 4px 16px;
+}
+
+.je-timeline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.je-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--mj-text-muted);
+}
+
+.je-step__dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--mj-radius-full);
+  border: 1px solid var(--mj-border-default);
+  background: var(--mj-bg-surface-card);
+  font-size: var(--mj-text-xs);
+}
+
+.je-step__label {
+  font-size: var(--mj-text-sm);
+}
+
+.je-step--done {
+  color: var(--mj-text-primary);
+}
+
+.je-step--done .je-step__dot {
+  border-color: color-mix(in srgb, var(--mj-brand-primary) 40%, var(--mj-border-default));
+  background: color-mix(in srgb, var(--mj-brand-primary) 12%, var(--mj-bg-surface));
+  color: var(--mj-brand-primary);
+}
+
+.je-step--current .je-step__dot {
+  border-color: var(--mj-brand-primary);
+  background: color-mix(in srgb, var(--mj-brand-primary) 18%, var(--mj-bg-surface));
+}
+
+.je-step--current .je-step__label {
+  font-weight: var(--mj-font-semibold);
+}
+
+.je-step__sep {
+  width: 28px;
+  height: 2px;
+  background: var(--mj-border-default);
+  border-radius: var(--mj-radius-full);
+}
+
+.je-step__sep--done {
+  background: color-mix(in srgb, var(--mj-brand-primary) 40%, var(--mj-border-default));
+}
+
+/* Reversal affordance. */
+.je-reversal__form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.je-reversal__reason {
+  min-width: 240px;
+}
+
+/* Banners. */
+.je-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--mj-radius-md);
+  border: 1px solid var(--mj-border-default);
+  background: var(--mj-bg-surface-card);
+  color: var(--mj-text-primary);
+  margin: 0 4px 16px;
+  font-size: var(--mj-text-sm);
+}
+
+.je-banner--success {
+  background: var(--mj-status-success-bg);
+  border-color: var(--mj-status-success-border);
+  color: var(--mj-status-success-text);
+}
+
+.je-banner--error {
+  background: var(--mj-status-error-bg);
+  border-color: var(--mj-status-error-border);
+  color: var(--mj-status-error-text);
+}
+
+/* Lines table. */
+.je-lines {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--mj-text-sm);
+}
+
+.je-lines th,
+.je-lines td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--mj-border-subtle);
+  vertical-align: top;
+}
+
+.je-lines th {
+  color: var(--mj-text-secondary);
+  font-weight: var(--mj-font-semibold);
+  text-transform: uppercase;
+  font-size: var(--mj-text-xs);
+  letter-spacing: 0.04em;
+}
+
+.je-lines__num {
+  width: 48px;
+  color: var(--mj-text-muted);
+}
+
+.je-lines__amt {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.je-lines__desc {
+  color: var(--mj-text-secondary);
+}
+
+.je-lines__total-label {
+  text-align: right;
+  color: var(--mj-text-secondary);
+  font-weight: var(--mj-font-semibold);
+}
+
+.je-lines__total {
+  font-weight: var(--mj-font-semibold);
+  color: var(--mj-text-primary);
+}
+
+/* Dimension chips. */
+.je-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.je-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--mj-radius-full);
+  border: 1px solid var(--mj-border-default);
+  background: var(--mj-bg-surface-card);
+  font-size: var(--mj-text-xs);
+}
+
+.je-chip__key {
+  color: var(--mj-text-muted);
+}
+
+.je-chip__val {
+  color: var(--mj-text-primary);
+  font-weight: var(--mj-font-medium);
+}

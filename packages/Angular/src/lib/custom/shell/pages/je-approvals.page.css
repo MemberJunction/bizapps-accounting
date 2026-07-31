@@ -1,0 +1,100 @@
+/* Manual-JE approvals (§8.1). Inbox idiom per the approved mockup — design tokens only.
+   Height chain: switched into <mj-left-nav-content>, so it declares its own flex-column host. */
+
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.jea {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+/* The not-built statement. Warning-toned deliberately: it is reporting a missing control, not
+   decorating the page. */
+.jea__notice {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 14px;
+  border: 1px solid var(--mj-status-warning-border);
+  background: var(--mj-status-warning-bg);
+  color: var(--mj-status-warning-text);
+  border-radius: 10px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.jea__notice code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+}
+
+.jea__inbox {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.jea__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--mj-border-default);
+  border-radius: 10px;
+  background: var(--mj-bg-surface-card);
+}
+.jea__item:hover {
+  background: var(--mj-bg-surface-hover);
+}
+.jea__icon {
+  color: var(--mj-brand-primary);
+  font-size: 15px;
+  flex: none;
+}
+.jea__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.jea__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mj-text-primary);
+}
+.jea__sub {
+  font-size: 11.5px;
+  color: var(--mj-text-muted);
+}
+/* Positioning only — but it must not select .mj-btn (the CI gate forbids it, because an
+   override there silently forks MJ's button styling). The button is wrapped instead, and
+   the WRAPPER is positioned; mjButton keeps full ownership of the button's appearance. */
+.jea__item .jea__action {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+}
+
+.jea__empty,
+.jea__error {
+  margin: 0;
+  font-size: 12.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--mj-text-muted);
+}
+.jea__error {
+  color: var(--mj-status-error-text);
+}

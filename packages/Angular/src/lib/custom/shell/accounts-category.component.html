@@ -1,0 +1,65 @@
+<mj-page-layout>
+  <!-- FULL WIDTH, ABOVE the rail — MJ's canonical shell shape (admin-container), and what makes the
+       header stay put while the body scrolls: mj-page-layout is overflow:hidden, the header is a
+       natural-height sibling, and the body owns overflow-y:auto. Deliberately TIGHT: one line, no
+       subtitle, no stacking. -->
+  <!-- Header = the CATEGORY (Marcelo 2026-07-16): the sub-page name is already the rail's active
+       item inches away, so restating it bought nothing; the category is the context that ISN'T
+       otherwise on screen.
+       NO stat capsules (Marcelo 2026-07-29): live state under the title made the header busy,
+       broke its vertical alignment against stat-less categories, and duplicated what the rail
+       badges already say. State lives on the RAIL as actionable-only count badges (shown only
+       when action is needed; absence = healthy); the header stays a stable one-line orientation
+       bar. Scope chip + refresh stay in [actions] — controls, not state. -->
+  <mj-page-header [Title]="CategoryTitle" [Icon]="CategoryIcon">
+    <div actions>
+      <mj-company-scope-chip></mj-company-scope-chip>
+      <!-- Refreshes ONLY the page in the body — not the rail, not other pages in this category.
+           Exactly one page is instantiated by the @switch below, so it is the only subscriber
+           (see PageRefreshService). Hidden when the mounted page has nothing to reload, rather
+           than offering a button that does nothing. -->
+      @if (CanRefreshActivePage) {
+        <mj-refresh-button (Clicked)="RefreshActivePage()"></mj-refresh-button>
+      }
+    </div>
+  </mj-page-header>
+
+  <mj-page-body [Flex]="true" [Padding]="false" Direction="row">
+    <!-- The rail + its desktop icons-only collapse toggle. One wrapper, nine shells: see
+         shell-rail.component.ts for why the collapse is not in MJ's own left-nav (QUESTIONS.md#q27). -->
+    <mj-shell-rail
+      [Sections]="RailSections"
+      [ActiveId]="ActivePageId"
+      [MobileTitle]="CategoryTitle"
+      (ItemClicked)="OnRailItemClicked($event)">
+    </mj-shell-rail>
+
+    <mj-left-nav-content>
+      @switch (ActivePageId) {
+        @case ('accounts') {
+          <mj-gl-accounts-page></mj-gl-accounts-page>
+        }
+        @case ('coa') {
+          <mj-chart-of-accounts-dashboard></mj-chart-of-accounts-dashboard>
+        }
+        @case ('links') {
+          <mj-account-links-page></mj-account-links-page>
+        }
+        @case ('erp') {
+          <!-- ChartOfAccountsMapping was RETIRED (plan D13): ERP identity lives on
+               GLAccount.ExternalSystem/ExternalAccountID with the account Code as the wire
+               fallback. The old mapping-approval page has no table to manage — pending until
+               a dedicated external-identity editor is designed (or the GL Accounts grid grows
+               inline ExternalAccountID editing). -->
+          <mj-shell-page-pending [PageName]="'ERP account identity'"></mj-shell-page-pending>
+        }
+        @case ('dimensions') {
+          <mj-dimensions-page></mj-dimensions-page>
+        }
+        @default {
+          <mj-shell-page-pending [PageName]="PendingPageName(ActivePageId)"></mj-shell-page-pending>
+        }
+      }
+    </mj-left-nav-content>
+  </mj-page-body>
+</mj-page-layout>

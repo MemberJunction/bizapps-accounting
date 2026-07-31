@@ -1,0 +1,141 @@
+/* GL accounts. Design tokens only — no hex/rgb literals, no .mj-btn overrides.
+
+   ⚠ These wrappers live inside <mj-page-body-interior>, which is display:block — so `flex: 1`
+   does NOT size them (it is a no-op and collapses the list to zero height). Size with
+   height/min-height; the percentage resolves against body-interior's flex-derived height. */
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  gap: 12px;
+}
+
+/* --- filters (one line, in the header's toolbar slot) --- */
+.gla-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.gla-field__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mj-text-muted);
+}
+.gla-field--search {
+  min-width: 220px;
+}
+.gla-field--wide {
+  grid-column: span 2;
+}
+.gla-help {
+  font-size: 11px;
+  color: var(--mj-text-muted);
+}
+
+/* --- editor --- */
+.gla-editor {
+  border: 1px solid var(--mj-border-default);
+  border-radius: 10px;
+  background: var(--mj-bg-surface);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.gla-editor__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.gla-editor__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--mj-text-primary);
+}
+.gla-editor__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.gla-editor__actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.gla-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--mj-text-secondary);
+}
+
+/* --- the list ---
+   A REAL bounded height + overflow-y:auto is what makes the sticky header work: `position: sticky`
+   only sticks inside a scrolling ancestor. Both axes are set explicitly, because per the CSS spec a
+   `visible` axis paired with a non-`visible` one computes to `auto` anyway. */
+.gla-wrap {
+  border: 1px solid var(--mj-border-default);
+  border-radius: 10px;
+  background: var(--mj-bg-surface);
+}
+.gla-grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.gla-grid th,
+.gla-grid td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--mj-border-subtle, var(--mj-border-default));
+  text-align: left;
+  white-space: nowrap;
+}
+.gla-grid thead th {
+  position: sticky;
+  top: 0;
+  background: var(--mj-bg-surface-card);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--mj-text-muted);
+  z-index: 1;
+}
+.gla-row--inactive td {
+  color: var(--mj-text-muted);
+}
+.gla-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.gla-code {
+  display: inline-block;
+}
+/* The arrow that says "this account rolls up into the one above" — otherwise ParentGLAccountID is
+   invisible and the indentation reads as decoration. */
+.gla-rollup {
+  font-size: 0.7em;
+  opacity: 0.45;
+  margin-right: 4px;
+}
+.gla-flag {
+  margin-left: 6px;
+  color: var(--mj-status-warning);
+}
+.gla-id {
+  font-size: 11px;
+  color: var(--mj-text-muted);
+}
+.gla-actions {
+  display: flex;
+  gap: 6px;
+}
+.gla-empty {
+  padding: 20px;
+  text-align: center;
+  color: var(--mj-text-muted);
+  font-style: italic;
+}
