@@ -1,0 +1,236 @@
+/* The rail column. `mj-page-body Direction="row"` lays the shell out as [rail | content], so this
+   host IS the rail column and must not stretch. position:relative makes it the containing block for
+   the hover-peek overlay below. */
+:host {
+  display: block;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.sr {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+/* ── Hover-to-expand (Marcelo 2026-07-21), DESKTOP ONLY ────────────────────────
+   A collapsed rail reserves only its 60px footprint; while hover-peeking, the rail content floats OUT
+   as an absolute overlay (240px) OVER the page body — the reserved width does not change, so the body
+   never shifts. Scoped to >700px because ≤700px is MJ's off-canvas drawer, which owns its own layout. */
+@media (min-width: 701px) {
+  :host.sr-collapsed {
+    width: 60px;
+  }
+  :host.sr-peeking .sr {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 240px;
+    height: 100%;
+    z-index: 60;
+    background: var(--mj-bg-surface);
+    /* A crisp EDGE LINE separates the floating rail from the content (a black shadow is invisible on a
+       dark page; a light one glows — so the BORDER is the real elevation cue in both themes).
+       PLUS an INSET TOP shadow: the peek overlay sits at z-index:60, ABOVE MJ's page-header (z-index:1,
+       --mj-shadow-md), so the header's own downward shadow no longer lands on the rail's top and it
+       looks like the rail rose above the header. Getting "above the card but under the header" is a
+       stacking dead-end (the content card sits at the same low level), so we RE-CAST the header's
+       shadow onto the overlay's own top edge — the rail reads as being below the header again. */
+    border-right: 1px solid var(--mj-border-strong, var(--mj-border-default));
+    box-shadow:
+      2px 0 28px 2px rgba(0, 0, 0, 0.38),
+      inset 0 9px 7px -7px rgba(0, 0, 0, 0.40);
+  }
+}
+
+/* MJ's rail owns its own scroll (overflow-y:auto). It just needs to be the growing flex item so the
+   toggle below can hold the floor. min-height:0 is what actually lets it scroll instead of pushing
+   the toggle off the bottom — the classic flex-child overflow trap. */
+.sr__nav {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ── The toggle — styled to MATCH a nav item row exactly ───────────────────────
+   It lives in MJ's [header] slot (inside the nav's 8px container padding), so it already shares the
+   items' icon column + spacing. These values are copied 1:1 from .mj-left-nav__item so it reads as
+   just another row: same padding, same 8px rounded-square HOVER (Marcelo — replaces the old full-width
+   highlight), same margin, same flex-start alignment. No border-right / background of its own. */
+.sr__toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  /* fit-content, NOT 100% (Marcelo 2026-07-30): the hover highlight must hug the BUTTON, not paint
+     the full rail-width row like a nav item. The 12px side padding keeps the icon on the shared
+     optical icon column, so alignment with the items below is unchanged. */
+  width: fit-content;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--mj-text-secondary);
+  font-family: inherit;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: background-color 0.12s ease, color 0.12s ease;
+  margin-bottom: 2px;
+}
+
+.sr__toggle:hover {
+  background: var(--mj-bg-surface-hover);
+  color: var(--mj-text-primary);
+}
+
+/* MJ's rail items show no focus ring of their own; this is a real button, so it keeps one.
+   :focus-visible (not :focus) so a mouse click doesn't paint a ring. */
+.sr__toggle:focus-visible {
+  outline: 2px solid var(--mj-border-focus);
+  outline-offset: -2px;
+}
+
+/* Matches .mj-left-nav__icon exactly (18px / 13px, centred) so the arrow sits on the same optical
+   column as every rail icon above it — collapsed OR expanded, the column never moves. */
+/* 1:1 with .mj-left-nav__icon (incl. the margin-top:1px nudge) so the hamburger sits on the exact same
+   optical column + baseline as every nav icon. */
+.sr__toggle-icon {
+  width: 18px;
+  text-align: center;
+  font-size: 13px;
+  margin-top: 1px;
+  flex-shrink: 0;
+}
+
+/* ── Collapsed: icons only ────────────────────────────────────────────────────
+   SCOPED TO DESKTOP. Below 701px MJ turns the rail into a fixed off-canvas drawer; it already
+   defends its width with !important, but nothing defends its labels — so an unscoped rule here
+   would strip the labels out of the mobile drawer and leave a column of anonymous icons. */
+@media (min-width: 701px) {
+  /* ITEM labels are HIDDEN VISUALLY, NOT REMOVED. `display:none` would drop them from the accessibility
+     tree too, leaving every rail button with no accessible name — an icon-only rail that screen
+     readers cannot read. This keeps the name and only takes the pixels. */
+  .sr--collapsed ::ng-deep .mj-left-nav__text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* With the text out of flow the icon is the only thing left; centre it in the narrow rail. */
+  .sr--collapsed ::ng-deep .mj-left-nav__item,
+  .sr--collapsed .sr__toggle {
+    justify-content: center;
+    gap: 0;
+    /* fit-content chip centred in the 60px rail (was width:100% + centred content). */
+    margin-inline: auto;
+  }
+
+  /* SECTION labels (MAIN / WORK / VIEWS) become a small centred DIVIDER LINE when collapsed, keeping the
+     label's OWN box (padding + height) so the vertical rhythm is IDENTICAL to the expanded rail — the
+     words come back in the exact same place on expand/peek (Marcelo 2026-07-21). `color: transparent`
+     hides the glyphs without removing them from the a11y tree or changing the box height. */
+  .sr--collapsed ::ng-deep .mj-left-nav__section-label {
+    position: relative;
+    color: transparent;
+    /* The transparent glyphs + their padding are still in flow; without this they can exceed the 60px
+       rail and make the collapsed rail HORIZONTALLY SCROLLABLE. Clip them to the rail width. */
+    overflow: hidden;
+  }
+  .sr--collapsed ::ng-deep .mj-left-nav__section-label::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 20px;
+    height: 1px;
+    background: var(--mj-border-default);
+  }
+
+  /* Belt-and-braces: a collapsed rail never scrolls sideways (it's 60px of centred icons). MJ's rail
+     owns overflow-y:auto; pinning overflow-x:hidden alongside it is a valid `hidden auto` (y still
+     scrolls) and kills any stray horizontal scrollbar. */
+  .sr--collapsed ::ng-deep .mj-left-nav {
+    overflow-x: hidden;
+  }
+}
+
+/* Below 701px the rail IS a drawer: it opens and closes already, and collapsing a drawer is
+   meaningless. The toggle would also render beneath MJ's in-flow mobile switcher, which is the
+   mobile answer to this exact problem. So it goes away entirely. */
+@media (max-width: 700px) {
+  .sr__toggle {
+    display: none;
+  }
+}
+
+/* ── Toggle divider (Marcelo 2026-07-29) ──────────────────────────────────────
+   A wordless hairline separating the collapse toggle from the nav items — symmetric margins on
+   both sides, no label padding (there is no label). Present identically in collapsed, expanded,
+   and hover-peek modes, so it adds the same constant height everywhere and item positions never
+   shift between modes (the no-shift north star). */
+.sr__divider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--mj-border-default);
+}
+
+/* ── Rail count badges — ZERO layout influence (Marcelo 2026-07-30) ───────────
+   MJ renders the badge as a flex sibling at the row end (`margin-left:auto`, in flow), so a pill
+   taller than the label line grew the row and its appearance nudged siblings. Ruling: the badge
+   must never change the item's size, and the icon must never move.
+   EXPANDED — keep MJ's row-end idiom but take the pill OUT OF FLOW: absolutely pinned to the
+   row's right edge, vertically centred. The row sizes exactly as if the badge did not exist.
+   COLLAPSED — no row edge exists at 60px; the badge becomes a compact count docked on the icon's
+   top-right corner (activity-bar idiom). The centred icon is untouched either way. */
+mj-shell-rail ::ng-deep .mj-left-nav__item {
+  position: relative;
+}
+mj-shell-rail ::ng-deep .mj-left-nav__badge {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: 0;
+  align-self: auto;
+  line-height: 1;
+  white-space: nowrap;
+}
+/* Keep a long label from running under the out-of-flow pill (modern-Chrome :has, fine here —
+   Explorer ships on Chrome; without :has the label merely underlaps, nothing breaks). */
+mj-shell-rail ::ng-deep .mj-left-nav__item:has(.mj-left-nav__badge) .mj-left-nav__label {
+  padding-right: 34px;
+}
+
+@media (min-width: 701px) {
+  .sr--collapsed ::ng-deep .mj-left-nav__item:has(.mj-left-nav__badge) .mj-left-nav__label {
+    padding-right: 0; /* label is visually hidden when collapsed; no reserve needed */
+  }
+  .sr--collapsed ::ng-deep .mj-left-nav__badge {
+    /* Corner-of-icon: icon is 18px, centred → its right edge sits at 50% + 9px. Overlap the pill's
+       centre onto that corner, clear of the row's top padding. Attention colour: presence = action
+       needed (absence = healthy), so it reads as a notification, not a grey ornament. */
+    right: auto;
+    left: calc(50% + 4px);
+    top: 4px;
+    transform: none;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    background: var(--mj-brand-primary);
+    color: var(--mj-text-inverse);
+  }
+  .sr--collapsed ::ng-deep .mj-left-nav__item--active .mj-left-nav__badge {
+    background: var(--mj-brand-primary);
+    color: var(--mj-text-inverse);
+  }
+}

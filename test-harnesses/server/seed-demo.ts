@@ -18,7 +18,7 @@
 import sql from 'mssql';
 import dotenv from 'dotenv';
 import path from 'path';
-import { RunView, UserInfo } from '@memberjunction/core';
+import { Metadata, RunView, UserInfo } from '@memberjunction/core';
 import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
 import { finishAndExit } from './harness-exit.js';
 import { assertInvariantTriggers } from './trigger-preflight.js';
@@ -78,19 +78,24 @@ const CO1 = 'a55c0de1-0001-4000-8000-000000000001';
 const IC_FLOW = 'a55c0de1-1c00-4000-8000-000000000001';
 
 async function verifyViews(pool: sql.ConnectionPool): Promise<void> {
-  console.log('── View verification (each must return >= 1 row) ──────────');
-  await verifyView(pool, 'vw_TrialBalance_AR',
-    `SELECT GLAccountCode, TotalDebits, TotalCredits, NetBalance FROM ${SCHEMA}.vw_TrialBalance_AR WHERE CompanyID='${CO1}' ORDER BY GLAccountCode`);
-  await verifyView(pool, 'vw_AROpenByCustomer',
-    `SELECT CustomerName, OpenBalance, TotalCharges, TotalPayments FROM ${SCHEMA}.vw_AROpenByCustomer WHERE CompanyID='${CO1}' ORDER BY OpenBalance DESC`);
-  await verifyView(pool, 'vw_ARAging',
-    `SELECT CustomerName, Current_0_30, Days_31_60, Days_61_90, Days_Over_90, TotalOpen FROM ${SCHEMA}.vw_ARAging WHERE CompanyID='${CO1}'`);
-  await verifyView(pool, 'vw_DefRevRollforward',
-    `SELECT PeriodMonth, OpeningBalance, Additions, Releases, ClosingBalance FROM ${SCHEMA}.vw_DefRevRollforward WHERE CompanyID='${CO1}' ORDER BY PeriodMonth`);
-  await verifyView(pool, 'vw_SalesTaxLiability',
-    `SELECT AuthorityCode, JurisdictionCode, AccruedAmount, RemittedAmount, OutstandingLiability, Status FROM ${SCHEMA}.vw_SalesTaxLiability WHERE CompanyID='${CO1}'`);
-  await verifyView(pool, 'vw_IntercompanyFlow',
-    `SELECT CompanyName, JournalEntryID, CounterpartyName, GLAccountCode, DebitAmount, CreditAmount FROM ${SCHEMA}.vw_IntercompanyFlow WHERE IntercompanyFlowID='${IC_FLOW}'`);
+  // The Block-6 `vw_*` read-model views were RETIRED in the rebuild (reports are deferred and get
+  // rebuilt as-needed on RunQuery — 2026-07-28 rulings), so verification now asserts the seeded
+  // BASE data directly: companies, their COAs, pending JEs, balanced lines, and the IC flow.
+  console.log('── Seeded-data verification (each must return >= 1 row) ──');
+  await verifyView(pool, 'company profiles (CO1..)',
+    `SELECT acp.ID, acp.CompanyCode FROM ${SCHEMA}.AccountingCompanyProfile acp WHERE acp.ID='${CO1}'`);
+  await verifyView(pool, 'CO1 chart of accounts',
+    `SELECT Code, Name FROM ${SCHEMA}.GLAccount WHERE CompanyID='${CO1}' ORDER BY Code`);
+  await verifyView(pool, 'CO1 journal entries',
+    `SELECT EntryNumber, Status FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${CO1}'`);
+  await verifyView(pool, 'CO1 balanced JE lines (netted to zero per JE)',
+    `SELECT je.ID, SUM(l.DebitAmount) AS D, SUM(l.CreditAmount) AS C FROM ${SCHEMA}.JournalEntry je JOIN ${SCHEMA}.JournalEntryLine l ON l.JournalEntryID=je.ID WHERE je.CompanyID='${CO1}' GROUP BY je.ID HAVING SUM(l.DebitAmount) = SUM(l.CreditAmount)`);
+  await verifyView(pool, 'dimensions + values',
+    `SELECT d.Name, (SELECT COUNT(*) FROM ${SCHEMA}.DimensionValue v WHERE v.DimensionID=d.ID) AS Vals FROM ${SCHEMA}.Dimension d`);
+  // There is no IntercompanyFlow table — the flow is a Description tag shared by the two IC legs
+  // (the former JE.IntercompanyFlowID column was dropped with D25).
+  await verifyView(pool, 'intercompany legs (2 JEs tagged with the flow id)',
+    `SELECT EntryNumber, Status FROM ${SCHEMA}.JournalEntry WHERE Description LIKE '%${IC_FLOW}%'`);
   console.log('──────────────────────────────────────────────────────────');
 }
 
@@ -102,7 +107,7 @@ async function main(): Promise<void> {
 
   let report: DemoSeedReport;
   try {
-    report = await seedAssociationDemo(user);
+    report = await seedAssociationDemo(user, Metadata.Provider);
   } catch (e) {
     console.error('SEED ERROR:', e instanceof Error ? (e.stack ?? e.message) : String(e));
     finishAndExit('\n────── Association demo seed: FAILED during seeding ──────', 2, pool);
@@ -110,16 +115,12 @@ async function main(): Promise<void> {
   printSeedReport(report);
 
   await verifyViews(pool);
-
-  // Sanity: at least one customer fully-settled by design should be ABSENT from vw_AROpenByCustomer
-  // (Initech — charge 400 + pay 400). Report it as an informational line, not a gating assertion.
-  const settled = (await pool.request().query(
-    `SELECT COUNT(*) c FROM ${SCHEMA}.vw_AROpenByCustomer WHERE CompanyID='${CO1}' AND CustomerName LIKE '%Initech Settled%'`,
-  )).recordset[0].c;
-  console.log(`  info: fully-settled customer rows in vw_AROpenByCustomer = ${Number(settled)} (expected 0 — HAVING <> 0 excludes it)`);
+  // (The old vw_AROpenByCustomer settled-customer sanity check is gone with the retired views —
+  // and its premise too: per-customer AR relied on line counterparty tagging, whose column was
+  // removed 2026-07-29. Customer Organizations remain purely as demo entities.)
 
   const failed = outcomes.filter(o => !o.Passed);
-  const summary = `\n────── Association demo seed: ${outcomes.length - failed.length}/${outcomes.length} views populated ──────`;
+  const summary = `\n────── Association demo seed: ${outcomes.length - failed.length}/${outcomes.length} checks populated ──────`;
   if (failed.length > 0) console.log(`  FAILED views: ${failed.map(f => `${f.Name} (${f.Rows} rows${f.Error ? ', ' + f.Error.split('\n')[0] : ''})`).join(', ')}`);
   // NEVER `await pool.close()` — non-blocking close + force-exit (the MJ provider pool can hang on close).
   finishAndExit(summary, failed.length > 0 ? 1 : 0, pool);

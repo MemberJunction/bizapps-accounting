@@ -272,14 +272,17 @@ describe('checkDraftBalance (stage 5 — UNBALANCED)', () => {
     expect(checkDraftBalance(norm(balancedDraft()))).toEqual([]);
   });
 
-  it('passes a multi-company entry balanced within EACH company', () => {
+  it('rejects a multi-company draft with the TYPED code, even when balanced per company (plan D3)', () => {
     const draft = balancedDraft({ Lines: [
       { GLAccountID: GL.aAR, DebitAmount: 100 },
       { GLAccountID: GL.aRev, CreditAmount: 100 },
       { GLAccountID: GL.bAR, DebitAmount: 40 },
       { GLAccountID: GL.bRev, CreditAmount: 40 },
     ] });
-    expect(checkDraftBalance(norm(draft))).toEqual([]);
+    const errs = checkDraftBalance(norm(draft));
+    expect(errs).toHaveLength(1);
+    expect(errs[0].Code).toBe('MULTI_COMPANY_DRAFT');
+    expect(errs[0].Message).toMatch(/split the draft per company/);
   });
 
   it('flags an overall imbalance', () => {
@@ -291,14 +294,16 @@ describe('checkDraftBalance (stage 5 — UNBALANCED)', () => {
     expect(errs.some(e => e.Code === 'UNBALANCED' && !/within company/.test(e.Message))).toBe(true);
   });
 
-  it('flags the AM-4 case: overall-balanced but unbalanced ACROSS companies', () => {
+  it('rejects the cross-company case (overall-balanced, spans two companies) as MULTI_COMPANY_DRAFT', () => {
+    // Pre-D3 this was the AM-4 per-company-balance case; single-company JEs make ANY
+    // multi-company draft invalid regardless of how it foots.
     const draft = balancedDraft({ Lines: [
       { GLAccountID: GL.aAR, DebitAmount: 100 },
       { GLAccountID: GL.bRev, CreditAmount: 100 },
     ] });
     const errs = checkDraftBalance(norm(draft));
-    expect(errs).toHaveLength(2); // both companies one-sided
-    expect(errs.every(e => e.Code === 'UNBALANCED' && /AM-4/.test(e.Message))).toBe(true);
+    expect(errs).toHaveLength(1);
+    expect(errs[0].Code).toBe('MULTI_COMPANY_DRAFT');
   });
 
   it('tolerates sub-cent rounding within 0.005 (matches the DB trigger)', () => {
@@ -325,16 +330,20 @@ describe('runDraftPipeline (stages 1-5 composed, fail-fast per stage)', () => {
     expect(out.normalized).toEqual([]);
   });
 
-  it('surfaces UNBALANCED only after accounts + dimensions pass (overall + per-company errors, like the DB triggers)', () => {
+  it('surfaces UNBALANCED only after accounts + dimensions pass (whole-entry footing, like trigger 50001)', () => {
     const out = runDraftPipeline(balancedDraft({ Lines: [
       { GLAccountID: GL.aAR, DebitAmount: 100 },
       { GLAccountID: GL.aRev, CreditAmount: 60 },
     ] }), lookups);
-    // A single-company imbalance is BOTH an overall and a within-company failure — two errors,
-    // mirroring the 50001 + 50019 trigger pair.
-    expect(out.errors).toHaveLength(2);
-    expect(out.errors.every(e => e.Code === 'UNBALANCED')).toBe(true);
-    expect(out.errors.some(e => /within company/.test(e.Message))).toBe(true);
+    expect(out.errors).toHaveLength(1);
+    expect(out.errors[0].Code).toBe('UNBALANCED');
     expect(out.normalized).toEqual([]);
+    expect(out.companyID).toBe('');
+  });
+
+  it('reports the single resolved company on success (the JE header CompanyID, plan D3)', () => {
+    const out = runDraftPipeline(balancedDraft(), lookups);
+    expect(out.errors).toEqual([]);
+    expect(out.companyID).toBe(out.normalized[0].CompanyID);
   });
 });

@@ -14,8 +14,9 @@
  *                             → DIMENSION_UNKNOWN / DIMENSION_VALUE_UNKNOWN
  *   4. normalizeLines       — merge same-side lines with identical (GLAccountID, dimension set);
  *                             debits ordered before credits; LineNumber assigned 1..n
- *   5. checkDraftBalance    — Σdebits = Σcredits for the WHOLE entry AND within EACH company
- *                             (company = the line's GLAccount.CompanyID — AM-4) → UNBALANCED
+ *   5. checkDraftBalance    — the draft resolves to exactly ONE company (plan D3: single-company
+ *                             JEs; company = the line's GLAccount.CompanyID) → MULTI_COMPANY_DRAFT,
+ *                             and Σdebits = Σcredits for the whole entry → UNBALANCED
  *
  * Stage 6 (the atomic write) is server-only and lives in AccountingEngine
  * (@mj-biz-apps/accounting-core-entities-server) — it consumes this pipeline's NormalizedLine[].
@@ -228,28 +229,29 @@ export function normalizeLines(draft: JournalEntryDraft, lookups: PipelineLookup
   return ordered;
 }
 
-// ─── Stage 5 — balance (overall + per company — AM-4) ────────────────────────
+// ─── Stage 5 — single-company (plan D3) + balance ────────────────────────────
+// Journal entries are SINGLE-COMPANY: the draft's lines must all resolve to one company (the JE
+// header's CompanyID), so the per-company balance rule collapses into the whole-entry balance and
+// a draft spanning several companies is rejected with a TYPED code — callers split per company
+// upstream (orders books one JE per order line).
 
 export function checkDraftBalance(normalized: NormalizedLine[]): JEValidationError[] {
   const errors: JEValidationError[] = [];
   const overall = { debits: 0, credits: 0 };
-  const byCompany = new Map<string, { debits: number; credits: number }>();
+  const companies = new Set<string>();
   for (const line of normalized) {
-    const companyKey = uuidKey(line.CompanyID);
-    const acc = byCompany.get(companyKey) ?? { debits: 0, credits: 0 };
-    acc.debits += line.DebitAmount ?? 0;
-    acc.credits += line.CreditAmount ?? 0;
-    byCompany.set(companyKey, acc);
+    companies.add(uuidKey(line.CompanyID));
     overall.debits += line.DebitAmount ?? 0;
     overall.credits += line.CreditAmount ?? 0;
   }
+  if (companies.size > 1) {
+    errors.push({
+      Code: 'MULTI_COMPANY_DRAFT',
+      Message: `draft spans ${companies.size} companies — a JournalEntry is single-company (plan D3); split the draft per company (one JE per company) before submitting.`,
+    });
+  }
   if (Math.abs(overall.debits - overall.credits) > BALANCE_TOLERANCE) {
     errors.push({ Code: 'UNBALANCED', Message: `entry is unbalanced: Sum(Debits)=${overall.debits.toFixed(2)} != Sum(Credits)=${overall.credits.toFixed(2)}` });
-  }
-  for (const [companyId, sums] of byCompany) {
-    if (Math.abs(sums.debits - sums.credits) > BALANCE_TOLERANCE) {
-      errors.push({ Code: 'UNBALANCED', Message: `entry is unbalanced within company ${companyId}: Sum(Debits)=${sums.debits.toFixed(2)} != Sum(Credits)=${sums.credits.toFixed(2)} (AM-4)` });
-    }
   }
   return errors;
 }
@@ -260,6 +262,8 @@ export interface DraftPipelineOutcome {
   errors: JEValidationError[];
   /** Present (and non-empty) only when errors is empty. */
   normalized: NormalizedLine[];
+  /** The single company every line resolved to (plan D3) — the JE header CompanyID. '' on failure. */
+  companyID: string;
 }
 
 /**
@@ -268,15 +272,15 @@ export interface DraftPipelineOutcome {
  */
 export function runDraftPipeline(draft: JournalEntryDraft, lookups: PipelineLookups): DraftPipelineOutcome {
   const shape = validateDraftShape(draft);
-  if (shape.length > 0) return { errors: shape, normalized: [] };
+  if (shape.length > 0) return { errors: shape, normalized: [], companyID: '' };
   const entryType = validateEntryType(draft, lookups);
-  if (entryType.length > 0) return { errors: entryType, normalized: [] };
+  if (entryType.length > 0) return { errors: entryType, normalized: [], companyID: '' };
   const accounts = validateAccounts(draft, lookups);
-  if (accounts.length > 0) return { errors: accounts, normalized: [] };
+  if (accounts.length > 0) return { errors: accounts, normalized: [], companyID: '' };
   const dims = validateDimensions(draft, lookups);
-  if (dims.length > 0) return { errors: dims, normalized: [] };
+  if (dims.length > 0) return { errors: dims, normalized: [], companyID: '' };
   const normalized = normalizeLines(draft, lookups);
   const balance = checkDraftBalance(normalized);
-  if (balance.length > 0) return { errors: balance, normalized: [] };
-  return { errors: [], normalized };
+  if (balance.length > 0) return { errors: balance, normalized: [], companyID: '' };
+  return { errors: [], normalized, companyID: normalized[0]?.CompanyID ?? '' };
 }

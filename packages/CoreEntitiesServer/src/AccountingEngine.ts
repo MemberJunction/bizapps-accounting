@@ -157,11 +157,12 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
     contextUser: UserInfo,
     provider: IMetadataProvider,
   ): Promise<CreateJournalEntryResult> {
-    // Single-company JE (plan D3): the header company is the one company every line's
-    // GLAccount belongs to (trigger 50019 enforces the match at the DB).
+    // Single-company JE (plan D3): pipeline stage 5 already rejected multi-company drafts with
+    // the typed MULTI_COMPANY_DRAFT code, so a validated draft resolves to exactly one company.
+    // This is a defense-in-depth floor only (trigger 50019 is the un-bypassable DB floor).
     const companies = [...new Set(normalized.map(l => l.CompanyID.toLowerCase()))];
     if (companies.length !== 1 || !companies[0]) {
-      return this.writeFailure(`journal entries are single-company (plan D3); draft lines resolve to ${companies.length} companies`, undefined);
+      return this.writeFailure(`journal entries are single-company (plan D3); draft lines resolve to ${companies.length} companies — the pipeline should have rejected this with MULTI_COMPANY_DRAFT`, undefined);
     }
 
     // Assemble the encapsulated entity: header + Lines + Dimensions in memory, then ONE

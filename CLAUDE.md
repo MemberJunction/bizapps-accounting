@@ -393,7 +393,7 @@ This repository provides the **AR subsidiary ledger of record + journal-entry pr
 4. `JournalEntry` / `JournalEntryLine` / `JournalEntryBatch` with balanced-JE + immutability invariants enforced at the DB level
 5. `Dimension` / `DimensionValue` / `JournalEntryLineDimension` for analytical tagging
 6. `ChartOfAccountsMapping` for ERP roundtrip
-7. Tax entities (`TaxAuthority`, `TaxJurisdiction`, `TaxRate`, `TaxLiability`, `TaxRemittance`, `CustomerTaxProfile`) + pluggable `TaxCalculationProvider`
+7. Tax entities (`TaxAuthority`, `TaxJurisdiction`, `TaxRate`, `TaxLiability`, `CustomerTaxProfile`) + pluggable `TaxCalculationProvider` — accounting keeps the tax ACCRUAL only; remitting to the authority is an ERP/GL concern (TaxRemittance removed 2026-07-29, Amith PR-27 review)
 8. Recurring JE templates (FX revaluation, depreciation, prepaid amortization, sales-tax snapshot)
 9. Account balance materialization for closed periods
 10. Read-model views (`vw_TrialBalance_AR`, `vw_AROpenByCustomer`, `vw_DefRevRollforward`, etc.) for Skip-generated reports

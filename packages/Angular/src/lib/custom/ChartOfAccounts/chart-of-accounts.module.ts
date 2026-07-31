@@ -14,6 +14,7 @@ import {
   MJEmptyStateComponent,
   MJDialogComponent,
   MJDialogActionsComponent,
+  MJComboboxComponent,
 } from '@memberjunction/ng-ui-components';
 
 import { ChartOfAccountsDashboardComponent } from './coa-dashboard.component';
@@ -38,6 +39,7 @@ import { ChartOfAccountsResourceComponent } from './coa-resource.component';
     MJEmptyStateComponent,
     MJDialogComponent,
     MJDialogActionsComponent,
+  MJComboboxComponent,
   ],
   exports: [ChartOfAccountsDashboardComponent, ChartOfAccountsResourceComponent],
 })

@@ -22,7 +22,6 @@ interface LineRow {
   DebitAmount: number | null;
   CreditAmount: number | null;
   Description: string | null;
-  CounterpartyOrganization: string | null;
   /** "Dimension: Value" chips for this line's analytical tags. */
   Dimensions: { Dimension: string; DimensionValue: string }[];
 }
@@ -176,7 +175,6 @@ export class JournalEntryFormComponentExtended extends mjBizAppsAccountingJourna
         DebitAmount: l.DebitAmount,
         CreditAmount: l.CreditAmount,
         Description: l.Description,
-        CounterpartyOrganization: l.CounterpartyOrganization,
         Dimensions: dimsByLine.get(l.ID) ?? [],
       }));
     } catch (e) {

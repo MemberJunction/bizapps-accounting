@@ -107,31 +107,6 @@
         }
     </mj-collapsible-panel>
 
-    <!-- GL Account Link Dimensions Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingGLAccountLinkDimensions"
-        SectionName="GL Account Link Dimensions"
-        Icon="fa fa-table"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingGLAccountLinkDimensions')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: GL Account Link Dimensions','DimensionID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: GL Account Link Dimensions')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingGLAccountLinkDimensions')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingGLAccountLinkDimensions', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
     <!-- Dimension Values Section -->
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingDimensionValues"
@@ -176,6 +151,31 @@
                 [ShowToolbar]="false"
                 (Navigate)="OnFormNavigate($event)"
                 (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingIntercompanyAccountMatchDimensions', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- GL Account Link Dimensions Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingGLAccountLinkDimensions"
+        SectionName="GL Account Link Dimensions"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingGLAccountLinkDimensions')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: GL Account Link Dimensions','DimensionID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: GL Account Link Dimensions')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingGLAccountLinkDimensions')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingGLAccountLinkDimensions', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>

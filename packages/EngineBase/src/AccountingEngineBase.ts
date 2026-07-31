@@ -214,16 +214,25 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
    * whose StartedAt/EndedAt window covers `asOfDate` — plus its ordered dimension requirements.
    * `role` accepts a GLAccountRole ID or Name. Returns null when no link qualifies (the caller
    * walks its own fallback chain — product → category → company default is Orders' code).
+   *
+   * `forCompanyID` (optional — Amith 2026-07-28/29): scope resolution to links whose GL account
+   * belongs to that company. A record (e.g. a shared product) can carry one link per company for
+   * the same role; a multi-company caller passes the booking company to get ITS account. The
+   * company is derived through the link's GLAccount FK (both tables live in this engine's cache,
+   * so the join is free) — GLAccountLink deliberately carries no denormalized CompanyID, and the
+   * derivation is stable because GLAccount identity fields are immutable from creation.
    */
-  public ResolveLinkedAccount(entityId: string, recordId: string, role: string, asOfDate: Date): ResolvedLinkedAccount | null {
+  public ResolveLinkedAccount(entityId: string, recordId: string, role: string, asOfDate: Date, forCompanyID?: string): ResolvedLinkedAccount | null {
     const roleId = uuidKey(this.GLAccountRoles.find(r => uuidKey(r.ID) === uuidKey(role))?.ID ?? this.GLAccountRoleByName(role)?.ID);
     if (!roleId) return null;
     const entityKey = uuidKey(entityId);
     const recordKey = (recordId ?? '').trim().toLowerCase();
+    const companyKey = uuidKey(forCompanyID ?? '');
     const candidates = this.GLAccountLinks.filter(l =>
       uuidKey(l.EntityID) === entityKey &&
       (l.RecordID ?? '').trim().toLowerCase() === recordKey &&
-      uuidKey(l.GLAccountRoleID) === roleId,
+      uuidKey(l.GLAccountRoleID) === roleId &&
+      (!companyKey || uuidKey(this.GLAccountByID(l.GLAccountID)?.CompanyID ?? '') === companyKey),
     );
     const winner = pickActiveLinkIndex(
       candidates.map(l => ({ Status: l.Status, StartedAt: l.StartedAt, EndedAt: l.EndedAt })),

@@ -82,7 +82,6 @@ flowchart TD
             TaxJurisdiction[TaxJurisdiction]
             TaxRate[TaxRate]
             TaxLiability[TaxLiability]
-            TaxRemittance[TaxRemittance]
             CTP[CustomerTaxProfile]
         end
         subgraph Perms["Permissions (planned)"]
@@ -106,7 +105,6 @@ flowchart TD
     JournalEntry --> JournalEntryLine
     GLAccount -->|company-match| JournalEntryLine
     Currency -->|original ccy| JournalEntryLine
-    Organization -->|counterparty| JournalEntryLine
     JournalEntry -.->|Reverses / ReversedBy| JournalEntry
     JournalEntryLine --> JELD
     DimensionValue --> JELD
@@ -126,8 +124,6 @@ flowchart TD
     Company --> TaxLiability
     TaxAuthority --> TaxLiability
     TaxJurisdiction --> TaxLiability
-    TaxLiability --> TaxRemittance
-    TaxRemittance -.->|posted JE| JournalEntry
     Organization --> CTP
     TaxJurisdiction --> CTP
     User --> UCR
@@ -162,7 +158,6 @@ erDiagram
     JournalEntry ||--|{ JournalEntryLine : "balanced on lock"
     GLAccount ||--o{ JournalEntryLine : "company-match trigger"
     Currency ||--o{ JournalEntryLine : "OriginalCurrencyCode"
-    Organization ||--o{ JournalEntryLine : "CounterpartyOrganizationID"
     JournalEntry |o--o| JournalEntry : "Reverses / ReversedBy"
     JournalEntryType ||--o{ JournalEntry : "EntryTypeID (BA-D29)"
     JournalEntryLine ||--o{ JournalEntryLineDimension : ""
@@ -206,8 +201,6 @@ erDiagram
     Company ||--o{ TaxLiability : ""
     TaxAuthority ||--o{ TaxLiability : ""
     TaxJurisdiction ||--o{ TaxLiability : ""
-    TaxLiability ||--o{ TaxRemittance : ""
-    JournalEntry |o--o{ TaxRemittance : "PostedJournalEntryID"
     Organization ||--o{ CustomerTaxProfile : ""
     TaxJurisdiction |o--o{ CustomerTaxProfile : ""
     %% ---- permissions (planned) ----
@@ -340,7 +333,6 @@ erDiagram
         decimal OriginalCreditAmount
         decimal ExchangeRateUsed
         string Description
-        uuid CounterpartyOrganizationID FK
     }
     JournalEntryLineDimension {
         uuid ID PK
@@ -416,14 +408,6 @@ erDiagram
         string Status "Open | Filed | Paid | PartiallyPaid"
         date DueDate
         string FilingFrequency
-    }
-    TaxRemittance {
-        uuid ID PK
-        uuid TaxLiabilityID FK
-        decimal RemittedAmount
-        date RemittedDate
-        string PaymentReference
-        uuid PostedJournalEntryID FK
     }
     CustomerTaxProfile {
         uuid ID PK
@@ -603,14 +587,8 @@ erDiagram
         uuid EntryTypeID FK "JournalEntryType (BA-D29) - consumer-extensible lookup"
         string Status "Pending | Batched | GLPosted"
         string Description
-        uuid OrderID "soft ref"
         uuid LinkedEntityID FK "D25 origin pair - __mj.Entity"
         string LinkedRecordID "D25 origin pair - soft by nature"
-        uuid SubscriptionID "soft ref"
-        uuid PaymentID "soft ref"
-        uuid ContractID "soft ref"
-        uuid IntercompanyFlowID "soft ref"
-        uuid TaxRemittanceID FK "nullable"
         uuid ReversesJournalEntryID FK "nullable - reverser typed Code=Reversal (50012)"
         uuid ReversedByJournalEntryID FK "nullable"
         uuid BatchID FK "nullable - member lock derives from batch status"
@@ -630,7 +608,6 @@ erDiagram
         decimal OriginalCreditAmount "nullable"
         decimal ExchangeRateUsed "nullable"
         string Description
-        uuid CounterpartyOrganizationID FK "customer on AR lines"
     }
     JournalEntryLineDimension {
         uuid ID PK
@@ -757,7 +734,6 @@ erDiagram
     TaxJurisdiction |o--o{ TaxJurisdiction : "ParentTaxJurisdictionID - nesting"
     TaxJurisdiction ||--o{ TaxRate : "snapshot of engine-returned rates"
     Company ||--o{ TaxLiability : "CompanyID"
-    TaxLiability ||--o{ TaxRemittance : "TaxLiabilityID"
 
     TaxAuthority {
         uuid ID PK
@@ -800,14 +776,6 @@ erDiagram
         date DueDate "nullable"
         string FilingFrequency "Monthly | Quarterly | SemiAnnual | Annual | OnDemand (nullable)"
     }
-    TaxRemittance {
-        uuid ID PK
-        uuid TaxLiabilityID FK
-        decimal RemittedAmount "> 0"
-        date RemittedDate
-        string PaymentReference "nullable"
-        uuid PostedJournalEntryID FK "nullable - the remittance JE (JournalEntryType boundary: issue #24)"
-    }
 ```
 
 ### 7b. CustomerTaxProfile — the BUYER's taxability
@@ -831,7 +799,7 @@ erDiagram
 ```
 
 Calculation is delegated (D17); these tables record, never author, rates. The two parties are
-deliberately separate: `TaxLiability`/`TaxRemittance` and the (planned) nexus are about the
+deliberately separate: `TaxLiability` and the (planned) nexus are about the
 **seller** (our company's obligation to collect + what it owes); `CustomerTaxProfile` is about the
 **buyer** (this customer's exemption privilege, certificate-backed — `IsExempt=1` requires
 `ExemptionCertificateRef`, CHECK-enforced).

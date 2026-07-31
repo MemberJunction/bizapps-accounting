@@ -1,0 +1,276 @@
+<!-- Batch workspace (§8.2). Mockup: nav-shell-batch-workspace.html — directionally binding.
+     NOTE there is deliberately NO Filters control here: the build-criteria panel is the ONLY
+     filter surface on this page (round-2 ruling — never two filter systems, never view-filters
+     that don't match the batch contents). -->
+<!-- There is deliberately NO <mj-page-header-interior> here. What you are building (its
+     number/status/target) rides in the workspace card's own header, beside the tabs, next to the
+     thing it describes — so an interior header had nothing left to carry, and an empty one still
+     paints its card chrome (background + border + shadow + row padding): a blank bubble.
+     Note MJ tightens <mj-page-body-interior>'s TOP padding to 8px on the assumption a header sits
+     above it, so this card starts a little higher than a header card would on a sibling page. Left
+     as-is pending Marcelo's eye on the live result. -->
+
+<!-- <mj-page-body-interior> is the interior primitive <mj-left-nav-content> expects; it owns the
+     gutters that keep content off the rail and off the page edge (elements were hitting the screen
+     edge without it). NOTE it is display:block, so children size with height/min-height, never with
+     flex — a `flex:1` child collapses to zero here. -->
+<mj-page-body-interior>
+  <!-- ONE backing card for the whole workspace, via the SHARED reusable primitive (same as the JE
+       workspace): the card owns the surface + tab strip + scrollable body, we project the identity
+       band ([workspaceHeader]) + the body (default slot). Browser-style draggable session tabs. -->
+  <mj-workspace-card
+    aria-label="Batch workspace"
+    [Tabs]="Tabs"
+    [ActiveId]="ActiveTabId"
+    NewTabLabel="New"
+    (TabSelected)="SelectTab($event)"
+    (TabClosed)="CloseTab($event)"
+    (NewTabRequested)="openNewDraft()"
+    (TabReordered)="ReorderTabs($event)"
+    [ShowFooter]="!!Draft"
+    ConfirmLabel="Build batch"
+    ConfirmIcon="fa-solid fa-boxes-stacked"
+    [ConfirmDisabled]="!CanBuild"
+    [ConfirmTitle]="BuildBlockedReason ?? 'Build the batch'"
+    [ConfirmBusy]="IsBuilding"
+    ConfirmBusyLabel="Building…"
+    DraftLabel="Keep as draft tab"
+    [DraftDisabled]="IsBuilt"
+    (Confirm)="Build()"
+    (SaveDraft)="KeepAsDraft()"
+    (Discard)="Discard()">
+
+    <!-- Identity + status + target — projected into the card's identity band. -->
+    <ng-container workspaceHeader>
+      <span class="bw-identity">{{ IsBuilt ? Draft?.BuiltBatchNumber : 'New batch' }}</span>
+      @if (IsBuilt) {
+        <mj-stat-badge Label="Built" Icon="fa-solid fa-check" Variant="success"></mj-stat-badge>
+      } @else {
+        <mj-stat-badge Label="Draft — not built" Variant="default"></mj-stat-badge>
+      }
+      <mj-stat-badge
+        [Label]="'Target: ' + (Draft?.Criteria?.TargetSystem ?? '')"
+        Icon="fa-solid fa-plug"
+        Variant="info"
+        title="The ERP this batch dispatches to.">
+      </mj-stat-badge>
+      <span class="bw-sessionnote">
+        <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+        Tabs keep your progress for this session — drafts are not saved to the database (v1).
+      </span>
+    </ng-container>
+
+    <ng-container>
+      @if (ActionMessage) {
+        <mj-alert [Variant]="ActionIsError ? 'error' : 'success'" [Message]="ActionMessage"></mj-alert>
+      }
+
+      <div class="bw-cols">
+  <!-- ── Build criteria: ALWAYS visible, because approvers see these too (§0) ── -->
+  <section class="bw-crit" aria-label="Build criteria">
+    <p class="bw-card-title">
+      <i class="fa-solid fa-sliders" aria-hidden="true"></i> Build criteria
+      <span class="bw-muted">always visible — approvers see these too</span>
+    </p>
+
+    @if (Draft) {
+      <!-- Memo: an OPTIONAL human label for the batch (JournalEntryBatch.Memo). Not identity —
+           BatchNumber is — but it names the tab as you type and makes the batch findable later.
+           Editable pre-build; frozen once built (like every other criterion). -->
+      <label class="bw-field">
+        <span>Memo</span>
+        <input
+          type="text"
+          class="mj-input"
+          maxlength="500"
+          placeholder="e.g. June month-end AR"
+          [(ngModel)]="Draft.Memo"
+          (ngModelChange)="OnMemoChanged()"
+          [disabled]="IsBuilt" />
+        <span class="bw-hint">Optional — label this batch so you can find it later. The batch number stays its identity.</span>
+      </label>
+
+      <label class="bw-field">
+        <span>Include unbatched through</span>
+        <input
+          type="datetime-local"
+          class="mj-input"
+          [(ngModel)]="Draft.Criteria.Cutoff"
+          (ngModelChange)="OnCriteriaChanged()"
+          [disabled]="IsBuilt" />
+      </label>
+
+      <label class="bw-field">
+        <span>Company</span>
+        <!-- Single-select (Marcelo 2026-07-21): a batch is single-company (clean single-CFO approval).
+             "All companies" is kept for now so the sweep-all path + existing engine still work; the
+             enforce-exactly-one-company invariant lands with the single-company engine change. -->
+        <select
+          class="mj-input"
+          [(ngModel)]="SelectedCompanyId"
+          (ngModelChange)="OnCriteriaChanged()"
+          [disabled]="IsBuilt">
+          <option [ngValue]="null">All companies</option>
+          @for (c of Scope.Companies; track c.ID) {
+            <option [ngValue]="c.ID">{{ c.Name }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="bw-field">
+        <span>Entry types</span>
+        <select class="mj-input" [(ngModel)]="Draft.Criteria.EntryTypeScope" (ngModelChange)="OnCriteriaChanged()" [disabled]="IsBuilt">
+          @for (s of EntryTypeScopes; track s.Id) {
+            <option [value]="s.Id">{{ s.Label }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="bw-field">
+        <span>Source</span>
+        <select class="mj-input" [(ngModel)]="Draft.Criteria.Source" (ngModelChange)="OnCriteriaChanged()" [disabled]="IsBuilt">
+          <option value="Standard">Standard (oldest-forward)</option>
+          <option value="View">From a saved view…</option>
+        </select>
+      </label>
+
+      <label class="bw-field">
+        <span>Target system</span>
+        <select class="mj-input" [(ngModel)]="Draft.Criteria.TargetSystem" (ngModelChange)="OnCriteriaChanged()" [disabled]="IsBuilt">
+          @for (t of TargetSystems; track t) {
+            <option [value]="t">{{ t }}</option>
+          }
+        </select>
+      </label>
+
+      <!-- Apply = the deferred query. Filters do NOT auto-query; the operator applies them when ready. -->
+      @if (!IsBuilt) {
+        <button type="button" class="mj-btn mj-btn--outline bw-apply" (click)="Apply()" [disabled]="IsPreviewing">
+          @if (IsPreviewing) {
+            <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Loading…
+          } @else {
+            <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+            {{ PreviewLoaded ? 'Apply filters' : 'Load entries' }}
+          }
+        </button>
+        @if (PreviewStale) {
+          <p class="bw-stale">
+            <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+            Filters changed — click <b>Apply filters</b> to refresh the matched entries.
+          </p>
+        }
+      }
+
+      <div class="bw-chips">
+        @for (chip of CriteriaChips; track chip) {
+          <span class="bw-chip">{{ chip }}</span>
+        }
+      </div>
+    }
+
+    <!-- Affected accounts lives INSIDE the criteria card (mockup) — it is a property of the
+         selection, so it belongs beside what selects it. -->
+    <p class="bw-card-title bw-card-title--sub">
+      <i class="fa-solid fa-sitemap" aria-hidden="true"></i> Affected accounts ({{ Preview?.AffectedAccounts?.length ?? 0 }})
+    </p>
+    <div class="bw-accounts" title="Every GL account the current selection touches — it changes as the selection changes">
+      @for (a of Preview?.AffectedAccounts ?? []; track a.GLAccountID) {
+        <span class="bw-account">
+          <span class="bw-mono">{{ a.Code }}</span> {{ a.Name }}
+          <span class="bw-muted">({{ a.CompanyIDs.length }} {{ a.CompanyIDs.length === 1 ? 'company' : 'companies' }})</span>
+        </span>
+      } @empty {
+        <span class="bw-muted">No accounts — nothing is selected.</span>
+      }
+    </div>
+  </section>
+
+  <!-- ── Preview ─────────────────────────────────────────────────────────────── -->
+  <section class="bw-preview" aria-label="Matched entries">
+    @if (HasOutOfOrder) {
+      <!-- MOD-8: allowed, but VISIBLE. Computed server-side from the same pool the build uses. -->
+      <div class="bw-warn">
+        <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+        Your exclusions skip <b>&nbsp;{{ Preview?.OutOfOrderSkipCount }} older entr{{ Preview?.OutOfOrderSkipCount === 1 ? 'y' : 'ies' }}&nbsp;</b>
+        — later entries will batch ahead of them (allowed, but visible · MOD-8).
+      </div>
+    }
+
+    @if (PreviewLoaded) {
+    <div class="bw-sumstrip">
+      <span>Included <b>{{ IncludedCount }}</b> / {{ Preview?.Candidates?.length ?? 0 }}</span>
+      <span>Excluded <b>{{ ExcludedCount }}</b></span>
+      <span [class.bw-unbalanced]="!IsBalanced">
+        Dr <b>{{ Preview?.TotalDebits ?? 0 | currency }}</b>
+        {{ IsBalanced ? '=' : '≠' }}
+        Cr <b>{{ Preview?.TotalCredits ?? 0 | currency }}</b>
+        {{ IsBalanced ? '✓' : '✗' }}
+      </span>
+      <span class="bw-muted">
+        @for (c of Preview?.PerCompany ?? []; track c.CompanyID) {
+          {{ CompanyName(c.CompanyID) }} · {{ c.Debit | currency }}&nbsp;&nbsp;
+        }
+      </span>
+    </div>
+    }
+
+    <div class="bw-tablewrap mjsh-tablewrap">
+      @if (IsPreviewing) {
+        <mj-loading text="Matching entries…"></mj-loading>
+      } @else if (!PreviewLoaded) {
+        <!-- Deferred first load: the tab opened WITHOUT a server query — the operator loads on demand. -->
+        <div class="bw-loadprompt">
+          <i class="fa-solid fa-layer-group" aria-hidden="true"></i>
+          <p>Set your criteria on the left, then load the matching journal entries.</p>
+          <button type="button" class="mj-btn mj-btn--outline" (click)="Apply()">
+            <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Load entries
+          </button>
+        </div>
+      } @else {
+        <table class="bw-grid mjsh-table">
+          <thead>
+            <tr>
+              <th class="bw-tick"><span class="bw-sr">Include</span></th>
+              <th>Entry №</th>
+              <th>Date</th>
+              <th>Memo</th>
+              <th>Company</th>
+              <th class="bw-num">Amount</th>
+              <th>Type</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (e of Preview?.Candidates ?? []; track e.ID) {
+              <tr [class.bw-excl]="IsExcluded(e.ID)">
+                <td class="bw-tick">
+                  <input
+                    type="checkbox"
+                    class="mj-checkbox"
+                    [checked]="!IsExcluded(e.ID)"
+                    [disabled]="IsBuilt"
+                    (change)="ToggleEntry(e.ID)"
+                    [attr.aria-label]="'Include ' + e.EntryNumber" />
+                </td>
+                <td class="bw-mono">{{ e.EntryNumber }}</td>
+                <!-- DATE column (no zone) — render UTC or it shifts a day for any user west of UTC. -->
+                <td>{{ e.EffectiveDate | date: 'yyyy-MM-dd' : 'UTC' }}</td>
+                <td>{{ e.Description || '—' }}</td>
+                <td>{{ CompanyName(e.CompanyID) }}</td>
+                <td class="bw-num">{{ e.Amount | currency }}</td>
+                <td>{{ e.EntryTypeCode }}</td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="7" class="bw-empty">Nothing matches these criteria.</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    </div>
+
+  </section>
+      </div>
+    </ng-container>
+  </mj-workspace-card>
+</mj-page-body-interior>

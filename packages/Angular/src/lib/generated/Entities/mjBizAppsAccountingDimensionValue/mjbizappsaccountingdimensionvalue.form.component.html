@@ -133,31 +133,6 @@
         }
     </mj-collapsible-panel>
 
-    <!-- Journal Entry Line Dimensions Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingJournalEntryLineDimensions"
-        SectionName="Journal Entry Line Dimensions"
-        Icon="fa fa-table"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingJournalEntryLineDimensions')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entry Line Dimensions','DimensionValueID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entry Line Dimensions')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntryLineDimensions')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntryLineDimensions', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
     <!-- Dimension Values Section -->
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingDimensionValues"
@@ -177,6 +152,31 @@
                 [ShowToolbar]="false"
                 (Navigate)="OnFormNavigate($event)"
                 (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingDimensionValues', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- Journal Entry Line Dimensions Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingJournalEntryLineDimensions"
+        SectionName="Journal Entry Line Dimensions"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingJournalEntryLineDimensions')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entry Line Dimensions','DimensionValueID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entry Line Dimensions')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntryLineDimensions')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntryLineDimensions', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>

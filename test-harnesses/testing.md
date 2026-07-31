@@ -13,9 +13,140 @@ create + open questions for the human, recorded so dev can roll through and circ
 Tiers: **1** Vitest (unit) · **2** server (tsx, in-process direct SQL) · **3** API (GraphQL→MJAPI) ·
 **4** GUI/DOM (no-browser — parked, mjdev overlay) · **5** Playwright (browser e2e, pre-PR only).
 
+## ⭐ CURRENT STATE — 2026-07-30 DEMO-GATE RUN (Amith's demo flow, pre-PR-merge gate)
+
+Gate scope (Amith 2026-07-30): prove the full demo flow — company profile setup → GL accounts →
+JE/Lines → batching — before the PR merges. Company-create browser SAVE stays a **waived** gap
+(5x; Marcelo ruling 2026-07-30: that dialog will be rebuilt as an app-owned form-based dialog).
+
+| What ran | Result |
+|---|---|
+| Tier-5 playwright suite (fresh run vs pushed HEAD) | **8/8 demo-relevant specs green** (10.2m). 9th spec = `orders-product-catalog`, failed as pre-known 5y blocker (orders@next ships no nav app) — NOT a regression |
+| **NEW** `test-harnesses/api/full-flow-api.ts` — the demo journey as ONE chain on a FRESH company, all over the wire (the exact calls the UI buttons make): ACP "New company" save → IS-A parent + W1 COA (10 accts, 11201/40100) → 3 JEs via `Accounting.CreateJournalEntry` (merge shape, entry-number format) → Preview/Build netted 600/600 → approval flip → Approve → Dispatch (Posted + MOCK ref) → JEs GLPosted via the dashboards' dynamic-view read path → **C2 dimension-split consolidation** (Marcelo ruling 2026-07-30: prove company × GLAccount × dimension-combo split on the PERSISTED summary, not just tier-1 pure netting): same-account/different-dims lines refuse to merge at creation (LineCount 3), batch collapse nets ACROSS JEs per dim group (AR×SALES 140 = 100+40, AR×MKTG 60 split, REV 200 untagged), summaryLineCount 3, each summary line re-tagged with exactly its combo — all read back over the wire → fixture teardown | **24/24, first run** |
+| Amith's orders integration suite (15 bundles) re-run vs pushed HEAD | **177/177** |
+| `cross-app-batching.mjs` — now +2 checks reading the order-JEs/batch back through the accounting dashboards' wire view path (the "API in orders → UI in accounting" closure) | **11/11** |
+
+**W1 auto-seed RETIRED (Marcelo ruling 2026-07-30, live UI session):** new companies start with an
+EMPTY chart (auto-seed collided with the L8 identity lock); `SeedDefaultChartOfAccounts()` stays as
+an explicit public capability. Contract re-pinned and re-proven: block0 W1.2 now asserts BOTH halves
+(empty on create + 10 accounts on explicit call) — **10/10**; full-flow-api asserts empty-start over
+the wire then creates its own AR/Revenue accounts — **24/24**; batching-fixture seeds explicitly —
+batch-reject spec re-proven **1/1**; CES units **42/42**. Amith's integration fixtures are unaffected
+by design (they seed directly, fixture.ts:270). Flagged to Amith via instance QUESTIONS.md (W1 was a
+master-plan item). `docs/lifecycle-hooks.md` updated.
+
+**Residue finding + sweep (2026-07-30):** the orders integration suite's bundle teardown LEAKS the
+accounting companies it provisions (63 IT-ORD ACP+Company rows + ~250 orders-schema rows from one
+run) and the cross-app teardown ran without CODEGEN creds (no ALTER for DISABLE TRIGGER) → 13
+orphan GLPosted JEs + 3 orphan batches. Fixed/handled: cross-app teardown now uses the CODEGEN
+pool; new `server/_maint-clean-test-residue.ts` + `_maint-clean-test-residue2.ts` (generic
+FK-driven, tag-scoped sweep, constraints re-verified WITH CHECK) ran to zero — instance now holds
+exactly the 3 Assoc Demo companies (verified over the UI's read path post-API-restart). Suite-leak
+finding filed to `~/MJDev/MJ-UPSTREAM.md` for the orders app.
+
+## ⭐ PRIOR STATE — 2026-07-30 FULL-COVERAGE OVERNIGHT RUN (all tiers + orders integration)
+
+**Final battery (2026-07-30, everything re-run after the night's metadata/view changes):**
+
+| Tier | Suite | Result |
+|---|---|---|
+| 1 | EngineBase units | **57/57** |
+| 1 | CoreEntitiesServer units | **42/42** |
+| 1 | Angular units | **125/125** |
+| 2 | live vitest (phase2 17 + batch-workspace pure 8) | **25/25** |
+| 2 | block0 / block1 / engine-runtime / intercompany (tsx) | **10/10 · 11/11 · 12/12 · 17/17** |
+| 3 | engine-op-api / batch-ops-api (incl. NEW regenerate wire section) | **11/11 · 37/37** |
+| 4 | gui dom suite (company-setup, je-dashboard, gl-accounts, batch-workspace + smoke) | **9/9** |
+| 5 | playwright: accounts-manage(2) · batch approve/reject/regenerate · je-reversal · company-create · je-create · shell-smoke | **9/9 specs green** |
+| X-app | Amith's orders integration suite (15 bundles) vs our HEAD | **177/177** |
+| X-app | cross-app-batching.mjs (order→JE→batch→approve→dispatch→GLPosted, committed flow) | **9/9** |
+
+**Named-flow coverage (Marcelo's 2026-07-29 sweep) — all browser-proven:** create JEs (workspace) ·
+batch build/approve/reject/REGENERATE · JE reversal · account create/rename/identity-lock ·
+dimensions render · company COA render · company creation (affordance+cancel; full dialog save =
+CODED GAP 5x, generated forms lack stable locators — upstream ask filed) · orders→accounting
+booking + batching end to end.
+
+**Known gaps / blocked (all coded + filed):**
+- 5x company-create dialog SAVE (upstream: generated-form locators; entity path covered tiers 2-4).
+- 4x tier-4 per-page floor: all-journal-entries, dispatch-status, account-links, dimensions,
+  je-approvals, je-workspace dom specs not yet authored (pattern established; direct-declaration).
+- 5y orders-product-catalog spec: orders@next ships NO nav-app metadata yet (blocked upstream).
+- TX-class finding: TaxRate.Rate unit/precision contract (fraction vs percent) — scaffolded
+  locally to DECIMAL(9,6); needs the real cross-app contract decision.
+- Metadata drift vs committed baseline (deliberate, needs a baseline pass to adopt): JE
+  EntryNumber IsNameField=1 (+ the 4 virtual name-fields it emits), Refund JournalEntryType in
+  the seed, CompanyTaxNexus scaffold table (accounting's plan owns the real one).
+
+**Environment lesson bank (tonight):** collapsed-rail hover-peek intercepts content clicks (park
+the mouse after rail nav; chip menus close on a NEUTRAL spot, never x<60) · getByRole name
+matching is SUBSTRING by default (the scope chip's "Scope: All companies" swallowed
+{name:'Companies'} — always exact:true on rail items) · batch specs must scopeToCompany (builds
+sweep every company in scope and the CFO gate must hold for each) · engine-runtime's stray-guard
+is company-scoped now (demo data legitimately keeps Pending JEs).
+
+---
+
+## ⭐ PRIOR STATE — 2026-07-29 harness modernization (the donor-port test line)
+
+The suite was modernized with the S-A/S-B/S-C port (see `plans/donor-audit.md`). **Dead harnesses
+were REMOVED** — they tested retired systems and could never run against the realigned schema:
+`block2` (old batch-line-item model) · `block4` (ScheduledJE/materializer, dead per D15) · `block5`
+(ChartOfAccountsMapping, dead per D13) · `block6` (the removed `vw_*` views) ·
+`batching-multicompany` (multi-company batches, superseded by single-company D7) · api
+`readmodels-api` / `batch-dispatch-api` / `batching-scenarios-api` (dropped views + the deleted
+BatchDispatchResolver). Their live coverage now lives in the modernized set below (integration-style
+flows with exact-value asserts, mirroring the orders headless-E2E pattern).
+
+**Current inventory + verified results (2026-07-29, instance accounting-revamp — API :4180):**
+
+| Tier | Harness | Covers | Last run |
+|---|---|---|---|
+| 1 | `packages/CoreEntitiesServer/src/__tests__/` (vitest) | seeds, types, batch/JE invariants, dims | **42/42** |
+| 1 | `test-harnesses/server/batch-workspace.pure.test.ts` (vitest, no DB) | pure batch-workspace machinery via the built package surface: outOfOrderSkipCount, classifyViewEntries, perCompanySubtotals — housed in the HARNESS (not package src) so engine-internal test scaffolding never ships | **8/8** |
+| 1 | `packages/EngineBase/src/__tests__/` (vitest) | pipeline stages 1–5 incl. `MULTI_COMPANY_DRAFT` + counterparty carry, link picker | **59/59** |
+| 2 | `test-harnesses/server/phase2-encapsulation.live.test.ts` (vitest, live DB) | L1–L16: encapsulated JE save/load/reversal (+guards L14, counterparty L15), engine set-op atomicity, ONE-transaction batch build + task stamp (L11–L13), GLAccount immediate lock (L8), link tie guard + forCompanyID (L16) | **16/16** |
+| 2 | `test-harnesses/server/block0-runtime.ts` (tsx) | W1 seeding, per-company JE numbering (BA-D31), batch numbering (DR-5 noted) | **10/10** |
+| 2 | `test-harnesses/server/block1-runtime.ts` (tsx) | REWRITTEN 2026-07-29: raw-SQL bypass proofs of the JE floor (50001/50003/50004/50006/50019/50022/50012), reversal via entity, entity double-entry validation | **11/11** |
+| 2 | `test-harnesses/server/engine-runtime.ts` (tsx) | engine typed error codes live (incl. MULTI_COMPANY_DRAFT), atomic rollback, ResolveLinkedAccount windows | **12/12** |
+| 2 | `test-harnesses/server/intercompany-runtime.ts` (tsx) | BA-D26/27 IAM resolution + triggers | **17/17** |
+| 3 | `test-harnesses/api/engine-op-api.ts` (tsx) | 'Accounting.CreateJournalEntry' over ExecuteRemoteOperation (per-company EntryNumber asserted) | **8/8** |
+| 3 | `test-harnesses/api/batch-ops-api.ts` (tsx, NEW) | the 5 batch remote ops end-to-end over the wire: build (netted 600-not-800 + stamped task), approval-state flip, dispatch→Posted, reject→Cancelled+pool-return, loud EmptyBatch | **23/23** |
+| 5 | `test-harnesses/playwright/specs/*-newnav` | REAL-BROWSER behavior flows on the rebuilt shell: batch build→approve→dispatch to Posted · batch reject (JEs return to pool) · JE reversal from All journal entries (build→dispatch→GLPosted→Reverse), each self-seeding via the fixture + console-error keystone | **3/3** (2026-07-29) |
+| 5 | `test-harnesses/playwright/shell-smoke.ts` (standalone tsx) | 5-category nav walk + shells mount + keystone | **ALL PASSED** (2026-07-29; one transient `ERR_CONNECTION_REFUSED` keystone hit on an earlier run — not reproduced with request-URL capture, watching) |
+| 5 | `specs/orders-product-catalog.spec.ts` | orders app UI — BLOCKED on the orders migrate (mjdev per-file-transaction fix) | not run |
+
+Shared fixture `playwright/lib/batching-fixture.ts` modernized: encapsulated JE saves, EntryTypeID
+lookup, User-based CFO (ApprovalCFOUserID), company-rooted teardown, per-company isolation (the
+global stray-Pending fail-fast is gone — builds are per-company now).
+
+**2026-07-29 tier-5 modernization notes:** `lib/explorer.ts` gained `resetCompanyScopeToAll`
+(the ported batch specs imported it but the ported lib lacked it — specs wouldn't load); the
+je-reversal spec was updated to the rebuilt workspace's sequence (scope reset + the deferred-query
+"Load entries" click before Build enables — the donor-era sequence left Build disabled). Also
+fixed: sub-page `mj-page-header`s painted OVER the category header + scope dropdown (same-z later
+DOM) — `category-shell.css` now isolates `mj-left-nav-content`'s stacking context; verified by
+headless hit-testing of the open scope menu. Proper chrome fix (pages → `mj-page-header-interior`
+per conventions §10) tracked for the hardening pass.
+
+**2026-07-29 shipping-hygiene fix (Amith/Marcelo PR review):** CoreEntitiesServer's tsconfig was
+missing the `src/**/__tests__/**` build exclude (EngineBase/Angular already had it), so compiled
+test files were landing in `dist/` — which `files: ['/dist']` would have PUBLISHED. Exclude added,
+dist rebuilt clean. The pure engine-internals spec (`BatchWorkspacePure`) moved to
+`test-harnesses/server/batch-workspace.pure.test.ts` (runs under the tier-2 vitest config, needs no
+DB, imports the built package surface). Verified after the change: CES units 42/42 · full tier-2
+vitest harness 25/25 (17 live + 8 pure) · no `__tests__` output in any package dist.
+
+---
+
 ## Coverage matrix (✓ = real-value/exact · ⚠ = intentional, see register · ✗ = GAP, fill it)
 
-_Reworked 2026-07-06 for the engine-meeting rulings: AccountingPeriod/AccountBalance retired (CH-1),
+> ⚠ **HISTORICAL (2026-07-06 era — pre-rebuild).** Rows below reference retired features
+> (multi-company JEs/batches, COAMapping, SJE, read-model views) and removed harnesses. Kept as
+> the record of what the donor-era suite covered; the CURRENT STATE section above is the live
+> inventory. A fresh matrix gets rebuilt when the UI port lands (tier 4/5 columns change shape).
+
+_Historical matrix, reworked 2026-07-06: AccountingPeriod/AccountBalance retired (CH-1),
 multi-company JEs + GLOBAL multi-company batches (CH-4/AM-4), batch lifecycle
 Pending→Approved→Sent→Posted, ERP resolution falls back to the account Code (AM-4), the SJE
 materializer retired (AM-6 — domain servers generate). W4 routing + period-close rows are gone

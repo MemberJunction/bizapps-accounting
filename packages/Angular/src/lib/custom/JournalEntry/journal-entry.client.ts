@@ -1,7 +1,8 @@
 /**
- * JournalEntryClient — thin transport for the JE actions the custom form invokes.
- * v1: GenerateJournalEntryReversal (→ JournalEntryResolver.GenerateJournalEntryReversal →
- * JournalEntryEntityServer.generateReversal). Mirrors the stage-1 BatchDispatchClient convention.
+ * JournalEntryClient — thin typed wrapper over the 'Accounting.GenerateJournalEntryReversal'
+ * Remote Operation (→ JournalEntryEntityServer.GenerateReversal). No hand-rolled gql: batch/JE
+ * actions travel the remote-op stack via `provider.RouteOperation` (four-surface doctrine,
+ * Amith 2026-07-28). No logic here — typed inputs + the legacy result shape the form binds to.
  */
 import { LogError } from '@memberjunction/core';
 import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
@@ -13,6 +14,8 @@ export interface GenerateReversalResult {
   ErrorMessage?: string;
 }
 
+interface GenerateReversalOutputWire { ReversalJournalEntryID: string; ReversalEntryNumber: string }
+
 export class JournalEntryClient {
   private dataProvider: GraphQLDataProvider;
 
@@ -23,14 +26,10 @@ export class JournalEntryClient {
   /** Generate a reversal JE (a new Pending entry, Dr/Cr swapped) for a posted/batched JE. */
   public async GenerateReversal(journalEntryID: string, reason: string): Promise<GenerateReversalResult> {
     try {
-      const mutation = `
-        mutation GenerateJournalEntryReversal($journalEntryID: ID!, $reason: String!) {
-          GenerateJournalEntryReversal(journalEntryID: $journalEntryID, reason: $reason) {
-            Success ReversalJournalEntryID ReversalEntryNumber ErrorMessage
-          }
-        }`;
-      const res = await this.dataProvider.ExecuteGQL(mutation, { journalEntryID, reason });
-      return (res?.GenerateJournalEntryReversal as GenerateReversalResult) ?? { Success: false, ErrorMessage: 'No response from server.' };
+      const res = await this.dataProvider.RouteOperation<{ JournalEntryID: string; Reason: string }, GenerateReversalOutputWire>(
+        'Accounting.GenerateJournalEntryReversal', { JournalEntryID: journalEntryID, Reason: reason });
+      if (!res.Success || !res.Output) return { Success: false, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
+      return { Success: true, ReversalJournalEntryID: res.Output.ReversalJournalEntryID, ReversalEntryNumber: res.Output.ReversalEntryNumber };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       LogError(`JournalEntryClient.GenerateReversal failed: ${msg}`);

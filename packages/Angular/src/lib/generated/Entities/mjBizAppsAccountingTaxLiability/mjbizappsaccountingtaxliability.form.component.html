@@ -105,35 +105,6 @@
 
     <mj-form-panel-slot Entity="{{record.EntityInfo.Name}}" Slot="after-fields" [Record]="record" [FormComponent]="this" [FormContext]="formContext"></mj-form-panel-slot>
 
-    <!-- ========================================
-         RELATED ENTITY PANELS
-         ======================================== -->
-
-    <!-- Tax Remittances Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingTaxRemittances"
-        SectionName="Tax Remittances"
-        Icon="fa fa-table"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingTaxRemittances')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Tax Remittances','TaxLiabilityID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Tax Remittances')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingTaxRemittances')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingTaxRemittances', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
     <mj-form-panel-slot Entity="{{record.EntityInfo.Name}}" Slot="after-related" [Record]="record" [FormComponent]="this" [FormContext]="formContext"></mj-form-panel-slot>
 </mj-record-form-container>
         
