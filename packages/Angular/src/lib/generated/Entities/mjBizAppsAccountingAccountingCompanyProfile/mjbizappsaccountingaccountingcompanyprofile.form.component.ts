@@ -16,11 +16,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileFormComponent extends Ba
     override async ngOnInit() {
         await super.ngOnInit();
         this.initSections([
-            { sectionKey: 'accountingProfileSettings', sectionName: 'Accounting Profile Settings', isExpanded: true },
-            { sectionKey: 'financialConfiguration', sectionName: 'Financial Configuration', isExpanded: true },
             { sectionKey: 'details', sectionName: 'Details', isExpanded: true },
-            { sectionKey: 'companyDetails', sectionName: 'Company Details', isExpanded: true },
-            { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingAccountingCompanyProfiles', sectionName: 'Accounting Company Profiles', isExpanded: false }
         ]);
     }

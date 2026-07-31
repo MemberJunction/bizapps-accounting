@@ -48,6 +48,7 @@ import '@memberjunction/server-bootstrap-lite';
 import '@mj-biz-apps/common-entities';
 import '@mj-biz-apps/accounting-entities';
 import '@mj-biz-apps/accounting-core-entities-server';
+import { RequireJournalEntryTypeID, JournalEntryEntityServer } from '@mj-biz-apps/accounting-core-entities-server';
 import type {
   mjBizAppsAccountingAccountingCompanyProfileEntity,
   mjBizAppsAccountingJournalEntryEntity,
@@ -162,7 +163,10 @@ async function main(): Promise<void> {
 
   const md = new Metadata();
   let acpId = '';
+  let acpCode = '';
   let seededGLIds: string[] = [];
+  let arGlId = '';
+  let revGlId = '';
   const createdJEIds: string[] = [];
   const createdBatchIds: string[] = [];
 
@@ -187,7 +191,8 @@ async function main(): Promise<void> {
     acp.NewRecord();
     acp.Name = `${RUN_TAG} Co`;
     acp.Description = 'Block 0 runtime test';
-    acp.CompanyCode = companyCode();
+    acpCode = companyCode();
+    acp.CompanyCode = acpCode;
     acp.FunctionalCurrencyCode = currencyCode;
     acp.EntityType = 'Subsidiary';
     acpId = acp.ID;
@@ -196,13 +201,23 @@ async function main(): Promise<void> {
     assert(ok, `Save failed: ${acp.LatestResult?.CompleteMessage ?? 'unknown'}`);
   });
 
-  await test('W1.2 seeds EXACTLY the 10 minimal GL accounts (IsSystemSeeded), correct codes', async () => {
+  // 2026-07-30 (Marcelo ruling): the W1 AUTO-hook is retired — a new company starts with an
+  // EMPTY chart (auto-seeding + the L8 identity lock forced ten locked accounts on everyone).
+  // Seeding is now an EXPLICIT capability. W1.2 pins BOTH halves of the new contract.
+  await test('W1.2 create leaves the chart EMPTY; explicit SeedDefaultChartOfAccounts() seeds the 10', async () => {
+    const preN = await scalar(pool, `SELECT COUNT(*) AS n FROM ${GL_TABLE} WHERE CompanyID=@id`, acpId);
+    assert(preN === 0, `expected an EMPTY chart on create (auto-seed retired), got ${preN} accounts`);
+    const acp = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, user);
+    assert(await acp.Load(acpId), 'ACP reload failed');
+    await (acp as unknown as { SeedDefaultChartOfAccounts(): Promise<void> }).SeedDefaultChartOfAccounts();
     const rv = new RunView();
     const res = await rv.RunView<{ ID: string; Code: string; IsSystemSeeded: boolean }>(
       { EntityName: GL_ENTITY, ExtraFilter: `CompanyID='${acpId}'`, Fields: ['ID', 'Code', 'IsSystemSeeded'], ResultType: 'simple' }, user);
     assert(res.Success, `GL RunView failed: ${res.ErrorMessage}`);
     const rows = res.Results ?? [];
     seededGLIds = rows.map(r => r.ID);
+    arGlId = rows.find(r => r.Code === '11201')?.ID ?? '';
+    revGlId = rows.find(r => r.Code === '40100')?.ID ?? '';
     assert(rows.length === 10, `expected 10 GL accounts, got ${rows.length}`);
     const codes = rows.map(r => r.Code).sort();
     assert(JSON.stringify(codes) === JSON.stringify([...EXPECTED_CODES].sort()),
@@ -213,21 +228,17 @@ async function main(): Promise<void> {
     assert(dbN === 10, `raw DB GL count expected 10, got ${dbN}`);
   });
 
-  await test('W1.3 wires the 5 default GL-account refs to the right account codes', async () => {
+  await test('W1.3 default GL-account refs stay UNWIRED (retired 2026-07-23 — role/link model replaces them)', async () => {
+    // The former 5-ref wiring was deliberately retired; the role-based GLAccountRole/GLAccountLink
+    // model replaces it, and per-company link seeding lands with the port work. This asserts the
+    // retirement is honored — a re-appearing wired ref would mean the old code path came back.
     const acp = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, user);
     await acp.Load(acpId);
-    const rv = new RunView();
-    const glRes = await rv.RunView<{ ID: string; Code: string }>(
-      { EntityName: GL_ENTITY, ExtraFilter: `CompanyID='${acpId}'`, Fields: ['ID', 'Code'], ResultType: 'simple' }, user);
-    const idToCode = new Map((glRes.Results ?? []).map(r => [r.ID.toLowerCase(), r.Code]));
-    const codeOf = (refId: string | null): string | undefined =>
-      refId ? idToCode.get(refId.toLowerCase()) : undefined;
-    // Typed reads (rule 2b) — one line per wired ref.
-    assert(codeOf(acp.AROpenGLAccountID) === '11201', `AROpenGLAccountID -> ${codeOf(acp.AROpenGLAccountID) ?? 'null'} (expected 11201)`);
-    assert(codeOf(acp.DeferredRevenueGLAccountID) === '21301', `DeferredRevenueGLAccountID -> ${codeOf(acp.DeferredRevenueGLAccountID) ?? 'null'} (expected 21301)`);
-    assert(codeOf(acp.SalesTaxPayableGLAccountID) === '21201', `SalesTaxPayableGLAccountID -> ${codeOf(acp.SalesTaxPayableGLAccountID) ?? 'null'} (expected 21201)`);
-    assert(codeOf(acp.RealizedFXGainLossGLAccountID) === '50400', `RealizedFXGainLossGLAccountID -> ${codeOf(acp.RealizedFXGainLossGLAccountID) ?? 'null'} (expected 50400)`);
-    assert(codeOf(acp.UnrealizedFXGainLossGLAccountID) === '50500', `UnrealizedFXGainLossGLAccountID -> ${codeOf(acp.UnrealizedFXGainLossGLAccountID) ?? 'null'} (expected 50500)`);
+    assert(acp.AROpenGLAccountID == null, `AROpenGLAccountID unexpectedly wired: ${acp.AROpenGLAccountID}`);
+    assert(acp.DeferredRevenueGLAccountID == null, `DeferredRevenueGLAccountID unexpectedly wired: ${acp.DeferredRevenueGLAccountID}`);
+    assert(acp.SalesTaxPayableGLAccountID == null, `SalesTaxPayableGLAccountID unexpectedly wired: ${acp.SalesTaxPayableGLAccountID}`);
+    assert(acp.RealizedFXGainLossGLAccountID == null, `RealizedFXGainLossGLAccountID unexpectedly wired: ${acp.RealizedFXGainLossGLAccountID}`);
+    assert(acp.UnrealizedFXGainLossGLAccountID == null, `UnrealizedFXGainLossGLAccountID unexpectedly wired: ${acp.UnrealizedFXGainLossGLAccountID}`);
   });
 
   await test('W1.4 defaults OperatingTimeZone = UTC (Block-0 addition)', async () => {
@@ -249,14 +260,18 @@ async function main(): Promise<void> {
     assert(acpChanges >= 1, `expected >=1 RecordChange row for the ACP, got ${acpChanges}`);
   });
 
-  // ─── W2 — JE numbering (GLOBAL per fiscal year — D-SEQ) ───────────────────
-  const makeJE = async (label: string): Promise<mjBizAppsAccountingJournalEntryEntity> => {
-    const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
+  // ─── W2 — JE numbering (PER-COMPANY per fiscal year — BA-D31/D19) ─────────
+  const makeJE = async (label: string): Promise<JournalEntryEntityServer> => {
+    // Encapsulated pattern (phase 2): header + ≥2 balanced lines, ONE transactional Save().
+    const je = await md.GetEntityObject<JournalEntryEntityServer>(JE_ENTITY, user);
     je.NewRecord();
+    je.CompanyID = acpId; // single-company JE (plan D3)
     je.EffectiveDate = new Date();
-    je.EntryType = 'Manual';
+    je.EntryTypeID = await RequireJournalEntryTypeID('Manual', user, Metadata.Provider); // type lookup replaced the EntryType enum (issue #24)
     je.Status = 'Pending';
     je.Description = `${RUN_TAG} ${label}`;
+    const l1 = await je.CreateLine(user); l1.GLAccountID = arGlId; l1.DebitAmount = 10;
+    const l2 = await je.CreateLine(user); l2.GLAccountID = revGlId; l2.CreditAmount = 10;
     const ok = await je.Save();
     assert(ok, `JE Save failed: ${je.LatestResult?.CompleteMessage ?? 'unknown'}`);
     createdJEIds.push(je.ID);
@@ -264,25 +279,29 @@ async function main(): Promise<void> {
   };
 
   let firstEntrySeq = 0;
-  await test('W2.1 JournalEntry gets EntryNumber JE-{FY}-{seq:000000} (global — no company segment)', async () => {
+  await test('W2.1 JournalEntry gets EntryNumber JE-{CompanyCode}-{FY}-{seq:000000} (per-company — BA-D31/D19)', async () => {
     const fy = new Date().getUTCFullYear();
     const je = await makeJE('W2.1 numbering test');
     const num = je.EntryNumber;
-    const re = new RegExp(`^JE-${fy}-\\d{6}$`);
+    const re = new RegExp(`^JE-${acpCode}-${fy}-\\d{6}$`);
     assert(re.test(num), `EntryNumber '${num}' does not match ${re}`);
     firstEntrySeq = sequencePart(num);
   });
 
-  await test('W2.2 second JE in the same fiscal year gets a strictly higher global sequence', async () => {
+  await test('W2.2 second JE in the same company + fiscal year gets a strictly higher sequence', async () => {
     const je = await makeJE('W2.2 numbering test');
     const seq = sequencePart(je.EntryNumber);
     assert(seq > firstEntrySeq, `expected sequence > ${firstEntrySeq}, got ${seq} ('${je.EntryNumber}')`);
   });
 
-  // ─── W3 — batch numbering (GLOBAL singleton sequence — D-SEQ) ─────────────
+  // ─── W3 — batch numbering (still the GLOBAL singleton sequence; ⚠ DR-5: the column
+  // description promises BATCH-{CompanyCode}-{seq} but spAssignNextBatchNumber emits the
+  // global BATCH-{seq} — asserted here as the sproc actually behaves; see plans/donor-audit.md) ──
   const makeBatch = async (): Promise<mjBizAppsAccountingJournalEntryBatchEntity> => {
     const batch = await md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, user);
     batch.NewRecord();
+    batch.CompanyID = acpId; // batches are single-company (D7/MOD-15)
+    batch.PostingDate = new Date(new Date().toISOString().slice(0, 10));
     batch.TargetSystem = 'BusinessCentral';
     batch.BatchedAt = new Date();
     batch.BatchedByUserID = user.ID;
@@ -297,7 +316,7 @@ async function main(): Promise<void> {
   };
 
   let firstBatchSeq = 0;
-  await test('W3.1 JournalEntryBatch gets BatchNumber BATCH-{seq:000000} (global — no company segment)', async () => {
+  await test('W3.1 JournalEntryBatch gets BatchNumber BATCH-{seq:000000} (global singleton sproc — DR-5 notes the description/sproc mismatch)', async () => {
     const batch = await makeBatch();
     const num = batch.BatchNumber;
     const re = /^BATCH-\d{6}$/;
@@ -321,10 +340,14 @@ async function main(): Promise<void> {
     pool.request().input('id', sql.UniqueIdentifier, acpId).query(`DELETE FROM ${table} WHERE CompanyID=@id`);
   const steps: Array<() => Promise<unknown>> = [
     ...createdBatchIds.map(id => () => byId(BATCH_TABLE, id)),
+    // Lines before headers (the W2 JEs are encapsulated header+lines now).
+    ...createdJEIds.map(id => () =>
+      pool.request().input('id', sql.UniqueIdentifier, id).query(`DELETE FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID=@id`)),
     ...createdJEIds.map(id => () => byId(JE_TABLE, id)),
   ];
   if (acpId) {
     steps.push(
+      () => byCompany(`${SCHEMA}.JournalEntrySequence`), // per-company numbering row (BA-D31)
       () => byId(ACP_TABLE, acpId),
       () => byCompany(GL_TABLE),
       () => byId(COMPANY_TABLE, acpId),

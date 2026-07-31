@@ -16,15 +16,12 @@ export class mjBizAppsAccountingGLAccountFormComponent extends BaseFormComponent
     override async ngOnInit() {
         await super.ngOnInit();
         this.initSections([
-            { sectionKey: 'accountDetails', sectionName: 'Account Details', isExpanded: true },
-            { sectionKey: 'hierarchyAndStructure', sectionName: 'Hierarchy and Structure', isExpanded: true },
-            { sectionKey: 'integrationSettings', sectionName: 'Integration Settings', isExpanded: true },
-            { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingJournalEntryLines', sectionName: 'Journal Entry Lines', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingIntercompanyAccountMatchesDueFromGLAccountID', sectionName: 'Intercompany Account Matches (Due From GL Account)', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingIntercompanyAccountMatchesDueToGLAccountID', sectionName: 'Intercompany Account Matches (Due To GL Account)', isExpanded: false },
+            { sectionKey: 'details', sectionName: 'Details', isExpanded: true },
             { sectionKey: 'mJBizAppsAccountingGLAccounts', sectionName: 'GL Accounts', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingGLAccountLinks', sectionName: 'GL Account Links', isExpanded: false }
+            { sectionKey: 'mJBizAppsAccountingJournalEntryLines', sectionName: 'Journal Entry Lines', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingGLAccountLinks', sectionName: 'GL Account Links', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingIntercompanyAccountMatchesDueFromGLAccountID', sectionName: 'Intercompany Account Matches (Due From GL Account ID)', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingIntercompanyAccountMatchesDueToGLAccountID', sectionName: 'Intercompany Account Matches (Due To GL Account ID)', isExpanded: false }
         ]);
     }
 }

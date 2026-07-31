@@ -1,0 +1,242 @@
+<!-- No top "New entry" button / header card — the workspace tab strip owns new-entry (browser-style
+     new-tab affordance). Identity/status/currency ride in the card header beside the tabs. -->
+
+<!-- <mj-page-body-interior> is the interior primitive <mj-left-nav-content> expects; it owns the
+     gutters that keep content off the rail and off the page edge. NOTE it is display:block, so its
+     children size with height/min-height — never with flex, which silently collapses to zero. -->
+<mj-page-body-interior>
+  <!-- The reusable workspace frame owns the card surface + tab strip + scrollable body; this page
+       projects its identity band ([workspaceHeader]) + its form (default slot). -->
+  <mj-workspace-card
+    aria-label="Journal entry workspace"
+    [Tabs]="Tabs"
+    [ActiveId]="ActiveTabId"
+    NewTabLabel="New entry"
+    (TabSelected)="SelectTab($event)"
+    (TabClosed)="CloseTab($event)"
+    (NewTabRequested)="openNewDraft()"
+    (TabReordered)="ReorderTabs($event)"
+    [ShowFooter]="!!Draft"
+    ConfirmLabel="Create entry"
+    ConfirmIcon="fa-solid fa-check"
+    [ConfirmDisabled]="!CanSubmit"
+    [ConfirmTitle]="SubmitBlockedReason ?? 'Create this entry'"
+    [ConfirmBusy]="IsSubmitting"
+    ConfirmBusyLabel="Creating…"
+    DraftLabel="Keep as draft tab"
+    [DraftDisabled]="IsCreated"
+    (Confirm)="Submit()"
+    (SaveDraft)="KeepAsDraft()"
+    (Discard)="Discard()">
+
+    <!-- Honest statement of the C.8 gap: the mockup promised approval routing; it does not exist. -->
+    <span workspaceFooterNote>
+      Manual entries route to CFO approval before batching (C.8) — not yet in force; a created entry is
+      Pending and can be picked up by the next batch build.
+    </span>
+
+    <!-- Identity + status + currency — projected into the card's identity band. -->
+    <ng-container workspaceHeader>
+      <span class="jew__identity">
+        {{ IsCreated ? Draft?.CreatedEntryNumber : 'New entry' }}
+      </span>
+      @if (IsCreated) {
+        <mj-stat-badge Label="Created" Icon="fa-solid fa-check" Variant="success"></mj-stat-badge>
+      } @else {
+        <mj-stat-badge Label="Draft" Variant="default"></mj-stat-badge>
+      }
+      @if (FunctionalCurrency) {
+        <mj-stat-badge [Label]="FunctionalCurrency + ' (functional)'" Icon="fa-solid fa-coins" Variant="default"></mj-stat-badge>
+      }
+      <span class="jew__session">
+        <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+        Tabs keep your progress for this session — drafts are not saved to the database (v1).
+      </span>
+    </ng-container>
+
+    <ng-container>
+      @if (Draft; as d) {
+        <fieldset class="jew__form" [disabled]="IsCreated">
+          <label class="jew__field">
+            <span>Company</span>
+            <!-- Scopes the account picker only. The engine derives the entry's company from the
+                 lines' accounts (MOD-12), so this is never sent. -->
+            <select class="mj-input" [(ngModel)]="d.CompanyID" (ngModelChange)="OnCompanyChanged()">
+              <option [ngValue]="null">Pick a company…</option>
+              @for (c of Companies; track c.ID) {
+                <option [ngValue]="c.ID">{{ c.Name }}</option>
+              }
+            </select>
+          </label>
+
+          <label class="jew__field">
+            <span>Posting date</span>
+            <input class="mj-input" type="date" [(ngModel)]="d.EffectiveDate" (ngModelChange)="touch()" />
+          </label>
+
+          <label class="jew__field">
+            <span>Entry type</span>
+            <!-- Fixed: this workspace is the manual-entry home. A one-option select would be a
+                 control that cannot be operated. -->
+            <output class="jew__readonly">Manual</output>
+          </label>
+
+          <label class="jew__field">
+            <span>Currency</span>
+            <output class="jew__readonly">{{ FunctionalCurrency ?? '—' }}</output>
+          </label>
+
+        </fieldset>
+
+        @if (!d.CompanyID) {
+          <p class="jew__hint">
+            <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+            Pick a company to choose accounts from — an entry's lines must all belong to one company.
+          </p>
+        }
+
+        <!-- Line editor. -->
+        <div class="jew__gridwrap mjsh-tablewrap" #gridScroll>
+          <table class="jew__grid mjsh-table">
+            <thead>
+              <tr>
+                <th>Account</th>
+                @for (dim of DimensionColumns; track dim.ID) {
+                  <th>{{ dim.Name }}</th>
+                }
+                <th class="num">Dr</th>
+                <th class="num">Cr</th>
+                <th>Memo</th>
+                <th class="jew__rowact"></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (line of d.Lines; track line.Key; let i = $index) {
+                <tr [class.jew__row--bad]="LineIssue(line) || EngineLineError(i)">
+                  <td>
+                    <select
+                      class="mj-input"
+                      [(ngModel)]="line.GLAccountID"
+                      (ngModelChange)="touch()"
+                      [mjTip]="AccountLabel(line.GLAccountID)"
+                      [mjTipAlways]="true"
+                      [disabled]="IsCreated || !d.CompanyID">
+                      <option [ngValue]="null">Pick an account…</option>
+                      @for (a of AccountOptions; track a.ID) {
+                        <option [ngValue]="a.ID">{{ a.Label }}</option>
+                      }
+                    </select>
+                  </td>
+                  @for (dim of DimensionColumns; track dim.ID) {
+                    <td>
+                      <select
+                        class="mj-input"
+                        [ngModel]="DimensionValueFor(line, dim.ID)"
+                        (ngModelChange)="SetDimensionValue(line, dim.ID, $event)"
+                        [disabled]="IsCreated">
+                        <option [ngValue]="null">—</option>
+                        @for (v of dim.Values; track v.ID) {
+                          <option [ngValue]="v.ID">{{ v.Label }}</option>
+                        }
+                      </select>
+                    </td>
+                  }
+                  <td class="num">
+                    <input class="mj-input num" [(ngModel)]="line.Debit" (ngModelChange)="touch()" [disabled]="IsCreated" inputmode="decimal" />
+                  </td>
+                  <td class="num">
+                    <input class="mj-input num" [(ngModel)]="line.Credit" (ngModelChange)="touch()" [disabled]="IsCreated" inputmode="decimal" />
+                  </td>
+                  <td>
+                    <!-- Per-line memo (JournalEntryLine.Description) — optional; already flows through
+                         toCreateInput → the CreateJournalEntry contract → the engine's atomic write. -->
+                    <input class="mj-input" [(ngModel)]="line.Description" (ngModelChange)="touch()" [disabled]="IsCreated" placeholder="Line memo (optional)" />
+                  </td>
+                  <td class="jew__rowact">
+                    <button
+                      type="button"
+                      mjButton
+                      variant="flat"
+                      size="sm"
+                      (click)="RemoveLine(line.Key)"
+                      [disabled]="IsCreated"
+                      title="Remove this line"
+                      aria-label="Remove this line">
+                      <i class="fa-regular fa-trash-can" aria-hidden="true"></i>
+                    </button>
+                  </td>
+                </tr>
+                @if (LineIssue(line) || EngineLineError(i)) {
+                  <tr class="jew__issuerow">
+                    <td [attr.colspan]="6 + DimensionColumns.length">
+                      <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+                      {{ EngineLineError(i) ?? LineIssue(line) }}
+                    </td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+        <!-- Full-width vertical resize bar (central grip) — drag the grid taller/shorter. -->
+        <div class="jew__resize" (pointerdown)="StartGridResize($event)" title="Drag to resize" aria-hidden="true">
+          <span class="jew__resize-grip"></span>
+        </div>
+
+        @if (!IsCreated) {
+          <button class="mj-btn mj-btn--flat jew__addline" (click)="AddLine()">
+            <i class="fa-solid fa-plus" aria-hidden="true"></i> Add line
+          </button>
+        }
+
+        <!-- Live balance strip. -->
+        <div class="jew__balance">
+          <!-- Format in the COMPANY's functional currency — the pipe's default is USD, which would
+               print "$" on an AED entry. -->
+          <span>Dr <b>{{ Totals.Debits | currency: (FunctionalCurrency ?? 'USD') }}</b></span>
+          <span>Cr <b>{{ Totals.Credits | currency: (FunctionalCurrency ?? 'USD') }}</b></span>
+          @if (IsBalanced) {
+            <mj-stat-badge Label="Balanced" Icon="fa-solid fa-scale-balanced" Variant="success"></mj-stat-badge>
+          } @else {
+            <mj-stat-badge Label="Not balanced" Icon="fa-solid fa-scale-unbalanced" Variant="warning"></mj-stat-badge>
+          }
+          <span class="jew__balancenote">
+            The balanced-entry rule is enforced at the database — this strip mirrors it live.
+          </span>
+        </div>
+
+        @if (DraftErrors.length) {
+          <div class="jew__errors" role="alert">
+            @for (e of DraftErrors; track e) {
+              <p><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i> {{ e }}</p>
+            }
+          </div>
+        }
+
+        <!-- Memo lives HERE — below the balance strip, right above Create — so it captures what the
+             operator actually did (Marcelo 2026-07-21): they build the entry first, then annotate it. -->
+        <label class="jew__field jew__memo">
+          <span>Memo</span>
+          <input
+            class="mj-input"
+            [(ngModel)]="d.Description"
+            (ngModelChange)="touch()"
+            [disabled]="IsCreated"
+            placeholder="What is this entry for?" />
+        </label>
+
+        <!-- Verbs now live in the shared <mj-workspace-card> action bar (configured on the card tag
+             above) — the standardized Create / Keep-as-draft / Discard trio. -->
+        @if (SubmitBlockedReason && !IsCreated) {
+          <p class="jew__hint">
+            <i class="fa-solid fa-circle-info" aria-hidden="true"></i> {{ SubmitBlockedReason }}
+          </p>
+        }
+      }
+
+      @if (ActionMessage) {
+        <p class="jew__msg" [class.jew__msg--error]="ActionIsError" role="status">{{ ActionMessage }}</p>
+      }
+    </ng-container>
+  </mj-workspace-card>
+</mj-page-body-interior>

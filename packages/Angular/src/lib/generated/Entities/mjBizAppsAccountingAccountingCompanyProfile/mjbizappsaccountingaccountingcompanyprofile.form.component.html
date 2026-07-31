@@ -10,11 +10,11 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Accounting Profile Settings Section -->
+    <!-- Details Section -->
     <mj-collapsible-panel
-        SectionKey="accountingProfileSettings"
-        SectionName="Accounting Profile Settings"
-        Icon="fa fa-file-invoice"
+        SectionKey="details"
+        SectionName="Details"
+        Icon="fa fa-align-left"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -81,16 +81,6 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Financial Configuration Section -->
-    <mj-collapsible-panel
-        SectionKey="financialConfiguration"
-        SectionName="Financial Configuration"
-        Icon="fa fa-dollar-sign"
-        [Form]="this"
-        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -137,14 +127,6 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="DefaultPaymentTermsTypeID"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
             FieldName="ApprovalCFOUserID"
             Type="textbox"
             [EditMode]="EditMode"
@@ -162,25 +144,7 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="RootParentAccountingCompanyID"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Details Section -->
-    <mj-collapsible-panel
-        SectionKey="details"
-        SectionName="Details"
-        Icon="fa fa-align-left"
-        [Form]="this"
-        [FormContext]="formContext">
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="__mj_Latitude"
+            FieldName="__mj_CreatedAt"
             Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
@@ -188,23 +152,11 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="__mj_Longitude"
+            FieldName="__mj_UpdatedAt"
             Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Company Details Section -->
-    <mj-collapsible-panel
-        SectionKey="companyDetails"
-        SectionName="Company Details"
-        Icon="fa fa-building"
-        Variant="inherited"
-        InheritedFromEntity="MJ: Companies"
-        [Form]="this"
-        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -228,7 +180,6 @@
             Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
-            LinkType="URL"
         ></mj-form-field>
         <mj-form-field 
             [Record]="record"
@@ -237,7 +188,6 @@
             Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
-            LinkType="URL"
         ></mj-form-field>
         <mj-form-field 
             [Record]="record"
@@ -247,28 +197,10 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- System Metadata Section -->
-    <mj-collapsible-panel
-        SectionKey="systemMetadata"
-        SectionName="System Metadata"
-        Icon="fa fa-cog"
-        [Form]="this"
-        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="__mj_CreatedAt"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="__mj_UpdatedAt"
+            FieldName="RootParentAccountingCompanyID"
             Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
@@ -286,7 +218,7 @@
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingAccountingCompanyProfiles"
         SectionName="Accounting Company Profiles"
-        Icon="fa fa-balance-scale"
+        Icon="fa fa-table"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"

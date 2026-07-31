@@ -4,7 +4,6 @@
   "license": "ISC",
   "description": "BizApps Accounting - AR subsidiary ledger of record and journal entry primitives built on MemberJunction",
   "workspaces": [
-    "apps/*",
     "packages/*"
   ],
   "scripts": {
@@ -13,11 +12,6 @@
     "build:stream": "turbo --log-order=stream build",
     "build:generated": "turbo --log-order=stream build --filter=\"@mj-biz-apps/accounting-entities\" --filter=\"@mj-biz-apps/accounting-actions\"",
     "build:packages": "turbo --log-order=stream build --filter=\"@mj-biz-apps/accounting-*\"",
-    "build:api": "turbo --log-order=stream build --filter=\"mj_api\"",
-    "build:explorer": "turbo --log-order=stream build --filter=\"mj_explorer\"",
-    "start": "turbo start --filter=mj_explorer --filter=mj_api",
-    "start:api": "turbo start --filter=mj_api",
-    "start:explorer": "turbo start --filter=mj_explorer",
     "mj": "node node_modules/@memberjunction/cli/bin/run.js",
     "mj:migrate": "node node_modules/@memberjunction/cli/bin/run.js migrate",
     "mj:codegen": "node node_modules/@memberjunction/cli/bin/run.js codegen",

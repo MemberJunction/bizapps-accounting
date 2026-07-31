@@ -8,68 +8,38 @@
     "DefaultSequence": 2010,
     "DefaultNavItems": [
       {
-        "Label": "Batch Status",
-        "Icon": "fa-solid fa-list-check",
-        "ResourceType": "Custom",
-        "DriverClass": "BatchStatusResource",
-        "isDefault": true
-      },
-      {
-        "Label": "Trial Balance & AR",
-        "Icon": "fa-solid fa-scale-balanced",
-        "ResourceType": "Custom",
-        "DriverClass": "TrialBalanceARResource",
-        "isDefault": false
-      },
-      {
-        "Label": "Revenue & Tax",
-        "Icon": "fa-solid fa-receipt",
-        "ResourceType": "Custom",
-        "DriverClass": "RevenueTaxResource",
-        "isDefault": false
-      },
-      {
-        "Label": "Batch Approvals",
-        "Icon": "fa-solid fa-paper-plane",
-        "ResourceType": "Custom",
-        "DriverClass": "BatchDispatchResource",
-        "isDefault": false
-      },
-      {
-        "Label": "Intercompany Flow",
-        "Icon": "fa-solid fa-arrows-turn-to-dots",
-        "ResourceType": "Custom",
-        "DriverClass": "IntercompanyFlowResource",
-        "isDefault": false
-      },
-      {
-        "Label": "Chart of Accounts",
-        "Icon": "fa-solid fa-sitemap",
-        "ResourceType": "Custom",
-        "DriverClass": "ChartOfAccountsResource",
-        "isDefault": false
-      },
-      {
-        "Label": "Companies",
-        "Icon": "fa-solid fa-building",
-        "ResourceType": "Custom",
-        "DriverClass": "CompanySetupResource",
-        "isDefault": false
-      },
-      {
         "Label": "Journal Entries",
         "Icon": "fa-solid fa-book-open",
         "ResourceType": "Custom",
-        "DriverClass": "JournalEntryConsoleResource",
+        "DriverClass": "JournalEntriesCategoryResource",
+        "isDefault": true
+      },
+      {
+        "Label": "Batches",
+        "Icon": "fa-solid fa-layer-group",
+        "ResourceType": "Custom",
+        "DriverClass": "BatchesCategoryResource",
         "isDefault": false
       },
       {
-        "Label": "Dimensions",
-        "Icon": "fa-solid fa-tags",
-        "ResourceType": "User Views",
-        "Configuration": {
-          "Entity": "MJ_BizApps_Accounting: Dimensions"
-        },
+        "Label": "Accounts",
+        "Icon": "fa-solid fa-sitemap",
+        "ResourceType": "Custom",
+        "DriverClass": "AccountsCategoryResource",
+        "isDefault": false
+      },
+      {
+        "Label": "Reports",
+        "Icon": "fa-solid fa-chart-column",
+        "ResourceType": "Custom",
+        "DriverClass": "ReportsCategoryResource",
+        "isDefault": false
+      },
+      {
+        "Label": "Configuration",
+        "Icon": "fa-solid fa-gear",
+        "ResourceType": "Custom",
+        "DriverClass": "ConfigurationCategoryResource",
         "isDefault": false
       }
     ]
@@ -81,7 +51,7 @@
     "ID": "08B5D905-6FB3-438B-94E5-2C5FF021B794"
   },
   "sync": {
-    "lastModified": "2026-07-28T21:08:56.215Z",
-    "checksum": "3a3779cafec58d38e26cfa9526955db75437fa14d36a5f6f434b7d44da58fdb6"
+    "lastModified": "2026-07-29T20:30:05.004Z",
+    "checksum": "2eace700a7640584d6cf068a7a3de24fed2e8addb75ab2d6de4763a6bf69f750"
   }
 }

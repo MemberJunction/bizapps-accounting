@@ -60,6 +60,10 @@ export interface LiveCtx {
   dimId: string;
   dimValSales: string;
   dimValMktg: string;
+  /** JournalEntryType Code → ID (issue #24). System codes from metadata; 'OrderBooking' ensured. */
+  entryTypes: Map<string, string>;
+  /** The single IsBatchSummary=1 type's ID (member-exclusion filters + summary assertions). */
+  batchSummaryTypeId: string;
   /** JE IDs the tests created — teardown deletes exactly these (plus the fixture company orbit). */
   createdJEIds: string[];
   /** Batch IDs the tests created. */
@@ -151,7 +155,27 @@ export async function bootstrapLive(): Promise<LiveCtx> {
     `INSERT INTO ${SCHEMA}.DimensionValue (ID, DimensionID, Code, Name) VALUES ` +
     `('${dimValSales}','${dimId}','SALES','Sales'),('${dimValMktg}','${dimId}','MKTG','Marketing')`);
 
-  return { pool, teardownPool, user: ctxUser, runTag, company, companyB, dimId, dimValSales, dimValMktg, createdJEIds: [], createdBatchIds: [] };
+  // JournalEntryType map (issue #24): the system rows come from metadata/journal-entry-types
+  // (mj sync push). The orders-domain 'OrderBooking' code the draft tests book with is ensured
+  // here BY CODE (reference data — created if absent, reused and left in place otherwise).
+  const jetRows = (await pool.request().query(
+    `SELECT ID, Code, IsBatchSummary FROM ${SCHEMA}.JournalEntryType`,
+  )).recordset as Array<{ ID: string; Code: string; IsBatchSummary: boolean }>;
+  const entryTypes = new Map(jetRows.map(r => [r.Code, r.ID]));
+  const missingSystem = ['Manual', 'Reversal', 'BatchSummary'].filter(c => !entryTypes.has(c));
+  if (missingSystem.length) {
+    throw new Error(`JournalEntryType system rows missing: [${missingSystem.join(', ')}] — run mj sync push (metadata/journal-entry-types) before the live harness.`);
+  }
+  if (!entryTypes.has('OrderBooking')) {
+    const obId = randomUUID();
+    await pool.request().query(
+      `INSERT INTO ${SCHEMA}.JournalEntryType (ID, Code, Name, Description, IsSystem, IsBatchSummary, IsActive) ` +
+      `VALUES ('${obId}','OrderBooking','Order Booking','Live-harness ensured orders-domain type (issue #24; bizapps-orders owns this row in production)',0,0,1)`);
+    entryTypes.set('OrderBooking', obId);
+  }
+  const batchSummaryTypeId = jetRows.find(r => r.IsBatchSummary)?.ID ?? entryTypes.get('BatchSummary')!;
+
+  return { pool, teardownPool, user: ctxUser, runTag, company, companyB, dimId, dimValSales, dimValMktg, entryTypes, batchSummaryTypeId, createdJEIds: [], createdBatchIds: [] };
 }
 
 /** FK-aware, trigger-toggling teardown of everything the run created. Warnings, never throws. */
@@ -175,6 +199,8 @@ export async function teardownLive(ctx: LiveCtx): Promise<void> {
   } finally {
     for (const t of toggled) await exec(`ENABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
   }
+  // GL account links created by the tie-guard specs — company-rooted through the account FK.
+  await exec(`DELETE lk FROM ${SCHEMA}.GLAccountLink lk JOIN ${SCHEMA}.GLAccount gl ON gl.ID=lk.GLAccountID WHERE gl.CompanyID IN (${companyIdList})`);
   await exec(`DELETE FROM ${SCHEMA}.DimensionValue WHERE DimensionID='${ctx.dimId}'`);
   await exec(`DELETE FROM ${SCHEMA}.Dimension WHERE ID='${ctx.dimId}'`);
   await exec(`DELETE FROM ${SCHEMA}.JournalEntrySequence WHERE CompanyID IN (${companyIdList})`);

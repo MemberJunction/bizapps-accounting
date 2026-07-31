@@ -26,14 +26,18 @@ import {
   JournalEntryEntityServer,
   JournalEntryBatchEntityServer,
   GLAccountEntityServer,
+  GLAccountLinkEntityServer,
   AccountingEngine,
   CreateJournalEntriesOperation,
   buildBatch,
   approveBatch,
   sendBatch,
   AutoApproveGate,
+  TasksAppApprovalGate,
   mockErpPoster,
+  type BatchApprovalGate,
 } from '@mj-biz-apps/accounting-core-entities-server';
+import type { mjBizAppsAccountingAccountingCompanyProfileEntity } from '@mj-biz-apps/accounting-entities';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import { bootstrapLive, teardownLive, scalar, SCHEMA, type LiveCtx } from './live-bootstrap.js';
 
@@ -50,7 +54,7 @@ async function createJE(withDim: boolean, amount: number, description: string): 
   je.NewRecord();
   je.CompanyID = ctx.company.id;
   je.EffectiveDate = new Date();
-  je.EntryType = 'Manual';
+  je.EntryTypeID = ctx.entryTypes.get('Manual')!;
   je.Status = 'Pending';
   je.Description = `${ctx.runTag} ${description}`;
   const l1 = await je.CreateLine(ctx.user);
@@ -123,7 +127,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     const reversal = await reloaded.GenerateReversal('live-harness L4', ctx.user);
     ctx.createdJEIds.push(reversal.ID);
 
-    expect(reversal.EntryType).toBe('Reversal');
+    expect(reversal.EntryTypeID.toLowerCase()).toBe(ctx.entryTypes.get('Reversal')!.toLowerCase());
     const backRef = await scalar(ctx.pool, `SELECT ReversedByJournalEntryID FROM ${SCHEMA}.JournalEntry WHERE ID='${firstJE.ID}'`);
     expect(String(backRef).toLowerCase()).toBe(reversal.ID.toLowerCase());
     // Swapped: the original's 125.50 DEBIT on AR comes back as a CREDIT on AR.
@@ -157,7 +161,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     // Netting on AR: +125.5(L1... L1 is Pending too!) — compute expected from raw SQL instead of hand-math:
     const rawDr = Number(await scalar(ctx.pool,
       `SELECT SUM(l.DebitAmount) FROM ${SCHEMA}.JournalEntryLine l JOIN ${SCHEMA}.JournalEntry j ON j.ID=l.JournalEntryID
-       WHERE j.CompanyID='${ctx.company.id}' AND j.Status='Pending' AND j.EntryType<>'BatchSummary'`));
+       WHERE j.CompanyID='${ctx.company.id}' AND j.Status='Pending' AND j.EntryTypeID<>'${ctx.batchSummaryTypeId}'`));
 
     const result = await buildBatch(ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, AutoApproveGate);
     expect(result, 'buildBatch returned null — expected pending JEs to batch').not.toBeNull();
@@ -165,8 +169,8 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
 
     // Summary JE: exists, right shape, rides the lock machinery.
     const summary = (await ctx.pool.request().query(
-      `SELECT EntryType, Status, CompanyID, BatchID FROM ${SCHEMA}.JournalEntry WHERE ID='${result!.summaryJournalEntryId}'`)).recordset[0];
-    expect(summary.EntryType).toBe('BatchSummary');
+      `SELECT EntryTypeID, Status, CompanyID, BatchID FROM ${SCHEMA}.JournalEntry WHERE ID='${result!.summaryJournalEntryId}'`)).recordset[0];
+    expect(String(summary.EntryTypeID).toLowerCase()).toBe(ctx.batchSummaryTypeId.toLowerCase());
     expect(summary.Status).toBe('Batched');
     expect(String(summary.BatchID).toLowerCase()).toBe(result!.batchId.toLowerCase());
 
@@ -275,15 +279,222 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     expect(after).toBe(before);
   });
 
-  it('L8 — GLAccount identity lock: Code change rejected once referenced; cosmetic rename still saves', async () => {
+  it('L8 — GLAccount identity lock is IMMEDIATE + UNCONDITIONAL (Amith 2026-07-29): identity frozen from creation; cosmetic rename still saves', async () => {
+    // Referenced account: identity change rejected (as before).
     const gl = await provider.GetEntityObject<GLAccountEntityServer>(GL_ENTITY, ctx.user);
     expect(await gl.Load(ctx.company.arGL)).toBe(true);
     gl.Code = '99999';
-    expect(await gl.Save()).toBe(false); // JE lines reference this account
+    expect(await gl.Save()).toBe(false);
 
+    // THE DELTA: a brand-new account with ZERO references is just as locked — no JE-line gate.
+    const fresh = await provider.GetEntityObject<GLAccountEntityServer>(GL_ENTITY, ctx.user);
+    fresh.NewRecord();
+    fresh.CompanyID = ctx.company.id;
+    fresh.Code = '19999';
+    fresh.Name = `${ctx.runTag} L8 fresh account`;
+    fresh.AccountType = 'Asset';
+    expect(await fresh.Save(), `fresh account save: ${fresh.LatestResult?.CompleteMessage}`).toBe(true);
+    fresh.Code = '19998'; // never referenced by anything — still refused
+    expect(await fresh.Save()).toBe(false);
+    expect(fresh.LatestResult?.CompleteMessage ?? '').toMatch(/immutable from creation/);
+
+    // Cosmetic fields stay editable on both.
     const gl2 = await provider.GetEntityObject<GLAccountEntityServer>(GL_ENTITY, ctx.user);
     expect(await gl2.Load(ctx.company.arGL)).toBe(true);
     gl2.Name = `${gl2.Name} (renamed by live harness)`;
     expect(await gl2.Save(), `cosmetic rename should save: ${gl2.LatestResult?.CompleteMessage}`).toBe(true);
+  });
+
+  // ─── One-transaction batch build (D10 rev. 2026-07-29) ─────────────────────
+
+  it('L11 — one-transaction build: a task-raise failure rolls back the ENTIRE build (no batch, no summary, JEs untouched)', async () => {
+    const fuel = await createJE(false, 55, 'L11 fuel');
+    const batchesBefore = Number(await scalar(ctx.pool, `SELECT COUNT(*) FROM ${SCHEMA}.JournalEntryBatch WHERE CompanyID='${ctx.company.id}'`));
+    const summariesBefore = Number(await scalar(ctx.pool, `SELECT COUNT(*) FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${ctx.company.id}' AND EntryTypeID='${ctx.batchSummaryTypeId}'`));
+
+    const failingGate: BatchApprovalGate = {
+      async assertApproved() { /* n/a */ },
+      async onBatchBuilt(): Promise<string | null> { throw new Error('L11 injected task-raise failure'); },
+    };
+    await expect(
+      buildBatch(ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, failingGate),
+    ).rejects.toThrow('L11 injected task-raise failure');
+
+    // Rollback proof — raw SQL underneath the entity layer: nothing was born, nothing was locked.
+    const batchesAfter = Number(await scalar(ctx.pool, `SELECT COUNT(*) FROM ${SCHEMA}.JournalEntryBatch WHERE CompanyID='${ctx.company.id}'`));
+    expect(batchesAfter).toBe(batchesBefore);
+    const summariesAfter = Number(await scalar(ctx.pool, `SELECT COUNT(*) FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${ctx.company.id}' AND EntryTypeID='${ctx.batchSummaryTypeId}'`));
+    expect(summariesAfter).toBe(summariesBefore);
+    const fuelRow = (await ctx.pool.request().query(
+      `SELECT Status, BatchID FROM ${SCHEMA}.JournalEntry WHERE ID='${fuel.ID}'`)).recordset[0];
+    expect(fuelRow.Status).toBe('Pending');
+    expect(fuelRow.BatchID).toBeNull();
+  });
+
+  it('L12 — real-gate CFO precondition fails BEFORE any write (no CFO configured → no batch row is ever born)', async () => {
+    // The fixture company's ACP has no ApprovalCFOUserID — the precondition must throw pre-write.
+    const batchesBefore = Number(await scalar(ctx.pool, `SELECT COUNT(*) FROM ${SCHEMA}.JournalEntryBatch WHERE CompanyID='${ctx.company.id}'`));
+    await expect(
+      buildBatch(ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, new TasksAppApprovalGate(provider)),
+    ).rejects.toThrow(/No CFO configured/);
+    const batchesAfter = Number(await scalar(ctx.pool, `SELECT COUNT(*) FROM ${SCHEMA}.JournalEntryBatch WHERE CompanyID='${ctx.company.id}'`));
+    expect(batchesAfter).toBe(batchesBefore);
+  });
+
+  it('L13 — real gate: approval Task raised + ApprovalTaskID/RaisedAt stamped in the SAME build transaction', async () => {
+    // Configure the CFO on the fixture company (the harness user doubles as the approver).
+    const acp = await provider.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(
+      'MJ_BizApps_Accounting: Accounting Company Profiles', ctx.user);
+    expect(await acp.Load(ctx.company.id)).toBe(true);
+    acp.ApprovalCFOUserID = ctx.user.ID;
+    expect(await acp.Save(), `CFO config save: ${acp.LatestResult?.CompleteMessage}`).toBe(true);
+
+    const result = await buildBatch(
+      ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, new TasksAppApprovalGate(provider));
+    ctx.createdBatchIds.push(result.batchId);
+    try {
+      expect(result.approvalTaskId).toBeTruthy();
+
+      // The stamp is on the batch row (raw SQL), matching the raised Task, with RaisedAt set.
+      const row = (await ctx.pool.request().query(
+        `SELECT ApprovalTaskID, ApprovalTaskRaisedAt FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${result.batchId}'`)).recordset[0];
+      expect(String(row.ApprovalTaskID).toLowerCase()).toBe(String(result.approvalTaskId).toLowerCase());
+      expect(row.ApprovalTaskRaisedAt).toBeTruthy();
+
+      // The Task genuinely exists in the tasks schema (committed with the batch — one transaction).
+      const taskCount = Number(await scalar(ctx.pool,
+        `SELECT COUNT(*) FROM __mj_BizAppsTasks.Task WHERE ID='${result.approvalTaskId}'`));
+      expect(taskCount).toBe(1);
+    } finally {
+      // Tasks-side rows are not company-rooted — clean them here (FK-aware order), best-effort.
+      const tid = result.approvalTaskId;
+      if (tid) {
+        await ctx.pool.request().query(`DELETE FROM __mj_BizAppsTasks.TaskActivity WHERE TaskID='${tid}'`).catch(() => undefined);
+        await ctx.pool.request().query(`DELETE FROM __mj_BizAppsTasks.TaskAssignment WHERE TaskID='${tid}'`).catch(() => undefined);
+        await ctx.pool.request().query(`DELETE FROM __mj_BizAppsTasks.TaskLink WHERE TaskID='${tid}'`).catch(() => undefined);
+        await ctx.pool.request().query(`DELETE FROM __mj_BizAppsTasks.TaskDecision WHERE TaskID='${tid}'`).catch(() => undefined);
+        await ctx.pool.request().query(`DELETE FROM __mj_BizAppsTasks.Task WHERE ID='${tid}'`).catch(() => undefined);
+      }
+    }
+  });
+
+  // ─── S-C: reversal guards (P-3; the counterparty column was killed 2026-07-29, Amith) ──
+
+  it('L14 — reversal guards: no double-reverse; a reversal cannot itself be reversed', async () => {
+    // L4 already reversed firstJE — a second reversal must be refused.
+    const je = await provider.GetEntityObject<JournalEntryEntityServer>(JE_ENTITY, ctx.user);
+    expect(await je.Load(firstJE.ID)).toBe(true);
+    expect(je.ReversedByJournalEntryID).toBeTruthy();
+    await expect(je.GenerateReversal('L14 double-reverse attempt', ctx.user)).rejects.toThrow(/already been reversed/);
+
+    // And the reversal entry itself (type Reversal) can never be reversed.
+    const reversal = await provider.GetEntityObject<JournalEntryEntityServer>(JE_ENTITY, ctx.user);
+    expect(await reversal.Load(je.ReversedByJournalEntryID as string)).toBe(true);
+    await expect(reversal.GenerateReversal('L14 reverse-a-reversal attempt', ctx.user)).rejects.toThrow(/cannot itself be reversed/);
+  });
+
+
+  // ─── GLAccountLink tie guard + forCompanyID (BA-D32 rev. 2026-07-29) ────────
+
+  it('L16 — link tie guard: same (record, role, company) + same StartedAt refused; DIFFERENT company shares the window; forCompanyID resolves per company', async () => {
+    // Fixture: link the same polymorphic record + role to company A's AR account AND
+    // company B's AR account, both Active with StartedAt = NULL. That is the supported
+    // multi-company shape; only a SECOND company-A link on the same start is an ambiguous tie.
+    const roleRow = (await ctx.pool.request().query(
+      `SELECT TOP 1 ID FROM ${SCHEMA}.GLAccountRole ORDER BY Sequence`)).recordset[0];
+    expect(roleRow?.ID).toBeTruthy();
+    const linkEntityInfo = provider.EntityByName('MJ_BizApps_Accounting: GL Accounts');
+    expect(linkEntityInfo).toBeTruthy();
+    const entityId = linkEntityInfo?.ID ?? '';
+    const recordId = `${ctx.runTag}-L16-record`;
+
+    const makeLink = async (glAccountId: string): Promise<GLAccountLinkEntityServer> => {
+      const link = await provider.GetEntityObject<GLAccountLinkEntityServer>('MJ_BizApps_Accounting: GL Account Links', ctx.user);
+      link.NewRecord();
+      link.GLAccountID = glAccountId;
+      link.GLAccountRoleID = roleRow.ID;
+      link.EntityID = entityId;
+      link.RecordID = recordId;
+      link.Status = 'Active';
+      return link;
+    };
+
+    // Company A link saves.
+    const linkA = await makeLink(ctx.company.arGL);
+    expect(await linkA.Save(), `link A save: ${linkA.LatestResult?.CompleteMessage}`).toBe(true);
+
+    // Company B link on the SAME record/role/window saves — different company, no tie.
+    const linkB = await makeLink(ctx.companyB.arGL);
+    expect(await linkB.Save(), `link B save: ${linkB.LatestResult?.CompleteMessage}`).toBe(true);
+
+    // A SECOND company-A link on the same StartedAt is the ambiguous tie — refused, with guidance.
+    const dupe = await makeLink(ctx.company.cashGL); // cash is also company A's book
+    expect(await dupe.Save()).toBe(false);
+    expect(dupe.LatestResult?.CompleteMessage ?? '').toMatch(/same StartedAt/);
+
+    // forCompanyID disambiguates resolution per company over the SAME record + role.
+    await AccountingEngineBase.Instance.ConfigEx({ forceRefresh: true, contextUser: ctx.user, provider });
+    const eng = AccountingEngineBase.Instance;
+    const forA = eng.ResolveLinkedAccount(entityId, recordId, roleRow.ID, new Date(), ctx.company.id);
+    const forB = eng.ResolveLinkedAccount(entityId, recordId, roleRow.ID, new Date(), ctx.companyB.id);
+    expect(forA?.Link?.GLAccountID?.toLowerCase()).toBe(ctx.company.arGL.toLowerCase());
+    expect(forB?.Link?.GLAccountID?.toLowerCase()).toBe(ctx.companyB.arGL.toLowerCase());
+    // Unscoped resolution still returns SOME active link (back-compat for single-company callers).
+    expect(eng.ResolveLinkedAccount(entityId, recordId, roleRow.ID, new Date())).toBeTruthy();
+  });
+
+  // ─── Batch entity encapsulation (Marcelo review round, 2026-07-29) ──────────
+
+  it('L17 — approval coherence guard: tampered control totals on a Pending batch refuse to approve', async () => {
+    // Fresh JE → build → tamper TotalDebits by raw SQL (legal while Pending — exactly the hole
+    // the guard closes) → approve must refuse with the footing message.
+    const fuel = await createJE(false, 75, 'L17 fuel');
+    void fuel;
+    const result = await buildBatch(ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, AutoApproveGate);
+    ctx.createdBatchIds.push(result.batchId);
+    await ctx.pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET TotalDebits = TotalDebits + 999 WHERE ID='${result.batchId}'`);
+
+    const batch = await provider.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, ctx.user);
+    expect(await batch.Load(result.batchId)).toBe(true);
+    batch.Status = 'Approved';
+    expect(await batch.Save()).toBe(false);
+    expect(batch.LatestResult?.CompleteMessage ?? '').toMatch(/do not foot/);
+
+    // Un-tamper → approval proceeds, and the auto-stamp fills the audit pair from context (L18 rolled in).
+    await ctx.pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET TotalDebits = TotalDebits - 999 WHERE ID='${result.batchId}'`);
+    const batch2 = await provider.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, ctx.user);
+    expect(await batch2.Load(result.batchId)).toBe(true);
+    batch2.Status = 'Approved'; // note: NOT setting ApprovedAt/ApprovedByUserID — the Save hook must
+    expect(await batch2.Save(), `approve after un-tamper: ${batch2.LatestResult?.CompleteMessage}`).toBe(true);
+    const row = (await ctx.pool.request().query(
+      `SELECT ApprovedAt, ApprovedByUserID FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${result.batchId}'`)).recordset[0];
+    expect(row.ApprovedAt).toBeTruthy();
+    expect(String(row.ApprovedByUserID).toLowerCase()).toBe(ctx.user.ID.toLowerCase());
+  });
+
+  it('L19 — owned collections: LoadMembers + LoadSummaryJournalEntry hydrate what the batch owns; entity Cancel() reverses the lock', async () => {
+    const fuel = await createJE(true, 85, 'L19 fuel');
+    const result = await buildBatch(ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, AutoApproveGate);
+
+    const batch = await provider.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, ctx.user);
+    expect(await batch.Load(result.batchId)).toBe(true);
+    const members = await batch.LoadMembers();
+    // Members = the fuel JE + the BatchSummary JE (it rides the same lock machinery).
+    expect(members.length).toBe(2);
+    expect(members.some(m => m.ID.toLowerCase() === fuel.ID.toLowerCase())).toBe(true);
+    const summary = await batch.LoadSummaryJournalEntry();
+    expect(summary?.ID?.toLowerCase()).toBe(result.summaryJournalEntryId.toLowerCase());
+
+    // Entity-owned Cancel: one call reverses the preliminary lock (this is now the cancel path).
+    expect(await batch.Cancel(ctx.user)).toBe(true);
+    const fuelRow = (await ctx.pool.request().query(
+      `SELECT Status, BatchID FROM ${SCHEMA}.JournalEntry WHERE ID='${fuel.ID}'`)).recordset[0];
+    expect(fuelRow.Status).toBe('Pending');
+    expect(fuelRow.BatchID).toBeNull();
+    const summaryGone = Number(await scalar(ctx.pool, `SELECT COUNT(*) FROM ${SCHEMA}.JournalEntry WHERE ID='${result.summaryJournalEntryId}'`));
+    expect(summaryGone).toBe(0);
+    const batchRow = (await ctx.pool.request().query(
+      `SELECT Status FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${result.batchId}'`)).recordset[0];
+    expect(batchRow.Status).toBe('Cancelled');
   });
 });

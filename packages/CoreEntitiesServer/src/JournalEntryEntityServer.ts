@@ -11,7 +11,8 @@
  *       2. Balanced overall debits and credits (SUM(Debits) === SUM(Credits) exactly).
  *       3. Single-company isolation (All line GLAccounts must match header CompanyID).
  *       4. Active GL Accounts (All line GLAccounts must be IsActive = 1).
- *       5. Reversal consistency (EntryType='Reversal' <-> ReversesJournalEntryID).
+ *       5. Reversal consistency (JournalEntryType Code='Reversal' <-> ReversesJournalEntryID —
+ *          async, issue #24: the code lives on the type row the FK points at).
  *   - W6 (Block 1) GenerateReversal: create a new Pending JE with Dr/Cr swapped.
  *   - W9 (Block 1) attachment validation: a non-null FileID must reference an existing __mj.File.
  */
@@ -36,6 +37,7 @@ import {
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 
 import { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
+import { LookupJournalEntryTypeByID, RequireJournalEntryTypeID } from './JournalEntryTypes.js';
 import { getNextJournalEntryNumber } from './SequenceService.js';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
@@ -242,27 +244,9 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
       }
     }
 
-    // Rule 4: Reversal consistency
-    if (this.EntryType === 'Reversal' && !this.ReversesJournalEntryID) {
-      result.Success = false;
-      result.Errors.push(
-        new ValidationErrorInfo(
-          'JournalEntryEntityServer.Validate',
-          'JournalEntry with EntryType="Reversal" must specify ReversesJournalEntryID.',
-          null,
-        ),
-      );
-    }
-    if (this.ReversesJournalEntryID && this.EntryType !== 'Reversal') {
-      result.Success = false;
-      result.Errors.push(
-        new ValidationErrorInfo(
-          'JournalEntryEntityServer.Validate',
-          'JournalEntry specifying ReversesJournalEntryID must have EntryType="Reversal".',
-          null,
-        ),
-      );
-    }
+    // Rule 4 (reversal consistency) moved to ValidateAsync (issue #24): the 'Reversal'
+    // discriminator now lives on the JournalEntryType row EntryTypeID points at, and reading
+    // it is a DB lookup. trg_JE_ReversalConsistency (50012) remains the un-bypassable floor.
 
     return result;
   }
@@ -270,6 +254,40 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
   /** Async validation for DB lookups (Company alignment, active GL Accounts, File attachment). */
   public override async ValidateAsync(): Promise<ValidationResult> {
     const result = await super.ValidateAsync();
+
+    // Rule 4: Reversal consistency — the 'Reversal' discriminator is the TYPE row's Code
+    // (issue #24), so the paired check reads the row EntryTypeID points at.
+    try {
+      const type = this.EntryTypeID
+        ? await LookupJournalEntryTypeByID(this.EntryTypeID, this.ContextCurrentUser, this.ProviderToUse as unknown as IMetadataProvider)
+        : null;
+      const isReversalType = type?.Code === 'Reversal';
+      if (isReversalType && !this.ReversesJournalEntryID) {
+        result.Success = false;
+        result.Errors.push(
+          new ValidationErrorInfo(
+            'JournalEntryEntityServer.ValidateAsync',
+            'JournalEntry typed \'Reversal\' must specify ReversesJournalEntryID.',
+            null,
+          ),
+        );
+      }
+      if (this.ReversesJournalEntryID && !isReversalType) {
+        result.Success = false;
+        result.Errors.push(
+          new ValidationErrorInfo(
+            'JournalEntryEntityServer.ValidateAsync',
+            'JournalEntry specifying ReversesJournalEntryID must be typed with JournalEntryType Code=\'Reversal\'.',
+            null,
+          ),
+        );
+      }
+    } catch (e: any) {
+      result.Success = false;
+      result.Errors.push(
+        new ValidationErrorInfo('JournalEntryEntityServer.ValidateAsync', e.message || String(e), null),
+      );
+    }
 
     // Rule 5: W9 Attachment validation
     try {
@@ -488,6 +506,17 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
     const user = contextUser ?? this.ContextCurrentUser;
     const provider = this.ProviderToUse as unknown as IMetadataProvider;
 
+    // Guards (defense-in-depth; the UI also hides the action): a reversal entry cannot itself be
+    // reversed (an ever-growing reverse-the-reverse chain), and an already-reversed entry cannot
+    // be reversed again (double-reversing would orphan the back-pointer).
+    const reversalTypeId = await RequireJournalEntryTypeID('Reversal', user, provider);
+    if (this.EntryTypeID?.toLowerCase() === reversalTypeId.toLowerCase() || this.ReversesJournalEntryID) {
+      throw new Error('GenerateReversal: a reversal entry cannot itself be reversed.');
+    }
+    if (this.ReversedByJournalEntryID) {
+      throw new Error(`GenerateReversal: ${this.EntryNumber} has already been reversed (by JE ${this.ReversedByJournalEntryID}).`);
+    }
+
     // Make sure this JE's own lines (+ dimension tags) are hydrated to copy from.
     if (this._lines.length === 0) {
       await this.LoadLines(user);
@@ -497,7 +526,7 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
     reversal.NewRecord();
     reversal.CompanyID = this.CompanyID;
     reversal.EffectiveDate = new Date();
-    reversal.EntryType = 'Reversal';
+    reversal.EntryTypeID = reversalTypeId;
     reversal.Status = 'Pending';
     reversal.Description = `Reversal of ${this.EntryNumber}: ${reason}`;
     reversal.ReversesJournalEntryID = this.ID;

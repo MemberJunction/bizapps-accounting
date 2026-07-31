@@ -33,11 +33,11 @@ import { mjBizAppsAccountingJournalEntryBatchFormComponent } from "./Entities/mj
 import { mjBizAppsAccountingJournalEntryLineDimensionFormComponent } from "./Entities/mjBizAppsAccountingJournalEntryLineDimension/mjbizappsaccountingjournalentrylinedimension.form.component";
 import { mjBizAppsAccountingJournalEntryLineFormComponent } from "./Entities/mjBizAppsAccountingJournalEntryLine/mjbizappsaccountingjournalentryline.form.component";
 import { mjBizAppsAccountingJournalEntrySequenceFormComponent } from "./Entities/mjBizAppsAccountingJournalEntrySequence/mjbizappsaccountingjournalentrysequence.form.component";
+import { mjBizAppsAccountingJournalEntryTypeFormComponent } from "./Entities/mjBizAppsAccountingJournalEntryType/mjbizappsaccountingjournalentrytype.form.component";
 import { mjBizAppsAccountingTaxAuthorityFormComponent } from "./Entities/mjBizAppsAccountingTaxAuthority/mjbizappsaccountingtaxauthority.form.component";
 import { mjBizAppsAccountingTaxJurisdictionFormComponent } from "./Entities/mjBizAppsAccountingTaxJurisdiction/mjbizappsaccountingtaxjurisdiction.form.component";
 import { mjBizAppsAccountingTaxLiabilityFormComponent } from "./Entities/mjBizAppsAccountingTaxLiability/mjbizappsaccountingtaxliability.form.component";
 import { mjBizAppsAccountingTaxRateFormComponent } from "./Entities/mjBizAppsAccountingTaxRate/mjbizappsaccountingtaxrate.form.component";
-import { mjBizAppsAccountingTaxRemittanceFormComponent } from "./Entities/mjBizAppsAccountingTaxRemittance/mjbizappsaccountingtaxremittance.form.component";
    
 
 @NgModule({
@@ -60,8 +60,8 @@ declarations: [
     mjBizAppsAccountingJournalEntryLineDimensionFormComponent,
     mjBizAppsAccountingJournalEntryLineFormComponent,
     mjBizAppsAccountingJournalEntrySequenceFormComponent,
-    mjBizAppsAccountingTaxAuthorityFormComponent,
-    mjBizAppsAccountingTaxJurisdictionFormComponent],
+    mjBizAppsAccountingJournalEntryTypeFormComponent,
+    mjBizAppsAccountingTaxAuthorityFormComponent],
 imports: [
     CommonModule,
     FormsModule,
@@ -78,9 +78,9 @@ export class GeneratedForms_SubModule_0 { }
 
 @NgModule({
 declarations: [
+    mjBizAppsAccountingTaxJurisdictionFormComponent,
     mjBizAppsAccountingTaxLiabilityFormComponent,
-    mjBizAppsAccountingTaxRateFormComponent,
-    mjBizAppsAccountingTaxRemittanceFormComponent],
+    mjBizAppsAccountingTaxRateFormComponent],
 imports: [
     CommonModule,
     FormsModule,

@@ -1,44 +1,42 @@
 /**
- * block1-runtime.ts — live validation of the Block-1 JE-lifecycle hooks + DB invariants.
+ * block1-runtime.ts — live validation of the JE-lifecycle DB invariants (the un-bypassable floor).
  *
  * Runs against a REAL instance DB through the REAL provider + server subclasses (MJAPI's path).
+ * The unique value of this harness is the RAW-SQL BYPASS proofs: each trigger is attacked
+ * underneath the entity layer, so a lying/removed trigger can never produce a false green.
  *
- * 2026-07-06 rework (engine-meeting rulings): AccountingPeriod is GONE, so the W4
- * adjusting-entry routing + period-close (50007) tests are RETIRED. JEs are now
- * MULTI-COMPANY (no header CompanyID — company derives from GLAccount.CompanyID per line),
- * which adds the AM-4 per-company balance invariant (50019):
+ * MODERNIZED 2026-07-29 for the realigned baseline (single-company JEs D3, JournalEntryType
+ * lookup #24, encapsulated phase-2 saves; the old multi-company/AM-4 rows are retired — plan D3
+ * made cross-company drafts a typed engine rejection AND a DB floor, both proven here):
  *
- *   W6  generateReversal: new Pending JE (EntryType='Reversal'), Dr/Cr swapped, back-referenced.
- *   F1  validateJournalEntry: balanced/active → valid; unbalanced → invalid.
- *   INV (DB triggers, each with a RAW-SQL bypass case + an allowed counter-case):
- *       balanced-on-lock overall (50001) · balanced-on-lock PER COMPANY (50019, AM-4) ·
- *       JE immutability (50003/50004) · JE-line immutability (50006).
+ *   INV (DB triggers, each with a raw-SQL bypass case + an allowed counter-case):
+ *       balanced-on-lock (50001) · single-company line floor (50019) · header-company change
+ *       floor (50022) · JE immutability update/delete (50004/50003, GL-roundtrip fields allowed) ·
+ *       line immutability on a locked JE (50006) · reversal typing (50012).
+ *   ENTITY: unbalanced encapsulated Save refused (double-entry validation), balanced saves.
  *
- * USAGE (cwd = instance worktree root, where .env resolves):
- *   npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/block1-runtime.ts
- * Exit: 0 all passed · 1 failures · 2 bootstrap error. Idempotent (FK-aware teardown by tracked IDs).
+ * Run from the INSTANCE WORKTREE ROOT: npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/block1-runtime.ts
+ * Exit: 0 all passed · 1 failures · 2 bootstrap error.
  */
 import sql from 'mssql';
 import dotenv from 'dotenv';
-import path from 'path';
-import { randomUUID } from 'crypto';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { Metadata, RunView, UserInfo } from '@memberjunction/core';
 import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
-import { assertInvariantTriggers } from './trigger-preflight.js';
-import { finishAndExit } from './harness-exit.js';
 import '@memberjunction/server-bootstrap-lite';
 import '@mj-biz-apps/common-entities';
 import '@mj-biz-apps/accounting-entities';
-import { validateJournalEntry } from '@mj-biz-apps/accounting-core-entities-server';
 import '@mj-biz-apps/accounting-core-entities-server';
+import { JournalEntryEntityServer, RequireJournalEntryTypeID } from '@mj-biz-apps/accounting-core-entities-server';
 import type {
   mjBizAppsAccountingAccountingCompanyProfileEntity,
   mjBizAppsAccountingJournalEntryEntity,
   mjBizAppsAccountingJournalEntryLineEntity,
   mjBizAppsAccountingJournalEntryBatchEntity,
 } from '@mj-biz-apps/accounting-entities';
-// The reversal hook (W6) lives on the registered server subclass; cast to reach generateReversal().
-import type { JournalEntryEntityServer } from '@mj-biz-apps/accounting-core-entities-server';
+import { finishAndExit } from './harness-exit.js';
+import { assertInvariantTriggers } from './trigger-preflight.js';
 
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
@@ -69,16 +67,16 @@ async function expectThrow(fn: () => Promise<unknown>, mustContain: string): Pro
   assert(msg.includes(mustContain), `expected error to contain "${mustContain}", got: ${msg.split('\n')[0]}`);
 }
 
-interface Company { id: string; arGL: string; revGL: string }
+interface Company { id: string; code: string; arGL: string; revGL: string }
 interface Ctx {
   pool: sql.ConnectionPool;
   /** db_owner pool (MJ_CodeGen) used ONLY for FK-aware teardown — the app user MJ_Connect lacks ALTER
    *  (can't DISABLE TRIGGER) and can't delete locked JEs/batches, which is the security model. */
   teardownPool: sql.ConnectionPool;
-  user: UserInfo; companyA: Company; companyB: Company; batchId: string;
+  user: UserInfo; companyA: Company; companyB: Company; batchId: string; manualTypeId: string;
 }
 
-/** Tracked created rows for the FK-aware teardown (JEs are global now — no CompanyID to sweep by). */
+/** Tracked created rows for the FK-aware teardown (companies are also swept whole). */
 const createdJEIds: string[] = [];
 
 async function createCompany(user: UserInfo, currencyCode: string, label: string): Promise<Company> {
@@ -92,13 +90,14 @@ async function createCompany(user: UserInfo, currencyCode: string, label: string
   acp.FunctionalCurrencyCode = currencyCode;
   acp.EntityType = 'Subsidiary';
   const id = acp.ID;
+  const code = acp.CompanyCode;
   if (!(await acp.Save())) throw new Error(`ACP save failed (${label}): ${acp.LatestResult?.CompleteMessage ?? 'unknown'}`);
   const glRes = await rv.RunView<{ ID: string; Code: string }>(
     { EntityName: GL_ENTITY, ExtraFilter: `CompanyID='${id}'`, Fields: ['ID', 'Code'], ResultType: 'simple' }, user);
   const byCode = new Map((glRes.Results ?? []).map(r => [r.Code, r.ID]));
   const arGL = byCode.get('11201'); const revGL = byCode.get('40100');
   if (!arGL || !revGL) throw new Error(`seeded GL accounts not found for ${label}`);
-  return { id, arGL, revGL };
+  return { id, code, arGL, revGL };
 }
 
 async function bootstrap(): Promise<Ctx> {
@@ -120,15 +119,19 @@ async function bootstrap(): Promise<Ctx> {
   const currencyCode = cur.Results?.[0]?.Code;
   if (!currencyCode) throw new Error(`no currency resolved (success=${cur.Success} err=${cur.ErrorMessage})`);
 
-  // Two test companies — the AM-4 per-company invariant (50019) needs lines spanning companies.
+  // Two test companies — the single-company floor (50019/50022) needs accounts from a SECOND company.
   const companyA = await createCompany(ctxUser, currencyCode, 'Co A');
   const companyB = await createCompany(ctxUser, currencyCode, 'Co B');
 
-  // A Pending batch for the lock tests — a JE can only be Batched if BatchID is set
+  const manualTypeId = await RequireJournalEntryTypeID('Manual', ctxUser, Metadata.Provider);
+
+  // A Pending batch (company A) for the lock tests — a JE can only be Batched if BatchID is set
   // (CK_JournalEntry_BatchedHasBatch). The batch stays Pending so it can be referenced + cleaned.
   const md = new Metadata();
   const batch = await md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, ctxUser);
   batch.NewRecord();
+  batch.CompanyID = companyA.id;
+  batch.PostingDate = new Date(new Date().toISOString().slice(0, 10));
   batch.TargetSystem = 'BusinessCentral';
   batch.BatchedAt = new Date();
   batch.BatchedByUserID = ctxUser.ID;
@@ -136,28 +139,31 @@ async function bootstrap(): Promise<Ctx> {
   batch.TotalEntries = 0; batch.TotalDebits = 0; batch.TotalCredits = 0;
   if (!(await batch.Save())) throw new Error(`batch save failed: ${batch.LatestResult?.CompleteMessage}`);
 
-  return { pool, teardownPool, user: ctxUser, companyA, companyB, batchId: batch.ID };
+  return { pool, teardownPool, user: ctxUser, companyA, companyB, batchId: batch.ID, manualTypeId };
 }
 
-/** App-path helper: create a Pending JE with a balanced (or unbalanced) Dr-AR / Cr-Revenue pair in one company. */
-async function makeJE(ctx: Ctx, co: Company, debit: number, credit: number): Promise<mjBizAppsAccountingJournalEntryEntity> {
+/** App-path helper: ONE encapsulated Save — header + Dr-AR / Cr-Revenue pair in one company (phase 2). */
+async function makeJE(ctx: Ctx, co: Company, debit: number, credit: number): Promise<JournalEntryEntityServer> {
   const md = new Metadata();
-  const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, ctx.user);
+  const je = await md.GetEntityObject<JournalEntryEntityServer>(JE_ENTITY, ctx.user);
   je.NewRecord();
+  je.CompanyID = co.id;
   je.EffectiveDate = new Date();
-  je.EntryType = 'Manual'; je.Status = 'Pending'; je.Description = `${RUN_TAG} test`;
+  je.EntryTypeID = ctx.manualTypeId;
+  je.Status = 'Pending'; je.Description = `${RUN_TAG} test`;
+  const l1 = await je.CreateLine(ctx.user); l1.GLAccountID = co.arGL; l1.DebitAmount = debit;
+  const l2 = await je.CreateLine(ctx.user); l2.GLAccountID = co.revGL; l2.CreditAmount = credit;
   if (!(await je.Save())) throw new Error(`JE save failed: ${je.LatestResult?.CompleteMessage}`);
   createdJEIds.push(je.ID);
-  await addLine(ctx, je.ID, 1, co.arGL, debit, null);
-  await addLine(ctx, je.ID, 2, co.revGL, null, credit);
   return je;
 }
-async function addLine(ctx: Ctx, jeId: string, lineNo: number, glId: string, debit: number | null, credit: number | null): Promise<void> {
+/** Add a line to an EXISTING unlocked JE (post-save additions are legal until lock). */
+async function addLine(ctx: Ctx, jeId: string, lineNo: number, glId: string, debit: number | null, credit: number | null): Promise<boolean> {
   const md = new Metadata();
   const l = await md.GetEntityObject<mjBizAppsAccountingJournalEntryLineEntity>(JEL_ENTITY, ctx.user);
   l.NewRecord(); l.JournalEntryID = jeId; l.LineNumber = lineNo; l.GLAccountID = glId;
   l.DebitAmount = debit; l.CreditAmount = credit;
-  if (!(await l.Save())) throw new Error(`line save failed: ${l.LatestResult?.CompleteMessage}`);
+  return l.Save();
 }
 async function setStatus(ctx: Ctx, jeId: string, status: JEStatus): Promise<boolean> {
   const md = new Metadata();
@@ -182,11 +188,13 @@ async function main(): Promise<void> {
   console.log(`\n══════ Block 1 runtime validation — user=${user.Email} companies=${companyA.id},${companyB.id} tag=${RUN_TAG} ══════\n`);
   const md = new Metadata();
 
-  // ─── INV: balanced-on-lock, overall (trg 50001) ───────────────────────────
+  // ─── INV: balanced-on-lock (trg 50001) ────────────────────────────────────
   await test('INV balanced-on-lock — DB-bypass raw UPDATE to Batched on an unbalanced JE → rejected (50001)', async () => {
     const jeId = randomUUID();
     createdJEIds.push(jeId);
-    await pool.request().query(`INSERT INTO ${SCHEMA}.JournalEntry (ID, EntryNumber, EffectiveDate, EntryType, Status) VALUES ('${jeId}','RAW-${RUN_TAG}-1', GETUTCDATE(), 'Manual','Pending')`);
+    await pool.request().query(
+      `INSERT INTO ${SCHEMA}.JournalEntry (ID, EntryNumber, CompanyID, EffectiveDate, EntryTypeID, Status)
+       VALUES ('${jeId}','RAW-${RUN_TAG}-1', '${companyA.id}', GETUTCDATE(), '${ctx.manualTypeId}','Pending')`);
     await pool.request().query(`INSERT INTO ${SCHEMA}.JournalEntryLine (ID, JournalEntryID, LineNumber, GLAccountID, DebitAmount) VALUES (NEWID(), '${jeId}', 1, '${companyA.arGL}', 100.00)`);
     await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntry SET Status='Batched', BatchID='${ctx.batchId}' WHERE ID='${jeId}'`), 'Sum(Debits)');
   });
@@ -196,32 +204,21 @@ async function main(): Promise<void> {
     assert(await setStatus(ctx, je.ID, 'Batched'), 'balanced JE should lock to Batched');
   });
 
-  // ─── INV: balanced-on-lock PER COMPANY (trg 50019 — AM-4) ─────────────────
-  await test('INV per-company balance — overall-balanced but cross-company-unbalanced JE locks → rejected (50019, AM-4)', async () => {
-    // Dr 100 in company A, Cr 100 in company B: Sum(Dr)=Sum(Cr) overall (passes 50001),
-    // but each company is one-sided — must be rejected by the per-company rule.
-    const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
-    je.NewRecord(); je.EffectiveDate = new Date();
-    je.EntryType = 'Manual'; je.Status = 'Pending'; je.Description = `${RUN_TAG} cross-company unbalanced`;
-    assert(await je.Save(), `JE save failed: ${je.LatestResult?.CompleteMessage}`);
-    createdJEIds.push(je.ID);
-    await addLine(ctx, je.ID, 1, companyA.arGL, 100, null);
-    await addLine(ctx, je.ID, 2, companyB.revGL, null, 100);
-    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntry SET Status='Batched', BatchID='${ctx.batchId}' WHERE ID='${je.ID}'`), 'WITHIN EACH company');
+  // ─── INV: single-company floor (trg 50019 line / 50022 header — plan D3) ──
+  await test('INV single-company — raw INSERT of another company\'s account line → rejected (50019)', async () => {
+    const je = await makeJE(ctx, companyA, 60, 60);
+    await expectThrow(
+      () => pool.request().query(`INSERT INTO ${SCHEMA}.JournalEntryLine (ID, JournalEntryID, LineNumber, GLAccountID, DebitAmount) VALUES (NEWID(), '${je.ID}', 3, '${companyB.arGL}', 10.00)`),
+      'must belong to the parent',
+    );
   });
 
-  await test('INV per-company balance — allowed: a multi-company JE balanced within EACH company locks', async () => {
-    // Two balanced pairs, one per company — balanced overall AND within each company.
-    const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
-    je.NewRecord(); je.EffectiveDate = new Date();
-    je.EntryType = 'Manual'; je.Status = 'Pending'; je.Description = `${RUN_TAG} multi-company balanced`;
-    assert(await je.Save(), `JE save failed: ${je.LatestResult?.CompleteMessage}`);
-    createdJEIds.push(je.ID);
-    await addLine(ctx, je.ID, 1, companyA.arGL, 100, null);
-    await addLine(ctx, je.ID, 2, companyA.revGL, null, 100);
-    await addLine(ctx, je.ID, 3, companyB.arGL, 40, null);
-    await addLine(ctx, je.ID, 4, companyB.revGL, null, 40);
-    assert(await setStatus(ctx, je.ID, 'Batched'), 'per-company-balanced multi-company JE should lock to Batched');
+  await test('INV single-company — raw UPDATE of the header CompanyID under existing lines → rejected (50022)', async () => {
+    const je = await makeJE(ctx, companyA, 65, 65);
+    await expectThrow(
+      () => pool.request().query(`UPDATE ${SCHEMA}.JournalEntry SET CompanyID='${companyB.id}' WHERE ID='${je.ID}'`),
+      'cannot change to a company',
+    );
   });
 
   // ─── INV: JE immutability (trg 50003 delete / 50004 update) ───────────────
@@ -232,14 +229,15 @@ async function main(): Promise<void> {
   });
 
   await test('INV JE immutability — DB-bypass DELETE of a Batched JE → rejected (50003)', async () => {
-    // Use a LINE-LESS JE so the FK (JEL→JE) doesn't pre-empt the trigger; 0 lines balances (0=0).
-    const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
-    je.NewRecord(); je.EffectiveDate = new Date();
-    je.EntryType = 'Manual'; je.Status = 'Pending'; je.Description = `${RUN_TAG} delete-test`;
-    assert(await je.Save(), `je save failed: ${je.LatestResult?.CompleteMessage}`);
-    createdJEIds.push(je.ID);
-    assert(await setStatus(ctx, je.ID, 'Batched'), 'lock failed');
-    await expectThrow(() => pool.request().query(`DELETE FROM ${SCHEMA}.JournalEntry WHERE ID='${je.ID}'`), 'cannot be deleted');
+    // Raw-inserted LINE-LESS JE (0 lines balances 0=0; entity saves require ≥2 lines, raw does not),
+    // so the FK (JEL→JE) doesn't pre-empt the delete trigger.
+    const jeId = randomUUID();
+    createdJEIds.push(jeId);
+    await pool.request().query(
+      `INSERT INTO ${SCHEMA}.JournalEntry (ID, EntryNumber, CompanyID, EffectiveDate, EntryTypeID, Status)
+       VALUES ('${jeId}','RAW-${RUN_TAG}-2', '${companyA.id}', GETUTCDATE(), '${ctx.manualTypeId}','Pending')`);
+    await pool.request().query(`UPDATE ${SCHEMA}.JournalEntry SET Status='Batched', BatchID='${ctx.batchId}' WHERE ID='${jeId}'`);
+    await expectThrow(() => pool.request().query(`DELETE FROM ${SCHEMA}.JournalEntry WHERE ID='${jeId}'`), 'cannot be deleted');
   });
 
   await test('INV JE immutability — allowed: GL-roundtrip fields update on a Batched JE', async () => {
@@ -255,19 +253,30 @@ async function main(): Promise<void> {
     await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryLine SET DebitAmount=999 WHERE JournalEntryID='${je.ID}' AND DebitAmount IS NOT NULL`), 'locked');
   });
 
-  // ─── W6 — reversal ────────────────────────────────────────────────────────
-  await test('W6 generateReversal — new Reversal JE with Dr/Cr swapped + back-references', async () => {
-    const orig = await makeJE(ctx, companyA, 100, 100) as JournalEntryEntityServer;
-    const reversal = await orig.generateReversal('block1 test reversal', user);
+  // ─── INV: reversal typing floor (trg 50012) ───────────────────────────────
+  await test('INV reversal typing — raw UPDATE setting ReversesJournalEntryID on a non-Reversal JE → rejected (50012)', async () => {
+    const orig = await makeJE(ctx, companyA, 45, 45);
+    const impostor = await makeJE(ctx, companyA, 45, 45); // typed Manual, not Reversal
+    await expectThrow(
+      () => pool.request().query(`UPDATE ${SCHEMA}.JournalEntry SET ReversesJournalEntryID='${orig.ID}' WHERE ID='${impostor.ID}'`),
+      'must be typed with JournalEntryType',
+    );
+  });
+
+  // ─── W6 — reversal through the entity (typed, swapped, back-referenced) ───
+  await test('W6 GenerateReversal — new Reversal-typed JE with Dr/Cr swapped + back-references', async () => {
+    const orig = await makeJE(ctx, companyA, 100, 100);
+    const reversal = await orig.GenerateReversal('block1 test reversal', user);
     createdJEIds.push(reversal.ID);
-    assert(reversal.EntryType === 'Reversal', `reversal EntryType=${reversal.EntryType}`);
+    const reversalTypeId = await RequireJournalEntryTypeID('Reversal', user, Metadata.Provider);
+    assert(reversal.EntryTypeID?.toLowerCase() === reversalTypeId.toLowerCase(), `reversal EntryTypeID=${reversal.EntryTypeID} (expected the Reversal type)`);
     assert(reversal.ReversesJournalEntryID === orig.ID, 'reversal must reference the original');
     assert(reversal.Status === 'Pending', `reversal Status=${reversal.Status}`);
     // original back-reference
     const reread = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
     await reread.Load(orig.ID);
     assert(reread.ReversedByJournalEntryID === reversal.ID, 'original must back-reference the reversal');
-    // lines swapped: original line 1 was Dr AR 100 → reversal line 1 should be Cr AR 100
+    // lines swapped: original Dr AR 100 → reversal Cr AR 100
     const rv = new RunView();
     const lr = await rv.RunView<{ LineNumber: number; GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null }>(
       { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID='${reversal.ID}'`, OrderBy: 'LineNumber ASC', Fields: ['LineNumber', 'GLAccountID', 'DebitAmount', 'CreditAmount'], ResultType: 'simple' }, user);
@@ -275,49 +284,38 @@ async function main(): Promise<void> {
     assert(!!arLine && arLine.CreditAmount === 100 && (arLine.DebitAmount ?? null) === null, `AR line should be swapped to a 100 credit, got Dr=${arLine?.DebitAmount} Cr=${arLine?.CreditAmount}`);
   });
 
-  // ─── F1 — validateJournalEntry ────────────────────────────────────────────
-  await test('F1 validateJournalEntry — balanced/active JE is valid', async () => {
-    const je = await makeJE(ctx, companyA, 100, 100);
-    const r = await validateJournalEntry(je.ID, user);
-    assert(r.valid, `expected valid, got errors: ${r.errors.join('; ')}`);
-  });
-
-  await test('F1 validateJournalEntry — unbalanced JE is invalid (balance error)', async () => {
-    const je = await makeJE(ctx, companyA, 100, 100);
-    await addLine(ctx, je.ID, 3, companyA.revGL, null, 25); // tip it out of balance (extra credit)
-    const r = await validateJournalEntry(je.ID, user);
-    assert(!r.valid && r.errors.some(e => e.includes('unbalanced')), `expected unbalanced invalid, got: valid=${r.valid} errors=${r.errors.join('; ')}`);
+  // ─── ENTITY validation (double-entry, encapsulated Save) ──────────────────
+  await test('ENTITY validation — a balanced encapsulated JE saves; tipping it out of balance then locking is refused', async () => {
+    const je = await makeJE(ctx, companyA, 100, 100); // saved balanced — the positive case
+    const tipped = await addLine(ctx, je.ID, 3, companyA.revGL, null, 25); // extra credit, legal while Pending
+    assert(tipped, 'adding a line to a Pending JE should be allowed');
+    assert(!(await setStatus(ctx, je.ID, 'Batched')), 'an unbalanced JE must not lock to Batched (50001 floor)');
   });
 
   // ─── Teardown (disable accounting triggers to clean locked rows) ──────────
   const exec = async (q: string) => { try { await ctx.teardownPool.request().query(q); } catch (e) { console.log(`      teardown warn: ${(e instanceof Error ? e.message : String(e)).split('\n')[0]}`); } };
-  // JEs are global (no CompanyID) → sweep by the tracked ID list. The invariant triggers must
-  // NEVER be left disabled, so re-enable every toggled table in a finally.
-  const jeIdList = createdJEIds.map(id => `'${id}'`).join(',');
-  const toggledTables = ['JournalEntryLine', 'JournalEntry'];
-  if (jeIdList.length > 0) {
-    try {
-      for (const t of toggledTables) await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
-      await exec(`DELETE FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID IN (${jeIdList})`);
-      await exec(`DELETE FROM ${SCHEMA}.JournalEntry WHERE ID IN (${jeIdList})`);
-    } finally {
-      for (const t of toggledTables) await exec(`ENABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
+  const toggledTables = ['JournalEntryLine', 'JournalEntry', 'JournalEntryBatch'];
+  try {
+    for (const t of toggledTables) await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
+    for (const co of [companyA, companyB]) {
+      await exec(`DELETE l FROM ${SCHEMA}.JournalEntryLine l JOIN ${SCHEMA}.JournalEntry j ON j.ID=l.JournalEntryID WHERE j.CompanyID='${co.id}'`);
+      await exec(`DELETE FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${co.id}'`);
+      await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatch WHERE CompanyID='${co.id}'`);
     }
+  } finally {
+    for (const t of toggledTables) await exec(`ENABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
   }
-  await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${ctx.batchId}'`);
   for (const co of [companyA, companyB]) {
+    await exec(`DELETE FROM ${SCHEMA}.JournalEntrySequence WHERE CompanyID='${co.id}'`); // per-company numbering rows (BA-D31)
     await exec(`DELETE FROM ${SCHEMA}.AccountingCompanyProfile WHERE ID='${co.id}'`);
     await exec(`DELETE FROM ${SCHEMA}.GLAccount WHERE CompanyID='${co.id}'`);
     await exec(`DELETE FROM __mj.Company WHERE ID='${co.id}'`);
   }
-  const leftover = (await pool.request().query(`SELECT COUNT(*) n FROM __mj.Company WHERE ID IN ('${companyA.id}','${companyB.id}')`)).recordset[0].n;
-  if (leftover > 0) {
-    console.log(`  (teardown note: ${leftover} test company row(s) persist — investigate, the db_owner teardown pool should have cleaned them.)`);
-  }
 
-  const failed = outcomes.filter(o => !o.Passed);
-  // NEVER `await pool.close()` before exit — the MJ provider pool can hang on close. Non-blocking close + force-exit.
-  finishAndExit(`\n────── Block 1 runtime: ${outcomes.length - failed.length}/${outcomes.length} passed ──────`, failed.length > 0 ? 1 : 0, pool, ctx.teardownPool);
+  const passed = outcomes.filter(o => o.Passed).length;
+  const summary = `Block 1 runtime: ${passed}/${outcomes.length} passed`;
+  console.log(`\n────── ${summary} ──────`);
+  finishAndExit(summary, passed === outcomes.length ? 0 : 1, ctx.pool, ctx.teardownPool);
 }
 
 void main();

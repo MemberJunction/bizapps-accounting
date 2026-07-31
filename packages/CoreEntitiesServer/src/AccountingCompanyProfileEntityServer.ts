@@ -57,39 +57,30 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
       return false;
     }
 
-    if (isNewRecord) {
-      await this.initializeProfile();
-    }
+    // NO auto-seed on create (Marcelo ruling 2026-07-30, supersedes the W1 auto-hook): a new
+    // company starts with an EMPTY chart. Rationale: GL accounts identity-lock immediately (L8),
+    // so auto-seeding forced ten locked-identity accounts on every company. The seed remains an
+    // EXPLICIT capability — call `SeedDefaultChartOfAccounts()` (idempotent, code-guarded) from
+    // fixtures, demo seeds, or a future "seed standard chart" affordance. `isNewRecord` is kept
+    // for the TZ default above.
+    void isNewRecord;
 
     return true;
   }
 
-  /**
-   * One-call initialization that used to be `spInitializeAccountingCompanyProfile`.
-   * Each step is idempotent so a failed init can be re-run.
-   * (The former default-account ref wiring was RETIRED 2026-07-23 — the ACP default-account
-   * columns were dropped in the rewritten baseline; the role-based GLAccountRole/GLAccountLink
-   * model replaces them and its seeding lands with the port work.)
-   */
-  private async initializeProfile(): Promise<void> {
-    try {
-      await this.seedDefaultChartOfAccounts();
-    } catch (error: unknown) {
-      LogError(
-        `AccountingCompanyProfileEntityServer.initializeProfile failed for CompanyID=${this.ID}: ${error}`,
-      );
-      throw error;
-    }
-  }
-
-  // ─── Seed COA ─────────────────────────────────────────────────────────
+  // ─── Seed COA (explicit capability — no longer an auto-hook) ───────────
 
   /** Override point: deployments can replace with a custom COA. */
   protected getChartOfAccountsToSeed(): ReadonlyArray<SeededGLAccount> {
     return DEFAULT_CHART_OF_ACCOUNTS;
   }
 
-  private async seedDefaultChartOfAccounts(): Promise<void> {
+  /**
+   * Seed the standard chart into THIS company — explicit, idempotent (existing codes are
+   * skipped), audit-by-construction (every row via BaseEntity.Save). Was the W1 auto-hook until
+   * 2026-07-30; now invoked deliberately by whoever wants the starter chart.
+   */
+  public async SeedDefaultChartOfAccounts(): Promise<void> {
     const companyId = this.ID;
     const currencyCode = this.FunctionalCurrencyCode;
     const seeds = this.getChartOfAccountsToSeed();
