@@ -9,7 +9,7 @@
  * 2026-07-06 rework (engine-meeting rulings): AccountingPeriod is GONE (the ERP owns
  * periods — CH-1), and JE/batch numbering is GLOBAL, not company-scoped (D-SEQ):
  *
- *   R1  GLAccountRole reference data: exactly the 8 seeded roles, in sequence order
+ *   R1  GLAccountRole reference data: exactly the 9 seeded roles, in sequence order
  *        (proves the migrations-only deploy carried the metadata-sync seed).
  *   W1  AccountingCompanyProfile first-save seeding (AccountingCompanyProfileEntityServer):
  *        1. create + Save() succeeds
@@ -79,6 +79,7 @@ const EXPECTED_ROLES: ReadonlyArray<{ sequence: number; name: string }> = [
   { sequence: 60, name: 'Sales Discounts' },
   { sequence: 70, name: 'Sales Returns and Allowances' },
   { sequence: 80, name: 'Deferred Revenue' },
+  { sequence: 90, name: 'Processing Fee' },
 ];
 
 const RUN_TAG = `BLOCK0-${Date.now()}`;
@@ -171,7 +172,7 @@ async function main(): Promise<void> {
   const createdBatchIds: string[] = [];
 
   // ─── R1 — GL account role reference data (metadata-sync seed) ─────────────
-  await test('R1 GLAccountRole reference data — exactly the 8 seeded roles, in sequence', async () => {
+  await test('R1 GLAccountRole reference data — exactly the 9 seeded roles, in sequence', async () => {
     const rv = new RunView();
     const res = await rv.RunView<{ Name: string; Sequence: number; Status: string }>(
       { EntityName: ROLE_ENTITY, Fields: ['Name', 'Sequence', 'Status'], OrderBy: 'Sequence ASC', ResultType: 'simple' }, user);
