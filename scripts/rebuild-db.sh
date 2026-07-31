@@ -79,7 +79,25 @@ for f in "$COMMON_REPO"/migrations/*.sql; do
         | $SQLCMD -d "${DB_DATABASE}" -i /dev/stdin
 done
 
-say "4/4  bizapps-accounting"
+# TRIM THE GENERATED HALF BEFORE APPLYING. Once CodeGen output lives in the baseline, a rebuild
+# produces a database whose entity metadata is ALREADY current — so the next CodeGen run has nothing
+# to do and emits only a delta, which append-codegen.sh then refuses (rightly) as a partial. Worse,
+# stale generated SQL referencing a table the hand-authored half no longer creates fails the migrate
+# outright. The cycle is only self-consistent if the rebuild applies the hand-authored DDL alone and
+# CodeGen regenerates the rest from scratch. This is what makes "edit the baseline in place" safe.
+say "4/4  bizapps-accounting (hand-authored DDL only)"
+MARKER='CODEGEN OUTPUT — GENERATED CODE BELOW THIS LINE'
+ACCT_MIGRATION=$(grep -rl "$MARKER" "$ROOT/migrations"/*.sql | head -1)
+if [[ -n "$ACCT_MIGRATION" ]]; then
+    MARKER_LINE=$(grep -n "$MARKER" "$ACCT_MIGRATION" | head -1 | cut -d: -f1)
+    BANNER_END=$(awk -v s="$MARKER_LINE" 'NR>=s && /^-- =+$/ { last=NR } NR>s && !/^--/ && NF { exit } END { print last }' "$ACCT_MIGRATION")
+    GENERATED_LINES=$(( $(wc -l < "$ACCT_MIGRATION") - BANNER_END ))
+    if (( GENERATED_LINES > 0 )); then
+        printf '  trimming %s lines of generated output (CodeGen will regenerate them)\n' "$GENERATED_LINES"
+        head -n "$BANNER_END" "$ACCT_MIGRATION" > "$ACCT_MIGRATION.tmp"
+        mv "$ACCT_MIGRATION.tmp" "$ACCT_MIGRATION"
+    fi
+fi
 # --schema is REQUIRED, not optional. Without it `mj migrate` uses the CORE schema's flyway history,
 # which already carries a SQL_BASELINE from step 2 — so flyway skips this app's `B` baseline entirely
 # and reports "0 applied" while creating nothing.

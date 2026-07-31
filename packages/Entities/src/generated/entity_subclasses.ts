@@ -177,6 +177,96 @@ export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
 export type mjBizAppsAccountingAccountingCompanyProfileEntityType = z.infer<typeof mjBizAppsAccountingAccountingCompanyProfileSchema>;
 
 /**
+ * zod schema definition for the entity MJ_BizApps_Accounting: Company Tax Nexus
+ */
+export const mjBizAppsAccountingCompanyTaxNexusSchema = z.object({
+    ID: z.string().describe(`
+        * * Field Name: ID
+        * * Display Name: ID
+        * * SQL Data Type: uniqueidentifier
+        * * Default Value: newsequentialid()`),
+    CompanyID: z.string().describe(`
+        * * Field Name: CompanyID
+        * * Display Name: Company ID
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
+        * * Description: The legal entity with the obligation.`),
+    TaxJurisdictionID: z.string().describe(`
+        * * Field Name: TaxJurisdictionID
+        * * Display Name: Tax Jurisdiction ID
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Tax Jurisdictions (vwTaxJurisdictions.ID)
+        * * Description: The jurisdiction it must collect for.`),
+    NexusType: z.union([z.literal('Economic'), z.literal('Marketplace'), z.literal('Physical'), z.literal('Voluntary')]).describe(`
+        * * Field Name: NexusType
+        * * Display Name: Nexus Type
+        * * SQL Data Type: nvarchar(20)
+        * * Default Value: Economic
+    * * Value List Type: List
+    * * Possible Values 
+    *   * Economic
+    *   * Marketplace
+    *   * Physical
+    *   * Voluntary
+        * * Description: WHY the obligation exists: Economic (crossed a revenue or transaction threshold), Physical (people, property or inventory in the state), Marketplace (a facilitator law attributes it) or Voluntary (registered without being required).`),
+    RegistrationNumber: z.string().nullable().describe(`
+        * * Field Name: RegistrationNumber
+        * * Display Name: Registration Number
+        * * SQL Data Type: nvarchar(100)
+        * * Description: The permit or registration number issued by the jurisdiction.`),
+    RegisteredFrom: z.date().describe(`
+        * * Field Name: RegisteredFrom
+        * * Display Name: Registered From
+        * * SQL Data Type: date
+        * * Description: When the registration took effect.`),
+    RegisteredTo: z.date().nullable().describe(`
+        * * Field Name: RegisteredTo
+        * * Display Name: Registered To
+        * * SQL Data Type: date
+        * * Description: When the REGISTRATION ended - not when the activity stopped. Registration is a one-way door: you must keep filing, including zero returns, until the account is formally closed, and a state will not close one with open periods.`),
+    ObligationEndsAt: z.date().nullable().describe(`
+        * * Field Name: ObligationEndsAt
+        * * Display Name: Obligation Ends At
+        * * SQL Data Type: date
+        * * Description: When the duty to COLLECT ends, which routinely outlasts the activity that created it. California holds a seller through the nexus year plus the whole following calendar year; Colorado, Washington, Wisconsin, Iowa and Michigan through the following calendar year; Texas until twelve consecutive months below the threshold. Separate from RegisteredTo because collapsing the two would end the obligation early.`),
+    Status: z.union([z.literal('Active'), z.literal('Inactive')]).describe(`
+        * * Field Name: Status
+        * * Display Name: Status
+        * * SQL Data Type: nvarchar(10)
+        * * Default Value: Active
+    * * Value List Type: List
+    * * Possible Values 
+    *   * Active
+    *   * Inactive
+        * * Description: Active | Inactive. A closed registration is retained rather than deleted - it is the evidence of what was true during an audited period.`),
+    Comments: z.string().nullable().describe(`
+        * * Field Name: Comments
+        * * Display Name: Comments
+        * * SQL Data Type: nvarchar(MAX)
+        * * Description: Free-text note, typically the nexus study or ruling that established the obligation.`),
+    __mj_CreatedAt: z.date().describe(`
+        * * Field Name: __mj_CreatedAt
+        * * Display Name: Created At
+        * * SQL Data Type: datetimeoffset
+        * * Default Value: getutcdate()`),
+    __mj_UpdatedAt: z.date().describe(`
+        * * Field Name: __mj_UpdatedAt
+        * * Display Name: Updated At
+        * * SQL Data Type: datetimeoffset
+        * * Default Value: getutcdate()`),
+    Company: z.string().describe(`
+        * * Field Name: Company
+        * * Display Name: Company
+        * * SQL Data Type: nvarchar(50)`),
+    TaxJurisdiction: z.string().describe(`
+        * * Field Name: TaxJurisdiction
+        * * Display Name: Tax Jurisdiction
+        * * SQL Data Type: nvarchar(200)`),
+});
+
+export type mjBizAppsAccountingCompanyTaxNexusEntityType = z.infer<typeof mjBizAppsAccountingCompanyTaxNexusSchema>;
+
+/**
  * zod schema definition for the entity MJ_BizApps_Accounting: Currencies
  */
 export const mjBizAppsAccountingCurrencySchema = z.object({
@@ -279,81 +369,6 @@ export const mjBizAppsAccountingCurrencySpotRateSchema = z.object({
 });
 
 export type mjBizAppsAccountingCurrencySpotRateEntityType = z.infer<typeof mjBizAppsAccountingCurrencySpotRateSchema>;
-
-/**
- * zod schema definition for the entity MJ_BizApps_Accounting: Customer Tax Profiles
- */
-export const mjBizAppsAccountingCustomerTaxProfileSchema = z.object({
-    ID: z.string().describe(`
-        * * Field Name: ID
-        * * Display Name: ID
-        * * SQL Data Type: uniqueidentifier
-        * * Default Value: newsequentialid()
-        * * Description: Unique identifier.`),
-    OrganizationID: z.string().describe(`
-        * * Field Name: OrganizationID
-        * * Display Name: Organization ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Common: Organizations (vwOrganizations.ID)
-        * * Description: Customer Organization (FK to __mj_BizAppsCommon.Organization).`),
-    TaxJurisdictionID: z.string().nullable().describe(`
-        * * Field Name: TaxJurisdictionID
-        * * Display Name: Tax Jurisdiction ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Tax Jurisdictions (vwTaxJurisdictions.ID)
-        * * Description: Jurisdiction where the customer is taxable (primary).`),
-    TaxIDNumber: z.string().nullable().describe(`
-        * * Field Name: TaxIDNumber
-        * * Display Name: Tax ID Number
-        * * SQL Data Type: nvarchar(100)
-        * * Description: Customer's tax registration number (VAT, EIN, ABN, etc.).`),
-    IsExempt: z.boolean().describe(`
-        * * Field Name: IsExempt
-        * * Display Name: Is Exempt
-        * * SQL Data Type: bit
-        * * Default Value: 0
-        * * Description: Whether the customer is currently tax-exempt.`),
-    ExemptionCertificateRef: z.string().nullable().describe(`
-        * * Field Name: ExemptionCertificateRef
-        * * Display Name: Exemption Certificate Ref
-        * * SQL Data Type: nvarchar(200)
-        * * Description: Reference to the exemption certificate (file ref, URL, certificate number). Required when IsExempt=1.`),
-    ExemptionExpiryDate: z.date().nullable().describe(`
-        * * Field Name: ExemptionExpiryDate
-        * * Display Name: Exemption Expiry Date
-        * * SQL Data Type: date
-        * * Description: When the exemption certificate expires.`),
-    EffectiveFrom: z.date().describe(`
-        * * Field Name: EffectiveFrom
-        * * Display Name: Effective From
-        * * SQL Data Type: date
-        * * Description: Earliest date this profile is in effect.`),
-    EffectiveTo: z.date().nullable().describe(`
-        * * Field Name: EffectiveTo
-        * * Display Name: Effective To
-        * * SQL Data Type: date
-        * * Description: Last date this profile is in effect (NULL = open-ended).`),
-    __mj_CreatedAt: z.date().describe(`
-        * * Field Name: __mj_CreatedAt
-        * * Display Name: Created At
-        * * SQL Data Type: datetimeoffset
-        * * Default Value: getutcdate()`),
-    __mj_UpdatedAt: z.date().describe(`
-        * * Field Name: __mj_UpdatedAt
-        * * Display Name: Updated At
-        * * SQL Data Type: datetimeoffset
-        * * Default Value: getutcdate()`),
-    Organization: z.string().describe(`
-        * * Field Name: Organization
-        * * Display Name: Organization
-        * * SQL Data Type: nvarchar(255)`),
-    TaxJurisdiction: z.string().nullable().describe(`
-        * * Field Name: TaxJurisdiction
-        * * Display Name: Tax Jurisdiction
-        * * SQL Data Type: nvarchar(200)`),
-});
-
-export type mjBizAppsAccountingCustomerTaxProfileEntityType = z.infer<typeof mjBizAppsAccountingCustomerTaxProfileSchema>;
 
 /**
  * zod schema definition for the entity MJ_BizApps_Accounting: Dimension Values
@@ -1725,7 +1740,7 @@ export const mjBizAppsAccountingTaxRateSchema = z.object({
     Rate: z.number().describe(`
         * * Field Name: Rate
         * * Display Name: Rate
-        * * SQL Data Type: decimal(7, 4)
+        * * SQL Data Type: decimal(9, 6)
         * * Description: Rate as a decimal fraction. 0.0825 = 8.25%.`),
     EffectiveFrom: z.date().describe(`
         * * Field Name: EffectiveFrom
@@ -1737,16 +1752,11 @@ export const mjBizAppsAccountingTaxRateSchema = z.object({
         * * Display Name: Effective To
         * * SQL Data Type: date
         * * Description: Last date this rate is effective (NULL = open-ended).`),
-    Source: z.union([z.literal('Avalara'), z.literal('Manual'), z.literal('TaxJar')]).describe(`
+    Source: z.string().describe(`
         * * Field Name: Source
         * * Display Name: Source
         * * SQL Data Type: nvarchar(50)
         * * Default Value: Manual
-    * * Value List Type: List
-    * * Possible Values 
-    *   * Avalara
-    *   * Manual
-    *   * TaxJar
         * * Description: Source of the rate: Avalara | TaxJar | Manual.`),
     __mj_CreatedAt: z.date().describe(`
         * * Field Name: __mj_CreatedAt
@@ -2164,6 +2174,220 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
 
 
 /**
+ * MJ_BizApps_Accounting: Company Tax Nexus - strongly typed entity sub-class
+ * * Schema: __mj_BizAppsAccounting
+ * * Base Table: CompanyTaxNexus
+ * * Base View: vwCompanyTaxNexus
+ * * @description Where THIS company must collect tax. Nexus is a property of our own legal entity's registrations, which is why it lives with Company rather than with the order. The mirror question - whether a BUYER is exempt - is CustomerTaxExemption in bizapps-orders. Both must hold to charge: the seller has nexus AND the buyer is not exempt AND the product is taxable there.
+ * * Primary Key: ID
+ * @extends {BaseEntity}
+ * @class
+ * @public
+ */
+@RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Company Tax Nexus')
+export class mjBizAppsAccountingCompanyTaxNexusEntity extends BaseEntity<mjBizAppsAccountingCompanyTaxNexusEntityType> {
+    /**
+    * Loads the MJ_BizApps_Accounting: Company Tax Nexus record from the database
+    * @param ID: string - primary key value to load the MJ_BizApps_Accounting: Company Tax Nexus record.
+    * @param EntityRelationshipsToLoad - (optional) the relationships to load
+    * @returns {Promise<boolean>} - true if successful, false otherwise
+    * @public
+    * @async
+    * @memberof mjBizAppsAccountingCompanyTaxNexusEntity
+    * @method
+    * @override
+    */
+    public async Load(ID: string, EntityRelationshipsToLoad?: string[]) : Promise<boolean> {
+        const compositeKey: CompositeKey = new CompositeKey();
+        compositeKey.KeyValuePairs.push({ FieldName: 'ID', Value: ID });
+        return await super.InnerLoad(compositeKey, EntityRelationshipsToLoad);
+    }
+
+    /**
+    * * Field Name: ID
+    * * Display Name: ID
+    * * SQL Data Type: uniqueidentifier
+    * * Default Value: newsequentialid()
+    */
+    get ID(): string {
+        return this.Get('ID');
+    }
+    set ID(value: string) {
+        this.Set('ID', value);
+    }
+
+    /**
+    * * Field Name: CompanyID
+    * * Display Name: Company ID
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
+    * * Description: The legal entity with the obligation.
+    */
+    get CompanyID(): string {
+        return this.Get('CompanyID');
+    }
+    set CompanyID(value: string) {
+        this.Set('CompanyID', value);
+    }
+
+    /**
+    * * Field Name: TaxJurisdictionID
+    * * Display Name: Tax Jurisdiction ID
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Tax Jurisdictions (vwTaxJurisdictions.ID)
+    * * Description: The jurisdiction it must collect for.
+    */
+    get TaxJurisdictionID(): string {
+        return this.Get('TaxJurisdictionID');
+    }
+    set TaxJurisdictionID(value: string) {
+        this.Set('TaxJurisdictionID', value);
+    }
+
+    /**
+    * * Field Name: NexusType
+    * * Display Name: Nexus Type
+    * * SQL Data Type: nvarchar(20)
+    * * Default Value: Economic
+    * * Value List Type: List
+    * * Possible Values 
+    *   * Economic
+    *   * Marketplace
+    *   * Physical
+    *   * Voluntary
+    * * Description: WHY the obligation exists: Economic (crossed a revenue or transaction threshold), Physical (people, property or inventory in the state), Marketplace (a facilitator law attributes it) or Voluntary (registered without being required).
+    */
+    get NexusType(): 'Economic' | 'Marketplace' | 'Physical' | 'Voluntary' {
+        return this.Get('NexusType');
+    }
+    set NexusType(value: 'Economic' | 'Marketplace' | 'Physical' | 'Voluntary') {
+        this.Set('NexusType', value);
+    }
+
+    /**
+    * * Field Name: RegistrationNumber
+    * * Display Name: Registration Number
+    * * SQL Data Type: nvarchar(100)
+    * * Description: The permit or registration number issued by the jurisdiction.
+    */
+    get RegistrationNumber(): string | null {
+        return this.Get('RegistrationNumber');
+    }
+    set RegistrationNumber(value: string | null) {
+        this.Set('RegistrationNumber', value);
+    }
+
+    /**
+    * * Field Name: RegisteredFrom
+    * * Display Name: Registered From
+    * * SQL Data Type: date
+    * * Description: When the registration took effect.
+    */
+    get RegisteredFrom(): Date {
+        return this.Get('RegisteredFrom');
+    }
+    set RegisteredFrom(value: Date) {
+        this.Set('RegisteredFrom', value);
+    }
+
+    /**
+    * * Field Name: RegisteredTo
+    * * Display Name: Registered To
+    * * SQL Data Type: date
+    * * Description: When the REGISTRATION ended - not when the activity stopped. Registration is a one-way door: you must keep filing, including zero returns, until the account is formally closed, and a state will not close one with open periods.
+    */
+    get RegisteredTo(): Date | null {
+        return this.Get('RegisteredTo');
+    }
+    set RegisteredTo(value: Date | null) {
+        this.Set('RegisteredTo', value);
+    }
+
+    /**
+    * * Field Name: ObligationEndsAt
+    * * Display Name: Obligation Ends At
+    * * SQL Data Type: date
+    * * Description: When the duty to COLLECT ends, which routinely outlasts the activity that created it. California holds a seller through the nexus year plus the whole following calendar year; Colorado, Washington, Wisconsin, Iowa and Michigan through the following calendar year; Texas until twelve consecutive months below the threshold. Separate from RegisteredTo because collapsing the two would end the obligation early.
+    */
+    get ObligationEndsAt(): Date | null {
+        return this.Get('ObligationEndsAt');
+    }
+    set ObligationEndsAt(value: Date | null) {
+        this.Set('ObligationEndsAt', value);
+    }
+
+    /**
+    * * Field Name: Status
+    * * Display Name: Status
+    * * SQL Data Type: nvarchar(10)
+    * * Default Value: Active
+    * * Value List Type: List
+    * * Possible Values 
+    *   * Active
+    *   * Inactive
+    * * Description: Active | Inactive. A closed registration is retained rather than deleted - it is the evidence of what was true during an audited period.
+    */
+    get Status(): 'Active' | 'Inactive' {
+        return this.Get('Status');
+    }
+    set Status(value: 'Active' | 'Inactive') {
+        this.Set('Status', value);
+    }
+
+    /**
+    * * Field Name: Comments
+    * * Display Name: Comments
+    * * SQL Data Type: nvarchar(MAX)
+    * * Description: Free-text note, typically the nexus study or ruling that established the obligation.
+    */
+    get Comments(): string | null {
+        return this.Get('Comments');
+    }
+    set Comments(value: string | null) {
+        this.Set('Comments', value);
+    }
+
+    /**
+    * * Field Name: __mj_CreatedAt
+    * * Display Name: Created At
+    * * SQL Data Type: datetimeoffset
+    * * Default Value: getutcdate()
+    */
+    get __mj_CreatedAt(): Date {
+        return this.Get('__mj_CreatedAt');
+    }
+
+    /**
+    * * Field Name: __mj_UpdatedAt
+    * * Display Name: Updated At
+    * * SQL Data Type: datetimeoffset
+    * * Default Value: getutcdate()
+    */
+    get __mj_UpdatedAt(): Date {
+        return this.Get('__mj_UpdatedAt');
+    }
+
+    /**
+    * * Field Name: Company
+    * * Display Name: Company
+    * * SQL Data Type: nvarchar(50)
+    */
+    get Company(): string {
+        return this.Get('Company');
+    }
+
+    /**
+    * * Field Name: TaxJurisdiction
+    * * Display Name: Tax Jurisdiction
+    * * SQL Data Type: nvarchar(200)
+    */
+    get TaxJurisdiction(): string {
+        return this.Get('TaxJurisdiction');
+    }
+}
+
+
+/**
  * MJ_BizApps_Accounting: Currencies - strongly typed entity sub-class
  * * Schema: __mj_BizAppsAccounting
  * * Base Table: Currency
@@ -2445,197 +2669,6 @@ export class mjBizAppsAccountingCurrencySpotRateEntity extends BaseEntity<mjBizA
     */
     get ToCurrencyCode_Virtual(): string {
         return this.Get('ToCurrencyCode_Virtual');
-    }
-}
-
-
-/**
- * MJ_BizApps_Accounting: Customer Tax Profiles - strongly typed entity sub-class
- * * Schema: __mj_BizAppsAccounting
- * * Base Table: CustomerTaxProfile
- * * Base View: vwCustomerTaxProfiles
- * * @description Taxability profile for an Organization (customer). Captures their tax ID, where they are taxable, and any exemption certificate.
- * * Primary Key: ID
- * @extends {BaseEntity}
- * @class
- * @public
- */
-@RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Customer Tax Profiles')
-export class mjBizAppsAccountingCustomerTaxProfileEntity extends BaseEntity<mjBizAppsAccountingCustomerTaxProfileEntityType> {
-    /**
-    * Loads the MJ_BizApps_Accounting: Customer Tax Profiles record from the database
-    * @param ID: string - primary key value to load the MJ_BizApps_Accounting: Customer Tax Profiles record.
-    * @param EntityRelationshipsToLoad - (optional) the relationships to load
-    * @returns {Promise<boolean>} - true if successful, false otherwise
-    * @public
-    * @async
-    * @memberof mjBizAppsAccountingCustomerTaxProfileEntity
-    * @method
-    * @override
-    */
-    public async Load(ID: string, EntityRelationshipsToLoad?: string[]) : Promise<boolean> {
-        const compositeKey: CompositeKey = new CompositeKey();
-        compositeKey.KeyValuePairs.push({ FieldName: 'ID', Value: ID });
-        return await super.InnerLoad(compositeKey, EntityRelationshipsToLoad);
-    }
-
-    /**
-    * * Field Name: ID
-    * * Display Name: ID
-    * * SQL Data Type: uniqueidentifier
-    * * Default Value: newsequentialid()
-    * * Description: Unique identifier.
-    */
-    get ID(): string {
-        return this.Get('ID');
-    }
-    set ID(value: string) {
-        this.Set('ID', value);
-    }
-
-    /**
-    * * Field Name: OrganizationID
-    * * Display Name: Organization ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Common: Organizations (vwOrganizations.ID)
-    * * Description: Customer Organization (FK to __mj_BizAppsCommon.Organization).
-    */
-    get OrganizationID(): string {
-        return this.Get('OrganizationID');
-    }
-    set OrganizationID(value: string) {
-        this.Set('OrganizationID', value);
-    }
-
-    /**
-    * * Field Name: TaxJurisdictionID
-    * * Display Name: Tax Jurisdiction ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Tax Jurisdictions (vwTaxJurisdictions.ID)
-    * * Description: Jurisdiction where the customer is taxable (primary).
-    */
-    get TaxJurisdictionID(): string | null {
-        return this.Get('TaxJurisdictionID');
-    }
-    set TaxJurisdictionID(value: string | null) {
-        this.Set('TaxJurisdictionID', value);
-    }
-
-    /**
-    * * Field Name: TaxIDNumber
-    * * Display Name: Tax ID Number
-    * * SQL Data Type: nvarchar(100)
-    * * Description: Customer's tax registration number (VAT, EIN, ABN, etc.).
-    */
-    get TaxIDNumber(): string | null {
-        return this.Get('TaxIDNumber');
-    }
-    set TaxIDNumber(value: string | null) {
-        this.Set('TaxIDNumber', value);
-    }
-
-    /**
-    * * Field Name: IsExempt
-    * * Display Name: Is Exempt
-    * * SQL Data Type: bit
-    * * Default Value: 0
-    * * Description: Whether the customer is currently tax-exempt.
-    */
-    get IsExempt(): boolean {
-        return this.Get('IsExempt');
-    }
-    set IsExempt(value: boolean) {
-        this.Set('IsExempt', value);
-    }
-
-    /**
-    * * Field Name: ExemptionCertificateRef
-    * * Display Name: Exemption Certificate Ref
-    * * SQL Data Type: nvarchar(200)
-    * * Description: Reference to the exemption certificate (file ref, URL, certificate number). Required when IsExempt=1.
-    */
-    get ExemptionCertificateRef(): string | null {
-        return this.Get('ExemptionCertificateRef');
-    }
-    set ExemptionCertificateRef(value: string | null) {
-        this.Set('ExemptionCertificateRef', value);
-    }
-
-    /**
-    * * Field Name: ExemptionExpiryDate
-    * * Display Name: Exemption Expiry Date
-    * * SQL Data Type: date
-    * * Description: When the exemption certificate expires.
-    */
-    get ExemptionExpiryDate(): Date | null {
-        return this.Get('ExemptionExpiryDate');
-    }
-    set ExemptionExpiryDate(value: Date | null) {
-        this.Set('ExemptionExpiryDate', value);
-    }
-
-    /**
-    * * Field Name: EffectiveFrom
-    * * Display Name: Effective From
-    * * SQL Data Type: date
-    * * Description: Earliest date this profile is in effect.
-    */
-    get EffectiveFrom(): Date {
-        return this.Get('EffectiveFrom');
-    }
-    set EffectiveFrom(value: Date) {
-        this.Set('EffectiveFrom', value);
-    }
-
-    /**
-    * * Field Name: EffectiveTo
-    * * Display Name: Effective To
-    * * SQL Data Type: date
-    * * Description: Last date this profile is in effect (NULL = open-ended).
-    */
-    get EffectiveTo(): Date | null {
-        return this.Get('EffectiveTo');
-    }
-    set EffectiveTo(value: Date | null) {
-        this.Set('EffectiveTo', value);
-    }
-
-    /**
-    * * Field Name: __mj_CreatedAt
-    * * Display Name: Created At
-    * * SQL Data Type: datetimeoffset
-    * * Default Value: getutcdate()
-    */
-    get __mj_CreatedAt(): Date {
-        return this.Get('__mj_CreatedAt');
-    }
-
-    /**
-    * * Field Name: __mj_UpdatedAt
-    * * Display Name: Updated At
-    * * SQL Data Type: datetimeoffset
-    * * Default Value: getutcdate()
-    */
-    get __mj_UpdatedAt(): Date {
-        return this.Get('__mj_UpdatedAt');
-    }
-
-    /**
-    * * Field Name: Organization
-    * * Display Name: Organization
-    * * SQL Data Type: nvarchar(255)
-    */
-    get Organization(): string {
-        return this.Get('Organization');
-    }
-
-    /**
-    * * Field Name: TaxJurisdiction
-    * * Display Name: Tax Jurisdiction
-    * * SQL Data Type: nvarchar(200)
-    */
-    get TaxJurisdiction(): string | null {
-        return this.Get('TaxJurisdiction');
     }
 }
 
@@ -6035,7 +6068,7 @@ export class mjBizAppsAccountingTaxRateEntity extends BaseEntity<mjBizAppsAccoun
     /**
     * * Field Name: Rate
     * * Display Name: Rate
-    * * SQL Data Type: decimal(7, 4)
+    * * SQL Data Type: decimal(9, 6)
     * * Description: Rate as a decimal fraction. 0.0825 = 8.25%.
     */
     get Rate(): number {
@@ -6076,17 +6109,12 @@ export class mjBizAppsAccountingTaxRateEntity extends BaseEntity<mjBizAppsAccoun
     * * Display Name: Source
     * * SQL Data Type: nvarchar(50)
     * * Default Value: Manual
-    * * Value List Type: List
-    * * Possible Values 
-    *   * Avalara
-    *   * Manual
-    *   * TaxJar
     * * Description: Source of the rate: Avalara | TaxJar | Manual.
     */
-    get Source(): 'Avalara' | 'Manual' | 'TaxJar' {
+    get Source(): string {
         return this.Get('Source');
     }
-    set Source(value: 'Avalara' | 'Manual' | 'TaxJar') {
+    set Source(value: string) {
         this.Set('Source', value);
     }
 

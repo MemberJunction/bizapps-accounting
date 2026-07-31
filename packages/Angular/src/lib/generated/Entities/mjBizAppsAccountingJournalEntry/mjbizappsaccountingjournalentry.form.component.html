@@ -177,31 +177,6 @@
          RELATED ENTITY PANELS
          ======================================== -->
 
-    <!-- Journal Entries (Reverses Journal Entry ID) Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingJournalEntriesReversesJournalEntryID"
-        SectionName="Journal Entries (Reverses Journal Entry ID)"
-        Icon="fa fa-table"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingJournalEntriesReversesJournalEntryID')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entries','ReversesJournalEntryID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entries')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntriesReversesJournalEntryID')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntriesReversesJournalEntryID', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
     <!-- Journal Entries (Reversed By Journal Entry ID) Section -->
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingJournalEntriesReversedByJournalEntryID"
@@ -221,6 +196,31 @@
                 [ShowToolbar]="false"
                 (Navigate)="OnFormNavigate($event)"
                 (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntriesReversedByJournalEntryID', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- Journal Entries (Reverses Journal Entry ID) Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingJournalEntriesReversesJournalEntryID"
+        SectionName="Journal Entries (Reverses Journal Entry ID)"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingJournalEntriesReversesJournalEntryID')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entries','ReversesJournalEntryID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entries')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntriesReversesJournalEntryID')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntriesReversesJournalEntryID', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>
