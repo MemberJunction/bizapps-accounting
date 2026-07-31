@@ -44,7 +44,13 @@ the ERP **by account number, split per company** (AM-4). Periods/close live in t
   so `__mj.RecordChange` records it — no bare T-SQL INSERT, even for seeds.
 - **Triggers enforce invariants; BaseEntity orchestrates (AD-2):** triggers can't be bypassed
   even by elevated DB privilege; sprocs can.
-- **Soft-refs / `JournalEntryLink` lineage (AD-15):** plain UUIDs to downstream apps, no hard FKs.
+- **Cross-app references point UP the dependency graph only (supersedes AD-15 — issue #22):**
+  references into installed dependency schemas (`__mj`, `__mj_BizAppsCommon`) are REAL FK
+  constraints (apps install in dependency order, so targets always exist). Accounting holds
+  **no references to its own dependents, hard or soft** — the old AD-15 "soft UUID to
+  downstream apps" pattern (and the retired `JournalEntryLink` table) is gone. Downstream
+  lineage is the polymorphic D25 origin pair: `LinkedEntityID` (hard FK to `__mj.Entity`) +
+  `LinkedRecordID` (soft by nature — the record lives in a schema this repo can't know).
 - **MULTI-COMPANY JEs (CH-2, supersedes AD-4's single-company rule):** a JE has NO header
   CompanyID — each line's company derives from its `GLAccount.CompanyID`, and the entry must
   balance overall AND within each company (AM-4, triggers 50019/50022). `IntercompanyFlowID`

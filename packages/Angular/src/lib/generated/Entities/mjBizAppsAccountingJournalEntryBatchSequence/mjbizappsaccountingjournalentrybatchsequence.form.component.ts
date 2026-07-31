@@ -15,8 +15,7 @@ export class mjBizAppsAccountingJournalEntryBatchSequenceFormComponent extends B
     override async ngOnInit() {
         await super.ngOnInit();
         this.initSections([
-            { sectionKey: 'batchConfiguration', sectionName: 'Batch Configuration', isExpanded: true },
-            { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false }
+            { sectionKey: 'details', sectionName: 'Details', isExpanded: true }
         ]);
     }
 }

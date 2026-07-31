@@ -19,10 +19,10 @@ import { execFileSync, execSync } from 'node:child_process';
 import path from 'node:path';
 import type { CreateJournalEntryOutput, JournalEntryDraft } from '@mj-biz-apps/accounting-engine-base';
 
-const API_URL = (process.env.MJ_API_URL ?? 'http://localhost:4070').replace(/\/+$/, '');
+const API_URL = (process.env.MJ_API_URL ?? 'http://localhost:4180').replace(/\/+$/, '');
 const GRAPHQL_URL = `${API_URL}/`;
 const MJDEV_LAUNCHER = '/Users/marcelotorres/MJDev/bin/mjdev';
-const INSTANCE_SLUG = process.env.MJDEV_SLUG ?? 'bizapps-accounting-dev';
+const INSTANCE_SLUG = process.env.MJDEV_SLUG ?? 'accounting-revamp';
 const WORKTREE_ROOT = process.cwd();
 const TSX = path.resolve(WORKTREE_ROOT, 'node_modules', '.bin', 'tsx');
 const FIXTURE = path.resolve(WORKTREE_ROOT, 'packages/dev-apps/bizapps-accounting/test-harnesses/playwright/lib/batching-fixture.ts');
@@ -129,7 +129,7 @@ async function main(): Promise<void> {
     check('transport success', ok.success === true, `${ok.resultCode} ${ok.errorMessage ?? ''}`);
     const out = JSON.parse(ok.outputJSON ?? '{}') as CreateJournalEntryOutput;
     check('Output.Success === true', out.Success === true, JSON.stringify(out.Errors));
-    check('EntryNumber matches JE-{FY}-{seq:000000}', /^JE-\d{4}-\d{6}$/.test(out.EntryNumber ?? ''), `got '${out.EntryNumber}'`);
+    check('EntryNumber matches JE-{CompanyCode}-{FY}-{seq:000000} (BA-D31/D19)', /^JE-[A-Z0-9]+-\d{4}-\d{6}$/.test(out.EntryNumber ?? ''), `got '${out.EntryNumber}'`);
     check('LineCount === 2 (duplicate debit lines merged on the wire path too)', out.LineCount === 2, `got ${out.LineCount}`);
     check('a JournalEntryID came back', !!out.JournalEntryID, JSON.stringify(out));
 
@@ -147,6 +147,16 @@ async function main(): Promise<void> {
     console.log('\n3. Unknown operation key:');
     const unknown = await executeOp(apiKey, 'Accounting.NoSuchOperation', {});
     check('unknown key refused with UNKNOWN_OPERATION', unknown.success === false && unknown.resultCode === 'UNKNOWN_OPERATION', JSON.stringify(unknown));
+
+    // 4. GenerateJournalEntryReversal — the op that replaced JournalEntryResolver (2026-07-29).
+    console.log('\n4. Accounting.GenerateJournalEntryReversal over the wire:');
+    const revRes = await executeOp(apiKey, 'Accounting.GenerateJournalEntryReversal', { JournalEntryID: out.JournalEntryID, Reason: `${fx.runTag} wire reversal` });
+    check('reversal transport success', revRes.success === true, `${revRes.resultCode} ${revRes.errorMessage ?? ''}`);
+    const revOut = JSON.parse(revRes.outputJSON ?? '{}') as { ReversalJournalEntryID?: string; ReversalEntryNumber?: string };
+    check('a reversal JE came back with an EntryNumber', !!revOut.ReversalJournalEntryID && /^JE-/.test(revOut.ReversalEntryNumber ?? ''), JSON.stringify(revOut));
+    // Guard over the wire: double-reversing the same JE is refused with the typed guard message.
+    const dupeRev = await executeOp(apiKey, 'Accounting.GenerateJournalEntryReversal', { JournalEntryID: out.JournalEntryID, Reason: `${fx.runTag} double reversal` });
+    check('double-reverse refused over the wire', dupeRev.success === false && /already been reversed/.test(dupeRev.errorMessage ?? ''), JSON.stringify(dupeRev).slice(0, 250));
   } catch (e) {
     check('wire flow completed without throwing', false, e instanceof Error ? e.message : String(e));
   } finally {

@@ -1,5 +1,5 @@
 import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@angular/core';
-import { RegisterClass } from '@memberjunction/global';
+import { NormalizeUUID, RegisterClass } from '@memberjunction/global';
 import { BaseDashboard } from '@memberjunction/ng-shared';
 import { ResourceData } from '@memberjunction/core-entities';
 import { Metadata, RunView } from '@memberjunction/core';
@@ -373,11 +373,23 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
 
   /** JE headers per batch (for the inferred date range + to fetch each batch's lines on expand). */
   private async loadJEHeaders(): Promise<Map<string, JEHeader[]>> {
-    const res = await this.runView().RunView<{ ID: string; BatchID: string | null; EffectiveDate: string | null }>(
-      { EntityName: JE_ENTITY, ExtraFilter: 'BatchID IS NOT NULL', Fields: ['ID', 'BatchID', 'EffectiveDate'], OrderBy: 'EffectiveDate ASC', ResultType: 'simple' }, this.contextUser());
+    // The batch's own SUMMARY JE also carries BatchID — it is the consolidation OF the sources,
+    // so counting it alongside them doubles every amount (Marcelo 2026-07-30: a 350/350 batch
+    // drilled down as 700/700). Exclude summaries here so the map holds SOURCE JEs only; the
+    // detail then re-derives the same netted posting the summary persists.
+    const [res, batches] = await Promise.all([
+      this.runView().RunView<{ ID: string; BatchID: string | null; EffectiveDate: string | null }>(
+        { EntityName: JE_ENTITY, ExtraFilter: 'BatchID IS NOT NULL', Fields: ['ID', 'BatchID', 'EffectiveDate'], OrderBy: 'EffectiveDate ASC', ResultType: 'simple' }, this.contextUser()),
+      this.runView().RunView<{ ID: string; SummaryJournalEntryID: string | null }>(
+        { EntityName: BATCH_ENTITY, Fields: ['ID', 'SummaryJournalEntryID'], ResultType: 'simple' }, this.contextUser()),
+    ]);
+    const summaryIds = new Set(
+      (batches.Results ?? []).map((b) => b.SummaryJournalEntryID).filter((id): id is string => !!id).map((id) => NormalizeUUID(id)),
+    );
     const byBatch = new Map<string, JEHeader[]>();
     for (const je of res.Results ?? []) {
       if (!je.BatchID) continue;
+      if (summaryIds.has(NormalizeUUID(je.ID))) continue; // the consolidation itself, not a source
       const arr = byBatch.get(je.BatchID) ?? [];
       arr.push({ ID: je.ID, EffectiveDate: je.EffectiveDate ? new Date(je.EffectiveDate) : null });
       byBatch.set(je.BatchID, arr);

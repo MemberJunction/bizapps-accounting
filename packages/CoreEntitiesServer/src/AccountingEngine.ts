@@ -69,7 +69,7 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
       // events in THIS process tier, so reference rows created by another process (a second MJAPI,
       // a script, a fixture) are invisible until refresh. An unknown-reference failure is exactly
       // that staleness signal — refresh once and re-validate before rejecting the caller.
-      const stalenessCodes = new Set(['ACCOUNT_UNKNOWN', 'ACCOUNT_INACTIVE', 'DIMENSION_UNKNOWN', 'DIMENSION_VALUE_UNKNOWN']);
+      const stalenessCodes = new Set(['ENTRY_TYPE_UNKNOWN', 'ENTRY_TYPE_INACTIVE', 'ACCOUNT_UNKNOWN', 'ACCOUNT_INACTIVE', 'DIMENSION_UNKNOWN', 'DIMENSION_VALUE_UNKNOWN']);
       if (outcome.errors.some(e => stalenessCodes.has(e.Code))) {
         await this.Config(true, contextUser, provider);
         outcome = runDraftPipeline(draft, this.Base.CreatePipelineLookups());
@@ -110,7 +110,7 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
       await this.Config(false, contextUser, provider);
       let outcomes = drafts.map(d => runDraftPipeline(d, this.Base.CreatePipelineLookups()));
       // One bounded staleness refresh for the whole set (same rationale as the single op).
-      const stalenessCodes = new Set(['ACCOUNT_UNKNOWN', 'ACCOUNT_INACTIVE', 'DIMENSION_UNKNOWN', 'DIMENSION_VALUE_UNKNOWN']);
+      const stalenessCodes = new Set(['ENTRY_TYPE_UNKNOWN', 'ENTRY_TYPE_INACTIVE', 'ACCOUNT_UNKNOWN', 'ACCOUNT_INACTIVE', 'DIMENSION_UNKNOWN', 'DIMENSION_VALUE_UNKNOWN']);
       if (outcomes.some(o => o.errors.some(e => stalenessCodes.has(e.Code)))) {
         await this.Config(true, contextUser, provider);
         outcomes = drafts.map(d => runDraftPipeline(d, this.Base.CreatePipelineLookups()));
@@ -157,20 +157,28 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
     contextUser: UserInfo,
     provider: IMetadataProvider,
   ): Promise<CreateJournalEntryResult> {
-    // Single-company JE (plan D3): the header company is the one company every line's
-    // GLAccount belongs to (trigger 50019 enforces the match at the DB).
+    // Single-company JE (plan D3): pipeline stage 5 already rejected multi-company drafts with
+    // the typed MULTI_COMPANY_DRAFT code, so a validated draft resolves to exactly one company.
+    // This is a defense-in-depth floor only (trigger 50019 is the un-bypassable DB floor).
     const companies = [...new Set(normalized.map(l => l.CompanyID.toLowerCase()))];
     if (companies.length !== 1 || !companies[0]) {
-      return this.writeFailure(`journal entries are single-company (plan D3); draft lines resolve to ${companies.length} companies`, undefined);
+      return this.writeFailure(`journal entries are single-company (plan D3); draft lines resolve to ${companies.length} companies — the pipeline should have rejected this with MULTI_COMPANY_DRAFT`, undefined);
     }
 
     // Assemble the encapsulated entity: header + Lines + Dimensions in memory, then ONE
     // transactional Save() — the entity owns numbering (W2 hook), validation, and atomicity.
+    // Pipeline stage 1b already proved the code resolves; this guard covers a cache refresh
+    // between validation and write (defensive — never expected on the same call).
+    const entryType = this.Base.JournalEntryTypeByCode(draft.EntryType);
+    if (!entryType) {
+      return this.writeFailure(`journal-entry type '${draft.EntryType}' vanished between validation and write`, undefined);
+    }
+
     const je = await provider.GetEntityObject<JournalEntryEntityServer>(JE_ENTITY, contextUser);
     je.NewRecord();
     je.CompanyID = normalized[0].CompanyID;
     je.EffectiveDate = new Date(draft.EffectiveDate);
-    je.EntryType = draft.EntryType;
+    je.EntryTypeID = entryType.ID;
     je.Status = 'Pending';
     je.Description = draft.Description ?? null;
     // Polymorphic origin pair (plan D25) — both-or-neither (CK_JournalEntry_LinkedPair).

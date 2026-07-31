@@ -1,3 +1,14 @@
+/**
+ * ReadModelsModule — now hosts ONLY the Batch Status dashboard + its Explorer resource shim
+ * (embedded by the Batches category shell).
+ *
+ * Its former siblings — TrialBalanceAR, RevenueTax, IntercompanyFlow — were DELETED 2026-07-29
+ * (Amith PR-27 dead-code sweep): their vw_* read-model backends were removed 2026-07-22 ("overdone
+ * — revisit if ever needed") and the category shells replaced their nav items. When reporting
+ * returns (item f), each report is rebuilt as-needed on RunQuery (four-surface doctrine) — the old
+ * dashboards live in git history as reference only. The module name is kept to avoid churning the
+ * package surface; fold BatchStatus into another module and delete this one whenever convenient.
+ */
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -19,26 +30,12 @@ import {
   MJDialogActionsComponent,
 } from '@memberjunction/ng-ui-components';
 
-import { TrialBalanceARDashboardComponent } from '../TrialBalanceAR/trial-balance-ar-dashboard.component';
-import { TrialBalanceARResourceComponent } from '../TrialBalanceAR/trial-balance-ar-resource.component';
-import { RevenueTaxDashboardComponent } from '../RevenueTax/revenue-tax-dashboard.component';
-import { RevenueTaxResourceComponent } from '../RevenueTax/revenue-tax-resource.component';
 import { BatchStatusDashboardComponent } from '../BatchStatus/batch-status-dashboard.component';
 import { BatchStatusResourceComponent } from '../BatchStatus/batch-status-resource.component';
-import { IntercompanyFlowDashboardComponent } from '../Intercompany/intercompany-flow-dashboard.component';
-import { IntercompanyFlowResourceComponent } from '../Intercompany/intercompany-flow-resource.component';
 
-/**
- * Feature module for the four Stage-2 read-model dashboards (Trial Balance & AR, Revenue & Tax,
- * Batch Status, Intercompany Flow) + their Explorer resource shims. Declared (NgModule) rather
- * than standalone to match the existing accounting-ng package pattern (mirrors BatchDispatchModule).
- */
 @NgModule({
   declarations: [
-    TrialBalanceARDashboardComponent, TrialBalanceARResourceComponent,
-    RevenueTaxDashboardComponent, RevenueTaxResourceComponent,
     BatchStatusDashboardComponent, BatchStatusResourceComponent,
-    IntercompanyFlowDashboardComponent, IntercompanyFlowResourceComponent,
   ],
   imports: [
     CommonModule,
@@ -56,10 +53,7 @@ import { IntercompanyFlowResourceComponent } from '../Intercompany/intercompany-
     MJDialogActionsComponent,
   ],
   exports: [
-    TrialBalanceARDashboardComponent, TrialBalanceARResourceComponent,
-    RevenueTaxDashboardComponent, RevenueTaxResourceComponent,
     BatchStatusDashboardComponent, BatchStatusResourceComponent,
-    IntercompanyFlowDashboardComponent, IntercompanyFlowResourceComponent,
   ],
 })
 export class ReadModelsModule {}

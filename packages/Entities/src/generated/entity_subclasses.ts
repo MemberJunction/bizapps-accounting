@@ -14,7 +14,7 @@ export const loadModule = () => {
 export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
     ID: z.string().describe(`
         * * Field Name: ID
-        * * Display Name: Company ID
+        * * Display Name: ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
         * * Description: Primary key AND foreign key to __mj.Company.ID. Same UUID as the parent Company row — this is the IsA pattern (BA-D9).`),
@@ -110,18 +110,13 @@ export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
         * * Description: Calendar day-of-month (1-31) when the fiscal year begins. Default 1.`),
     ParentAccountingCompanyID: z.string().nullable().describe(`
         * * Field Name: ParentAccountingCompanyID
-        * * Display Name: Parent Accounting Company
+        * * Display Name: Parent Accounting Company ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Accounting Company Profiles (vwAccountingCompanyProfiles.ID)
         * * Description: If set, this profile uses the books (COA, periods, JEs) of the referenced profile (consolidated reporting). Chains are forbidden: the referenced profile must NOT itself have a parent (BA-D9; trigger trg_ACP_NoChains).`),
-    DefaultPaymentTermsTypeID: z.string().nullable().describe(`
-        * * Field Name: DefaultPaymentTermsTypeID
-        * * Display Name: Default Payment Terms
-        * * SQL Data Type: uniqueidentifier
-        * * Description: Default payment terms type for new orders/invoices. FK delegated to BizAppsOrders.PaymentTermsType (soft ref; no FK constraint).`),
     ApprovalCFOUserID: z.string().nullable().describe(`
         * * Field Name: ApprovalCFOUserID
-        * * Display Name: CFO Approval User
+        * * Display Name: Approval CFO User ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
         * * Description: The CFO (an __mj.User — a security identity) who must approve a Journal Entry Batch for this company before it dispatches to the ERP. Resolved by the bizapps-tasks approval gate. Nullable: companies without a configured CFO fall back to the role-based resolver.`),
@@ -143,7 +138,7 @@ export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
         * * Default Value: getutcdate()`),
     Name: z.string().describe(`
         * * Field Name: Name
-        * * Display Name: Company Name
+        * * Display Name: Name
         * * SQL Data Type: nvarchar(50)`),
     Description: z.string().describe(`
         * * Field Name: Description
@@ -163,27 +158,19 @@ export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
         * * SQL Data Type: nvarchar(255)`),
     FunctionalCurrencyCode_Virtual: z.string().describe(`
         * * Field Name: FunctionalCurrencyCode_Virtual
-        * * Display Name: Functional Currency (Display)
+        * * Display Name: Functional Currency Code Virtual
         * * SQL Data Type: nvarchar(80)`),
     ReportingCurrencyCode_Virtual: z.string().nullable().describe(`
         * * Field Name: ReportingCurrencyCode_Virtual
-        * * Display Name: Reporting Currency (Display)
+        * * Display Name: Reporting Currency Code Virtual
         * * SQL Data Type: nvarchar(80)`),
     ApprovalCFOUser: z.string().nullable().describe(`
         * * Field Name: ApprovalCFOUser
-        * * Display Name: CFO Approver Name
+        * * Display Name: Approval CFO User
         * * SQL Data Type: nvarchar(100)`),
-    __mj_Latitude: z.number().nullable().describe(`
-        * * Field Name: __mj_Latitude
-        * * Display Name: Mj Latitude
-        * * SQL Data Type: decimal(10, 6)`),
-    __mj_Longitude: z.number().nullable().describe(`
-        * * Field Name: __mj_Longitude
-        * * Display Name: Mj Longitude
-        * * SQL Data Type: decimal(10, 6)`),
     RootParentAccountingCompanyID: z.string().nullable().describe(`
         * * Field Name: RootParentAccountingCompanyID
-        * * Display Name: Root Parent Company
+        * * Display Name: Root Parent Accounting Company ID
         * * SQL Data Type: uniqueidentifier`),
 });
 
@@ -200,11 +187,11 @@ export const mjBizAppsAccountingCurrencySchema = z.object({
         * * Default Value: newsequentialid()`),
     Code: z.string().describe(`
         * * Field Name: Code
-        * * Display Name: Currency Code
+        * * Display Name: Code
         * * SQL Data Type: char(3)`),
     Name: z.string().describe(`
         * * Field Name: Name
-        * * Display Name: Currency Name
+        * * Display Name: Name
         * * SQL Data Type: nvarchar(80)`),
     Symbol: z.string().nullable().describe(`
         * * Field Name: Symbol
@@ -217,7 +204,7 @@ export const mjBizAppsAccountingCurrencySchema = z.object({
         * * Default Value: 2`),
     IsActive: z.boolean().describe(`
         * * Field Name: IsActive
-        * * Display Name: Active
+        * * Display Name: Is Active
         * * SQL Data Type: bit
         * * Default Value: 1`),
     __mj_CreatedAt: z.date().describe(`
@@ -245,12 +232,12 @@ export const mjBizAppsAccountingCurrencySpotRateSchema = z.object({
         * * Default Value: newsequentialid()`),
     FromCurrencyCode: z.string().describe(`
         * * Field Name: FromCurrencyCode
-        * * Display Name: From Currency
+        * * Display Name: From Currency Code
         * * SQL Data Type: char(3)
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Currencies (vwCurrencies.Code)`),
     ToCurrencyCode: z.string().describe(`
         * * Field Name: ToCurrencyCode
-        * * Display Name: To Currency
+        * * Display Name: To Currency Code
         * * SQL Data Type: char(3)
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Currencies (vwCurrencies.Code)`),
     RateDate: z.date().describe(`
@@ -268,7 +255,7 @@ export const mjBizAppsAccountingCurrencySpotRateSchema = z.object({
         * * Default Value: Manual`),
     IsActive: z.boolean().describe(`
         * * Field Name: IsActive
-        * * Display Name: Active
+        * * Display Name: Is Active
         * * SQL Data Type: bit
         * * Default Value: 1`),
     __mj_CreatedAt: z.date().describe(`
@@ -283,11 +270,11 @@ export const mjBizAppsAccountingCurrencySpotRateSchema = z.object({
         * * Default Value: getutcdate()`),
     FromCurrencyCode_Virtual: z.string().describe(`
         * * Field Name: FromCurrencyCode_Virtual
-        * * Display Name: From Currency (Virtual)
+        * * Display Name: From Currency Code Virtual
         * * SQL Data Type: nvarchar(80)`),
     ToCurrencyCode_Virtual: z.string().describe(`
         * * Field Name: ToCurrencyCode_Virtual
-        * * Display Name: To Currency (Virtual)
+        * * Display Name: To Currency Code Virtual
         * * SQL Data Type: nvarchar(80)`),
 });
 
@@ -305,9 +292,9 @@ export const mjBizAppsAccountingCustomerTaxProfileSchema = z.object({
         * * Description: Unique identifier.`),
     OrganizationID: z.string().describe(`
         * * Field Name: OrganizationID
-        * * Display Name: Organization
+        * * Display Name: Organization ID
         * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ.BizApps.Common: Organizations (vwOrganizationsExtended.ID)
+        * * Related Entity/Foreign Key: MJ_BizApps_Common: Organizations (vwOrganizations.ID)
         * * Description: Customer Organization (FK to __mj_BizAppsCommon.Organization).`),
     TaxJurisdictionID: z.string().nullable().describe(`
         * * Field Name: TaxJurisdictionID
@@ -328,7 +315,7 @@ export const mjBizAppsAccountingCustomerTaxProfileSchema = z.object({
         * * Description: Whether the customer is currently tax-exempt.`),
     ExemptionCertificateRef: z.string().nullable().describe(`
         * * Field Name: ExemptionCertificateRef
-        * * Display Name: Exemption Certificate Reference
+        * * Display Name: Exemption Certificate Ref
         * * SQL Data Type: nvarchar(200)
         * * Description: Reference to the exemption certificate (file ref, URL, certificate number). Required when IsExempt=1.`),
     ExemptionExpiryDate: z.date().nullable().describe(`
@@ -358,7 +345,7 @@ export const mjBizAppsAccountingCustomerTaxProfileSchema = z.object({
         * * Default Value: getutcdate()`),
     Organization: z.string().describe(`
         * * Field Name: Organization
-        * * Display Name: Organization Name
+        * * Display Name: Organization
         * * SQL Data Type: nvarchar(255)`),
     TaxJurisdiction: z.string().nullable().describe(`
         * * Field Name: TaxJurisdiction
@@ -380,7 +367,7 @@ export const mjBizAppsAccountingDimensionValueSchema = z.object({
         * * Description: Unique identifier.`),
     DimensionID: z.string().describe(`
         * * Field Name: DimensionID
-        * * Display Name: Dimension
+        * * Display Name: Dimension ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Dimensions (vwDimensions.ID)
         * * Description: Dimension this value belongs to.`),
@@ -396,7 +383,7 @@ export const mjBizAppsAccountingDimensionValueSchema = z.object({
         * * Description: Display name for this value.`),
     ParentDimensionValueID: z.string().nullable().describe(`
         * * Field Name: ParentDimensionValueID
-        * * Display Name: Parent Value
+        * * Display Name: Parent Dimension Value ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Dimension Values (vwDimensionValues.ID)
         * * Description: Parent value for hierarchical dimensions (e.g. Country contains States).`),
@@ -428,15 +415,15 @@ export const mjBizAppsAccountingDimensionValueSchema = z.object({
         * * Default Value: getutcdate()`),
     Dimension: z.string().describe(`
         * * Field Name: Dimension
-        * * Display Name: Dimension Name
+        * * Display Name: Dimension
         * * SQL Data Type: nvarchar(100)`),
     ParentDimensionValue: z.string().nullable().describe(`
         * * Field Name: ParentDimensionValue
-        * * Display Name: Parent Value Name
+        * * Display Name: Parent Dimension Value
         * * SQL Data Type: nvarchar(200)`),
     RootParentDimensionValueID: z.string().nullable().describe(`
         * * Field Name: RootParentDimensionValueID
-        * * Display Name: Root Parent Value
+        * * Display Name: Root Parent Dimension Value ID
         * * SQL Data Type: uniqueidentifier`),
 });
 
@@ -475,7 +462,7 @@ export const mjBizAppsAccountingDimensionSchema = z.object({
         * * Description: Sort order in dropdowns and report filters. Lower values appear first.`),
     IsActive: z.boolean().describe(`
         * * Field Name: IsActive
-        * * Display Name: Active
+        * * Display Name: Is Active
         * * SQL Data Type: bit
         * * Default Value: 1
         * * Description: Whether this dimension is available for new JE-line tagging. Inactive dimensions stay in historical data but are hidden from selection.`),
@@ -504,13 +491,13 @@ export const mjBizAppsAccountingGLAccountLinkDimensionSchema = z.object({
         * * Default Value: newsequentialid()`),
     GLAccountLinkID: z.string().describe(`
         * * Field Name: GLAccountLinkID
-        * * Display Name: GL Account Link
+        * * Display Name: GL Account Link ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Account Links (vwGLAccountLinks.ID)
         * * Description: The link this dimension requirement belongs to.`),
     DimensionID: z.string().describe(`
         * * Field Name: DimensionID
-        * * Display Name: Dimension
+        * * Display Name: Dimension ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Dimensions (vwDimensions.ID)
         * * Description: The Dimension that applies (validate-only vocabulary — never invented here).`),
@@ -532,7 +519,7 @@ export const mjBizAppsAccountingGLAccountLinkDimensionSchema = z.object({
         * * Default Value: getutcdate()`),
     Dimension: z.string().describe(`
         * * Field Name: Dimension
-        * * Display Name: Dimension Name
+        * * Display Name: Dimension
         * * SQL Data Type: nvarchar(100)`),
 });
 
@@ -549,19 +536,19 @@ export const mjBizAppsAccountingGLAccountLinkSchema = z.object({
         * * Default Value: newsequentialid()`),
     GLAccountID: z.string().describe(`
         * * Field Name: GLAccountID
-        * * Display Name: GL Account
+        * * Display Name: GL Account ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Accounts (vwGLAccounts.ID)
         * * Description: The GL account this link maps its target record to.`),
     GLAccountRoleID: z.string().describe(`
         * * Field Name: GLAccountRoleID
-        * * Display Name: GL Account Role
+        * * Display Name: GL Account Role ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Account Roles (vwGLAccountRoles.ID)
         * * Description: The role the account plays for the target record (Sales, AR, ...). Assumed correction OQ-G: absent from the 07-03 field list but required to tell a record's Revenue link from its AR link.`),
     EntityID: z.string().describe(`
         * * Field Name: EntityID
-        * * Display Name: Entity
+        * * Display Name: Entity ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ: Entities (vwEntities.ID)
         * * Description: Polymorphic reference part 1: the MJ Entity of the target record (references __mj.Entity). Same TaggedItem-style pattern as JournalEntry.LinkedEntityID/LinkedRecordID (plan D25).`),
@@ -608,15 +595,15 @@ export const mjBizAppsAccountingGLAccountLinkSchema = z.object({
         * * Default Value: getutcdate()`),
     GLAccount: z.string().describe(`
         * * Field Name: GLAccount
-        * * Display Name: GL Account Name
+        * * Display Name: GL Account
         * * SQL Data Type: nvarchar(200)`),
     GLAccountRole: z.string().describe(`
         * * Field Name: GLAccountRole
-        * * Display Name: GL Account Role Name
+        * * Display Name: GL Account Role
         * * SQL Data Type: nvarchar(100)`),
     Entity: z.string().describe(`
         * * Field Name: Entity
-        * * Display Name: Entity Name
+        * * Display Name: Entity
         * * SQL Data Type: nvarchar(255)`),
 });
 
@@ -683,18 +670,18 @@ export const mjBizAppsAccountingGLAccountSchema = z.object({
         * * Description: Unique identifier.`),
     CompanyID: z.string().describe(`
         * * Field Name: CompanyID
-        * * Display Name: Company
+        * * Display Name: Company ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
         * * Description: Company that owns this account. UNIQUE (CompanyID, Code) — each company has its own chart.`),
     Code: z.string().describe(`
         * * Field Name: Code
-        * * Display Name: Account Code
+        * * Display Name: Code
         * * SQL Data Type: nvarchar(40)
         * * Description: Account code matching the ERP COA, e.g. '11201' or '40100-SUB'.`),
     Name: z.string().describe(`
         * * Field Name: Name
-        * * Display Name: Account Name
+        * * Display Name: Name
         * * SQL Data Type: nvarchar(200)
         * * Description: Display name for the account.`),
     AccountType: z.union([z.literal('Asset'), z.literal('Equity'), z.literal('Expense'), z.literal('Liability'), z.literal('Revenue')]).describe(`
@@ -711,7 +698,7 @@ export const mjBizAppsAccountingGLAccountSchema = z.object({
         * * Description: High-level type: Asset | Liability | Equity | Revenue | Expense (AM-3 five-value enum; contra/statistical variants may return later as a sub-classification).`),
     ParentGLAccountID: z.string().nullable().describe(`
         * * Field Name: ParentGLAccountID
-        * * Display Name: Parent Account ID
+        * * Display Name: Parent GL Account ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Accounts (vwGLAccounts.ID)
         * * Description: Parent account for hierarchical rollup (NULL = top of chart).`),
@@ -760,19 +747,19 @@ export const mjBizAppsAccountingGLAccountSchema = z.object({
         * * Default Value: getutcdate()`),
     Company: z.string().describe(`
         * * Field Name: Company
-        * * Display Name: Company Name
+        * * Display Name: Company
         * * SQL Data Type: nvarchar(50)`),
     ParentGLAccount: z.string().nullable().describe(`
         * * Field Name: ParentGLAccount
-        * * Display Name: Parent Account
+        * * Display Name: Parent GL Account
         * * SQL Data Type: nvarchar(200)`),
     CurrencyCode_Virtual: z.string().nullable().describe(`
         * * Field Name: CurrencyCode_Virtual
-        * * Display Name: Currency
+        * * Display Name: Currency Code Virtual
         * * SQL Data Type: nvarchar(80)`),
     RootParentGLAccountID: z.string().nullable().describe(`
         * * Field Name: RootParentGLAccountID
-        * * Display Name: Root Parent Account ID
+        * * Display Name: Root Parent GL Account ID
         * * SQL Data Type: uniqueidentifier`),
 });
 
@@ -789,13 +776,13 @@ export const mjBizAppsAccountingIntercompanyAccountMatchDimensionSchema = z.obje
         * * Default Value: newsequentialid()`),
     IntercompanyAccountMatchID: z.string().describe(`
         * * Field Name: IntercompanyAccountMatchID
-        * * Display Name: Intercompany Account Match
+        * * Display Name: Intercompany Account Match ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Intercompany Account Matches (vwIntercompanyAccountMatches.ID)
         * * Description: The account pair this dimension requirement belongs to.`),
     Side: z.union([z.literal('DueFrom'), z.literal('DueTo')]).describe(`
         * * Field Name: Side
-        * * Display Name: Transaction Side
+        * * Display Name: Side
         * * SQL Data Type: nvarchar(10)
     * * Value List Type: List
     * * Possible Values 
@@ -804,13 +791,13 @@ export const mjBizAppsAccountingIntercompanyAccountMatchDimensionSchema = z.obje
         * * Description: Which leg the requirement applies to: DueTo (source company's liability) or DueFrom (target company's receivable). The two legs sit on different companies' books and routinely carry different values for the same Dimension.`),
     DimensionID: z.string().describe(`
         * * Field Name: DimensionID
-        * * Display Name: Dimension
+        * * Display Name: Dimension ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Dimensions (vwDimensions.ID)
         * * Description: The Dimension that applies (validate-only vocabulary — never invented here).`),
     DimensionValueID: z.string().nullable().describe(`
         * * Field Name: DimensionValueID
-        * * Display Name: Dimension Value
+        * * Display Name: Dimension Value ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Dimension Values (vwDimensionValues.ID)
         * * Description: Optional fixed value to stamp. NULL keeps the GLAccountLink behaviour of taking the value from the calling context. Must belong to DimensionID (enforced by trigger).`),
@@ -832,11 +819,11 @@ export const mjBizAppsAccountingIntercompanyAccountMatchDimensionSchema = z.obje
         * * Default Value: getutcdate()`),
     Dimension: z.string().describe(`
         * * Field Name: Dimension
-        * * Display Name: Dimension Name
+        * * Display Name: Dimension
         * * SQL Data Type: nvarchar(100)`),
     DimensionValue: z.string().nullable().describe(`
         * * Field Name: DimensionValue
-        * * Display Name: Dimension Value Name
+        * * Display Name: Dimension Value
         * * SQL Data Type: nvarchar(200)`),
 });
 
@@ -853,25 +840,25 @@ export const mjBizAppsAccountingIntercompanyAccountMatchSchema = z.object({
         * * Default Value: newsequentialid()`),
     SourceCompanyID: z.string().describe(`
         * * Field Name: SourceCompanyID
-        * * Display Name: Source Company
+        * * Display Name: Source Company ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
         * * Description: The company that COLLECTED the cash and therefore owes — the Due To liability sits on its books.`),
     TargetCompanyID: z.string().describe(`
         * * Field Name: TargetCompanyID
-        * * Display Name: Target Company
+        * * Display Name: Target Company ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
         * * Description: The company that is OWED because it owns the line the cash settled — the Due From receivable sits on its books.`),
     DueToGLAccountID: z.string().describe(`
         * * Field Name: DueToGLAccountID
-        * * Display Name: Due To GL Account
+        * * Display Name: Due To GL Account ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Accounts (vwGLAccounts.ID)
         * * Description: The intercompany PAYABLE on the source company's books. Must be a Liability account belonging to SourceCompanyID (enforced by trigger, not merely by convention: a backwards pair still balances).`),
     DueFromGLAccountID: z.string().describe(`
         * * Field Name: DueFromGLAccountID
-        * * Display Name: Due From GL Account
+        * * Display Name: Due From GL Account ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Accounts (vwGLAccounts.ID)
         * * Description: The intercompany RECEIVABLE on the target company's books. Must be an Asset account belonging to TargetCompanyID.`),
@@ -913,19 +900,19 @@ export const mjBizAppsAccountingIntercompanyAccountMatchSchema = z.object({
         * * Default Value: getutcdate()`),
     SourceCompany: z.string().describe(`
         * * Field Name: SourceCompany
-        * * Display Name: Source Company Name
+        * * Display Name: Source Company
         * * SQL Data Type: nvarchar(50)`),
     TargetCompany: z.string().describe(`
         * * Field Name: TargetCompany
-        * * Display Name: Target Company Name
+        * * Display Name: Target Company
         * * SQL Data Type: nvarchar(50)`),
     DueToGLAccount: z.string().describe(`
         * * Field Name: DueToGLAccount
-        * * Display Name: Due To GL Account Name
+        * * Display Name: Due To GL Account
         * * SQL Data Type: nvarchar(200)`),
     DueFromGLAccount: z.string().describe(`
         * * Field Name: DueFromGLAccount
-        * * Display Name: Due From GL Account Name
+        * * Display Name: Due From GL Account
         * * SQL Data Type: nvarchar(200)`),
 });
 
@@ -957,30 +944,12 @@ export const mjBizAppsAccountingJournalEntrySchema = z.object({
         * * Display Name: Effective Date
         * * SQL Data Type: date
         * * Description: Accounting date for the entry (the ERP assigns its own period at posting).`),
-    EntryType: z.union([z.literal('Adjustment'), z.literal('BatchSummary'), z.literal('CommissionAccrual'), z.literal('FXRevaluation'), z.literal('IntercompanyFlow'), z.literal('Manual'), z.literal('OpeningBalance'), z.literal('OrderBooking'), z.literal('PartnerRevShare'), z.literal('PaymentReceipt'), z.literal('PeriodEndAccrual'), z.literal('Refund'), z.literal('RevenueRecognition'), z.literal('Reversal'), z.literal('TaxRemittance'), z.literal('WaterfallDistribution'), z.literal('Writeoff')]).describe(`
-        * * Field Name: EntryType
-        * * Display Name: Entry Type
-        * * SQL Data Type: nvarchar(40)
-    * * Value List Type: List
-    * * Possible Values 
-    *   * Adjustment
-    *   * BatchSummary
-    *   * CommissionAccrual
-    *   * FXRevaluation
-    *   * IntercompanyFlow
-    *   * Manual
-    *   * OpeningBalance
-    *   * OrderBooking
-    *   * PartnerRevShare
-    *   * PaymentReceipt
-    *   * PeriodEndAccrual
-    *   * Refund
-    *   * RevenueRecognition
-    *   * Reversal
-    *   * TaxRemittance
-    *   * WaterfallDistribution
-    *   * Writeoff
-        * * Description: OrderBooking | PaymentReceipt | RevenueRecognition | CommissionAccrual | PartnerRevShare | IntercompanyFlow | WaterfallDistribution | Refund | Writeoff | Reversal | Manual | TaxRemittance | PeriodEndAccrual | FXRevaluation | OpeningBalance | Adjustment.`),
+    EntryTypeID: z.string().describe(`
+        * * Field Name: EntryTypeID
+        * * Display Name: Entry Type ID
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entry Types (vwJournalEntryTypes.ID)
+        * * Description: The JournalEntryType classifying this entry (issue #24, BA-D29). Accounting seeds its own ledger-mechanics types; consuming apps seed their domain types as rows.`),
     Status: z.union([z.literal('Batched'), z.literal('GLPosted'), z.literal('Pending')]).describe(`
         * * Field Name: Status
         * * Display Name: Status
@@ -1002,7 +971,7 @@ export const mjBizAppsAccountingJournalEntrySchema = z.object({
         * * Display Name: Linked Entity ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ: Entities (vwEntities.ID)
-        * * Description: Polymorphic origin part 1 (plan D25): the MJ Entity of the single causal source record for this JE (OrderLine for booking/rev-rec entries, Payment for receipts/refunds, TaxRemittance for remittances, ...). FK to __mj.Entity. NULL (with LinkedRecordID) = manual JE.`),
+        * * Description: Polymorphic origin part 1 (plan D25): the MJ Entity of the single causal source record for this JE (OrderLine for booking/rev-rec entries, Payment for receipts/refunds, ...). FK to __mj.Entity. NULL (with LinkedRecordID) = manual JE.`),
     LinkedRecordID: z.string().nullable().describe(`
         * * Field Name: LinkedRecordID
         * * Display Name: Linked Record ID
@@ -1013,7 +982,7 @@ export const mjBizAppsAccountingJournalEntrySchema = z.object({
         * * Display Name: Reverses Journal Entry ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entries (vwJournalEntries.ID)
-        * * Description: When set, this JE is a reversal of the referenced original JE. EntryType MUST be 'Reversal' (trg_JE_ReversalConsistency).`),
+        * * Description: When set, this JE is a reversal of the referenced original JE. Its JournalEntryType Code MUST be 'Reversal' (trg_JE_ReversalConsistency).`),
     ReversedByJournalEntryID: z.string().nullable().describe(`
         * * Field Name: ReversedByJournalEntryID
         * * Display Name: Reversed By Journal Entry ID
@@ -1056,6 +1025,10 @@ export const mjBizAppsAccountingJournalEntrySchema = z.object({
         * * Field Name: Company
         * * Display Name: Company
         * * SQL Data Type: nvarchar(50)`),
+    EntryType: z.string().describe(`
+        * * Field Name: EntryType
+        * * Display Name: Entry Type
+        * * SQL Data Type: nvarchar(100)`),
     LinkedEntity: z.string().nullable().describe(`
         * * Field Name: LinkedEntity
         * * Display Name: Linked Entity
@@ -1135,7 +1108,7 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * Display Name: Summary Journal Entry ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entries (vwJournalEntries.ID)
-        * * Description: The aggregated summary JournalEntry (EntryType=BatchSummary, EffectiveDate=PostingDate) that posts to the GL for this batch (plan D9). Its lines net debits/credits per GLAccount x dimension-combo. The summary carries this batch's BatchID (same derived lock machinery as members) but is excluded from member/netting/sweep queries by its EntryType.`),
+        * * Description: The aggregated summary JournalEntry (its JournalEntryType flagged IsBatchSummary, EffectiveDate=PostingDate) that posts to the GL for this batch (plan D9). Its lines net debits/credits per GLAccount x dimension-combo. The summary carries this batch's BatchID (same derived lock machinery as members) but is excluded from member/netting/sweep queries via its type's IsBatchSummary flag.`),
     TargetSystem: z.union([z.literal('BusinessCentral'), z.literal('NetSuite'), z.literal('Other'), z.literal('QuickBooks'), z.literal('Sage'), z.literal('Xero')]).describe(`
         * * Field Name: TargetSystem
         * * Display Name: Target System
@@ -1195,7 +1168,7 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * Description: Sum of credits across all JE lines in the batch (functional currency).`),
     ExternalBatchRef: z.string().nullable().describe(`
         * * Field Name: ExternalBatchRef
-        * * Display Name: External Batch Reference
+        * * Display Name: External Batch Ref
         * * SQL Data Type: nvarchar(100)
         * * Description: ERP's reference returned on send (used to correlate the consolidated JE posted in the ERP).`),
     ApprovedAt: z.date().nullable().describe(`
@@ -1272,19 +1245,19 @@ export const mjBizAppsAccountingJournalEntryLineDimensionSchema = z.object({
         * * Description: Unique identifier.`),
     JournalEntryLineID: z.string().describe(`
         * * Field Name: JournalEntryLineID
-        * * Display Name: Journal Entry Line
+        * * Display Name: Journal Entry Line ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entry Lines (vwJournalEntryLines.ID)
         * * Description: JE line being tagged.`),
     DimensionID: z.string().describe(`
         * * Field Name: DimensionID
-        * * Display Name: Dimension
+        * * Display Name: Dimension ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Dimensions (vwDimensions.ID)
         * * Description: Dimension being applied. UNIQUE per (Line, Dimension) so a line cannot have two values for the same dimension.`),
     DimensionValueID: z.string().describe(`
         * * Field Name: DimensionValueID
-        * * Display Name: Dimension Value
+        * * Display Name: Dimension Value ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Dimension Values (vwDimensionValues.ID)
         * * Description: Value chosen for the dimension on this line.`),
@@ -1300,11 +1273,11 @@ export const mjBizAppsAccountingJournalEntryLineDimensionSchema = z.object({
         * * Default Value: getutcdate()`),
     Dimension: z.string().describe(`
         * * Field Name: Dimension
-        * * Display Name: Dimension Name
+        * * Display Name: Dimension
         * * SQL Data Type: nvarchar(100)`),
     DimensionValue: z.string().describe(`
         * * Field Name: DimensionValue
-        * * Display Name: Dimension Value Name
+        * * Display Name: Dimension Value
         * * SQL Data Type: nvarchar(200)`),
 });
 
@@ -1322,7 +1295,7 @@ export const mjBizAppsAccountingJournalEntryLineSchema = z.object({
         * * Description: Unique identifier.`),
     JournalEntryID: z.string().describe(`
         * * Field Name: JournalEntryID
-        * * Display Name: Journal Entry
+        * * Display Name: Journal Entry ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entries (vwJournalEntries.ID)
         * * Description: Parent JournalEntry.`),
@@ -1373,12 +1346,6 @@ export const mjBizAppsAccountingJournalEntryLineSchema = z.object({
         * * Display Name: Description
         * * SQL Data Type: nvarchar(MAX)
         * * Description: Free-form description of the line (memo).`),
-    CounterpartyOrganizationID: z.string().nullable().describe(`
-        * * Field Name: CounterpartyOrganizationID
-        * * Display Name: Counterparty Organization ID
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ.BizApps.Common: Organizations (vwOrganizationsExtended.ID)
-        * * Description: For AR-side lines, the Customer Organization. FK to __mj_BizAppsCommon.Organization.`),
     __mj_CreatedAt: z.date().describe(`
         * * Field Name: __mj_CreatedAt
         * * Display Name: Created At
@@ -1395,12 +1362,8 @@ export const mjBizAppsAccountingJournalEntryLineSchema = z.object({
         * * SQL Data Type: nvarchar(200)`),
     OriginalCurrencyCode_Virtual: z.string().nullable().describe(`
         * * Field Name: OriginalCurrencyCode_Virtual
-        * * Display Name: Original Currency Code (Virtual)
+        * * Display Name: Original Currency Code Virtual
         * * SQL Data Type: nvarchar(80)`),
-    CounterpartyOrganization: z.string().nullable().describe(`
-        * * Field Name: CounterpartyOrganization
-        * * Display Name: Counterparty Organization
-        * * SQL Data Type: nvarchar(255)`),
 });
 
 export type mjBizAppsAccountingJournalEntryLineEntityType = z.infer<typeof mjBizAppsAccountingJournalEntryLineSchema>;
@@ -1442,6 +1405,62 @@ export const mjBizAppsAccountingJournalEntrySequenceSchema = z.object({
 export type mjBizAppsAccountingJournalEntrySequenceEntityType = z.infer<typeof mjBizAppsAccountingJournalEntrySequenceSchema>;
 
 /**
+ * zod schema definition for the entity MJ_BizApps_Accounting: Journal Entry Types
+ */
+export const mjBizAppsAccountingJournalEntryTypeSchema = z.object({
+    ID: z.string().describe(`
+        * * Field Name: ID
+        * * Display Name: ID
+        * * SQL Data Type: uniqueidentifier
+        * * Default Value: newsequentialid()`),
+    Code: z.string().describe(`
+        * * Field Name: Code
+        * * Display Name: Code
+        * * SQL Data Type: nvarchar(40)
+        * * Description: Stable machine code for the type (e.g. Manual, Reversal, BatchSummary, OrderBooking). Unique. Referenced by code; display uses Name.`),
+    Name: z.string().describe(`
+        * * Field Name: Name
+        * * Display Name: Name
+        * * SQL Data Type: nvarchar(100)
+        * * Description: Human-readable display name for the type.`),
+    Description: z.string().nullable().describe(`
+        * * Field Name: Description
+        * * Display Name: Description
+        * * SQL Data Type: nvarchar(MAX)
+        * * Description: What this entry type classifies and which app owns it.`),
+    IsSystem: z.boolean().describe(`
+        * * Field Name: IsSystem
+        * * Display Name: Is System
+        * * SQL Data Type: bit
+        * * Default Value: 0
+        * * Description: 1 = accounting's own ledger-mechanics type (Manual, Reversal, BatchSummary, ...). Consumers must not repurpose or delete IsSystem rows.`),
+    IsBatchSummary: z.boolean().describe(`
+        * * Field Name: IsBatchSummary
+        * * Display Name: Is Batch Summary
+        * * SQL Data Type: bit
+        * * Default Value: 0
+        * * Description: 1 = this type marks a batch's aggregated summary JE. Batch member/netting/sweep queries exclude JEs of this type via a join on this flag (replaces the former 'BatchSummary' magic-string match). A filtered unique index allows exactly one flagged row.`),
+    IsActive: z.boolean().describe(`
+        * * Field Name: IsActive
+        * * Display Name: Is Active
+        * * SQL Data Type: bit
+        * * Default Value: 1
+        * * Description: Whether this type may be used on NEW journal entries. Inactive types remain for historical rows.`),
+    __mj_CreatedAt: z.date().describe(`
+        * * Field Name: __mj_CreatedAt
+        * * Display Name: Created At
+        * * SQL Data Type: datetimeoffset
+        * * Default Value: getutcdate()`),
+    __mj_UpdatedAt: z.date().describe(`
+        * * Field Name: __mj_UpdatedAt
+        * * Display Name: Updated At
+        * * SQL Data Type: datetimeoffset
+        * * Default Value: getutcdate()`),
+});
+
+export type mjBizAppsAccountingJournalEntryTypeEntityType = z.infer<typeof mjBizAppsAccountingJournalEntryTypeSchema>;
+
+/**
  * zod schema definition for the entity MJ_BizApps_Accounting: Tax Authorities
  */
 export const mjBizAppsAccountingTaxAuthoritySchema = z.object({
@@ -1453,7 +1472,7 @@ export const mjBizAppsAccountingTaxAuthoritySchema = z.object({
         * * Description: Unique identifier.`),
     Code: z.string().describe(`
         * * Field Name: Code
-        * * Display Name: Authority Code
+        * * Display Name: Code
         * * SQL Data Type: nvarchar(40)
         * * Description: Globally unique authority code, e.g. 'US-IRS', 'CA-BOE', 'EU-VAT-DE'.`),
     Name: z.string().describe(`
@@ -1468,7 +1487,7 @@ export const mjBizAppsAccountingTaxAuthoritySchema = z.object({
         * * Description: ISO 3166-1 alpha-2 country code for the authority's primary jurisdiction.`),
     IsActive: z.boolean().describe(`
         * * Field Name: IsActive
-        * * Display Name: Active
+        * * Display Name: Is Active
         * * SQL Data Type: bit
         * * Default Value: 1
         * * Description: Whether this authority is currently active.`),
@@ -1482,14 +1501,6 @@ export const mjBizAppsAccountingTaxAuthoritySchema = z.object({
         * * Display Name: Updated At
         * * SQL Data Type: datetimeoffset
         * * Default Value: getutcdate()`),
-    __mj_Latitude: z.number().nullable().describe(`
-        * * Field Name: __mj_Latitude
-        * * Display Name: Mj Latitude
-        * * SQL Data Type: decimal(10, 6)`),
-    __mj_Longitude: z.number().nullable().describe(`
-        * * Field Name: __mj_Longitude
-        * * Display Name: Mj Longitude
-        * * SQL Data Type: decimal(10, 6)`),
 });
 
 export type mjBizAppsAccountingTaxAuthorityEntityType = z.infer<typeof mjBizAppsAccountingTaxAuthoritySchema>;
@@ -1506,7 +1517,7 @@ export const mjBizAppsAccountingTaxJurisdictionSchema = z.object({
         * * Description: Unique identifier.`),
     TaxAuthorityID: z.string().describe(`
         * * Field Name: TaxAuthorityID
-        * * Display Name: Tax Authority
+        * * Display Name: Tax Authority ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Tax Authorities (vwTaxAuthorities.ID)
         * * Description: TaxAuthority this jurisdiction belongs to.`),
@@ -1552,7 +1563,7 @@ export const mjBizAppsAccountingTaxJurisdictionSchema = z.object({
         * * Description: City name scoping (if the jurisdiction is city-specific).`),
     ParentTaxJurisdictionID: z.string().nullable().describe(`
         * * Field Name: ParentTaxJurisdictionID
-        * * Display Name: Parent Jurisdiction
+        * * Display Name: Parent Tax Jurisdiction ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Tax Jurisdictions (vwTaxJurisdictions.ID)
         * * Description: Parent jurisdiction for nested scopes (e.g. county inside state).`),
@@ -1574,23 +1585,15 @@ export const mjBizAppsAccountingTaxJurisdictionSchema = z.object({
         * * Default Value: getutcdate()`),
     TaxAuthority: z.string().describe(`
         * * Field Name: TaxAuthority
-        * * Display Name: Tax Authority Name
+        * * Display Name: Tax Authority
         * * SQL Data Type: nvarchar(200)`),
     ParentTaxJurisdiction: z.string().nullable().describe(`
         * * Field Name: ParentTaxJurisdiction
-        * * Display Name: Parent Jurisdiction Name
+        * * Display Name: Parent Tax Jurisdiction
         * * SQL Data Type: nvarchar(200)`),
-    __mj_Latitude: z.number().nullable().describe(`
-        * * Field Name: __mj_Latitude
-        * * Display Name: Mj Latitude
-        * * SQL Data Type: decimal(10, 6)`),
-    __mj_Longitude: z.number().nullable().describe(`
-        * * Field Name: __mj_Longitude
-        * * Display Name: Mj Longitude
-        * * SQL Data Type: decimal(10, 6)`),
     RootParentTaxJurisdictionID: z.string().nullable().describe(`
         * * Field Name: RootParentTaxJurisdictionID
-        * * Display Name: Root Parent Jurisdiction
+        * * Display Name: Root Parent Tax Jurisdiction ID
         * * SQL Data Type: uniqueidentifier`),
 });
 
@@ -1608,19 +1611,19 @@ export const mjBizAppsAccountingTaxLiabilitySchema = z.object({
         * * Description: Unique identifier.`),
     CompanyID: z.string().describe(`
         * * Field Name: CompanyID
-        * * Display Name: Company
+        * * Display Name: Company ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
         * * Description: Company this liability belongs to.`),
     TaxAuthorityID: z.string().describe(`
         * * Field Name: TaxAuthorityID
-        * * Display Name: Tax Authority
+        * * Display Name: Tax Authority ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Tax Authorities (vwTaxAuthorities.ID)
         * * Description: TaxAuthority owed.`),
     TaxJurisdictionID: z.string().describe(`
         * * Field Name: TaxJurisdictionID
-        * * Display Name: Tax Jurisdiction
+        * * Display Name: Tax Jurisdiction ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Tax Jurisdictions (vwTaxJurisdictions.ID)
         * * Description: TaxJurisdiction the liability is scoped to.`),
@@ -1677,15 +1680,15 @@ export const mjBizAppsAccountingTaxLiabilitySchema = z.object({
         * * Default Value: getutcdate()`),
     Company: z.string().describe(`
         * * Field Name: Company
-        * * Display Name: Company Name
+        * * Display Name: Company
         * * SQL Data Type: nvarchar(50)`),
     TaxAuthority: z.string().describe(`
         * * Field Name: TaxAuthority
-        * * Display Name: Tax Authority Name
+        * * Display Name: Tax Authority
         * * SQL Data Type: nvarchar(200)`),
     TaxJurisdiction: z.string().describe(`
         * * Field Name: TaxJurisdiction
-        * * Display Name: Tax Jurisdiction Name
+        * * Display Name: Tax Jurisdiction
         * * SQL Data Type: nvarchar(200)`),
 });
 
@@ -1762,57 +1765,6 @@ export const mjBizAppsAccountingTaxRateSchema = z.object({
 });
 
 export type mjBizAppsAccountingTaxRateEntityType = z.infer<typeof mjBizAppsAccountingTaxRateSchema>;
-
-/**
- * zod schema definition for the entity MJ_BizApps_Accounting: Tax Remittances
- */
-export const mjBizAppsAccountingTaxRemittanceSchema = z.object({
-    ID: z.string().describe(`
-        * * Field Name: ID
-        * * Display Name: ID
-        * * SQL Data Type: uniqueidentifier
-        * * Default Value: newsequentialid()
-        * * Description: Unique identifier.`),
-    TaxLiabilityID: z.string().describe(`
-        * * Field Name: TaxLiabilityID
-        * * Display Name: Tax Liability
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Tax Liabilities (vwTaxLiabilities.ID)
-        * * Description: Liability this payment is against.`),
-    RemittedAmount: z.number().describe(`
-        * * Field Name: RemittedAmount
-        * * Display Name: Remitted Amount
-        * * SQL Data Type: decimal(18, 2)
-        * * Description: Amount remitted (functional currency).`),
-    RemittedDate: z.date().describe(`
-        * * Field Name: RemittedDate
-        * * Display Name: Remitted Date
-        * * SQL Data Type: date
-        * * Description: Date the remittance was paid.`),
-    PaymentReference: z.string().nullable().describe(`
-        * * Field Name: PaymentReference
-        * * Display Name: Payment Reference
-        * * SQL Data Type: nvarchar(100)
-        * * Description: External payment reference (wire ID, check number, confirmation code).`),
-    PostedJournalEntryID: z.string().nullable().describe(`
-        * * Field Name: PostedJournalEntryID
-        * * Display Name: Posted Journal Entry
-        * * SQL Data Type: uniqueidentifier
-        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entries (vwJournalEntries.ID)
-        * * Description: JE that records this remittance.`),
-    __mj_CreatedAt: z.date().describe(`
-        * * Field Name: __mj_CreatedAt
-        * * Display Name: Created At
-        * * SQL Data Type: datetimeoffset
-        * * Default Value: getutcdate()`),
-    __mj_UpdatedAt: z.date().describe(`
-        * * Field Name: __mj_UpdatedAt
-        * * Display Name: Updated At
-        * * SQL Data Type: datetimeoffset
-        * * Default Value: getutcdate()`),
-});
-
-export type mjBizAppsAccountingTaxRemittanceEntityType = z.infer<typeof mjBizAppsAccountingTaxRemittanceSchema>;
  
  
 
@@ -1847,86 +1799,8 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
     }
 
     /**
-    * Validate() method override for MJ_BizApps_Accounting: Accounting Company Profiles entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
-    * * CompanyCode: The company code must be in uppercase, contain only letters, numbers, hyphens, or underscores, and be between 2 and 20 characters in length.
-    * * FiscalYearStartDay: The fiscal year start day must be a valid calendar day between 1 and 31.
-    * * FiscalYearStartMonth: The fiscal year start month must be a valid calendar month represented by a number between 1 and 12.
-    * @public
-    * @method
-    * @override
-    */
-    public override Validate(): ValidationResult {
-        const result = super.Validate();
-        this.ValidateCompanyCodeFormatAndLength(result);
-        this.ValidateFiscalYearStartDayRange(result);
-        this.ValidateFiscalYearStartMonthRange(result);
-        result.Success = result.Success && (result.Errors.length === 0);
-
-        return result;
-    }
-
-    /**
-    * The company code must be in uppercase, contain only letters, numbers, hyphens, or underscores, and be between 2 and 20 characters in length.
-    * @param result - the ValidationResult object to add any errors or warnings to
-    * @public
-    * @method
-    */
-    public ValidateCompanyCodeFormatAndLength(result: ValidationResult) {
-    	if (this.CompanyCode != null) {
-    		const code = this.CompanyCode;
-    		const isValidPattern = /^[A-Z0-9_-]+$/.test(code);
-    		const isValidLength = code.length >= 2 && code.length <= 20;
-    
-    		if (!isValidPattern || !isValidLength) {
-    			result.Errors.push(new ValidationErrorInfo(
-    				"CompanyCode",
-    				"Company Code must be uppercase, contain only letters, numbers, hyphens, or underscores, and be between 2 and 20 characters long.",
-    				this.CompanyCode,
-    				ValidationErrorType.Failure
-    			));
-    		}
-    	}
-    }
-
-    /**
-    * The fiscal year start day must be a valid calendar day between 1 and 31.
-    * @param result - the ValidationResult object to add any errors or warnings to
-    * @public
-    * @method
-    */
-    public ValidateFiscalYearStartDayRange(result: ValidationResult) {
-    	if (this.FiscalYearStartDay != null && (this.FiscalYearStartDay < 1 || this.FiscalYearStartDay > 31)) {
-    		result.Errors.push(new ValidationErrorInfo(
-    			"FiscalYearStartDay",
-    			"Fiscal year start day must be between 1 and 31.",
-    			this.FiscalYearStartDay,
-    			ValidationErrorType.Failure
-    		));
-    	}
-    }
-
-    /**
-    * The fiscal year start month must be a valid calendar month represented by a number between 1 and 12.
-    * @param result - the ValidationResult object to add any errors or warnings to
-    * @public
-    * @method
-    */
-    public ValidateFiscalYearStartMonthRange(result: ValidationResult) {
-    	if (this.FiscalYearStartMonth !== undefined && this.FiscalYearStartMonth !== null) {
-    		if (this.FiscalYearStartMonth < 1 || this.FiscalYearStartMonth > 12) {
-    			result.Errors.push(new ValidationErrorInfo(
-    				"FiscalYearStartMonth",
-    				"Fiscal year start month must be a valid month between 1 and 12.",
-    				this.FiscalYearStartMonth,
-    				ValidationErrorType.Failure
-    			));
-    		}
-    	}
-    }
-
-    /**
     * * Field Name: ID
-    * * Display Name: Company ID
+    * * Display Name: ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
     * * Description: Primary key AND foreign key to __mj.Company.ID. Same UUID as the parent Company row — this is the IsA pattern (BA-D9).
@@ -2126,7 +2000,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
 
     /**
     * * Field Name: ParentAccountingCompanyID
-    * * Display Name: Parent Accounting Company
+    * * Display Name: Parent Accounting Company ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Accounting Company Profiles (vwAccountingCompanyProfiles.ID)
     * * Description: If set, this profile uses the books (COA, periods, JEs) of the referenced profile (consolidated reporting). Chains are forbidden: the referenced profile must NOT itself have a parent (BA-D9; trigger trg_ACP_NoChains).
@@ -2139,21 +2013,8 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
     }
 
     /**
-    * * Field Name: DefaultPaymentTermsTypeID
-    * * Display Name: Default Payment Terms
-    * * SQL Data Type: uniqueidentifier
-    * * Description: Default payment terms type for new orders/invoices. FK delegated to BizAppsOrders.PaymentTermsType (soft ref; no FK constraint).
-    */
-    get DefaultPaymentTermsTypeID(): string | null {
-        return this.Get('DefaultPaymentTermsTypeID');
-    }
-    set DefaultPaymentTermsTypeID(value: string | null) {
-        this.Set('DefaultPaymentTermsTypeID', value);
-    }
-
-    /**
     * * Field Name: ApprovalCFOUserID
-    * * Display Name: CFO Approval User
+    * * Display Name: Approval CFO User ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
     * * Description: The CFO (an __mj.User — a security identity) who must approve a Journal Entry Batch for this company before it dispatches to the ERP. Resolved by the bizapps-tasks approval gate. Nullable: companies without a configured CFO fall back to the role-based resolver.
@@ -2201,7 +2062,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
 
     /**
     * * Field Name: Name
-    * * Display Name: Company Name
+    * * Display Name: Name
     * * SQL Data Type: nvarchar(50)
     * * IS-A Source: Inherited from MJ: Companies
     */
@@ -2266,7 +2127,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
 
     /**
     * * Field Name: FunctionalCurrencyCode_Virtual
-    * * Display Name: Functional Currency (Display)
+    * * Display Name: Functional Currency Code Virtual
     * * SQL Data Type: nvarchar(80)
     */
     get FunctionalCurrencyCode_Virtual(): string {
@@ -2275,7 +2136,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
 
     /**
     * * Field Name: ReportingCurrencyCode_Virtual
-    * * Display Name: Reporting Currency (Display)
+    * * Display Name: Reporting Currency Code Virtual
     * * SQL Data Type: nvarchar(80)
     */
     get ReportingCurrencyCode_Virtual(): string | null {
@@ -2284,7 +2145,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
 
     /**
     * * Field Name: ApprovalCFOUser
-    * * Display Name: CFO Approver Name
+    * * Display Name: Approval CFO User
     * * SQL Data Type: nvarchar(100)
     */
     get ApprovalCFOUser(): string | null {
@@ -2292,26 +2153,8 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
     }
 
     /**
-    * * Field Name: __mj_Latitude
-    * * Display Name: Mj Latitude
-    * * SQL Data Type: decimal(10, 6)
-    */
-    get __mj_Latitude(): number | null {
-        return this.Get('__mj_Latitude');
-    }
-
-    /**
-    * * Field Name: __mj_Longitude
-    * * Display Name: Mj Longitude
-    * * SQL Data Type: decimal(10, 6)
-    */
-    get __mj_Longitude(): number | null {
-        return this.Get('__mj_Longitude');
-    }
-
-    /**
     * * Field Name: RootParentAccountingCompanyID
-    * * Display Name: Root Parent Company
+    * * Display Name: Root Parent Accounting Company ID
     * * SQL Data Type: uniqueidentifier
     */
     get RootParentAccountingCompanyID(): string | null {
@@ -2351,38 +2194,6 @@ export class mjBizAppsAccountingCurrencyEntity extends BaseEntity<mjBizAppsAccou
     }
 
     /**
-    * Validate() method override for MJ_BizApps_Accounting: Currencies entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
-    * * Code: The code must be written in all uppercase letters to maintain consistent formatting across the system.
-    * @public
-    * @method
-    * @override
-    */
-    public override Validate(): ValidationResult {
-        const result = super.Validate();
-        this.ValidateCodeIsUppercase(result);
-        result.Success = result.Success && (result.Errors.length === 0);
-
-        return result;
-    }
-
-    /**
-    * The code must be written in all uppercase letters to maintain consistent formatting across the system.
-    * @param result - the ValidationResult object to add any errors or warnings to
-    * @public
-    * @method
-    */
-    public ValidateCodeIsUppercase(result: ValidationResult) {
-    	if (this.Code != null && this.Code !== this.Code.toUpperCase()) {
-    		result.Errors.push(new ValidationErrorInfo(
-    			"Code",
-    			"Code must be in all uppercase letters.",
-    			this.Code,
-    			ValidationErrorType.Failure
-    		));
-    	}
-    }
-
-    /**
     * * Field Name: ID
     * * Display Name: ID
     * * SQL Data Type: uniqueidentifier
@@ -2397,7 +2208,7 @@ export class mjBizAppsAccountingCurrencyEntity extends BaseEntity<mjBizAppsAccou
 
     /**
     * * Field Name: Code
-    * * Display Name: Currency Code
+    * * Display Name: Code
     * * SQL Data Type: char(3)
     */
     get Code(): string {
@@ -2409,7 +2220,7 @@ export class mjBizAppsAccountingCurrencyEntity extends BaseEntity<mjBizAppsAccou
 
     /**
     * * Field Name: Name
-    * * Display Name: Currency Name
+    * * Display Name: Name
     * * SQL Data Type: nvarchar(80)
     */
     get Name(): string {
@@ -2446,7 +2257,7 @@ export class mjBizAppsAccountingCurrencyEntity extends BaseEntity<mjBizAppsAccou
 
     /**
     * * Field Name: IsActive
-    * * Display Name: Active
+    * * Display Name: Is Active
     * * SQL Data Type: bit
     * * Default Value: 1
     */
@@ -2510,57 +2321,6 @@ export class mjBizAppsAccountingCurrencySpotRateEntity extends BaseEntity<mjBizA
     }
 
     /**
-    * Validate() method override for MJ_BizApps_Accounting: Currency Spot Rates entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
-    * * Rate: The exchange rate must be greater than zero.
-    * * Table-Level: The source currency and destination currency must be different. An exchange rate cannot be defined between the same currency.
-    * @public
-    * @method
-    * @override
-    */
-    public override Validate(): ValidationResult {
-        const result = super.Validate();
-        this.ValidateRateGreaterThanZero(result);
-        this.ValidateFromCurrencyCodeDifferentFromToCurrencyCode(result);
-        result.Success = result.Success && (result.Errors.length === 0);
-
-        return result;
-    }
-
-    /**
-    * The exchange rate must be greater than zero.
-    * @param result - the ValidationResult object to add any errors or warnings to
-    * @public
-    * @method
-    */
-    public ValidateRateGreaterThanZero(result: ValidationResult) {
-    	if (this.Rate != null && this.Rate <= 0) {
-    		result.Errors.push(new ValidationErrorInfo(
-    			"Rate",
-    			"The exchange rate must be greater than zero.",
-    			this.Rate,
-    			ValidationErrorType.Failure
-    		));
-    	}
-    }
-
-    /**
-    * The source currency and destination currency must be different. An exchange rate cannot be defined between the same currency.
-    * @param result - the ValidationResult object to add any errors or warnings to
-    * @public
-    * @method
-    */
-    public ValidateFromCurrencyCodeDifferentFromToCurrencyCode(result: ValidationResult) {
-    	if (this.FromCurrencyCode != null && this.ToCurrencyCode != null && this.FromCurrencyCode === this.ToCurrencyCode) {
-    		result.Errors.push(new ValidationErrorInfo(
-    			"ToCurrencyCode",
-    			"The source currency code and destination currency code must be different.",
-    			this.ToCurrencyCode,
-    			ValidationErrorType.Failure
-    		));
-    	}
-    }
-
-    /**
     * * Field Name: ID
     * * Display Name: ID
     * * SQL Data Type: uniqueidentifier
@@ -2575,7 +2335,7 @@ export class mjBizAppsAccountingCurrencySpotRateEntity extends BaseEntity<mjBizA
 
     /**
     * * Field Name: FromCurrencyCode
-    * * Display Name: From Currency
+    * * Display Name: From Currency Code
     * * SQL Data Type: char(3)
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Currencies (vwCurrencies.Code)
     */
@@ -2588,7 +2348,7 @@ export class mjBizAppsAccountingCurrencySpotRateEntity extends BaseEntity<mjBizA
 
     /**
     * * Field Name: ToCurrencyCode
-    * * Display Name: To Currency
+    * * Display Name: To Currency Code
     * * SQL Data Type: char(3)
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Currencies (vwCurrencies.Code)
     */
@@ -2638,7 +2398,7 @@ export class mjBizAppsAccountingCurrencySpotRateEntity extends BaseEntity<mjBizA
 
     /**
     * * Field Name: IsActive
-    * * Display Name: Active
+    * * Display Name: Is Active
     * * SQL Data Type: bit
     * * Default Value: 1
     */
@@ -2671,7 +2431,7 @@ export class mjBizAppsAccountingCurrencySpotRateEntity extends BaseEntity<mjBizA
 
     /**
     * * Field Name: FromCurrencyCode_Virtual
-    * * Display Name: From Currency (Virtual)
+    * * Display Name: From Currency Code Virtual
     * * SQL Data Type: nvarchar(80)
     */
     get FromCurrencyCode_Virtual(): string {
@@ -2680,7 +2440,7 @@ export class mjBizAppsAccountingCurrencySpotRateEntity extends BaseEntity<mjBizA
 
     /**
     * * Field Name: ToCurrencyCode_Virtual
-    * * Display Name: To Currency (Virtual)
+    * * Display Name: To Currency Code Virtual
     * * SQL Data Type: nvarchar(80)
     */
     get ToCurrencyCode_Virtual(): string {
@@ -2720,38 +2480,6 @@ export class mjBizAppsAccountingCustomerTaxProfileEntity extends BaseEntity<mjBi
     }
 
     /**
-    * Validate() method override for MJ_BizApps_Accounting: Customer Tax Profiles entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
-    * * Table-Level: If the tax exemption status is active, an exemption certificate reference must be provided.
-    * @public
-    * @method
-    * @override
-    */
-    public override Validate(): ValidationResult {
-        const result = super.Validate();
-        this.ValidateExemptionCertificateRefWhenExempt(result);
-        result.Success = result.Success && (result.Errors.length === 0);
-
-        return result;
-    }
-
-    /**
-    * If the tax exemption status is active, an exemption certificate reference must be provided.
-    * @param result - the ValidationResult object to add any errors or warnings to
-    * @public
-    * @method
-    */
-    public ValidateExemptionCertificateRefWhenExempt(result: ValidationResult) {
-    	if (this.IsExempt && (this.ExemptionCertificateRef == null || this.ExemptionCertificateRef.trim() === "")) {
-    		result.Errors.push(new ValidationErrorInfo(
-    			"ExemptionCertificateRef",
-    			"An exemption certificate reference must be provided when the tax exemption status is active.",
-    			this.ExemptionCertificateRef,
-    			ValidationErrorType.Failure
-    		));
-    	}
-    }
-
-    /**
     * * Field Name: ID
     * * Display Name: ID
     * * SQL Data Type: uniqueidentifier
@@ -2767,9 +2495,9 @@ export class mjBizAppsAccountingCustomerTaxProfileEntity extends BaseEntity<mjBi
 
     /**
     * * Field Name: OrganizationID
-    * * Display Name: Organization
+    * * Display Name: Organization ID
     * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ.BizApps.Common: Organizations (vwOrganizationsExtended.ID)
+    * * Related Entity/Foreign Key: MJ_BizApps_Common: Organizations (vwOrganizations.ID)
     * * Description: Customer Organization (FK to __mj_BizAppsCommon.Organization).
     */
     get OrganizationID(): string {
@@ -2822,7 +2550,7 @@ export class mjBizAppsAccountingCustomerTaxProfileEntity extends BaseEntity<mjBi
 
     /**
     * * Field Name: ExemptionCertificateRef
-    * * Display Name: Exemption Certificate Reference
+    * * Display Name: Exemption Certificate Ref
     * * SQL Data Type: nvarchar(200)
     * * Description: Reference to the exemption certificate (file ref, URL, certificate number). Required when IsExempt=1.
     */
@@ -2894,7 +2622,7 @@ export class mjBizAppsAccountingCustomerTaxProfileEntity extends BaseEntity<mjBi
 
     /**
     * * Field Name: Organization
-    * * Display Name: Organization Name
+    * * Display Name: Organization
     * * SQL Data Type: nvarchar(255)
     */
     get Organization(): string {
@@ -2958,7 +2686,7 @@ export class mjBizAppsAccountingDimensionValueEntity extends BaseEntity<mjBizApp
 
     /**
     * * Field Name: DimensionID
-    * * Display Name: Dimension
+    * * Display Name: Dimension ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Dimensions (vwDimensions.ID)
     * * Description: Dimension this value belongs to.
@@ -2998,7 +2726,7 @@ export class mjBizAppsAccountingDimensionValueEntity extends BaseEntity<mjBizApp
 
     /**
     * * Field Name: ParentDimensionValueID
-    * * Display Name: Parent Value
+    * * Display Name: Parent Dimension Value ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Dimension Values (vwDimensionValues.ID)
     * * Description: Parent value for hierarchical dimensions (e.g. Country contains States).
@@ -3072,7 +2800,7 @@ export class mjBizAppsAccountingDimensionValueEntity extends BaseEntity<mjBizApp
 
     /**
     * * Field Name: Dimension
-    * * Display Name: Dimension Name
+    * * Display Name: Dimension
     * * SQL Data Type: nvarchar(100)
     */
     get Dimension(): string {
@@ -3081,7 +2809,7 @@ export class mjBizAppsAccountingDimensionValueEntity extends BaseEntity<mjBizApp
 
     /**
     * * Field Name: ParentDimensionValue
-    * * Display Name: Parent Value Name
+    * * Display Name: Parent Dimension Value
     * * SQL Data Type: nvarchar(200)
     */
     get ParentDimensionValue(): string | null {
@@ -3090,7 +2818,7 @@ export class mjBizAppsAccountingDimensionValueEntity extends BaseEntity<mjBizApp
 
     /**
     * * Field Name: RootParentDimensionValueID
-    * * Display Name: Root Parent Value
+    * * Display Name: Root Parent Dimension Value ID
     * * SQL Data Type: uniqueidentifier
     */
     get RootParentDimensionValueID(): string | null {
@@ -3198,7 +2926,7 @@ export class mjBizAppsAccountingDimensionEntity extends BaseEntity<mjBizAppsAcco
 
     /**
     * * Field Name: IsActive
-    * * Display Name: Active
+    * * Display Name: Is Active
     * * SQL Data Type: bit
     * * Default Value: 1
     * * Description: Whether this dimension is available for new JE-line tagging. Inactive dimensions stay in historical data but are hidden from selection.
@@ -3277,7 +3005,7 @@ export class mjBizAppsAccountingGLAccountLinkDimensionEntity extends BaseEntity<
 
     /**
     * * Field Name: GLAccountLinkID
-    * * Display Name: GL Account Link
+    * * Display Name: GL Account Link ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Account Links (vwGLAccountLinks.ID)
     * * Description: The link this dimension requirement belongs to.
@@ -3291,7 +3019,7 @@ export class mjBizAppsAccountingGLAccountLinkDimensionEntity extends BaseEntity<
 
     /**
     * * Field Name: DimensionID
-    * * Display Name: Dimension
+    * * Display Name: Dimension ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Dimensions (vwDimensions.ID)
     * * Description: The Dimension that applies (validate-only vocabulary — never invented here).
@@ -3339,7 +3067,7 @@ export class mjBizAppsAccountingGLAccountLinkDimensionEntity extends BaseEntity<
 
     /**
     * * Field Name: Dimension
-    * * Display Name: Dimension Name
+    * * Display Name: Dimension
     * * SQL Data Type: nvarchar(100)
     */
     get Dimension(): string {
@@ -3393,7 +3121,7 @@ export class mjBizAppsAccountingGLAccountLinkEntity extends BaseEntity<mjBizApps
 
     /**
     * * Field Name: GLAccountID
-    * * Display Name: GL Account
+    * * Display Name: GL Account ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Accounts (vwGLAccounts.ID)
     * * Description: The GL account this link maps its target record to.
@@ -3407,7 +3135,7 @@ export class mjBizAppsAccountingGLAccountLinkEntity extends BaseEntity<mjBizApps
 
     /**
     * * Field Name: GLAccountRoleID
-    * * Display Name: GL Account Role
+    * * Display Name: GL Account Role ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Account Roles (vwGLAccountRoles.ID)
     * * Description: The role the account plays for the target record (Sales, AR, ...). Assumed correction OQ-G: absent from the 07-03 field list but required to tell a record's Revenue link from its AR link.
@@ -3421,7 +3149,7 @@ export class mjBizAppsAccountingGLAccountLinkEntity extends BaseEntity<mjBizApps
 
     /**
     * * Field Name: EntityID
-    * * Display Name: Entity
+    * * Display Name: Entity ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ: Entities (vwEntities.ID)
     * * Description: Polymorphic reference part 1: the MJ Entity of the target record (references __mj.Entity). Same TaggedItem-style pattern as JournalEntry.LinkedEntityID/LinkedRecordID (plan D25).
@@ -3526,7 +3254,7 @@ export class mjBizAppsAccountingGLAccountLinkEntity extends BaseEntity<mjBizApps
 
     /**
     * * Field Name: GLAccount
-    * * Display Name: GL Account Name
+    * * Display Name: GL Account
     * * SQL Data Type: nvarchar(200)
     */
     get GLAccount(): string {
@@ -3535,7 +3263,7 @@ export class mjBizAppsAccountingGLAccountLinkEntity extends BaseEntity<mjBizApps
 
     /**
     * * Field Name: GLAccountRole
-    * * Display Name: GL Account Role Name
+    * * Display Name: GL Account Role
     * * SQL Data Type: nvarchar(100)
     */
     get GLAccountRole(): string {
@@ -3544,7 +3272,7 @@ export class mjBizAppsAccountingGLAccountLinkEntity extends BaseEntity<mjBizApps
 
     /**
     * * Field Name: Entity
-    * * Display Name: Entity Name
+    * * Display Name: Entity
     * * SQL Data Type: nvarchar(255)
     */
     get Entity(): string {
@@ -3707,38 +3435,6 @@ export class mjBizAppsAccountingGLAccountEntity extends BaseEntity<mjBizAppsAcco
     }
 
     /**
-    * Validate() method override for MJ_BizApps_Accounting: GL Accounts entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
-    * * Table-Level: A GL account cannot be set as its own parent. This prevents self-referencing loops in the chart of accounts hierarchy.
-    * @public
-    * @method
-    * @override
-    */
-    public override Validate(): ValidationResult {
-        const result = super.Validate();
-        this.ValidateParentGLAccountIDNotEqualToID(result);
-        result.Success = result.Success && (result.Errors.length === 0);
-
-        return result;
-    }
-
-    /**
-    * A GL account cannot be set as its own parent. This prevents self-referencing loops in the chart of accounts hierarchy.
-    * @param result - the ValidationResult object to add any errors or warnings to
-    * @public
-    * @method
-    */
-    public ValidateParentGLAccountIDNotEqualToID(result: ValidationResult) {
-    	if (this.ParentGLAccountID != null && this.ParentGLAccountID === this.ID) {
-    		result.Errors.push(new ValidationErrorInfo(
-    			"ParentGLAccountID",
-    			"A GL account cannot be its own parent. Please select a different parent account.",
-    			this.ParentGLAccountID,
-    			ValidationErrorType.Failure
-    		));
-    	}
-    }
-
-    /**
     * * Field Name: ID
     * * Display Name: ID
     * * SQL Data Type: uniqueidentifier
@@ -3754,7 +3450,7 @@ export class mjBizAppsAccountingGLAccountEntity extends BaseEntity<mjBizAppsAcco
 
     /**
     * * Field Name: CompanyID
-    * * Display Name: Company
+    * * Display Name: Company ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
     * * Description: Company that owns this account. UNIQUE (CompanyID, Code) — each company has its own chart.
@@ -3768,7 +3464,7 @@ export class mjBizAppsAccountingGLAccountEntity extends BaseEntity<mjBizAppsAcco
 
     /**
     * * Field Name: Code
-    * * Display Name: Account Code
+    * * Display Name: Code
     * * SQL Data Type: nvarchar(40)
     * * Description: Account code matching the ERP COA, e.g. '11201' or '40100-SUB'.
     */
@@ -3781,7 +3477,7 @@ export class mjBizAppsAccountingGLAccountEntity extends BaseEntity<mjBizAppsAcco
 
     /**
     * * Field Name: Name
-    * * Display Name: Account Name
+    * * Display Name: Name
     * * SQL Data Type: nvarchar(200)
     * * Description: Display name for the account.
     */
@@ -3814,7 +3510,7 @@ export class mjBizAppsAccountingGLAccountEntity extends BaseEntity<mjBizAppsAcco
 
     /**
     * * Field Name: ParentGLAccountID
-    * * Display Name: Parent Account ID
+    * * Display Name: Parent GL Account ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Accounts (vwGLAccounts.ID)
     * * Description: Parent account for hierarchical rollup (NULL = top of chart).
@@ -3929,7 +3625,7 @@ export class mjBizAppsAccountingGLAccountEntity extends BaseEntity<mjBizAppsAcco
 
     /**
     * * Field Name: Company
-    * * Display Name: Company Name
+    * * Display Name: Company
     * * SQL Data Type: nvarchar(50)
     */
     get Company(): string {
@@ -3938,7 +3634,7 @@ export class mjBizAppsAccountingGLAccountEntity extends BaseEntity<mjBizAppsAcco
 
     /**
     * * Field Name: ParentGLAccount
-    * * Display Name: Parent Account
+    * * Display Name: Parent GL Account
     * * SQL Data Type: nvarchar(200)
     */
     get ParentGLAccount(): string | null {
@@ -3947,7 +3643,7 @@ export class mjBizAppsAccountingGLAccountEntity extends BaseEntity<mjBizAppsAcco
 
     /**
     * * Field Name: CurrencyCode_Virtual
-    * * Display Name: Currency
+    * * Display Name: Currency Code Virtual
     * * SQL Data Type: nvarchar(80)
     */
     get CurrencyCode_Virtual(): string | null {
@@ -3956,7 +3652,7 @@ export class mjBizAppsAccountingGLAccountEntity extends BaseEntity<mjBizAppsAcco
 
     /**
     * * Field Name: RootParentGLAccountID
-    * * Display Name: Root Parent Account ID
+    * * Display Name: Root Parent GL Account ID
     * * SQL Data Type: uniqueidentifier
     */
     get RootParentGLAccountID(): string | null {
@@ -4010,7 +3706,7 @@ export class mjBizAppsAccountingIntercompanyAccountMatchDimensionEntity extends 
 
     /**
     * * Field Name: IntercompanyAccountMatchID
-    * * Display Name: Intercompany Account Match
+    * * Display Name: Intercompany Account Match ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Intercompany Account Matches (vwIntercompanyAccountMatches.ID)
     * * Description: The account pair this dimension requirement belongs to.
@@ -4024,7 +3720,7 @@ export class mjBizAppsAccountingIntercompanyAccountMatchDimensionEntity extends 
 
     /**
     * * Field Name: Side
-    * * Display Name: Transaction Side
+    * * Display Name: Side
     * * SQL Data Type: nvarchar(10)
     * * Value List Type: List
     * * Possible Values 
@@ -4041,7 +3737,7 @@ export class mjBizAppsAccountingIntercompanyAccountMatchDimensionEntity extends 
 
     /**
     * * Field Name: DimensionID
-    * * Display Name: Dimension
+    * * Display Name: Dimension ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Dimensions (vwDimensions.ID)
     * * Description: The Dimension that applies (validate-only vocabulary — never invented here).
@@ -4055,7 +3751,7 @@ export class mjBizAppsAccountingIntercompanyAccountMatchDimensionEntity extends 
 
     /**
     * * Field Name: DimensionValueID
-    * * Display Name: Dimension Value
+    * * Display Name: Dimension Value ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Dimension Values (vwDimensionValues.ID)
     * * Description: Optional fixed value to stamp. NULL keeps the GLAccountLink behaviour of taking the value from the calling context. Must belong to DimensionID (enforced by trigger).
@@ -4103,7 +3799,7 @@ export class mjBizAppsAccountingIntercompanyAccountMatchDimensionEntity extends 
 
     /**
     * * Field Name: Dimension
-    * * Display Name: Dimension Name
+    * * Display Name: Dimension
     * * SQL Data Type: nvarchar(100)
     */
     get Dimension(): string {
@@ -4112,7 +3808,7 @@ export class mjBizAppsAccountingIntercompanyAccountMatchDimensionEntity extends 
 
     /**
     * * Field Name: DimensionValue
-    * * Display Name: Dimension Value Name
+    * * Display Name: Dimension Value
     * * SQL Data Type: nvarchar(200)
     */
     get DimensionValue(): string | null {
@@ -4152,80 +3848,6 @@ export class mjBizAppsAccountingIntercompanyAccountMatchEntity extends BaseEntit
     }
 
     /**
-    * Validate() method override for MJ_BizApps_Accounting: Intercompany Account Matches entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
-    * * Table-Level: The Due To GL Account and Due From GL Account must be different to ensure proper intercompany accounting entry routing.
-    * * Table-Level: If both start and end times are provided, the end time must be after the start time.
-    * * Table-Level: The source company and target company must be different. A company cannot perform an intercompany transaction with itself.
-    * @public
-    * @method
-    * @override
-    */
-    public override Validate(): ValidationResult {
-        const result = super.Validate();
-        this.ValidateDueToGLAccountIDNotEqualToDueFromGLAccountID(result);
-        this.ValidateEndedAtAfterStartedAt(result);
-        this.ValidateSourceCompanyDifferentFromTargetCompany(result);
-        result.Success = result.Success && (result.Errors.length === 0);
-
-        return result;
-    }
-
-    /**
-    * The Due To GL Account and Due From GL Account must be different to ensure proper intercompany accounting entry routing.
-    * @param result - the ValidationResult object to add any errors or warnings to
-    * @public
-    * @method
-    */
-    public ValidateDueToGLAccountIDNotEqualToDueFromGLAccountID(result: ValidationResult) {
-    	if (this.DueToGLAccountID != null && this.DueFromGLAccountID != null && this.DueToGLAccountID === this.DueFromGLAccountID) {
-    		result.Errors.push(new ValidationErrorInfo(
-    			"DueToGLAccountID",
-    			"The Due To GL Account and Due From GL Account cannot be the same.",
-    			this.DueToGLAccountID,
-    			ValidationErrorType.Failure
-    		));
-    	}
-    }
-
-    /**
-    * If both start and end times are provided, the end time must be after the start time.
-    * @param result - the ValidationResult object to add any errors or warnings to
-    * @public
-    * @method
-    */
-    public ValidateEndedAtAfterStartedAt(result: ValidationResult) {
-    	if (this.StartedAt != null && this.EndedAt != null) {
-    		const start = new Date(this.StartedAt as any).getTime();
-    		const end = new Date(this.EndedAt as any).getTime();
-    		if (end <= start) {
-    			result.Errors.push(new ValidationErrorInfo(
-    				"EndedAt",
-    				"The end date and time must be after the start date and time.",
-    				this.EndedAt,
-    				ValidationErrorType.Failure
-    			));
-    		}
-    	}
-    }
-
-    /**
-    * The source company and target company must be different. A company cannot perform an intercompany transaction with itself.
-    * @param result - the ValidationResult object to add any errors or warnings to
-    * @public
-    * @method
-    */
-    public ValidateSourceCompanyDifferentFromTargetCompany(result: ValidationResult) {
-    	if (this.SourceCompanyID != null && this.TargetCompanyID != null && this.SourceCompanyID === this.TargetCompanyID) {
-    		result.Errors.push(new ValidationErrorInfo(
-    			"SourceCompanyID",
-    			"The source company and target company must be different.",
-    			this.SourceCompanyID,
-    			ValidationErrorType.Failure
-    		));
-    	}
-    }
-
-    /**
     * * Field Name: ID
     * * Display Name: ID
     * * SQL Data Type: uniqueidentifier
@@ -4240,7 +3862,7 @@ export class mjBizAppsAccountingIntercompanyAccountMatchEntity extends BaseEntit
 
     /**
     * * Field Name: SourceCompanyID
-    * * Display Name: Source Company
+    * * Display Name: Source Company ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
     * * Description: The company that COLLECTED the cash and therefore owes — the Due To liability sits on its books.
@@ -4254,7 +3876,7 @@ export class mjBizAppsAccountingIntercompanyAccountMatchEntity extends BaseEntit
 
     /**
     * * Field Name: TargetCompanyID
-    * * Display Name: Target Company
+    * * Display Name: Target Company ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
     * * Description: The company that is OWED because it owns the line the cash settled — the Due From receivable sits on its books.
@@ -4268,7 +3890,7 @@ export class mjBizAppsAccountingIntercompanyAccountMatchEntity extends BaseEntit
 
     /**
     * * Field Name: DueToGLAccountID
-    * * Display Name: Due To GL Account
+    * * Display Name: Due To GL Account ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Accounts (vwGLAccounts.ID)
     * * Description: The intercompany PAYABLE on the source company's books. Must be a Liability account belonging to SourceCompanyID (enforced by trigger, not merely by convention: a backwards pair still balances).
@@ -4282,7 +3904,7 @@ export class mjBizAppsAccountingIntercompanyAccountMatchEntity extends BaseEntit
 
     /**
     * * Field Name: DueFromGLAccountID
-    * * Display Name: Due From GL Account
+    * * Display Name: Due From GL Account ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Accounts (vwGLAccounts.ID)
     * * Description: The intercompany RECEIVABLE on the target company's books. Must be an Asset account belonging to TargetCompanyID.
@@ -4374,7 +3996,7 @@ export class mjBizAppsAccountingIntercompanyAccountMatchEntity extends BaseEntit
 
     /**
     * * Field Name: SourceCompany
-    * * Display Name: Source Company Name
+    * * Display Name: Source Company
     * * SQL Data Type: nvarchar(50)
     */
     get SourceCompany(): string {
@@ -4383,7 +4005,7 @@ export class mjBizAppsAccountingIntercompanyAccountMatchEntity extends BaseEntit
 
     /**
     * * Field Name: TargetCompany
-    * * Display Name: Target Company Name
+    * * Display Name: Target Company
     * * SQL Data Type: nvarchar(50)
     */
     get TargetCompany(): string {
@@ -4392,7 +4014,7 @@ export class mjBizAppsAccountingIntercompanyAccountMatchEntity extends BaseEntit
 
     /**
     * * Field Name: DueToGLAccount
-    * * Display Name: Due To GL Account Name
+    * * Display Name: Due To GL Account
     * * SQL Data Type: nvarchar(200)
     */
     get DueToGLAccount(): string {
@@ -4401,7 +4023,7 @@ export class mjBizAppsAccountingIntercompanyAccountMatchEntity extends BaseEntit
 
     /**
     * * Field Name: DueFromGLAccount
-    * * Display Name: Due From GL Account Name
+    * * Display Name: Due From GL Account
     * * SQL Data Type: nvarchar(200)
     */
     get DueFromGLAccount(): string {
@@ -4438,117 +4060,6 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
         const compositeKey: CompositeKey = new CompositeKey();
         compositeKey.KeyValuePairs.push({ FieldName: 'ID', Value: ID });
         return await super.InnerLoad(compositeKey, EntityRelationshipsToLoad);
-    }
-
-    /**
-    * Validate() method override for MJ_BizApps_Accounting: Journal Entries entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
-    * * Table-Level: A Batch ID is required for all records unless the status is 'Pending'.
-    * * Table-Level: If the status is set to 'GLPosted', a GL posting date and time must be provided to ensure accurate financial tracking.
-    * * Table-Level: Both Linked Entity ID and Linked Record ID must be provided together, or both must be left blank. This ensures that linkage references are complete and valid.
-    * * Table-Level: A journal entry cannot be reversed by itself. The reversing journal entry must be a different record.
-    * * Table-Level: A journal entry cannot reverse itself. The reversing journal entry ID must be different from the journal entry's own ID.
-    * @public
-    * @method
-    * @override
-    */
-    public override Validate(): ValidationResult {
-        const result = super.Validate();
-        this.ValidateBatchIDRequiredForNonPendingStatus(result);
-        this.ValidateGLPostedAtWhenStatusIsGLPosted(result);
-        this.ValidateLinkedEntityAndLinkedRecordBothOrNeither(result);
-        this.ValidateReversedByJournalEntryIDNotEqualToID(result);
-        this.ValidateReversesJournalEntryIDNotEqualToID(result);
-        result.Success = result.Success && (result.Errors.length === 0);
-
-        return result;
-    }
-
-    /**
-    * A Batch ID is required for all records unless the status is 'Pending'.
-    * @param result - the ValidationResult object to add any errors or warnings to
-    * @public
-    * @method
-    */
-    public ValidateBatchIDRequiredForNonPendingStatus(result: ValidationResult) {
-    	if (this.Status !== "Pending" && this.BatchID == null) {
-    		result.Errors.push(new ValidationErrorInfo(
-    			"BatchID",
-    			"A Batch ID is required when the status is not 'Pending'. Current status is " + this.Status + ".",
-    			this.BatchID,
-    			ValidationErrorType.Failure
-    		));
-    	}
-    }
-
-    /**
-    * If the status is set to 'GLPosted', a GL posting date and time must be provided to ensure accurate financial tracking.
-    * @param result - the ValidationResult object to add any errors or warnings to
-    * @public
-    * @method
-    */
-    public ValidateGLPostedAtWhenStatusIsGLPosted(result: ValidationResult) {
-    	if (this.Status === "GLPosted" && this.GLPostedAt == null) {
-    		result.Errors.push(new ValidationErrorInfo(
-    			"GLPostedAt",
-    			"A GL posting date and time must be provided when the status is set to 'GLPosted'.",
-    			this.GLPostedAt,
-    			ValidationErrorType.Failure
-    		));
-    	}
-    }
-
-    /**
-    * Both Linked Entity ID and Linked Record ID must be provided together, or both must be left blank. This ensures that linkage references are complete and valid.
-    * @param result - the ValidationResult object to add any errors or warnings to
-    * @public
-    * @method
-    */
-    public ValidateLinkedEntityAndLinkedRecordBothOrNeither(result: ValidationResult) {
-    	const hasLinkedEntity = this.LinkedEntityID != null;
-    	const hasLinkedRecord = this.LinkedRecordID != null && this.LinkedRecordID !== "";
-    
-    	if (hasLinkedEntity !== hasLinkedRecord) {
-    		result.Errors.push(new ValidationErrorInfo(
-    			"LinkedEntityID",
-    			"Both Linked Entity ID and Linked Record ID must be provided together, or both must be omitted.",
-    			this.LinkedEntityID,
-    			ValidationErrorType.Failure
-    		));
-    	}
-    }
-
-    /**
-    * A journal entry cannot be reversed by itself. The reversing journal entry must be a different record.
-    * @param result - the ValidationResult object to add any errors or warnings to
-    * @public
-    * @method
-    */
-    public ValidateReversedByJournalEntryIDNotEqualToID(result: ValidationResult) {
-    	if (this.ReversedByJournalEntryID != null && this.ReversedByJournalEntryID === this.ID) {
-    		result.Errors.push(new ValidationErrorInfo(
-    			"ReversedByJournalEntryID",
-    			"A journal entry cannot be reversed by itself. The Reversed By Journal Entry ID must be different from the Journal Entry ID.",
-    			this.ReversedByJournalEntryID,
-    			ValidationErrorType.Failure
-    		));
-    	}
-    }
-
-    /**
-    * A journal entry cannot reverse itself. The reversing journal entry ID must be different from the journal entry's own ID.
-    * @param result - the ValidationResult object to add any errors or warnings to
-    * @public
-    * @method
-    */
-    public ValidateReversesJournalEntryIDNotEqualToID(result: ValidationResult) {
-    	if (this.ReversesJournalEntryID != null && this.ReversesJournalEntryID === this.ID) {
-    		result.Errors.push(new ValidationErrorInfo(
-    			"ReversesJournalEntryID",
-    			"A journal entry cannot reverse itself. The Reverses Journal Entry ID must be different from the Journal Entry ID.",
-    			this.ReversesJournalEntryID,
-    			ValidationErrorType.Failure
-    		));
-    	}
     }
 
     /**
@@ -4606,35 +4117,17 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     }
 
     /**
-    * * Field Name: EntryType
-    * * Display Name: Entry Type
-    * * SQL Data Type: nvarchar(40)
-    * * Value List Type: List
-    * * Possible Values 
-    *   * Adjustment
-    *   * BatchSummary
-    *   * CommissionAccrual
-    *   * FXRevaluation
-    *   * IntercompanyFlow
-    *   * Manual
-    *   * OpeningBalance
-    *   * OrderBooking
-    *   * PartnerRevShare
-    *   * PaymentReceipt
-    *   * PeriodEndAccrual
-    *   * Refund
-    *   * RevenueRecognition
-    *   * Reversal
-    *   * TaxRemittance
-    *   * WaterfallDistribution
-    *   * Writeoff
-    * * Description: OrderBooking | PaymentReceipt | RevenueRecognition | CommissionAccrual | PartnerRevShare | IntercompanyFlow | WaterfallDistribution | Refund | Writeoff | Reversal | Manual | TaxRemittance | PeriodEndAccrual | FXRevaluation | OpeningBalance | Adjustment.
+    * * Field Name: EntryTypeID
+    * * Display Name: Entry Type ID
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entry Types (vwJournalEntryTypes.ID)
+    * * Description: The JournalEntryType classifying this entry (issue #24, BA-D29). Accounting seeds its own ledger-mechanics types; consuming apps seed their domain types as rows.
     */
-    get EntryType(): 'Adjustment' | 'BatchSummary' | 'CommissionAccrual' | 'FXRevaluation' | 'IntercompanyFlow' | 'Manual' | 'OpeningBalance' | 'OrderBooking' | 'PartnerRevShare' | 'PaymentReceipt' | 'PeriodEndAccrual' | 'Refund' | 'RevenueRecognition' | 'Reversal' | 'TaxRemittance' | 'WaterfallDistribution' | 'Writeoff' {
-        return this.Get('EntryType');
+    get EntryTypeID(): string {
+        return this.Get('EntryTypeID');
     }
-    set EntryType(value: 'Adjustment' | 'BatchSummary' | 'CommissionAccrual' | 'FXRevaluation' | 'IntercompanyFlow' | 'Manual' | 'OpeningBalance' | 'OrderBooking' | 'PartnerRevShare' | 'PaymentReceipt' | 'PeriodEndAccrual' | 'Refund' | 'RevenueRecognition' | 'Reversal' | 'TaxRemittance' | 'WaterfallDistribution' | 'Writeoff') {
-        this.Set('EntryType', value);
+    set EntryTypeID(value: string) {
+        this.Set('EntryTypeID', value);
     }
 
     /**
@@ -4674,7 +4167,7 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     * * Display Name: Linked Entity ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ: Entities (vwEntities.ID)
-    * * Description: Polymorphic origin part 1 (plan D25): the MJ Entity of the single causal source record for this JE (OrderLine for booking/rev-rec entries, Payment for receipts/refunds, TaxRemittance for remittances, ...). FK to __mj.Entity. NULL (with LinkedRecordID) = manual JE.
+    * * Description: Polymorphic origin part 1 (plan D25): the MJ Entity of the single causal source record for this JE (OrderLine for booking/rev-rec entries, Payment for receipts/refunds, ...). FK to __mj.Entity. NULL (with LinkedRecordID) = manual JE.
     */
     get LinkedEntityID(): string | null {
         return this.Get('LinkedEntityID');
@@ -4701,7 +4194,7 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     * * Display Name: Reverses Journal Entry ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entries (vwJournalEntries.ID)
-    * * Description: When set, this JE is a reversal of the referenced original JE. EntryType MUST be 'Reversal' (trg_JE_ReversalConsistency).
+    * * Description: When set, this JE is a reversal of the referenced original JE. Its JournalEntryType Code MUST be 'Reversal' (trg_JE_ReversalConsistency).
     */
     get ReversesJournalEntryID(): string | null {
         return this.Get('ReversesJournalEntryID');
@@ -4808,6 +4301,15 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     }
 
     /**
+    * * Field Name: EntryType
+    * * Display Name: Entry Type
+    * * SQL Data Type: nvarchar(100)
+    */
+    get EntryType(): string {
+        return this.Get('EntryType');
+    }
+
+    /**
     * * Field Name: LinkedEntity
     * * Display Name: Linked Entity
     * * SQL Data Type: nvarchar(255)
@@ -4873,38 +4375,6 @@ export class mjBizAppsAccountingJournalEntryBatchSequenceEntity extends BaseEnti
         const compositeKey: CompositeKey = new CompositeKey();
         compositeKey.KeyValuePairs.push({ FieldName: 'ID', Value: ID });
         return await super.InnerLoad(compositeKey, EntityRelationshipsToLoad);
-    }
-
-    /**
-    * Validate() method override for MJ_BizApps_Accounting: Journal Entry Batch Sequences entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
-    * * ID: The record's ID must be exactly 1, ensuring that only a single system configuration record can exist in the database.
-    * @public
-    * @method
-    * @override
-    */
-    public override Validate(): ValidationResult {
-        const result = super.Validate();
-        this.ValidateIdEqualsOne(result);
-        result.Success = result.Success && (result.Errors.length === 0);
-
-        return result;
-    }
-
-    /**
-    * The record's ID must be exactly 1, ensuring that only a single system configuration record can exist in the database.
-    * @param result - the ValidationResult object to add any errors or warnings to
-    * @public
-    * @method
-    */
-    public ValidateIdEqualsOne(result: ValidationResult) {
-    	if (this.ID !== 1) {
-    		result.Errors.push(new ValidationErrorInfo(
-    			"ID",
-    			"The ID for this record must be exactly 1 to ensure only a single configuration record exists.",
-    			this.ID,
-    			ValidationErrorType.Failure
-    		));
-    	}
     }
 
     /**
@@ -5044,7 +4514,7 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     * * Display Name: Summary Journal Entry ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entries (vwJournalEntries.ID)
-    * * Description: The aggregated summary JournalEntry (EntryType=BatchSummary, EffectiveDate=PostingDate) that posts to the GL for this batch (plan D9). Its lines net debits/credits per GLAccount x dimension-combo. The summary carries this batch's BatchID (same derived lock machinery as members) but is excluded from member/netting/sweep queries by its EntryType.
+    * * Description: The aggregated summary JournalEntry (its JournalEntryType flagged IsBatchSummary, EffectiveDate=PostingDate) that posts to the GL for this batch (plan D9). Its lines net debits/credits per GLAccount x dimension-combo. The summary carries this batch's BatchID (same derived lock machinery as members) but is excluded from member/netting/sweep queries via its type's IsBatchSummary flag.
     */
     get SummaryJournalEntryID(): string | null {
         return this.Get('SummaryJournalEntryID');
@@ -5168,7 +4638,7 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
 
     /**
     * * Field Name: ExternalBatchRef
-    * * Display Name: External Batch Reference
+    * * Display Name: External Batch Ref
     * * SQL Data Type: nvarchar(100)
     * * Description: ERP's reference returned on send (used to correlate the consolidated JE posted in the ERP).
     */
@@ -5366,7 +4836,7 @@ export class mjBizAppsAccountingJournalEntryLineDimensionEntity extends BaseEnti
 
     /**
     * * Field Name: JournalEntryLineID
-    * * Display Name: Journal Entry Line
+    * * Display Name: Journal Entry Line ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entry Lines (vwJournalEntryLines.ID)
     * * Description: JE line being tagged.
@@ -5380,7 +4850,7 @@ export class mjBizAppsAccountingJournalEntryLineDimensionEntity extends BaseEnti
 
     /**
     * * Field Name: DimensionID
-    * * Display Name: Dimension
+    * * Display Name: Dimension ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Dimensions (vwDimensions.ID)
     * * Description: Dimension being applied. UNIQUE per (Line, Dimension) so a line cannot have two values for the same dimension.
@@ -5394,7 +4864,7 @@ export class mjBizAppsAccountingJournalEntryLineDimensionEntity extends BaseEnti
 
     /**
     * * Field Name: DimensionValueID
-    * * Display Name: Dimension Value
+    * * Display Name: Dimension Value ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Dimension Values (vwDimensionValues.ID)
     * * Description: Value chosen for the dimension on this line.
@@ -5428,7 +4898,7 @@ export class mjBizAppsAccountingJournalEntryLineDimensionEntity extends BaseEnti
 
     /**
     * * Field Name: Dimension
-    * * Display Name: Dimension Name
+    * * Display Name: Dimension
     * * SQL Data Type: nvarchar(100)
     */
     get Dimension(): string {
@@ -5437,7 +4907,7 @@ export class mjBizAppsAccountingJournalEntryLineDimensionEntity extends BaseEnti
 
     /**
     * * Field Name: DimensionValue
-    * * Display Name: Dimension Value Name
+    * * Display Name: Dimension Value
     * * SQL Data Type: nvarchar(200)
     */
     get DimensionValue(): string {
@@ -5477,121 +4947,6 @@ export class mjBizAppsAccountingJournalEntryLineEntity extends BaseEntity<mjBizA
     }
 
     /**
-    * Validate() method override for MJ_BizApps_Accounting: Journal Entry Lines entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
-    * * LineNumber: Line number must be a positive integer greater than zero to ensure proper sequencing of journal entry lines.
-    * * Table-Level: Each journal entry line must have either a Debit Amount or a Credit Amount, but not both. The specified amount must be greater than zero, and the other field must be left blank.
-    * * Table-Level: If an original debit or credit amount is specified, an exchange rate must also be provided to ensure proper currency conversion.
-    * * Table-Level: If an original debit or credit amount is specified, its corresponding current debit or credit amount must also be provided. If no original amounts are specified, both original debit and original credit must be left blank.
-    * * Table-Level: An entry cannot have both an original debit amount and an original credit amount specified at the same time. At most, only one of these amounts can be provided.
-    * @public
-    * @method
-    * @override
-    */
-    public override Validate(): ValidationResult {
-        const result = super.Validate();
-        this.ValidateLineNumberGreaterThanZero(result);
-        this.ValidateDebitAndCreditAmounts(result);
-        this.ValidateExchangeRateUsedWhenOriginalAmountsSpecified(result);
-        this.ValidateOriginalAndCurrentAmountsMatch(result);
-        this.ValidateOriginalDebitAndCreditAmounts(result);
-        result.Success = result.Success && (result.Errors.length === 0);
-
-        return result;
-    }
-
-    /**
-    * Line number must be a positive integer greater than zero to ensure proper sequencing of journal entry lines.
-    * @param result - the ValidationResult object to add any errors or warnings to
-    * @public
-    * @method
-    */
-    public ValidateLineNumberGreaterThanZero(result: ValidationResult) {
-        if (this.LineNumber != null && this.LineNumber <= 0) {
-            result.Errors.push(new ValidationErrorInfo(
-                "LineNumber",
-                "Line number must be a positive integer greater than zero.",
-                this.LineNumber,
-                ValidationErrorType.Failure
-            ));
-        }
-    }
-
-    /**
-    * Each journal entry line must have either a Debit Amount or a Credit Amount, but not both. The specified amount must be greater than zero, and the other field must be left blank.
-    * @param result - the ValidationResult object to add any errors or warnings to
-    * @public
-    * @method
-    */
-    public ValidateDebitAndCreditAmounts(result: ValidationResult) {
-        const isDebitValid = this.DebitAmount != null && this.CreditAmount == null && this.DebitAmount > 0;
-        const isCreditValid = this.CreditAmount != null && this.DebitAmount == null && this.CreditAmount > 0;
-    
-        if (!isDebitValid && !isCreditValid) {
-            result.Errors.push(new ValidationErrorInfo(
-                "DebitAmount",
-                "Exactly one of Debit Amount or Credit Amount must be populated with a value greater than zero, and the other must be empty.",
-                this.DebitAmount,
-                ValidationErrorType.Failure
-            ));
-        }
-    }
-
-    /**
-    * If an original debit or credit amount is specified, an exchange rate must also be provided to ensure proper currency conversion.
-    * @param result - the ValidationResult object to add any errors or warnings to
-    * @public
-    * @method
-    */
-    public ValidateExchangeRateUsedWhenOriginalAmountsSpecified(result: ValidationResult) {
-        if ((this.OriginalDebitAmount != null || this.OriginalCreditAmount != null) && this.ExchangeRateUsed == null) {
-            result.Errors.push(new ValidationErrorInfo(
-                "ExchangeRateUsed",
-                "An exchange rate must be provided when an original debit or credit amount is specified.",
-                this.ExchangeRateUsed,
-                ValidationErrorType.Failure
-            ));
-        }
-    }
-
-    /**
-    * If an original debit or credit amount is specified, its corresponding current debit or credit amount must also be provided. If no original amounts are specified, both original debit and original credit must be left blank.
-    * @param result - the ValidationResult object to add any errors or warnings to
-    * @public
-    * @method
-    */
-    public ValidateOriginalAndCurrentAmountsMatch(result: ValidationResult) {
-        const hasNoOriginals = this.OriginalDebitAmount == null && this.OriginalCreditAmount == null;
-        const hasDebitMatch = this.OriginalDebitAmount != null && this.DebitAmount != null;
-        const hasCreditMatch = this.OriginalCreditAmount != null && this.CreditAmount != null;
-    
-        if (!(hasNoOriginals || hasDebitMatch || hasCreditMatch)) {
-            result.Errors.push(new ValidationErrorInfo(
-                "OriginalDebitAmount",
-                "If an original debit or credit amount is provided, its corresponding current amount must also be specified. Otherwise, both original amounts must be empty.",
-                this.OriginalDebitAmount,
-                ValidationErrorType.Failure
-            ));
-        }
-    }
-
-    /**
-    * An entry cannot have both an original debit amount and an original credit amount specified at the same time. At most, only one of these amounts can be provided.
-    * @param result - the ValidationResult object to add any errors or warnings to
-    * @public
-    * @method
-    */
-    	public ValidateOriginalDebitAndCreditAmounts(result: ValidationResult) {
-    		if (this.OriginalDebitAmount != null && this.OriginalCreditAmount != null) {
-    			result.Errors.push(new ValidationErrorInfo(
-    				"OriginalDebitAmount",
-    				"An entry cannot have both an original debit amount and an original credit amount specified at the same time.",
-    				this.OriginalDebitAmount,
-    				ValidationErrorType.Failure
-    			));
-    		}
-    	}
-
-    /**
     * * Field Name: ID
     * * Display Name: ID
     * * SQL Data Type: uniqueidentifier
@@ -5607,7 +4962,7 @@ export class mjBizAppsAccountingJournalEntryLineEntity extends BaseEntity<mjBizA
 
     /**
     * * Field Name: JournalEntryID
-    * * Display Name: Journal Entry
+    * * Display Name: Journal Entry ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entries (vwJournalEntries.ID)
     * * Description: Parent JournalEntry.
@@ -5739,20 +5094,6 @@ export class mjBizAppsAccountingJournalEntryLineEntity extends BaseEntity<mjBizA
     }
 
     /**
-    * * Field Name: CounterpartyOrganizationID
-    * * Display Name: Counterparty Organization ID
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ.BizApps.Common: Organizations (vwOrganizationsExtended.ID)
-    * * Description: For AR-side lines, the Customer Organization. FK to __mj_BizAppsCommon.Organization.
-    */
-    get CounterpartyOrganizationID(): string | null {
-        return this.Get('CounterpartyOrganizationID');
-    }
-    set CounterpartyOrganizationID(value: string | null) {
-        this.Set('CounterpartyOrganizationID', value);
-    }
-
-    /**
     * * Field Name: __mj_CreatedAt
     * * Display Name: Created At
     * * SQL Data Type: datetimeoffset
@@ -5783,20 +5124,11 @@ export class mjBizAppsAccountingJournalEntryLineEntity extends BaseEntity<mjBizA
 
     /**
     * * Field Name: OriginalCurrencyCode_Virtual
-    * * Display Name: Original Currency Code (Virtual)
+    * * Display Name: Original Currency Code Virtual
     * * SQL Data Type: nvarchar(80)
     */
     get OriginalCurrencyCode_Virtual(): string | null {
         return this.Get('OriginalCurrencyCode_Virtual');
-    }
-
-    /**
-    * * Field Name: CounterpartyOrganization
-    * * Display Name: Counterparty Organization
-    * * SQL Data Type: nvarchar(255)
-    */
-    get CounterpartyOrganization(): string | null {
-        return this.Get('CounterpartyOrganization');
     }
 }
 
@@ -5903,6 +5235,152 @@ export class mjBizAppsAccountingJournalEntrySequenceEntity extends BaseEntity<mj
 
 
 /**
+ * MJ_BizApps_Accounting: Journal Entry Types - strongly typed entity sub-class
+ * * Schema: __mj_BizAppsAccounting
+ * * Base Table: JournalEntryType
+ * * Base View: vwJournalEntryTypes
+ * * @description Extensible classification of journal entries (issue #24, BA-D29). Replaces the former closed EntryType CHECK enum. Accounting seeds only the ledger-mechanics types it owns (IsSystem=1, via metadata/journal-entry-types); consuming apps (orders, AP, payroll, ...) seed their own domain types via mj sync push without touching this repo.
+ * * Primary Key: ID
+ * @extends {BaseEntity}
+ * @class
+ * @public
+ */
+@RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Journal Entry Types')
+export class mjBizAppsAccountingJournalEntryTypeEntity extends BaseEntity<mjBizAppsAccountingJournalEntryTypeEntityType> {
+    /**
+    * Loads the MJ_BizApps_Accounting: Journal Entry Types record from the database
+    * @param ID: string - primary key value to load the MJ_BizApps_Accounting: Journal Entry Types record.
+    * @param EntityRelationshipsToLoad - (optional) the relationships to load
+    * @returns {Promise<boolean>} - true if successful, false otherwise
+    * @public
+    * @async
+    * @memberof mjBizAppsAccountingJournalEntryTypeEntity
+    * @method
+    * @override
+    */
+    public async Load(ID: string, EntityRelationshipsToLoad?: string[]) : Promise<boolean> {
+        const compositeKey: CompositeKey = new CompositeKey();
+        compositeKey.KeyValuePairs.push({ FieldName: 'ID', Value: ID });
+        return await super.InnerLoad(compositeKey, EntityRelationshipsToLoad);
+    }
+
+    /**
+    * * Field Name: ID
+    * * Display Name: ID
+    * * SQL Data Type: uniqueidentifier
+    * * Default Value: newsequentialid()
+    */
+    get ID(): string {
+        return this.Get('ID');
+    }
+    set ID(value: string) {
+        this.Set('ID', value);
+    }
+
+    /**
+    * * Field Name: Code
+    * * Display Name: Code
+    * * SQL Data Type: nvarchar(40)
+    * * Description: Stable machine code for the type (e.g. Manual, Reversal, BatchSummary, OrderBooking). Unique. Referenced by code; display uses Name.
+    */
+    get Code(): string {
+        return this.Get('Code');
+    }
+    set Code(value: string) {
+        this.Set('Code', value);
+    }
+
+    /**
+    * * Field Name: Name
+    * * Display Name: Name
+    * * SQL Data Type: nvarchar(100)
+    * * Description: Human-readable display name for the type.
+    */
+    get Name(): string {
+        return this.Get('Name');
+    }
+    set Name(value: string) {
+        this.Set('Name', value);
+    }
+
+    /**
+    * * Field Name: Description
+    * * Display Name: Description
+    * * SQL Data Type: nvarchar(MAX)
+    * * Description: What this entry type classifies and which app owns it.
+    */
+    get Description(): string | null {
+        return this.Get('Description');
+    }
+    set Description(value: string | null) {
+        this.Set('Description', value);
+    }
+
+    /**
+    * * Field Name: IsSystem
+    * * Display Name: Is System
+    * * SQL Data Type: bit
+    * * Default Value: 0
+    * * Description: 1 = accounting's own ledger-mechanics type (Manual, Reversal, BatchSummary, ...). Consumers must not repurpose or delete IsSystem rows.
+    */
+    get IsSystem(): boolean {
+        return this.Get('IsSystem');
+    }
+    set IsSystem(value: boolean) {
+        this.Set('IsSystem', value);
+    }
+
+    /**
+    * * Field Name: IsBatchSummary
+    * * Display Name: Is Batch Summary
+    * * SQL Data Type: bit
+    * * Default Value: 0
+    * * Description: 1 = this type marks a batch's aggregated summary JE. Batch member/netting/sweep queries exclude JEs of this type via a join on this flag (replaces the former 'BatchSummary' magic-string match). A filtered unique index allows exactly one flagged row.
+    */
+    get IsBatchSummary(): boolean {
+        return this.Get('IsBatchSummary');
+    }
+    set IsBatchSummary(value: boolean) {
+        this.Set('IsBatchSummary', value);
+    }
+
+    /**
+    * * Field Name: IsActive
+    * * Display Name: Is Active
+    * * SQL Data Type: bit
+    * * Default Value: 1
+    * * Description: Whether this type may be used on NEW journal entries. Inactive types remain for historical rows.
+    */
+    get IsActive(): boolean {
+        return this.Get('IsActive');
+    }
+    set IsActive(value: boolean) {
+        this.Set('IsActive', value);
+    }
+
+    /**
+    * * Field Name: __mj_CreatedAt
+    * * Display Name: Created At
+    * * SQL Data Type: datetimeoffset
+    * * Default Value: getutcdate()
+    */
+    get __mj_CreatedAt(): Date {
+        return this.Get('__mj_CreatedAt');
+    }
+
+    /**
+    * * Field Name: __mj_UpdatedAt
+    * * Display Name: Updated At
+    * * SQL Data Type: datetimeoffset
+    * * Default Value: getutcdate()
+    */
+    get __mj_UpdatedAt(): Date {
+        return this.Get('__mj_UpdatedAt');
+    }
+}
+
+
+/**
  * MJ_BizApps_Accounting: Tax Authorities - strongly typed entity sub-class
  * * Schema: __mj_BizAppsAccounting
  * * Base Table: TaxAuthority
@@ -5948,7 +5426,7 @@ export class mjBizAppsAccountingTaxAuthorityEntity extends BaseEntity<mjBizAppsA
 
     /**
     * * Field Name: Code
-    * * Display Name: Authority Code
+    * * Display Name: Code
     * * SQL Data Type: nvarchar(40)
     * * Description: Globally unique authority code, e.g. 'US-IRS', 'CA-BOE', 'EU-VAT-DE'.
     */
@@ -5987,7 +5465,7 @@ export class mjBizAppsAccountingTaxAuthorityEntity extends BaseEntity<mjBizAppsA
 
     /**
     * * Field Name: IsActive
-    * * Display Name: Active
+    * * Display Name: Is Active
     * * SQL Data Type: bit
     * * Default Value: 1
     * * Description: Whether this authority is currently active.
@@ -6017,24 +5495,6 @@ export class mjBizAppsAccountingTaxAuthorityEntity extends BaseEntity<mjBizAppsA
     */
     get __mj_UpdatedAt(): Date {
         return this.Get('__mj_UpdatedAt');
-    }
-
-    /**
-    * * Field Name: __mj_Latitude
-    * * Display Name: Mj Latitude
-    * * SQL Data Type: decimal(10, 6)
-    */
-    get __mj_Latitude(): number | null {
-        return this.Get('__mj_Latitude');
-    }
-
-    /**
-    * * Field Name: __mj_Longitude
-    * * Display Name: Mj Longitude
-    * * SQL Data Type: decimal(10, 6)
-    */
-    get __mj_Longitude(): number | null {
-        return this.Get('__mj_Longitude');
     }
 }
 
@@ -6085,7 +5545,7 @@ export class mjBizAppsAccountingTaxJurisdictionEntity extends BaseEntity<mjBizAp
 
     /**
     * * Field Name: TaxAuthorityID
-    * * Display Name: Tax Authority
+    * * Display Name: Tax Authority ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Tax Authorities (vwTaxAuthorities.ID)
     * * Description: TaxAuthority this jurisdiction belongs to.
@@ -6203,7 +5663,7 @@ export class mjBizAppsAccountingTaxJurisdictionEntity extends BaseEntity<mjBizAp
 
     /**
     * * Field Name: ParentTaxJurisdictionID
-    * * Display Name: Parent Jurisdiction
+    * * Display Name: Parent Tax Jurisdiction ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Tax Jurisdictions (vwTaxJurisdictions.ID)
     * * Description: Parent jurisdiction for nested scopes (e.g. county inside state).
@@ -6251,7 +5711,7 @@ export class mjBizAppsAccountingTaxJurisdictionEntity extends BaseEntity<mjBizAp
 
     /**
     * * Field Name: TaxAuthority
-    * * Display Name: Tax Authority Name
+    * * Display Name: Tax Authority
     * * SQL Data Type: nvarchar(200)
     */
     get TaxAuthority(): string {
@@ -6260,7 +5720,7 @@ export class mjBizAppsAccountingTaxJurisdictionEntity extends BaseEntity<mjBizAp
 
     /**
     * * Field Name: ParentTaxJurisdiction
-    * * Display Name: Parent Jurisdiction Name
+    * * Display Name: Parent Tax Jurisdiction
     * * SQL Data Type: nvarchar(200)
     */
     get ParentTaxJurisdiction(): string | null {
@@ -6268,26 +5728,8 @@ export class mjBizAppsAccountingTaxJurisdictionEntity extends BaseEntity<mjBizAp
     }
 
     /**
-    * * Field Name: __mj_Latitude
-    * * Display Name: Mj Latitude
-    * * SQL Data Type: decimal(10, 6)
-    */
-    get __mj_Latitude(): number | null {
-        return this.Get('__mj_Latitude');
-    }
-
-    /**
-    * * Field Name: __mj_Longitude
-    * * Display Name: Mj Longitude
-    * * SQL Data Type: decimal(10, 6)
-    */
-    get __mj_Longitude(): number | null {
-        return this.Get('__mj_Longitude');
-    }
-
-    /**
     * * Field Name: RootParentTaxJurisdictionID
-    * * Display Name: Root Parent Jurisdiction
+    * * Display Name: Root Parent Tax Jurisdiction ID
     * * SQL Data Type: uniqueidentifier
     */
     get RootParentTaxJurisdictionID(): string | null {
@@ -6301,7 +5743,7 @@ export class mjBizAppsAccountingTaxJurisdictionEntity extends BaseEntity<mjBizAp
  * * Schema: __mj_BizAppsAccounting
  * * Base Table: TaxLiability
  * * Base View: vwTaxLiabilities
- * * @description Open tax liability balance per (Company × Authority × Jurisdiction × Period). Accrued from JE postings; paid down via TaxRemittance records.
+ * * @description Open tax liability balance per (Company × Authority × Jurisdiction × Period). Accrued from JE postings; remitted to the authority in the ERP (no remittance table here — ERP/GL concern).
  * * Primary Key: ID
  * @extends {BaseEntity}
  * @class
@@ -6342,7 +5784,7 @@ export class mjBizAppsAccountingTaxLiabilityEntity extends BaseEntity<mjBizAppsA
 
     /**
     * * Field Name: CompanyID
-    * * Display Name: Company
+    * * Display Name: Company ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
     * * Description: Company this liability belongs to.
@@ -6356,7 +5798,7 @@ export class mjBizAppsAccountingTaxLiabilityEntity extends BaseEntity<mjBizAppsA
 
     /**
     * * Field Name: TaxAuthorityID
-    * * Display Name: Tax Authority
+    * * Display Name: Tax Authority ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Tax Authorities (vwTaxAuthorities.ID)
     * * Description: TaxAuthority owed.
@@ -6370,7 +5812,7 @@ export class mjBizAppsAccountingTaxLiabilityEntity extends BaseEntity<mjBizAppsA
 
     /**
     * * Field Name: TaxJurisdictionID
-    * * Display Name: Tax Jurisdiction
+    * * Display Name: Tax Jurisdiction ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Tax Jurisdictions (vwTaxJurisdictions.ID)
     * * Description: TaxJurisdiction the liability is scoped to.
@@ -6485,7 +5927,7 @@ export class mjBizAppsAccountingTaxLiabilityEntity extends BaseEntity<mjBizAppsA
 
     /**
     * * Field Name: Company
-    * * Display Name: Company Name
+    * * Display Name: Company
     * * SQL Data Type: nvarchar(50)
     */
     get Company(): string {
@@ -6494,7 +5936,7 @@ export class mjBizAppsAccountingTaxLiabilityEntity extends BaseEntity<mjBizAppsA
 
     /**
     * * Field Name: TaxAuthority
-    * * Display Name: Tax Authority Name
+    * * Display Name: Tax Authority
     * * SQL Data Type: nvarchar(200)
     */
     get TaxAuthority(): string {
@@ -6503,7 +5945,7 @@ export class mjBizAppsAccountingTaxLiabilityEntity extends BaseEntity<mjBizAppsA
 
     /**
     * * Field Name: TaxJurisdiction
-    * * Display Name: Tax Jurisdiction Name
+    * * Display Name: Tax Jurisdiction
     * * SQL Data Type: nvarchar(200)
     */
     get TaxJurisdiction(): string {
@@ -6540,59 +5982,6 @@ export class mjBizAppsAccountingTaxRateEntity extends BaseEntity<mjBizAppsAccoun
         const compositeKey: CompositeKey = new CompositeKey();
         compositeKey.KeyValuePairs.push({ FieldName: 'ID', Value: ID });
         return await super.InnerLoad(compositeKey, EntityRelationshipsToLoad);
-    }
-
-    /**
-    * Validate() method override for MJ_BizApps_Accounting: Tax Rates entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
-    * * Rate: The tax rate must be a value between 0 and 1 inclusive, representing a percentage from 0% to 100%.
-    * * Table-Level: The effective end date must be on or after the effective start date to ensure valid date ranges.
-    * @public
-    * @method
-    * @override
-    */
-    public override Validate(): ValidationResult {
-        const result = super.Validate();
-        this.ValidateRateRange(result);
-        this.ValidateEffectiveToAfterOrEqualEffectiveFrom(result);
-        result.Success = result.Success && (result.Errors.length === 0);
-
-        return result;
-    }
-
-    /**
-    * The tax rate must be a value between 0 and 1 inclusive, representing a percentage from 0% to 100%.
-    * @param result - the ValidationResult object to add any errors or warnings to
-    * @public
-    * @method
-    */
-    public ValidateRateRange(result: ValidationResult) {
-    	if (this.Rate != null && (this.Rate < 0 || this.Rate > 1)) {
-    		result.Errors.push(new ValidationErrorInfo(
-    			"Rate",
-    			"The tax rate must be a value between 0 and 1 inclusive.",
-    			this.Rate,
-    			ValidationErrorType.Failure
-    		));
-    	}
-    }
-
-    /**
-    * The effective end date must be on or after the effective start date to ensure valid date ranges.
-    * @param result - the ValidationResult object to add any errors or warnings to
-    * @public
-    * @method
-    */
-    public ValidateEffectiveToAfterOrEqualEffectiveFrom(result: ValidationResult) {
-    	if (this.EffectiveTo != null && this.EffectiveFrom != null) {
-    		if (this.EffectiveTo < this.EffectiveFrom) {
-    			result.Errors.push(new ValidationErrorInfo(
-    				"EffectiveTo",
-    				"The Effective To date must be on or after the Effective From date.",
-    				this.EffectiveTo,
-    				ValidationErrorType.Failure
-    			));
-    		}
-    	}
     }
 
     /**
@@ -6728,170 +6117,5 @@ export class mjBizAppsAccountingTaxRateEntity extends BaseEntity<mjBizAppsAccoun
     */
     get TaxJurisdiction(): string {
         return this.Get('TaxJurisdiction');
-    }
-}
-
-
-/**
- * MJ_BizApps_Accounting: Tax Remittances - strongly typed entity sub-class
- * * Schema: __mj_BizAppsAccounting
- * * Base Table: TaxRemittance
- * * Base View: vwTaxRemittances
- * * @description A payment made against a TaxLiability. Generates a JE of EntryType=TaxRemittance via PostedJournalEntryID.
- * * Primary Key: ID
- * @extends {BaseEntity}
- * @class
- * @public
- */
-@RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Tax Remittances')
-export class mjBizAppsAccountingTaxRemittanceEntity extends BaseEntity<mjBizAppsAccountingTaxRemittanceEntityType> {
-    /**
-    * Loads the MJ_BizApps_Accounting: Tax Remittances record from the database
-    * @param ID: string - primary key value to load the MJ_BizApps_Accounting: Tax Remittances record.
-    * @param EntityRelationshipsToLoad - (optional) the relationships to load
-    * @returns {Promise<boolean>} - true if successful, false otherwise
-    * @public
-    * @async
-    * @memberof mjBizAppsAccountingTaxRemittanceEntity
-    * @method
-    * @override
-    */
-    public async Load(ID: string, EntityRelationshipsToLoad?: string[]) : Promise<boolean> {
-        const compositeKey: CompositeKey = new CompositeKey();
-        compositeKey.KeyValuePairs.push({ FieldName: 'ID', Value: ID });
-        return await super.InnerLoad(compositeKey, EntityRelationshipsToLoad);
-    }
-
-    /**
-    * Validate() method override for MJ_BizApps_Accounting: Tax Remittances entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
-    * * RemittedAmount: The remitted amount must be greater than zero to ensure that only positive payment amounts are recorded.
-    * @public
-    * @method
-    * @override
-    */
-    public override Validate(): ValidationResult {
-        const result = super.Validate();
-        this.ValidateRemittedAmountGreaterThanZero(result);
-        result.Success = result.Success && (result.Errors.length === 0);
-
-        return result;
-    }
-
-    /**
-    * The remitted amount must be greater than zero to ensure that only positive payment amounts are recorded.
-    * @param result - the ValidationResult object to add any errors or warnings to
-    * @public
-    * @method
-    */
-    public ValidateRemittedAmountGreaterThanZero(result: ValidationResult) {
-        if (this.RemittedAmount !== undefined && this.RemittedAmount !== null && this.RemittedAmount <= 0) {
-            result.Errors.push(new ValidationErrorInfo(
-                "RemittedAmount",
-                "The remitted amount must be greater than zero.",
-                this.RemittedAmount,
-                ValidationErrorType.Failure
-            ));
-        }
-    }
-
-    /**
-    * * Field Name: ID
-    * * Display Name: ID
-    * * SQL Data Type: uniqueidentifier
-    * * Default Value: newsequentialid()
-    * * Description: Unique identifier.
-    */
-    get ID(): string {
-        return this.Get('ID');
-    }
-    set ID(value: string) {
-        this.Set('ID', value);
-    }
-
-    /**
-    * * Field Name: TaxLiabilityID
-    * * Display Name: Tax Liability
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Tax Liabilities (vwTaxLiabilities.ID)
-    * * Description: Liability this payment is against.
-    */
-    get TaxLiabilityID(): string {
-        return this.Get('TaxLiabilityID');
-    }
-    set TaxLiabilityID(value: string) {
-        this.Set('TaxLiabilityID', value);
-    }
-
-    /**
-    * * Field Name: RemittedAmount
-    * * Display Name: Remitted Amount
-    * * SQL Data Type: decimal(18, 2)
-    * * Description: Amount remitted (functional currency).
-    */
-    get RemittedAmount(): number {
-        return this.Get('RemittedAmount');
-    }
-    set RemittedAmount(value: number) {
-        this.Set('RemittedAmount', value);
-    }
-
-    /**
-    * * Field Name: RemittedDate
-    * * Display Name: Remitted Date
-    * * SQL Data Type: date
-    * * Description: Date the remittance was paid.
-    */
-    get RemittedDate(): Date {
-        return this.Get('RemittedDate');
-    }
-    set RemittedDate(value: Date) {
-        this.Set('RemittedDate', value);
-    }
-
-    /**
-    * * Field Name: PaymentReference
-    * * Display Name: Payment Reference
-    * * SQL Data Type: nvarchar(100)
-    * * Description: External payment reference (wire ID, check number, confirmation code).
-    */
-    get PaymentReference(): string | null {
-        return this.Get('PaymentReference');
-    }
-    set PaymentReference(value: string | null) {
-        this.Set('PaymentReference', value);
-    }
-
-    /**
-    * * Field Name: PostedJournalEntryID
-    * * Display Name: Posted Journal Entry
-    * * SQL Data Type: uniqueidentifier
-    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entries (vwJournalEntries.ID)
-    * * Description: JE that records this remittance.
-    */
-    get PostedJournalEntryID(): string | null {
-        return this.Get('PostedJournalEntryID');
-    }
-    set PostedJournalEntryID(value: string | null) {
-        this.Set('PostedJournalEntryID', value);
-    }
-
-    /**
-    * * Field Name: __mj_CreatedAt
-    * * Display Name: Created At
-    * * SQL Data Type: datetimeoffset
-    * * Default Value: getutcdate()
-    */
-    get __mj_CreatedAt(): Date {
-        return this.Get('__mj_CreatedAt');
-    }
-
-    /**
-    * * Field Name: __mj_UpdatedAt
-    * * Display Name: Updated At
-    * * SQL Data Type: datetimeoffset
-    * * Default Value: getutcdate()
-    */
-    get __mj_UpdatedAt(): Date {
-        return this.Get('__mj_UpdatedAt');
     }
 }

@@ -109,7 +109,12 @@ async function bootstrap(): Promise<Ctx> {
   await UserCache.Instance.Refresh(pool);
   const ctxUser = UserCache.Users.find(u => u?.Type?.trim().toLowerCase() === 'owner') ?? UserCache.Users[0];
   if (!ctxUser) throw new Error('No context user found.');
-  const stray = (await pool.request().query(`SELECT COUNT(*) n FROM ${SCHEMA}.JournalEntry WHERE Status='Pending'`)).recordset[0].n;
+  // Company-scoped since 2026-07-30: builds and the engine's cross-checks are per-company (D3/D7),
+  // and the DEMO seed legitimately keeps Pending JEs (the dimension-tagged workspace candidate) —
+  // a GLOBAL stray guard now false-fails on a populated instance. Only THIS harness's own company
+  // matters, and it is created fresh below, so the pre-existing-strays check narrows to leftovers
+  // from a prior crashed run of THIS harness (its deterministic company name).
+  const stray = (await pool.request().query(`SELECT COUNT(*) n FROM ${SCHEMA}.JournalEntry je JOIN ${SCHEMA}.AccountingCompanyProfile c ON c.ID=je.CompanyID JOIN __mj.Company co ON co.ID=c.ID WHERE je.Status='Pending' AND co.Name LIKE 'ENGINE-%'`)).recordset[0].n;
   if (Number(stray) > 0) throw new Error(`${stray} stray Pending JE(s) exist — clean them up before running engine-runtime.`);
   const rv = new RunView();
   const cur = await rv.RunView<{ Code: string }>({ EntityName: CURRENCY_ENTITY, Fields: ['Code'], MaxRows: 1, ResultType: 'simple' }, ctxUser);
@@ -173,11 +178,14 @@ async function main(): Promise<void> {
       ],
     });
     assert(out.Success === true, `expected success, got ${JSON.stringify(out.Errors)}`);
-    assert(/^JE-\d{4}-\d{6}$/.test(out.EntryNumber ?? ''), `EntryNumber '${out.EntryNumber}' should be JE-{FY}-{seq:000000}`);
+    assert(/^JE-[A-Z0-9]+-\d{4}-\d{6}$/.test(out.EntryNumber ?? ''), `EntryNumber '${out.EntryNumber}' should be JE-{CompanyCode}-{FY}-{seq:000000} (BA-D31/D19 per-company)`);
     assert(out.LineCount === 3, `expected 3 normalized lines (AR merged; Rev split by dims), got ${out.LineCount}`);
-    // Raw-SQL cross-checks — the truth, not the code under test.
-    const je = (await pool.request().query(`SELECT Status, EntryType FROM ${SCHEMA}.JournalEntry WHERE ID='${out.JournalEntryID}'`)).recordset[0];
-    assert(!!je && je.Status === 'Pending' && je.EntryType === 'OrderBooking', `JE row wrong: ${JSON.stringify(je)}`);
+    // Raw-SQL cross-checks — the truth, not the code under test. (EntryType column was replaced
+    // by the EntryTypeID lookup, issue #24 — join the type table for the CODE.)
+    const je = (await pool.request().query(
+      `SELECT j.Status, t.Code AS EntryTypeCode FROM ${SCHEMA}.JournalEntry j
+         JOIN ${SCHEMA}.JournalEntryType t ON t.ID = j.EntryTypeID WHERE j.ID='${out.JournalEntryID}'`)).recordset[0];
+    assert(!!je && je.Status === 'Pending' && je.EntryTypeCode === 'OrderBooking', `JE row wrong: ${JSON.stringify(je)}`);
     const lines = (await pool.request().query(`SELECT LineNumber, GLAccountID, DebitAmount, CreditAmount FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID='${out.JournalEntryID}' ORDER BY LineNumber`)).recordset;
     assert(lines.length === 3, `expected 3 line rows, got ${lines.length}`);
     assert(Number(lines[0].DebitAmount) === 100 && lines[0].GLAccountID.toLowerCase() === companyA.arGL.toLowerCase(), `line 1 should be the merged Dr AR 100, got ${JSON.stringify(lines[0])}`);
@@ -231,13 +239,13 @@ async function main(): Promise<void> {
     expectError(out, 'UNBALANCED');
   });
 
-  await test('E2 UNBALANCED per company — overall-balanced but cross-company-unbalanced refused (AM-4)', async () => {
+  await test('E2 MULTI_COMPANY_DRAFT — a draft spanning two companies refused with the typed code (plan D3)', async () => {
     const out = await runOp(ctx, { EffectiveDate: '2026-07-06', EntryType: 'Manual', Lines: [
       { GLAccountID: companyA.arGL, DebitAmount: 100 },
       { GLAccountID: companyB.revGL, CreditAmount: 100 },
     ] });
-    expectError(out, 'UNBALANCED');
-    assert((out.Errors ?? []).some(e => /AM-4/.test(e.Message)), `expected the per-company AM-4 message, got ${JSON.stringify(out.Errors)}`);
+    expectError(out, 'MULTI_COMPANY_DRAFT');
+    assert((out.Errors ?? []).some(e => /split the draft per company/.test(e.Message)), `expected the split-per-company guidance, got ${JSON.stringify(out.Errors)}`);
   });
 
   await test('E2 MALFORMED_DRAFT — single-line draft refused', async () => {
@@ -356,6 +364,7 @@ async function main(): Promise<void> {
   await exec(`DELETE FROM ${SCHEMA}.DimensionValue WHERE DimensionID IN ('${ctx.dimId}','${ctx.dimId2}')`);
   await exec(`DELETE FROM ${SCHEMA}.Dimension WHERE ID IN ('${ctx.dimId}','${ctx.dimId2}')`);
   for (const co of [companyA, companyB]) {
+    await exec(`DELETE FROM ${SCHEMA}.JournalEntrySequence WHERE CompanyID='${co.id}'`); // per-company numbering rows (BA-D31)
     await exec(`DELETE FROM ${SCHEMA}.AccountingCompanyProfile WHERE ID='${co.id}'`);
     await exec(`DELETE FROM ${SCHEMA}.GLAccount WHERE CompanyID='${co.id}'`);
     await exec(`DELETE FROM __mj.Company WHERE ID='${co.id}'`);

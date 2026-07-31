@@ -84,6 +84,44 @@ export async function openNavItem(page: Page, label: string): Promise<void> {
   await page.waitForTimeout(4500);
 }
 
+/**
+ * Reset the header company-scope chip to "All companies" (idempotent). The scope persists
+ * per user, so a previous session's narrowing (e.g. a human clicking around) would otherwise
+ * hide the fixture company's rows from every list page and the spec would fail on an empty
+ * grid. SelectAll() does NOT close the menu (it closes on outside click), so we click the
+ * page body afterwards.
+ */
+export async function resetCompanyScopeToAll(page: Page): Promise<void> {
+  const chip = page.locator('.scope-chip__btn').first();
+  await chip.waitFor({ state: 'visible', timeout: 20_000 });
+  if (/all companies/i.test((await chip.textContent()) ?? '')) return;
+  await chip.click();
+  const all = page.locator('.scope-chip__all').first();
+  await all.waitFor({ state: 'visible', timeout: 10_000 });
+  await all.click();
+  // Close on a NEUTRAL spot (the category title area) — x:4 was over the collapsed rail and
+  // triggered its hover-peek overlay, which then intercepted the next content click.
+  await page.locator('body').click({ position: { x: 500, y: 70 } });
+  await page.waitForTimeout(3000); // pages re-query on scope change
+}
+
+/**
+ * Narrow the header company scope to EXACTLY the named company (from All). Batch builds sweep
+ * every company in scope and the CFO precondition must hold for each — so batch specs scope to
+ * their fixture company: true isolation from demo/other data, and the fixture's CFO satisfies
+ * the gate. Assumes the scope is currently All (call resetCompanyScopeToAll first).
+ */
+export async function scopeToCompany(page: Page, nameContains: string): Promise<void> {
+  const chip = page.locator('.scope-chip__btn').first();
+  await chip.waitFor({ state: 'visible', timeout: 20_000 });
+  await chip.click();
+  const item = page.locator('.scope-chip__item', { hasText: nameContains }).first();
+  await item.waitFor({ state: 'visible', timeout: 10_000 });
+  await item.click(); // Toggle from All(empty) → exactly this company
+  await page.locator('body').click({ position: { x: 500, y: 70 } }); // neutral close (see above)
+  await page.waitForTimeout(3000); // pages re-query on scope change
+}
+
 /** The company <select> options (excludes disabled placeholders). */
 export async function companyOptions(page: Page): Promise<string[]> {
   return page.evaluate(() =>

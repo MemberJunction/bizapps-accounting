@@ -2,13 +2,17 @@
  * Server-side subclass of GLAccount — always-applies invariants for the chart of accounts.
  *
  * The rule that MUST hold on every save regardless of caller:
- *   **Identity fields are immutable once the account is referenced by journal-entry lines.**
- *   - CompanyID  — moving the account would retroactively break the single-company invariant
- *                  (plan D3) on posted entries; trigger 50019 only checks lines at INSERT.
- *   - Code       — the account NUMBER is the ERP wire identity (AM-4 dispatch resolution
- *                  falls back to it); editing it under posted entries redefines what history
- *                  meant and what future dispatches send. Remaps go through the mutable
- *                  ExternalSystem/ExternalAccountID pair instead.
+ *   **Identity fields are immutable from the moment the record is created** (Amith 2026-07-29 —
+ *   immediate + unconditional; supersedes the earlier referenced-by-JE-lines gate). Why the
+ *   stronger form: gating on references left a window where an unreferenced-by-JE-lines account
+ *   could change CompanyID while GLAccountLink / IntercompanyAccountMatch rows pointed at it,
+ *   silently re-aiming them (the probe-C hole). Freezing identity at creation kills the whole
+ *   drift class at the root, and lets downstream tables derive company through the FK instead
+ *   of denormalizing it.
+ *   - CompanyID  — moving the account re-aims every reference to another company's books.
+ *   - Code       — the account NUMBER is the ERP wire identity (dispatch resolution falls back
+ *                  to it); editing it redefines what history meant and what dispatches send.
+ *                  Remaps go through the mutable ExternalSystem/ExternalAccountID pair instead.
  *   - AccountType — flipping Asset→Expense etc. rewrites the semantics of every historical
  *                  trial balance built on this account.
  *   - CurrencyCode — same retroactive meaning-change class.
@@ -16,13 +20,13 @@
  * Deliberately MUTABLE at any time: Name/Description (cosmetic), IsActive (normal lifecycle —
  * new-line gating is enforced by the JE/line servers), ExternalSystem/ExternalAccountID (the
  * sanctioned remap mechanism). Code format/uniqueness are DB CHECK/UQ constraints.
+ * A mis-created account is corrected by deactivating it and creating a new one.
  */
-import { BaseEntity, IRunViewProvider, ValidationResult, ValidationErrorInfo } from '@memberjunction/core';
+import { BaseEntity, ValidationResult, ValidationErrorInfo } from '@memberjunction/core';
 import { RegisterClass } from '@memberjunction/global';
 import { mjBizAppsAccountingGLAccountEntity } from '@mj-biz-apps/accounting-entities';
 
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
-const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
 
 @RegisterClass(BaseEntity, GL_ENTITY)
 export class GLAccountEntityServer extends mjBizAppsAccountingGLAccountEntity {
@@ -37,19 +41,22 @@ export class GLAccountEntityServer extends mjBizAppsAccountingGLAccountEntity {
   }
 
   /** The identity fields locked once JE lines reference this account. */
-  private static readonly LOCKED_ONCE_REFERENCED: ReadonlyArray<string> = ['CompanyID', 'Code', 'AccountType', 'CurrencyCode'];
+  private static readonly LOCKED_IDENTITY_FIELDS: ReadonlyArray<string> = ['CompanyID', 'Code', 'AccountType', 'CurrencyCode'];
 
   /**
-   * Cross-record invariant (needs a DB lookup): block identity-field changes once JE lines
-   * reference this account. The probe is gated cheapest-first — it only runs when one of the
-   * locked fields ACTUALLY changed (in-memory OldValue check; zero queries on normal edits),
-   * and then it's a single TOP-1 index seek on the JEL.GLAccountID FK index.
+   * Identity lock — IMMEDIATE and UNCONDITIONAL (Amith 2026-07-29, supersedes the
+   * referenced-by-JE-lines gate): the identity fields are frozen the moment the record is
+   * created, NOT gated on JE-line references. This closes the whole drift class at the root —
+   * an account that can never change company/code/type cannot silently re-aim its GLAccountLink
+   * or IntercompanyAccountMatch references (the probe-C hole), so downstream tables need no
+   * denormalized CompanyID. Pure in-memory OldValue check — no DB probe needed anymore.
+   * Cosmetic fields (Name, Description, IsActive, ExternalSystem/ExternalAccountID) stay editable.
    */
   public override async ValidateAsync(): Promise<ValidationResult> {
     const result = await super.ValidateAsync();
 
     if (this.IsSaved) {
-      const changedLocked = GLAccountEntityServer.LOCKED_ONCE_REFERENCED.filter(fieldName => {
+      const changedLocked = GLAccountEntityServer.LOCKED_IDENTITY_FIELDS.filter(fieldName => {
         const field = this.GetFieldByName(fieldName);
         if (!field) return false;
         const oldValue = field.OldValue;
@@ -58,12 +65,12 @@ export class GLAccountEntityServer extends mjBizAppsAccountingGLAccountEntity {
         return String(oldValue).toLowerCase() !== String(newValue ?? '').toLowerCase();
       });
 
-      if (changedLocked.length > 0 && (await this.hasJournalEntryLineReferences())) {
+      if (changedLocked.length > 0) {
         result.Success = false;
         result.Errors.push(
           new ValidationErrorInfo(
             'GLAccountEntityServer.ValidateAsync',
-            `GLAccount ${this.Code ?? this.ID}: ${changedLocked.join(', ')} cannot change while journal-entry lines reference this account — identity fields are immutable once posted against (retroactive meaning-change). Remap via ExternalSystem/ExternalAccountID; deactivate via IsActive.`,
+            `GLAccount ${this.Code ?? this.ID}: ${changedLocked.join(', ')} cannot change — identity fields are immutable from creation (Amith 2026-07-29). Remap via ExternalSystem/ExternalAccountID; deactivate via IsActive; corrections are a new account.`,
             null,
           ),
         );
@@ -71,18 +78,5 @@ export class GLAccountEntityServer extends mjBizAppsAccountingGLAccountEntity {
     }
 
     return result;
-  }
-
-  private async hasJournalEntryLineReferences(): Promise<boolean> {
-    const provider = this.ProviderToUse as unknown as IRunViewProvider;
-    const res = await provider.RunView<{ ID: string }>(
-      { EntityName: JEL_ENTITY, ExtraFilter: `GLAccountID='${this.ID}'`, Fields: ['ID'], MaxRows: 1, ResultType: 'simple', BypassCache: true },
-      this.ContextCurrentUser,
-    );
-    // Loud on failure (loads throw): silently answering "no references" would let the change through.
-    if (!res.Success) {
-      throw new Error(`GLAccountEntityServer: failed to check JE-line references for account ${this.ID}: ${res.ErrorMessage ?? 'unknown error'}`);
-    }
-    return (res.Results?.length ?? 0) > 0;
   }
 }

@@ -127,8 +127,18 @@
           </select>
         </label>
         <label class="coa-field">
-          <span class="coa-field__label">Currency code</span>
-          <input class="mj-input" type="text" maxlength="3" [(ngModel)]="Model.CurrencyCode" placeholder="Company default" />
+          <span class="coa-field__label">Currency</span>
+          <!-- Searchable combobox (Marcelo 2026-07-30): the label is "CODE — Name", and the combobox
+               filters on that text, so typing either the actual code ("USD") or the name ("dollar")
+               finds it. Empty = inherit the company's functional currency. -->
+          <mj-combobox
+            [Data]="CurrencyOptions"
+            TextField="Label"
+            ValueField="Code"
+            [ValuePrimitive]="true"
+            Placeholder="Company default"
+            [(ngModel)]="Model.CurrencyCode">
+          </mj-combobox>
         </label>
         <label class="coa-field coa-field--check">
           <input type="checkbox" class="mj-checkbox" [(ngModel)]="Model.IsActive" />

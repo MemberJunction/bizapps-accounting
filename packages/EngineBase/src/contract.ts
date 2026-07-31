@@ -6,16 +6,17 @@
  * ZERO server dependencies. The server engine (`AccountingEngine` in
  * `@mj-biz-apps/accounting-core-entities-server`) and the remotable op both use these exact types.
  *
- * Notes (plan §3): NO CompanyID anywhere (multi-company — company derives per line from
- * GLAccount.CompanyID, CH-2); NO period fields (CH-1); NO FX fields in v1 (deferred).
+ * Notes: the draft carries NO CompanyID field — the engine derives the (single) company from the
+ * lines' GLAccount.CompanyID and stamps JournalEntry.CompanyID (plan D3: journal entries are
+ * single-company). A draft whose lines resolve to MORE than one company is rejected with
+ * MULTI_COMPANY_DRAFT — callers split per company upstream (orders books one JE per order line).
+ * NO period fields; NO FX fields in v1 (deferred).
  *
  * CONNECTS TO:
  *   PIPELINE:  ./pipeline.ts (the pure validation/normalization stages over this contract)
  *   SERVER:    AccountingEngine.CreateJournalEntry · CreateJournalEntryOperation ('Accounting.CreateJournalEntry')
  *   DOC:       plans/accounting-engine-plan.md §3
  */
-import type { mjBizAppsAccountingJournalEntryEntity } from '@mj-biz-apps/accounting-entities';
-
 /** One requested debit-or-credit line. Exactly one side, strictly > 0. */
 export interface JournalEntryLineDraft {
   /** The resolved GL account UUID (Orders resolves codes/links to IDs before calling — S2). */
@@ -36,8 +37,13 @@ export interface JournalEntryLineDimensionDraft {
 export interface JournalEntryDraft {
   /** ISO date (or datetime) the entry takes effect. */
   EffectiveDate: string;
-  /** Derived from the generated entity union (rule 2c) — never hand-copied. */
-  EntryType: mjBizAppsAccountingJournalEntryEntity['EntryType'];
+  /**
+   * The JournalEntryType CODE (issue #24, BA-D29) — e.g. 'Manual', 'OrderBooking'. Resolved to
+   * EntryTypeID against the JournalEntryType lookup at validation time (ENTRY_TYPE_UNKNOWN /
+   * ENTRY_TYPE_INACTIVE). The former closed enum is gone: consuming apps seed their own type
+   * rows, so this is an open string validated against live reference data, not a TS union.
+   */
+  EntryType: string;
   Description?: string;
   /**
    * Polymorphic origin pair (plan D25): the single causal source record for this JE.
@@ -51,11 +57,14 @@ export interface JournalEntryDraft {
 
 export type JEErrorCode =
   | 'MALFORMED_DRAFT'
+  | 'ENTRY_TYPE_UNKNOWN'
+  | 'ENTRY_TYPE_INACTIVE'
   | 'ACCOUNT_UNKNOWN'
   | 'ACCOUNT_INACTIVE'
   | 'DIMENSION_UNKNOWN'
   | 'DIMENSION_VALUE_UNKNOWN'
   | 'UNBALANCED'
+  | 'MULTI_COMPANY_DRAFT'
   | 'INTERNAL_ERROR';
 
 export interface JEValidationError {

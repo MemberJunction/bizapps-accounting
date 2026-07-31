@@ -7,7 +7,10 @@ import { ResourceData } from '@memberjunction/core-entities';
 import { mjBizAppsAccountingAccountingCompanyProfileEntity } from '@mj-biz-apps/accounting-entities';
 
 const COMPANY_PROFILE_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
-const USER_ENTITY = 'Users'; // __mj.User — the CFO approver FK target (ApprovalCFOUserID)
+// __mj.User — the CFO approver FK target (ApprovalCFOUserID). MJ v5: core entities REQUIRE the
+// 'MJ: ' prefix — the bare 'Users' no longer resolves and threw "Entity Users not found in
+// metadata" as a red card on the Configuration page (same bug class as TasksAppApprovalGate).
+const USER_ENTITY = 'MJ: Users';
 
 /** Value-list unions, derived from the generated entity (rule 2c — never hand-copied). */
 type EntityType = mjBizAppsAccountingAccountingCompanyProfileEntity['EntityType'];
@@ -164,6 +167,24 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
     const c = this.Selected;
     if (!c) return;
     this.forms.Open({ EntityName: COMPANY_PROFILE_ENTITY, PrimaryKey: CompositeKey.FromID(c.ID), Presentation: 'dialog', Width: '94vw' });
+  }
+
+  /**
+   * Create a new accounting company. ONE profile save is the whole creation path: the entity's
+   * IS-A machinery creates the `__mj.Company` parent row (same UUID) and the server-side W1 hook
+   * seeds the company's default chart of accounts — the same path the test fixture uses. No keys
+   * passed to the presenter = new-record form in edit mode.
+   */
+  public async NewCompany(): Promise<void> {
+    const ref = this.forms.Open({ EntityName: COMPANY_PROFILE_ENTITY, Presentation: 'dialog', Width: '94vw' });
+    const saved = await ref.AfterSaved();
+    if (!saved) return; // cancelled
+    const created = saved as mjBizAppsAccountingAccountingCompanyProfileEntity;
+    await this.loadCompanies();
+    this._selectedID = created.ID;
+    this.ActionMessage = `Company ${created.Name} created — its default chart of accounts has been seeded.`;
+    this.ActionIsError = false;
+    this.cdr.markForCheck();
   }
 
   // ─── CFO assignment ─────────────────────────────────────────────────────────

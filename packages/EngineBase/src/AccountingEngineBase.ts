@@ -37,6 +37,7 @@ import type {
   mjBizAppsAccountingGLAccountRoleEntity,
   mjBizAppsAccountingIntercompanyAccountMatchDimensionEntity,
   mjBizAppsAccountingIntercompanyAccountMatchEntity,
+  mjBizAppsAccountingJournalEntryTypeEntity,
 } from '@mj-biz-apps/accounting-entities';
 import type { PipelineLookups } from './pipeline.js';
 
@@ -138,6 +139,7 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
       { PropertyName: '_dimensionValues', EntityName: 'MJ_BizApps_Accounting: Dimension Values' },
       { PropertyName: '_companyProfiles', EntityName: 'MJ_BizApps_Accounting: Accounting Company Profiles' },
       { PropertyName: '_currencies', EntityName: 'MJ_BizApps_Accounting: Currencies' },
+      { PropertyName: '_journalEntryTypes', EntityName: 'MJ_BizApps_Accounting: Journal Entry Types' },
       { PropertyName: '_intercompanyMatches', EntityName: 'MJ_BizApps_Accounting: Intercompany Account Matches' },
       {
         PropertyName: '_intercompanyMatchDimensions',
@@ -177,6 +179,9 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
   public get Currencies(): mjBizAppsAccountingCurrencyEntity[] {
     return this.GetConfigData<mjBizAppsAccountingCurrencyEntity>('_currencies');
   }
+  public get JournalEntryTypes(): mjBizAppsAccountingJournalEntryTypeEntity[] {
+    return this.GetConfigData<mjBizAppsAccountingJournalEntryTypeEntity>('_journalEntryTypes');
+  }
   public get IntercompanyAccountMatches(): mjBizAppsAccountingIntercompanyAccountMatchEntity[] {
     return this.GetConfigData<mjBizAppsAccountingIntercompanyAccountMatchEntity>('_intercompanyMatches');
   }
@@ -209,16 +214,25 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
    * whose StartedAt/EndedAt window covers `asOfDate` — plus its ordered dimension requirements.
    * `role` accepts a GLAccountRole ID or Name. Returns null when no link qualifies (the caller
    * walks its own fallback chain — product → category → company default is Orders' code).
+   *
+   * `forCompanyID` (optional — Amith 2026-07-28/29): scope resolution to links whose GL account
+   * belongs to that company. A record (e.g. a shared product) can carry one link per company for
+   * the same role; a multi-company caller passes the booking company to get ITS account. The
+   * company is derived through the link's GLAccount FK (both tables live in this engine's cache,
+   * so the join is free) — GLAccountLink deliberately carries no denormalized CompanyID, and the
+   * derivation is stable because GLAccount identity fields are immutable from creation.
    */
-  public ResolveLinkedAccount(entityId: string, recordId: string, role: string, asOfDate: Date): ResolvedLinkedAccount | null {
+  public ResolveLinkedAccount(entityId: string, recordId: string, role: string, asOfDate: Date, forCompanyID?: string): ResolvedLinkedAccount | null {
     const roleId = uuidKey(this.GLAccountRoles.find(r => uuidKey(r.ID) === uuidKey(role))?.ID ?? this.GLAccountRoleByName(role)?.ID);
     if (!roleId) return null;
     const entityKey = uuidKey(entityId);
     const recordKey = (recordId ?? '').trim().toLowerCase();
+    const companyKey = uuidKey(forCompanyID ?? '');
     const candidates = this.GLAccountLinks.filter(l =>
       uuidKey(l.EntityID) === entityKey &&
       (l.RecordID ?? '').trim().toLowerCase() === recordKey &&
-      uuidKey(l.GLAccountRoleID) === roleId,
+      uuidKey(l.GLAccountRoleID) === roleId &&
+      (!companyKey || uuidKey(this.GLAccountByID(l.GLAccountID)?.CompanyID ?? '') === companyKey),
     );
     const winner = pickActiveLinkIndex(
       candidates.map(l => ({ Status: l.Status, StartedAt: l.StartedAt, EndedAt: l.EndedAt })),
@@ -299,9 +313,21 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
 
   // ─── pipeline adapter ──────────────────────────────────────────────────────
 
+  /** Point lookup: the JournalEntryType with this Code (case-insensitive), or undefined. */
+  public JournalEntryTypeByCode(code: string): mjBizAppsAccountingJournalEntryTypeEntity | undefined {
+    const key = (code ?? '').trim().toLowerCase();
+    return this.JournalEntryTypes.find(t => t.Code.trim().toLowerCase() === key);
+  }
+
+  /** The single IsBatchSummary=1 type row (filtered unique index guarantees at most one). */
+  public get BatchSummaryEntryType(): mjBizAppsAccountingJournalEntryTypeEntity | undefined {
+    return this.JournalEntryTypes.find(t => t.IsBatchSummary);
+  }
+
   /** Cache-backed lookups for the pure draft pipeline (./pipeline.ts). */
   public CreatePipelineLookups(): PipelineLookups {
     const accounts = new Map(this.GLAccounts.map(a => [uuidKey(a.ID), a]));
+    const entryTypes = new Map(this.JournalEntryTypes.map(t => [t.Code.trim().toLowerCase(), t]));
     const dimensions = new Set(this.Dimensions.map(d => uuidKey(d.ID)));
     const valuesByDimension = new Map<string, Set<string>>();
     for (const v of this.DimensionValues) {
@@ -314,6 +340,10 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
       accountByID: (id) => {
         const a = accounts.get(uuidKey(id));
         return a ? { ID: a.ID, CompanyID: a.CompanyID, IsActive: a.IsActive } : undefined;
+      },
+      entryTypeByCode: (code) => {
+        const t = entryTypes.get((code ?? '').trim().toLowerCase());
+        return t ? { ID: t.ID, Code: t.Code, IsActive: t.IsActive, IsBatchSummary: t.IsBatchSummary } : undefined;
       },
       dimensionExists: (id) => dimensions.has(uuidKey(id)),
       dimensionValueBelongs: (dimensionId, valueId) => valuesByDimension.get(uuidKey(dimensionId))?.has(uuidKey(valueId)) ?? false,

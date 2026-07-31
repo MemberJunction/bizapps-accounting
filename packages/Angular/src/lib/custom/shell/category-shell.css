@@ -1,0 +1,95 @@
+/* Shared layout for the category shells.
+
+   The rail-beside-content layout is MJ's, not ours: <mj-page-body [Flex]="true" [Padding]="false"
+   Direction="row"> + <mj-left-nav> + <mj-left-nav-content>, exactly as MJ's own admin-container
+   does it. `Direction="row"` alone is inert — without [Flex]="true" the body never becomes a flex
+   container, so the rail stacks ABOVE the content and the content pane inherits no height (which
+   also starves an AG grid inside it). This file therefore owns almost nothing: the host sizing and
+   the responsive collapse. See explorer-chrome-conventions §10. */
+
+:host {
+  display: block;
+  height: 100%;
+}
+
+/* ── Contain each page's stacking (Marcelo 2026-07-29) ─────────────────────────
+   Sub-pages mount their own <mj-page-header> (and sticky table headers) with positive z-indexes.
+   Those are SIBLINGS-in-context of the shell's category header (also z-index:1), so later DOM
+   order let a page's subheader paint OVER the category header (its shadow stopped landing) and
+   OVER the company-scope dropdown (capped inside the header's z:1 context). `isolation: isolate`
+   makes the content pane its own stacking context: inner z-indexes keep working against each
+   other (sticky theads over rows, etc.) but can no longer escape to fight the shell chrome —
+   the category header, scope menu, and the rail's hover-peek overlay (z:60 sibling) all win.
+   NOTE: the real chrome fix is pages adopting <mj-page-header-interior> per
+   explorer-chrome-conventions §10 (tracked for the UI hardening pass); this rule stays valid
+   either way as the structural guarantee. */
+:host ::ng-deep mj-left-nav-content {
+  isolation: isolate;
+}
+
+/* mj-left-nav becomes an off-canvas drawer at <=700px; stack the body at the same breakpoint so
+   its in-flow section switcher sits ABOVE the content rather than competing for width. This is the
+   consumer responsibility documented on mj-left-nav. */
+@media (max-width: 700px) {
+  :host ::ng-deep mj-page-body > .mj-page-body {
+    flex-direction: column;
+  }
+}
+
+/* ── Header density (LOCAL OVERRIDE — deliberately minimal) ───────────────────
+   Marcelo: the stock header "needs to be smaller... it's just too thick. It's taking up a lot of
+   space and it's not doing much" — the user already knows the section (top nav) and the page (rail),
+   so the title earns little vertical space.
+
+   ⚠ WHAT THIS BLOCK USED TO GET WRONG (fixed 2026-07-17, and it is the same mistake as the .mj-btn
+   override we removed the same day). It ALSO forced the title to --mj-text-lg and the icon to 28px.
+   But MJ's own title is --mj-text-xl and MJ ALREADY drops it to --mj-text-lg under a <=768px media
+   query — so the override was PINNING MJ'S SMALL-SCREEN SIZE ONTO DESKTOP, permanently, defeating a
+   responsive decision MJ had already made. Marcelo saw the symptom and read it backwards:
+   "I'm not loving this metadata capsule. It's almost larger than the title... the icon next to it
+   looks really small in comparison." The capsule is MJ's own --mj-text-xs and was never the problem
+   — the TITLE had been shrunk a step, so the badge stopped reading as subordinate to it.
+
+   THE LESSON, twice in one day: overriding shared chrome does not merely restyle it, it OPTS OUT OF
+   DECISIONS THE COMPONENT ALREADY MADE FOR YOU — MJ's 44px touch target on the button, MJ's
+   responsive title here. Only the padding is overridden now; type scale and icon size are MJ's.
+   Asked upstream as a `Dense` input (QUESTIONS.md#q33) — delete this block if it lands. */
+:host ::ng-deep mj-page-header .mj-page-header-row--primary {
+  padding-top: var(--mj-space-2);
+  padding-bottom: var(--mj-space-2);
+}
+
+/* ── Header controls: UNIFORM VERTICAL SIZING ────────────────────────────────
+   Marcelo: the refresh button and the scope chip were different heights. "We need to pick one
+   sizing... the padding above and below those elements must be the same. Uniform vertical sizing,
+   uniform padding above and below. The horizontal doesn't matter, but the vertical sizing does."
+
+   So: one height for every control in the header bar, applied at the bar level rather than per
+   control — a per-control fix would drift again the next time one is added. Horizontal padding is
+   deliberately left to each control (a chip wants more than an icon button). */
+:host ::ng-deep mj-page-header .mj-page-header__actions > *,
+:host ::ng-deep mj-page-header [actions] > * {
+  --mj-shell-control-h: 32px; /* = MJ's own .mj-btn--sm min-height. Match MJ; don't fork it. */
+  min-height: var(--mj-shell-control-h);
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+}
+/* NOTE the .mj-btn selector is deliberately ABSENT here. mjButton owns the button's
+   appearance (there is a CI gate on exactly this), and overriding it forks MJ's styling
+   silently: MJ's own .mj-btn--sm is min-height:32px AND grows to 44px under a small-screen
+   media query — the WCAG touch-target minimum. Forcing height on it would squash that back
+   down on a phone, quietly undoing MJ's accessibility accommodation for the sake of 2px.
+   So the button is left native at MJ's `sm` size, and the OTHER controls match IT. */
+/* Only the scope chip + refresh live in [actions] now — the stat badges moved to [meta]
+   (2026-07-17), so their selector is gone rather than left as dead weight. These two are
+   exactly the pair whose mismatched heights Marcelo flagged, so this rule still has a job. */
+:host ::ng-deep mj-page-header [actions] mj-refresh-button button,
+:host ::ng-deep mj-page-header [actions] mj-company-scope-chip > * {
+  height: var(--mj-shell-control-h);
+  padding-top: 0;
+  padding-bottom: 0;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+}

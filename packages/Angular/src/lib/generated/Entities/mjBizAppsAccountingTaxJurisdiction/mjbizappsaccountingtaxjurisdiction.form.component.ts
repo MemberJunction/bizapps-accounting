@@ -16,14 +16,10 @@ export class mjBizAppsAccountingTaxJurisdictionFormComponent extends BaseFormCom
     override async ngOnInit() {
         await super.ngOnInit();
         this.initSections([
-            { sectionKey: 'jurisdictionIdentification', sectionName: 'Jurisdiction Identification', isExpanded: true },
-            { sectionKey: 'geographicScope', sectionName: 'Geographic Scope', isExpanded: true },
-            { sectionKey: 'hierarchyAndStatus', sectionName: 'Hierarchy and Status', isExpanded: true },
             { sectionKey: 'details', sectionName: 'Details', isExpanded: true },
-            { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingCustomerTaxProfiles', sectionName: 'Customer Tax Profiles', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingTaxLiabilities', sectionName: 'Tax Liabilities', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingTaxRates', sectionName: 'Tax Rates', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingCustomerTaxProfiles', sectionName: 'Customer Tax Profiles', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingTaxJurisdictions', sectionName: 'Tax Jurisdictions', isExpanded: false }
         ]);
     }

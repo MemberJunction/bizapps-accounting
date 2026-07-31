@@ -1,8 +1,22 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Metadata, EntityInfo } from '@memberjunction/core';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import { JournalEntryEntityServer } from '../JournalEntryEntityServer.js';
 import { JournalEntryLineEntityServer } from '../JournalEntryLineEntityServer.js';
+
+// Mock type IDs for the reversal-consistency rules (issue #24: the 'Reversal' discriminator is
+// the JournalEntryType row's Code, resolved by EntryTypeID — mocked here, no DB in unit tests).
+const JET_ORDERBOOKING = 'JET_ORDERBOOKING';
+const JET_REVERSAL = 'JET_REVERSAL';
+
+vi.mock('../JournalEntryTypes.js', () => ({
+  LookupJournalEntryTypeByID: vi.fn(async (id: string) => {
+    if (id === JET_REVERSAL) return { ID: JET_REVERSAL, Code: 'Reversal', Name: 'Reversal', IsSystem: true, IsBatchSummary: false, IsActive: true };
+    if (id === JET_ORDERBOOKING) return { ID: JET_ORDERBOOKING, Code: 'OrderBooking', Name: 'Order Booking', IsSystem: false, IsBatchSummary: false, IsActive: true };
+    return null;
+  }),
+  RequireJournalEntryTypeID: vi.fn(async () => JET_REVERSAL),
+}));
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
@@ -48,7 +62,7 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
       return info;
     };
 
-    jeEntityInfo = createMockEntity(JE_ENTITY, ['ID', 'CompanyID', 'EffectiveDate', 'EntryType', 'Status', 'EntryNumber', 'ReversesJournalEntryID', 'ReversedByJournalEntryID', 'FileID']);
+    jeEntityInfo = createMockEntity(JE_ENTITY, ['ID', 'CompanyID', 'EffectiveDate', 'EntryTypeID', 'Status', 'EntryNumber', 'ReversesJournalEntryID', 'ReversedByJournalEntryID', 'FileID']);
     jelEntityInfo = createMockEntity(JEL_ENTITY, ['ID', 'JournalEntryID', 'LineNumber', 'GLAccountID', 'DebitAmount', 'CreditAmount', 'Description']);
     const glEntityInfo = createMockEntity(GL_ENTITY, ['ID', 'CompanyID', 'Code', 'IsActive']);
 
@@ -67,7 +81,7 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
     je.NewRecord();
     je.CompanyID = 'CO_100';
     je.EffectiveDate = new Date('2026-07-01');
-    je.EntryType = 'OrderBooking';
+    je.EntryTypeID = JET_ORDERBOOKING;
     je.Status = 'Pending';
   });
 
@@ -223,7 +237,22 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
       expect(result.Errors.some(e => getErrorText(e).includes('cannot be negative'))).toBe(true);
     });
 
-    it('fails validation when EntryType is Reversal but ReversesJournalEntryID is missing', () => {
+    it('fails async validation when the type is Reversal but ReversesJournalEntryID is missing (issue #24: rule moved to ValidateAsync)', async () => {
+      je.EntryTypeID = JET_REVERSAL;
+      const result = await je.ValidateAsync();
+      expect(result.Success).toBe(false);
+      expect(result.Errors.some(e => getErrorText(e).includes('must specify ReversesJournalEntryID'))).toBe(true);
+    });
+
+    it('fails async validation when ReversesJournalEntryID is set but the type is not Reversal', async () => {
+      je.EntryTypeID = JET_ORDERBOOKING;
+      je.ReversesJournalEntryID = 'JE_SOME_ORIGINAL';
+      const result = await je.ValidateAsync();
+      expect(result.Success).toBe(false);
+      expect(result.Errors.some(e => getErrorText(e).includes("Code='Reversal'"))).toBe(true);
+    });
+
+    it('fails validation when a reversal-shaped entry is unbalanced (sync rules still run)', () => {
       const line1 = new JournalEntryLineEntityServer(jelEntityInfo as any);
       line1.NewRecord();
       line1.GLAccountID = 'GL_1';
@@ -232,15 +261,16 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
       const line2 = new JournalEntryLineEntityServer(jelEntityInfo as any);
       line2.NewRecord();
       line2.GLAccountID = 'GL_2';
-      line2.CreditAmount = 100;
+      line2.CreditAmount = 60;
 
       je.AddLine(line1);
       je.AddLine(line2);
-      je.EntryType = 'Reversal';
+      je.EntryTypeID = JET_REVERSAL;
+      je.ReversesJournalEntryID = 'JE_SOME_ORIGINAL';
 
       const result = je.Validate();
       expect(result.Success).toBe(false);
-      expect(result.Errors.some(e => getErrorText(e).includes('must specify ReversesJournalEntryID'))).toBe(true);
+      expect(result.Errors.some(e => /balanced|Debits/i.test(getErrorText(e)))).toBe(true);
     });
 
     it('fails validation when a line GL account belongs to a different company than parent JE', () => {

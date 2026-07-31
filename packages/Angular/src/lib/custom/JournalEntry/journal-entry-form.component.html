@@ -94,7 +94,6 @@
             <th class="je-lines__num">#</th>
             <th>Account</th>
             <th>Description</th>
-            <th>Counterparty</th>
             <th class="je-lines__amt">Debit</th>
             <th class="je-lines__amt">Credit</th>
             <th>Dimensions</th>
@@ -106,7 +105,6 @@
               <td class="je-lines__num">{{ line.LineNumber }}</td>
               <td>{{ line.GLAccount }}</td>
               <td class="je-lines__desc">{{ line.Description }}</td>
-              <td>{{ line.CounterpartyOrganization }}</td>
               <td class="je-lines__amt">{{ line.DebitAmount ? (line.DebitAmount | number:'1.2-2') : '' }}</td>
               <td class="je-lines__amt">{{ line.CreditAmount ? (line.CreditAmount | number:'1.2-2') : '' }}</td>
               <td>
