@@ -118,5 +118,16 @@
       "lastModified": "2026-07-29T23:26:49.982Z",
       "checksum": "0b2c5b71f94d7dd3690a6a2150afa8d2736c171a24c8d6c1a886827a36688255"
     }
+  },
+  {
+    "fields": {
+      "Name": "Processing Fee",
+      "Description": "Payment processor fees expensed at capture (orders D18). The gateway keeps its cut, so cash lands NET while the customer's receivable is relieved GROSS; this role names the expense account carrying the difference. Without it the fee is not booked and cash reads gross by that amount.",
+      "Status": "Active",
+      "Sequence": 90
+    },
+    "primaryKey": {
+      "ID": "0FA84B95-F7FF-4429-9C51-F06C941D7052"
+    }
   }
 ]
