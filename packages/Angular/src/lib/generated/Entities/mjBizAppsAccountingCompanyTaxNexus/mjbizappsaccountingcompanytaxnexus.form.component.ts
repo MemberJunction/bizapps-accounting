@@ -15,9 +15,7 @@ export class mjBizAppsAccountingCompanyTaxNexusFormComponent extends BaseFormCom
     override async ngOnInit() {
         await super.ngOnInit();
         this.initSections([
-            { sectionKey: 'nexusConfiguration', sectionName: 'Nexus Configuration', isExpanded: true },
-            { sectionKey: 'registrationDetails', sectionName: 'Registration Details', isExpanded: true },
-            { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false }
+            { sectionKey: 'details', sectionName: 'Details', isExpanded: true }
         ]);
     }
 }
