@@ -20,7 +20,7 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="OrganizationID"
+            FieldName="CompanyID"
             Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
@@ -38,7 +38,15 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="TaxIDNumber"
+            FieldName="NexusType"
+            Type="select"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="RegistrationNumber"
             Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
@@ -46,23 +54,7 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="IsExempt"
-            Type="checkbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="ExemptionCertificateRef"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="ExemptionExpiryDate"
+            FieldName="RegisteredFrom"
             Type="datepicker"
             [EditMode]="EditMode"
             [FormContext]="formContext"
@@ -70,7 +62,7 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="EffectiveFrom"
+            FieldName="RegisteredTo"
             Type="datepicker"
             [EditMode]="EditMode"
             [FormContext]="formContext"
@@ -78,8 +70,24 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="EffectiveTo"
+            FieldName="ObligationEndsAt"
             Type="datepicker"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="Status"
+            Type="select"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="Comments"
+            Type="textarea"
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>

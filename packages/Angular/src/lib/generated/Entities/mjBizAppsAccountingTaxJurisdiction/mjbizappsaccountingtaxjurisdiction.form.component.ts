@@ -17,10 +17,10 @@ export class mjBizAppsAccountingTaxJurisdictionFormComponent extends BaseFormCom
         await super.ngOnInit();
         this.initSections([
             { sectionKey: 'details', sectionName: 'Details', isExpanded: true },
-            { sectionKey: 'mJBizAppsAccountingCustomerTaxProfiles', sectionName: 'Customer Tax Profiles', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingTaxLiabilities', sectionName: 'Tax Liabilities', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingTaxRates', sectionName: 'Tax Rates', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingTaxJurisdictions', sectionName: 'Tax Jurisdictions', isExpanded: false }
+            { sectionKey: 'mJBizAppsAccountingTaxJurisdictions', sectionName: 'Tax Jurisdictions', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingCompanyTaxNexus', sectionName: 'Company Tax Nexus', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingTaxRates', sectionName: 'Tax Rates', isExpanded: false }
         ]);
     }
 }
