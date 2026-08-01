@@ -1,0 +1,125 @@
+@if (LoadError) {
+  <div class="jed__banner jed__banner--error" role="alert">
+    <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+    {{ LoadError }}
+  </div>
+} @else if (!Header) {
+  <div class="jed__banner" role="status">
+    <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+    Loading journal entry…
+  </div>
+} @else {
+  <!-- ── Identity + status ────────────────────────────────────────────────── -->
+  @if (ShowIdentity) {
+    <div class="jed__identity">
+      <div class="jed__title">
+        <span class="jed__number">{{ Header.EntryNumber }}</span>
+        <mj-stat-badge [Label]="Header.Status" [Variant]="StatusVariant" />
+        @if (AwaitsApproval) {
+          <!-- The C.8 CFO gate is DESIGNED but not enforced server-side (see awaitsApproval in
+               the L0 rules). The chip reports the state; it must not claim a block that a
+               batching run would happily ignore. -->
+          <mj-stat-badge Label="awaiting review" Variant="warning" />
+        }
+      </div>
+      <dl class="jed__facts">
+        <div><dt>Type</dt><dd>{{ Header.EntryType }}</dd></div>
+        @if (Header.Company) {
+          <div><dt>Company</dt><dd>{{ Header.Company }}</dd></div>
+        }
+        <div><dt>Effective</dt><dd>{{ Header.EffectiveDate ? (Header.EffectiveDate | date: 'mediumDate') : '—' }}</dd></div>
+        @if (Header.GLPostedAt) {
+          <div><dt>Posted</dt><dd>{{ Header.GLPostedAt | date: 'medium' }}</dd></div>
+        }
+        @if (Header.GLReferenceID) {
+          <div><dt>ERP ref</dt><dd>{{ Header.GLReferenceID }}</dd></div>
+        }
+      </dl>
+      @if (Header.Description) {
+        <p class="jed__description">{{ Header.Description }}</p>
+      }
+    </div>
+  }
+
+  <!-- ── Timeline + reversal ──────────────────────────────────────────────── -->
+  @if (ShowTimeline || ShowReversal) {
+    <div class="jed__header">
+      @if (ShowTimeline) {
+        <mjacc-je-status-timeline [Status]="Header.Status" />
+      }
+      @if (ShowReversal) {
+        <mjacc-je-reversal-panel
+          [CanReverse]="CanReverse"
+          [BlockedReason]="ReverseBlockedReason"
+          [Busy]="IsReversing"
+          [ReasonInputId]="'jed-reason-' + Header.ID"
+          (ReversalRequested)="onReversalRequested($event)"
+          (ReversalDismissed)="onReversalDismissed()" />
+      }
+    </div>
+  }
+
+  @if (ActionMessage) {
+    <div
+      class="jed__banner"
+      [class.jed__banner--error]="ActionIsError"
+      [class.jed__banner--success]="!ActionIsError"
+      role="status">
+      <i
+        class="fa-solid"
+        [class.fa-circle-check]="!ActionIsError"
+        [class.fa-triangle-exclamation]="ActionIsError"
+        aria-hidden="true"></i>
+      {{ ActionMessage }}
+    </div>
+  }
+
+  <!-- ── Lineage ──────────────────────────────────────────────────────────── -->
+  @if (ShowLineage) {
+    <div class="jed__lineage">
+      @if (Header.BatchID) {
+        <button type="button" class="jed__lineage-link" (click)="OpenBatch()">
+          <i class="fa-solid fa-layer-group" aria-hidden="true"></i>
+          Batch {{ Lineage.BatchNumber ?? '' }}
+        </button>
+      }
+      @if (HasSourceRecord) {
+        <button type="button" class="jed__lineage-link" (click)="OpenSourceRecord()">
+          <i class="fa-solid fa-file-invoice-dollar" aria-hidden="true"></i>
+          {{ SourceRecordLabel }}
+        </button>
+      }
+      @if (Header.ReversedByJournalEntryID) {
+        <button type="button" class="jed__lineage-link" (click)="OpenRelatedEntry('reversal')">
+          <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>
+          Reversed by {{ Lineage.ReversalEntryNumber ?? 'entry' }}
+        </button>
+      }
+      @if (Header.ReversesJournalEntryID) {
+        <button type="button" class="jed__lineage-link" (click)="OpenRelatedEntry('reverses')">
+          <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
+          Reverses {{ Lineage.ReversesEntryNumber ?? 'entry' }}
+        </button>
+      }
+    </div>
+  }
+
+  <!-- ── Lines ────────────────────────────────────────────────────────────── -->
+  @if (IsLoading) {
+    <div class="jed__banner" role="status">
+      <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+      Loading lines…
+    </div>
+  } @else if (Lines.length === 0) {
+    <div class="jed__banner" role="status">
+      <i class="fa-solid fa-inbox" aria-hidden="true"></i>
+      This journal entry has no lines.
+    </div>
+  } @else {
+    <mjacc-je-line-table
+      [Lines]="Lines"
+      [ShowDimensions]="ShowDimensions"
+      [IsBalanced]="IsBalanced"
+      (RecordOpenRequested)="onLineRecordOpen($event)" />
+  }
+}

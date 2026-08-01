@@ -9,7 +9,7 @@ import {
   toCreateInput,
   type JEDraftLine,
   type JEDraftState,
-} from '../lib/custom/shell/pages/je-draft';
+} from '../je-draft.js';
 
 /**
  * Tier 1 for the JE workspace's pure seam (§8.1).

@@ -1,5 +1,5 @@
-import type { CreateJournalEntryInput, JournalEntryLineDraft } from '@mj-biz-apps/accounting-engine-base';
-import { isBalanced } from '../../shared/je-rules';
+import type { CreateJournalEntryInput, JournalEntryLineDraft } from './contract.js';
+import { isBalanced } from './je-rules.js';
 
 /**
  * The pure state + rules behind the JE workspace's line editor (§8.1).
@@ -15,8 +15,8 @@ import { isBalanced } from '../../shared/je-rules';
  * a round-trip.
  *
  * CONNECTS TO:
- *   CONTRACT: @mj-biz-apps/accounting-engine-base (CreateJournalEntryInput / JournalEntryLineDraft)
- *   SHARED:   ../../shared/je-rules (isBalanced — one cent-tolerance rule for the whole app)
+ *   CONTRACT: ./contract (CreateJournalEntryInput / JournalEntryLineDraft)
+ *   SHARED:   ./je-rules (isBalanced — one cent-tolerance rule for the whole app)
  */
 
 /** One editable row. Amounts stay as RAW TEXT so a half-typed "8." survives a change-detection pass. */
@@ -27,12 +27,6 @@ export interface JEDraftLine {
   Debit: string;
   Credit: string;
   Description: string;
-  /**
-   * The counterparty (customer/vendor Organization) this line's receivable-or-payable belongs to —
-   * the AR subledger's "who owes" (vw_AROpenByCustomer). Optional and only meaningful on AR lines;
-   * null ⇒ not sent. Order booking + payment capture set it on the AR line automatically; this is
-   * the manual-entry equivalent. Flows straight through the CreateJournalEntry contract to the
-   * engine's atomic write — NOT a frontend-set field.
   /** DimensionID → DimensionValueID. Only pre-existing values are ever sent (CH-12: never auto-create). */
   DimensionValueIDs: Record<string, string | null>;
 }

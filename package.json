@@ -12,6 +12,7 @@
     "build:stream": "turbo --log-order=stream build",
     "build:generated": "turbo --log-order=stream build --filter=\"@mj-biz-apps/accounting-entities\" --filter=\"@mj-biz-apps/accounting-actions\"",
     "build:packages": "turbo --log-order=stream build --filter=\"@mj-biz-apps/accounting-*\"",
+    "check:ui-layers": "node .github/scripts/check-ui-layers.mjs packages",
     "mj": "node node_modules/@memberjunction/cli/bin/run.js",
     "mj:migrate": "node node_modules/@memberjunction/cli/bin/run.js migrate",
     "mj:codegen": "node node_modules/@memberjunction/cli/bin/run.js codegen",

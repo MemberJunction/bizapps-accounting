@@ -17,6 +17,10 @@ import { LinkDirectivesModule } from '@memberjunction/ng-link-directives';
 import { SharedGenericModule } from '@memberjunction/ng-shared-generic';
 import { MJButtonDirective, MJEmptyStateComponent } from '@memberjunction/ng-ui-components';
 
+// Layer 1 + 2 widgets. Standalone, so they are imported directly rather than via a module —
+// and they know nothing about Explorer, which is why the slide-in can embed the same one.
+import { JournalEntryDetailComponent } from '@mj-biz-apps/accounting-ng-widgets';
+
 import { JournalEntryFormComponentExtended, LoadJournalEntryFormComponentExtended } from './JournalEntry/journal-entry-form.component';
 import { GLAccountFormComponentExtended, LoadGLAccountFormComponentExtended } from './GLAccount/gl-account-form.component';
 
@@ -31,6 +35,7 @@ import { GLAccountFormComponentExtended, LoadGLAccountFormComponentExtended } fr
     SharedGenericModule,
     MJButtonDirective,
     MJEmptyStateComponent,
+    JournalEntryDetailComponent,
   ],
   exports: [JournalEntryFormComponentExtended, GLAccountFormComponentExtended],
 })

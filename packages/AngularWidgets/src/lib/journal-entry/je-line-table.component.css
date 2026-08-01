@@ -1,0 +1,117 @@
+/* Journal-entry line table — design tokens only (no hardcoded colors). */
+
+.jelt {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--mj-text-sm);
+}
+
+.jelt th,
+.jelt td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--mj-border-subtle);
+  vertical-align: top;
+}
+
+.jelt th {
+  color: var(--mj-text-secondary);
+  font-weight: var(--mj-font-semibold);
+  text-transform: uppercase;
+  font-size: var(--mj-text-xs);
+  letter-spacing: 0.04em;
+}
+
+.jelt__num {
+  width: 48px;
+  color: var(--mj-text-muted);
+}
+
+.jelt__amt {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.jelt__desc {
+  color: var(--mj-text-secondary);
+}
+
+/* The account cell is a button so keyboard users get the drill-through too, but it must
+   read as text rather than as a control sitting inside a data table. */
+.jelt__link {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+
+.jelt__link:hover .jelt__name,
+.jelt__link:focus-visible .jelt__name {
+  text-decoration: underline;
+}
+
+.jelt__link:focus-visible {
+  outline: 2px solid var(--mj-brand-primary);
+  outline-offset: 2px;
+  border-radius: var(--mj-radius-sm);
+}
+
+.jelt__code {
+  font-variant-numeric: tabular-nums;
+  color: var(--mj-text-muted);
+}
+
+.jelt__name {
+  color: var(--mj-text-primary);
+}
+
+.jelt__total-label {
+  text-align: right;
+  color: var(--mj-text-secondary);
+  font-weight: var(--mj-font-semibold);
+}
+
+.jelt__total {
+  font-weight: var(--mj-font-semibold);
+  color: var(--mj-text-primary);
+}
+
+.jelt__unbalanced {
+  color: var(--mj-status-error-text);
+  background: var(--mj-status-error-bg);
+  font-weight: var(--mj-font-medium);
+}
+
+/* Dimension chips. */
+.jelt__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.jelt__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--mj-radius-full);
+  border: 1px solid var(--mj-border-default);
+  background: var(--mj-bg-surface-card);
+  font-size: var(--mj-text-xs);
+}
+
+.jelt__chip-key {
+  color: var(--mj-text-muted);
+}
+
+.jelt__chip-val {
+  color: var(--mj-text-primary);
+  font-weight: var(--mj-font-medium);
+}

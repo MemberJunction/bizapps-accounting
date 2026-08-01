@@ -21,8 +21,18 @@ bizapps-accounting/
     Entities/          - @mj-biz-apps/accounting-entities (CodeGen-generated entity subclasses)
     Actions/           - @mj-biz-apps/accounting-actions (CodeGen-generated action subclasses)
     Server/            - @mj-biz-apps/accounting-server (server bootstrap + GraphQL resolvers)
-    Angular/           - @mj-biz-apps/accounting-ng (Angular bootstrap + form components)
+    Angular/           - @mj-biz-apps/accounting-ng (UI layer 3: Explorer forms + resource components)
+    AngularWidgets/    - @mj-biz-apps/accounting-ng-widgets (UI layers 1+2: reusable widgets, NO routing/Explorer)
+    EngineBase/        - @mj-biz-apps/accounting-engine-base (UI layer 0: pure TS rules, math, remote-op clients)
 ```
+
+### UI is layered — read `docs/UI_LAYERING.md` before building any screen
+
+L0 pure TS → L1 presentational widget → L2 composite widget → L3 Explorer surface. **Nothing below
+L3 imports `@angular/router` or `@memberjunction/ng-shared`; nothing at L3 holds domain logic.**
+Enforced by `npm run check:ui-layers` (opt-in per package via `"mjUILayer"`) and by
+`packages/AngularWidgets/src/__tests__/widget-layer-purity.test.ts`. The standard itself is the MJ
+repo's [`guides/UI_LAYERING_GUIDE.md`](https://github.com/MemberJunction/MJ/blob/next/guides/UI_LAYERING_GUIDE.md).
 
 ---
 

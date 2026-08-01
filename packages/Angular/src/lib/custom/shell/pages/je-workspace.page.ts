@@ -7,7 +7,7 @@ import type { JEValidationError } from '@mj-biz-apps/accounting-engine-base';
 import { CompanyScopeService } from '../../shared/company-scope.service';
 import { WorkspaceTabStore } from '../../../transfer-pending/workspace-tabs/workspace-tab-store';
 import { WorkspaceTab } from '../../../transfer-pending/workspace-tabs/workspace-tabs.types';
-import { isBalanced } from '../../shared/je-rules';
+import { isBalanced } from '@mj-biz-apps/accounting-engine-base';
 import { JEWorkspaceClient } from './je-workspace.client';
 import {
   type JEDraftState,
@@ -18,7 +18,7 @@ import {
   lineIssue,
   isLineEmpty,
   toCreateInput,
-} from './je-draft';
+} from '@mj-biz-apps/accounting-engine-base';
 
 /** An account offered by the picker — flattened so the template does no entity work. */
 export interface AccountOption {
@@ -55,7 +55,7 @@ export interface DimensionColumn {
  *
  * CONNECTS TO:
  *   OP:     ./je-workspace.client → 'Accounting.CreateJournalEntry'
- *   PURE:   ./je-draft (money math, balance, contract mapping — tier 1)
+ *   PURE:   @mj-biz-apps/accounting-engine-base (je-draft: money math, balance, contract mapping — L0)
  *   ENGINE: AccountingEngineBase (cached GL accounts + dimensions — no round-trip to populate)
  */
 @Component({

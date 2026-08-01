@@ -6,7 +6,7 @@ import {
   isBalanced,
   statusVariant,
   ReversalCandidate,
-} from '../lib/custom/shared/je-rules';
+} from '../je-rules.js';
 
 /**
  * TIER 1 — the client-side JE rules.

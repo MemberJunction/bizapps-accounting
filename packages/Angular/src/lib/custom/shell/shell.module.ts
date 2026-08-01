@@ -20,6 +20,9 @@ import {
   MJAlertComponent,
 } from '@memberjunction/ng-ui-components';
 
+// Layer 1 + 2 widgets — standalone, Explorer-unaware, shared with the entity forms.
+import { JournalEntryDetailComponent } from '@mj-biz-apps/accounting-ng-widgets';
+
 import { CompanyScopeChipComponent } from '../shared/company-scope-chip.component';
 import { PageRefreshService } from '../../transfer-pending/shell-refresh/page-refresh.service';
 import { GlResolutionPreviewComponent } from '../shared/gl-resolution-preview.component';
@@ -112,6 +115,7 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
     MJEmptyStateComponent,
     MjSlidePanelComponent,
     MJAlertComponent,
+    JournalEntryDetailComponent,
     CompanyScopeChipComponent,
     GlResolutionPreviewComponent,
     WorkspaceTabStripComponent,

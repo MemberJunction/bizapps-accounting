@@ -1,0 +1,124 @@
+/* Journal-entry detail composite — design tokens only (no hardcoded colors). */
+
+:host {
+  display: block;
+}
+
+/* Identity strip. */
+.jed__identity {
+  padding: 4px 4px 12px;
+}
+
+.jed__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.jed__number {
+  font-size: var(--mj-text-lg);
+  font-weight: var(--mj-font-semibold);
+  color: var(--mj-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.jed__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin: 10px 0 0;
+}
+
+.jed__facts > div {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.jed__facts dt {
+  color: var(--mj-text-muted);
+  font-size: var(--mj-text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.jed__facts dd {
+  margin: 0;
+  color: var(--mj-text-primary);
+  font-size: var(--mj-text-sm);
+}
+
+.jed__description {
+  margin: 10px 0 0;
+  color: var(--mj-text-secondary);
+  font-size: var(--mj-text-sm);
+}
+
+/* Timeline + reversal row. */
+.jed__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 12px 4px 16px;
+}
+
+/* Banners. */
+.jed__banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--mj-radius-md);
+  border: 1px solid var(--mj-border-default);
+  background: var(--mj-bg-surface-card);
+  color: var(--mj-text-primary);
+  margin: 0 4px 16px;
+  font-size: var(--mj-text-sm);
+}
+
+.jed__banner--success {
+  background: var(--mj-status-success-bg);
+  border-color: var(--mj-status-success-border);
+  color: var(--mj-status-success-text);
+}
+
+.jed__banner--error {
+  background: var(--mj-status-error-bg);
+  border-color: var(--mj-status-error-border);
+  color: var(--mj-status-error-text);
+}
+
+/* Lineage links. Buttons, not anchors: these emit intent, they are not URLs — an <a href>
+   inside MJ Explorer would be a cold-load navigation that discards the shell's tab state. */
+.jed__lineage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 4px 16px;
+}
+
+.jed__lineage-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--mj-radius-full);
+  border: 1px solid var(--mj-border-default);
+  background: var(--mj-bg-surface-card);
+  color: var(--mj-text-secondary);
+  font-size: var(--mj-text-xs);
+  cursor: pointer;
+}
+
+.jed__lineage-link:hover {
+  color: var(--mj-text-primary);
+  border-color: color-mix(in srgb, var(--mj-brand-primary) 40%, var(--mj-border-default));
+}
+
+.jed__lineage-link:focus-visible {
+  outline: 2px solid var(--mj-brand-primary);
+  outline-offset: 2px;
+}

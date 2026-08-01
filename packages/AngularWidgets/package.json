@@ -1,0 +1,47 @@
+{
+  "name": "@mj-biz-apps/accounting-ng-widgets",
+  "type": "module",
+  "version": "0.1.0",
+  "description": "BizApps Accounting reusable Angular widgets (UI layers 1 + 2) \u2014 framework-clean components that render accounting concepts and emit intent. No routing, no MJ Explorer dependency.",
+  "main": "dist/public-api.js",
+  "types": "dist/public-api.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "/dist"
+  ],
+  "scripts": {
+    "build": "ngc",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "author": "MemberJunction.com",
+  "license": "ISC",
+  "dependencies": {
+    "@mj-biz-apps/accounting-engine-base": "0.1.0",
+    "@mj-biz-apps/accounting-entities": "0.1.0"
+  },
+  "peerDependencies": {
+    "@angular/common": ">=21.0.0 <22.0.0",
+    "@angular/core": ">=21.0.0 <22.0.0",
+    "@angular/forms": ">=21.0.0 <22.0.0",
+    "@memberjunction/core": "^5.50.0",
+    "@memberjunction/global": "^5.50.0",
+    "@memberjunction/graphql-dataprovider": "^5.50.0",
+    "@memberjunction/ng-base-types": "^5.50.0",
+    "@memberjunction/ng-shared-generic": "^5.50.0",
+    "@memberjunction/ng-ui-components": "^5.50.0"
+  },
+  "devDependencies": {
+    "@angular/compiler": "21.1.3",
+    "@angular/compiler-cli": "21.1.3",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MemberJunction/bizapps-accounting"
+  },
+  "mjUILayer": "widgets"
+}

@@ -4,4 +4,7 @@
  */
 export * from './contract.js';
 export * from './pipeline.js';
+export * from './je-rules.js';
+export * from './je-draft.js';
+export * from './journal-entry.client.js';
 export * from './AccountingEngineBase.js';

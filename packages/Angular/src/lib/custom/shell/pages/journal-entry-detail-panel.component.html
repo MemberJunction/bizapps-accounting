@@ -1,155 +1,24 @@
 <mj-slide-panel [Visible]="Visible" [Title]="Title" (Closed)="Close()">
   <!-- .jed owns the panel's internal gutters: mj-slide-panel's .sp-body has NO padding of its own,
-       so without this everything (text AND the chips) sits flush against the panel edge and the
-       header rule. Gutters match the panel header's own 16px/24px rhythm. -->
+       so without this everything sits flush against the panel edge and the header rule. Gutters
+       match the panel header's own 16px/24px rhythm. -->
   <div class="jed">
-    @if (IsLoading) {
-      <mj-loading text="Loading entry…"></mj-loading>
-    } @else if (LoadError) {
-      <mj-alert Variant="error" [Message]="LoadError"></mj-alert>
-    } @else if (Header; as h) {
-      <!-- State strip: status, type, approval gate, balance. Sits BELOW the header rule with real
-           breathing room (the .jed top gutter) — never flush against it. -->
-      <div class="jed__chips">
-        <mj-stat-badge [Label]="h.Status" [Variant]="StatusVariant"></mj-stat-badge>
-        <mj-stat-badge [Label]="h.EntryType" Variant="default"></mj-stat-badge>
-        @if (AwaitsApproval) {
-          <!-- C.8 is designed but NOT enforced server-side (see je-rules.awaitsApproval). The chip
-               reports the state; it must not imply a block that does not exist. -->
-          <mj-stat-badge
-            Label="Manual — awaiting review"
-            Icon="fa-solid fa-user-check"
-            Variant="warning"
-            title="Manual entries are intended to need CFO approval before batching (C.8). That gate is not yet in force, so this entry can still be picked up by a batch build.">
-          </mj-stat-badge>
-        }
-        @if (IsBalanced) {
-          <mj-stat-badge Label="Balanced" Icon="fa-solid fa-scale-balanced" Variant="success"></mj-stat-badge>
-        } @else {
-          <mj-stat-badge Label="Out of balance" Icon="fa-solid fa-triangle-exclamation" Variant="error"></mj-stat-badge>
-        }
-      </div>
+    <!-- Pop-out (↗) is required on every slide-in by the element doctrine, and it belongs to the
+         PANEL rather than the widget: "open this somewhere else" is a presentation decision, and
+         a widget that made it could not be embedded on the surface it wants to pop out to. -->
+    <div class="jed__actions">
+      <button type="button" mjButton variant="outline" size="sm" (click)="PopOut()"
+              title="Open the full entry (closes this panel)">
+        <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i> Open full
+      </button>
+    </div>
 
-      <!-- Header verbs. Pop-out (↗) is required on every slide-in by the element doctrine; it CLOSES
-           this panel as it opens the full entry, so the full record isn't left hidden behind it. -->
-      <div class="jed__actions">
-        <button type="button" mjButton Variant="outline" Size="sm" (click)="PopOut()" title="Open the full entry (closes this panel)">
-          <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i> Open full
-        </button>
-        @if (h.OrderID) {
-          <button type="button" mjButton Variant="outline" Size="sm" (click)="OpenSourceOrder()" title="Open the order that booked this entry">
-            <i class="fa-solid fa-cart-shopping" aria-hidden="true"></i> Open source order
-          </button>
-        }
-        <button
-          type="button"
-          mjButton
-          Variant="outline"
-          Size="sm"
-          [disabled]="!CanReverse"
-          [title]="ReverseBlockedReason ?? 'Generate a balanced reversing entry'"
-          (click)="Reverse()">
-          @if (IsReversing) {
-            <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Reversing…
-          } @else {
-            <i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Reverse
-          }
-        </button>
-      </div>
-
-      @if (ActionMessage) {
-        <mj-alert [Variant]="ActionIsError ? 'error' : 'success'" [Message]="ActionMessage"></mj-alert>
-      }
-
-      <!-- Identity + facts. Everything an approver needs before they look at the lines. -->
-      <h4 class="jed__h">Entry</h4>
-      <dl class="jed__facts">
-        <dt>Number</dt>
-        <dd>{{ h.EntryNumber }}</dd>
-        <dt>Company</dt>
-        <dd>{{ h.Company }}</dd>
-        <dt>Effective</dt>
-        <!-- DATE column (no zone) — render UTC or it shifts a day for any user west of UTC. -->
-        <dd>{{ h.EffectiveDate ? (h.EffectiveDate | date: 'mediumDate' : 'UTC') : '—' }}</dd>
-        <dt>Description</dt>
-        <dd>{{ h.Description || '—' }}</dd>
-        <dt>Batch</dt>
-        <dd>{{ BatchNumber ?? (h.BatchID ? 'in a batch' : 'Not batched') }}</dd>
-        @if (h.GLPostedAt) {
-          <dt>GL posted</dt>
-          <!-- datetimeoffset = an INSTANT → local zone, no 'UTC' arg. -->
-          <dd>{{ h.GLPostedAt | date: 'medium' }}</dd>
-        }
-        @if (h.GLReferenceID) {
-          <dt>GL reference</dt>
-          <dd>{{ h.GLReferenceID }}</dd>
-        }
-        @if (ReversalEntryNumber) {
-          <dt>Reversed by</dt>
-          <dd>{{ ReversalEntryNumber }}</dd>
-        }
-        @if (ReversesEntryNumber) {
-          <dt>Reverses</dt>
-          <dd>{{ ReversesEntryNumber }}</dd>
-        }
-        <dt>Created</dt>
-        <!-- datetimeoffset = an INSTANT → local zone. -->
-        <dd>{{ h.__mj_CreatedAt | date: 'medium' }}</dd>
-      </dl>
-
-      <!-- Lines. The entry IS its lines — an approver cannot judge an entry without them.
-           (§8.1 asks for these inline in the grid; AG Grid Community has no master/detail, so they
-           live here — see the component doc comment.) -->
-      <h4 class="jed__h">Lines</h4>
-      <table class="jed__lines">
-        <thead>
-          <tr>
-            <th scope="col">#</th>
-            <th scope="col">Account</th>
-            <th scope="col" class="jed__num">Debit</th>
-            <th scope="col" class="jed__num">Credit</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (l of Lines; track l.LineNumber) {
-            <tr>
-              <td>{{ l.LineNumber }}</td>
-              <td>
-                <div class="jed__acct">
-                  <span class="jed__acctcode">{{ l.AccountCode }}</span>
-                  <span class="jed__acctname">{{ l.AccountName }}</span>
-                  @if (l.AccountType) {
-                    <span class="jed__accttype">{{ l.AccountType }}</span>
-                  }
-                </div>
-                @if (l.Description) {
-                  <div class="jed__linedesc">{{ l.Description }}</div>
-                }
-                @if (l.Dimensions.length > 0) {
-                  <div class="jed__dims">
-                    @for (d of l.Dimensions; track d) {
-                      <span class="jed__dim">{{ d }}</span>
-                    }
-                  </div>
-                }
-              </td>
-              <td class="jed__num">{{ l.Debit ? (l.Debit | number: '1.2-2') : '' }}</td>
-              <td class="jed__num">{{ l.Credit ? (l.Credit | number: '1.2-2') : '' }}</td>
-            </tr>
-          } @empty {
-            <tr>
-              <td colspan="4" class="jed__empty">This entry has no lines.</td>
-            </tr>
-          }
-        </tbody>
-        <tfoot>
-          <tr [class.jed__unbalanced]="!IsBalanced">
-            <td colspan="2">Totals</td>
-            <td class="jed__num">{{ TotalDebits | number: '1.2-2' }}</td>
-            <td class="jed__num">{{ TotalCredits | number: '1.2-2' }}</td>
-          </tr>
-        </tfoot>
-      </table>
-    }
+    <!-- The entry itself — the same widget the Explorer Journal Entry form embeds. -->
+    <mjacc-journal-entry-detail
+        [JournalEntryID]="JournalEntryID"
+        [Provider]="ProviderToUse"
+        (AfterHeaderLoaded)="OnHeaderLoaded($event)"
+        (AfterReversalRequested)="OnAfterReversal($event)"
+        (RecordOpenRequested)="OnRecordOpenRequested($event)"></mjacc-journal-entry-detail>
   </div>
 </mj-slide-panel>
