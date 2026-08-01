@@ -10,15 +10,21 @@
 # WHAT IT DOES
 #   1. drop + recreate the database
 #   2. MJ core schema at the pinned version
-#   3. bizapps-common   — applied with sqlcmd rather than `mj migrate` because its migrations are
-#                         written against ${flyway:defaultSchema} meaning __mj (it EXTENDS core),
-#                         which `mj migrate` would rewrite to this app's schema. Its own tables use
-#                         the literal __mj_BizAppsCommon schema, so they still land correctly.
+#   3. bizapps-common   — applied with `mj migrate --schema __mj_BizAppsCommon`, same as the
+#                         installer. Its baseline uses only literal __mj_BizAppsCommon names (zero
+#                         placeholders), and its codegen-emitted V migrations use
+#                         ${flyway:defaultSchema} meaning its OWN schema — so the standard rewrite
+#                         is correct for every file. (The previous sqlcmd loop mapped
+#                         defaultSchema to __mj AND swallowed SQL errors — sqlcmd without `-b`
+#                         exits 0 on statement failures — so common's V migrations, including the
+#                         Person.DisplayName computed column that tasks' views join on, were
+#                         silently skipped on every rebuild.)
 #   4. this app's migrations
 #
-# bizapps-tasks is a declared dependency (mj-app.json) but is NOT installed here: nothing in this
-# baseline references its schema, and the approval gate resolves it at runtime. Add a step if that
-# ever stops being true.
+# bizapps-tasks is a declared dependency AND the baseline now references its schema —
+# FK_JEBatch_ApprovalTask points at __mj_BizAppsTasks.Task (#22 item 1) — so it is applied as
+# step 4, before this app's migrations. Its migrations are written against its OWN schema
+# (${flyway:defaultSchema} = __mj_BizAppsTasks), so plain `mj migrate --schema` applies them.
 #
 # AFTER THIS, still by hand (they need judgement, not automation):
 #   npm run mj:codegen                     # regenerate entity metadata + SQL objects
@@ -51,16 +57,18 @@ PARSE
 
 : "${DB_DATABASE:?DB_DATABASE is not set — check .env}"
 
-MJ_VERSION="${MJ_CORE_VERSION:-v5.49.0}"
+MJ_VERSION="${MJ_CORE_VERSION:-v5.50.0}"
 COMMON_REPO="${BIZAPPS_COMMON_REPO:-$ROOT/../bizapps-common}"
+TASKS_REPO="${BIZAPPS_TASKS_REPO:-$ROOT/../bizapps-tasks}"
 MJ="node $ROOT/node_modules/@memberjunction/cli/bin/run.js"
-SQLCMD="sqlcmd -S ${DB_HOST},${DB_PORT:-1433} -U ${DB_USERNAME} -P ${DB_PASSWORD} -C -N o"
+SQLCMD="sqlcmd -S ${DB_HOST},${DB_PORT:-1433} -U ${DB_USERNAME} -P ${DB_PASSWORD} -C -N o -b"
 
 say() { printf '\n\033[1m=== %s ===\033[0m\n' "$1"; }
 
 [[ -d "$COMMON_REPO" ]] || { echo "bizapps-common checkout not found at $COMMON_REPO" >&2; exit 1; }
+[[ -d "$TASKS_REPO" ]] || { echo "bizapps-tasks checkout not found at $TASKS_REPO" >&2; exit 1; }
 
-say "1/4  Recreating ${DB_DATABASE}"
+say "1/5  Recreating ${DB_DATABASE}"
 $SQLCMD -d master -Q "
     IF DB_ID('${DB_DATABASE}') IS NOT NULL
     BEGIN
@@ -69,15 +77,11 @@ $SQLCMD -d master -Q "
     END
     CREATE DATABASE [${DB_DATABASE}];"
 
-say "2/4  MJ core @ ${MJ_VERSION}"
+say "2/5  MJ core @ ${MJ_VERSION}"
 $MJ migrate -t "${MJ_VERSION}"
 
-say "3/4  bizapps-common"
-for f in "$COMMON_REPO"/migrations/*.sql; do
-    printf '  %s\n' "$(basename "$f")"
-    sed 's/\${flyway:defaultSchema}/__mj/g; s/\${mjSchema}/__mj/g' "$f" \
-        | $SQLCMD -d "${DB_DATABASE}" -i /dev/stdin
-done
+say "3/5  bizapps-common"
+$MJ migrate --schema __mj_BizAppsCommon --dir "$COMMON_REPO/migrations"
 
 # TRIM THE GENERATED HALF BEFORE APPLYING. Once CodeGen output lives in the baseline, a rebuild
 # produces a database whose entity metadata is ALREADY current — so the next CodeGen run has nothing
@@ -85,7 +89,10 @@ done
 # stale generated SQL referencing a table the hand-authored half no longer creates fails the migrate
 # outright. The cycle is only self-consistent if the rebuild applies the hand-authored DDL alone and
 # CodeGen regenerates the rest from scratch. This is what makes "edit the baseline in place" safe.
-say "4/4  bizapps-accounting (hand-authored DDL only)"
+say "4/5  bizapps-tasks"
+$MJ migrate --schema __mj_BizAppsTasks --dir "$TASKS_REPO/migrations"
+
+say "5/5  bizapps-accounting (hand-authored DDL only)"
 MARKER='CODEGEN OUTPUT — GENERATED CODE BELOW THIS LINE'
 ACCT_MIGRATION=$(grep -rl "$MARKER" "$ROOT/migrations"/*.sql | head -1)
 if [[ -n "$ACCT_MIGRATION" ]]; then

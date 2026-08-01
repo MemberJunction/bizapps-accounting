@@ -140,6 +140,56 @@
          RELATED ENTITY PANELS
          ======================================== -->
 
+    <!-- Tax Rates Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingTaxRates"
+        SectionName="Tax Rates"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingTaxRates')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Tax Rates','TaxJurisdictionID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Tax Rates')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingTaxRates')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingTaxRates', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- Company Tax Nexus Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingCompanyTaxNexus"
+        SectionName="Company Tax Nexus"
+        Icon="fa fa-table"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingCompanyTaxNexus')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Company Tax Nexus','TaxJurisdictionID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Company Tax Nexus')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingCompanyTaxNexus')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingCompanyTaxNexus', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
     <!-- Tax Liabilities Section -->
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingTaxLiabilities"
@@ -184,56 +234,6 @@
                 [ShowToolbar]="false"
                 (Navigate)="OnFormNavigate($event)"
                 (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingTaxJurisdictions', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
-    <!-- Company Tax Nexus Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingCompanyTaxNexus"
-        SectionName="Company Tax Nexus"
-        Icon="fa fa-table"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingCompanyTaxNexus')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Company Tax Nexus','TaxJurisdictionID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Company Tax Nexus')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingCompanyTaxNexus')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingCompanyTaxNexus', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
-    <!-- Tax Rates Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingTaxRates"
-        SectionName="Tax Rates"
-        Icon="fa fa-table"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingTaxRates')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Tax Rates','TaxJurisdictionID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Tax Rates')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingTaxRates')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingTaxRates', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>
