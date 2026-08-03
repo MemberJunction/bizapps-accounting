@@ -1216,7 +1216,8 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * Field Name: ApprovalTaskID
         * * Display Name: Approval Task ID
         * * SQL Data Type: uniqueidentifier
-        * * Description: The bizapps-tasks approval Task raised for this batch (plan D10). NO FK by design (cross-app); stamped together with ApprovalTaskRaisedAt in the task-raise transaction (both-or-neither CHECK). NULL = task not yet raised (retryable state).`),
+        * * Related Entity/Foreign Key: MJ_BizApps_Tasks: Tasks (vwTasks.ID)
+        * * Description: The bizapps-tasks approval Task raised for this batch (plan D10). Real FK to __mj_BizAppsTasks.Task (#22) — cross-app references point UP the dependency graph, and tasks installs before this app. Stamped together with ApprovalTaskRaisedAt in the task-raise transaction (both-or-neither CHECK). NULL = task not yet raised (retryable state).`),
     ApprovalTaskRaisedAt: z.date().nullable().describe(`
         * * Field Name: ApprovalTaskRaisedAt
         * * Display Name: Approval Task Raised At
@@ -1244,6 +1245,10 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * Field Name: ApprovedByUser
         * * Display Name: Approved By User
         * * SQL Data Type: nvarchar(100)`),
+    ApprovalTask: z.string().nullable().describe(`
+        * * Field Name: ApprovalTask
+        * * Display Name: Approval Task
+        * * SQL Data Type: nvarchar(255)`),
 });
 
 export type mjBizAppsAccountingJournalEntryBatchEntityType = z.infer<typeof mjBizAppsAccountingJournalEntryBatchSchema>;
@@ -4752,7 +4757,8 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     * * Field Name: ApprovalTaskID
     * * Display Name: Approval Task ID
     * * SQL Data Type: uniqueidentifier
-    * * Description: The bizapps-tasks approval Task raised for this batch (plan D10). NO FK by design (cross-app); stamped together with ApprovalTaskRaisedAt in the task-raise transaction (both-or-neither CHECK). NULL = task not yet raised (retryable state).
+    * * Related Entity/Foreign Key: MJ_BizApps_Tasks: Tasks (vwTasks.ID)
+    * * Description: The bizapps-tasks approval Task raised for this batch (plan D10). Real FK to __mj_BizAppsTasks.Task (#22) — cross-app references point UP the dependency graph, and tasks installs before this app. Stamped together with ApprovalTaskRaisedAt in the task-raise transaction (both-or-neither CHECK). NULL = task not yet raised (retryable state).
     */
     get ApprovalTaskID(): string | null {
         return this.Get('ApprovalTaskID');
@@ -4819,6 +4825,15 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     */
     get ApprovedByUser(): string | null {
         return this.Get('ApprovedByUser');
+    }
+
+    /**
+    * * Field Name: ApprovalTask
+    * * Display Name: Approval Task
+    * * SQL Data Type: nvarchar(255)
+    */
+    get ApprovalTask(): string | null {
+        return this.Get('ApprovalTask');
     }
 }
 

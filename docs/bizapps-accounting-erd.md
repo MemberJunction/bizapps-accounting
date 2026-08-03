@@ -355,7 +355,7 @@ erDiagram
         int TotalEntries
         decimal TotalDebits
         decimal TotalCredits
-        uuid ApprovalTaskID "bizapps-tasks, no FK"
+        uuid ApprovalTaskID "FK to __mj_BizAppsTasks.Task (#22)"
         datetimeoffset ApprovalTaskRaisedAt
         string ExternalBatchRef
         datetimeoffset SentAt
@@ -691,7 +691,7 @@ erDiagram
         int TotalEntries "control totals"
         decimal TotalDebits
         decimal TotalCredits
-        uuid ApprovalTaskID "bizapps-tasks, NO FK - both-or-neither with RaisedAt (CHECK)"
+        uuid ApprovalTaskID "FK to __mj_BizAppsTasks.Task (#22) - both-or-neither with RaisedAt (CHECK)"
         datetimeoffset ApprovalTaskRaisedAt "nullable"
         string ExternalBatchRef "nullable"
         datetimeoffset SentAt "nullable"
