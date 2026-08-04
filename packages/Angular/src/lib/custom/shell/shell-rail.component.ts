@@ -96,6 +96,16 @@ export class ShellRailComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * True exactly when the rail is showing icons with NO labels — the same condition as the
+   * `.sr--collapsed` class, expressed once so the two can't drift. Drives `mj-left-nav`'s `IconOnly`,
+   * which turns on per-item tooltips + accessible names. Hover-peek is deliberately excluded: while
+   * peeking, the labels are back on screen, so a tooltip would just repeat what the user can read.
+   */
+  public get IconOnly(): boolean {
+    return !this.ShowingWide;
+  }
+
+  /**
    * The width the nav renders at. 60px is the collapsed rail (MJ's own numbers: rail padding 8+8, item
    * padding 12+12, icon 18, border 1 — derived so it stays exact if MJ retunes them); 240px expanded.
    */

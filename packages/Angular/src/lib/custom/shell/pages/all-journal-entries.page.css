@@ -1,3 +1,15 @@
+
+/* The gutter body-interior no longer provides ([Padding]=false) — 16px sides to match the
+   header-interior bubble's own margin, so all bubbles are the same width. */
+.aje-body {
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: var(--mj-space-4);
+}
 /* All journal entries — the list idiom other lists clone. Design tokens only.
 
    HEIGHT CHAIN (this is load-bearing, not decoration): mj-entity-data-grid's own :host is
@@ -64,11 +76,29 @@
 }
 
 .aje-grid {
-  /* height (not flex) — the parent <mj-page-body-interior> is display:block. See the header note.
-     100% resolves against body-interior's flex-derived height, so the grid fills the pane and
-     scrolls INTERNALLY rather than making the page scroll (Marcelo: tables scroll, pages don't). */
-  height: 100%;
+  /* flex is legal again: the parent .aje-body IS a flex column with a definite height (the old
+     height-not-flex warning applied to body-interior's display:block, which we now bypass).
+     The card dressing matches the other bubbles — surface, border, LG radius — and overflow:hidden
+     is what actually rounds the table: it clips AG Grid's square corners to the card. */
+  flex: 1 1 auto;
   min-height: 320px;
   display: flex;
   flex-direction: column;
+  background: var(--mj-bg-surface);
+  border: 1px solid var(--mj-border-default);
+  border-radius: var(--mj-radius-lg);
+  overflow: hidden;
+}
+
+/* The fused subheader (Marcelo 2026-08-04): one band carrying stats + search/chips/filters, styled
+   like the interior header card it replaced — the page's single piece of top chrome. The internal
+   rule divides the stats row from the toolbar row, echoing header-interior's own row divider. */
+.aje-subheader {
+  background: var(--mj-bg-surface);
+  border: 1px solid var(--mj-border-default);
+  border-radius: var(--mj-radius-lg);
+}
+.aje-subheader mja-list-toolbar {
+  display: block;
+  border-top: 1px solid var(--mj-border-default);
 }

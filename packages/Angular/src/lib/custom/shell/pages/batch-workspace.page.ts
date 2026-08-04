@@ -1,5 +1,5 @@
-import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, OnInit, OnDestroy } from '@angular/core';
-import { type IRemoteOperationProvider } from '@memberjunction/core';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef, Input, inject, OnInit, OnDestroy } from '@angular/core';
+import { RunView, type IRemoteOperationProvider } from '@memberjunction/core';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
@@ -101,6 +101,68 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
     // Prime the engine cache (JournalEntryTypes for the scope control) — no-op when already loaded.
     void AccountingEngineBase.Instance.Config(false, this.ProviderToUse.CurrentUser, this.ProviderToUse);
     this.openNewDraft();
+    this.initialized = true;
+    if (this.pendingFocusID) {
+      const id = this.pendingFocusID;
+      this.pendingFocusID = null;
+      void this.openExistingBatch(id);
+    }
+  }
+
+  // ─── open an EXISTING batch (the lists' "Open in workspace") ────────────────
+
+  /**
+   * An existing batch to open as a read-only record tab — the target of the batch detail panel's
+   * "Open in workspace". The category passes its `PageParam` here (GoToPage('workspace', id)). The
+   * tab uses the same `BuiltBatchNumber` receipt mode a just-built batch gets: viewing where
+   * batches live, never editing a built batch.
+   */
+  @Input()
+  set FocusBatchID(value: string | null) {
+    if (!value || value === this._focusBatchID) return;
+    this._focusBatchID = value;
+    if (this.initialized) void this.openExistingBatch(value);
+    else this.pendingFocusID = value;
+  }
+  get FocusBatchID(): string | null {
+    return this._focusBatchID;
+  }
+  private _focusBatchID: string | null = null;
+  private pendingFocusID: string | null = null;
+  private initialized = false;
+
+  /** Load the batch and open it as a locked record tab labeled by batch number. */
+  private async openExistingBatch(id: string): Promise<void> {
+    const rv = RunView.FromMetadataProvider(this.ProviderToUse);
+    const res = await rv.RunView<{ ID: string; BatchNumber: string; Memo: string | null }>(
+      {
+        EntityName: 'MJ_BizApps_Accounting: Journal Entry Batches',
+        ExtraFilter: `ID='${id}'`,
+        Fields: ['ID', 'BatchNumber', 'Memo'],
+        ResultType: 'simple',
+      },
+      this.ProviderToUse.CurrentUser,
+    );
+    const row = res.Success ? (res.Results?.[0] ?? null) : null;
+    if (!row) {
+      this.cdr.markForCheck();
+      return;
+    }
+    this.tabs.Open({
+      Id: `batch-view-${id}`,
+      Label: row.BatchNumber,
+      Icon: 'fa-solid fa-layer-group',
+      Status: 'complete', // read-only record — a built batch is immutable from here
+      State: {
+        Criteria: this.defaultCriteria(),
+        ExcludedIDs: [],
+        Memo: row.Memo ?? '',
+        Preview: null,
+        PreviewStale: false,
+        BuiltBatchNumber: row.BatchNumber,
+      },
+    });
+    this.cdr.markForCheck();
   }
 
   // ─── tabs ──────────────────────────────────────────────────────────────────

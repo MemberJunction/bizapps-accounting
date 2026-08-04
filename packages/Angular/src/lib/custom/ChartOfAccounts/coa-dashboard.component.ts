@@ -102,6 +102,43 @@ export class ChartOfAccountsDashboardComponent extends BaseDashboard {
   public AccountTypeFilter: AccountType | 'All' = 'All';
   public Search = '';
 
+  // ─── list-page standard chrome (fused subheader — Marcelo 2026-08-04) ────────
+
+  public get SummaryFigures(): Array<{ Label: string; Value: string; Tone?: 'default' | 'credit' | 'muted' | 'success' | 'warning' | 'danger' | 'info' }> {
+    return [
+      { Label: 'Accounts', Value: String(this.AllAccounts.length) },
+      { Label: 'Companies', Value: String(this.CompanyCount) },
+    ];
+  }
+
+  /** Account types as chips (single-select, matching SetAccountTypeFilter's semantics). */
+  public get TypeChips(): Array<{ Key: string; Label: string; Count?: number | null }> {
+    return [
+      { Key: 'All', Label: 'All types' },
+      ...(['Asset', 'Liability', 'Equity', 'Revenue', 'Expense'] as const)
+        .filter((t) => this.AllAccounts.some((a) => a.AccountType === t))
+        .map((t) => ({ Key: t, Label: t, Count: this.AllAccounts.filter((a) => a.AccountType === t).length })),
+    ];
+  }
+
+  public get ActiveTypeKeys(): string[] {
+    return [this.AccountTypeFilter];
+  }
+
+  public OnTypeToggled(key: string): void {
+    this.SetAccountTypeFilter(key as AccountType | 'All');
+  }
+
+  public AdvancedOpen = false;
+
+  public get AdvancedCount(): number {
+    return this.SelectedCompanyID !== 'All' ? 1 : 0;
+  }
+
+  public OnToolbarSearch(text: string): void {
+    this.Search = text;
+  }
+
   private _selectedCompanyID = 'All';
   /** The scoped, fully-traversed tree — rebuilt whenever the company scope or data changes. */
   private scopedTree: TreeNode[] = [];

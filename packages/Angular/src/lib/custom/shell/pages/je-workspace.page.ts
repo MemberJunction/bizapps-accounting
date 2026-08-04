@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, ChangeDetectorRef, ElementRef, ViewChild, inject, OnInit } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef, ElementRef, Input, ViewChild, inject, OnInit } from '@angular/core';
 import { RunView, type IRemoteOperationProvider } from '@memberjunction/core';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
 import { NormalizeUUID, UUIDsEqual } from '@memberjunction/global';
@@ -86,6 +86,100 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
   async ngOnInit(): Promise<void> {
     this.DimensionColumns = this.loadDimensionColumns();
     this.openNewDraft();
+    this.initialized = true;
+    if (this.pendingFocusID) {
+      const id = this.pendingFocusID;
+      this.pendingFocusID = null;
+      await this.openExistingEntry(id);
+    }
+  }
+
+  // ─── open an EXISTING entry (the lists' "Open in workspace") ────────────────
+
+  /**
+   * An existing entry to open as a LOCKED receipt tab — the target of the detail panels' "Open in
+   * workspace". The category passes its `PageParam` here (GoToPage('workspace', id)). The entry
+   * renders in the editor layout with every control locked (the same `CreatedEntryNumber` receipt
+   * mode a just-created entry gets), so "open in workspace" means *see it where JEs live*, not
+   * *edit it* — posted ledger rows are immutable by trigger anyway.
+   */
+  @Input()
+  set FocusEntryID(value: string | null) {
+    if (!value || value === this._focusEntryID) return;
+    this._focusEntryID = value;
+    if (this.initialized) void this.openExistingEntry(value);
+    else this.pendingFocusID = value;
+  }
+  get FocusEntryID(): string | null {
+    return this._focusEntryID;
+  }
+  private _focusEntryID: string | null = null;
+  private pendingFocusID: string | null = null;
+  private initialized = false;
+
+  /** Load the entry + its lines and open them as a locked receipt tab labeled by entry number. */
+  private async openExistingEntry(id: string): Promise<void> {
+    try {
+      const rv = RunView.FromMetadataProvider(this.ProviderToUse);
+      const [headerRes, lineRes] = await rv.RunViews(
+        [
+          {
+            EntityName: 'MJ_BizApps_Accounting: Journal Entries',
+            ExtraFilter: `ID='${id}'`,
+            Fields: ['ID', 'EntryNumber', 'CompanyID', 'EffectiveDate', 'Description'],
+            ResultType: 'simple',
+          },
+          {
+            EntityName: 'MJ_BizApps_Accounting: Journal Entry Lines',
+            ExtraFilter: `JournalEntryID='${id}'`,
+            Fields: ['GLAccountID', 'DebitAmount', 'CreditAmount', 'Description', 'LineNumber'],
+            OrderBy: 'LineNumber ASC',
+            ResultType: 'simple',
+          },
+        ],
+        this.ProviderToUse.CurrentUser,
+      );
+      const header = (headerRes.Success ? headerRes.Results?.[0] : null) as
+        | { ID: string; EntryNumber: string; CompanyID: string; EffectiveDate: Date | string | null; Description: string | null }
+        | null;
+      if (!header) {
+        this.ActionMessage = 'That journal entry could not be loaded into the workspace.';
+        this.ActionIsError = true;
+        this.cdr.markForCheck();
+        return;
+      }
+      const rows = (lineRes.Success ? (lineRes.Results ?? []) : []) as Array<{
+        GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null; Description: string | null;
+      }>;
+      const lines: JEDraftLine[] = rows.map((r) => ({
+        ...this.newLine(),
+        GLAccountID: r.GLAccountID,
+        Debit: r.DebitAmount ? String(r.DebitAmount) : '',
+        Credit: r.CreditAmount ? String(r.CreditAmount) : '',
+        Description: r.Description ?? '',
+      }));
+      const effective = header.EffectiveDate
+        ? (header.EffectiveDate instanceof Date ? header.EffectiveDate : new Date(header.EffectiveDate)).toISOString().slice(0, 10)
+        : new Date().toISOString().slice(0, 10);
+      this.tabs.Open({
+        Id: `je-view-${id}`,
+        Label: header.EntryNumber,
+        Icon: 'fa-solid fa-book-open',
+        Status: 'complete', // locked receipt — viewing, never editing
+        State: {
+          CompanyID: header.CompanyID,
+          EffectiveDate: effective,
+          Description: header.Description ?? '',
+          Lines: lines.length > 0 ? lines : [this.newLine()],
+          CreatedEntryNumber: header.EntryNumber,
+        },
+      });
+      this.clearMessages();
+    } catch (e) {
+      this.ActionMessage = e instanceof Error ? e.message : String(e);
+      this.ActionIsError = true;
+    }
+    this.cdr.markForCheck();
   }
 
   // ─── tabs ──────────────────────────────────────────────────────────────────
