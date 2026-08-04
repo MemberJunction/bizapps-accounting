@@ -87,7 +87,9 @@
        AND order — so users were still being served widths captured before the auto-width work, and
        edits to [Columns] had no effect for anyone who had ever opened this grid. Bumping the key
        retires those saved states; the version suffix exists for exactly this. Bump it again after any
-       [Columns] change users must actually see. -->
+       [Columns] change users must actually see.
+       [FillWidth] appends an inert, unlabelled trailing column so the row banding and rules reach the
+       card's edge — without stretching any real column to get there. -->
   <mj-entity-data-grid
     [Params]="GridParams"
     [Columns]="Columns"
@@ -96,6 +98,7 @@
     [ShowPager]="true"
     [AllowSorting]="true"
     [ShowToolbar]="false"
+    [FillWidth]="true"
     [SelectionMode]="'single'"
     KeyField="ID"
     StateKey="mj.bizappsacct.grid.allJournalEntries.v2"
