@@ -134,6 +134,19 @@ export class JournalEntryDetailPanelComponent extends BaseAngularComponent {
   @Output() Closed = new EventEmitter<void>();
   /** Emitted after a mutating action succeeds, so the host list refetches (§8 refresh policy). */
   @Output() Changed = new EventEmitter<void>();
+  /**
+   * "Open in workspace" — carries the entry ID; the host routes it to the JE workspace page via the
+   * category's `GoToPage('workspace', id)`. Same close-as-you-leave rule as PopOut: the workspace is
+   * the destination, so this panel gets out of the way.
+   */
+  @Output() OpenInWorkspace = new EventEmitter<string>();
+
+  public GoToWorkspace(): void {
+    if (!this.Header) return;
+    const id = this.Header.ID;
+    this.Closed.emit();
+    this.OpenInWorkspace.emit(id);
+  }
 
   public Header: JEDetailHeader | null = null;
   public Lines: JEDetailLine[] = [];

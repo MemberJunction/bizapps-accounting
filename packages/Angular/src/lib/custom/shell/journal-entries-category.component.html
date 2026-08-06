@@ -17,10 +17,23 @@
       <!-- Refreshes ONLY the page in the body — not the rail, not other pages in this category.
            Exactly one page is instantiated by the @switch below, so it is the only subscriber
            (see PageRefreshService). Hidden when the mounted page has nothing to reload, rather
-           than offering a button that does nothing. -->
+           than offering a button that does nothing. Icon-only outline, matching orders'
+           section-shell refresh (Marcelo 2026-08-04: one refresh idiom across the family). -->
       @if (CanRefreshActivePage) {
-        <mj-refresh-button (Clicked)="RefreshActivePage()"></mj-refresh-button>
+        <button
+          type="button"
+          class="mj-btn mj-btn--outline"
+          (click)="RefreshActivePage()"
+          aria-label="Refresh this page"
+          title="Refresh this page">
+          <i class="fa-solid fa-arrow-rotate-right" aria-hidden="true"></i>
+        </button>
       }
+      <!-- The category's create verb, promoted from the page headers (Marcelo 2026-08-04) — the
+           same slot orders' primary action occupies, so every app's top-right reads identically. -->
+      <button type="button" class="mj-btn mj-btn--primary" (click)="GoToPage('workspace')">
+        <i class="fa-solid fa-plus" aria-hidden="true"></i> New journal entry
+      </button>
     </div>
   </mj-page-header>
 
@@ -42,10 +55,13 @@
           <mj-je-dashboard-page (CreateRequested)="GoToPage('workspace')"></mj-je-dashboard-page>
         }
         @case ('all-entries') {
-          <mj-all-journal-entries-page (CreateRequested)="GoToPage('workspace')"></mj-all-journal-entries-page>
+          <mj-all-journal-entries-page
+            (CreateRequested)="GoToPage('workspace')"
+            (WorkspaceRequested)="GoToPage('workspace', $event)">
+          </mj-all-journal-entries-page>
         }
         @case ('workspace') {
-          <mj-je-workspace-page></mj-je-workspace-page>
+          <mj-je-workspace-page [FocusEntryID]="PageParam"></mj-je-workspace-page>
         }
         @case ('approvals') {
           <mj-je-approvals-page></mj-je-approvals-page>

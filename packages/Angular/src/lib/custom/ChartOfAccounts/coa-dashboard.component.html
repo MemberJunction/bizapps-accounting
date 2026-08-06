@@ -1,42 +1,35 @@
 <mj-page-layout>
-  <mj-page-header
-    Title="Chart of Accounts"
-    Icon="fa-solid fa-sitemap"
-    Subtitle="Browse the GL account hierarchy by company — filter by account type or search, and open any account to edit it">
-
-    <div meta>
-      <mj-stat-badge Icon="fa-solid fa-list" [Count]="AllAccounts.length" Label="accounts" Variant="info" />
-      <mj-stat-badge Icon="fa-solid fa-building" [Count]="CompanyCount" Label="companies" Variant="default" />
-    </div>
-
-    <div actions>
-      <button mjButton variant="primary" size="sm" (click)="OnNewAccount()"><i class="fa-solid fa-plus"></i> New Account</button>
-      <mj-refresh-button [Loading]="IsBusy" (Clicked)="loadData()"></mj-refresh-button>
-    </div>
-
-    <div toolbar>
-      <div class="coa-filters">
+  <!-- The fused subheader (list-page standard, Marcelo 2026-08-04): no title card — the rail names
+       the page. Stats + type chips + search in ONE band; the Company narrowing lives behind the
+       Filters disclosure; the page-local New Account verb rides the toolbar's actions slot (an
+       inline dialog create — no workspace to route to). The tree below keeps its own idiom. -->
+  <div class="coa-subheader">
+    <mja-summary-strip [Bare]="true" [Figures]="SummaryFigures" />
+    <mja-list-toolbar
+      [Bare]="true"
+      [Search]="Search"
+      SearchPlaceholder="Search code or name…"
+      [Presets]="TypeChips"
+      [ActiveKeys]="ActiveTypeKeys"
+      [HasAdvanced]="true"
+      [AdvancedCount]="AdvancedCount"
+      [(AdvancedOpen)]="AdvancedOpen"
+      (SearchChanged)="OnToolbarSearch($event)"
+      (PresetToggled)="OnTypeToggled($event)">
+      <span toolbar-actions>
+        <button mjButton variant="primary" size="sm" (click)="OnNewAccount()"><i class="fa-solid fa-plus"></i> New Account</button>
+      </span>
+      <label class="coa-field">
+        <span class="coa-field__label">Company</span>
         <select class="mj-input coa-companyselect" [(ngModel)]="SelectedCompanyID">
           <option value="All">All companies</option>
           @for (c of Companies; track c.ID) {
             <option [value]="c.ID">{{ c.Name }} ({{ c.CompanyCode }})</option>
           }
         </select>
-
-        <div class="coa-chips">
-          <button class="coa-chip" [class.coa-chip--on]="AccountTypeFilter === 'All'" (click)="SetAccountTypeFilter('All')">All types</button>
-          @for (t of AccountTypes; track t) {
-            <button class="coa-chip" [attr.data-variant]="TypeVariant(t)" [class.coa-chip--on]="AccountTypeFilter === t" (click)="SetAccountTypeFilter(t)">{{ t }}</button>
-          }
-        </div>
-
-        <div class="coa-searchbox">
-          <i class="fa-solid fa-magnifying-glass"></i>
-          <input class="mj-input" type="text" placeholder="Search code or name…" [(ngModel)]="Search" />
-        </div>
-      </div>
-    </div>
-  </mj-page-header>
+      </label>
+    </mja-list-toolbar>
+  </div>
 
   <mj-page-body>
     @if (IsBusy) {

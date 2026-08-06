@@ -33,6 +33,9 @@
       <!-- Header verbs. Pop-out (↗) is required on every slide-in by the element doctrine; it CLOSES
            this panel as it opens the full entry, so the full record isn't left hidden behind it. -->
       <div class="jed__actions">
+        <button type="button" mjButton Variant="outline" Size="sm" (click)="GoToWorkspace()" title="Open this entry in the JE workspace (closes this panel)">
+          <i class="fa-solid fa-diagram-project" aria-hidden="true"></i> Open in workspace
+        </button>
         <button type="button" mjButton Variant="outline" Size="sm" (click)="PopOut()" title="Open the full entry (closes this panel)">
           <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i> Open full
         </button>

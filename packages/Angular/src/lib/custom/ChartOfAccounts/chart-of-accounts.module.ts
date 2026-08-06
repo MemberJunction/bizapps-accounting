@@ -1,6 +1,8 @@
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { MJASummaryStripComponent } from '../shared/summary-strip.component';
+import { MJAListToolbarComponent } from '../shared/list-toolbar.component';
 
 import { SharedGenericModule } from '@memberjunction/ng-shared-generic';
 
@@ -27,6 +29,8 @@ import { ChartOfAccountsResourceComponent } from './coa-resource.component';
 @NgModule({
   declarations: [ChartOfAccountsDashboardComponent, ChartOfAccountsResourceComponent],
   imports: [
+    MJASummaryStripComponent,
+    MJAListToolbarComponent,
     CommonModule,
     FormsModule,
     SharedGenericModule,
