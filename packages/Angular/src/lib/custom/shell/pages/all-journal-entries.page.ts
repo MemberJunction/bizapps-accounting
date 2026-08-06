@@ -1,8 +1,8 @@
-import { Component, ChangeDetectionStrategy, ChangeDetectorRef, EventEmitter, inject, OnInit, OnDestroy, Output } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef, EventEmitter, inject, OnInit, OnDestroy, Output, ViewChild } from '@angular/core';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
 import { RunViewParams, CompositeKey, Metadata, RunView } from '@memberjunction/core';
 import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
-import { GridColumnConfig } from '@memberjunction/ng-entity-viewer';
+import { GridColumnConfig, EntityDataGridComponent } from '@memberjunction/ng-entity-viewer';
 import { mjBizAppsAccountingJournalEntryEntity } from '@mj-biz-apps/accounting-entities';
 import { CompanyScopeService, ScopeCompany } from '../../shared/company-scope.service';
 import { openBizDetail } from '../../shared/biz-detail-form';
@@ -146,8 +146,10 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
   /** The row whose detail slide-in is open, if any. */
   public SelectedID: string | null = null;
 
-  /** Bumped to force the grid to refetch (the header refresh control + post-mutation refetch). */
-  public RefreshToken = 0;
+  /** The grid itself — its Params setter DEEP-COMPARES and skips the refetch when the rebuilt
+   *  params are equivalent, so refresh-with-unchanged-filters must call the grid directly.
+   *  (Replaces the vestigial RefreshToken counter, which nothing consumed.) */
+  @ViewChild(EntityDataGridComponent) private grid?: EntityDataGridComponent;
 
   public Columns: GridColumnConfig[] = [
     { field: 'EntryNumber', title: 'Entry №', width: 140, sortable: true },
@@ -449,8 +451,8 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
     if (this.searchTimer) clearTimeout(this.searchTimer);
   }
   public Refresh(): void {
-    this.RefreshToken++;
     this.applyFilters();
+    void this.grid?.Refresh(); // unchanged params deep-equal → the setter skips; refetch explicitly
   }
 
   /**

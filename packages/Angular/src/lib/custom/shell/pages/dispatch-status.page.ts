@@ -1,9 +1,9 @@
-import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, OnInit, OnDestroy } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, OnInit, OnDestroy, ViewChild } from '@angular/core';
 import { Metadata, RunView, RunViewParams } from '@memberjunction/core';
 import { UUIDsEqual } from '@memberjunction/global';
 import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
-import { GridColumnConfig } from '@memberjunction/ng-entity-viewer';
+import { GridColumnConfig, EntityDataGridComponent } from '@memberjunction/ng-entity-viewer';
 import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
 import { JournalEntryBatchDispatchClient } from '../../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
@@ -96,6 +96,10 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
 
   public GridParams: RunViewParams = { EntityName: BATCH_ENTITY };
 
+  /** The grid — its Params setter deep-compares and skips equal params, so refresh-with-unchanged-
+   *  filters must call the grid directly. */
+  @ViewChild(EntityDataGridComponent) private grid?: EntityDataGridComponent;
+
   /** Filtered count (`null` = not loaded / the read failed — rendered "—", never a fabricated 0). */
   public TotalCount: number | null = null;
   /** Failed batches in the current NON-status filter — the attention strip's rows. */
@@ -143,6 +147,7 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
   /** The ONE refresh control lives in the shell header — this page adds no second one (§8). */
   public Refresh(): void {
     this.applyFilters();
+    void this.grid?.Refresh(); // unchanged params deep-equal → the setter skips; refetch explicitly
   }
 
   /**

@@ -54,6 +54,6 @@ export function LoadBizAppsAccountingServer(): void {
     // This function exists as the startupExport entry point for DynamicPackageLoader.
     LoadCreateJournalEntryOperation(); // tree-shaking anchor for 'Accounting.CreateJournalEntry'
     LoadCreateJournalEntriesOperation(); // tree-shaking anchor for 'Accounting.CreateJournalEntries' (the SET op)
-    LoadJournalEntryBatchOperations(); // tree-shaking anchor for the Accounting.BuildJournalEntryBatch/RegenerateBatch/DispatchBatch/RecordBatchDecision/GetBatchApprovalState ops
+    LoadJournalEntryBatchOperations(); // tree-shaking anchor for the Accounting.BuildJournalEntryBatch/RegenerateJournalEntryBatch/DispatchJournalEntryBatch/RecordBatchDecision/GetBatchApprovalState ops
     LoadGenerateReversalOperation(); // tree-shaking anchor for 'Accounting.GenerateJournalEntryReversal'
 }

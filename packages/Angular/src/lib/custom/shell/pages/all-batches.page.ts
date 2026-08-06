@@ -1,7 +1,7 @@
-import { Component, ChangeDetectionStrategy, ChangeDetectorRef, EventEmitter, inject, OnInit, OnDestroy, Output } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef, EventEmitter, inject, OnInit, OnDestroy, Output, ViewChild } from '@angular/core';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
 import { RunView, RunViewParams } from '@memberjunction/core';
-import { GridColumnConfig } from '@memberjunction/ng-entity-viewer';
+import { GridColumnConfig, EntityDataGridComponent } from '@memberjunction/ng-entity-viewer';
 import { mjBizAppsAccountingJournalEntryBatchEntityType } from '@mj-biz-apps/accounting-entities';
 import { CompanyScopeService, ScopeCompany } from '../../shared/company-scope.service';
 import { TIME_WINDOWS, TimeWindowId, timeWindowRange, toSqlDate, andFilters } from '../../../transfer-pending/list-scaffold/time-window';
@@ -86,15 +86,20 @@ export class AllBatchesPageComponent implements OnInit, OnDestroy {
   /** The row whose detail slide-in is open, if any. */
   public SelectedID: string | null = null;
 
-  public RefreshToken = 0;
+  /** The grid — its Params setter deep-compares and skips equal params, so refresh-with-unchanged-
+   *  filters must call the grid directly. (Replaces the vestigial RefreshToken counter.) */
+  @ViewChild(EntityDataGridComponent) private grid?: EntityDataGridComponent;
 
   public Columns: GridColumnConfig[] = [
     { field: 'JournalEntryBatchNumber', title: 'Batch №', width: 150, sortable: true },
     { field: 'PostingDate', title: 'Posting date', width: 130, sortable: true },
     { field: 'Status', title: 'Status', width: 110, sortable: true },
     { field: 'TargetSystem', title: 'Target', width: 130, sortable: true },
-    // Explicit integer type: TotalEntries is a COUNT, and without this the grid's numeric
-    // default dressed it as currency ("$1.00" entries — observed live 2026-08-04).
+    // TotalEntries is a COUNT — but it still renders as currency ("$1.00" entries) because of an
+    // MJ-CORE gap (MJ-UPSTREAM.md 2026-08-06): mapColumnConfigToColDef drops the host column's
+    // type/format/formatter, then applyFieldFormatter's NAME-PATTERN heuristic (includes('total'))
+    // dresses the field as currency. This config is CORRECT per the GridColumnConfig contract and
+    // takes effect the moment MJ wires customFormat through — do not remove it.
     { field: 'TotalEntries', title: 'Entries', width: 100, sortable: true, type: 'number', format: '#,##0' },
     { field: 'TotalDebits', title: 'Debits', width: 130, sortable: true },
     { field: 'TotalCredits', title: 'Credits', width: 130, sortable: true },
@@ -305,8 +310,8 @@ export class AllBatchesPageComponent implements OnInit, OnDestroy {
   }
 
   public Refresh(): void {
-    this.RefreshToken++;
     this.applyFilters();
+    void this.grid?.Refresh(); // unchanged params deep-equal → the setter skips; refetch explicitly
   }
 
   /** Row click → the batch detail slide-in. `rowKey` is CompositeKey form — parse it (grid-row-key). */

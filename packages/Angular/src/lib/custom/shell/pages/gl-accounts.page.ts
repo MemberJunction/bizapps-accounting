@@ -1,9 +1,10 @@
-import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, Input, OnInit, OnDestroy } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, Input, OnInit, OnDestroy, ViewChild } from '@angular/core';
 import { UUIDsEqual, NormalizeUUID } from '@memberjunction/global';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
 import { RunViewParams } from '@memberjunction/core';
-import { GridColumnConfig } from '@memberjunction/ng-entity-viewer';
+import { GridColumnConfig, EntityDataGridComponent } from '@memberjunction/ng-entity-viewer';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
+import { rowKeyToId } from '../../../transfer-pending/list-scaffold/grid-row-key';
 import { CompanyScopeService } from '../../shared/company-scope.service';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import type { mjBizAppsAccountingGLAccountEntity } from '@mj-biz-apps/accounting-entities';
@@ -208,6 +209,11 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
    */
   public GridParams: RunViewParams = { EntityName: GL_ENTITY };
 
+  /** The grid itself — needed because its Params setter DEEP-COMPARES and skips the refetch when
+   *  the rebuilt params are equivalent (same filters/search). After a save, the predicate hasn't
+   *  changed but the DATA has, so the refresh must be explicit. */
+  @ViewChild(EntityDataGridComponent) private grid?: EntityDataGridComponent;
+
   public readonly GridColumns: GridColumnConfig[] = [
     // Company first, always: an account only exists inside a company's chart.
     { field: 'Company', title: 'Company', width: 180, sortable: true },
@@ -249,8 +255,12 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
     this.rebuildGridParams();
   }
 
-  /** Row click = edit (the per-row Edit button retired with the hand-rolled table). */
-  public OnGridRowClicked(id: string): void {
+  /** Row click = edit (the per-row Edit button retired with the hand-rolled table). The grid's
+   *  rowKey is a CompositeKey concatenated string ('ID|<uuid>'), not a bare ID — parse it (same
+   *  lesson the JE detail panel learned; see rowKeyToId). */
+  public OnGridRowClicked(rowKey: string): void {
+    const id = rowKeyToId(rowKey);
+    if (!id) return;
     const row = this.Rows.find((r) => UUIDsEqual(r.ID, id));
     if (row) this.StartEdit(row);
   }
@@ -289,6 +299,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
 
   public Refresh(): void {
     void this.load(true);
+    void this.grid?.Refresh(); // header Refresh must refetch the grid too — unchanged params won't
   }
 
   // ------------------------------------------------------------------ filtering
@@ -470,7 +481,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
 
       this.Draft = null;
       await this.load(true);
-      this.rebuildGridParams(); // refetch the grid so the saved change shows
+      void this.grid?.Refresh(); // params are unchanged post-save (deep-equal → setter skips), so refetch explicitly
     } catch (e) {
       this.EditorError = this.friendlySaveError(e instanceof Error ? e.message : String(e), 'The account could not be saved.');
     } finally {
@@ -553,7 +564,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
         return;
       }
       await this.load(true);
-      this.rebuildGridParams(); // refetch the grid so the saved change shows
+      void this.grid?.Refresh(); // params are unchanged post-save (deep-equal → setter skips), so refetch explicitly
     } catch (e) {
       this.LoadError = e instanceof Error ? e.message : String(e);
     } finally {
