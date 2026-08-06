@@ -29,10 +29,10 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
  * are all NOT NULL and all named in the Fields list below. See the same note on je-dashboard.page.
  */
 type BatchListRow = Required<
-  Pick<mjBizAppsAccountingJournalEntryBatchEntityType, 'ID' | 'BatchNumber' | 'Status' | 'TargetSystem' | '__mj_CreatedAt'>
+  Pick<mjBizAppsAccountingJournalEntryBatchEntityType, 'ID' | 'JournalEntryBatchNumber' | 'Status' | 'TargetSystem' | '__mj_CreatedAt'>
 >;
 
-const BATCH_LIST_FIELDS: (keyof BatchListRow)[] = ['ID', 'BatchNumber', 'Status', 'TargetSystem', '__mj_CreatedAt'];
+const BATCH_LIST_FIELDS: (keyof BatchListRow)[] = ['ID', 'JournalEntryBatchNumber', 'Status', 'TargetSystem', '__mj_CreatedAt'];
 
 /** Every count the page reads, carried together so the cards can source their headers from them. */
 interface BatchCounts {
@@ -69,7 +69,7 @@ interface BatchListRows {
   styleUrls: ['./accounting-dashboard.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class BatchesDashboardPageComponent extends AccountingDashboardBase implements OnInit, OnDestroy {
+export class JournalEntryBatchesDashboardPageComponent extends AccountingDashboardBase implements OnInit, OnDestroy {
   /** The shell header's Refresh reaches this page only while it is the mounted one. */
   private pageRefresh = inject(PageRefreshService);
   private refreshSub: { unsubscribe: () => void } | null = null;
@@ -272,7 +272,7 @@ export class BatchesDashboardPageComponent extends AccountingDashboardBase imple
   private toItem(row: BatchListRow, warn: boolean): DashboardListItem {
     return {
       Id: row.ID,
-      Title: row.BatchNumber,
+      Title: row.JournalEntryBatchNumber,
       Detail: row.TargetSystem,
       Status: row.Status,
       // __mj_CreatedAt is an instant (DATETIMEOFFSET) — the browser's local zone is the right

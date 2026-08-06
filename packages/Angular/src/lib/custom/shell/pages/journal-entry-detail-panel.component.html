@@ -74,7 +74,7 @@
         <dt>Description</dt>
         <dd>{{ h.Description || '—' }}</dd>
         <dt>Batch</dt>
-        <dd>{{ BatchNumber ?? (h.BatchID ? 'in a batch' : 'Not batched') }}</dd>
+        <dd>{{ JournalEntryBatchNumber ?? (h.JournalEntryBatchID ? 'in a batch' : 'Not batched') }}</dd>
         @if (h.GLPostedAt) {
           <dt>GL posted</dt>
           <!-- datetimeoffset = an INSTANT → local zone, no 'UTC' arg. -->

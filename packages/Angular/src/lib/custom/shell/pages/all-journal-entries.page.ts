@@ -147,7 +147,7 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
     // most room; the grid ellipsises overflow so a long memo stays on one readable line.
     { field: 'Description', title: 'Memo', width: 'auto', sortable: false },
     { field: 'CompanyID', title: 'Company', width: 160, visible: false, sortable: true },
-    { field: 'BatchID', title: 'Batch', width: 140, visible: false, sortable: true },
+    { field: 'JournalEntryBatchID', title: 'Batch', width: 140, visible: false, sortable: true },
   ];
 
   ngOnInit(): void {

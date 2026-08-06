@@ -62,7 +62,7 @@ Override the endpoint or key via env: `MJ_API_URL` (default `http://localhost:40
 - **`AccountingIntercompanyFlow`** — scoping: CO1 = 0 rows, CO2 = the seeded leg (EntryType `IntercompanyFlow`).
 
 **`batch-dispatch-api.ts`** — the write flow, end to end:
-`BuildJEBatch` (Success, BatchID, JECount≥1) → `JEBatchApprovalState` (Approved=false) →
+`BuildJEBatch` (Success, JournalEntryBatchID, JECount≥1) → `JEBatchApprovalState` (Approved=false) →
 `RecordJEBatchDecision('Approved')` → `JEBatchApprovalState` (Approved=true) → `DispatchJEBatch`
 (Status == 'Posted'; early dispatch before the decision is refused) → `GenerateJournalEntryReversal` (a new Pending reversal JE).
 

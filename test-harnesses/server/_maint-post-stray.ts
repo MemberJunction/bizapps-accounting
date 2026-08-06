@@ -40,7 +40,7 @@ async function main(): Promise<void> {
   console.log(`Built batch ${built.batchId}: ${built.jeCount} JE(s), ${built.summaryLineCount} summary line(s), ${built.totalDebits}/${built.totalCredits}`);
   await approveBatch(built.batchId, user.ID, user);
   const posted = await sendBatch(built.batchId, user, { gate: AutoApproveGate });
-  console.log(`Batch ${built.batchId} → ${posted.Status} (ref ${posted.ExternalBatchRef})`);
+  console.log(`Batch ${built.batchId} → ${posted.Status} (ref ${posted.ExternalJournalEntryBatchRef})`);
   finishAndExit(`Posted ${built.jeCount} previously-Pending JE(s). Clean slate for block2.`, 0, pool);
 }
 

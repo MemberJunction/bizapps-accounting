@@ -30,12 +30,12 @@ import {
   MJDialogActionsComponent,
 } from '@memberjunction/ng-ui-components';
 
-import { BatchStatusDashboardComponent } from '../BatchStatus/batch-status-dashboard.component';
-import { BatchStatusResourceComponent } from '../BatchStatus/batch-status-resource.component';
+import { JournalEntryBatchStatusDashboardComponent } from '../JournalEntryBatchStatus/journal-entry-batch-status-dashboard.component';
+import { JournalEntryBatchStatusResourceComponent } from '../JournalEntryBatchStatus/journal-entry-batch-status-resource.component';
 
 @NgModule({
   declarations: [
-    BatchStatusDashboardComponent, BatchStatusResourceComponent,
+    JournalEntryBatchStatusDashboardComponent, JournalEntryBatchStatusResourceComponent,
   ],
   imports: [
     CommonModule,
@@ -53,7 +53,7 @@ import { BatchStatusResourceComponent } from '../BatchStatus/batch-status-resour
     MJDialogActionsComponent,
   ],
   exports: [
-    BatchStatusDashboardComponent, BatchStatusResourceComponent,
+    JournalEntryBatchStatusDashboardComponent, JournalEntryBatchStatusResourceComponent,
   ],
 })
 export class ReadModelsModule {}

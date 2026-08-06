@@ -110,7 +110,7 @@
                 <td class="bs-num">{{ row.TotalDebits | number:'1.2-2' }}</td>
                 <td class="bs-num">{{ row.TotalCredits | number:'1.2-2' }}</td>
                 <td>{{ row.BatchedAt ? (row.BatchedAt | date:'yyyy-MM-dd HH:mm') : '—' }}</td>
-                <td class="bs-ref">{{ row.ExternalBatchRef ?? '—' }}</td>
+                <td class="bs-ref">{{ row.ExternalJournalEntryBatchRef ?? '—' }}</td>
               </tr>
               @if (row.Expanded) {
                 <tr class="bs-detail-row">

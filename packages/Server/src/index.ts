@@ -13,13 +13,13 @@ import '@mj-biz-apps/accounting-actions';
 // Server-side entity subclasses — must come after accounting-entities so
 // @RegisterClass auto-increment gives these higher priority
 import '@mj-biz-apps/accounting-core-entities-server';
-import { LoadBatchOperations, LoadCreateJournalEntriesOperation, LoadCreateJournalEntryOperation, LoadGenerateReversalOperation } from '@mj-biz-apps/accounting-core-entities-server';
+import { LoadJournalEntryBatchOperations, LoadCreateJournalEntriesOperation, LoadCreateJournalEntryOperation, LoadGenerateReversalOperation } from '@mj-biz-apps/accounting-core-entities-server';
 
 // Import generated GraphQL resolvers
 import './generated/generated.js';
 
 // NO custom hand-written resolvers remain: every custom server action travels the Remote
-// Operations stack (four-surface doctrine, Amith 2026-07-28) — see BatchOperations.ts /
+// Operations stack (four-surface doctrine, Amith 2026-07-28) — see JournalEntryBatchOperations.ts /
 // GenerateReversalOperation.ts / CreateJournalEntr(y|ies)Operation.ts in core-entities-server.
 // (BatchDispatchResolver, ReadModelsResolver, and JournalEntryResolver were deleted 2026-07-29.)
 
@@ -54,6 +54,6 @@ export function LoadBizAppsAccountingServer(): void {
     // This function exists as the startupExport entry point for DynamicPackageLoader.
     LoadCreateJournalEntryOperation(); // tree-shaking anchor for 'Accounting.CreateJournalEntry'
     LoadCreateJournalEntriesOperation(); // tree-shaking anchor for 'Accounting.CreateJournalEntries' (the SET op)
-    LoadBatchOperations(); // tree-shaking anchor for the Accounting.BuildBatch/RegenerateBatch/DispatchBatch/RecordBatchDecision/GetBatchApprovalState ops
+    LoadJournalEntryBatchOperations(); // tree-shaking anchor for the Accounting.BuildJournalEntryBatch/RegenerateBatch/DispatchBatch/RecordBatchDecision/GetBatchApprovalState ops
     LoadGenerateReversalOperation(); // tree-shaking anchor for 'Accounting.GenerateJournalEntryReversal'
 }

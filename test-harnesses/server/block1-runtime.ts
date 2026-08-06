@@ -92,6 +92,9 @@ async function createCompany(user: UserInfo, currencyCode: string, label: string
   const id = acp.ID;
   const code = acp.CompanyCode;
   if (!(await acp.Save())) throw new Error(`ACP save failed (${label}): ${acp.LatestResult?.CompleteMessage ?? 'unknown'}`);
+  // W1 auto-seed RETIRED (Marcelo ruling 2026-07-30): a new company starts with an EMPTY chart and
+  // seeding is an explicit capability — same contract block0 W1.2 pins.
+  await (acp as unknown as { SeedDefaultChartOfAccounts(): Promise<void> }).SeedDefaultChartOfAccounts();
   const glRes = await rv.RunView<{ ID: string; Code: string }>(
     { EntityName: GL_ENTITY, ExtraFilter: `CompanyID='${id}'`, Fields: ['ID', 'Code'], ResultType: 'simple' }, user);
   const byCode = new Map((glRes.Results ?? []).map(r => [r.Code, r.ID]));
@@ -125,8 +128,8 @@ async function bootstrap(): Promise<Ctx> {
 
   const manualTypeId = await RequireJournalEntryTypeID('Manual', ctxUser, Metadata.Provider);
 
-  // A Pending batch (company A) for the lock tests — a JE can only be Batched if BatchID is set
-  // (CK_JournalEntry_BatchedHasBatch). The batch stays Pending so it can be referenced + cleaned.
+  // A Pending batch (company A) for the lock tests — a JE can only be Batched if JournalEntryBatchID is set
+  // (CK_JournalEntry_BatchedHasJournalEntryBatch). The batch stays Pending so it can be referenced + cleaned.
   const md = new Metadata();
   const batch = await md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, ctxUser);
   batch.NewRecord();
@@ -169,7 +172,7 @@ async function setStatus(ctx: Ctx, jeId: string, status: JEStatus): Promise<bool
   const md = new Metadata();
   const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, ctx.user);
   await je.Load(jeId);
-  if (status === 'Batched' || status === 'GLPosted') je.BatchID = ctx.batchId; // CK_JournalEntry_BatchedHasBatch
+  if (status === 'Batched' || status === 'GLPosted') je.JournalEntryBatchID = ctx.batchId; // CK_JournalEntry_BatchedHasJournalEntryBatch
   je.Status = status;
   try {
     const ok = await je.Save();
@@ -196,7 +199,7 @@ async function main(): Promise<void> {
       `INSERT INTO ${SCHEMA}.JournalEntry (ID, EntryNumber, CompanyID, EffectiveDate, EntryTypeID, Status)
        VALUES ('${jeId}','RAW-${RUN_TAG}-1', '${companyA.id}', GETUTCDATE(), '${ctx.manualTypeId}','Pending')`);
     await pool.request().query(`INSERT INTO ${SCHEMA}.JournalEntryLine (ID, JournalEntryID, LineNumber, GLAccountID, DebitAmount) VALUES (NEWID(), '${jeId}', 1, '${companyA.arGL}', 100.00)`);
-    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntry SET Status='Batched', BatchID='${ctx.batchId}' WHERE ID='${jeId}'`), 'Sum(Debits)');
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntry SET Status='Batched', JournalEntryBatchID='${ctx.batchId}' WHERE ID='${jeId}'`), 'Sum(Debits)');
   });
 
   await test('INV balanced-on-lock — allowed: a balanced JE locks to Batched', async () => {
@@ -236,7 +239,7 @@ async function main(): Promise<void> {
     await pool.request().query(
       `INSERT INTO ${SCHEMA}.JournalEntry (ID, EntryNumber, CompanyID, EffectiveDate, EntryTypeID, Status)
        VALUES ('${jeId}','RAW-${RUN_TAG}-2', '${companyA.id}', GETUTCDATE(), '${ctx.manualTypeId}','Pending')`);
-    await pool.request().query(`UPDATE ${SCHEMA}.JournalEntry SET Status='Batched', BatchID='${ctx.batchId}' WHERE ID='${jeId}'`);
+    await pool.request().query(`UPDATE ${SCHEMA}.JournalEntry SET Status='Batched', JournalEntryBatchID='${ctx.batchId}' WHERE ID='${jeId}'`);
     await expectThrow(() => pool.request().query(`DELETE FROM ${SCHEMA}.JournalEntry WHERE ID='${jeId}'`), 'cannot be deleted');
   });
 

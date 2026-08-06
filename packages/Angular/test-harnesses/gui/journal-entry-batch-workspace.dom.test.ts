@@ -25,7 +25,7 @@ import {
   MJEmptyStateComponent,
 } from '@memberjunction/ng-ui-components';
 import { SharedGenericModule } from '@memberjunction/ng-shared-generic';
-import { BatchWorkspacePageComponent } from '../../src/lib/custom/shell/pages/batch-workspace.page';
+import { JournalEntryBatchWorkspacePageComponent } from '../../src/lib/custom/shell/pages/journal-entry-batch-workspace.page';
 import { WorkspaceCardComponent } from '../../src/lib/transfer-pending/workspace-tabs/workspace-card.component';
 import { WorkspaceTabStripComponent } from '../../src/lib/transfer-pending/workspace-tabs/workspace-tab-strip.component';
 import { WorkspaceTipDirective } from '../../src/lib/transfer-pending/workspace-tabs/workspace-tip.directive';
@@ -33,7 +33,7 @@ import { PageRefreshService } from '../../src/lib/transfer-pending/shell-refresh
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 
-async function waitFor(fixture: ComponentFixture<BatchWorkspacePageComponent>, cond: () => boolean, ms = 45_000): Promise<void> {
+async function waitFor(fixture: ComponentFixture<JournalEntryBatchWorkspacePageComponent>, cond: () => boolean, ms = 45_000): Promise<void> {
   const start = Date.now();
   while (!cond()) {
     if (Date.now() - start > ms) throw new Error('waitFor: condition not met in time');
@@ -50,11 +50,11 @@ describe('Batch workspace (tier 4)', () => {
 
   it('defers its query: fresh tab has no preview, Build is blocked with the exact reason, Load entries renders', async () => {
     await TestBed.configureTestingModule({
-      declarations: [BatchWorkspacePageComponent],
+      declarations: [JournalEntryBatchWorkspacePageComponent],
       imports: [CommonModule, FormsModule, SharedGenericModule, MJButtonDirective, MJPageHeaderInteriorComponent, MJPageBodyInteriorComponent, MJLeftNavContentComponent, MJStatBadgeComponent, MJAlertComponent, MJEmptyStateComponent, WorkspaceCardComponent, WorkspaceTabStripComponent, WorkspaceTipDirective],
       providers: [PageRefreshService],
     }).compileComponents();
-    const fixture = TestBed.createComponent(BatchWorkspacePageComponent);
+    const fixture = TestBed.createComponent(JournalEntryBatchWorkspacePageComponent);
     fixture.detectChanges(); // ngOnInit → opens a draft tab, NO query yet
     const comp = fixture.componentInstance;
 
@@ -70,19 +70,19 @@ describe('Batch workspace (tier 4)', () => {
 
   it('Apply() runs the real PreviewBatch op; candidates match an independent Pending count', async () => {
     await TestBed.configureTestingModule({
-      declarations: [BatchWorkspacePageComponent],
+      declarations: [JournalEntryBatchWorkspacePageComponent],
       imports: [CommonModule, FormsModule, SharedGenericModule, MJButtonDirective, MJPageHeaderInteriorComponent, MJPageBodyInteriorComponent, MJLeftNavContentComponent, MJStatBadgeComponent, MJAlertComponent, MJEmptyStateComponent, WorkspaceCardComponent, WorkspaceTabStripComponent, WorkspaceTipDirective],
       providers: [PageRefreshService],
     }).compileComponents();
-    const fixture = TestBed.createComponent(BatchWorkspacePageComponent);
+    const fixture = TestBed.createComponent(JournalEntryBatchWorkspacePageComponent);
     fixture.detectChanges();
     const comp = fixture.componentInstance;
 
     // Independent expectation: Pending, non-batch-summary JEs (the preview's default criteria =
-    // all companies, all non-summary types). IsBatchSummary rides the type row (issue #24).
+    // all companies, all non-summary types). IsJournalEntryBatchSummary rides the type row (issue #24).
     const expected = await new RunView().RunView({
       EntityName: JE_ENTITY,
-      ExtraFilter: `Status='Pending' AND EntryTypeID NOT IN (SELECT ID FROM __mj_BizAppsAccounting.JournalEntryType WHERE IsBatchSummary=1)`,
+      ExtraFilter: `Status='Pending' AND EntryTypeID NOT IN (SELECT ID FROM __mj_BizAppsAccounting.JournalEntryType WHERE IsJournalEntryBatchSummary=1)`,
       Fields: ['ID'],
       MaxRows: 1,
       ResultType: 'simple',

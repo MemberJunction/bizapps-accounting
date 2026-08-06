@@ -18,17 +18,17 @@ import { LoadCustomForms } from './lib/custom/custom-forms.module';
 
 // Import custom Explorer resource components (dashboards). Static import + the Load* calls in
 // LoadBizAppsAccountingClient() keep their @RegisterClass decorators from being tree-shaken out.
-import { BatchDispatchModule } from './lib/custom/BatchDispatch/batch-dispatch.module';
-import { LoadBatchDispatchDashboard } from './lib/custom/BatchDispatch/batch-dispatch-dashboard.component';
-import { LoadBatchDispatchResource } from './lib/custom/BatchDispatch/batch-dispatch-resource.component';
+import { JournalEntryBatchDispatchModule } from './lib/custom/JournalEntryBatchDispatch/journal-entry-batch-dispatch.module';
+import { LoadJournalEntryBatchDispatchDashboard } from './lib/custom/JournalEntryBatchDispatch/journal-entry-batch-dispatch-dashboard.component';
+import { LoadJournalEntryBatchDispatchResource } from './lib/custom/JournalEntryBatchDispatch/journal-entry-batch-dispatch-resource.component';
 
 // Batch Status dashboard (embedded by the Batches category shell). Its former ReadModelsModule
 // siblings — TrialBalanceAR / RevenueTax / IntercompanyFlow / JEConsole — were DELETED 2026-07-29
 // (Amith PR-27 dead-code sweep): their vw_* backends were removed 2026-07-22 and the new category
 // shells replaced their nav items; git history keeps them if reporting (item f) resurrects one.
 import { ReadModelsModule } from './lib/custom/shared/read-models.module';
-import { LoadBatchStatusDashboard } from './lib/custom/BatchStatus/batch-status-dashboard.component';
-import { LoadBatchStatusResource } from './lib/custom/BatchStatus/batch-status-resource.component';
+import { LoadJournalEntryBatchStatusDashboard } from './lib/custom/JournalEntryBatchStatus/journal-entry-batch-status-dashboard.component';
+import { LoadJournalEntryBatchStatusResource } from './lib/custom/JournalEntryBatchStatus/journal-entry-batch-status-resource.component';
 
 // Chart of Accounts tree + Company Setup hub. (The Approvals inbox was removed — redundant with Batches.)
 import { ChartOfAccountsModule } from './lib/custom/ChartOfAccounts/chart-of-accounts.module';
@@ -56,7 +56,7 @@ import { CLASS_REGISTRATIONS } from './lib/generated/class-registrations-manifes
 export { CLASS_REGISTRATIONS } from './lib/generated/class-registrations-manifest';
 export { GeneratedFormsModule } from './lib/generated/generated-forms.module';
 export { CustomFormsModule } from './lib/custom/custom-forms.module';
-export { BatchDispatchModule } from './lib/custom/BatchDispatch/batch-dispatch.module';
+export { JournalEntryBatchDispatchModule } from './lib/custom/JournalEntryBatchDispatch/journal-entry-batch-dispatch.module';
 export { ReadModelsModule } from './lib/custom/shared/read-models.module';
 // Shared bizapps detail surfaces (slide-in + centered dialog over the MJ form host). Exported so orders reuses the
 // same two standardized surfaces across the suite.
@@ -136,13 +136,13 @@ export { CrossAppLinkService } from './lib/transfer-pending/cross-app-link/cross
  */
 export function LoadBizAppsAccountingClient(): void {
     // Stage 1 — Batch Dispatch.
-    LoadBatchDispatchDashboard();
-    LoadBatchDispatchResource();
-    void BatchDispatchModule;
+    LoadJournalEntryBatchDispatchDashboard();
+    LoadJournalEntryBatchDispatchResource();
+    void JournalEntryBatchDispatchModule;
 
     // Batch Status (embedded by the Batches category shell).
-    LoadBatchStatusDashboard();
-    LoadBatchStatusResource();
+    LoadJournalEntryBatchStatusDashboard();
+    LoadJournalEntryBatchStatusResource();
     void ReadModelsModule;
 
     // Custom forms (Journal Entry, GL Account).

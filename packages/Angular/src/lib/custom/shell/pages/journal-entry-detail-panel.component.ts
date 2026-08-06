@@ -31,7 +31,7 @@ export interface JEDetailHeader {
   /** Denormalized company name carried by vwJournalEntries — no lookup needed. */
   Company: string;
   OrderID: string | null;
-  BatchID: string | null;
+  JournalEntryBatchID: string | null;
   ReversedByJournalEntryID: string | null;
   ReversesJournalEntryID: string | null;
   /** datetimeoffset — an INSTANT. Rendered in the viewer's local zone. */
@@ -137,7 +137,7 @@ export class JournalEntryDetailPanelComponent extends BaseAngularComponent {
 
   public Header: JEDetailHeader | null = null;
   public Lines: JEDetailLine[] = [];
-  public BatchNumber: string | null = null;
+  public JournalEntryBatchNumber: string | null = null;
   public ReversalEntryNumber: string | null = null;
   public ReversesEntryNumber: string | null = null;
 
@@ -261,7 +261,7 @@ export class JournalEntryDetailPanelComponent extends BaseAngularComponent {
   private reset(): void {
     this.Header = null;
     this.Lines = [];
-    this.BatchNumber = null;
+    this.JournalEntryBatchNumber = null;
     this.ReversalEntryNumber = null;
     this.ReversesEntryNumber = null;
     this.ActionMessage = null;
@@ -286,7 +286,7 @@ export class JournalEntryDetailPanelComponent extends BaseAngularComponent {
             ExtraFilter: `ID='${id}'`,
             Fields: [
               'ID', 'EntryNumber', 'EntryType', 'Status', 'EffectiveDate', 'Description',
-              'CompanyID', 'Company', 'OrderID', 'BatchID', 'ReversedByJournalEntryID',
+              'CompanyID', 'Company', 'OrderID', 'JournalEntryBatchID', 'ReversedByJournalEntryID',
               'ReversesJournalEntryID', 'GLPostedAt', 'GLReferenceID', '__mj_CreatedAt',
             ],
             ResultType: 'simple',
@@ -334,7 +334,7 @@ export class JournalEntryDetailPanelComponent extends BaseAngularComponent {
 
   /** The single second round-trip: everything keyed on the ids the first read produced. */
   private async loadDetail(header: JEDetailHeader, rawLines: JELineRow[]): Promise<void> {
-    this.BatchNumber = null;
+    this.JournalEntryBatchNumber = null;
     this.ReversalEntryNumber = null;
     this.ReversesEntryNumber = null;
 
@@ -352,9 +352,9 @@ export class JournalEntryDetailPanelComponent extends BaseAngularComponent {
       slots.accounts = queries.length;
       queries.push(this.accountQuery(accountIDs));
     }
-    if (header.BatchID) {
+    if (header.JournalEntryBatchID) {
       slots.batch = queries.length;
-      queries.push({ EntityName: BATCH_ENTITY, ExtraFilter: `ID='${header.BatchID}'`, Fields: ['ID', 'BatchNumber'], ResultType: 'simple' });
+      queries.push({ EntityName: BATCH_ENTITY, ExtraFilter: `ID='${header.JournalEntryBatchID}'`, Fields: ['ID', 'JournalEntryBatchNumber'], ResultType: 'simple' });
     }
     if (relatedJEIds.length > 0) {
       slots.related = queries.length;
@@ -368,8 +368,8 @@ export class JournalEntryDetailPanelComponent extends BaseAngularComponent {
     this.Lines = rawLines.map((l) => this.toDetailLine(l, accounts, dims));
 
     if (slots.batch !== undefined) {
-      const row = (results[slots.batch]?.Results?.[0] ?? null) as { BatchNumber: string } | null;
-      this.BatchNumber = row?.BatchNumber ?? null;
+      const row = (results[slots.batch]?.Results?.[0] ?? null) as { JournalEntryBatchNumber: string } | null;
+      this.JournalEntryBatchNumber = row?.JournalEntryBatchNumber ?? null;
     }
     if (slots.related !== undefined) {
       this.applyReversalChain(header, (results[slots.related]?.Results ?? []) as Array<{ ID: string; EntryNumber: string }>);

@@ -13,7 +13,7 @@ import { BaseResourceComponent } from '@memberjunction/ng-shared';
   selector: 'mj-batch-status-resource',
   template: `<mj-batch-status-dashboard></mj-batch-status-dashboard>`,
 })
-export class BatchStatusResourceComponent extends BaseResourceComponent implements OnInit {
+export class JournalEntryBatchStatusResourceComponent extends BaseResourceComponent implements OnInit {
   ngOnInit(): void {
     super.ngOnInit();
     this.NotifyLoadComplete();
@@ -29,6 +29,6 @@ export class BatchStatusResourceComponent extends BaseResourceComponent implemen
 }
 
 /** Tree-shaking prevention — called from public-api.ts. */
-export function LoadBatchStatusResource(): void {
+export function LoadJournalEntryBatchStatusResource(): void {
   // No-op.
 }

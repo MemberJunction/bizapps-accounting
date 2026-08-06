@@ -7,12 +7,12 @@ import { CompanyScopeService } from '../../shared/company-scope.service';
 import { WorkspaceTabStore } from '../../../transfer-pending/workspace-tabs/workspace-tab-store';
 import { WorkspaceTab } from '../../../transfer-pending/workspace-tabs/workspace-tabs.types';
 import {
-  BatchWorkspaceClient,
+  JournalEntryBatchWorkspaceClient,
   type BatchCriteria,
   type BatchPreview,
   type EntryTypeScope,
   type BatchTargetSystem,
-} from './batch-workspace.client';
+} from './journal-entry-batch-workspace.client';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 
@@ -20,13 +20,13 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 interface BatchDraft {
   Criteria: BatchCriteria;
   /** Optional free-text label (JournalEntryBatch.Memo) — "what was this batch for". NOT identity
-   *  (BatchNumber is); purely for findability. Editable pre-build, and it drives the tab caption. */
+   *  (JournalEntryBatchNumber is); purely for findability. Editable pre-build, and it drives the tab caption. */
   Memo: string;
   /** Ids the operator has UN-ticked. Kept as the exclusion set (not the inclusion set) so newly
    *  appearing candidates default to INCLUDED, which is what an oldest-forward sweep means. */
   ExcludedIDs: string[];
   /** Set once built — the tab becomes a read-only record of the batch. */
-  BuiltBatchNumber?: string;
+  BuiltJournalEntryBatchNumber?: string;
   /** The loaded preview — stored PER-TAB so switching tabs does NOT re-query the server (Marcelo
    *  2026-07-21). Null until the operator clicks Load / Apply (the query is deferred, never automatic). */
   Preview?: BatchPreview | null;
@@ -43,18 +43,18 @@ interface BatchDraft {
  * systems), preview right with include/exclude, the MOD-8 out-of-order warning, a live Dr = Cr
  * strip with per-company subtotals, and session tabs.
  *
- * Everything server-side goes through the `Accounting.PreviewBatch` / `Accounting.BuildBatch`
+ * Everything server-side goes through the `Accounting.PreviewJournalEntryBatch` / `Accounting.BuildJournalEntryBatch`
  * Remote Operations — the preview runs the SAME candidate filter and netting the build runs, so
  * what you see is what you get.
  */
 @Component({
   standalone: false,
   selector: 'mj-batch-workspace-page',
-  templateUrl: './batch-workspace.page.html',
-  styleUrls: ['./shell-table.css', './batch-workspace.page.css'],
+  templateUrl: './journal-entry-batch-workspace.page.html',
+  styleUrls: ['./shell-table.css', './journal-entry-batch-workspace.page.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class BatchWorkspacePageComponent extends BaseAngularComponent implements OnInit, OnDestroy {
+export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponent implements OnInit, OnDestroy {
   private cdr = inject(ChangeDetectorRef);
   /** The shell header's Refresh reaches this page only while it is the mounted one. */
   private pageRefresh = inject(PageRefreshService);
@@ -62,7 +62,7 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
   public Scope = inject(CompanyScopeService);
 
   private tabs = new WorkspaceTabStore<BatchDraft>();
-  private client = new BatchWorkspaceClient();
+  private client = new JournalEntryBatchWorkspaceClient();
 
   /** The active tab's loaded preview (per-tab, so tab switches don't re-query). Null until Load/Apply. */
   public get Preview(): BatchPreview | null {
@@ -115,7 +115,7 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
     return this.tabs.ActiveTab?.State ?? null;
   }
   public get IsBuilt(): boolean {
-    return !!this.Draft?.BuiltBatchNumber;
+    return !!this.Draft?.BuiltJournalEntryBatchNumber;
   }
 
   public openNewDraft(): void {
@@ -136,13 +136,13 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
 
   /**
    * The tab caption. Human fields lead: a typed memo IS the caption; else the built batch number;
-   * else a plain "New batch". BatchNumber stays the batch's identity — the memo only makes the tab
+   * else a plain "New batch". JournalEntryBatchNumber stays the batch's identity — the memo only makes the tab
    * (and later the All-Batches list) findable by a phrase the operator remembers.
    */
   private batchTabLabel(d: BatchDraft): string {
     const memo = d.Memo?.trim();
     if (memo) return memo;
-    return d.BuiltBatchNumber?.trim() || 'New batch';
+    return d.BuiltJournalEntryBatchNumber?.trim() || 'New batch';
   }
 
   /**
@@ -295,7 +295,7 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
     if (scope === 'All') return null; // no clause
     if (scope === 'Manual') return ['Manual'];
     const all = AccountingEngineBase.Instance.JournalEntryTypes
-      .filter((t) => t.IsActive && !t.IsBatchSummary)
+      .filter((t) => t.IsActive && !t.IsJournalEntryBatchSummary)
       .map((t) => t.Code);
     return all.filter((c) => c !== 'Manual');
   }
@@ -368,7 +368,7 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
       const res = await this.client.Build(this.opProvider, d.Criteria, this.includedIds(d) ?? []);
 
       // A selection spanning companies builds one batch per company (D7) — show them all.
-      d.BuiltBatchNumber = res.BatchIDs.join(', ');
+      d.BuiltJournalEntryBatchNumber = res.JournalEntryBatchIDs.join(', ');
       if (this.tabs.ActiveId) {
         this.tabs.UpdateState(this.tabs.ActiveId, d, false);
         this.tabs.SetStatus(this.tabs.ActiveId, 'complete');
@@ -377,7 +377,7 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
       }
       // On confirm, refresh to a FRESH tab (Marcelo 2026-07-21) — the built batch stays in its own
       // read-only tab for review while a new draft is ready. (openNewDraft clears messages; set after.)
-      const builtNumber = d.BuiltBatchNumber;
+      const builtNumber = d.BuiltJournalEntryBatchNumber;
       const taskRaised = res.ApprovalTaskRaised;
       this.openNewDraft();
       this.ActionMessage = taskRaised

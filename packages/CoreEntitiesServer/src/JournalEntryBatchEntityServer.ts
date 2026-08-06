@@ -3,7 +3,7 @@
  * (enriched 2026-07-29 per Marcelo's review: "some of it should be in a BaseEntity subclass").
  *
  * WHAT LIVES HERE (single-aggregate concerns):
- *   - BatchNumber: atomic counter sproc on first save.
+ *   - JournalEntryBatchNumber: atomic counter sproc on first save.
  *   - Lifecycle: born Pending; the legal status-transition graph; Approved auto-stamps
  *     ApprovedAt/ApprovedByUserID from the context user when the caller didn't supply them.
  *   - Read-only hydration (JE.Lines-style): `Members` (the locked member JEs) and
@@ -17,7 +17,7 @@
  *     unlock is the batch releasing ITS OWN locks (the reversible Batched→Pending transition the
  *     DB triggers sanction exactly for this), so it is legitimately batch-owned.
  *
- * WHAT DELIBERATELY STAYS IN THE ENGINE (multi-aggregate orchestration — BatchingEngine.ts):
+ * WHAT DELIBERATELY STAYS IN THE ENGINE (multi-aggregate orchestration — JournalEntryBatchEngine.ts):
  *   build/regenerate (gather candidates → net → create summary → lock N independent JEs → raise
  *   the approval task) and dispatch (gate + ERP poster seam). Those compose MANY aggregates and
  *   run behind Remote Operations per the engine+transaction ruling (Marcelo 2026-07-21).
@@ -31,7 +31,7 @@ import {
   mjBizAppsAccountingJournalEntryLineEntity,
 } from '@mj-biz-apps/accounting-entities';
 
-import { getNextBatchNumber } from './SequenceService.js';
+import { getNextJournalEntryBatchNumber } from './SequenceService.js';
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
@@ -68,8 +68,8 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
   }
 
   override async Save(options?: EntitySaveOptions): Promise<boolean> {
-    if (!this.IsSaved && !this.BatchNumber) {
-      await this.assignBatchNumber();
+    if (!this.IsSaved && !this.JournalEntryBatchNumber) {
+      await this.assignJournalEntryBatchNumber();
     }
     // Approved auto-stamp: the approval-audit pair is an invariant of the TRANSITION, so the
     // entity fills it from context when the caller didn't — self-enforcing, not caller-supplied.
@@ -162,7 +162,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     }
 
     const members = await this.LoadMembers();
-    // The summary JE also carries this BatchID (it rides the member lock machinery) — exclude it.
+    // The summary JE also carries this JournalEntryBatchID (it rides the member lock machinery) — exclude it.
     const memberCount = members.filter(m => m.ID.toLowerCase() !== summary.ID.toLowerCase()).length;
     if (memberCount !== (this.TotalEntries ?? 0)) {
       fail(`TotalEntries (${this.TotalEntries}) does not match the locked member count (${memberCount}). Regenerate the batch.`);
@@ -174,8 +174,8 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
   // ─── owned collections (read-only hydration — JE.Lines-style) ─────────────
 
   /**
-   * The journal entries locked to this batch (INCLUDING the BatchSummary JE, which carries the
-   * BatchID so it rides the same lock machinery). Lazy; cached per instance; `forceRefresh` to
+   * The journal entries locked to this batch (INCLUDING the JournalEntryBatchSummary JE, which carries the
+   * JournalEntryBatchID so it rides the same lock machinery). Lazy; cached per instance; `forceRefresh` to
    * re-read. READ-ONLY by convention: mutating members happens through their own entities /
    * the engine — the batch never writes other aggregates outside its sanctioned lock-release.
    */
@@ -183,7 +183,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     if (this._members && !forceRefresh) return this._members;
     const rv = this.ProviderToUse as unknown as IRunViewProvider;
     const res = await rv.RunView<mjBizAppsAccountingJournalEntryEntity>(
-      { EntityName: JE_ENTITY, ExtraFilter: `BatchID='${this.ID}'`, ResultType: 'entity_object', BypassCache: true },
+      { EntityName: JE_ENTITY, ExtraFilter: `JournalEntryBatchID='${this.ID}'`, ResultType: 'entity_object', BypassCache: true },
       contextUser ?? this.ContextCurrentUser,
     );
     if (!res.Success) throw new Error(`JournalEntryBatchEntityServer.LoadMembers failed: ${res.ErrorMessage ?? 'unknown'}`);
@@ -191,7 +191,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     return this._members;
   }
 
-  /** The netted BatchSummary journal entry this batch points at (null when none, e.g. cancelled). */
+  /** The netted JournalEntryBatchSummary journal entry this batch points at (null when none, e.g. cancelled). */
   public async LoadSummaryJournalEntry(forceRefresh = false, contextUser?: UserInfo): Promise<mjBizAppsAccountingJournalEntryEntity | null> {
     if (this._summary !== undefined && !forceRefresh) return this._summary;
     if (!this.SummaryJournalEntryID) { this._summary = null; return null; }
@@ -206,13 +206,13 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
   /**
    * Reverse an unapproved (Pending) batch in ONE provider transaction: clear the summary pointer,
    * return every member JE to the candidate pool (the sanctioned reversible Batched→Pending +
-   * BatchID→NULL unlock), delete the summary JE (lines first), and mark this batch Cancelled.
+   * JournalEntryBatchID→NULL unlock), delete the summary JE (lines first), and mark this batch Cancelled.
    * Valid ONLY while Status='Pending' — approval makes the lock permanent (plan §7.3).
    */
   public async Cancel(contextUser?: UserInfo): Promise<boolean> {
     if (!this.IsSaved) throw new Error('JournalEntryBatchEntityServer.Cancel: the batch must be saved.');
     if (this.Status !== 'Pending') {
-      throw new Error(`JournalEntryBatchEntityServer.Cancel: batch ${this.BatchNumber} is ${this.Status}; only a Pending (unapproved) batch can be cancelled/reversed.`);
+      throw new Error(`JournalEntryBatchEntityServer.Cancel: batch ${this.JournalEntryBatchNumber} is ${this.Status}; only a Pending (unapproved) batch can be cancelled/reversed.`);
     }
     const user = contextUser ?? this.ContextCurrentUser;
     const dbProvider = this.ProviderToUse as unknown as DatabaseProviderBase;
@@ -249,7 +249,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     const rv = this.ProviderToUse as unknown as IRunViewProvider;
     const md = this.ProviderToUse as unknown as IMetadataProvider;
     const res = await rv.RunView<{ ID: string }>(
-      { EntityName: JE_ENTITY, ExtraFilter: `BatchID='${this.ID}' AND Status='Batched'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true },
+      { EntityName: JE_ENTITY, ExtraFilter: `JournalEntryBatchID='${this.ID}' AND Status='Batched'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true },
       user,
     );
     if (!res.Success) throw new Error(`batch teardown: member scan failed: ${res.ErrorMessage ?? 'unknown'}`);
@@ -257,7 +257,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
       const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, user);
       await je.Load(row.ID);
       je.Status = 'Pending';
-      je.BatchID = null;
+      je.JournalEntryBatchID = null;
       if (!(await je.Save())) throw new Error(`batch teardown: JE ${row.ID} Batched→Pending failed: ${je.LatestResult?.CompleteMessage ?? 'unknown'}`);
     }
 
@@ -279,14 +279,14 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     this._summary = undefined;
   }
 
-  private async assignBatchNumber(): Promise<void> {
+  private async assignJournalEntryBatchNumber(): Promise<void> {
     if (!this.ContextCurrentUser) {
-      throw new Error('JournalEntryBatchEntityServer.assignBatchNumber: ContextCurrentUser is required');
+      throw new Error('JournalEntryBatchEntityServer.assignJournalEntryBatchNumber: ContextCurrentUser is required');
     }
-    const batchNumber = await getNextBatchNumber(
+    const batchNumber = await getNextJournalEntryBatchNumber(
       this.ContextCurrentUser,
       this.ProviderToUse as unknown as IMetadataProvider,
     );
-    this.BatchNumber = batchNumber;
+    this.JournalEntryBatchNumber = batchNumber;
   }
 }

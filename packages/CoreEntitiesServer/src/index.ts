@@ -31,12 +31,12 @@ export {
   DEFAULT_GL_ACCOUNT_REFS,
 } from './SeedData.js';
 export type { SeededGLAccount } from './SeedData.js';
-export { getNextJournalEntryNumber, getNextBatchNumber } from './SequenceService.js';
+export { getNextJournalEntryNumber, getNextJournalEntryBatchNumber } from './SequenceService.js';
 export {
   LookupJournalEntryTypeByCode,
   LookupJournalEntryTypeByID,
   RequireJournalEntryTypeID,
-  GetBatchSummaryEntryType,
+  GetJournalEntryBatchSummaryEntryType,
 } from './JournalEntryTypes.js';
 export type { JournalEntryTypeRow } from './JournalEntryTypes.js';
 
@@ -45,7 +45,7 @@ export type { JournalEntryTypeRow } from './JournalEntryTypes.js';
 //  Git history keeps it if a batch-side pre-lock validator is ever wanted again.)
 
 // S1 — batching engine: net a company's Pending JEs into a SINGLE-COMPANY batch (D7) whose
-// summary is a BatchSummary JournalEntry, lock + dispatch (CFO-approval gate + ERP-post seam).
+// summary is a JournalEntryBatchSummary JournalEntry, lock + dispatch (CFO-approval gate + ERP-post seam).
 export {
   buildBatch,
   buildBatchFromExplicitIds,
@@ -56,8 +56,8 @@ export {
   outOfOrderSkipCount,
   perCompanySubtotals,
   pendingCompanies,
-  EmptyBatchError,
-  BatchFromViewError,
+  EmptyJournalEntryBatchError,
+  JournalEntryBatchFromViewError,
   approveBatch,
   sendBatch,
   cancelBatch,
@@ -66,23 +66,23 @@ export {
   resolveExternalAccount,
   mockErpPoster,
   AutoApproveGate,
-} from './BatchingEngine.js';
+} from './JournalEntryBatchEngine.js';
 export type {
-  BatchTargetSystem,
+  JournalEntryBatchTargetSystem,
   DimRef,
   NettableLine,
   NetGroup,
-  BuildBatchResult,
-  BuildBatchOptions,
-  BuildBatchFromViewOptions,
-  BatchPreviewEntry,
+  BuildJournalEntryBatchResult,
+  BuildJournalEntryBatchOptions,
+  BuildJournalEntryBatchFromViewOptions,
+  JournalEntryBatchPreviewEntry,
   AffectedAccount,
-  BatchPreviewResult,
+  JournalEntryBatchPreviewResult,
   ErpPostResult,
   ErpPoster,
-  BatchApprovalGate,
-  SendBatchOptions,
-} from './BatchingEngine.js';
+  JournalEntryBatchApprovalGate,
+  SendJournalEntryBatchOptions,
+} from './JournalEntryBatchEngine.js';
 
 // S1 — the REAL CFO-approval gate, backed by the bizapps-tasks app (replaces AutoApproveGate in
 // production). See TasksAppApprovalGate.ts.
@@ -109,23 +109,23 @@ export {
   type GenerateReversalOutput,
 } from './GenerateReversalOperation.js';
 export {
-  BuildBatchOperation,
-  PreviewBatchOperation,
-  RegenerateBatchOperation,
-  DispatchBatchOperation,
-  RecordBatchDecisionOperation,
-  GetBatchApprovalStateOperation,
-  LoadBatchOperations,
-  type BatchCriteriaInput,
-  type PreviewBatchInput,
-  type BuildBatchInput,
-  type BuildBatchOutput,
-  type RegenerateBatchInput,
-  type DispatchBatchInput,
-  type DispatchBatchOutput,
-  type BatchDecisionOutcome,
-  type RecordBatchDecisionInput,
-  type RecordBatchDecisionOutput,
-  type GetBatchApprovalStateInput,
-  type GetBatchApprovalStateOutput,
-} from './BatchOperations.js';
+  BuildJournalEntryBatchOperation,
+  PreviewJournalEntryBatchOperation,
+  RegenerateJournalEntryBatchOperation,
+  DispatchJournalEntryBatchOperation,
+  RecordJournalEntryBatchDecisionOperation,
+  GetJournalEntryBatchApprovalStateOperation,
+  LoadJournalEntryBatchOperations,
+  type JournalEntryBatchCriteriaInput,
+  type PreviewJournalEntryBatchInput,
+  type BuildJournalEntryBatchInput,
+  type BuildJournalEntryBatchOutput,
+  type RegenerateJournalEntryBatchInput,
+  type DispatchJournalEntryBatchInput,
+  type DispatchJournalEntryBatchOutput,
+  type JournalEntryBatchDecisionOutcome,
+  type RecordJournalEntryBatchDecisionInput,
+  type RecordJournalEntryBatchDecisionOutput,
+  type GetJournalEntryBatchApprovalStateInput,
+  type GetJournalEntryBatchApprovalStateOutput,
+} from './JournalEntryBatchOperations.js';

@@ -13,7 +13,47 @@ create + open questions for the human, recorded so dev can roll through and circ
 Tiers: **1** Vitest (unit) · **2** server (tsx, in-process direct SQL) · **3** API (GraphQL→MJAPI) ·
 **4** GUI/DOM (no-browser — parked, mjdev overlay) · **5** Playwright (browser e2e, pre-PR only).
 
-## ⭐ CURRENT STATE — 2026-07-30 DEMO-GATE RUN (Amith's demo flow, pre-PR-merge gate)
+## ⭐ CURRENT STATE — 2026-08-05 JOURNALENTRYBATCH RENAME BATTERY (full pyramid vs the identifier refactor)
+
+Gate scope: Amith's ruling — every bare `Batch`-prefixed identifier naming the JournalEntryBatch
+entity renamed to the full prefix (`BatchID→JournalEntryBatchID`, `BatchNumber→JournalEntryBatchNumber`,
+`ExternalBatchRef→ExternalJournalEntryBatchRef`, `IsBatchSummary→IsJournalEntryBatchSummary`,
+`spAssignNextBatchNumber→spAssignNextJournalEntryBatchNumber`, `trg_JEBatch_*→trg_JournalEntryBatch_*`,
+FK/CK/UX names), applied by editing the consolidated baseline in place (house convention) +
+drop-schema → migrate → sync → codegen (verified NO-OP — baseline self-consistent) → build, then the
+Assoc Demo re-seed (6/6; NOTE: drop-schema strands the IsA PARENT rows in __mj.Company — the 3 demo
+parents had to be deleted before re-seed could recreate them). Deliberately unchanged: verb-form
+lifecycle columns (BatchedAt/BatchedByUserID), Status value 'Batched', the BATCH- number format,
+and compact DisplayNames ("Batch ID"). Branch: refactor/journal-entry-batch-rename.
+
+| Tier | Suite | Result |
+|---|---|---|
+| 1 | EngineBase / CoreEntitiesServer / Angular units | **57/57 · 44/44 · 125/125** |
+| 2 | block0 / block1 / engine-runtime / intercompany + server vitest | **10/10 · 11/11 · 12/12 · 17/17 · 25/25** |
+| 3 | engine-op-api / batch-ops-api / full-flow-api (wire) | **11/11 · 37/37 · 24/24** |
+| 4 | GUI DOM suite | **9/9** |
+| 5 | Playwright (8 demo-relevant specs incl. all three batch specs) | **8/8 green** (10.6m) |
+| 5 | orders-product-catalog | pre-known 5y blocker (orders unlinked) — NOT a regression |
+
+Round 2 (2026-08-05): DisplayNames renamed too (baseline + DB, codegen refreshed); server files/classes
+aligned (JournalEntryBatchEngine.ts, JournalEntryBatchOperations.ts, all exported bare-Batch
+identifiers; op WIRE KEYS deliberately unchanged pending ruling). Re-validated after: CES units
+44/44 · engine-runtime 12/12 · tier-3 wire 11/11 · 37/37 · 24/24 · tier-4 9/9 · tier-5 batch
+specs 3/3 (exact-value regenerate 600→711 proven).
+
+Round 3 (2026-08-05): op WIRE KEYS renamed (orders' tip verified zero-reference — heads-up filed
+as bizapps-orders#37) + Angular files/dirs/classes renamed (JournalEntryBatchDispatch/,
+JournalEntryBatchStatus/, journal-entry-batch-workspace.*, journal-entry-batches-dashboard.page,
+gui dom spec file). Selectors + @RegisterClass resource keys kept (metadata-bound); batches-category
+kept (nav-category name). Re-validated: full app build clean · Angular units 125/125 · tier-3 wire
+11/11 · 37/37 · 24/24 (driving the NEW op keys) · tier-4 9/9 · tier-5 batch specs 3/3.
+
+Harness notes: the three explicit-seed fixes (W1 auto-seed retirement) + the two MJ-5.51 locator
+fixes were re-applied on this branch (they also ship in PR #44's branch; identical edits, clean
+merge). Cross-app: bizapps-orders consumes these fields — it needs a companion rename sweep in its
+own repo once this lands.
+
+## ⭐ PRIOR STATE — 2026-07-30 DEMO-GATE RUN (Amith's demo flow, pre-PR-merge gate)
 
 Gate scope (Amith 2026-07-30): prove the full demo flow — company profile setup → GL accounts →
 JE/Lines → batching — before the PR merges. Company-create browser SAVE stays a **waived** gap
@@ -210,7 +250,7 @@ committed Tier-5 specs** yet — treat as a coverage gap to fill (Tier-5 `dashbo
 **Open questions for the human → see `instances/accounting-engine-dev/QUESTIONS.md`:**
 - ✅ **Batch reject semantics** (Q4) — RESOLVED 2026-07-08 (Robert: levels of locking). Reject now reverses the
   **preliminary** lock: `cancelBatch` → batch Cancelled + entries back to the candidate pool. Proven in `block2`
-  (`#12 cancelBatch`) + live through MJAPI. Impl: migration `V202607081600` + `BatchingEngine.cancelBatch`.
+  (`#12 cancelBatch`) + live through MJAPI. Impl: migration `V202607081600` + `JournalEntryBatchEngine.cancelBatch`.
 - ✅ **buildBatch atomicity** (Q5) — RESOLVED 2026-07-08. A failed approval-task raise now auto-reverses the batch
   (reversible preliminary lock) instead of stranding a task-less orphan. Proven in `block2` (`no CFO → auto-reverse`).
 - ⏳ **Follow-on GAAP calls (Q12–Q15, high-priority for Robert):** reversal same-period-vs-forward-date, batch cutoff

@@ -319,9 +319,9 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
     return this.JournalEntryTypes.find(t => t.Code.trim().toLowerCase() === key);
   }
 
-  /** The single IsBatchSummary=1 type row (filtered unique index guarantees at most one). */
-  public get BatchSummaryEntryType(): mjBizAppsAccountingJournalEntryTypeEntity | undefined {
-    return this.JournalEntryTypes.find(t => t.IsBatchSummary);
+  /** The single IsJournalEntryBatchSummary=1 type row (filtered unique index guarantees at most one). */
+  public get JournalEntryBatchSummaryEntryType(): mjBizAppsAccountingJournalEntryTypeEntity | undefined {
+    return this.JournalEntryTypes.find(t => t.IsJournalEntryBatchSummary);
   }
 
   /** Cache-backed lookups for the pure draft pipeline (./pipeline.ts). */
@@ -343,7 +343,7 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
       },
       entryTypeByCode: (code) => {
         const t = entryTypes.get((code ?? '').trim().toLowerCase());
-        return t ? { ID: t.ID, Code: t.Code, IsActive: t.IsActive, IsBatchSummary: t.IsBatchSummary } : undefined;
+        return t ? { ID: t.ID, Code: t.Code, IsActive: t.IsActive, IsJournalEntryBatchSummary: t.IsJournalEntryBatchSummary } : undefined;
       },
       dimensionExists: (id) => dimensions.has(uuidKey(id)),
       dimensionValueBelongs: (dimensionId, valueId) => valuesByDimension.get(uuidKey(dimensionId))?.has(uuidKey(valueId)) ?? false,

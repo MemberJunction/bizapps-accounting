@@ -1,9 +1,9 @@
 /**
  * SequenceService — calls the DB-level atomic numbering stored procs from
- * TypeScript so EntityServer hooks can assign EntryNumber / BatchNumber
+ * TypeScript so EntityServer hooks can assign EntryNumber / JournalEntryBatchNumber
  * before super.Save() commits the row.
  *
- * The sprocs (spAssignNextJournalEntryNumber, spAssignNextBatchNumber) are
+ * The sprocs (spAssignNextJournalEntryNumber, spAssignNextJournalEntryBatchNumber) are
  * intentionally kept at DB level because they require atomic
  * HOLDLOCK+UPDLOCK read-modify-write semantics that don't translate to
  * app-level code under concurrency. Everything else moves to TypeScript.
@@ -58,29 +58,29 @@ export async function getNextJournalEntryNumber(
 
 /**
  * Atomically increments the GLOBAL singleton batch counter and returns the
- * formatted BatchNumber 'BATCH-{seq:000000}'. (D-SEQ: batches are multi-company.)
+ * formatted JournalEntryBatchNumber 'BATCH-{seq:000000}'. (D-SEQ: batches are multi-company.)
  */
-export async function getNextBatchNumber(
+export async function getNextJournalEntryBatchNumber(
   contextUser: UserInfo,
   provider: IMetadataProvider,
 ): Promise<string> {
   const sqlProvider = getSqlServerProvider(provider);
   const sql = `
     DECLARE @batchNumber NVARCHAR(40);
-    EXEC ${ACCOUNTING_SCHEMA}.spAssignNextBatchNumber
-        @BatchNumber  = @batchNumber OUTPUT;
-    SELECT @batchNumber AS BatchNumber;
+    EXEC ${ACCOUNTING_SCHEMA}.spAssignNextJournalEntryBatchNumber
+        @JournalEntryBatchNumber  = @batchNumber OUTPUT;
+    SELECT @batchNumber AS JournalEntryBatchNumber;
   `;
   const rows = await sqlProvider.ExecuteSQL(
     sql,
     {},
-    { isMutation: true, description: 'spAssignNextBatchNumber' },
+    { isMutation: true, description: 'spAssignNextJournalEntryBatchNumber' },
     contextUser,
   );
-  const value = rows?.[0]?.BatchNumber;
+  const value = rows?.[0]?.JournalEntryBatchNumber;
   if (!value || typeof value !== 'string') {
     throw new Error(
-      'SequenceService.getNextBatchNumber: sproc returned no value',
+      'SequenceService.getNextJournalEntryBatchNumber: sproc returned no value',
     );
   }
   return value;

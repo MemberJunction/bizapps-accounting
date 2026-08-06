@@ -12,9 +12,9 @@
  *
  * CONNECTS TO:
  *   ENGINE:   AccountingEngineBase (cached sibling for pipeline validation)
- *   CALLERS:  JournalEntryEntityServer (reversal typing) · BatchingEngine (summary typing +
+ *   CALLERS:  JournalEntryEntityServer (reversal typing) · JournalEntryBatchEngine (summary typing +
  *             member exclusion) · BatchDispatchResolver · AssociationDemoSeedData
- *   DB:       __mj_BizAppsAccounting.JournalEntryType (UQ Code; filtered-unique IsBatchSummary)
+ *   DB:       __mj_BizAppsAccounting.JournalEntryType (UQ Code; filtered-unique IsJournalEntryBatchSummary)
  */
 import { IMetadataProvider, IRunViewProvider, RunView, UserInfo } from '@memberjunction/core';
 
@@ -26,11 +26,11 @@ export interface JournalEntryTypeRow {
   Code: string;
   Name: string;
   IsSystem: boolean;
-  IsBatchSummary: boolean;
+  IsJournalEntryBatchSummary: boolean;
   IsActive: boolean;
 }
 
-const FIELDS = ['ID', 'Code', 'Name', 'IsSystem', 'IsBatchSummary', 'IsActive'];
+const FIELDS = ['ID', 'Code', 'Name', 'IsSystem', 'IsJournalEntryBatchSummary', 'IsActive'];
 
 /** Resolve a JournalEntryType by Code. Null when no row exists. */
 export async function LookupJournalEntryTypeByCode(
@@ -66,17 +66,17 @@ export async function RequireJournalEntryTypeID(
 }
 
 /**
- * The single IsBatchSummary=1 type (filtered unique index allows at most one). Throws when the
+ * The single IsJournalEntryBatchSummary=1 type (filtered unique index allows at most one). Throws when the
  * flag row is missing — a missing discriminator must fail loudly, never fall back (the failure
  * mode is a summary JE that still balances, so there is no downstream signal).
  */
-export async function GetBatchSummaryEntryType(
+export async function GetJournalEntryBatchSummaryEntryType(
   contextUser: UserInfo,
   provider: IMetadataProvider,
 ): Promise<JournalEntryTypeRow> {
-  const row = await lookupOne('IsBatchSummary=1', contextUser, provider);
+  const row = await lookupOne('IsJournalEntryBatchSummary=1', contextUser, provider);
   if (!row) {
-    throw new Error("No JournalEntryType is flagged IsBatchSummary — seed metadata/journal-entry-types (the 'BatchSummary' system row) before batching.");
+    throw new Error("No JournalEntryType is flagged IsJournalEntryBatchSummary — seed metadata/journal-entry-types (the 'JournalEntryBatchSummary' system row) before batching.");
   }
   return row;
 }

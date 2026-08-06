@@ -9,8 +9,8 @@
 >
 > **Current as of 2026-07-27** (schema realignment, issues #22 + #24):
 > - **NEW `JournalEntryType`** (BA-D29) — extensible JE classification replacing the closed
->   `EntryType` CHECK enum; `JournalEntry.EntryTypeID` FK; `IsBatchSummary` flag replaces the
->   `'BatchSummary'` magic string; accounting seeds only its 8 system rows, consuming apps
+>   `EntryType` CHECK enum; `JournalEntry.EntryTypeID` FK; `IsJournalEntryBatchSummary` flag replaces the
+>   `'JournalEntryBatchSummary'` magic string; accounting seeds only its 8 system rows, consuming apps
 >   seed their domain types.
 > - **DROPPED `AccountingCompanyProfile.DefaultPaymentTermsTypeID`** (BA-D30) — accounting
 >   never references its dependents, hard or soft; per-company default terms move to orders.
@@ -115,7 +115,7 @@ flowchart TD
     IAM --> IAMD
     Dimension --> IAMD
     Company -->|single-company D7| Batch
-    Batch -->|BatchID: members + summary| JournalEntry
+    Batch -->|JournalEntryBatchID: members + summary| JournalEntry
     Batch -.->|SummaryJournalEntryID| JournalEntry
     User -->|batched / approved by| Batch
     Company --> JESeq
@@ -190,7 +190,7 @@ erDiagram
     }
     %% ---- batching ----
     Company ||--o{ JournalEntryBatch : "single-company (D7)"
-    JournalEntryBatch ||--o{ JournalEntry : "BatchID (members + summary, by IsBatchSummary type)"
+    JournalEntryBatch ||--o{ JournalEntry : "JournalEntryBatchID (members + summary, by IsJournalEntryBatchSummary type)"
     JournalEntryBatch |o--o| JournalEntry : "SummaryJournalEntryID"
     User ||--o{ JournalEntryBatch : "BatchedBy / ApprovedBy"
     Company ||--o{ JournalEntrySequence : "per-company per-FY numbering"
@@ -298,10 +298,10 @@ erDiagram
     }
     JournalEntryType {
         uuid ID PK
-        string Code UK "Manual | Reversal | BatchSummary | consumer-seeded ..."
+        string Code UK "Manual | Reversal | JournalEntryBatchSummary | consumer-seeded ..."
         string Name
         bool IsSystem "accounting's own - do not repurpose"
-        bool IsBatchSummary "exactly one flagged row (filtered UX)"
+        bool IsJournalEntryBatchSummary "exactly one flagged row (filtered UX)"
         bool IsActive
     }
     JournalEntry {
@@ -316,7 +316,7 @@ erDiagram
         string LinkedRecordID "D25 origin pair - soft by nature"
         uuid ReversesJournalEntryID FK
         uuid ReversedByJournalEntryID FK
-        uuid BatchID FK "lock derives from batch status"
+        uuid JournalEntryBatchID FK "lock derives from batch status"
         uuid FileID FK
         datetimeoffset GLPostedAt
         string GLReferenceID
@@ -342,10 +342,10 @@ erDiagram
     }
     JournalEntryBatch {
         uuid ID PK
-        string BatchNumber UK "global sequence"
+        string JournalEntryBatchNumber UK "global sequence"
         uuid CompanyID FK
         date PostingDate "must match the GL (D8)"
-        uuid SummaryJournalEntryID FK "summary JE (type flagged IsBatchSummary)"
+        uuid SummaryJournalEntryID FK "summary JE (type flagged IsJournalEntryBatchSummary)"
         string TargetSystem
         string Status "Pending | Approved | Sent | Posted | Failed | Cancelled"
         datetimeoffset BatchedAt
@@ -357,7 +357,7 @@ erDiagram
         decimal TotalCredits
         uuid ApprovalTaskID "FK to __mj_BizAppsTasks.Task (#22)"
         datetimeoffset ApprovalTaskRaisedAt
-        string ExternalBatchRef
+        string ExternalJournalEntryBatchRef
         datetimeoffset SentAt
         datetimeoffset PostedAt
         string ErrorMessage
@@ -591,7 +591,7 @@ erDiagram
         string LinkedRecordID "D25 origin pair - soft by nature"
         uuid ReversesJournalEntryID FK "nullable - reverser typed Code=Reversal (50012)"
         uuid ReversedByJournalEntryID FK "nullable"
-        uuid BatchID FK "nullable - member lock derives from batch status"
+        uuid JournalEntryBatchID FK "nullable - member lock derives from batch status"
         uuid FileID FK "nullable - source document"
         datetimeoffset GLPostedAt "GL roundtrip - mutable after lock"
         string GLReferenceID "GL roundtrip"
@@ -645,11 +645,11 @@ erDiagram
 
     JournalEntryType {
         uuid ID PK
-        string Code UK "Manual | Reversal | BatchSummary | consumer-seeded ..."
+        string Code UK "Manual | Reversal | JournalEntryBatchSummary | consumer-seeded ..."
         string Name
         string Description "nullable"
         bool IsSystem "accounting's own - never repurpose or delete"
-        bool IsBatchSummary "exactly ONE flagged row (filtered unique index)"
+        bool IsJournalEntryBatchSummary "exactly ONE flagged row (filtered unique index)"
         bool IsActive "inactive = no NEW entries; history keeps it"
     }
 ```
@@ -661,7 +661,7 @@ the per-entity soft-ref columns AND the `JournalEntryLink` table.
 
 **Entry types (BA-D29, issue #24):** the classification is an extensible lookup, not a closed enum.
 Accounting seeds only its ledger-mechanics rows (`IsSystem=1`, via `metadata/journal-entry-types/`):
-Manual, Reversal, Adjustment, OpeningBalance, BatchSummary, FXRevaluation, PeriodEndAccrual,
+Manual, Reversal, Adjustment, OpeningBalance, JournalEntryBatchSummary, FXRevaluation, PeriodEndAccrual,
 Writeoff. Domain types (OrderBooking, PaymentReceipt, ...) are seeded by their owning app via
 `mj sync push`. Triggers 50012 (reversal typing) and 50023 (summary coherence) join this table.
 
@@ -672,16 +672,16 @@ Writeoff. Domain types (OrderBooking, PaymentReceipt, ...) are seeded by their o
 ```mermaid
 erDiagram
     Company ||--o{ JournalEntryBatch : "CompanyID NOT NULL - single-company (D7)"
-    JournalEntryBatch ||--o{ JournalEntry : "BatchID - members AND the summary (discriminated by the type IsBatchSummary flag)"
+    JournalEntryBatch ||--o{ JournalEntry : "JournalEntryBatchID - members AND the summary (discriminated by the type IsJournalEntryBatchSummary flag)"
     JournalEntryBatch |o--o| JournalEntry : "SummaryJournalEntryID - coherence trigger 50023"
     User ||--o{ JournalEntryBatch : "BatchedBy / ApprovedBy"
 
     JournalEntryBatch {
         uuid ID PK
-        string BatchNumber UK "global sequence"
+        string JournalEntryBatchNumber UK "global sequence"
         uuid CompanyID FK
         date PostingDate "singular, accountant-set - must match the GL (D8)"
-        uuid SummaryJournalEntryID FK "type IsBatchSummary, EffectiveDate=PostingDate, same BatchID"
+        uuid SummaryJournalEntryID FK "type IsJournalEntryBatchSummary, EffectiveDate=PostingDate, same JournalEntryBatchID"
         string TargetSystem "BusinessCentral | QuickBooks | NetSuite | Sage | Xero | Other"
         string Status "Pending | Approved | Sent | Posted | Failed | Cancelled"
         datetimeoffset BatchedAt
@@ -693,7 +693,7 @@ erDiagram
         decimal TotalCredits
         uuid ApprovalTaskID "FK to __mj_BizAppsTasks.Task (#22) - both-or-neither with RaisedAt (CHECK)"
         datetimeoffset ApprovalTaskRaisedAt "nullable"
-        string ExternalBatchRef "nullable"
+        string ExternalJournalEntryBatchRef "nullable"
         datetimeoffset SentAt "nullable"
         datetimeoffset PostedAt "nullable"
         string ErrorMessage "nullable"
@@ -702,7 +702,7 @@ erDiagram
 
 **Lock model (derived, one machinery):** member + summary JEs lock preliminarily at build
 (`Batched`, batch still `Pending` — reversible unlock sanctioned), permanently at approval,
-`GLPosted` at post. Summary is excluded from netting/count/sweep via its type's `IsBatchSummary` flag (the
+`GLPosted` at post. Summary is excluded from netting/count/sweep via its type's `IsJournalEntryBatchSummary` flag (the
 discriminator); footing-trigger successor = pending Amith.
 
 ---

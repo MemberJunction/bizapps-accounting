@@ -1,14 +1,14 @@
 /**
  * TasksAppApprovalGate — the REAL CFO approval gate for JE-batch dispatch (Block 2 completion).
  *
- * Replaces the placeholder AutoApproveGate in production. It backs the BatchApprovalGate seam
- * (BatchingEngine.ts) with the bizapps-tasks app so a JE batch can only be sent once a CFO has
+ * Replaces the placeholder AutoApproveGate in production. It backs the JournalEntryBatchApprovalGate seam
+ * (JournalEntryBatchEngine.ts) with the bizapps-tasks app so a JE batch can only be sent once a CFO has
  * recorded a terminal Approved / ApprovedWithConditions decision against the linked approval Task.
  *
  *   onBatchBuilt(batchId): batches are SINGLE-COMPANY (D7) — resolve the batch's CompanyID →
  *     that company's AccountingCompanyProfile.ApprovalCFOUserID (a __mj.User). If null,
  *     HARD-FAIL (per the per-company-field decision — no role fallback). Then
- *     CreateApprovalRequest ONE "Approve JE Batch #<BatchNumber>" Task linked to the batch
+ *     CreateApprovalRequest ONE "Approve JE Batch #<JournalEntryBatchNumber>" Task linked to the batch
  *     (polymorphic Task Link), assigned to that CFO User. (Interim shape pending the
  *     approval-flow review with Robert.)
  *   assertApproved(batchId): find the Task linked to the batch; require a terminal Approved /
@@ -27,7 +27,7 @@
  *           · Task Decision Outcomes · Task Types
  *   WRITES (via TaskOrchestrationService): Tasks · Task Links · Task Assignments · Task Decisions
  *   ENTITY (gated): 'MJ_BizApps_Accounting: Journal Entry Batches'
- *   DOC:    BatchingEngine.ts (BatchApprovalGate seam) · plan §S1 (CFO-approval workflow gate)
+ *   DOC:    JournalEntryBatchEngine.ts (JournalEntryBatchApprovalGate seam) · plan §S1 (CFO-approval workflow gate)
  */
 import { IMetadataProvider, IRunViewProvider, UserInfo } from '@memberjunction/core';
 import { UUIDsEqual } from '@memberjunction/global';
@@ -43,7 +43,7 @@ import type {
   mjBizAppsAccountingJournalEntryBatchEntity,
   mjBizAppsAccountingAccountingCompanyProfileEntity,
 } from '@mj-biz-apps/accounting-entities';
-import type { BatchApprovalGate } from './BatchingEngine.js';
+import type { JournalEntryBatchApprovalGate } from './JournalEntryBatchEngine.js';
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
@@ -67,7 +67,7 @@ const APPROVED_OUTCOME_CODES: ReadonlySet<TaskDecisionOutcomeCode> = new Set(['A
  * Real CFO-approval gate, backed by bizapps-tasks. Stateless — one instance can serve every batch.
  * The correct IMetadataProvider is injected at construction (required; no global fallback).
  */
-export class TasksAppApprovalGate implements BatchApprovalGate {
+export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate {
   private readonly orchestration = new TaskOrchestrationService();
 
   constructor(private readonly provider: IMetadataProvider) {
@@ -100,9 +100,9 @@ export class TasksAppApprovalGate implements BatchApprovalGate {
     const batchEntityId = this.batchEntityId();
     const userEntityId = this.resolveUserEntityId();
     await this.orchestration.CreateApprovalRequest({
-      Name: `Approve Journal Entry Batch #${batch.BatchNumber}`,
+      Name: `Approve Journal Entry Batch #${batch.JournalEntryBatchNumber}`,
       TypeID: typeId,
-      Description: `CFO approval required to dispatch Journal Entry Batch #${batch.BatchNumber} to ${batch.TargetSystem}.`,
+      Description: `CFO approval required to dispatch Journal Entry Batch #${batch.JournalEntryBatchNumber} to ${batch.TargetSystem}.`,
       Priority: 'High',
       LinkEntityID: batchEntityId,
       LinkRecordID: batchId,

@@ -1004,9 +1004,9 @@ export const mjBizAppsAccountingJournalEntrySchema = z.object({
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entries (vwJournalEntries.ID)
         * * Description: Back-pointer set on the original JE when a reversal is emitted against it.`),
-    BatchID: z.string().nullable().describe(`
-        * * Field Name: BatchID
-        * * Display Name: Batch ID
+    JournalEntryBatchID: z.string().nullable().describe(`
+        * * Field Name: JournalEntryBatchID
+        * * Display Name: Journal Entry Batch ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entry Batches (vwJournalEntryBatches.ID)
         * * Description: Batch that locked this JE (set when Status transitions to Batched).`),
@@ -1102,11 +1102,11 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * SQL Data Type: uniqueidentifier
         * * Default Value: newsequentialid()
         * * Description: Unique identifier.`),
-    BatchNumber: z.string().describe(`
-        * * Field Name: BatchNumber
-        * * Display Name: Batch Number
+    JournalEntryBatchNumber: z.string().describe(`
+        * * Field Name: JournalEntryBatchNumber
+        * * Display Name: Journal Entry Batch Number
         * * SQL Data Type: nvarchar(40)
-        * * Description: Gap-free batch number assigned by spAssignNextBatchNumber. Format 'BATCH-{CompanyCode}-{seq:000000}'.`),
+        * * Description: Gap-free batch number assigned by spAssignNextJournalEntryBatchNumber. Format 'BATCH-{CompanyCode}-{seq:000000}'.`),
     CompanyID: z.string().describe(`
         * * Field Name: CompanyID
         * * Display Name: Company ID
@@ -1123,7 +1123,7 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * Display Name: Summary Journal Entry ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entries (vwJournalEntries.ID)
-        * * Description: The aggregated summary JournalEntry (its JournalEntryType flagged IsBatchSummary, EffectiveDate=PostingDate) that posts to the GL for this batch (plan D9). Its lines net debits/credits per GLAccount x dimension-combo. The summary carries this batch's BatchID (same derived lock machinery as members) but is excluded from member/netting/sweep queries via its type's IsBatchSummary flag.`),
+        * * Description: The aggregated summary JournalEntry (its JournalEntryType flagged IsJournalEntryBatchSummary, EffectiveDate=PostingDate) that posts to the GL for this batch (plan D9). Its lines net debits/credits per GLAccount x dimension-combo. The summary carries this batch's JournalEntryBatchID (same derived lock machinery as members) but is excluded from member/netting/sweep queries via its type's IsJournalEntryBatchSummary flag.`),
     TargetSystem: z.union([z.literal('BusinessCentral'), z.literal('NetSuite'), z.literal('Other'), z.literal('QuickBooks'), z.literal('Sage'), z.literal('Xero')]).describe(`
         * * Field Name: TargetSystem
         * * Display Name: Target System
@@ -1162,7 +1162,7 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
     *   * Pending
     *   * Posted
     *   * Sent
-        * * Description: Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed triggers retry + escalation; Cancelled is terminal from Pending or unsent Approved (trg_JEBatch_Immutability).`),
+        * * Description: Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed triggers retry + escalation; Cancelled is terminal from Pending or unsent Approved (trg_JournalEntryBatch_Immutability).`),
     TotalEntries: z.number().describe(`
         * * Field Name: TotalEntries
         * * Display Name: Total Entries
@@ -1181,9 +1181,9 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * SQL Data Type: decimal(18, 2)
         * * Default Value: 0
         * * Description: Sum of credits across all JE lines in the batch (functional currency).`),
-    ExternalBatchRef: z.string().nullable().describe(`
-        * * Field Name: ExternalBatchRef
-        * * Display Name: External Batch Ref
+    ExternalJournalEntryBatchRef: z.string().nullable().describe(`
+        * * Field Name: ExternalJournalEntryBatchRef
+        * * Display Name: External Journal Entry Batch Ref
         * * SQL Data Type: nvarchar(100)
         * * Description: ERP's reference returned on send (used to correlate the consolidated JE posted in the ERP).`),
     ApprovedAt: z.date().nullable().describe(`
@@ -1437,7 +1437,7 @@ export const mjBizAppsAccountingJournalEntryTypeSchema = z.object({
         * * Field Name: Code
         * * Display Name: Code
         * * SQL Data Type: nvarchar(40)
-        * * Description: Stable machine code for the type (e.g. Manual, Reversal, BatchSummary, OrderBooking). Unique. Referenced by code; display uses Name.`),
+        * * Description: Stable machine code for the type (e.g. Manual, Reversal, JournalEntryBatchSummary, OrderBooking). Unique. Referenced by code; display uses Name.`),
     Name: z.string().describe(`
         * * Field Name: Name
         * * Display Name: Name
@@ -1453,13 +1453,13 @@ export const mjBizAppsAccountingJournalEntryTypeSchema = z.object({
         * * Display Name: Is System
         * * SQL Data Type: bit
         * * Default Value: 0
-        * * Description: 1 = accounting's own ledger-mechanics type (Manual, Reversal, BatchSummary, ...). Consumers must not repurpose or delete IsSystem rows.`),
-    IsBatchSummary: z.boolean().describe(`
-        * * Field Name: IsBatchSummary
-        * * Display Name: Is Batch Summary
+        * * Description: 1 = accounting's own ledger-mechanics type (Manual, Reversal, JournalEntryBatchSummary, ...). Consumers must not repurpose or delete IsSystem rows.`),
+    IsJournalEntryBatchSummary: z.boolean().describe(`
+        * * Field Name: IsJournalEntryBatchSummary
+        * * Display Name: Is Journal Entry Batch Summary
         * * SQL Data Type: bit
         * * Default Value: 0
-        * * Description: 1 = this type marks a batch's aggregated summary JE. Batch member/netting/sweep queries exclude JEs of this type via a join on this flag (replaces the former 'BatchSummary' magic-string match). A filtered unique index allows exactly one flagged row.`),
+        * * Description: 1 = this type marks a batch's aggregated summary JE. Batch member/netting/sweep queries exclude JEs of this type via a join on this flag (replaces the former 'JournalEntryBatchSummary' magic-string match). A filtered unique index allows exactly one flagged row.`),
     IsActive: z.boolean().describe(`
         * * Field Name: IsActive
         * * Display Name: Is Active
@@ -4256,17 +4256,17 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     }
 
     /**
-    * * Field Name: BatchID
-    * * Display Name: Batch ID
+    * * Field Name: JournalEntryBatchID
+    * * Display Name: Journal Entry Batch ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entry Batches (vwJournalEntryBatches.ID)
     * * Description: Batch that locked this JE (set when Status transitions to Batched).
     */
-    get BatchID(): string | null {
-        return this.Get('BatchID');
+    get JournalEntryBatchID(): string | null {
+        return this.Get('JournalEntryBatchID');
     }
-    set BatchID(value: string | null) {
-        this.Set('BatchID', value);
+    set JournalEntryBatchID(value: string | null) {
+        this.Set('JournalEntryBatchID', value);
     }
 
     /**
@@ -4390,7 +4390,7 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
  * * Schema: __mj_BizAppsAccounting
  * * Base Table: JournalEntryBatchSequence
  * * Base View: vwJournalEntryBatchSequences
- * * @description GLOBAL singleton counter backing gap-free JournalEntryBatch numbering (plan D19: batch numbering stays global). One row, ID = 1. Consumed only by spAssignNextBatchNumber.
+ * * @description GLOBAL singleton counter backing gap-free JournalEntryBatch numbering (plan D19: batch numbering stays global). One row, ID = 1. Consumed only by spAssignNextJournalEntryBatchNumber.
  * * Primary Key: ID
  * @extends {BaseEntity}
  * @class
@@ -4508,16 +4508,16 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     }
 
     /**
-    * * Field Name: BatchNumber
-    * * Display Name: Batch Number
+    * * Field Name: JournalEntryBatchNumber
+    * * Display Name: Journal Entry Batch Number
     * * SQL Data Type: nvarchar(40)
-    * * Description: Gap-free batch number assigned by spAssignNextBatchNumber. Format 'BATCH-{CompanyCode}-{seq:000000}'.
+    * * Description: Gap-free batch number assigned by spAssignNextJournalEntryBatchNumber. Format 'BATCH-{CompanyCode}-{seq:000000}'.
     */
-    get BatchNumber(): string {
-        return this.Get('BatchNumber');
+    get JournalEntryBatchNumber(): string {
+        return this.Get('JournalEntryBatchNumber');
     }
-    set BatchNumber(value: string) {
-        this.Set('BatchNumber', value);
+    set JournalEntryBatchNumber(value: string) {
+        this.Set('JournalEntryBatchNumber', value);
     }
 
     /**
@@ -4552,7 +4552,7 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     * * Display Name: Summary Journal Entry ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Journal Entries (vwJournalEntries.ID)
-    * * Description: The aggregated summary JournalEntry (its JournalEntryType flagged IsBatchSummary, EffectiveDate=PostingDate) that posts to the GL for this batch (plan D9). Its lines net debits/credits per GLAccount x dimension-combo. The summary carries this batch's BatchID (same derived lock machinery as members) but is excluded from member/netting/sweep queries via its type's IsBatchSummary flag.
+    * * Description: The aggregated summary JournalEntry (its JournalEntryType flagged IsJournalEntryBatchSummary, EffectiveDate=PostingDate) that posts to the GL for this batch (plan D9). Its lines net debits/credits per GLAccount x dimension-combo. The summary carries this batch's JournalEntryBatchID (same derived lock machinery as members) but is excluded from member/netting/sweep queries via its type's IsJournalEntryBatchSummary flag.
     */
     get SummaryJournalEntryID(): string | null {
         return this.Get('SummaryJournalEntryID');
@@ -4623,7 +4623,7 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     *   * Pending
     *   * Posted
     *   * Sent
-    * * Description: Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed triggers retry + escalation; Cancelled is terminal from Pending or unsent Approved (trg_JEBatch_Immutability).
+    * * Description: Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed triggers retry + escalation; Cancelled is terminal from Pending or unsent Approved (trg_JournalEntryBatch_Immutability).
     */
     get Status(): 'Approved' | 'Cancelled' | 'Failed' | 'Pending' | 'Posted' | 'Sent' {
         return this.Get('Status');
@@ -4675,16 +4675,16 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     }
 
     /**
-    * * Field Name: ExternalBatchRef
-    * * Display Name: External Batch Ref
+    * * Field Name: ExternalJournalEntryBatchRef
+    * * Display Name: External Journal Entry Batch Ref
     * * SQL Data Type: nvarchar(100)
     * * Description: ERP's reference returned on send (used to correlate the consolidated JE posted in the ERP).
     */
-    get ExternalBatchRef(): string | null {
-        return this.Get('ExternalBatchRef');
+    get ExternalJournalEntryBatchRef(): string | null {
+        return this.Get('ExternalJournalEntryBatchRef');
     }
-    set ExternalBatchRef(value: string | null) {
-        this.Set('ExternalBatchRef', value);
+    set ExternalJournalEntryBatchRef(value: string | null) {
+        this.Set('ExternalJournalEntryBatchRef', value);
     }
 
     /**
@@ -5329,7 +5329,7 @@ export class mjBizAppsAccountingJournalEntryTypeEntity extends BaseEntity<mjBizA
     * * Field Name: Code
     * * Display Name: Code
     * * SQL Data Type: nvarchar(40)
-    * * Description: Stable machine code for the type (e.g. Manual, Reversal, BatchSummary, OrderBooking). Unique. Referenced by code; display uses Name.
+    * * Description: Stable machine code for the type (e.g. Manual, Reversal, JournalEntryBatchSummary, OrderBooking). Unique. Referenced by code; display uses Name.
     */
     get Code(): string {
         return this.Get('Code');
@@ -5369,7 +5369,7 @@ export class mjBizAppsAccountingJournalEntryTypeEntity extends BaseEntity<mjBizA
     * * Display Name: Is System
     * * SQL Data Type: bit
     * * Default Value: 0
-    * * Description: 1 = accounting's own ledger-mechanics type (Manual, Reversal, BatchSummary, ...). Consumers must not repurpose or delete IsSystem rows.
+    * * Description: 1 = accounting's own ledger-mechanics type (Manual, Reversal, JournalEntryBatchSummary, ...). Consumers must not repurpose or delete IsSystem rows.
     */
     get IsSystem(): boolean {
         return this.Get('IsSystem');
@@ -5379,17 +5379,17 @@ export class mjBizAppsAccountingJournalEntryTypeEntity extends BaseEntity<mjBizA
     }
 
     /**
-    * * Field Name: IsBatchSummary
-    * * Display Name: Is Batch Summary
+    * * Field Name: IsJournalEntryBatchSummary
+    * * Display Name: Is Journal Entry Batch Summary
     * * SQL Data Type: bit
     * * Default Value: 0
-    * * Description: 1 = this type marks a batch's aggregated summary JE. Batch member/netting/sweep queries exclude JEs of this type via a join on this flag (replaces the former 'BatchSummary' magic-string match). A filtered unique index allows exactly one flagged row.
+    * * Description: 1 = this type marks a batch's aggregated summary JE. Batch member/netting/sweep queries exclude JEs of this type via a join on this flag (replaces the former 'JournalEntryBatchSummary' magic-string match). A filtered unique index allows exactly one flagged row.
     */
-    get IsBatchSummary(): boolean {
-        return this.Get('IsBatchSummary');
+    get IsJournalEntryBatchSummary(): boolean {
+        return this.Get('IsJournalEntryBatchSummary');
     }
-    set IsBatchSummary(value: boolean) {
-        this.Set('IsBatchSummary', value);
+    set IsJournalEntryBatchSummary(value: boolean) {
+        this.Set('IsJournalEntryBatchSummary', value);
     }
 
     /**

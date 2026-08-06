@@ -75,11 +75,11 @@ plan is authoritative.
 |---|---|
 | Company profile init / starter COA | `CoreEntitiesServer/AccountingCompanyProfileEntityServer.ts` (W1) + `SeedData.ts` |
 | JE numbering (GLOBAL per FY) | `JournalEntryEntityServer.ts` (W2) + `SequenceService.ts` + `spAssignNextJournalEntryNumber` |
-| Batch numbering (GLOBAL) | `JournalEntryBatchEntityServer.ts` (W3) + `spAssignNextBatchNumber` |
+| Batch numbering (GLOBAL) | `JournalEntryBatchEntityServer.ts` (W3) + `spAssignNextJournalEntryBatchNumber` |
 | The minimal seeded chart | `CoreEntitiesServer/SeedData.ts` (`DEFAULT_CHART_OF_ACCOUNTS`, `DEFAULT_GL_ACCOUNT_REFS`) |
 | **The engine contract / pure pipeline / caches / ResolveLinkedAccount** | `packages/EngineBase/src/{contract,pipeline,AccountingEngineBase}.ts` |
 | **CreateJournalEntry write path + the remotable op** | `CoreEntitiesServer/AccountingEngine.ts` + `CreateJournalEntryOperation.ts` |
-| Batching → approval → ERP post | `CoreEntitiesServer/BatchingEngine.ts` (buildBatch/approveBatch/sendBatch) + `TasksAppApprovalGate.ts` + `trg_JEBatch_*` |
+| Batching → approval → ERP post | `CoreEntitiesServer/BatchingEngine.ts` (buildBatch/approveBatch/sendBatch) + `TasksAppApprovalGate.ts` + `trg_JournalEntryBatch_*` |
 | Read-model views (12) | baseline migration §"read-model views" + `Server/resolvers/ReadModelsResolver.ts` |
 
 <a id="company-profile-init"></a>

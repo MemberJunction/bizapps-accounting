@@ -60,7 +60,7 @@ async function main(): Promise<void> {
     if (built) {
       await approveBatch(built.batchId, user.ID, user);
       const posted = await sendBatch(built.batchId, user, { gate: AutoApproveGate });
-      console.log(`  swept ${built.jeCount} JE(s) → batch ${built.batchId} → ${posted.Status} (${posted.ExternalBatchRef})`);
+      console.log(`  swept ${built.jeCount} JE(s) → batch ${built.batchId} → ${posted.Status} (${posted.ExternalJournalEntryBatchRef})`);
     } else {
       console.log('  buildBatch netted nothing (JEs may not net to a balanced summary) — left Pending.');
     }

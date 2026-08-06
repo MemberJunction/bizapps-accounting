@@ -48,7 +48,7 @@ export interface EntryTypeLookup {
   ID: string;
   Code: string;
   IsActive: boolean;
-  IsBatchSummary: boolean;
+  IsJournalEntryBatchSummary: boolean;
 }
 
 /** Caller-supplied lookups — the engine backs these with its caches; unit tests use plain Maps. */

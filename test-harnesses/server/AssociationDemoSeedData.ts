@@ -54,10 +54,13 @@ import {
   mjBizAppsAccountingTaxLiabilityEntity,
 } from '@mj-biz-apps/accounting-entities';
 import type { mjBizAppsCommonOrganizationEntity } from '@mj-biz-apps/common-entities';
+// Value import (not `import type`): used with `instanceof` to reach the server subclass's explicit
+// SeedDefaultChartOfAccounts() without a cast — see ensureCompany().
+import { AccountingCompanyProfileEntityServer } from '@mj-biz-apps/accounting-core-entities-server';
 
 import {
   buildBatch, approveBatch, sendBatch, AutoApproveGate,
-  GetBatchSummaryEntryType, LookupJournalEntryTypeByCode, JournalEntryEntityServer,
+  GetJournalEntryBatchSummaryEntryType, LookupJournalEntryTypeByCode, JournalEntryEntityServer,
 } from '@mj-biz-apps/accounting-core-entities-server';
 
 // ─── Entity name constants ───────────────────────────────────────────────────
@@ -328,6 +331,27 @@ async function ensureCompany(
       throw new Error(`ensureCompany: ACP save failed for ${name}: ${acp.LatestResult?.CompleteMessage ?? 'unknown'}`);
     }
   }
+
+  // Seed the starter chart EXPLICITLY. Until 2026-07-30 this happened by itself: saving a new
+  // profile fired the W1 auto-hook, which is why this seed could reference GL code 11201 without
+  // ever creating it. That hook was deliberately retired (it forced ten identity-locked accounts
+  // onto every company), leaving new companies with an EMPTY chart — which silently broke this seed.
+  // It stayed hidden because the instance already held accounts created under the old behaviour; it
+  // surfaces only on a from-scratch database, as `makeJE: GL code 11201 not found`.
+  //
+  // Deliberately OUTSIDE the `!exists` branch: the entity-side seed is idempotent (existing codes are
+  // skipped), and running it unconditionally makes this function self-healing. Seeding only on create
+  // would strand exactly the case that produced this bug — a company row that already exists from an
+  // earlier partial run but never got a chart.
+  if (acp instanceof AccountingCompanyProfileEntityServer) {
+    await acp.SeedDefaultChartOfAccounts();
+  } else {
+    throw new Error(
+      `ensureCompany: ${ACP_ENTITY} did not resolve to AccountingCompanyProfileEntityServer, so the ` +
+        `starter chart cannot be seeded. Import '@mj-biz-apps/accounting-core-entities-server' in the ` +
+        `harness entry point so the server subclass registers.`,
+    );
+  }
   report.Companies.push({ ID: companyId, Name: name, Created: !exists });
 
   const glByCode = await loadGLByCode(contextUser, companyId);
@@ -415,7 +439,7 @@ async function ensureDemoEntryTypes(contextUser: UserInfo, provider: IMetadataPr
     row.Name = t.name;
     row.Description = t.description;
     row.IsSystem = false;
-    row.IsBatchSummary = false;
+    row.IsJournalEntryBatchSummary = false;
     row.IsActive = true;
     if (!(await row.Save())) throw new Error(`ensureDemoEntryTypes: save failed for '${t.code}': ${row.LatestResult?.CompleteMessage}`);
     map.set(t.code, row.ID);
@@ -473,7 +497,7 @@ async function makeJE(
 
 /** Build + approve + dispatch one SINGLE-COMPANY batch (D7) per company with Pending JEs → they become GLPosted. */
 async function postPending(contextUser: UserInfo, report: DemoSeedReport, provider: IMetadataProvider): Promise<void> {
-  const summaryType = await GetBatchSummaryEntryType(contextUser, provider);
+  const summaryType = await GetJournalEntryBatchSummaryEntryType(contextUser, provider);
   const rv = new RunView(provider as unknown as IRunViewProvider);
   const res = await rv.RunView<{ CompanyID: string }>(
     { EntityName: JE_ENTITY, ExtraFilter: `Status='Pending' AND EntryTypeID<>'${summaryType.ID}'`, Fields: ['CompanyID'], ResultType: 'simple', BypassCache: true },

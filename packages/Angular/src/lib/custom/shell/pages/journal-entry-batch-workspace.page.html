@@ -42,7 +42,7 @@
 
     <!-- Identity + status + target — projected into the card's identity band. -->
     <ng-container workspaceHeader>
-      <span class="bw-identity">{{ IsBuilt ? Draft?.BuiltBatchNumber : 'New batch' }}</span>
+      <span class="bw-identity">{{ IsBuilt ? Draft?.BuiltJournalEntryBatchNumber : 'New batch' }}</span>
       @if (IsBuilt) {
         <mj-stat-badge Label="Built" Icon="fa-solid fa-check" Variant="success"></mj-stat-badge>
       } @else {
@@ -75,7 +75,7 @@
 
     @if (Draft) {
       <!-- Memo: an OPTIONAL human label for the batch (JournalEntryBatch.Memo). Not identity —
-           BatchNumber is — but it names the tab as you type and makes the batch findable later.
+           JournalEntryBatchNumber is — but it names the tab as you type and makes the batch findable later.
            Editable pre-build; frozen once built (like every other criterion). -->
       <label class="bw-field">
         <span>Memo</span>

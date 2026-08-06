@@ -2905,7 +2905,7 @@ export class mjBizAppsAccountingJournalEntry_ {
         
     @Field({nullable: true, description: `Batch that locked this JE (set when Status transitions to Batched).`}) 
     @MaxLength(36)
-    BatchID?: string;
+    JournalEntryBatchID?: string;
         
     @Field({nullable: true, description: `When the ERP acknowledged the consolidated batch (Status transitions to GLPosted).`}) 
     GLPostedAt?: Date;
@@ -3001,7 +3001,7 @@ export class CreatemjBizAppsAccountingJournalEntryInput {
     ReversedByJournalEntryID: string | null;
 
     @Field({ nullable: true })
-    BatchID: string | null;
+    JournalEntryBatchID: string | null;
 
     @Field({ nullable: true })
     GLPostedAt: Date | null;
@@ -3056,7 +3056,7 @@ export class UpdatemjBizAppsAccountingJournalEntryInput {
     ReversedByJournalEntryID?: string | null;
 
     @Field({ nullable: true })
-    BatchID?: string | null;
+    JournalEntryBatchID?: string | null;
 
     @Field({ nullable: true })
     GLPostedAt?: Date | null;
@@ -3203,7 +3203,7 @@ export class mjBizAppsAccountingJournalEntryResolver extends ResolverBase {
 //****************************************************************************
 // ENTITY CLASS for MJ_BizApps_Accounting: Journal Entry Batch Sequences
 //****************************************************************************
-@ObjectType({ description: `GLOBAL singleton counter backing gap-free JournalEntryBatch numbering (plan D19: batch numbering stays global). One row, ID = 1. Consumed only by spAssignNextBatchNumber.` })
+@ObjectType({ description: `GLOBAL singleton counter backing gap-free JournalEntryBatch numbering (plan D19: batch numbering stays global). One row, ID = 1. Consumed only by spAssignNextJournalEntryBatchNumber.` })
 export class mjBizAppsAccountingJournalEntryBatchSequence_ {
     @Field(() => Int) 
     ID: number;
@@ -3348,9 +3348,9 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @MaxLength(36)
     ID: string;
         
-    @Field({description: `Gap-free batch number assigned by spAssignNextBatchNumber. Format 'BATCH-{CompanyCode}-{seq:000000}'.`}) 
+    @Field({description: `Gap-free batch number assigned by spAssignNextJournalEntryBatchNumber. Format 'BATCH-{CompanyCode}-{seq:000000}'.`}) 
     @MaxLength(40)
-    BatchNumber: string;
+    JournalEntryBatchNumber: string;
         
     @Field({description: `The single company this batch belongs to (plan D7). One batch per company per run; the batch gathers ONLY this company's Pending JEs.`}) 
     @MaxLength(36)
@@ -3359,7 +3359,7 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @Field({description: `Singular, accountant-set posting date chosen at batch build (plan D8). Carried to the GL's posting date and must match between systems; drives the ERP period. Document dates stay informational.`}) 
     PostingDate: Date;
         
-    @Field({nullable: true, description: `The aggregated summary JournalEntry (its JournalEntryType flagged IsBatchSummary, EffectiveDate=PostingDate) that posts to the GL for this batch (plan D9). Its lines net debits/credits per GLAccount x dimension-combo. The summary carries this batch's BatchID (same derived lock machinery as members) but is excluded from member/netting/sweep queries via its type's IsBatchSummary flag.`}) 
+    @Field({nullable: true, description: `The aggregated summary JournalEntry (its JournalEntryType flagged IsJournalEntryBatchSummary, EffectiveDate=PostingDate) that posts to the GL for this batch (plan D9). Its lines net debits/credits per GLAccount x dimension-combo. The summary carries this batch's JournalEntryBatchID (same derived lock machinery as members) but is excluded from member/netting/sweep queries via its type's IsJournalEntryBatchSummary flag.`}) 
     @MaxLength(36)
     SummaryJournalEntryID?: string;
         
@@ -3374,7 +3374,7 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @MaxLength(36)
     BatchedByUserID: string;
         
-    @Field({description: `Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed triggers retry + escalation; Cancelled is terminal from Pending or unsent Approved (trg_JEBatch_Immutability).`}) 
+    @Field({description: `Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed triggers retry + escalation; Cancelled is terminal from Pending or unsent Approved (trg_JournalEntryBatch_Immutability).`}) 
     @MaxLength(20)
     Status: string;
         
@@ -3389,7 +3389,7 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
         
     @Field({nullable: true, description: `ERP's reference returned on send (used to correlate the consolidated JE posted in the ERP).`}) 
     @MaxLength(100)
-    ExternalBatchRef?: string;
+    ExternalJournalEntryBatchRef?: string;
         
     @Field({nullable: true, description: `When a human approved the batch for dispatch (locks its content; the new Approved status).`}) 
     ApprovedAt?: Date;
@@ -3437,7 +3437,7 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     ApprovalTask?: string;
         
     @Field(() => [mjBizAppsAccountingJournalEntry_])
-    mjBizAppsAccountingJournalEntries_BatchIDArray: mjBizAppsAccountingJournalEntry_[]; // Link to mjBizAppsAccountingJournalEntries
+    mjBizAppsAccountingJournalEntries_JournalEntryBatchIDArray: mjBizAppsAccountingJournalEntry_[]; // Link to mjBizAppsAccountingJournalEntries
     
 }
 
@@ -3450,7 +3450,7 @@ export class CreatemjBizAppsAccountingJournalEntryBatchInput {
     ID?: string;
 
     @Field({ nullable: true })
-    BatchNumber?: string;
+    JournalEntryBatchNumber?: string;
 
     @Field({ nullable: true })
     CompanyID?: string;
@@ -3483,7 +3483,7 @@ export class CreatemjBizAppsAccountingJournalEntryBatchInput {
     TotalCredits?: number;
 
     @Field({ nullable: true })
-    ExternalBatchRef: string | null;
+    ExternalJournalEntryBatchRef: string | null;
 
     @Field({ nullable: true })
     ApprovedAt: Date | null;
@@ -3520,7 +3520,7 @@ export class UpdatemjBizAppsAccountingJournalEntryBatchInput {
     ID: string;
 
     @Field({ nullable: true })
-    BatchNumber?: string;
+    JournalEntryBatchNumber?: string;
 
     @Field({ nullable: true })
     CompanyID?: string;
@@ -3553,7 +3553,7 @@ export class UpdatemjBizAppsAccountingJournalEntryBatchInput {
     TotalCredits?: number;
 
     @Field({ nullable: true })
-    ExternalBatchRef?: string | null;
+    ExternalJournalEntryBatchRef?: string | null;
 
     @Field({ nullable: true })
     ApprovedAt?: Date | null;
@@ -3641,10 +3641,10 @@ export class mjBizAppsAccountingJournalEntryBatchResolver extends ResolverBase {
     }
     
     @FieldResolver(() => [mjBizAppsAccountingJournalEntry_])
-    async mjBizAppsAccountingJournalEntries_BatchIDArray(@Root() mjbizappsaccountingjournalentrybatch_: mjBizAppsAccountingJournalEntryBatch_, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine) {
+    async mjBizAppsAccountingJournalEntries_JournalEntryBatchIDArray(@Root() mjbizappsaccountingjournalentrybatch_: mjBizAppsAccountingJournalEntryBatch_, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine) {
         this.CheckUserReadPermissions('MJ_BizApps_Accounting: Journal Entries', userPayload);
         const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
-        const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwJournalEntries')} WHERE ${provider.QuoteIdentifier('BatchID')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: Journal Entries', userPayload, EntityPermissionType.Read, 'AND');
+        const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwJournalEntries')} WHERE ${provider.QuoteIdentifier('JournalEntryBatchID')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: Journal Entries', userPayload, EntityPermissionType.Read, 'AND');
         const rows = await provider.ExecuteSQL(sSQL, [mjbizappsaccountingjournalentrybatch_.ID], undefined, this.GetUserFromPayload(userPayload));
         const result = await this.ArrayMapFieldNamesToCodeNames('MJ_BizApps_Accounting: Journal Entries', rows, this.GetUserFromPayload(userPayload));
         return result;
@@ -4255,7 +4255,7 @@ export class mjBizAppsAccountingJournalEntryType_ {
     @MaxLength(36)
     ID: string;
         
-    @Field({description: `Stable machine code for the type (e.g. Manual, Reversal, BatchSummary, OrderBooking). Unique. Referenced by code; display uses Name.`}) 
+    @Field({description: `Stable machine code for the type (e.g. Manual, Reversal, JournalEntryBatchSummary, OrderBooking). Unique. Referenced by code; display uses Name.`}) 
     @MaxLength(40)
     Code: string;
         
@@ -4266,11 +4266,11 @@ export class mjBizAppsAccountingJournalEntryType_ {
     @Field({nullable: true, description: `What this entry type classifies and which app owns it.`}) 
     Description?: string;
         
-    @Field(() => Boolean, {description: `1 = accounting's own ledger-mechanics type (Manual, Reversal, BatchSummary, ...). Consumers must not repurpose or delete IsSystem rows.`}) 
+    @Field(() => Boolean, {description: `1 = accounting's own ledger-mechanics type (Manual, Reversal, JournalEntryBatchSummary, ...). Consumers must not repurpose or delete IsSystem rows.`}) 
     IsSystem: boolean;
         
-    @Field(() => Boolean, {description: `1 = this type marks a batch's aggregated summary JE. Batch member/netting/sweep queries exclude JEs of this type via a join on this flag (replaces the former 'BatchSummary' magic-string match). A filtered unique index allows exactly one flagged row.`}) 
-    IsBatchSummary: boolean;
+    @Field(() => Boolean, {description: `1 = this type marks a batch's aggregated summary JE. Batch member/netting/sweep queries exclude JEs of this type via a join on this flag (replaces the former 'JournalEntryBatchSummary' magic-string match). A filtered unique index allows exactly one flagged row.`}) 
+    IsJournalEntryBatchSummary: boolean;
         
     @Field(() => Boolean, {description: `Whether this type may be used on NEW journal entries. Inactive types remain for historical rows.`}) 
     IsActive: boolean;
@@ -4307,7 +4307,7 @@ export class CreatemjBizAppsAccountingJournalEntryTypeInput {
     IsSystem?: boolean;
 
     @Field(() => Boolean, { nullable: true })
-    IsBatchSummary?: boolean;
+    IsJournalEntryBatchSummary?: boolean;
 
     @Field(() => Boolean, { nullable: true })
     IsActive?: boolean;
@@ -4338,7 +4338,7 @@ export class UpdatemjBizAppsAccountingJournalEntryTypeInput {
     IsSystem?: boolean;
 
     @Field(() => Boolean, { nullable: true })
-    IsBatchSummary?: boolean;
+    IsJournalEntryBatchSummary?: boolean;
 
     @Field(() => Boolean, { nullable: true })
     IsActive?: boolean;

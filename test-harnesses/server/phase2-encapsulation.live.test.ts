@@ -10,7 +10,7 @@
  *   L4  GenerateReversal — swapped amounts, both back-references, dimension tags CARRIED.
  *   L5  engine draft path — AccountingEngine merges duplicate lines and books through the
  *       encapsulated entity (the orders-server call path).
- *   L6  full batch cycle — buildBatch nets to a BatchSummary JE (exact netted totals),
+ *   L6  full batch cycle — buildBatch nets to a JournalEntryBatchSummary JE (exact netted totals),
  *       members lock; approve → dispatch (mock poster) → batch Posted, members + summary GLPosted.
  *   L7  batch lifecycle invariants on a SAVED batch — Posted is terminal (illegal transition
  *       rejected by the entity), and a batch cannot be BORN mid-lifecycle.
@@ -35,7 +35,7 @@ import {
   AutoApproveGate,
   TasksAppApprovalGate,
   mockErpPoster,
-  type BatchApprovalGate,
+  type JournalEntryBatchApprovalGate,
 } from '@mj-biz-apps/accounting-core-entities-server';
 import type { mjBizAppsAccountingAccountingCompanyProfileEntity } from '@mj-biz-apps/accounting-entities';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
@@ -156,7 +156,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     expect(merged).toBe(100);
   });
 
-  it('L6 — full batch cycle: netted BatchSummary JE, exact totals, approve → dispatch → GLPosted', async () => {
+  it('L6 — full batch cycle: netted JournalEntryBatchSummary JE, exact totals, approve → dispatch → GLPosted', async () => {
     // Candidates right now: L2's 40/40 + L4's reversal (125.50 both ways) + L5's 100/100.
     // Netting on AR: +125.5(L1... L1 is Pending too!) — compute expected from raw SQL instead of hand-math:
     const rawDr = Number(await scalar(ctx.pool,
@@ -169,10 +169,10 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
 
     // Summary JE: exists, right shape, rides the lock machinery.
     const summary = (await ctx.pool.request().query(
-      `SELECT EntryTypeID, Status, CompanyID, BatchID FROM ${SCHEMA}.JournalEntry WHERE ID='${result!.summaryJournalEntryId}'`)).recordset[0];
+      `SELECT EntryTypeID, Status, CompanyID, JournalEntryBatchID FROM ${SCHEMA}.JournalEntry WHERE ID='${result!.summaryJournalEntryId}'`)).recordset[0];
     expect(String(summary.EntryTypeID).toLowerCase()).toBe(ctx.batchSummaryTypeId.toLowerCase());
     expect(summary.Status).toBe('Batched');
-    expect(String(summary.BatchID).toLowerCase()).toBe(result!.batchId.toLowerCase());
+    expect(String(summary.JournalEntryBatchID).toLowerCase()).toBe(result!.batchId.toLowerCase());
 
     // Control totals foot and are EXACT: netting preserves balance, so batch Dr == batch Cr,
     // and both ≤ the gross pending debits (netting can only shrink).
@@ -190,7 +190,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     await approveBatch(result!.batchId, ctx.user.ID, ctx.user, provider);
     const batch = await sendBatch(result!.batchId, ctx.user, { gate: AutoApproveGate, poster: mockErpPoster, provider });
     expect(batch.Status).toBe('Posted');
-    const notPosted = Number(await scalar(ctx.pool, `SELECT COUNT(*) FROM ${SCHEMA}.JournalEntry WHERE BatchID='${result!.batchId}' AND Status<>'GLPosted'`));
+    const notPosted = Number(await scalar(ctx.pool, `SELECT COUNT(*) FROM ${SCHEMA}.JournalEntry WHERE JournalEntryBatchID='${result!.batchId}' AND Status<>'GLPosted'`));
     expect(notPosted).toBe(0);
   });
 
@@ -312,7 +312,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     const batchesBefore = Number(await scalar(ctx.pool, `SELECT COUNT(*) FROM ${SCHEMA}.JournalEntryBatch WHERE CompanyID='${ctx.company.id}'`));
     const summariesBefore = Number(await scalar(ctx.pool, `SELECT COUNT(*) FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${ctx.company.id}' AND EntryTypeID='${ctx.batchSummaryTypeId}'`));
 
-    const failingGate: BatchApprovalGate = {
+    const failingGate: JournalEntryBatchApprovalGate = {
       async assertApproved() { /* n/a */ },
       async onBatchBuilt(): Promise<string | null> { throw new Error('L11 injected task-raise failure'); },
     };
@@ -326,9 +326,9 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     const summariesAfter = Number(await scalar(ctx.pool, `SELECT COUNT(*) FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${ctx.company.id}' AND EntryTypeID='${ctx.batchSummaryTypeId}'`));
     expect(summariesAfter).toBe(summariesBefore);
     const fuelRow = (await ctx.pool.request().query(
-      `SELECT Status, BatchID FROM ${SCHEMA}.JournalEntry WHERE ID='${fuel.ID}'`)).recordset[0];
+      `SELECT Status, JournalEntryBatchID FROM ${SCHEMA}.JournalEntry WHERE ID='${fuel.ID}'`)).recordset[0];
     expect(fuelRow.Status).toBe('Pending');
-    expect(fuelRow.BatchID).toBeNull();
+    expect(fuelRow.JournalEntryBatchID).toBeNull();
   });
 
   it('L12 — real-gate CFO precondition fails BEFORE any write (no CFO configured → no batch row is ever born)', async () => {
@@ -479,7 +479,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     const batch = await provider.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, ctx.user);
     expect(await batch.Load(result.batchId)).toBe(true);
     const members = await batch.LoadMembers();
-    // Members = the fuel JE + the BatchSummary JE (it rides the same lock machinery).
+    // Members = the fuel JE + the JournalEntryBatchSummary JE (it rides the same lock machinery).
     expect(members.length).toBe(2);
     expect(members.some(m => m.ID.toLowerCase() === fuel.ID.toLowerCase())).toBe(true);
     const summary = await batch.LoadSummaryJournalEntry();
@@ -488,9 +488,9 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     // Entity-owned Cancel: one call reverses the preliminary lock (this is now the cancel path).
     expect(await batch.Cancel(ctx.user)).toBe(true);
     const fuelRow = (await ctx.pool.request().query(
-      `SELECT Status, BatchID FROM ${SCHEMA}.JournalEntry WHERE ID='${fuel.ID}'`)).recordset[0];
+      `SELECT Status, JournalEntryBatchID FROM ${SCHEMA}.JournalEntry WHERE ID='${fuel.ID}'`)).recordset[0];
     expect(fuelRow.Status).toBe('Pending');
-    expect(fuelRow.BatchID).toBeNull();
+    expect(fuelRow.JournalEntryBatchID).toBeNull();
     const summaryGone = Number(await scalar(ctx.pool, `SELECT COUNT(*) FROM ${SCHEMA}.JournalEntry WHERE ID='${result.summaryJournalEntryId}'`));
     expect(summaryGone).toBe(0);
     const batchRow = (await ctx.pool.request().query(

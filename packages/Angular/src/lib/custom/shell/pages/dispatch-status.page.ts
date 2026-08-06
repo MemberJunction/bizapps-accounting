@@ -6,7 +6,7 @@ import { BaseAngularComponent } from '@memberjunction/ng-base-types';
 import { GridColumnConfig } from '@memberjunction/ng-entity-viewer';
 import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
-import { BatchDispatchClient } from '../../BatchDispatch/batch-dispatch.client';
+import { JournalEntryBatchDispatchClient } from '../../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
 import { TIME_WINDOWS, TimeWindowId, timeWindowRange, toSqlDate, andFilters } from '../../../transfer-pending/list-scaffold/time-window';
 import { sqlLiteral, likeContains } from '../../../transfer-pending/list-scaffold/sql-filter';
 import { rowKeyToId } from '../../../transfer-pending/list-scaffold/grid-row-key';
@@ -47,7 +47,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * 2. **What is waiting or broken sorts to the TOP** — the grid's default order is a lifecycle CASE
  *    (Failed → Sent → Approved → Pending → settled), newest dispatch first inside each band.
  * 3. **It leads with the dispatch columns All batches does not** — TargetSystem, SentAt, PostedAt,
- *    ExternalBatchRef (the ERP's own reference) and ErrorMessage. All batches leads with debits,
+ *    ExternalJournalEntryBatchRef (the ERP's own reference) and ErrorMessage. All batches leads with debits,
  *    credits and coverage; this leads with the send.
  * 4. **A Failed batch's error is surfaced, never buried** — failed batches get a dedicated attention
  *    strip above the grid carrying the full ErrorMessage + the Retry verb, and the strip deliberately
@@ -105,7 +105,7 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
 
   public IsLoading = false;
   public LoadError: string | null = null;
-  public RetryingBatchID: string | null = null;
+  public RetryingJournalEntryBatchID: string | null = null;
   public ActionMessage: string | null = null;
   public ActionIsError = false;
 
@@ -117,12 +117,12 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
    * ERP, when did it leave, when did it land, what did the ERP call it, and what went wrong.
    */
   public Columns: GridColumnConfig[] = [
-    { field: 'BatchNumber', title: 'Batch №', width: 170, sortable: true },
+    { field: 'JournalEntryBatchNumber', title: 'Batch №', width: 170, sortable: true },
     { field: 'Status', title: 'Status', width: 110, sortable: true },
     { field: 'TargetSystem', title: 'Target ERP', width: 140, sortable: true },
     { field: 'SentAt', title: 'Sent', width: 160, sortable: true },
     { field: 'PostedAt', title: 'Posted', width: 160, sortable: true },
-    { field: 'ExternalBatchRef', title: 'ERP reference', width: 180, sortable: true },
+    { field: 'ExternalJournalEntryBatchRef', title: 'ERP reference', width: 180, sortable: true },
     { field: 'ErrorMessage', title: 'Error', width: 'auto', sortable: false },
     { field: 'TotalEntries', title: 'JEs', width: 80, sortable: true },
     { field: 'BatchedAt', title: 'Batched', width: 160, visible: false, sortable: true },
@@ -228,7 +228,7 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
    * string with no parameter binding).
    */
   private searchFilter(): string | null {
-    return likeContains(['BatchNumber', 'ExternalBatchRef', 'ID'], this.Search);
+    return likeContains(['JournalEntryBatchNumber', 'ExternalJournalEntryBatchRef', 'ID'], this.Search);
   }
 
   // ─── loads ───────────────────────────────────────────────────────────────────
@@ -398,7 +398,7 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
 
   /** Only a Failed dispatch is retryable — Posted is settled, Sent is still in flight. */
   public CanRetry(batch: mjBizAppsAccountingJournalEntryBatchEntity): boolean {
-    return batch.Status === 'Failed' && this.RetryingBatchID === null;
+    return batch.Status === 'Failed' && this.RetryingJournalEntryBatchID === null;
   }
 
   public RetryBlockedReason(batch: mjBizAppsAccountingJournalEntryBatchEntity): string | null {
@@ -419,14 +419,14 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
   /** Re-attempt the ERP send. Same verb (and the same approval gate) as Batch approvals. */
   public async Retry(batch: mjBizAppsAccountingJournalEntryBatchEntity): Promise<void> {
     if (!this.CanRetry(batch)) return;
-    this.RetryingBatchID = batch.ID;
+    this.RetryingJournalEntryBatchID = batch.ID;
     this.ActionMessage = null;
     this.cdr.markForCheck();
     try {
-      const client = new BatchDispatchClient(this.ProviderToUse as GraphQLDataProvider);
+      const client = new JournalEntryBatchDispatchClient(this.ProviderToUse as GraphQLDataProvider);
       const res = await client.DispatchBatch(batch.ID);
       if (res.Success) {
-        this.ActionMessage = `Re-dispatched ${batch.BatchNumber}${res.ExternalBatchRef ? ` — ERP ref ${res.ExternalBatchRef}` : ''}.`;
+        this.ActionMessage = `Re-dispatched ${batch.JournalEntryBatchNumber}${res.ExternalJournalEntryBatchRef ? ` — ERP ref ${res.ExternalJournalEntryBatchRef}` : ''}.`;
         this.ActionIsError = false;
         this.SelectedBatch = null;
         this.Refresh(); // refetch-on-mutating-action (§8)
@@ -436,7 +436,7 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
     } catch (e) {
       this.setError(e instanceof Error ? e.message : String(e));
     } finally {
-      this.RetryingBatchID = null;
+      this.RetryingJournalEntryBatchID = null;
       this.cdr.markForCheck();
     }
   }

@@ -102,7 +102,7 @@
       @for (b of FailedBatches; track b.ID) {
         <article class="ds-fail">
           <div class="ds-fail__head">
-            <span class="ds-mono">{{ b.BatchNumber }}</span>
+            <span class="ds-mono">{{ b.JournalEntryBatchNumber }}</span>
             <span class="ds-fail__meta">{{ b.TargetSystem }}</span>
             <!-- SentAt is datetimeoffset (a true instant) → render LOCAL, no 'UTC' arg. Passing
                  'UTC' here would misreport when the send actually happened. -->
@@ -116,7 +116,7 @@
               [disabled]="!CanRetry(b)"
               [title]="RetryBlockedReason(b) ?? 'Re-attempt the ERP dispatch'"
               (click)="Retry(b)">
-              @if (RetryingBatchID === b.ID) {
+              @if (RetryingJournalEntryBatchID === b.ID) {
                 <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Retrying…
               } @else {
                 <i class="fa-solid fa-rotate-right" aria-hidden="true"></i> Retry dispatch
@@ -133,11 +133,11 @@
   @if (SelectedBatch) {
     <section class="ds-selected" aria-label="Selected batch">
       <div class="ds-fail__head">
-        <span class="ds-mono">{{ SelectedBatch.BatchNumber }}</span>
+        <span class="ds-mono">{{ SelectedBatch.JournalEntryBatchNumber }}</span>
         <span class="ds-fail__meta">{{ SelectedBatch.Status }} · {{ SelectedBatch.TargetSystem }}</span>
         <span class="ds-fail__meta">Sent {{ SelectedBatch.SentAt ? (SelectedBatch.SentAt | date: 'yyyy-MM-dd HH:mm') : '—' }}</span>
         <span class="ds-fail__meta">Posted {{ SelectedBatch.PostedAt ? (SelectedBatch.PostedAt | date: 'yyyy-MM-dd HH:mm') : '—' }}</span>
-        <span class="ds-fail__meta">ERP ref <span class="ds-mono">{{ SelectedBatch.ExternalBatchRef || '—' }}</span></span>
+        <span class="ds-fail__meta">ERP ref <span class="ds-mono">{{ SelectedBatch.ExternalJournalEntryBatchRef || '—' }}</span></span>
         @if (SelectedBatch.Status === 'Failed') {
           <button type="button" mjButton variant="primary" size="sm" [disabled]="!CanRetry(SelectedBatch)" (click)="Retry(SelectedBatch)">
             <i class="fa-solid fa-rotate-right" aria-hidden="true"></i> Retry dispatch

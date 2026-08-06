@@ -17,7 +17,7 @@ import { BaseResourceComponent } from '@memberjunction/ng-shared';
   selector: 'mj-batch-dispatch-resource',
   template: `<mj-batch-dispatch-dashboard></mj-batch-dispatch-dashboard>`,
 })
-export class BatchDispatchResourceComponent extends BaseResourceComponent implements OnInit {
+export class JournalEntryBatchDispatchResourceComponent extends BaseResourceComponent implements OnInit {
   ngOnInit(): void {
     super.ngOnInit();
     // The inner dashboard does the data load; the shim signals the shell that it's interactive so
@@ -35,6 +35,6 @@ export class BatchDispatchResourceComponent extends BaseResourceComponent implem
 }
 
 /** Tree-shaking prevention — called from public-api.ts. */
-export function LoadBatchDispatchResource(): void {
+export function LoadJournalEntryBatchDispatchResource(): void {
   // No-op. Keeps the @RegisterClass(BaseResourceComponent, 'BatchDispatchResource') from being shaken out.
 }

@@ -47,7 +47,7 @@
               <div class="bd-card__head">
                 <div class="bd-card__title">
                   <i class="fa-solid fa-receipt"></i>
-                  <span class="bd-card__number">{{ row.BatchNumber }}</span>
+                  <span class="bd-card__number">{{ row.JournalEntryBatchNumber }}</span>
                   <span class="bd-card__target">→ {{ row.TargetSystem }}</span>
                 </div>
                 <div class="bd-card__badges">
@@ -75,10 +75,10 @@
                   <span class="bd-metric__label">Total Credits</span>
                   <span class="bd-metric__value">{{ row.TotalCredits | number:'1.2-2' }}</span>
                 </div>
-                @if (row.ExternalBatchRef) {
+                @if (row.ExternalJournalEntryBatchRef) {
                   <div class="bd-metric">
                     <span class="bd-metric__label">ERP Ref</span>
-                    <span class="bd-metric__value">{{ row.ExternalBatchRef }}</span>
+                    <span class="bd-metric__value">{{ row.ExternalJournalEntryBatchRef }}</span>
                   </div>
                 }
               </div>

@@ -52,7 +52,7 @@ export function reversalBlockedReason(entry: ReversalCandidate): string | null {
  *
  * ⚠ The gate is NOT ENFORCED TODAY — do not let the UI claim otherwise. `JournalEntry.Status` has
  * only three values (`Pending | Batched | GLPosted`); there is no `Approved` state, and the server's
- * candidate filter (`pendingCandidateFilter`, BatchingEngine.ts) selects on `Status='Pending'` with
+ * candidate filter (`pendingCandidateFilter`, JournalEntryBatchEngine.ts) selects on `Status='Pending'` with
  * no entry-type exclusion. So a Manual Pending entry IS batchable right now, and any copy saying
  * "cannot be batched until approved" is false.
  *

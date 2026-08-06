@@ -16,15 +16,15 @@ import {
   MJEmptyStateComponent,
 } from '@memberjunction/ng-ui-components';
 
-import { BatchDispatchDashboardComponent } from './batch-dispatch-dashboard.component';
-import { BatchDispatchResourceComponent } from './batch-dispatch-resource.component';
+import { JournalEntryBatchDispatchDashboardComponent } from './journal-entry-batch-dispatch-dashboard.component';
+import { JournalEntryBatchDispatchResourceComponent } from './journal-entry-batch-dispatch-resource.component';
 
 /**
  * Feature module for the Block 2 Batch Dispatch dashboard + its Explorer resource shim.
  * Declared (NgModule) rather than standalone to match the existing accounting-ng package pattern.
  */
 @NgModule({
-  declarations: [BatchDispatchDashboardComponent, BatchDispatchResourceComponent],
+  declarations: [JournalEntryBatchDispatchDashboardComponent, JournalEntryBatchDispatchResourceComponent],
   imports: [
     CommonModule,
     FormsModule,
@@ -37,6 +37,6 @@ import { BatchDispatchResourceComponent } from './batch-dispatch-resource.compon
     MJRefreshButtonComponent,
     MJEmptyStateComponent,
   ],
-  exports: [BatchDispatchDashboardComponent, BatchDispatchResourceComponent],
+  exports: [JournalEntryBatchDispatchDashboardComponent, JournalEntryBatchDispatchResourceComponent],
 })
-export class BatchDispatchModule {}
+export class JournalEntryBatchDispatchModule {}

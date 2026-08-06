@@ -88,6 +88,9 @@ async function createCompany(user: UserInfo, currencyCode: string, label: string
   acp.EntityType = 'Subsidiary';
   const id = acp.ID;
   if (!(await acp.Save())) throw new Error(`ACP save failed (${label}): ${acp.LatestResult?.CompleteMessage ?? 'unknown'}`);
+  // W1 auto-seed RETIRED (Marcelo ruling 2026-07-30): a new company starts with an EMPTY chart and
+  // seeding is an explicit capability — same contract block0 W1.2 pins.
+  await (acp as unknown as { SeedDefaultChartOfAccounts(): Promise<void> }).SeedDefaultChartOfAccounts();
   const glRes = await rv.RunView<{ ID: string; Code: string }>(
     { EntityName: GL_ENTITY, ExtraFilter: `CompanyID='${id}'`, Fields: ['ID', 'Code'], ResultType: 'simple' }, user);
   const byCode = new Map((glRes.Results ?? []).map(r => [r.Code, r.ID]));

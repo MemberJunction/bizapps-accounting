@@ -201,7 +201,7 @@ async function teardownCompany(p: Pools, companyId: string, cfoPersonId: string 
   // dropped once no line items / JEs reference them, at the end).
   try {
     const r = await p.teardownPool.request().query(
-      `SELECT t.ID id FROM ${TASK_SCHEMA}.TaskLink l JOIN ${TASK_SCHEMA}.Task t ON t.ID=l.TaskID JOIN __mj.Entity e ON e.ID=l.EntityID WHERE e.Name='MJ_BizApps_Accounting: Journal Entry Batches' AND l.RecordID IN (SELECT DISTINCT BatchID FROM ${SCHEMA}.JournalEntryBatchLineItem WHERE CompanyID='${companyId}')`);
+      `SELECT t.ID id FROM ${TASK_SCHEMA}.TaskLink l JOIN ${TASK_SCHEMA}.Task t ON t.ID=l.TaskID JOIN __mj.Entity e ON e.ID=l.EntityID WHERE e.Name='MJ_BizApps_Accounting: Journal Entry Batches' AND l.RecordID IN (SELECT DISTINCT JournalEntryBatchID FROM ${SCHEMA}.JournalEntryBatchLineItem WHERE CompanyID='${companyId}')`);
     const taskIds = r.recordset.map((x: { id: string }) => `'${x.id}'`).join(',');
     if (taskIds) {
       await exec(`DELETE FROM ${TASK_SCHEMA}.TaskDecision WHERE TaskID IN (${taskIds})`);
@@ -229,7 +229,7 @@ async function teardownCompany(p: Pools, companyId: string, cfoPersonId: string 
       await exec(`DELETE FROM ${SCHEMA}.JournalEntry WHERE ID IN (${jeIdList})`);
     }
     await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatchLineItem WHERE CompanyID='${companyId}'`);
-    await exec(`DELETE b FROM ${SCHEMA}.JournalEntryBatch b WHERE NOT EXISTS (SELECT 1 FROM ${SCHEMA}.JournalEntryBatchLineItem li WHERE li.BatchID=b.ID) AND NOT EXISTS (SELECT 1 FROM ${SCHEMA}.JournalEntry je WHERE je.BatchID=b.ID)`);
+    await exec(`DELETE b FROM ${SCHEMA}.JournalEntryBatch b WHERE NOT EXISTS (SELECT 1 FROM ${SCHEMA}.JournalEntryBatchLineItem li WHERE li.JournalEntryBatchID=b.ID) AND NOT EXISTS (SELECT 1 FROM ${SCHEMA}.JournalEntry je WHERE je.JournalEntryBatchID=b.ID)`);
   } finally {
     for (const t of toggled) await exec(`ENABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
   }

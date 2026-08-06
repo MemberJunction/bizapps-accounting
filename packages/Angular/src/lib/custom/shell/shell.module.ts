@@ -27,7 +27,7 @@ import { WorkspaceTabStripComponent } from '../../transfer-pending/workspace-tab
 import { WorkspaceCardComponent } from '../../transfer-pending/workspace-tabs/workspace-card.component';
 import { WorkspaceTipDirective } from '../../transfer-pending/workspace-tabs/workspace-tip.directive';
 
-import { BatchDispatchModule } from '../BatchDispatch/batch-dispatch.module';
+import { JournalEntryBatchDispatchModule } from '../JournalEntryBatchDispatch/journal-entry-batch-dispatch.module';
 import { ChartOfAccountsModule } from '../ChartOfAccounts/chart-of-accounts.module';
 import { CompanySetupModule } from '../CompanySetup/company-setup.module';
 import { ReadModelsModule } from '../shared/read-models.module';
@@ -45,10 +45,10 @@ import { JournalEntriesCategoryResourceComponent } from './journal-entries-categ
 import { AllJournalEntriesPageComponent } from './pages/all-journal-entries.page';
 import { JEWorkspacePageComponent } from './pages/je-workspace.page';
 import { JEApprovalsPageComponent } from './pages/je-approvals.page';
-import { BatchWorkspacePageComponent } from './pages/batch-workspace.page';
+import { JournalEntryBatchWorkspacePageComponent } from './pages/journal-entry-batch-workspace.page';
 import { DispatchStatusPageComponent } from './pages/dispatch-status.page';
 import { JeDashboardPageComponent } from './pages/je-dashboard.page';
-import { BatchesDashboardPageComponent } from './pages/batches-dashboard.page';
+import { JournalEntryBatchesDashboardPageComponent } from './pages/journal-entry-batches-dashboard.page';
 import { DimensionsPageComponent } from './pages/dimensions.page';
 import { AccountLinksPageComponent } from './pages/account-links.page';
 import { GLAccountsPageComponent } from './pages/gl-accounts.page';
@@ -60,7 +60,7 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
  * The app shell (UI plan §8.0): the category shells + their pages.
  *
  * NgModule-declared to match this package's existing pattern (mirrors ReadModelsModule /
- * BatchDispatchModule). The standalone pieces we own (scope chip, tab strip) and MJ's standalone
+ * JournalEntryBatchDispatchModule). The standalone pieces we own (scope chip, tab strip) and MJ's standalone
  * chrome are imported, not declared.
  */
 @NgModule({
@@ -78,10 +78,10 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
     AllJournalEntriesPageComponent,
     JEWorkspacePageComponent,
     JEApprovalsPageComponent,
-    BatchWorkspacePageComponent,
+    JournalEntryBatchWorkspacePageComponent,
     DispatchStatusPageComponent,
     JeDashboardPageComponent,
-    BatchesDashboardPageComponent,
+    JournalEntryBatchesDashboardPageComponent,
     DimensionsPageComponent,
     AccountLinksPageComponent,
     GLAccountsPageComponent,
@@ -95,7 +95,7 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
     SharedGenericModule,
     EntityViewerModule, // <mj-entity-data-grid> — the house grid
     // The Batches category HOSTS these existing dashboards (now on interior chrome, §6 sweep).
-    BatchDispatchModule, // <mj-batch-dispatch-dashboard> — Batch approvals
+    JournalEntryBatchDispatchModule, // <mj-batch-dispatch-dashboard> — Batch approvals
     ReadModelsModule, // <mj-batch-status-dashboard> + the read-model report dashboards
     ChartOfAccountsModule, // <mj-coa-dashboard> — Accounts
     CompanySetupModule, // <mj-company-setup-dashboard> — Configuration
@@ -132,10 +132,10 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
     AllJournalEntriesPageComponent,
     JEWorkspacePageComponent,
     JEApprovalsPageComponent,
-    BatchWorkspacePageComponent,
+    JournalEntryBatchWorkspacePageComponent,
     DispatchStatusPageComponent,
     JeDashboardPageComponent,
-    BatchesDashboardPageComponent,
+    JournalEntryBatchesDashboardPageComponent,
     DimensionsPageComponent,
     AccountLinksPageComponent,
     GLAccountsPageComponent,

@@ -99,7 +99,7 @@ function fixtureTeardown(companyId: string): void {
 interface BuildResultWire { batchId: string; summaryJournalEntryId: string; summaryLineCount: number; totalDebits: number; totalCredits: number; jeCount: number; approvalTaskId: string | null }
 interface BuildOutputWire { Batches: BuildResultWire[]; NothingToBatch: boolean }
 interface ApprovalStateWire { Approved: boolean; Reason?: string }
-interface DispatchWire { Status: string; ExternalBatchRef: string | null }
+interface DispatchWire { Status: string; ExternalJournalEntryBatchRef: string | null }
 
 const ACP_ENTITY_GL = 'MJ_BizApps_Accounting: GL Accounts';
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
@@ -188,34 +188,34 @@ async function main(): Promise<void> {
     // ── C. Batching — the batch-workspace buttons' ops, exact values ─────────────────────
     console.log('\nC. Batch: preview → build → approve → dispatch → GLPosted:');
     const prev = opOutput<{ Candidates: unknown[]; TotalDebits: number; TotalCredits: number }>(
-      await executeOp(apiKey, 'Accounting.PreviewBatch', { CompanyIDs: [companyId] }));
+      await executeOp(apiKey, 'Accounting.PreviewJournalEntryBatch', { CompanyIDs: [companyId] }));
     check('preview: 3 candidates, totals 600/600', prev.Candidates?.length === 3 && prev.TotalDebits === 600 && prev.TotalCredits === 600,
       JSON.stringify({ n: prev.Candidates?.length, d: prev.TotalDebits, c: prev.TotalCredits }));
 
-    const build = opOutput<BuildOutputWire>(await executeOp(apiKey, 'Accounting.BuildBatch', { TargetSystem: 'BusinessCentral', CompanyID: companyId }));
+    const build = opOutput<BuildOutputWire>(await executeOp(apiKey, 'Accounting.BuildJournalEntryBatch', { TargetSystem: 'BusinessCentral', CompanyID: companyId }));
     const b = build.Batches?.[0];
     check('ONE batch built: jeCount 3, totals 600/600', build.Batches?.length === 1 && b?.jeCount === 3 && b?.totalDebits === 600 && b?.totalCredits === 600,
       JSON.stringify(build).slice(0, 200));
 
-    const pre = opOutput<ApprovalStateWire>(await executeOp(apiKey, 'Accounting.GetBatchApprovalState', { BatchID: b?.batchId }));
+    const pre = opOutput<ApprovalStateWire>(await executeOp(apiKey, 'Accounting.GetJournalEntryBatchApprovalState', { JournalEntryBatchID: b?.batchId }));
     check('approval state initially FALSE', pre.Approved === false, JSON.stringify(pre));
-    const dec = await executeOp(apiKey, 'Accounting.RecordBatchDecision', { BatchID: b?.batchId, Decision: 'Approved', Notes: `${RUN_TAG} demo approval` });
-    const post = opOutput<ApprovalStateWire>(await executeOp(apiKey, 'Accounting.GetBatchApprovalState', { BatchID: b?.batchId }));
+    const dec = await executeOp(apiKey, 'Accounting.RecordJournalEntryBatchDecision', { JournalEntryBatchID: b?.batchId, Decision: 'Approved', Notes: `${RUN_TAG} demo approval` });
+    const post = opOutput<ApprovalStateWire>(await executeOp(apiKey, 'Accounting.GetJournalEntryBatchApprovalState', { JournalEntryBatchID: b?.batchId }));
     check('decision recorded → approval state TRUE', dec.success === true && post.Approved === true, JSON.stringify({ dec: dec.resultCode, post }));
 
-    const disp = opOutput<DispatchWire>(await executeOp(apiKey, 'Accounting.DispatchBatch', { BatchID: b?.batchId }));
-    check("dispatch → Status 'Posted' with mock external ref", disp.Status === 'Posted' && (disp.ExternalBatchRef ?? '').startsWith('MOCK-'), JSON.stringify(disp));
+    const disp = opOutput<DispatchWire>(await executeOp(apiKey, 'Accounting.DispatchJournalEntryBatch', { JournalEntryBatchID: b?.batchId }));
+    check("dispatch → Status 'Posted' with mock external ref", disp.Status === 'Posted' && (disp.ExternalJournalEntryBatchRef ?? '').startsWith('MOCK-'), JSON.stringify(disp));
 
     // The same dynamic views the dashboards consume — the UI's read path.
-    const jeRows = await wireRows<{ ID: string; Status: string; BatchID: string | null }>(apiKey, JE_ENTITY,
-      `CompanyID='${companyId}' AND Description LIKE '${RUN_TAG}%'`, ['ID', 'Status', 'BatchID']);
-    const glPosted = jeRows.filter((r) => r.Status === 'GLPosted' && !!r.BatchID);
+    const jeRows = await wireRows<{ ID: string; Status: string; JournalEntryBatchID: string | null }>(apiKey, JE_ENTITY,
+      `CompanyID='${companyId}' AND Description LIKE '${RUN_TAG}%'`, ['ID', 'Status', 'JournalEntryBatchID']);
+    const glPosted = jeRows.filter((r) => r.Status === 'GLPosted' && !!r.JournalEntryBatchID);
     check('all 3 source JEs read back GLPosted + batch-linked (dashboard view path)', jeRows.length === 3 && glPosted.length === 3,
       JSON.stringify(jeRows.map((r) => r.Status)));
-    const batchRows = await wireRows<{ ID: string; Status: string; ExternalBatchRef: string | null }>(apiKey, BATCH_ENTITY,
-      `ID='${b?.batchId}'`, ['ID', 'Status', 'ExternalBatchRef']);
+    const batchRows = await wireRows<{ ID: string; Status: string; ExternalJournalEntryBatchRef: string | null }>(apiKey, BATCH_ENTITY,
+      `ID='${b?.batchId}'`, ['ID', 'Status', 'ExternalJournalEntryBatchRef']);
     check('batch row readable with Posted status + external ref (batch workspace view path)',
-      batchRows.length === 1 && batchRows[0].Status === 'Posted' && !!batchRows[0].ExternalBatchRef, JSON.stringify(batchRows));
+      batchRows.length === 1 && batchRows[0].Status === 'Posted' && !!batchRows[0].ExternalJournalEntryBatchRef, JSON.stringify(batchRows));
 
     // ── C2. Consolidation SPLIT enforcement: company × GLAccount × dimension-combo ────────
     // (Marcelo 2026-07-30: prove the split is enforced on the PERSISTED summary, not just in
@@ -242,7 +242,7 @@ async function main(): Promise<void> {
     ])));
     check('JE5 booked', je5.Success === true, JSON.stringify(je5));
 
-    const build2 = opOutput<BuildOutputWire>(await executeOp(apiKey, 'Accounting.BuildBatch', { TargetSystem: 'BusinessCentral', CompanyID: companyId }));
+    const build2 = opOutput<BuildOutputWire>(await executeOp(apiKey, 'Accounting.BuildJournalEntryBatch', { TargetSystem: 'BusinessCentral', CompanyID: companyId }));
     const b2 = build2.Batches?.[0];
     check('dims batch built: jeCount 2, totals 200/200, summaryLineCount 3 (SALES+MKTG+REV, split held)',
       build2.Batches?.length === 1 && b2?.jeCount === 2 && b2?.totalDebits === 200 && b2?.totalCredits === 200 && b2?.summaryLineCount === 3,

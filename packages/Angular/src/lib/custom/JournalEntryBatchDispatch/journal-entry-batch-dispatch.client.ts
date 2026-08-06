@@ -1,7 +1,7 @@
 /**
- * BatchDispatchClient — a thin, strongly-typed wrapper over the batch Remote Operations
- * (`Accounting.BuildBatch` / `Accounting.RegenerateBatch` / `Accounting.DispatchBatch` /
- * `Accounting.RecordBatchDecision` / `Accounting.GetBatchApprovalState`).
+ * JournalEntryBatchDispatchClient — a thin, strongly-typed wrapper over the batch Remote Operations
+ * (`Accounting.BuildJournalEntryBatch` / `Accounting.RegenerateJournalEntryBatch` / `Accounting.DispatchJournalEntryBatch` /
+ * `Accounting.RecordJournalEntryBatchDecision` / `Accounting.GetJournalEntryBatchApprovalState`).
  *
  * Deliberately NOT a hand-written GraphQL client (the old shape, which talked to the deleted
  * BatchDispatchResolver): batch actions run the batching engine server-side, so they travel MJ's
@@ -20,8 +20,8 @@ import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
 // ─── Wire shapes of the Remote Operation outputs (kept local — the ops live in the server-only
 // @mj-biz-apps/accounting-core-entities-server package, which the browser cannot import) ─────────
 
-/** One built batch, as `Accounting.BuildBatch`/`RegenerateBatch` return it. */
-interface BuildBatchResultWire {
+/** One built batch, as `Accounting.BuildJournalEntryBatch`/`RegenerateBatch` return it. */
+interface BuildJournalEntryBatchResultWire {
   batchId: string;
   summaryJournalEntryId: string;
   summaryLineCount: number;
@@ -31,20 +31,20 @@ interface BuildBatchResultWire {
   approvalTaskId: string | null;
 }
 
-interface BuildBatchOutputWire {
-  Batches: BuildBatchResultWire[];
+interface BuildJournalEntryBatchOutputWire {
+  Batches: BuildJournalEntryBatchResultWire[];
   NothingToBatch: boolean;
 }
 
-interface DispatchBatchOutputWire { Status: string; ExternalBatchRef: string | null }
-interface GetBatchApprovalStateOutputWire { Approved: boolean; Reason?: string }
-interface RecordBatchDecisionOutputWire { Recorded: true }
+interface DispatchJournalEntryBatchOutputWire { Status: string; ExternalJournalEntryBatchRef: string | null }
+interface GetJournalEntryBatchApprovalStateOutputWire { Approved: boolean; Reason?: string }
+interface RecordJournalEntryBatchDecisionOutputWire { Recorded: true }
 
 // ─── The legacy result shapes the dashboard components bind to (unchanged public API) ────────────
 
 export interface BuildJEBatchResult {
   Success: boolean;
-  BatchID?: string;
+  JournalEntryBatchID?: string;
   SummaryLineCount: number;
   TotalDebits: number;
   TotalCredits: number;
@@ -57,7 +57,7 @@ export interface BuildJEBatchResult {
 export interface DispatchJEBatchResult {
   Success: boolean;
   Status?: string;
-  ExternalBatchRef?: string;
+  ExternalJournalEntryBatchRef?: string;
   ErrorMessage?: string;
 }
 
@@ -75,7 +75,7 @@ export interface JEBatchApprovalState {
 /** The CFO decision outcomes the in-app control can record. */
 export type BatchDecision = 'Approved' | 'ApprovedWithConditions' | 'Rejected';
 
-export class BatchDispatchClient {
+export class JournalEntryBatchDispatchClient {
   private dataProvider: GraphQLDataProvider;
 
   constructor(dataProvider: GraphQLDataProvider) {
@@ -89,13 +89,13 @@ export class BatchDispatchClient {
   public async BuildBatch(targetSystem: string): Promise<BuildJEBatchResult> {
     const empty = { Success: false, SummaryLineCount: 0, TotalDebits: 0, TotalCredits: 0, JECount: 0, CompanyCount: 0, NothingToBatch: false };
     try {
-      const res = await this.dataProvider.RouteOperation<{ TargetSystem: string }, BuildBatchOutputWire>(
-        'Accounting.BuildBatch', { TargetSystem: targetSystem });
+      const res = await this.dataProvider.RouteOperation<{ TargetSystem: string }, BuildJournalEntryBatchOutputWire>(
+        'Accounting.BuildJournalEntryBatch', { TargetSystem: targetSystem });
       if (!res.Success || !res.Output) return { ...empty, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
       return this.toBuildResult(res.Output.Batches, res.Output.NothingToBatch);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      LogError(`BatchDispatchClient.BuildBatch failed: ${msg}`);
+      LogError(`JournalEntryBatchDispatchClient.BuildBatch failed: ${msg}`);
       return { ...empty, ErrorMessage: msg };
     }
   }
@@ -108,13 +108,13 @@ export class BatchDispatchClient {
   public async RegenerateBatch(batchID: string, targetSystem: string): Promise<BuildJEBatchResult> {
     const empty = { Success: false, SummaryLineCount: 0, TotalDebits: 0, TotalCredits: 0, JECount: 0, CompanyCount: 0, NothingToBatch: false };
     try {
-      const res = await this.dataProvider.RouteOperation<{ BatchID: string; TargetSystem: string }, BuildBatchResultWire>(
-        'Accounting.RegenerateBatch', { BatchID: batchID, TargetSystem: targetSystem });
+      const res = await this.dataProvider.RouteOperation<{ JournalEntryBatchID: string; TargetSystem: string }, BuildJournalEntryBatchResultWire>(
+        'Accounting.RegenerateJournalEntryBatch', { JournalEntryBatchID: batchID, TargetSystem: targetSystem });
       if (!res.Success || !res.Output) return { ...empty, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
       return this.toBuildResult([res.Output], false);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      LogError(`BatchDispatchClient.RegenerateBatch failed: ${msg}`);
+      LogError(`JournalEntryBatchDispatchClient.RegenerateBatch failed: ${msg}`);
       return { ...empty, ErrorMessage: msg };
     }
   }
@@ -122,13 +122,13 @@ export class BatchDispatchClient {
   /** Dispatch an Approved batch to the ERP (mock poster for v1). */
   public async DispatchBatch(batchID: string): Promise<DispatchJEBatchResult> {
     try {
-      const res = await this.dataProvider.RouteOperation<{ BatchID: string }, DispatchBatchOutputWire>(
-        'Accounting.DispatchBatch', { BatchID: batchID });
+      const res = await this.dataProvider.RouteOperation<{ JournalEntryBatchID: string }, DispatchJournalEntryBatchOutputWire>(
+        'Accounting.DispatchJournalEntryBatch', { JournalEntryBatchID: batchID });
       if (!res.Success || !res.Output) return { Success: false, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
-      return { Success: true, Status: res.Output.Status, ExternalBatchRef: res.Output.ExternalBatchRef ?? undefined };
+      return { Success: true, Status: res.Output.Status, ExternalJournalEntryBatchRef: res.Output.ExternalJournalEntryBatchRef ?? undefined };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      LogError(`BatchDispatchClient.DispatchBatch failed: ${msg}`);
+      LogError(`JournalEntryBatchDispatchClient.DispatchBatch failed: ${msg}`);
       return { Success: false, ErrorMessage: msg };
     }
   }
@@ -136,13 +136,13 @@ export class BatchDispatchClient {
   /** Record an in-app CFO approve/reject decision on the batch's approval Task. */
   public async RecordDecision(batchID: string, decision: BatchDecision, notes?: string): Promise<RecordJEBatchDecisionResult> {
     try {
-      const res = await this.dataProvider.RouteOperation<{ BatchID: string; Decision: BatchDecision; Notes: string | null }, RecordBatchDecisionOutputWire>(
-        'Accounting.RecordBatchDecision', { BatchID: batchID, Decision: decision, Notes: notes ?? null });
+      const res = await this.dataProvider.RouteOperation<{ JournalEntryBatchID: string; Decision: BatchDecision; Notes: string | null }, RecordJournalEntryBatchDecisionOutputWire>(
+        'Accounting.RecordJournalEntryBatchDecision', { JournalEntryBatchID: batchID, Decision: decision, Notes: notes ?? null });
       if (!res.Success) return { Success: false, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
       return { Success: true };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      LogError(`BatchDispatchClient.RecordDecision failed: ${msg}`);
+      LogError(`JournalEntryBatchDispatchClient.RecordDecision failed: ${msg}`);
       return { Success: false, ErrorMessage: msg };
     }
   }
@@ -150,23 +150,23 @@ export class BatchDispatchClient {
   /** Read-only: is this batch approved to dispatch? Drives the Dispatch button's enabled state. */
   public async GetApprovalState(batchID: string): Promise<JEBatchApprovalState> {
     try {
-      const res = await this.dataProvider.RouteOperation<{ BatchID: string }, GetBatchApprovalStateOutputWire>(
-        'Accounting.GetBatchApprovalState', { BatchID: batchID });
+      const res = await this.dataProvider.RouteOperation<{ JournalEntryBatchID: string }, GetJournalEntryBatchApprovalStateOutputWire>(
+        'Accounting.GetJournalEntryBatchApprovalState', { JournalEntryBatchID: batchID });
       if (!res.Success || !res.Output) return { Success: false, Approved: false, Reason: res.ErrorMessage ?? 'No response from server.' };
       return { Success: true, Approved: res.Output.Approved, Reason: res.Output.Reason };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      LogError(`BatchDispatchClient.GetApprovalState failed: ${msg}`);
+      LogError(`JournalEntryBatchDispatchClient.GetApprovalState failed: ${msg}`);
       return { Success: false, Approved: false, Reason: msg };
     }
   }
 
   /** Collapse one-or-many per-company build results into the legacy aggregate shape. */
-  private toBuildResult(batches: BuildBatchResultWire[], nothingToBatch: boolean): BuildJEBatchResult {
+  private toBuildResult(batches: BuildJournalEntryBatchResultWire[], nothingToBatch: boolean): BuildJEBatchResult {
     return {
       Success: true,
       NothingToBatch: nothingToBatch,
-      BatchID: batches.length === 1 ? batches[0].batchId : undefined,
+      JournalEntryBatchID: batches.length === 1 ? batches[0].batchId : undefined,
       SummaryLineCount: batches.reduce((s, b) => s + b.summaryLineCount, 0),
       TotalDebits: batches.reduce((s, b) => s + b.totalDebits, 0),
       TotalCredits: batches.reduce((s, b) => s + b.totalCredits, 0),

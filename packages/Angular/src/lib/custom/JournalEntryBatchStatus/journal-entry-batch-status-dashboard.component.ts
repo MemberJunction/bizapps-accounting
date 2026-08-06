@@ -8,7 +8,7 @@ import { MjButtonVariant } from '@memberjunction/ng-ui-components';
 import {
   mjBizAppsAccountingJournalEntryBatchEntity,
 } from '@mj-biz-apps/accounting-entities';
-import { BatchDispatchClient } from '../BatchDispatch/batch-dispatch.client';
+import { JournalEntryBatchDispatchClient } from '../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 
 /** Generated value-list unions (rule 2c: derived from the entity, never hand-copied). */
@@ -33,13 +33,13 @@ export interface PreviewEntry { ID: string; EntryNumber: string; EffectiveDate: 
 /** One batch row in the table, with its inferred date range + lazily-loaded JE detail. */
 export interface BatchRow {
   ID: string;
-  BatchNumber: string;
+  JournalEntryBatchNumber: string;
   Status: BatchStatus;
   TargetSystem: TargetSystem;
   TotalEntries: number;
   TotalDebits: number;
   TotalCredits: number;
-  ExternalBatchRef: string | null;
+  ExternalJournalEntryBatchRef: string | null;
   BatchedAt: Date | null;
   /** Inferred from the batch's journal entries' EffectiveDates (min/max) — a temporary stand-in for a real cutoff. */
   StartDate: Date | null;
@@ -65,12 +65,12 @@ type SortField = 'Status' | 'TargetSystem' | 'TotalEntries' | 'TotalDebits' | 'T
 @Component({
   standalone: false,
   selector: 'mj-batch-status-dashboard',
-  templateUrl: './batch-status-dashboard.component.html',
-  styleUrls: ['./batch-status-dashboard.component.css'],
+  templateUrl: './journal-entry-batch-status-dashboard.component.html',
+  styleUrls: ['./journal-entry-batch-status-dashboard.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 @RegisterClass(BaseDashboard, 'BatchStatusDashboard')
-export class BatchStatusDashboardComponent extends BaseDashboard {
+export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
   public IsLoading = false;
   public LoadError: string | null = null;
   public ActionMessage: string | null = null;
@@ -295,7 +295,7 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
     this.clearActionMessage();
     this.cdr.markForCheck();
     try {
-      const res = await new BatchDispatchClient(this.ProviderToUse as GraphQLDataProvider).BuildBatch(this.BuildTarget);
+      const res = await new JournalEntryBatchDispatchClient(this.ProviderToUse as GraphQLDataProvider).BuildBatch(this.BuildTarget);
       if (res.Success && res.NothingToBatch) {
         this.setActionMessage('No pending journal entries to batch.', false);
         this.BuildPreviewVisible = false;
@@ -334,15 +334,15 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
   }
 
   private toRow(
-    b: { ID: string; BatchNumber: string; Status: BatchStatus; TargetSystem: TargetSystem; TotalEntries: number; TotalDebits: number; TotalCredits: number; ExternalBatchRef: string | null; BatchedAt: Date | null },
+    b: { ID: string; JournalEntryBatchNumber: string; Status: BatchStatus; TargetSystem: TargetSystem; TotalEntries: number; TotalDebits: number; TotalCredits: number; ExternalJournalEntryBatchRef: string | null; BatchedAt: Date | null },
     jes: JEHeader[], companyIDs: string[],
   ): BatchRow {
     const dates = jes.map(j => j.EffectiveDate).filter((d): d is Date => d instanceof Date);
     const times = dates.map(d => d.getTime());
     return {
-      ID: b.ID, BatchNumber: b.BatchNumber, Status: b.Status, TargetSystem: b.TargetSystem,
+      ID: b.ID, JournalEntryBatchNumber: b.JournalEntryBatchNumber, Status: b.Status, TargetSystem: b.TargetSystem,
       TotalEntries: b.TotalEntries, TotalDebits: b.TotalDebits, TotalCredits: b.TotalCredits,
-      ExternalBatchRef: b.ExternalBatchRef, BatchedAt: b.BatchedAt,
+      ExternalJournalEntryBatchRef: b.ExternalJournalEntryBatchRef, BatchedAt: b.BatchedAt,
       StartDate: times.length ? new Date(Math.min(...times)) : null,
       EndDate: times.length ? new Date(Math.max(...times)) : null,
       CompanyIDs: companyIDs,
@@ -360,26 +360,26 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
       .sort((a, b) => a.Name.localeCompare(b.Name));
   }
 
-  private async loadBatches(): Promise<Array<{ ID: string; BatchNumber: string; Status: BatchStatus; TargetSystem: TargetSystem; CompanyID: string | null; TotalEntries: number; TotalDebits: number; TotalCredits: number; ExternalBatchRef: string | null; BatchedAt: Date | null }>> {
+  private async loadBatches(): Promise<Array<{ ID: string; JournalEntryBatchNumber: string; Status: BatchStatus; TargetSystem: TargetSystem; CompanyID: string | null; TotalEntries: number; TotalDebits: number; TotalCredits: number; ExternalJournalEntryBatchRef: string | null; BatchedAt: Date | null }>> {
     const res = await this.runView().RunView<mjBizAppsAccountingJournalEntryBatchEntity>(
       { EntityName: BATCH_ENTITY, OrderBy: 'BatchedAt DESC', ResultType: 'simple' }, this.contextUser());
     return (res.Results ?? []).map(b => ({
-      ID: b.ID, BatchNumber: b.BatchNumber, Status: b.Status, TargetSystem: b.TargetSystem,
+      ID: b.ID, JournalEntryBatchNumber: b.JournalEntryBatchNumber, Status: b.Status, TargetSystem: b.TargetSystem,
       CompanyID: b.CompanyID ?? null,
       TotalEntries: b.TotalEntries, TotalDebits: b.TotalDebits, TotalCredits: b.TotalCredits,
-      ExternalBatchRef: b.ExternalBatchRef, BatchedAt: b.BatchedAt ? new Date(b.BatchedAt) : null,
+      ExternalJournalEntryBatchRef: b.ExternalJournalEntryBatchRef, BatchedAt: b.BatchedAt ? new Date(b.BatchedAt) : null,
     }));
   }
 
   /** JE headers per batch (for the inferred date range + to fetch each batch's lines on expand). */
   private async loadJEHeaders(): Promise<Map<string, JEHeader[]>> {
-    // The batch's own SUMMARY JE also carries BatchID — it is the consolidation OF the sources,
+    // The batch's own SUMMARY JE also carries JournalEntryBatchID — it is the consolidation OF the sources,
     // so counting it alongside them doubles every amount (Marcelo 2026-07-30: a 350/350 batch
     // drilled down as 700/700). Exclude summaries here so the map holds SOURCE JEs only; the
     // detail then re-derives the same netted posting the summary persists.
     const [res, batches] = await Promise.all([
-      this.runView().RunView<{ ID: string; BatchID: string | null; EffectiveDate: string | null }>(
-        { EntityName: JE_ENTITY, ExtraFilter: 'BatchID IS NOT NULL', Fields: ['ID', 'BatchID', 'EffectiveDate'], OrderBy: 'EffectiveDate ASC', ResultType: 'simple' }, this.contextUser()),
+      this.runView().RunView<{ ID: string; JournalEntryBatchID: string | null; EffectiveDate: string | null }>(
+        { EntityName: JE_ENTITY, ExtraFilter: 'JournalEntryBatchID IS NOT NULL', Fields: ['ID', 'JournalEntryBatchID', 'EffectiveDate'], OrderBy: 'EffectiveDate ASC', ResultType: 'simple' }, this.contextUser()),
       this.runView().RunView<{ ID: string; SummaryJournalEntryID: string | null }>(
         { EntityName: BATCH_ENTITY, Fields: ['ID', 'SummaryJournalEntryID'], ResultType: 'simple' }, this.contextUser()),
     ]);
@@ -388,11 +388,11 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
     );
     const byBatch = new Map<string, JEHeader[]>();
     for (const je of res.Results ?? []) {
-      if (!je.BatchID) continue;
+      if (!je.JournalEntryBatchID) continue;
       if (summaryIds.has(NormalizeUUID(je.ID))) continue; // the consolidation itself, not a source
-      const arr = byBatch.get(je.BatchID) ?? [];
+      const arr = byBatch.get(je.JournalEntryBatchID) ?? [];
       arr.push({ ID: je.ID, EffectiveDate: je.EffectiveDate ? new Date(je.EffectiveDate) : null });
-      byBatch.set(je.BatchID, arr);
+      byBatch.set(je.JournalEntryBatchID, arr);
     }
     return byBatch;
   }
@@ -484,6 +484,6 @@ export class BatchStatusDashboardComponent extends BaseDashboard {
 }
 
 /** Tree-shaking prevention — called from public-api.ts. */
-export function LoadBatchStatusDashboard(): void {
+export function LoadJournalEntryBatchStatusDashboard(): void {
   // No-op.
 }
