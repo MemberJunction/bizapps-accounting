@@ -56,11 +56,11 @@ test('Build→approve→dispatch, then Reverse the GLPosted JE from All journal 
   const loadBtn = page.getByRole('button', { name: /Load entries/i }).first();
   await expect(loadBtn, 'the deferred-query Load-entries button').toBeVisible({ timeout: 30_000 });
   await loadBtn.click();
-  const buildBtn = page.getByRole('button', { name: /Build batch/i }).first();
-  await expect(buildBtn, 'Build batch enables once candidates load').toBeEnabled({ timeout: 30_000 });
+  const buildBtn = page.getByRole('button', { name: /Build JE batch/i }).first();
+  await expect(buildBtn, 'Build JE batch enables once candidates load').toBeEnabled({ timeout: 30_000 });
   await buildBtn.click();
   await page.waitForTimeout(2000);
-  const confirmBuild = page.getByRole('button', { name: /Build batch \(\d+\)/i }).first();
+  const confirmBuild = page.getByRole('button', { name: /Build JE batch \(\d+\)/i }).first();
   if (await confirmBuild.isVisible().catch(() => false)) { await confirmBuild.click(); }
   await page.waitForTimeout(7000);
 

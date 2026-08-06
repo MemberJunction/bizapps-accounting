@@ -59,11 +59,11 @@ test('Build → late candidate → Regenerate re-gathers (5→6 entries, 600→7
   const loadBtn = page.getByRole('button', { name: /Load entries/i }).first();
   await expect(loadBtn).toBeVisible({ timeout: 30_000 });
   await loadBtn.click();
-  const buildBtn = page.getByRole('button', { name: /Build batch/i }).first();
+  const buildBtn = page.getByRole('button', { name: /Build JE batch/i }).first();
   await expect(buildBtn, 'Build enables once candidates load').toBeEnabled({ timeout: 30_000 });
   await buildBtn.click();
   await page.waitForTimeout(2000);
-  const confirm = page.getByRole('button', { name: /Build batch \(\d+\)/i }).first();
+  const confirm = page.getByRole('button', { name: /Build JE batch \(\d+\)/i }).first();
   if (await confirm.isVisible().catch(() => false)) { await confirm.click(); }
   await page.waitForTimeout(7000);
 
@@ -92,7 +92,7 @@ test('Build → late candidate → Regenerate re-gathers (5→6 entries, 600→7
   const loadBtn2 = page.getByRole('button', { name: /Load entries/i }).first();
   await expect(loadBtn2).toBeVisible({ timeout: 30_000 });
   await loadBtn2.click();
-  const buildBtn2 = page.getByRole('button', { name: /Build batch/i }).first();
+  const buildBtn2 = page.getByRole('button', { name: /Build JE batch/i }).first();
   await expect(buildBtn2, 'all 6 JEs are back in the pool (buildable again)').toBeEnabled({ timeout: 30_000 });
 
   expectNoConsoleErrors(sink, 'batch regenerate flow');

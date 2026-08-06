@@ -194,12 +194,12 @@ export class BatchDetailPanelComponent extends BaseAngularComponent {
       );
 
       if (!headerRes.Success) {
-        this.LoadError = headerRes.ErrorMessage ?? 'This batch could not be loaded.';
+        this.LoadError = headerRes.ErrorMessage ?? 'This journal entry batch could not be loaded.';
         return;
       }
       const header = (headerRes.Results?.[0] ?? null) as BatchDetailHeader | null;
       if (!header) {
-        this.LoadError = 'This batch could not be found. It may have been deleted, or you may not have access to it.';
+        this.LoadError = 'This journal entry batch could not be found. It may have been deleted, or you may not have access to it.';
         return;
       }
       this.Header = header;

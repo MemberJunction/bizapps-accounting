@@ -4,10 +4,10 @@
      filters — the same chrome contract All batches / All journal entries use. -->
 <mj-page-header-interior
   Title="Dispatch status"
-  Subtitle="The wire, not the archive — batches awaiting the ERP’s confirmation or needing a retry, broken first. All batches is the full history.">
+  Subtitle="The wire, not the archive — journal entry batches awaiting the ERP’s confirmation or needing a retry, broken first. All journal entry batches is the full history.">
 
   <div meta>
-    <mj-stat-badge Icon="fa-solid fa-paper-plane" [Count]="TotalCount ?? '—'" Label="batches" Variant="info"></mj-stat-badge>
+    <mj-stat-badge Icon="fa-solid fa-paper-plane" [Count]="TotalCount ?? '—'" Label="JE batches" Variant="info"></mj-stat-badge>
     @if (FailedCount > 0) {
       <mj-stat-badge [Count]="FailedCount" Label="failed" Icon="fa-solid fa-triangle-exclamation" Variant="error"></mj-stat-badge>
     }
@@ -62,7 +62,7 @@
         <input
           type="search"
           class="mj-input"
-          placeholder="Batch № or ERP reference"
+          placeholder="JE batch № or ERP reference"
           [(ngModel)]="Search"
           (change)="OnFilterChanged()"
           aria-label="Search dispatches" />
@@ -123,7 +123,7 @@
 
   <!-- A clicked row pins its full dispatch facts here — the grid's Error column truncates. -->
   @if (SelectedBatch) {
-    <section class="ds-selected" aria-label="Selected batch">
+    <section class="ds-selected" aria-label="Selected journal entry batch">
       <div class="ds-fail__head">
         <span class="ds-mono">{{ SelectedBatch.JournalEntryBatchNumber }}</span>
         <span class="ds-fail__meta">{{ SelectedBatch.Status }} · {{ SelectedBatch.TargetSystem }}</span>

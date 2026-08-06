@@ -61,12 +61,12 @@ test('Batches → build → Batch approvals → Approve → Dispatch advances to
   const loadBtn = page.getByRole('button', { name: /Load entries/i }).first();
   await expect(loadBtn, 'the deferred-query Load-entries button').toBeVisible({ timeout: 30_000 });
   await loadBtn.click();
-  const buildBtn = page.getByRole('button', { name: /Build batch/i }).first();
-  await expect(buildBtn, 'Build batch enables once candidates load').toBeEnabled({ timeout: 30_000 });
+  const buildBtn = page.getByRole('button', { name: /Build JE batch/i }).first();
+  await expect(buildBtn, 'Build JE batch enables once candidates load').toBeEnabled({ timeout: 30_000 });
   await buildBtn.click();
   await page.waitForTimeout(2000);
-  // A preview/confirm may appear ("Build batch (N)"); confirm it if present, else the build was direct.
-  const confirm = page.getByRole('button', { name: /Build batch \(\d+\)/i }).first();
+  // A preview/confirm may appear ("Build JE batch (N)"); confirm it if present, else the build was direct.
+  const confirm = page.getByRole('button', { name: /Build JE batch \(\d+\)/i }).first();
   if (await confirm.isVisible().catch(() => false)) { await confirm.click(); }
   await page.waitForTimeout(7000);
 

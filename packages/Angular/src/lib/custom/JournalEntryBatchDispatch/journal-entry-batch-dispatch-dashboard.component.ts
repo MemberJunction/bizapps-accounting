@@ -230,7 +230,7 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
     );
     if (!res.Success) {
       this.Batches = [];
-      this.LoadError = res.ErrorMessage ?? 'Failed to load batches.';
+      this.LoadError = res.ErrorMessage ?? 'Failed to load journal entry batches.';
       return;
     }
     this.Batches = (res.Results ?? []).map(b => this.toRow(b));

@@ -90,6 +90,24 @@ name-pattern currency heuristic) — filed in MJ-UPSTREAM.md 2026-08-06 with roo
 app keeps its correct column config so it heals when MJ fixes the mapping. A StateKey v1→v2 bump
 was tried on that theory and REVERTED (fresh state still renders currency — disproven).
 
+**2026-08-06 (final) — full UI terminology audit (Marcelo: "change every corresponding piece to
+journal entry batch, except batched at / batched by / the Batched status").** Inventoried every
+user-visible string in the app (attribute-borne labels/titles/placeholders/aria-labels, template
+text, TS label/tooltip/message literals, and grid column headers) and swept **66 sites across 20
+files**. Rule applied and worth remembering: **NOUN forms referring to the entity are renamed; VERB
+forms are kept** — which is exactly the rationale behind the three agreed exceptions. So `BatchedAt`
+/ `BatchedByUserID` / the `Batched` status stay, and so do "batched", "batching", "unbatched" and
+"to batch" (26 + 24 + 12 + 5 + 3 occurrences, deliberate). `BATCH-…` numbers stay — that's data.
+Register: full "journal entry batch" in prose/messages; "JE batch" in compact chrome (buttons,
+column heads, placeholders, stat labels), matching the rail. Renamed surfaces include the page
+titles ("JE Batch Approvals", "JE Batch Status"), the create verb ("New JE batch"), the build
+button + preview dialog ("Build JE batch"), grid column heads ("JE batch №", "JE batch"), search
+placeholders/labels, every empty state and error message, and the workspace tab/identity/hint.
+Four tier-5 specs' `Build batch` locators updated (stale-label case — the button really was
+renamed). **Validated:** live probe confirms rendered rail/headers/buttons with **zero console
+errors** and no truncation (screenshots captured), and **tier 5 passes 6/6** — the four batch flows
+(approve · reject · regenerate · reversal) plus both accounts specs, all driving the swept UI.
+
 **Battery verdict 2026-08-06: FULL PYRAMID GREEN at baseline** — units 101 · tier-2 75 · tier-3 72
 · tier-4 9 · tier-5 8 (+1 pre-known orders blocker). The branch's uncommitted fix wave (4 grid
 pages' refresh, gl-accounts rowKey parse + CSS height chain, tier-4 module import + regression

@@ -56,11 +56,11 @@ test('Batches → build → Batch approvals → Reject cancels the batch (new na
   const loadBtn = page.getByRole('button', { name: /Load entries/i }).first();
   await expect(loadBtn, 'the deferred-query Load-entries button').toBeVisible({ timeout: 30_000 });
   await loadBtn.click();
-  const buildBtn = page.getByRole('button', { name: /Build batch/i }).first();
-  await expect(buildBtn, 'Build batch enables once candidates load').toBeEnabled({ timeout: 30_000 });
+  const buildBtn = page.getByRole('button', { name: /Build JE batch/i }).first();
+  await expect(buildBtn, 'Build JE batch enables once candidates load').toBeEnabled({ timeout: 30_000 });
   await buildBtn.click();
   await page.waitForTimeout(2000);
-  const confirm = page.getByRole('button', { name: /Build batch \(\d+\)/i }).first();
+  const confirm = page.getByRole('button', { name: /Build JE batch \(\d+\)/i }).first();
   if (await confirm.isVisible().catch(() => false)) { await confirm.click(); }
   await page.waitForTimeout(7000);
 

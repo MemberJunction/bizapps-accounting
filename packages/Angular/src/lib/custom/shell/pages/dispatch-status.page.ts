@@ -121,7 +121,7 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
    * ERP, when did it leave, when did it land, what did the ERP call it, and what went wrong.
    */
   public Columns: GridColumnConfig[] = [
-    { field: 'JournalEntryBatchNumber', title: 'Batch №', width: 170, sortable: true },
+    { field: 'JournalEntryBatchNumber', title: 'JE batch №', width: 170, sortable: true },
     { field: 'Status', title: 'Status', width: 110, sortable: true },
     { field: 'TargetSystem', title: 'Target ERP', width: 140, sortable: true },
     { field: 'SentAt', title: 'Sent', width: 160, sortable: true },
@@ -302,8 +302,8 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
 
   public get EmptyMessage(): string {
     return this.ShowingInFlight
-      ? 'Nothing is in flight. No batch is awaiting an ERP confirmation and none has failed in this window — that is the healthy state, not a missing read.'
-      : 'No batches match these filters. Widen the date window, or clear the status toggles to see every batch.';
+      ? 'Nothing is in flight. No journal entry batch is awaiting an ERP confirmation and none has failed in this window — that is the healthy state, not a missing read.'
+      : 'No journal entry batches match these filters. Widen the date window, or clear the status toggles to see every one.';
   }
 
   // ─── filter controls ─────────────────────────────────────────────────────────
@@ -419,11 +419,11 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
       case 'Failed':
         return null;
       case 'Posted':
-        return 'This batch already posted to the ERP.';
+        return 'This journal entry batch already posted to the ERP.';
       case 'Sent':
-        return 'This batch is in flight — awaiting the ERP’s confirmation.';
+        return 'This journal entry batch is in flight — awaiting the ERP’s confirmation.';
       case 'Cancelled':
-        return 'This batch was cancelled.';
+        return 'This journal entry batch was cancelled.';
       default:
         return `A ${batch.Status} batch has not been dispatched — approve and dispatch it from Batch approvals.`;
     }

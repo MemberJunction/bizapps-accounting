@@ -168,7 +168,7 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
     // the card edge without any real column being stretched to get there.
     { field: 'Description', title: 'Memo', width: 'auto', maxWidth: 420, sortable: false },
     { field: 'CompanyID', title: 'Company', width: 160, visible: false, sortable: true },
-    { field: 'JournalEntryBatchID', title: 'Batch', width: 140, visible: false, sortable: true },
+    { field: 'JournalEntryBatchID', title: 'JE batch', width: 140, visible: false, sortable: true },
   ];
 
   ngOnInit(): void {

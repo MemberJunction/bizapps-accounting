@@ -191,7 +191,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
     const id = `draft-${this.tabs.Count + 1}-${Date.now()}`;
     this.tabs.Open({
       Id: id,
-      Label: 'New batch (draft)',
+      Label: 'New JE batch (draft)',
       Icon: 'fa-solid fa-pen-ruler',
       Status: 'draft',
       State: { Criteria: this.defaultCriteria(), ExcludedIDs: [], Memo: '', Preview: null, PreviewStale: false },
@@ -211,7 +211,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
   private batchTabLabel(d: BatchDraft): string {
     const memo = d.Memo?.trim();
     if (memo) return memo;
-    return d.BuiltJournalEntryBatchNumber?.trim() || 'New batch';
+    return d.BuiltJournalEntryBatchNumber?.trim() || 'New JE batch';
   }
 
   /**

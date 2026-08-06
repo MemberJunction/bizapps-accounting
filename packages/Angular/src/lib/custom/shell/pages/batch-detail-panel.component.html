@@ -16,7 +16,7 @@
             Label="No approval task"
             Icon="fa-solid fa-link-slash"
             Variant="warning"
-            title="This built batch has no approval task (MOD-14). The batch is valid — the task raise needs retrying, or nobody will be asked to approve it.">
+            title="This built journal entry batch has no approval task (MOD-14). It is valid — the task raise needs retrying, or nobody will be asked to approve it.">
           </mj-stat-badge>
         }
       </div>
@@ -24,10 +24,10 @@
       <!-- Header verbs — workspace first (the working destination), then the pop-out the element
            doctrine requires. Both close this panel as they hand the screen over. -->
       <div class="bdp__actions">
-        <button type="button" mjButton Variant="outline" Size="sm" (click)="GoToWorkspace()" title="Open this batch in the batch workspace (closes this panel)">
+        <button type="button" mjButton Variant="outline" Size="sm" (click)="GoToWorkspace()" title="Open this journal entry batch in the JE batch workspace (closes this panel)">
           <i class="fa-solid fa-diagram-project" aria-hidden="true"></i> Open in workspace
         </button>
-        <button type="button" mjButton Variant="outline" Size="sm" (click)="PopOut()" title="Open the full batch record (closes this panel)">
+        <button type="button" mjButton Variant="outline" Size="sm" (click)="PopOut()" title="Open the full journal entry batch record (closes this panel)">
           <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i> Open full
         </button>
       </div>
@@ -63,11 +63,11 @@
 
       <!-- Member entries. The count is the TRUE total; the list is a bounded page of it. -->
       <div class="bdp__members-head">
-        <span class="bdp__members-title">Entries in this batch</span>
+        <span class="bdp__members-title">Entries in this journal entry batch</span>
         <span class="bdp__members-count">{{ MemberCount }}</span>
       </div>
       @if (Members.length === 0) {
-        <div class="bdp__empty">No journal entries are attached to this batch.</div>
+        <div class="bdp__empty">No journal entries are attached to this journal entry batch.</div>
       } @else {
         <table class="bdp__members">
           <thead>
@@ -86,7 +86,7 @@
           </tbody>
         </table>
         @if (MembersTruncated) {
-          <div class="bdp__truncated">Showing the first {{ Members.length }} of {{ MemberCount }} entries — open the full batch for the rest.</div>
+          <div class="bdp__truncated">Showing the first {{ Members.length }} of {{ MemberCount }} entries — open the full journal entry batch for the rest.</div>
         }
       }
     }

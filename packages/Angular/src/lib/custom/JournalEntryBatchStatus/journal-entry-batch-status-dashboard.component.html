@@ -1,11 +1,11 @@
 <mj-page-layout>
   <mj-page-header
-    Title="Batch Status"
+    Title="JE Batch Status"
     Icon="fa-solid fa-list-check"
-    Subtitle="Journal-entry batches — filter, sort, and expand a batch to see its consolidated posting (debits first, then credits) by company and account">
+    Subtitle="Journal entry batches — filter, sort, and expand one to see its consolidated posting (debits first, then credits) by company and account">
 
     <div meta>
-      <mj-stat-badge Icon="fa-solid fa-layer-group" [Count]="FilteredCount" Label="batches" Variant="info" />
+      <mj-stat-badge Icon="fa-solid fa-layer-group" [Count]="FilteredCount" Label="JE batches" Variant="info" />
       @for (s of StatusOptions; track s) {
         @if (statusCount(s) > 0) {
           <mj-stat-badge [Count]="statusCount(s)" [Label]="s" [Variant]="BadgeVariant(s)" />
@@ -78,8 +78,8 @@
     } @else if (LoadError) {
       <div class="bs-banner bs-banner--error" role="alert"><i class="fa-solid fa-triangle-exclamation"></i> {{ LoadError }}</div>
     } @else if (FilteredBatches.length === 0) {
-      <mj-empty-state Icon="fa-solid fa-inbox" Title="No batches"
-        Message="No journal-entry batches match the current filters. Build Batch nets all pending journal entries into a new batch.">
+      <mj-empty-state Icon="fa-solid fa-inbox" Title="No journal entry batches"
+        Message="No journal entry batches match the current filters. Build JE batch nets all pending journal entries into a new one.">
       </mj-empty-state>
     } @else {
       <div class="bs-table-region">
@@ -121,7 +121,7 @@
                       @if (row.DetailLoading) {
                         <mj-loading text="Loading entries…" size="small"></mj-loading>
                       } @else if (!row.Detail || row.Detail.Lines.length === 0) {
-                        <div class="bs-detail__empty">This batch has no consolidated movements.</div>
+                        <div class="bs-detail__empty">This journal entry batch has no consolidated movements.</div>
                       } @else {
                         <table class="bs-detail-table">
                           <thead>
@@ -164,7 +164,7 @@
 </mj-page-layout>
 
 <!-- Build-Batch preview: shows the time span + the journal entries a build will include, then confirms. -->
-<mj-dialog [Visible]="BuildPreviewVisible" Title="Build Batch — preview" [Width]="640" (Close)="CloseBuildPreview()">
+<mj-dialog [Visible]="BuildPreviewVisible" Title="Build JE batch — preview" [Width]="640" (Close)="CloseBuildPreview()">
   <div class="bs-preview">
     @if (PreviewLoading) {
       <mj-loading text="Gathering candidate journal entries…" size="small"></mj-loading>
@@ -216,7 +216,7 @@
   <mj-dialog-actions>
     <button mjButton variant="primary" size="sm" [disabled]="Building || PreviewLoading || PreviewCount === 0" (click)="OnBuildJournalEntryBatch()">
       @if (Building) { <i class="fa-solid fa-spinner fa-spin"></i> Building… }
-      @else { <i class="fa-solid fa-layer-group"></i> Build batch ({{ PreviewCount }}) }
+      @else { <i class="fa-solid fa-layer-group"></i> Build JE batch ({{ PreviewCount }}) }
     </button>
     <button mjButton variant="flat" size="sm" [disabled]="Building" (click)="CloseBuildPreview()">Cancel</button>
   </mj-dialog-actions>

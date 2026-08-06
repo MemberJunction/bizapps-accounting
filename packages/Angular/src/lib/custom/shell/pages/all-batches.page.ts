@@ -91,7 +91,7 @@ export class AllBatchesPageComponent implements OnInit, OnDestroy {
   @ViewChild(EntityDataGridComponent) private grid?: EntityDataGridComponent;
 
   public Columns: GridColumnConfig[] = [
-    { field: 'JournalEntryBatchNumber', title: 'Batch №', width: 150, sortable: true },
+    { field: 'JournalEntryBatchNumber', title: 'JE batch №', width: 150, sortable: true },
     { field: 'PostingDate', title: 'Posting date', width: 130, sortable: true },
     { field: 'Status', title: 'Status', width: 110, sortable: true },
     { field: 'TargetSystem', title: 'Target', width: 130, sortable: true },
@@ -228,7 +228,7 @@ export class AllBatchesPageComponent implements OnInit, OnDestroy {
   public get SummaryFigures(): MJASummaryFigure[] {
     const figures: MJASummaryFigure[] = [
       { Label: 'Scope', Value: this.Scope.Label, Tone: 'info' },
-      { Label: 'Batches', Value: this.TotalCount === null ? '—' : String(this.TotalCount) },
+      { Label: 'JE batches', Value: this.TotalCount === null ? '—' : String(this.TotalCount) },
     ];
     for (const s of STATUSES) {
       const n = this.StatusCount(s);

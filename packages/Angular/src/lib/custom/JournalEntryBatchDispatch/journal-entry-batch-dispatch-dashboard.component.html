@@ -1,11 +1,11 @@
 <mj-page-layout>
   <mj-page-header
-    Title="Batch Approvals"
+    Title="JE Batch Approvals"
     Icon="fa-solid fa-paper-plane"
-    Subtitle="Review, approve, and dispatch journal-entry batches to the ERP">
+    Subtitle="Review, approve, and dispatch journal entry batches to the ERP">
 
     <div meta>
-      <mj-stat-badge [Count]="Batches.length" Label="batches" />
+      <mj-stat-badge [Count]="Batches.length" Label="JE batches" />
     </div>
 
     <div actions>
@@ -36,8 +36,8 @@
       @if (Batches.length === 0) {
         <mj-empty-state
           Icon="fa-solid fa-inbox"
-          Title="No batches yet"
-          Message="Batches built from the Batch Status page appear here for review, CFO approval, and dispatch to the ERP.">
+          Title="No journal entry batches yet"
+          Message="Journal entry batches built from the JE Batch Status page appear here for review, CFO approval, and dispatch to the ERP.">
         </mj-empty-state>
       } @else {
         <div class="bd-list">
@@ -111,7 +111,7 @@
                 }
                 @if (canRegenerate(row)) {
                   <button mjButton variant="secondary" size="sm" [disabled]="row.Busy" (click)="OnRegenerate(row)"
-                          title="Unlock this batch's entries and re-gather all current candidates into it.">
+                          title="Unlock this journal entry batch's entries and re-gather all current candidates into it.">
                     <i class="fa-solid fa-rotate"></i> Regenerate
                   </button>
                 }

@@ -19,7 +19,7 @@
        workspace): the card owns the surface + tab strip + scrollable body, we project the identity
        band ([workspaceHeader]) + the body (default slot). Browser-style draggable session tabs. -->
   <mj-workspace-card
-    aria-label="Batch workspace"
+    aria-label="JE batch workspace"
     [Tabs]="Tabs"
     [ActiveId]="ActiveTabId"
     NewTabLabel="New"
@@ -28,7 +28,7 @@
     (NewTabRequested)="openNewDraft()"
     (TabReordered)="ReorderTabs($event)"
     [ShowFooter]="!!Draft"
-    ConfirmLabel="Build batch"
+    ConfirmLabel="Build JE batch"
     ConfirmIcon="fa-solid fa-boxes-stacked"
     [ConfirmDisabled]="!CanBuild"
     [ConfirmTitle]="BuildBlockedReason ?? 'Build the batch'"
@@ -42,7 +42,7 @@
 
     <!-- Identity + status + target — projected into the card's identity band. -->
     <ng-container workspaceHeader>
-      <span class="bw-identity">{{ IsBuilt ? Draft?.BuiltJournalEntryBatchNumber : 'New batch' }}</span>
+      <span class="bw-identity">{{ IsBuilt ? Draft?.BuiltJournalEntryBatchNumber : 'New JE batch' }}</span>
       @if (IsBuilt) {
         <mj-stat-badge Label="Built" Icon="fa-solid fa-check" Variant="success"></mj-stat-badge>
       } @else {
@@ -52,7 +52,7 @@
         [Label]="'Target: ' + (Draft?.Criteria?.TargetSystem ?? '')"
         Icon="fa-solid fa-plug"
         Variant="info"
-        title="The ERP this batch dispatches to.">
+        title="The ERP this journal entry batch dispatches to.">
       </mj-stat-badge>
       <span class="bw-sessionnote">
         <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
@@ -87,7 +87,7 @@
           [(ngModel)]="Draft.Memo"
           (ngModelChange)="OnMemoChanged()"
           [disabled]="IsBuilt" />
-        <span class="bw-hint">Optional — label this batch so you can find it later. The batch number stays its identity.</span>
+        <span class="bw-hint">Optional — label this journal entry batch so you can find it later. The JE batch number stays its identity.</span>
       </label>
 
       <label class="bw-field">
