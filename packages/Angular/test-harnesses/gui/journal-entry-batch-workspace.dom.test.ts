@@ -23,6 +23,7 @@ import {
   MJStatBadgeComponent,
   MJAlertComponent,
   MJEmptyStateComponent,
+  MJDropdownComponent
 } from '@memberjunction/ng-ui-components';
 import { SharedGenericModule } from '@memberjunction/ng-shared-generic';
 import { JournalEntryBatchWorkspacePageComponent } from '../../src/lib/custom/shell/pages/journal-entry-batch-workspace.page';
@@ -51,7 +52,7 @@ describe('Batch workspace (tier 4)', () => {
   it('defers its query: fresh tab has no preview, Build is blocked with the exact reason, Load entries renders', async () => {
     await TestBed.configureTestingModule({
       declarations: [JournalEntryBatchWorkspacePageComponent],
-      imports: [CommonModule, FormsModule, SharedGenericModule, MJButtonDirective, MJPageHeaderInteriorComponent, MJPageBodyInteriorComponent, MJLeftNavContentComponent, MJStatBadgeComponent, MJAlertComponent, MJEmptyStateComponent, WorkspaceCardComponent, WorkspaceTabStripComponent, WorkspaceTipDirective],
+      imports: [CommonModule, FormsModule, SharedGenericModule, MJButtonDirective, MJPageHeaderInteriorComponent, MJPageBodyInteriorComponent, MJLeftNavContentComponent, MJStatBadgeComponent, MJAlertComponent, MJEmptyStateComponent, MJDropdownComponent, WorkspaceCardComponent, WorkspaceTabStripComponent, WorkspaceTipDirective],
       providers: [PageRefreshService],
     }).compileComponents();
     const fixture = TestBed.createComponent(JournalEntryBatchWorkspacePageComponent);
@@ -71,7 +72,7 @@ describe('Batch workspace (tier 4)', () => {
   it('Apply() runs the real PreviewBatch op; candidates match an independent Pending count', async () => {
     await TestBed.configureTestingModule({
       declarations: [JournalEntryBatchWorkspacePageComponent],
-      imports: [CommonModule, FormsModule, SharedGenericModule, MJButtonDirective, MJPageHeaderInteriorComponent, MJPageBodyInteriorComponent, MJLeftNavContentComponent, MJStatBadgeComponent, MJAlertComponent, MJEmptyStateComponent, WorkspaceCardComponent, WorkspaceTabStripComponent, WorkspaceTipDirective],
+      imports: [CommonModule, FormsModule, SharedGenericModule, MJButtonDirective, MJPageHeaderInteriorComponent, MJPageBodyInteriorComponent, MJLeftNavContentComponent, MJStatBadgeComponent, MJAlertComponent, MJEmptyStateComponent, MJDropdownComponent, WorkspaceCardComponent, WorkspaceTabStripComponent, WorkspaceTipDirective],
       providers: [PageRefreshService],
     }).compileComponents();
     const fixture = TestBed.createComponent(JournalEntryBatchWorkspacePageComponent);

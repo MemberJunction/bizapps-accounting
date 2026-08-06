@@ -19,7 +19,16 @@
            (see PageRefreshService). Hidden when the mounted page has nothing to reload, rather
            than offering a button that does nothing. -->
       @if (CanRefreshActivePage) {
-        <mj-refresh-button (Clicked)="RefreshActivePage()"></mj-refresh-button>
+        <!-- Orders-style icon-only outline refresh — the app-wide header convention
+             (Marcelo 2026-08-05 audit: every category header refresh looks like this). -->
+        <button
+          type="button"
+          class="mj-btn mj-btn--outline"
+          (click)="RefreshActivePage()"
+          aria-label="Refresh this page"
+          title="Refresh this page">
+          <i class="fa-solid fa-arrow-rotate-right" aria-hidden="true"></i>
+        </button>
       }
     </div>
   </mj-page-header>

@@ -115,7 +115,8 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
    * Per-page company narrowing, mirroring All batches' Company select. This ANDs *inside* the
    * app-wide company scope (the rail chip) — it narrows the scope, it never widens it.
    */
-  public CompanyID: string | null = null;
+  /** MULTI-select company narrowing (Marcelo 2026-08-05): empty = no narrowing ("All companies"). */
+  public CompanyIDs: string[] = [];
 
   /**
    * `string`, not `JEType | 'All'`, on purpose: the options come from runtime metadata (see
@@ -214,7 +215,7 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
       this.statusFilter(),
       this.TypeFilter === 'All' ? null : `EntryType='${sqlLiteral(this.TypeFilter)}'`,
       this.searchFilter(),
-      this.CompanyID ? `CompanyID='${sqlLiteral(this.CompanyID)}'` : null,
+      this.CompanyIDs.length ? `CompanyID IN (${this.CompanyIDs.map((id) => `'${sqlLiteral(id)}'`).join(',')})` : null,
       // Company scope is app-wide: an empty selection means ALL, resolved inside the service so the
       // rule lives in exactly one place. ANDed with the per-page select above, which only narrows it.
       this.Scope.FilterFor('CompanyID'),
@@ -347,9 +348,25 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
    * filter can never silently shape the grid. The date window counts as ONE deviation (preset
    * changed or custom range), because the preset and the calendar boxes are one filter.
    */
+  /** The checkbox-dropdown hands back the whole selection; store + refetch like any filter edit. */
+  public OnCompanyIDsChanged(ids: string[]): void {
+    this.CompanyIDs = ids;
+    this.OnFilterChanged();
+  }
+
+  /** Dropdown rows for the entry-type filter — the 'All types' sentinel plus the metadata values. */
+  public get EntryTypeChoices(): ReadonlyArray<{ Label: string; Value: string }> {
+    return [{ Label: 'All types', Value: 'All' }, ...this.EntryTypes.map((t) => ({ Label: t, Value: t }))];
+  }
+
+  /** Dropdown rows for the window filter — the shared windows plus the custom-range sentinel. */
+  public get WindowChoices(): ReadonlyArray<{ Id: string; Label: string }> {
+    return [...this.TimeWindows, { Id: 'custom', Label: 'Custom range' }];
+  }
+
   public get AdvancedCount(): number {
     let n = 0;
-    if (this.CompanyID) n++;
+    if (this.CompanyIDs.length) n++;
     if (this.TypeFilter !== 'All') n++;
     if (this.TimeWindow !== 'last90') n++;
     return n;

@@ -37,22 +37,14 @@
 
       <label class="ds-field">
         <span class="ds-field__label">Target ERP</span>
-        <select class="mj-input" [(ngModel)]="TargetFilter" (ngModelChange)="OnFilterChanged()" aria-label="Target ERP">
-          <option value="All">All systems</option>
-          @for (t of Targets; track t) {
-            <option [value]="t">{{ t }}</option>
-          }
-        </select>
+        <mj-dropdown [Data]="TargetChoices" TextField="Label" ValueField="Value" [ValuePrimitive]="true"
+          [(ngModel)]="TargetFilter" (ngModelChange)="OnFilterChanged()" aria-label="Target ERP" />
       </label>
 
       <label class="ds-field">
         <span class="ds-field__label">Window</span>
-        <select class="mj-input" [(ngModel)]="TimeWindow" (ngModelChange)="OnWindowChanged()" aria-label="Time window">
-          @for (w of TimeWindows; track w.Id) {
-            <option [value]="w.Id">{{ w.Label }}</option>
-          }
-          <option value="custom">Custom range</option>
-        </select>
+        <mj-dropdown [Data]="WindowChoices" TextField="Label" ValueField="Id" [ValuePrimitive]="true"
+          [(ngModel)]="TimeWindow" (ngModelChange)="OnWindowChanged()" aria-label="Time window" />
       </label>
 
       <label class="ds-field ds-field--date">

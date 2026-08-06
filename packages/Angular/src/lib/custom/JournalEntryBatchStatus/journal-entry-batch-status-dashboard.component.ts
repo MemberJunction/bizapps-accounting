@@ -1,4 +1,5 @@
 import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@angular/core';
+import { PageRefreshService } from '../../transfer-pending/shell-refresh/page-refresh.service';
 import { NormalizeUUID, RegisterClass } from '@memberjunction/global';
 import { BaseDashboard } from '@memberjunction/ng-shared';
 import { ResourceData } from '@memberjunction/core-entities';
@@ -93,7 +94,8 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
 
   /** Filters. Empty status set = show all; null company/target = "All". */
   public SelectedStatuses = new Set<BatchStatus>();
-  public SelectedCompanyID: string | null = null;
+  /** MULTI-select company narrowing (Marcelo 2026-08-05): empty = no narrowing. */
+  public SelectedCompanyIDs: string[] = [];
   public SelectedTarget: TargetSystem | null = null;
   /** Target used by the in-page Build action (defaults to the filtered target, else Business Central). */
   public BuildTarget: TargetSystem = 'BusinessCentral';
@@ -114,10 +116,25 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
 
   async GetResourceDisplayName(_data: ResourceData): Promise<string> { return 'Batch Status'; }
 
+  /** The category header's Refresh reaches this dashboard through the shared channel —
+   *  the inline mj-refresh-button was removed (Marcelo 2026-08-05: the header owns the ONE
+   *  refresh control, orders-style). Subscribing is also what makes the header button SHOW
+   *  while this page is mounted (CanRefreshActivePage = HasSubscriber). */
+  /** OPTIONAL: provided per category shell; a directly-mounted resource (or a bare TestBed) has none. */
+  private pageRefresh = inject(PageRefreshService, { optional: true });
+  private refreshSub: { unsubscribe: () => void } | null = null;
+
   protected initDashboard(): void {
+    this.refreshSub = this.pageRefresh?.OnRefresh(() => void this.Reload()) ?? null;
     // Value-lists come from entity metadata (CHECK-constraint values), never hardcoded.
     this.StatusOptions = this.fieldValues<BatchStatus>(BATCH_ENTITY, 'Status');
     this.TargetOptions = this.fieldValues<TargetSystem>(BATCH_ENTITY, 'TargetSystem');
+  }
+
+  public override ngOnDestroy(): void {
+    // Unsubscribing keeps the header's Refresh page-aware: a destroyed page stops counting.
+    this.refreshSub?.unsubscribe();
+    super.ngOnDestroy();
   }
 
   /** The metadata-defined values for a value-list field — the source of truth for the field's CHECK-constraint union. */
@@ -151,8 +168,16 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
   public ShowAllStatuses(): void { this.SelectedStatuses.clear(); this.cdr.markForCheck(); }
   public get AllStatusesShown(): boolean { return this.SelectedStatuses.size === 0; }
 
-  public OnCompanyChange(companyID: string): void { this.SelectedCompanyID = companyID || null; this.cdr.markForCheck(); }
-  public OnTargetChange(target: string): void { this.SelectedTarget = (target as TargetSystem) || null; this.cdr.markForCheck(); }
+  public OnCompanyIDsChanged(ids: string[]): void { this.SelectedCompanyIDs = ids; this.cdr.markForCheck(); }
+  /** ERP targets shaped for the filter dropdown (string list + a null 'All systems' default row). */
+  public get TargetChoices(): ReadonlyArray<{ Label: string; Value: string }> {
+    return this.TargetOptions.map((t) => ({ Label: t, Value: t }));
+  }
+
+  /** Dropdown sentinel rows (were '' <option>s). */
+  public readonly AllSystemsDefault = { Value: null, Label: 'All systems' };
+
+    public OnTargetChange(target: string): void { this.SelectedTarget = (target as TargetSystem) || null; this.cdr.markForCheck(); }
   public OnBuildTargetChange(target: string): void { this.BuildTarget = target as TargetSystem; this.cdr.markForCheck(); }
   public OnFromDateChange(v: string): void { this.FromDate = v || null; this.ActiveWindow = null; this.cdr.markForCheck(); }
   public OnToDateChange(v: string): void { this.ToDate = v || null; this.ActiveWindow = null; this.cdr.markForCheck(); }
@@ -205,7 +230,7 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
   public get FilteredBatches(): BatchRow[] {
     const rows = this.Batches.filter(b =>
       (this.SelectedStatuses.size === 0 || this.SelectedStatuses.has(b.Status)) &&
-      (!this.SelectedCompanyID || b.CompanyIDs.includes(this.SelectedCompanyID)) &&
+      (this.SelectedCompanyIDs.length === 0 || this.SelectedCompanyIDs.some((id) => b.CompanyIDs.includes(id))) &&
       (!this.SelectedTarget || b.TargetSystem === this.SelectedTarget) &&
       this.inSpan(b));
     return this.sortRows(rows);

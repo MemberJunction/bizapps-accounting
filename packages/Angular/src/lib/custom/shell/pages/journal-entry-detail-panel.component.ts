@@ -136,8 +136,10 @@ export class JournalEntryDetailPanelComponent extends BaseAngularComponent {
   @Output() Changed = new EventEmitter<void>();
   /**
    * "Open in workspace" — carries the entry ID; the host routes it to the JE workspace page via the
-   * category's `GoToPage('workspace', id)`. Same close-as-you-leave rule as PopOut: the workspace is
-   * the destination, so this panel gets out of the way.
+   * category's `GoToPage('workspace', id)`. Close-as-you-leave: the workspace is the destination,
+   * so this panel gets out of the way. This is the panel's ONE open action (Marcelo 2026-08-05):
+   * the old "Open full" pop-out to the MJ form host was removed — the workspace IS the full-depth
+   * home for an entry, so two open verbs were one too many.
    */
   @Output() OpenInWorkspace = new EventEmitter<string>();
 
@@ -207,27 +209,8 @@ export class JournalEntryDetailPanelComponent extends BaseAngularComponent {
   }
 
   /**
-   * Pop-out (↗) to the entry's full-depth home — the MJ form host.
-   *
-   * **The panel closes as part of opening it** (GUI feedback 2026-07-16): the slide-in sits ABOVE
-   * the main screen, so leaving it open meant "Open full" opened the full entry *behind* the panel
-   * that hid it. Opening the full record and staying open is never the intent — the end state is
-   * the full record, unobstructed.
-   */
-  public PopOut(): void {
-    if (!this.Header) return;
-    openBizDetail(this.forms, {
-      entityName: JE_ENTITY,
-      primaryKey: CompositeKey.FromID(this.Header.ID),
-      title: `Journal entry ${this.Header.EntryNumber}`,
-      mode: 'dialog',
-    });
-    this.Closed.emit();
-  }
-
-  /**
    * Cross-app deep link to the order that booked this entry (the GUI-review navigation fix).
-   * Same rule as PopOut: we hand the screen over, so this panel gets out of the way.
+   * Close-as-you-leave: we hand the screen over, so this panel gets out of the way.
    */
   public OpenSourceOrder(): void {
     if (!this.Header?.OrderID) return;

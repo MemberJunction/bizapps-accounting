@@ -13,6 +13,7 @@
       [Bare]="true"
       [Search]="SearchText"
       SearchPlaceholder="Name, code or ID…"
+      SearchLabel="Search accounts"
       [Presets]="TypeChips"
       [ActiveKeys]="ActiveTypeKeys"
       [HasAdvanced]="true"
@@ -20,37 +21,27 @@
       [(AdvancedOpen)]="AdvancedOpen"
       (SearchChanged)="OnToolbarSearch($event)"
       (PresetToggled)="OnTypeToggled($event)">
-      <span toolbar-actions>
-        <button type="button" mjButton Variant="primary" Size="sm" (click)="StartCreate()">
-          <i class="fa-solid fa-plus" aria-hidden="true"></i> New account
-        </button>
-      </span>
       <label class="gla-field">
         <span class="gla-field__label">Company</span>
-        <select class="mj-input" [(ngModel)]="FilterCompanyID" aria-label="Company">
-          <option value="">All companies</option>
-          @for (c of CompanyOptions; track c.ID) {
-            <option [value]="c.ID">{{ c.Name }}</option>
-          }
-        </select>
+        <!-- CHECKBOX multi-select (Marcelo 2026-08-05): narrow to any set of companies; empty = all. -->
+        <mja-check-dropdown
+          [Options]="CompanyOptions"
+          [SelectedIDs]="FilterCompanyIDs"
+          AllLabel="All companies"
+          AriaLabel="Company"
+          (SelectedIDsChange)="OnFilterCompanyIDsChanged($event)" />
       </label>
       <label class="gla-field">
         <span class="gla-field__label">Status</span>
-        <select class="mj-input" [(ngModel)]="FilterActive" aria-label="Status">
-          <option value="">Active &amp; inactive</option>
-          <option value="Active">Active only</option>
-          <option value="Inactive">Inactive only</option>
-        </select>
+        <mj-dropdown [Data]="StatusChoices" TextField="Label" ValueField="Value" [ValuePrimitive]="true"
+          [(ngModel)]="FilterActive" aria-label="Status" />
       </label>
       <label class="gla-field">
         <!-- IsSystemSeeded exists for exactly this distinction: platform-shipped accounts vs.
              deployment customizations. -->
         <span class="gla-field__label">Source</span>
-        <select class="mj-input" [(ngModel)]="FilterSource" aria-label="Source">
-          <option value="">Seeded &amp; custom</option>
-          <option value="Seeded">System-seeded</option>
-          <option value="Custom">Custom</option>
-        </select>
+        <mj-dropdown [Data]="SourceChoices" TextField="Label" ValueField="Value" [ValuePrimitive]="true"
+          [(ngModel)]="FilterSource" aria-label="Source" />
       </label>
     </mja-list-toolbar>
   </div>
@@ -87,12 +78,9 @@
                UNIQUE(CompanyID, Code)) — there is no pool of unowned accounts to hook up later.
                On edit the company is fixed: moving an account between charts would silently break
                its rollup parent and could collide with the target chart's codes. -->
-          <select class="mj-input" [(ngModel)]="Draft.CompanyID" [disabled]="!!Draft.ID" aria-label="Owning company">
-            <option value="">Choose the owning company…</option>
-            @for (c of CompanyOptions; track c.ID) {
-              <option [value]="c.ID">{{ c.Name }}</option>
-            }
-          </select>
+          <mj-dropdown [Data]="CompanyOptions" TextField="Name" ValueField="ID" [ValuePrimitive]="true"
+            [DefaultItem]="OwningCompanyDefault" [Disabled]="!!Draft.ID"
+            [(ngModel)]="Draft.CompanyID" aria-label="Owning company" />
           <span class="gla-help">{{ Draft.ID ? 'An account stays in the chart it was created in.' : 'This company will own the account.' }}</span>
         </label>
 
@@ -109,11 +97,8 @@
 
         <label class="gla-field">
           <span class="gla-field__label">Account type</span>
-          <select class="mj-input" [(ngModel)]="Draft.AccountType" aria-label="Account type">
-            @for (t of AccountTypes; track t) {
-              <option [value]="t">{{ t }}</option>
-            }
-          </select>
+          <mj-dropdown [Data]="AccountTypes" [ValuePrimitive]="true"
+            [(ngModel)]="Draft.AccountType" aria-label="Account type" />
         </label>
 
         <label class="gla-field gla-field--wide">
@@ -121,12 +106,9 @@
           <!-- The picker offers only THIS company's own accounts, minus this account and everything
                beneath it. That IS what a parent is: the account this one rolls up into, inside the
                same chart (e.g. 11200 Cash parents 11201 Cash — Operating). -->
-          <select class="mj-input" [(ngModel)]="Draft.ParentGLAccountID" [disabled]="!Draft.CompanyID" aria-label="Parent account">
-            <option value="">None — top of the chart</option>
-            @for (p of ParentOptions; track p.ID) {
-              <option [value]="p.ID">{{ p.Label }}</option>
-            }
-          </select>
+          <mj-dropdown [Data]="ParentOptions" TextField="Label" ValueField="ID" [ValuePrimitive]="true"
+            [DefaultItem]="ParentNoneDefault" [Disabled]="!Draft.CompanyID"
+            [(ngModel)]="Draft.ParentGLAccountID" aria-label="Parent account" />
           <span class="gla-help">
             The account this one rolls up into — always another account in {{ Draft.CompanyID ? 'this same company’s chart' : 'the owning company’s chart' }}.
             Leave as “None” for a top-level account.
@@ -135,12 +117,9 @@
 
         <label class="gla-field">
           <span class="gla-field__label">Currency</span>
-          <select class="mj-input" [(ngModel)]="Draft.CurrencyCode" aria-label="Currency">
-            <option value="">Company’s functional currency</option>
-            @for (c of CurrencyOptions; track c.Code) {
-              <option [value]="c.Code">{{ c.Code }} — {{ c.Name }}</option>
-            }
-          </select>
+          <mj-dropdown [Data]="CurrencyChoices" TextField="Label" ValueField="Code" [ValuePrimitive]="true"
+            [DefaultItem]="CurrencyDefault"
+            [(ngModel)]="Draft.CurrencyCode" aria-label="Currency" />
         </label>
 
         <label class="gla-field">

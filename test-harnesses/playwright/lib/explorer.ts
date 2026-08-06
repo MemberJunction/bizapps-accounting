@@ -137,6 +137,17 @@ export async function scopeToCompany(page: Page, nameContains: string): Promise<
   await page.waitForTimeout(3000); // pages re-query on scope change
 }
 
+/**
+ * Pick an option in an `mj-dropdown` (the app converted every native <select> to MJ controls,
+ * Marcelo 2026-08-05). The trigger carries the aria-label on the HOST element; the options render
+ * in a CDK overlay at document level as `.mj-dropdown-option` rows.
+ */
+export async function pickMjDropdown(scope: Page | Locator, page: Page, ariaLabel: string, optionText: string | RegExp): Promise<void> {
+  await scope.locator(`mj-dropdown[aria-label="${ariaLabel}"]`).first().click();
+  await page.locator('.mj-dropdown-panel .mj-dropdown-option', { hasText: optionText }).first().click();
+  await page.waitForTimeout(400);
+}
+
 /** The company <select> options (excludes disabled placeholders). */
 export async function companyOptions(page: Page): Promise<string[]> {
   return page.evaluate(() =>

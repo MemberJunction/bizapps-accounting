@@ -303,6 +303,14 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
 
   // ─── filter controls ─────────────────────────────────────────────────────────
 
+  /** Choice rows (were inline <option>s). */
+  public get TargetChoices(): ReadonlyArray<{ Label: string; Value: string }> {
+    return [{ Label: 'All systems', Value: 'All' }, ...this.Targets.map((t) => ({ Label: t, Value: t }))];
+  }
+  public get WindowChoices(): ReadonlyArray<{ Id: string; Label: string }> {
+    return [...this.TimeWindows, { Id: 'custom', Label: 'Custom range' }];
+  }
+
   public OnFilterChanged(): void {
     this.applyFilters();
   }

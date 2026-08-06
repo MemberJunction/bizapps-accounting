@@ -88,6 +88,13 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
    * not exist server-side (see je-rules.awaitsApproval / QUESTIONS.md#q6), so 'All' really does mean
    * every Pending entry, manual ones included. Label says what the build does.
    */
+  /** Dropdown sentinel + choice rows (were inline <option>s). */
+  public readonly AllCompaniesDefault = { ID: null, Name: 'All companies' };
+  public readonly SourceChoices: ReadonlyArray<{ Label: string; Value: string }> = [
+    { Label: 'Standard (oldest-forward)', Value: 'Standard' },
+    { Label: 'From a saved view…', Value: 'View' },
+  ];
+
   public readonly EntryTypeScopes: ReadonlyArray<{ Id: EntryTypeScope; Label: string }> = [
     { Id: 'All', Label: 'All (system + manual)' },
     { Id: 'System', Label: 'System only' },
@@ -114,31 +121,31 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
   /**
    * An existing batch to open as a read-only record tab — the target of the batch detail panel's
    * "Open in workspace". The category passes its `PageParam` here (GoToPage('workspace', id)). The
-   * tab uses the same `BuiltBatchNumber` receipt mode a just-built batch gets: viewing where
+   * tab uses the same `BuiltJournalEntryBatchNumber` receipt mode a just-built batch gets: viewing where
    * batches live, never editing a built batch.
    */
   @Input()
-  set FocusBatchID(value: string | null) {
-    if (!value || value === this._focusBatchID) return;
-    this._focusBatchID = value;
+  set FocusJournalEntryBatchID(value: string | null) {
+    if (!value || value === this._focusJournalEntryBatchID) return;
+    this._focusJournalEntryBatchID = value;
     if (this.initialized) void this.openExistingBatch(value);
     else this.pendingFocusID = value;
   }
-  get FocusBatchID(): string | null {
-    return this._focusBatchID;
+  get FocusJournalEntryBatchID(): string | null {
+    return this._focusJournalEntryBatchID;
   }
-  private _focusBatchID: string | null = null;
+  private _focusJournalEntryBatchID: string | null = null;
   private pendingFocusID: string | null = null;
   private initialized = false;
 
   /** Load the batch and open it as a locked record tab labeled by batch number. */
   private async openExistingBatch(id: string): Promise<void> {
     const rv = RunView.FromMetadataProvider(this.ProviderToUse);
-    const res = await rv.RunView<{ ID: string; BatchNumber: string; Memo: string | null }>(
+    const res = await rv.RunView<{ ID: string; JournalEntryBatchNumber: string; Memo: string | null }>(
       {
         EntityName: 'MJ_BizApps_Accounting: Journal Entry Batches',
         ExtraFilter: `ID='${id}'`,
-        Fields: ['ID', 'BatchNumber', 'Memo'],
+        Fields: ['ID', 'JournalEntryBatchNumber', 'Memo'],
         ResultType: 'simple',
       },
       this.ProviderToUse.CurrentUser,
@@ -150,7 +157,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
     }
     this.tabs.Open({
       Id: `batch-view-${id}`,
-      Label: row.BatchNumber,
+      Label: row.JournalEntryBatchNumber,
       Icon: 'fa-solid fa-layer-group',
       Status: 'complete', // read-only record — a built batch is immutable from here
       State: {
@@ -159,7 +166,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
         Memo: row.Memo ?? '',
         Preview: null,
         PreviewStale: false,
-        BuiltBatchNumber: row.BatchNumber,
+        BuiltJournalEntryBatchNumber: row.JournalEntryBatchNumber,
       },
     });
     this.cdr.markForCheck();

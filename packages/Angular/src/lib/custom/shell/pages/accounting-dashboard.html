@@ -7,20 +7,9 @@
      the tinted `icon-wrapper` chip above a label-over-value, the 16px radius + lift-on-hover
      surface, the `section-header` + `section-title` card head, and the `activity-item` row (rounded
      icon chip · details · status pill). Same idiom, MJ tokens only. -->
-<!-- [actions] is the verbs slot (chrome conventions §10). The ONE refresh control lives in the shell
-     header — deliberately not repeated here — so this slot carries only the section's create verb.
-     The page cannot navigate itself (Explorer resources are not routed), so the button emits
-     CreateRequested and the hosting shell decides what "create" does. -->
-<mj-page-header-interior>
-  @if (CreateLabel) {
-    <div actions>
-      <button mjButton variant="primary" size="sm" (click)="RequestCreate()">
-        <i class="fa-solid fa-plus" aria-hidden="true"></i>
-        <span>{{ CreateLabel }}</span>
-      </button>
-    </div>
-  }
-</mj-page-header-interior>
+<!-- NO header-interior card here (Marcelo 2026-08-05): its only content was the section's create
+     verb, and that verb now lives in the CATEGORY header (promoted 2026-08-04) — a card holding a
+     duplicate button was pure redundancy. The dashboard body IS the page. -->
 
 <!-- The scrollable body MUST be <mj-page-body-interior>: it is the interior primitive
      <mj-left-nav-content> expects, and it owns the padding that keeps content off the rail. Bare

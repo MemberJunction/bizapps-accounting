@@ -76,8 +76,6 @@ export class JournalEntryBatchesDashboardPageComponent extends AccountingDashboa
   public Scope = inject(CompanyScopeService);
   public Title = 'Batches';
   public Subtitle = 'What is open, waiting, or stuck on its way to the ERP';
-  /** The section's create verb — the shell must bind (CreateRequested). See the base class. */
-  public override CreateLabel = 'New batch';
 
   /**
    * The composition cards. Derived ENTIRELY from `BatchCounts` — every segment is a number

@@ -17,19 +17,13 @@
   <div toolbar class="al-filters">
     <label class="al-field">
       <span class="al-field__label">Role</span>
-      <select class="mj-input" [(ngModel)]="RoleFilter" (ngModelChange)="OnFilterChanged()" aria-label="Role">
-        <option value="All">All roles</option>
-        @for (r of Roles; track r.ID) {
-          <option [value]="r.ID">{{ r.Name }}</option>
-        }
-      </select>
+      <mj-dropdown [Data]="RoleChoices" TextField="Name" ValueField="ID" [ValuePrimitive]="true"
+        [(ngModel)]="RoleFilter" (ngModelChange)="OnFilterChanged()" aria-label="Role" />
     </label>
     <label class="al-field">
       <span class="al-field__label">Status</span>
-      <select class="mj-input" [(ngModel)]="StatusFilter" (ngModelChange)="OnFilterChanged()" aria-label="Status">
-        <option value="Active">Active only</option>
-        <option value="All">All</option>
-      </select>
+      <mj-dropdown [Data]="LinkStatusChoices" TextField="Label" ValueField="Value" [ValuePrimitive]="true"
+        [(ngModel)]="StatusFilter" (ngModelChange)="OnFilterChanged()" aria-label="Status" />
     </label>
     <label class="al-field al-field--search">
       <span class="al-field__label">Search</span>

@@ -71,7 +71,8 @@ export class AllBatchesPageComponent implements OnInit, OnDestroy {
   public SelectedStatuses = new Set<BatchStatus>();
 
   /** Per-page company narrowing — ANDs inside the app-wide scope, never widens it. */
-  public CompanyID: string | null = null;
+  /** MULTI-select company narrowing (Marcelo 2026-08-05): empty = no narrowing ("All companies"). */
+  public CompanyIDs: string[] = [];
 
   public Search = '';
 
@@ -88,7 +89,7 @@ export class AllBatchesPageComponent implements OnInit, OnDestroy {
   public RefreshToken = 0;
 
   public Columns: GridColumnConfig[] = [
-    { field: 'BatchNumber', title: 'Batch №', width: 150, sortable: true },
+    { field: 'JournalEntryBatchNumber', title: 'Batch №', width: 150, sortable: true },
     { field: 'PostingDate', title: 'Posting date', width: 130, sortable: true },
     { field: 'Status', title: 'Status', width: 110, sortable: true },
     { field: 'TargetSystem', title: 'Target', width: 130, sortable: true },
@@ -123,7 +124,7 @@ export class AllBatchesPageComponent implements OnInit, OnDestroy {
     this.GridParams = {
       EntityName: BATCH_ENTITY,
       ExtraFilter: filter || undefined,
-      OrderBy: 'PostingDate DESC, BatchNumber DESC',
+      OrderBy: 'PostingDate DESC, JournalEntryBatchNumber DESC',
     };
     this.cdr.markForCheck();
     void this.refreshStats(filter);
@@ -135,7 +136,7 @@ export class AllBatchesPageComponent implements OnInit, OnDestroy {
       this.dateFilter(),
       this.statusFilter(),
       this.searchFilter(),
-      this.CompanyID ? `CompanyID='${sqlLiteral(this.CompanyID)}'` : null,
+      this.CompanyIDs.length ? `CompanyID IN (${this.CompanyIDs.map((id) => `'${sqlLiteral(id)}'`).join(',')})` : null,
       this.Scope.FilterFor('CompanyID'),
     );
   }
@@ -156,7 +157,7 @@ export class AllBatchesPageComponent implements OnInit, OnDestroy {
 
   /** Batch № + ERP reference + the full id — the strings a person actually pastes. */
   private searchFilter(): string | null {
-    return likeContains(['BatchNumber', 'ExternalBatchRef', 'ID'], this.Search);
+    return likeContains(['JournalEntryBatchNumber', 'ExternalJournalEntryBatchRef', 'ID'], this.Search);
   }
 
   // ─── overview stats (summary strip) ──────────────────────────────────────────
@@ -256,9 +257,20 @@ export class AllBatchesPageComponent implements OnInit, OnDestroy {
   public AdvancedOpen = false;
 
   /** The date window counts as ONE deviation — the preset and the calendar are one filter. */
+  /** The checkbox-dropdown hands back the whole selection; store + refetch like any filter edit. */
+  public OnCompanyIDsChanged(ids: string[]): void {
+    this.CompanyIDs = ids;
+    this.OnFilterChanged();
+  }
+
+  /** Dropdown rows for the window filter — the shared windows plus the custom-range sentinel. */
+  public get WindowChoices(): ReadonlyArray<{ Id: string; Label: string }> {
+    return [...this.TimeWindows, { Id: 'custom', Label: 'Custom range' }];
+  }
+
   public get AdvancedCount(): number {
     let n = 0;
-    if (this.CompanyID) n++;
+    if (this.CompanyIDs.length) n++;
     if (this.TimeWindow !== 'last90') n++;
     return n;
   }

@@ -49,13 +49,13 @@
     <mj-left-nav-content>
       @switch (ActivePageId) {
         @case ('dashboard') {
-          <mj-batches-dashboard-page (CreateRequested)="GoToPage('workspace')"></mj-batches-dashboard-page>
+          <mj-batches-dashboard-page></mj-batches-dashboard-page>
         }
         @case ('all-batches') {
           <!-- The list-idiom page (2026-08-04) — replaced the old BatchStatus dashboard here; that
                dashboard still exists and can host elsewhere if wanted. -->
           <mj-all-batches-page
-            (CreateRequested)="GoToPage('workspace')"
+           
             (WorkspaceRequested)="GoToPage('workspace', $event)">
           </mj-all-batches-page>
         }
@@ -63,7 +63,7 @@
           <mj-batch-dispatch-dashboard></mj-batch-dispatch-dashboard>
         }
         @case ('workspace') {
-          <mj-batch-workspace-page [FocusBatchID]="PageParam"></mj-batch-workspace-page>
+          <mj-batch-workspace-page [FocusJournalEntryBatchID]="PageParam"></mj-batch-workspace-page>
         }
         @case ('dispatch') {
           <mj-dispatch-status-page></mj-dispatch-status-page>

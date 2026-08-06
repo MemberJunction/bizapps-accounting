@@ -36,9 +36,6 @@
         <button type="button" mjButton Variant="outline" Size="sm" (click)="GoToWorkspace()" title="Open this entry in the JE workspace (closes this panel)">
           <i class="fa-solid fa-diagram-project" aria-hidden="true"></i> Open in workspace
         </button>
-        <button type="button" mjButton Variant="outline" Size="sm" (click)="PopOut()" title="Open the full entry (closes this panel)">
-          <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i> Open full
-        </button>
         @if (h.OrderID) {
           <button type="button" mjButton Variant="outline" Size="sm" (click)="OpenSourceOrder()" title="Open the order that booked this entry">
             <i class="fa-solid fa-cart-shopping" aria-hidden="true"></i> Open source order

@@ -53,3 +53,31 @@ export function openBizDetail(forms: MJFormPresenterService, opts: BizDetailOpti
     ShowFooter: true,
   });
 }
+
+
+/** Options for {@link openBizCreate} — same surfaces, no key (the form opens on a NEW record). */
+export interface BizCreateOptions {
+  entityName: string;
+  title?: string;
+  mode?: BizDetailMode;
+  /** Default field values for the new record (e.g. a pre-picked parent). */
+  newRecordValues?: Record<string, unknown>;
+}
+
+/**
+ * Open a CREATE form in the standardized bizapps surface (slide-in by default). Same curated
+ * config as {@link openBizDetail}; omitting the key is what puts the MJ form host in new-record
+ * mode (new -> edit by default).
+ */
+export function openBizCreate(forms: MJFormPresenterService, opts: BizCreateOptions) {
+  const slideIn = (opts.mode ?? 'slide-in') === 'slide-in';
+  return forms.Open({
+    EntityName: opts.entityName,
+    Title: opts.title,
+    NewRecordValues: opts.newRecordValues,
+    Presentation: slideIn ? 'slide-in' : 'dialog',
+    ...(slideIn ? { WidthPx: 560 } : { Width: '760px' }),
+    Config: { ...BIZ_DETAIL_CONFIG, WidthMode: slideIn ? 'full-width' : 'centered' },
+    ShowFooter: true,
+  });
+}

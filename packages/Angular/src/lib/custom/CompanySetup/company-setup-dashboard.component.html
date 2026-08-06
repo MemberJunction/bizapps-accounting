@@ -8,12 +8,6 @@
       <mj-stat-badge Icon="fa-solid fa-building" [Count]="Companies.length" Label="companies" Variant="info" />
     </div>
 
-    <div actions>
-      <button mjButton variant="primary" size="sm" (click)="NewCompany()">
-        <i class="fa-solid fa-plus"></i> New company
-      </button>
-      <mj-refresh-button [Loading]="IsBusy" (Clicked)="loadData()"></mj-refresh-button>
-    </div>
   </mj-page-header>
 
   <mj-page-body>
@@ -84,10 +78,9 @@
                       Make me the CFO
                     </button>
                     <span class="cs-cfo__or">or assign someone</span>
-                    <select class="mj-input cs-cfo__select" [(ngModel)]="SelectedUserID">
-                      <option value="" disabled>Select a user…</option>
-                      @for (u of Users; track u.ID) { <option [value]="u.ID">{{ u.Name }}</option> }
-                    </select>
+                    <mj-dropdown class="cs-cfo__select" [Data]="Users" TextField="Name" ValueField="ID" [ValuePrimitive]="true"
+                      Placeholder="Select a user…"
+                      [(ngModel)]="SelectedUserID" aria-label="CFO user" />
                     <button mjButton variant="success" size="sm" [disabled]="!CanAssignSelected" (click)="AssignSelectedCFO()">
                       <i class="fa-solid fa-check"></i> Assign
                     </button>

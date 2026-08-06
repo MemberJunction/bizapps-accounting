@@ -19,9 +19,13 @@ import {
   MJStatBadgeComponent,
   MJAlertComponent,
   MJEmptyStateComponent,
+  MJDropdownComponent
 } from '@memberjunction/ng-ui-components';
 import { SharedGenericModule } from '@memberjunction/ng-shared-generic';
 import { GLAccountsPageComponent } from '../../src/lib/custom/shell/pages/gl-accounts.page';
+import { MJASummaryStripComponent } from '../../src/lib/custom/shared/summary-strip.component';
+import { MJACheckDropdownComponent } from '../../src/lib/custom/shared/check-dropdown.component';
+import { MJAListToolbarComponent } from '../../src/lib/custom/shared/list-toolbar.component';
 import { PageRefreshService } from '../../src/lib/transfer-pending/shell-refresh/page-refresh.service';
 
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
@@ -40,7 +44,7 @@ async function waitFor(fixture: ComponentFixture<GLAccountsPageComponent>, cond:
 async function mount(): Promise<ComponentFixture<GLAccountsPageComponent>> {
   await TestBed.configureTestingModule({
     declarations: [GLAccountsPageComponent],
-    imports: [CommonModule, FormsModule, SharedGenericModule, MJButtonDirective, MJPageHeaderInteriorComponent, MJPageBodyInteriorComponent, MJStatBadgeComponent, MJAlertComponent, MJEmptyStateComponent],
+    imports: [CommonModule, FormsModule, SharedGenericModule, MJButtonDirective, MJPageHeaderInteriorComponent, MJPageBodyInteriorComponent, MJStatBadgeComponent, MJAlertComponent, MJEmptyStateComponent, MJASummaryStripComponent, MJAListToolbarComponent, MJACheckDropdownComponent, MJDropdownComponent],
     providers: [PageRefreshService],
   }).compileComponents();
   const fixture = TestBed.createComponent(GLAccountsPageComponent);
@@ -80,7 +84,7 @@ describe('All Accounts page (tier 4)', () => {
     const fixture = await mount();
     const comp = fixture.componentInstance;
     const co1Expected = await new RunView().RunView({ EntityName: GL_ENTITY, ExtraFilter: `CompanyID='${DEMO_CO1}'`, Fields: ['ID'], MaxRows: 1, ResultType: 'simple' });
-    comp.FilterCompanyID = DEMO_CO1.toUpperCase();
+    comp.OnFilterCompanyIDsChanged([DEMO_CO1.toUpperCase()]); // multi-select filter (2026-08-05)
     fixture.detectChanges();
     // `Filtered` is the template's data source — assert it matches the independent per-company count
     // and that no row outside the filter leaks through.

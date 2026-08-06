@@ -13,7 +13,35 @@ create + open questions for the human, recorded so dev can roll through and circ
 Tiers: **1** Vitest (unit) · **2** server (tsx, in-process direct SQL) · **3** API (GraphQL→MJAPI) ·
 **4** GUI/DOM (no-browser — parked, mjdev overlay) · **5** Playwright (browser e2e, pre-PR only).
 
-## ⭐ CURRENT STATE — 2026-08-05 JOURNALENTRYBATCH RENAME BATTERY (full pyramid vs the identifier refactor)
+## ⭐ CURRENT STATE — 2026-08-05 UI-WAVE BATTERY (post-#43 merge + the chrome/control wave)
+
+Scope: PR #43 merged into the rename branch (conflict-free; git followed the renames; the guarded
+sweep re-ran over #43's 16 arriving files — zero leftovers) plus the UI wave (Marcelo's 2026-08-05
+task list): JE panel "Open full" removed (workspace = the ONE open action) · ALL 34 native <select>s
+replaced with MJ controls (mj-dropdown CVA; new shared mja-check-dropdown CHECKBOX multi-select for
+company filters on All-JE / All-batches / All-accounts / CoA / batch-status — batch-workspace's
+company stays single: it is a BUILD CRITERION under single-company batches, MOD-15) · every inline
+mj-refresh-button removed and all five category headers on the orders-style outline refresh
+(dashboards subscribe to PageRefreshService, OPTIONAL injection — provided per category shell) ·
+create verbs hoisted: the category header shows the ACTIVE PAGE's create verb (New account / New
+dimension / New company), dashboard header-cards deleted · Dimensions page: status filter + New
+dimension + per-row details opening the record's real form in the MJ slide-in (openBizCreate added
+to the standardized helper) · slide-in audit: app already 100% on mj-slide-panel/MJFormPresenter —
+nothing to swap.
+
+| Tier | Suite | Result |
+|---|---|---|
+| 1 | Angular units | **125/125** |
+| 4 | GUI DOM suite | **9/9** (specs updated: TestBed imports for the new controls; company-setup asserts the create button's INTENTIONAL absence; gl-accounts drives the multi-select API) |
+| live | keystone sweep over every new surface (15 checks) | **15/15**, zero console/page errors (2 initial FAILs were probe-timing, re-proven individually) |
+| 5 | Playwright full suite (specs now drive mj-dropdown via pickMjDropdown) | **8/8 green** (10.8m) |
+| 5 | orders-product-catalog | pre-known 5y blocker — NOT a regression |
+
+Tiers 2/3 unaffected by this wave (server untouched) — last green on the rename battery below.
+Known follow-ups: mj-dropdown lacks an accessible-name input (host aria-label interim; MJ upstream
+candidate) · GLAccountLink demo seed/create-UI gap (diagnosed 2026-08-05, awaiting ruling).
+
+## ⭐ PRIOR STATE — 2026-08-05 JOURNALENTRYBATCH RENAME BATTERY (full pyramid vs the identifier refactor)
 
 Gate scope: Amith's ruling — every bare `Batch`-prefixed identifier naming the JournalEntryBatch
 entity renamed to the full prefix (`BatchID→JournalEntryBatchID`, `BatchNumber→JournalEntryBatchNumber`,

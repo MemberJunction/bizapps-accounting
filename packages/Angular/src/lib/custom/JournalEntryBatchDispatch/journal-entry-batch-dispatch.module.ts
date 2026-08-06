@@ -1,3 +1,4 @@
+import { MJACheckDropdownComponent } from '../shared/check-dropdown.component';
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -13,8 +14,7 @@ import {
   MJPageBodyComponent,
   MJStatBadgeComponent,
   MJRefreshButtonComponent,
-  MJEmptyStateComponent,
-} from '@memberjunction/ng-ui-components';
+  MJEmptyStateComponent, MJDropdownComponent } from '@memberjunction/ng-ui-components';
 
 import { JournalEntryBatchDispatchDashboardComponent } from './journal-entry-batch-dispatch-dashboard.component';
 import { JournalEntryBatchDispatchResourceComponent } from './journal-entry-batch-dispatch-resource.component';
@@ -25,7 +25,7 @@ import { JournalEntryBatchDispatchResourceComponent } from './journal-entry-batc
  */
 @NgModule({
   declarations: [JournalEntryBatchDispatchDashboardComponent, JournalEntryBatchDispatchResourceComponent],
-  imports: [
+  imports: [MJDropdownComponent, MJACheckDropdownComponent, 
     CommonModule,
     FormsModule,
     SharedGenericModule,

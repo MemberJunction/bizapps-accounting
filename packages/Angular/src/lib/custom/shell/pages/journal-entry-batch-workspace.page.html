@@ -105,42 +105,34 @@
         <!-- Single-select (Marcelo 2026-07-21): a batch is single-company (clean single-CFO approval).
              "All companies" is kept for now so the sweep-all path + existing engine still work; the
              enforce-exactly-one-company invariant lands with the single-company engine change. -->
-        <select
-          class="mj-input"
-          [(ngModel)]="SelectedCompanyId"
-          (ngModelChange)="OnCriteriaChanged()"
-          [disabled]="IsBuilt">
-          <option [ngValue]="null">All companies</option>
-          @for (c of Scope.Companies; track c.ID) {
-            <option [ngValue]="c.ID">{{ c.Name }}</option>
-          }
-        </select>
+        <!-- Single-select ON PURPOSE: this is a BUILD CRITERION (batches are single-company,
+             MOD-15) — "All companies" means the build sweeps each company in scope separately,
+             not a multi-narrowing like the list-page filters. -->
+        <mj-dropdown [Data]="Scope.Companies" TextField="Name" ValueField="ID" [ValuePrimitive]="true"
+          [DefaultItem]="AllCompaniesDefault"
+          [(ngModel)]="SelectedCompanyId" (ngModelChange)="OnCriteriaChanged()"
+          [Disabled]="IsBuilt" aria-label="Company" />
       </label>
 
       <label class="bw-field">
         <span>Entry types</span>
-        <select class="mj-input" [(ngModel)]="Draft.Criteria.EntryTypeScope" (ngModelChange)="OnCriteriaChanged()" [disabled]="IsBuilt">
-          @for (s of EntryTypeScopes; track s.Id) {
-            <option [value]="s.Id">{{ s.Label }}</option>
-          }
-        </select>
+        <mj-dropdown [Data]="EntryTypeScopes" TextField="Label" ValueField="Id" [ValuePrimitive]="true"
+          [(ngModel)]="Draft.Criteria.EntryTypeScope" (ngModelChange)="OnCriteriaChanged()"
+          [Disabled]="IsBuilt" aria-label="Entry types" />
       </label>
 
       <label class="bw-field">
         <span>Source</span>
-        <select class="mj-input" [(ngModel)]="Draft.Criteria.Source" (ngModelChange)="OnCriteriaChanged()" [disabled]="IsBuilt">
-          <option value="Standard">Standard (oldest-forward)</option>
-          <option value="View">From a saved view…</option>
-        </select>
+        <mj-dropdown [Data]="SourceChoices" TextField="Label" ValueField="Value" [ValuePrimitive]="true"
+          [(ngModel)]="Draft.Criteria.Source" (ngModelChange)="OnCriteriaChanged()"
+          [Disabled]="IsBuilt" aria-label="Source" />
       </label>
 
       <label class="bw-field">
         <span>Target system</span>
-        <select class="mj-input" [(ngModel)]="Draft.Criteria.TargetSystem" (ngModelChange)="OnCriteriaChanged()" [disabled]="IsBuilt">
-          @for (t of TargetSystems; track t) {
-            <option [value]="t">{{ t }}</option>
-          }
-        </select>
+        <mj-dropdown [Data]="TargetSystems" [ValuePrimitive]="true"
+          [(ngModel)]="Draft.Criteria.TargetSystem" (ngModelChange)="OnCriteriaChanged()"
+          [Disabled]="IsBuilt" aria-label="Target system" />
       </label>
 
       <!-- Apply = the deferred query. Filters do NOT auto-query; the operator applies them when ready. -->

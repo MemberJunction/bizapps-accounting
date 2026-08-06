@@ -1,4 +1,5 @@
 import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@angular/core';
+import { PageRefreshService } from '../../transfer-pending/shell-refresh/page-refresh.service';
 import { BaseDashboard } from '@memberjunction/ng-shared';
 import { RegisterClass } from '@memberjunction/global';
 import { ResourceData } from '@memberjunction/core-entities';
@@ -74,8 +75,23 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
     return 'Batch Approvals';
   }
 
+  /** The category header's Refresh reaches this dashboard through the shared channel —
+   *  the inline mj-refresh-button was removed (Marcelo 2026-08-05: the header owns the ONE
+   *  refresh control, orders-style). Subscribing is also what makes the header button SHOW
+   *  while this page is mounted (CanRefreshActivePage = HasSubscriber). */
+  /** OPTIONAL: provided per category shell; a directly-mounted resource (or a bare TestBed) has none. */
+  private pageRefresh = inject(PageRefreshService, { optional: true });
+  private refreshSub: { unsubscribe: () => void } | null = null;
+
   protected initDashboard(): void {
+    this.refreshSub = this.pageRefresh?.OnRefresh(() => void this.loadData()) ?? null;
     // One-time setup; data loads in loadData(). No persisted UI state for v1.
+  }
+
+  public override ngOnDestroy(): void {
+    // Unsubscribing keeps the header's Refresh page-aware: a destroyed page stops counting.
+    this.refreshSub?.unsubscribe();
+    super.ngOnDestroy();
   }
 
   protected async loadData(): Promise<void> {

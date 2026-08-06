@@ -43,8 +43,8 @@
         <div><dt>Entries</dt><dd>{{ h.TotalEntries }}</dd></div>
         <div><dt>Total debits</dt><dd class="num">{{ h.TotalDebits | currency }}</dd></div>
         <div><dt>Total credits</dt><dd class="num">{{ h.TotalCredits | currency }}</dd></div>
-        @if (h.ExternalBatchRef) {
-          <div><dt>ERP reference</dt><dd class="mono">{{ h.ExternalBatchRef }}</dd></div>
+        @if (h.ExternalJournalEntryBatchRef) {
+          <div><dt>ERP reference</dt><dd class="mono">{{ h.ExternalJournalEntryBatchRef }}</dd></div>
         }
         <div><dt>Created</dt><dd>{{ h.__mj_CreatedAt | date: 'medium' }}</dd></div>
         @if (h.ApprovalTaskRaisedAt) {

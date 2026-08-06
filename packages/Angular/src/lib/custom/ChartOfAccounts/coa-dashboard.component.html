@@ -16,17 +16,15 @@
       [(AdvancedOpen)]="AdvancedOpen"
       (SearchChanged)="OnToolbarSearch($event)"
       (PresetToggled)="OnTypeToggled($event)">
-      <span toolbar-actions>
-        <button mjButton variant="primary" size="sm" (click)="OnNewAccount()"><i class="fa-solid fa-plus"></i> New Account</button>
-      </span>
       <label class="coa-field">
         <span class="coa-field__label">Company</span>
-        <select class="mj-input coa-companyselect" [(ngModel)]="SelectedCompanyID">
-          <option value="All">All companies</option>
-          @for (c of Companies; track c.ID) {
-            <option [value]="c.ID">{{ c.Name }} ({{ c.CompanyCode }})</option>
-          }
-        </select>
+        <!-- CHECKBOX multi-select (Marcelo 2026-08-05): show any subset of companies' trees; empty = all. -->
+        <mja-check-dropdown
+          [Options]="CompanyScopeOptions"
+          [SelectedIDs]="SelectedCompanyIDs"
+          AllLabel="All companies"
+          AriaLabel="Company"
+          (SelectedIDsChange)="OnCompanyIDsChanged($event)" />
       </label>
     </mja-list-toolbar>
   </div>
@@ -98,26 +96,23 @@
         </label>
         <label class="coa-field">
           <span class="coa-field__label">Account type <span class="coa-req">*</span></span>
-          <select class="mj-input" [(ngModel)]="Model.AccountType">
-            @for (t of AccountTypeOptions; track t) { <option [value]="t">{{ t }}</option> }
-          </select>
+          <mj-dropdown [Data]="AccountTypeOptions" [ValuePrimitive]="true"
+            [(ngModel)]="Model.AccountType" aria-label="Account type" />
         </label>
         <label class="coa-field">
           <span class="coa-field__label">Company <span class="coa-req">*</span></span>
           @if (DialogMode === 'create') {
-            <select class="mj-input" [(ngModel)]="Model.CompanyID">
-              @for (c of Companies; track c.ID) { <option [value]="c.ID">{{ c.Name }} ({{ c.CompanyCode }})</option> }
-            </select>
+            <mj-dropdown [Data]="CompanyScopeOptions" TextField="Name" ValueField="ID" [ValuePrimitive]="true"
+              [(ngModel)]="Model.CompanyID" aria-label="Company" />
           } @else {
             <input class="mj-input" type="text" [value]="companyName(Model.CompanyID)" disabled />
           }
         </label>
         <label class="coa-field">
           <span class="coa-field__label">Parent account</span>
-          <select class="mj-input" [(ngModel)]="Model.ParentGLAccountID">
-            <option [ngValue]="null">— none (top level) —</option>
-            @for (p of ParentOptions; track p.ID) { <option [ngValue]="p.ID">{{ p.Code }} · {{ p.Name }}</option> }
-          </select>
+          <mj-dropdown [Data]="ParentChoices" TextField="Label" ValueField="ID" [ValuePrimitive]="true"
+            [DefaultItem]="ParentNoneDefault"
+            [(ngModel)]="Model.ParentGLAccountID" aria-label="Parent account" />
         </label>
         <label class="coa-field">
           <span class="coa-field__label">Currency</span>

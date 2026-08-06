@@ -15,14 +15,14 @@ import { LinkDirectivesModule } from '@memberjunction/ng-link-directives';
 
 // Loading / empty-state + buttons.
 import { SharedGenericModule } from '@memberjunction/ng-shared-generic';
-import { MJButtonDirective, MJEmptyStateComponent } from '@memberjunction/ng-ui-components';
+import { MJButtonDirective, MJEmptyStateComponent, MJDropdownComponent } from '@memberjunction/ng-ui-components';
 
 import { JournalEntryFormComponentExtended, LoadJournalEntryFormComponentExtended } from './JournalEntry/journal-entry-form.component';
 import { GLAccountFormComponentExtended, LoadGLAccountFormComponentExtended } from './GLAccount/gl-account-form.component';
 
 @NgModule({
   declarations: [JournalEntryFormComponentExtended, GLAccountFormComponentExtended],
-  imports: [
+  imports: [MJDropdownComponent, 
     CommonModule,
     FormsModule,
     BaseFormsModule,

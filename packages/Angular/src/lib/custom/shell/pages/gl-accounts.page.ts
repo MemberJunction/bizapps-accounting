@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, OnInit, OnDestroy } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, Input, OnInit, OnDestroy } from '@angular/core';
 import { UUIDsEqual, NormalizeUUID } from '@memberjunction/global';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
@@ -124,10 +124,38 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
   public LoadError: string | null = null;
 
   // --- filters (one line; search sits to the right of the drop-downs) ---
-  public FilterCompanyID = '';
+  /** MULTI-select company narrowing (Marcelo 2026-08-05): empty = no narrowing ("All companies"). */
+  public FilterCompanyIDs: string[] = [];
   public FilterAccountType = '';
   /** '' = any, 'Active' | 'Inactive'. */
   public FilterActive = '';
+
+  /** The checkbox-dropdown hands back the whole selection (client-side filter — no refetch needed). */
+  public OnFilterCompanyIDsChanged(ids: string[]): void {
+    this.FilterCompanyIDs = ids;
+  }
+
+  /** Currency rows shaped for the dropdown ("USD — US Dollar"). */
+  public get CurrencyChoices(): ReadonlyArray<{ Code: string; Label: string }> {
+    return this.CurrencyOptions.map((c) => ({ Code: c.Code, Label: `${c.Code} — ${c.Name}` }));
+  }
+
+  /** The editor dropdowns' empty-state rows (mj-dropdown DefaultItem = the '' sentinel each select had). */
+  public readonly OwningCompanyDefault = { ID: '', Name: 'Choose the owning company…' };
+  public readonly ParentNoneDefault = { ID: '', Label: 'None — top of the chart' };
+  public readonly CurrencyDefault = { Code: '', Label: 'Company’s functional currency' };
+
+  public readonly StatusChoices: ReadonlyArray<{ Label: string; Value: string }> = [
+    { Label: 'Active & inactive', Value: '' },
+    { Label: 'Active only', Value: 'Active' },
+    { Label: 'Inactive only', Value: 'Inactive' },
+  ];
+
+  public readonly SourceChoices: ReadonlyArray<{ Label: string; Value: string }> = [
+    { Label: 'Seeded & custom', Value: '' },
+    { Label: 'System-seeded', Value: 'Seeded' },
+    { Label: 'Custom', Value: 'Custom' },
+  ];
   /** '' = any, 'Seeded' = platform-shipped, 'Custom' = deployment customization. */
   public FilterSource = '';
   public SearchText = '';
@@ -167,7 +195,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
   /** Count pill on the Filters button — a hidden active filter must never silently shape the list. */
   public get AdvancedCount(): number {
     let n = 0;
-    if (this.FilterCompanyID) n++;
+    if (this.FilterCompanyIDs.length) n++;
     if (this.FilterActive) n++;
     if (this.FilterSource) n++;
     return n;
@@ -212,7 +240,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
    * visible) so an ID pasted from a log or a deep link still finds its row.
    */
   private matchesFilters(r: AccountRow, q: string): boolean {
-    if (this.FilterCompanyID && !UUIDsEqual(r.CompanyID, this.FilterCompanyID)) return false;
+    if (this.FilterCompanyIDs.length && !this.FilterCompanyIDs.some((id) => UUIDsEqual(r.CompanyID, id))) return false;
     if (this.FilterAccountType && r.AccountType !== this.FilterAccountType) return false;
     if (this.FilterActive === 'Active' && !r.IsActive) return false;
     if (this.FilterActive === 'Inactive' && r.IsActive) return false;
@@ -223,7 +251,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
   }
 
   public ClearFilters(): void {
-    this.FilterCompanyID = '';
+    this.FilterCompanyIDs = [];
     this.FilterAccountType = '';
     this.FilterActive = '';
     this.FilterSource = '';
@@ -242,13 +270,23 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
 
   // ------------------------------------------------------------------ editor
 
+  /** Monotonic counter from the category header's "New account" verb — each bump opens the editor. */
+  private _createSignal = 0;
+  @Input() set CreateSignal(v: number) {
+    if (v > this._createSignal) {
+      this._createSignal = v;
+      this.StartCreate();
+    }
+  }
+
   public StartCreate(): void {
     // An account cannot exist outside a company's chart, so the company is a REQUIRED first choice,
     // not an optional afterthought. Pre-pick only when the choice is unambiguous.
     const only = this.CompanyOptions.length === 1 ? this.CompanyOptions[0].ID : '';
     this.Draft = {
       ID: null,
-      CompanyID: this.FilterCompanyID || only,
+      // Pre-pick the filtered company only when the filter narrows to EXACTLY one — else unambiguous-only.
+      CompanyID: (this.FilterCompanyIDs.length === 1 ? this.FilterCompanyIDs[0] : '') || only,
       Code: '',
       Name: '',
       AccountType: 'Asset',

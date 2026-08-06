@@ -13,7 +13,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { loginViaMagicLink } from '../lib/auth';
-import { openAccountingApp, openNavItem, captureConsoleErrors, expectNoConsoleErrors, resetCompanyScopeToAll } from '../lib/explorer';
+import { openAccountingApp, openNavItem, captureConsoleErrors, expectNoConsoleErrors, resetCompanyScopeToAll, pickMjDropdown } from '../lib/explorer';
 import { HARNESS_DIR } from '../lib/env';
 
 const WORKTREE_ROOT = path.resolve(HARNESS_DIR, '..', '..', '..', '..', '..');
@@ -61,14 +61,15 @@ test('All accounts: create → rename → identity-lock rejection, all through t
   await page.getByRole('button', { name: /New account/i }).click();
   const editor = page.locator('.gla-editor');
   await expect(editor).toBeVisible();
-  await editor.getByLabel('Owning company').selectOption(fx!.companyId.toUpperCase());
+  // The editor's pickers are mj-dropdowns now (2026-08-05 conversion) — drive by open + option text.
+  await pickMjDropdown(editor, page, 'Owning company', fx!.companyName);
   await editor.getByLabel('Code').fill(NEW_CODE);
   await editor.getByLabel('Name').fill(NEW_NAME);
-  await editor.getByLabel('Account type').selectOption('Expense');
-  // Currency: pick the first real option (the fixture company's functional currency exists).
-  const currency = editor.getByLabel('Currency');
-  const currencyValue = await currency.locator('option').nth(1).getAttribute('value');
-  await currency.selectOption(currencyValue ?? 'USD');
+  await pickMjDropdown(editor, page, 'Account type', 'Expense');
+  // Currency: pick the first REAL option (skip the default 'functional currency' row).
+  await editor.locator(`mj-dropdown[aria-label="Currency"]`).first().click();
+  await page.locator('.mj-dropdown-panel .mj-dropdown-option:not(.mj-dropdown-option--default)').first().click();
+  await page.waitForTimeout(400);
   await editor.getByRole('button', { name: /Create account/i }).click();
   await page.waitForTimeout(4000);
   await expect(page.locator('.gla-editor'), 'editor closes on successful create').toBeHidden();

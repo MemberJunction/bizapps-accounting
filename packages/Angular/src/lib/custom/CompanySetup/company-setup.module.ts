@@ -11,8 +11,7 @@ import {
   MJPageBodyComponent,
   MJStatBadgeComponent,
   MJRefreshButtonComponent,
-  MJEmptyStateComponent,
-} from '@memberjunction/ng-ui-components';
+  MJEmptyStateComponent, MJDropdownComponent } from '@memberjunction/ng-ui-components';
 
 import { CompanySetupDashboardComponent } from './company-setup-dashboard.component';
 import { CompanySetupResourceComponent } from './company-setup-resource.component';
@@ -23,7 +22,7 @@ import { CompanySetupResourceComponent } from './company-setup-resource.componen
  */
 @NgModule({
   declarations: [CompanySetupDashboardComponent, CompanySetupResourceComponent],
-  imports: [
+  imports: [MJDropdownComponent, 
     CommonModule,
     FormsModule,
     SharedGenericModule,

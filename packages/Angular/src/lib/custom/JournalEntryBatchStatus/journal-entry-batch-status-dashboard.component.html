@@ -14,7 +14,6 @@
     </div>
 
     <div actions>
-      <mj-refresh-button [Loading]="IsLoading" (Clicked)="Reload()"></mj-refresh-button>
       <button mjButton variant="primary" size="sm" [disabled]="Building" (click)="OpenBuildPreview()">
         <i class="fa-solid fa-layer-group"></i> Build Batch
       </button>
@@ -30,17 +29,20 @@
         </div>
         <label class="bs-field">
           <span class="bs-field__label">Company</span>
-          <select class="mj-input" [value]="SelectedCompanyID ?? ''" (change)="OnCompanyChange($any($event.target).value)">
-            <option value="">All companies</option>
-            @for (co of Companies; track co.ID) { <option [value]="co.ID">{{ co.Name }}</option> }
-          </select>
+          <!-- CHECKBOX multi-select (Marcelo 2026-08-05): narrow to any set of companies; empty = all. -->
+          <mja-check-dropdown
+            [Options]="Companies"
+            [SelectedIDs]="SelectedCompanyIDs"
+            AllLabel="All companies"
+            AriaLabel="Company"
+            (SelectedIDsChange)="OnCompanyIDsChanged($event)" />
         </label>
         <label class="bs-field">
           <span class="bs-field__label">Target ERP</span>
-          <select class="mj-input" [value]="SelectedTarget ?? ''" (change)="OnTargetChange($any($event.target).value)">
-            <option value="">All systems</option>
-            @for (t of TargetOptions; track t) { <option [value]="t">{{ t }}</option> }
-          </select>
+          <mj-dropdown [Data]="TargetChoices" TextField="Label" ValueField="Value" [ValuePrimitive]="true"
+            [DefaultItem]="AllSystemsDefault"
+            [ngModel]="SelectedTarget" (ngModelChange)="OnTargetChange($event ?? '')"
+            aria-label="Target ERP" />
         </label>
         <label class="bs-field">
           <span class="bs-field__label">From</span>
@@ -170,9 +172,9 @@
       <div class="bs-preview__head">
         <label class="bs-field">
           <span class="bs-field__label">Target ERP</span>
-          <select class="mj-input" [value]="BuildTarget" (change)="OnBuildTargetChange($any($event.target).value)">
-            @for (t of TargetOptions; track t) { <option [value]="t">{{ t }}</option> }
-          </select>
+          <mj-dropdown [Data]="TargetOptions" [ValuePrimitive]="true"
+            [ngModel]="BuildTarget" (ngModelChange)="OnBuildTargetChange($event)"
+            aria-label="Build target system" />
         </label>
         <div class="bs-preview__facts">
           <div><span class="bs-field__label">Covers</span>

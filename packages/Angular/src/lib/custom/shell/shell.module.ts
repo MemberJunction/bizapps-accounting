@@ -1,3 +1,4 @@
+import { MJACheckDropdownComponent } from '../shared/check-dropdown.component';
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -17,8 +18,7 @@ import {
   MJRefreshButtonComponent,
   MJEmptyStateComponent,
   MjSlidePanelComponent,
-  MJAlertComponent,
-} from '@memberjunction/ng-ui-components';
+  MJAlertComponent, MJDropdownComponent } from '@memberjunction/ng-ui-components';
 
 import { CompanyScopeChipComponent } from '../shared/company-scope-chip.component';
 import { PageRefreshService } from '../../transfer-pending/shell-refresh/page-refresh.service';
@@ -93,7 +93,7 @@ import { MJAListToolbarComponent } from '../shared/list-toolbar.component';
     GLAccountsPageComponent,
     JournalEntryDetailPanelComponent,
   ],
-  imports: [
+  imports: [MJDropdownComponent, MJACheckDropdownComponent, 
     ShellPagePendingComponent, // standalone — shared with orders' shell
     MJASummaryStripComponent, // standalone — the orders-idiom stats bubble (list-page standard)
     MJAListToolbarComponent, // standalone — search + preset chips + Filters disclosure (list-page standard)

@@ -85,8 +85,6 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
   public Scope = inject(CompanyScopeService);
   public Title = 'Journal Entries';
   public Subtitle = 'What needs attention in the ledger';
-  /** The section's create verb — the shell must bind (CreateRequested). See the base class. */
-  public override CreateLabel = 'New journal entry';
 
   /**
    * The composition cards. Derived ENTIRELY from `JeCounts` — every segment is a number `loadCounts`

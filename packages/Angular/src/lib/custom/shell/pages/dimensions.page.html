@@ -4,6 +4,11 @@
   </div>
   <!-- One line: the search sits where the drop-downs' right edge would be (Marcelo's filter-bar rule). -->
   <div toolbar class="dim-filters">
+    <label class="dim-field">
+      <span class="dim-field__label">Status</span>
+      <mj-dropdown [Data]="StatusChoices" TextField="Label" ValueField="Value" [ValuePrimitive]="true"
+        [(ngModel)]="StatusFilter" (ngModelChange)="OnSearchChanged()" aria-label="Status" />
+    </label>
     <label class="dim-field dim-field--search">
       <span class="dim-field__label">Search</span>
       <input
@@ -37,6 +42,16 @@
         @if (!d.IsActive) {
           <span class="dim-item__inactive">inactive</span>
         }
+      </button>
+      <!-- Details = the dimension's own FORM in the standardized slide-in (read-only, edit on
+           demand) — the row click keeps selecting for the values grid; this opens the record. -->
+      <button
+        type="button"
+        class="dim-item__details mj-btn mj-btn--flat"
+        (click)="OpenDetails(d.ID)"
+        [attr.aria-label]="'Open details for ' + d.Name"
+        title="Open details">
+        <i class="fa-solid fa-up-right-from-square" aria-hidden="true"></i>
       </button>
     } @empty {
       @if (!IsLoading) {

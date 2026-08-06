@@ -80,8 +80,12 @@ test('Build→approve→dispatch, then Reverse the GLPosted JE from All journal 
   //    "click the first GLPosted row" version wrongly reversed demo data; never reach outside the fixture.)
   //    The reversal it creates lands in the fixture company, so the afterAll teardown cleans it.
   await railItem(page, 'Journal Entries', 'All journal entries');
-  const search = page.getByRole('searchbox', { name: /Search entries/i }).first();
-  if (await search.isVisible().catch(() => false)) { await search.fill(fx!.jeEntryNumber); await page.waitForTimeout(3000); }
+  const search = page.getByRole('searchbox', { name: /Search journal entries/i }).first();
+  // Unconditional: the old visibility guard silently skipped the search when the label didn't
+  // resolve — a hidden liveness skip. A missing search box is a failure.
+  await expect(search, 'the list-toolbar search renders').toBeVisible({ timeout: 15_000 });
+  await search.fill(fx!.jeEntryNumber);
+  await page.waitForTimeout(3000);
   const fixtureRow = page.locator('.ag-row').filter({ hasText: fx!.jeEntryNumber }).first();
   await expect(fixtureRow, `the fixture JE ${fx!.jeEntryNumber} (GLPosted after dispatch) should be present`).toBeVisible({ timeout: 30_000 });
   await fixtureRow.click();
