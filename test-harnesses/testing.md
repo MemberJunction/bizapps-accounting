@@ -13,6 +13,23 @@ create + open questions for the human, recorded so dev can roll through and circ
 Tiers: **1** Vitest (unit) · **2** server (tsx, in-process direct SQL) · **3** API (GraphQL→MJAPI) ·
 **4** GUI/DOM (no-browser — parked, mjdev overlay) · **5** Playwright (browser e2e, pre-PR only).
 
+## ⚠ OPEN (2026-08-05, checkpoint before compact) — All-accounts standard-grid swap, spec red
+
+All accounts now renders the STANDARD mj-entity-data-grid (Marcelo's ask): toolbar filters/search
+feed GridParams.ExtraFilter (server-side; same predicate the client filter used), row-click opens
+the editor (per-row Edit/Retire buttons retired — the editor's Active checkbox is the retire path),
+tree indentation/orphan flags stay on the CoA page. LIVE-PROVEN by screenshot: grid renders, search
+'11201' returns exactly the 4 expected AR rows, zero console errors. Tier-4 dom spec pivoted to
+value-level GridParams asserts (jsdom can't paint AG grids) — green.
+
+**RED / open:** tier-5 accounts spec test 1 (create→rename→lock) times out on
+`.ag-row hasText NEW_CODE` at the rename step — yet the grid VISIBLY renders rows while
+`locator('.ag-row').count()` returns 0 on this page (a row-DOM/selector mismatch; note the rendered
+grid also shows a PARENT column not in GridColumns — investigate what DOM mj-entity-data-grid
+produces here vs All-JE where .ag-row works). Next step: dump the grid's row DOM (probe script at
+/tmp/gla-dom.mjs), fix the spec locator (or grid config), re-run the two accounts specs.
+Everything else in the UI-wave battery below still stands.
+
 ## ⭐ CURRENT STATE — 2026-08-05 UI-WAVE BATTERY (post-#43 merge + the chrome/control wave)
 
 Scope: PR #43 merged into the rename branch (conflict-free; git followed the renames; the guarded

@@ -78,8 +78,10 @@ test('All accounts: create → rename → identity-lock rejection, all through t
   await expect(page.getByText(NEW_NAME).first(), 'created account appears in the table').toBeVisible();
 
   // ── 2. Cosmetic RENAME saves ────────────────────────────────────────────────
-  const row = page.locator('tr', { hasText: NEW_CODE }).first();
-  await row.getByRole('button', { name: /Edit/i }).first().click();
+  // Standard MJ grid (2026-08-05): rows are .ag-row and CLICKING the row opens the editor
+  // (the per-row Edit button retired with the hand-rolled table).
+  const row = page.locator('.ag-row', { hasText: NEW_CODE }).first();
+  await row.click();
   await expect(editor).toBeVisible();
   await editor.getByLabel('Name').fill(RENAMED);
   await editor.getByRole('button', { name: /Save account/i }).click();
@@ -90,8 +92,8 @@ test('All accounts: create → rename → identity-lock rejection, all through t
   await expect(page.getByText(RENAMED).first(), 'rename round-trips through save + reload').toBeVisible();
 
   // ── 3. IDENTITY LOCK: changing Code must be rejected with the entity's error ─
-  const row2 = page.locator('tr', { hasText: NEW_CODE }).first();
-  await row2.getByRole('button', { name: /Edit/i }).first().click();
+  const row2 = page.locator('.ag-row', { hasText: NEW_CODE }).first();
+  await row2.click();
   await expect(editor).toBeVisible();
   await editor.getByLabel('Code').fill('99902');
   await editor.getByRole('button', { name: /Save account/i }).click();

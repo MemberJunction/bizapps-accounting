@@ -1,6 +1,8 @@
 import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, Input, OnInit, OnDestroy } from '@angular/core';
 import { UUIDsEqual, NormalizeUUID } from '@memberjunction/global';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
+import { RunViewParams } from '@memberjunction/core';
+import { GridColumnConfig } from '@memberjunction/ng-entity-viewer';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
 import { CompanyScopeService } from '../../shared/company-scope.service';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
@@ -133,6 +135,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
   /** The checkbox-dropdown hands back the whole selection (client-side filter — no refetch needed). */
   public OnFilterCompanyIDsChanged(ids: string[]): void {
     this.FilterCompanyIDs = ids;
+    this.rebuildGridParams();
   }
 
   /** Currency rows shaped for the dropdown ("USD — US Dollar"). */
@@ -187,12 +190,71 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
   /** Single-select semantics (matching the old Type select): re-clicking the active chip clears. */
   public OnTypeToggled(key: string): void {
     this.FilterAccountType = key === 'all' || this.FilterAccountType === key ? '' : key;
-    this.cdr.markForCheck();
+    this.rebuildGridParams();
   }
 
   public AdvancedOpen = false;
 
   /** Count pill on the Filters button — a hidden active filter must never silently shape the list. */
+  // ── the STANDARD MJ grid (Marcelo 2026-08-05) ─────────────────────────────────
+  /** Escape a value for an ExtraFilter literal (single quotes doubled). */
+  private sqlLit(v: string): string {
+    return v.replace(/'/g, "''");
+  }
+
+  /**
+   * The grid's query — the SAME predicate the old client-side filter applied, expressed as the
+   * entity view's ExtraFilter so the standard grid owns fetching/sorting/paging/state.
+   */
+  public GridParams: RunViewParams = { EntityName: GL_ENTITY };
+
+  public readonly GridColumns: GridColumnConfig[] = [
+    // Company first, always: an account only exists inside a company's chart.
+    { field: 'Company', title: 'Company', width: 180, sortable: true },
+    { field: 'Code', title: 'Code', width: 110, sortable: true },
+    { field: 'Name', title: 'Name', width: 'auto', maxWidth: 380, sortable: true },
+    { field: 'AccountType', title: 'Type', width: 110, sortable: true },
+    { field: 'CurrencyCode', title: 'Currency', width: 100, sortable: true },
+    { field: 'ExternalSystem', title: 'External system', width: 140, sortable: true },
+    { field: 'ExternalAccountID', title: 'External account ID', width: 160, sortable: true },
+    { field: 'IsActive', title: 'Active', type: 'boolean', width: 90, sortable: true },
+    { field: 'IsSystemSeeded', title: 'Seeded', type: 'boolean', width: 90, sortable: true },
+    { field: 'ID', title: 'ID', width: 280, sortable: true },
+  ];
+
+  /** Rebuild the grid predicate from the toolbar state. New object identity triggers a refetch. */
+  private rebuildGridParams(): void {
+    const parts: string[] = [];
+    if (this.FilterCompanyIDs.length) parts.push(`CompanyID IN (${this.FilterCompanyIDs.map((id) => `'${this.sqlLit(id)}'`).join(',')})`);
+    if (this.FilterAccountType) parts.push(`AccountType='${this.sqlLit(this.FilterAccountType)}'`);
+    if (this.FilterActive) parts.push(`IsActive=${this.FilterActive === 'Active' ? 1 : 0}`);
+    if (this.FilterSource) parts.push(`IsSystemSeeded=${this.FilterSource === 'Seeded' ? 1 : 0}`);
+    const q = this.SearchText.trim();
+    if (q) {
+      const like = this.sqlLit(q);
+      parts.push(`(Name LIKE '%${like}%' OR Code LIKE '%${like}%' OR CAST(ID AS NVARCHAR(50)) LIKE '%${like}%')`);
+    }
+    const scope = this.Scope.FilterFor('CompanyID');
+    if (scope) parts.push(scope);
+    this.GridParams = {
+      EntityName: GL_ENTITY,
+      ExtraFilter: parts.length ? parts.join(' AND ') : undefined,
+      OrderBy: 'Company ASC, Code ASC',
+    };
+    this.cdr.markForCheck();
+  }
+
+  /** Status/Source dropdowns re-query the grid like every other filter edit. */
+  public OnStatusOrSourceChanged(): void {
+    this.rebuildGridParams();
+  }
+
+  /** Row click = edit (the per-row Edit button retired with the hand-rolled table). */
+  public OnGridRowClicked(id: string): void {
+    const row = this.Rows.find((r) => UUIDsEqual(r.ID, id));
+    if (row) this.StartEdit(row);
+  }
+
   public get AdvancedCount(): number {
     let n = 0;
     if (this.FilterCompanyIDs.length) n++;
@@ -204,7 +266,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
   /** Client-side filtering — instant, no debounce needed. */
   public OnToolbarSearch(text: string): void {
     this.SearchText = text;
-    this.cdr.markForCheck();
+    this.rebuildGridParams();
   }
 
   // --- editor ---
@@ -216,6 +278,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
 
   ngOnInit(): void {
     this.refreshSub = this.pageRefresh.OnRefresh(() => this.Refresh());
+    this.rebuildGridParams(); // the grid queries immediately; the engine rows load alongside
     void this.load();
   }
 
@@ -256,7 +319,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
     this.FilterActive = '';
     this.FilterSource = '';
     this.SearchText = '';
-    this.cdr.markForCheck();
+    this.rebuildGridParams();
   }
 
   public get OrphanCount(): number {
@@ -407,6 +470,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
 
       this.Draft = null;
       await this.load(true);
+      this.rebuildGridParams(); // refetch the grid so the saved change shows
     } catch (e) {
       this.EditorError = this.friendlySaveError(e instanceof Error ? e.message : String(e), 'The account could not be saved.');
     } finally {
@@ -489,6 +553,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
         return;
       }
       await this.load(true);
+      this.rebuildGridParams(); // refetch the grid so the saved change shows
     } catch (e) {
       this.LoadError = e instanceof Error ? e.message : String(e);
     } finally {

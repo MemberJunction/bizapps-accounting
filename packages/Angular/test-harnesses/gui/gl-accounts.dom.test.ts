@@ -77,7 +77,12 @@ describe('All Accounts page (tier 4)', () => {
 
     // The rendered table shows the same row.
     const el: HTMLElement = fixture.nativeElement;
-    expect(el.textContent).toContain('Operating Cash');
+    // The table is the STANDARD mj-entity-data-grid now (2026-08-05). jsdom cannot paint the AG
+    // grid (TEST-ARCHITECTURE: virtualized grids are a tier-5 render concern), so the render
+    // anchor moved to tier 5; HERE we assert the component's QUERY is right at value level.
+    const comp2 = fixture.componentInstance;
+    expect(comp2.GridParams.EntityName).toBe(GL_ENTITY);
+    expect(comp2.GridParams.OrderBy).toBe('Company ASC, Code ASC');
   }, 90_000);
 
   it('company filter narrows the Filtered view to exactly that company (client-side filter over loaded rows)', async () => {
@@ -85,6 +90,8 @@ describe('All Accounts page (tier 4)', () => {
     const comp = fixture.componentInstance;
     const co1Expected = await new RunView().RunView({ EntityName: GL_ENTITY, ExtraFilter: `CompanyID='${DEMO_CO1}'`, Fields: ['ID'], MaxRows: 1, ResultType: 'simple' });
     comp.OnFilterCompanyIDsChanged([DEMO_CO1.toUpperCase()]); // multi-select filter (2026-08-05)
+    // The grid predicate must carry the SAME narrowing (server-side IN clause).
+    expect(comp.GridParams.ExtraFilter).toContain(`CompanyID IN ('${DEMO_CO1.toUpperCase()}')`);
     fixture.detectChanges();
     // `Filtered` is the template's data source — assert it matches the independent per-company count
     // and that no row outside the filter leaks through.

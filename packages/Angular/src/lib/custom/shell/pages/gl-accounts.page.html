@@ -34,14 +34,14 @@
       <label class="gla-field">
         <span class="gla-field__label">Status</span>
         <mj-dropdown [Data]="StatusChoices" TextField="Label" ValueField="Value" [ValuePrimitive]="true"
-          [(ngModel)]="FilterActive" aria-label="Status" />
+          [(ngModel)]="FilterActive" (ngModelChange)="OnStatusOrSourceChanged()" aria-label="Status" />
       </label>
       <label class="gla-field">
         <!-- IsSystemSeeded exists for exactly this distinction: platform-shipped accounts vs.
              deployment customizations. -->
         <span class="gla-field__label">Source</span>
         <mj-dropdown [Data]="SourceChoices" TextField="Label" ValueField="Value" [ValuePrimitive]="true"
-          [(ngModel)]="FilterSource" aria-label="Source" />
+          [(ngModel)]="FilterSource" (ngModelChange)="OnStatusOrSourceChanged()" aria-label="Source" />
       </label>
     </mja-list-toolbar>
   </div>
@@ -155,97 +155,29 @@
     </section>
   }
 
-  <div class="gla-wrap mjsh-tablewrap">
-    @if (IsLoading) {
-      <mj-loading text="Loading accounts…"></mj-loading>
-    } @else {
-      <table class="gla-grid mjsh-table">
-        <thead>
-          <tr>
-            <th>Company</th>
-            <th>Code</th>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Parent</th>
-            <th>Currency</th>
-            <th>External system</th>
-            <th>External account ID</th>
-            <th>Active</th>
-            <th>Source</th>
-            <th>ID</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (r of Filtered; track r.ID) {
-            <tr [class.gla-row--inactive]="!r.IsActive">
-              <!-- Company first, always: an account only exists inside a company's chart. -->
-              <td>{{ r.Company }}</td>
-              <td class="gla-mono">
-                <!-- Indentation IS the rollup — a child sits under its parent. -->
-                <span class="gla-code" [style.padding-left]="IndentFor(r)">
-                  @if (r.Depth > 0) {
-                    <i class="fa-solid fa-turn-up fa-rotate-90 gla-rollup" aria-hidden="true" title="Rolls up into the account above"></i>
-                  }
-                  {{ r.Code }}
-                </span>
-              </td>
-              <td>{{ r.Name }}</td>
-              <td>{{ r.AccountType }}</td>
-              <td>
-                {{ r.ParentLabel || '—' }}
-                @if (r.IsOrphan) {
-                  <i class="fa-solid fa-link-slash gla-flag" aria-hidden="true" title="This account's parent isn't in this chart. A rollup parent must be another account in the same company's chart."></i>
-                }
-                @if (r.InCycle) {
-                  <i class="fa-solid fa-rotate gla-flag" aria-hidden="true" title="This account's parent chain loops back on itself — the rollup is broken. Shown at the top of the chart."></i>
-                }
-              </td>
-              <td>{{ r.CurrencyCode || '—' }}</td>
-              <td>{{ r.ExternalSystem || '—' }}</td>
-              <td class="gla-mono">{{ r.ExternalAccountID || '—' }}</td>
-              <td>
-                <mj-stat-badge [Label]="r.IsActive ? 'Active' : 'Inactive'" [Variant]="r.IsActive ? 'success' : 'default'"></mj-stat-badge>
-              </td>
-              <td>
-                <mj-stat-badge [Label]="r.IsSystemSeeded ? 'Seeded' : 'Custom'" Variant="default"
-                  [title]="r.IsSystemSeeded ? 'Shipped by spSeedDefaultChartOfAccounts.' : 'Created for this deployment.'"></mj-stat-badge>
-              </td>
-              <td class="gla-mono gla-id" [title]="r.ID">{{ r.ID }}</td>
-              <td class="gla-actions">
-                <button type="button" mjButton Variant="flat" Size="sm" (click)="StartEdit(r)" title="Edit this account">
-                  <i class="fa-solid fa-pen" aria-hidden="true"></i> Edit
-                </button>
-                <!-- No Delete: an account referenced by a JE line or an account link can't be
-                     deleted (FK). Retiring it is the schema's own intended path — "Inactive
-                     accounts retain historical data." -->
-                <button
-                  type="button"
-                  mjButton
-                  Variant="flat"
-                  Size="sm"
-                  [disabled]="IsSaving"
-                  (click)="ToggleActive(r)"
-                  [title]="r.IsActive ? 'Retire this account — it stops being available for new journal-entry lines but keeps its history' : 'Return this account to use for new journal-entry lines'">
-                  {{ r.IsActive ? 'Retire' : 'Reactivate' }}
-                </button>
-              </td>
-            </tr>
-          } @empty {
-            <tr>
-              <td colspan="12" class="gla-empty">
-                @if (Rows.length === 0) {
-                  No accounts in scope. Every account belongs to a company’s chart — widen the company scope, or create one.
-                } @else {
-                  No accounts match these filters.
-                  <button type="button" mjButton Variant="flat" Size="sm" (click)="ClearFilters()">Clear filters</button>
-                }
-              </td>
-            </tr>
-          }
-        </tbody>
-      </table>
-    }
+  <!-- MJ's house grid (Marcelo 2026-08-05: All accounts uses the STANDARD mj-entity-data-grid,
+       same as All journal entries / All batches — §8 MJ-wins). The toolbar filters + search feed
+       the grid's ExtraFilter (server-side predicate, same shape the client filter used). Clicking
+       a row opens the editor above (per-row Edit/Retire buttons retired with the hand-rolled
+       table — the editor's Active checkbox is the retire path). Tree indentation + orphan/cycle
+       flags were the hand-rolled table's extra; the rollup STRUCTURE lives on the Chart of
+       accounts page (the tree view), so this page is the flat, sortable inventory. -->
+  <div class="gla-wrap">
+    <mj-entity-data-grid
+      [Params]="GridParams"
+      [Columns]="GridColumns"
+      PaginationMode="client"
+      [PageSize]="100"
+      [ShowPager]="true"
+      [AllowSorting]="true"
+      [ShowToolbar]="false"
+      [SelectionMode]="'single'"
+      KeyField="ID"
+      StateKey="mj.bizappsacct.grid.allAccounts.v1"
+      [AutoPersistState]="true"
+      Height="auto"
+      (AfterRowClick)="OnGridRowClicked($event.rowKey)">
+    </mj-entity-data-grid>
   </div>
   </div>
 </mj-page-body-interior>
