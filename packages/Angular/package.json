@@ -41,7 +41,9 @@
     "@memberjunction/ng-ui-components": "^5.50.0",
     "@mj-biz-apps/common-ng": ">=5.30.0",
     "@mj-biz-apps/common-entities": ">=5.30.0",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "@memberjunction/ng-base-types": "^5.50.0",
+    "@angular/cdk": ">=21.0.0 <22.0.0"
   },
   "devDependencies": {
     "@angular/compiler": "21.1.3",
