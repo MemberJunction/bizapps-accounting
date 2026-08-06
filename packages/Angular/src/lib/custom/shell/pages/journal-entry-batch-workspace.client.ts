@@ -15,20 +15,20 @@ import { IRemoteOperationProvider, LogError } from '@memberjunction/core';
  * is a ProviderBase)."
  */
 
-export type BatchTargetSystem = 'BusinessCentral' | 'NetSuite' | 'Other' | 'QuickBooks' | 'Sage' | 'Xero';
+export type JournalEntryBatchTargetSystem = 'BusinessCentral' | 'NetSuite' | 'Other' | 'QuickBooks' | 'Sage' | 'Xero';
 
 /** The mockup's 3-way entry-type control (NOT the entity's 16-value EntryType union). */
 export type EntryTypeScope = 'All' | 'System' | 'Manual';
 
 /** The §8.2 criteria panel's state. */
-export interface BatchCriteria {
+export interface JournalEntryBatchCriteria {
   /** `datetime-local` value (LOCAL time, as typed). Converted to a UTC instant on the wire. */
   Cutoff: string | null;
   CompanyIDs: string[];
   EntryTypeScope: EntryTypeScope;
   Source: 'Standard' | 'View';
   ViewID: string | null;
-  TargetSystem: BatchTargetSystem;
+  TargetSystem: JournalEntryBatchTargetSystem;
 }
 
 export interface BatchPreviewEntry {
@@ -81,7 +81,7 @@ export class JournalEntryBatchWorkspaceClient {
 
   public async Preview(
     provider: IRemoteOperationProvider,
-    criteria: BatchCriteria,
+    criteria: JournalEntryBatchCriteria,
     includedIds: string[] | null,
     entryTypes: string[] | null,
   ): Promise<BatchPreview> {
@@ -99,7 +99,7 @@ export class JournalEntryBatchWorkspaceClient {
     return res.Output;
   }
 
-  public async Build(provider: IRemoteOperationProvider, criteria: BatchCriteria, includedIds: string[]): Promise<BuildOutcome> {
+  public async Build(provider: IRemoteOperationProvider, criteria: JournalEntryBatchCriteria, includedIds: string[]): Promise<BuildOutcome> {
     const res = await provider.RouteOperation<Record<string, unknown>, BuildBatchOpOutput>(
       'Accounting.BuildJournalEntryBatch',
       {
@@ -127,7 +127,7 @@ export class JournalEntryBatchWorkspaceClient {
   }
 }
 
-/** The `Accounting.BuildJournalEntryBatch` output: one engine BuildBatchResult per company batch built (D7). */
+/** The `Accounting.BuildJournalEntryBatch` output: one engine BuildJournalEntryBatchResult per company batch built (D7). */
 interface BuildBatchOpOutput {
   Batches: Array<{
     batchId: string;

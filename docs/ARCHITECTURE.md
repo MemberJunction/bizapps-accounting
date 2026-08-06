@@ -30,7 +30,7 @@ THE ENGINE (EngineBase + CoreEntitiesServer)
                                      → ONE-TransactionGroup atomic write
    'Accounting.CreateJournalEntry'   the remotable op — same call in-process (orders-server) and over GraphQL
 Lifecycle hooks (CoreEntitiesServer) W1/W2/W3/W6/W9 BaseEntity.Save() overrides (W4/W7/W8 retired with periods)
-Batching (CoreEntitiesServer)        GLOBAL multi-company buildBatch → approveBatch → sendBatch → Posted
+Batching (CoreEntitiesServer)        GLOBAL multi-company buildJournalEntryBatch → approveJournalEntryBatch → sendJournalEntryBatch → Posted
 DB invariants (migrations)           12 triggers (incl. AM-4 per-company balance 50019/50023/50022)
                                      + 2 GLOBAL numbering sprocs  ◄── the un-bypassable floor
 ```
@@ -79,7 +79,7 @@ plan is authoritative.
 | The minimal seeded chart | `CoreEntitiesServer/SeedData.ts` (`DEFAULT_CHART_OF_ACCOUNTS`, `DEFAULT_GL_ACCOUNT_REFS`) |
 | **The engine contract / pure pipeline / caches / ResolveLinkedAccount** | `packages/EngineBase/src/{contract,pipeline,AccountingEngineBase}.ts` |
 | **CreateJournalEntry write path + the remotable op** | `CoreEntitiesServer/AccountingEngine.ts` + `CreateJournalEntryOperation.ts` |
-| Batching → approval → ERP post | `CoreEntitiesServer/BatchingEngine.ts` (buildBatch/approveBatch/sendBatch) + `TasksAppApprovalGate.ts` + `trg_JournalEntryBatch_*` |
+| Batching → approval → ERP post | `CoreEntitiesServer/JournalEntryBatchEngine.ts` (buildJournalEntryBatch/approveJournalEntryBatch/sendJournalEntryBatch) + `TasksAppApprovalGate.ts` + `trg_JournalEntryBatch_*` |
 | Read-model views (12) | baseline migration §"read-model views" + `Server/resolvers/ReadModelsResolver.ts` |
 
 <a id="company-profile-init"></a>
@@ -109,7 +109,7 @@ balance **overall and per company** (AM-4), and writes atomically. Hooks on the 
   foots overall (50014) **and per company (50023)**, batch immutability (50008/50009).
   *(The period-close trigger + W4 routing were retired with the period tables.)*
 - **Batch lifecycle (CH-3):** `Pending → Approved → Sent → Posted | Failed | Cancelled` — see
-  `BatchingEngine.ts`; the ERP wire is **account numbers, split per company** (AM-4).
+  `JournalEntryBatchEngine.ts`; the ERP wire is **account numbers, split per company** (AM-4).
 - **W5** realized-FX auto-emit: retired — Orders/Payments computes + posts the FX line (§C1).
 
 ## 6. Connection map

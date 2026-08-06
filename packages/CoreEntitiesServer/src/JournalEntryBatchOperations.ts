@@ -12,11 +12,11 @@
  * server-side, so remote ops (the 4th client surface) are the sanctioned way to invoke them from
  * the UI; one call site works both in-process and over GraphQL via `RouteOperation`.
  *
- *   Accounting.BuildJournalEntryBatch            → buildBatch(...)      one single-company batch (D7), or the
+ *   Accounting.BuildJournalEntryBatch            → buildJournalEntryBatch(...)      one single-company batch (D7), or the
  *                                                            all-pending sweep when CompanyID is omitted
- *   Accounting.RegenerateJournalEntryBatch       → regenerateBatch(...) rebuild a Pending batch in place; empty → cancel + throw
- *   Accounting.DispatchJournalEntryBatch         → sendBatch(...)       Approved→Sent→Posted via the mock ERP poster (v1)
- *   Accounting.RecordJournalEntryBatchDecision   → gate.recordDecision + approveBatch | cancelBatch (in-app CFO approve/reject)
+ *   Accounting.RegenerateJournalEntryBatch       → regenerateJournalEntryBatch(...) rebuild a Pending batch in place; empty → cancel + throw
+ *   Accounting.DispatchJournalEntryBatch         → sendJournalEntryBatch(...)       Approved→Sent→Posted via the mock ERP poster (v1)
+ *   Accounting.RecordJournalEntryBatchDecision   → gate.recordDecision + approveJournalEntryBatch | cancelJournalEntryBatch (in-app CFO approve/reject)
  *   Accounting.GetJournalEntryBatchApprovalState → gate.assertApproved probe (read-only: is this batch dispatchable?)
  *
  * These are thin by design — every rule (netting, the one-transaction build incl. the approval
@@ -26,20 +26,20 @@
  * writes land on the caller's transaction-capable provider.
  *
  * CONNECTS TO:
- *   ENGINE: ./JournalEntryBatchEngine (buildBatch · regenerateBatch · sendBatch · approveBatch · cancelBatch)
+ *   ENGINE: ./JournalEntryBatchEngine (buildJournalEntryBatch · regenerateJournalEntryBatch · sendJournalEntryBatch · approveJournalEntryBatch · cancelJournalEntryBatch)
  *   GATE:   ./TasksAppApprovalGate (the bizapps-tasks-backed CFO gate; provider-injected)
  */
 import { BaseRemotableOperation, IMetadataProvider, IRunViewProvider, RunView, UserInfo } from '@memberjunction/core';
 import { RegisterClass } from '@memberjunction/global';
 import {
-  buildBatch,
-  buildBatchFromExplicitIds,
-  buildBatchFromView,
+  buildJournalEntryBatch,
+  buildJournalEntryBatchFromExplicitIds,
+  buildJournalEntryBatchFromView,
   previewBatch,
-  regenerateBatch,
-  sendBatch,
-  approveBatch,
-  cancelBatch,
+  regenerateJournalEntryBatch,
+  sendJournalEntryBatch,
+  approveJournalEntryBatch,
+  cancelJournalEntryBatch,
   pendingCompanies,
   mockErpPoster,
   EmptyJournalEntryBatchError,
@@ -131,34 +131,34 @@ export class BuildJournalEntryBatchOperation extends BaseRemotableOperation<Buil
   public readonly OperationKey = 'Accounting.BuildJournalEntryBatch';
 
   protected async InternalExecute(input: BuildJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<BuildJournalEntryBatchOutput> {
-    if (!input?.TargetSystem) throw new Error('BuildBatch: TargetSystem is required.');
+    if (!input?.TargetSystem) throw new Error('BuildJournalEntryBatch: TargetSystem is required.');
     const gate = new TasksAppApprovalGate(provider);
     const options = toOptions(input);
     const source = input.Source ?? 'Standard';
 
     switch (source) {
       case 'View': {
-        if (!input.ViewID) throw new Error('BuildBatch: Source=View requires a ViewID.');
-        const batches = await buildBatchFromView(input.ViewID, input.TargetSystem, user.ID, user, provider, gate, options);
+        if (!input.ViewID) throw new Error('BuildJournalEntryBatch: Source=View requires a ViewID.');
+        const batches = await buildJournalEntryBatchFromView(input.ViewID, input.TargetSystem, user.ID, user, provider, gate, options);
         return { Batches: batches, NothingToBatch: false };
       }
       case 'Explicit': {
-        if (!input.JournalEntryIDs?.length) throw new Error('BuildBatch: Source=Explicit requires JournalEntryIDs.');
-        const batches = await buildBatchFromExplicitIds(input.JournalEntryIDs, input.TargetSystem, user.ID, user, provider, gate);
+        if (!input.JournalEntryIDs?.length) throw new Error('BuildJournalEntryBatch: Source=Explicit requires JournalEntryIDs.');
+        const batches = await buildJournalEntryBatchFromExplicitIds(input.JournalEntryIDs, input.TargetSystem, user.ID, user, provider, gate);
         return { Batches: batches, NothingToBatch: false };
       }
       case 'Standard': {
         if (input.CompanyID) {
           // Explicit company: EmptyJournalEntryBatchError propagates — the caller asked for THIS build and
           // must hear loudly that there was nothing to batch.
-          const result = await buildBatch(input.CompanyID, input.TargetSystem, user.ID, user, provider, gate, options);
+          const result = await buildJournalEntryBatch(input.CompanyID, input.TargetSystem, user.ID, user, provider, gate, options);
           return { Batches: [result], NothingToBatch: false };
         }
         // Sweep: one batch per company with candidates; a company that nets to zero is skipped.
         const batches: BuildJournalEntryBatchResult[] = [];
         for (const companyId of await pendingCompanies(user, provider, options)) {
           try {
-            batches.push(await buildBatch(companyId, input.TargetSystem, user.ID, user, provider, gate, options));
+            batches.push(await buildJournalEntryBatch(companyId, input.TargetSystem, user.ID, user, provider, gate, options));
           } catch (e) {
             if (e instanceof EmptyJournalEntryBatchError) continue;
             throw e;
@@ -168,7 +168,7 @@ export class BuildJournalEntryBatchOperation extends BaseRemotableOperation<Buil
       }
       default:
         // Total today; the default keeps it total if the union ever widens.
-        throw new Error(`BuildBatch: unknown Source '${source}'.`);
+        throw new Error(`BuildJournalEntryBatch: unknown Source '${source}'.`);
     }
   }
 }
@@ -182,11 +182,11 @@ export class RegenerateJournalEntryBatchOperation extends BaseRemotableOperation
   public readonly OperationKey = 'Accounting.RegenerateJournalEntryBatch';
 
   protected async InternalExecute(input: RegenerateJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<BuildJournalEntryBatchResult> {
-    if (!input?.JournalEntryBatchID) throw new Error('RegenerateBatch: JournalEntryBatchID is required.');
-    if (!input?.TargetSystem) throw new Error('RegenerateBatch: TargetSystem is required.');
+    if (!input?.JournalEntryBatchID) throw new Error('RegenerateJournalEntryBatch: JournalEntryBatchID is required.');
+    if (!input?.TargetSystem) throw new Error('RegenerateJournalEntryBatch: TargetSystem is required.');
     // A re-gather to NOTHING cancels the batch and throws EmptyJournalEntryBatchError (surfaced to the caller
     // as a failed operation with that message) — never a silent empty batch.
-    return regenerateBatch(input.JournalEntryBatchID, input.TargetSystem, user, provider);
+    return regenerateJournalEntryBatch(input.JournalEntryBatchID, input.TargetSystem, user, provider);
   }
 }
 
@@ -201,8 +201,8 @@ export class DispatchJournalEntryBatchOperation extends BaseRemotableOperation<D
   public readonly OperationKey = 'Accounting.DispatchJournalEntryBatch';
 
   protected async InternalExecute(input: DispatchJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<DispatchJournalEntryBatchOutput> {
-    if (!input?.JournalEntryBatchID) throw new Error('DispatchBatch: JournalEntryBatchID is required.');
-    const batch = await sendBatch(input.JournalEntryBatchID, user, { gate: new TasksAppApprovalGate(provider), poster: mockErpPoster, provider });
+    if (!input?.JournalEntryBatchID) throw new Error('DispatchJournalEntryBatch: JournalEntryBatchID is required.');
+    const batch = await sendJournalEntryBatch(input.JournalEntryBatchID, user, { gate: new TasksAppApprovalGate(provider), poster: mockErpPoster, provider });
     return { Status: batch.Status, ExternalJournalEntryBatchRef: batch.ExternalJournalEntryBatchRef ?? null };
   }
 }
@@ -236,9 +236,9 @@ export class RecordJournalEntryBatchDecisionOperation extends BaseRemotableOpera
       input.JournalEntryBatchID, input.Decision as TaskDecisionOutcomeCode, personId, input.Notes ?? undefined, user);
 
     if (input.Decision === 'Approved' || input.Decision === 'ApprovedWithConditions') {
-      await approveBatch(input.JournalEntryBatchID, user.ID, user, provider);
+      await approveJournalEntryBatch(input.JournalEntryBatchID, user.ID, user, provider);
     } else {
-      await cancelBatch(input.JournalEntryBatchID, user, provider);
+      await cancelJournalEntryBatch(input.JournalEntryBatchID, user, provider);
     }
     return { Recorded: true };
   }

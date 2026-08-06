@@ -214,7 +214,7 @@
   </div>
 
   <mj-dialog-actions>
-    <button mjButton variant="primary" size="sm" [disabled]="Building || PreviewLoading || PreviewCount === 0" (click)="OnBuildBatch()">
+    <button mjButton variant="primary" size="sm" [disabled]="Building || PreviewLoading || PreviewCount === 0" (click)="OnBuildJournalEntryBatch()">
       @if (Building) { <i class="fa-solid fa-spinner fa-spin"></i> Building… }
       @else { <i class="fa-solid fa-layer-group"></i> Build batch ({{ PreviewCount }}) }
     </button>

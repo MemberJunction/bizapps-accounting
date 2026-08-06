@@ -432,7 +432,7 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
     this.cdr.markForCheck();
     try {
       const client = new JournalEntryBatchDispatchClient(this.ProviderToUse as GraphQLDataProvider);
-      const res = await client.DispatchBatch(batch.ID);
+      const res = await client.DispatchJournalEntryBatch(batch.ID);
       if (res.Success) {
         this.ActionMessage = `Re-dispatched ${batch.JournalEntryBatchNumber}${res.ExternalJournalEntryBatchRef ? ` — ERP ref ${res.ExternalJournalEntryBatchRef}` : ''}.`;
         this.ActionIsError = false;

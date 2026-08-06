@@ -15,7 +15,7 @@ import '@memberjunction/server-bootstrap-lite';
 import '@mj-biz-apps/common-entities';
 import '@mj-biz-apps/accounting-entities';
 import '@mj-biz-apps/accounting-core-entities-server';
-import { buildBatch, approveBatch, sendBatch, AutoApproveGate } from '@mj-biz-apps/accounting-core-entities-server';
+import { buildJournalEntryBatch, approveJournalEntryBatch, sendJournalEntryBatch, AutoApproveGate } from '@mj-biz-apps/accounting-core-entities-server';
 
 async function main(): Promise<void> {
   dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
@@ -35,11 +35,11 @@ async function main(): Promise<void> {
   console.log(`Pending JEs before: ${pending.length}`);
   if (pending.length === 0) { finishAndExit('Nothing Pending — no-op.', 0, pool); return; }
 
-  const built = await buildBatch('BusinessCentral', user.ID, user, AutoApproveGate);
-  if (!built) { finishAndExit('buildBatch returned null (nothing netted).', 0, pool); return; }
+  const built = await buildJournalEntryBatch('BusinessCentral', user.ID, user, AutoApproveGate);
+  if (!built) { finishAndExit('buildJournalEntryBatch returned null (nothing netted).', 0, pool); return; }
   console.log(`Built batch ${built.batchId}: ${built.jeCount} JE(s), ${built.summaryLineCount} summary line(s), ${built.totalDebits}/${built.totalCredits}`);
-  await approveBatch(built.batchId, user.ID, user);
-  const posted = await sendBatch(built.batchId, user, { gate: AutoApproveGate });
+  await approveJournalEntryBatch(built.batchId, user.ID, user);
+  const posted = await sendJournalEntryBatch(built.batchId, user, { gate: AutoApproveGate });
   console.log(`Batch ${built.batchId} → ${posted.Status} (ref ${posted.ExternalJournalEntryBatchRef})`);
   finishAndExit(`Posted ${built.jeCount} previously-Pending JE(s). Clean slate for block2.`, 0, pool);
 }

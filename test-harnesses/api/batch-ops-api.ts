@@ -13,14 +13,14 @@
  *   2. The ApprovalTaskID/RaisedAt stamp is on the batch row (verified over the wire).
  *   3. GetBatchApprovalState → not approved (with a reason).
  *   4. RecordBatchDecision Approved → approval state flips true.
- *   5. DispatchBatch → Posted + MOCK external ref.
+ *   5. DispatchJournalEntryBatch → Posted + MOCK external ref.
  *   6. Reject path: a new wire-created JE builds a second batch; RecordBatchDecision Rejected →
  *      batch Cancelled, the JE returns to the candidate pool (Pending, JournalEntryBatchID NULL).
  *   7. EmptyJournalEntryBatchError on the wire: an explicit build for a company with nothing to batch is a
  *      loud failure, not a silent no-op.
  *
  * (The no-CompanyID SWEEP form is deliberately NOT exercised here: on a shared instance it would
- * batch other companies' Pending JEs. Its loop is per-company buildBatch + pendingCompanies, both
+ * batch other companies' Pending JEs. Its loop is per-company buildJournalEntryBatch + pendingCompanies, both
  * covered — the sweep composition is exercised by the seeded GUI tier instead.)
  *
  * Run from the INSTANCE WORKTREE ROOT:
@@ -183,7 +183,7 @@ async function main(): Promise<void> {
     check('approval state now TRUE', post.Approved === true, JSON.stringify(post));
 
     // 5. Dispatch — Approved → Sent → Posted via the mock poster.
-    console.log('\n5. DispatchBatch:');
+    console.log('\n5. DispatchJournalEntryBatch:');
     const dispRes = await executeOp(apiKey, 'Accounting.DispatchJournalEntryBatch', { JournalEntryBatchID: b.batchId });
     check('dispatch transport success', dispRes.success === true, `${dispRes.resultCode} ${dispRes.errorMessage ?? ''}`);
     const disp = opOutput<DispatchWire>(dispRes);
@@ -230,8 +230,8 @@ async function main(): Promise<void> {
     };
     const lateOut = opOutput<CreateJournalEntryOutput>(await executeOp(apiKey, 'Accounting.CreateJournalEntry', lateDraft));
     check('late candidate booked over the wire', lateOut.Success === true, JSON.stringify(lateOut.Errors));
-    // regenerateBatch returns a FLAT single-batch result (it rebuilds ONE batch in place),
-    // unlike BuildBatch's per-company Batches[] envelope.
+    // regenerateJournalEntryBatch returns a FLAT single-batch result (it rebuilds ONE batch in place),
+    // unlike BuildJournalEntryBatch's per-company Batches[] envelope.
     const rb = opOutput<{ batchId: string; jeCount: number; totalDebits: number; totalCredits: number; summaryLineCount: number }>(
       await executeOp(apiKey, 'Accounting.RegenerateJournalEntryBatch', { JournalEntryBatchID: b3?.batchId, TargetSystem: 'BusinessCentral' }));
     check('regenerate re-gathered BOTH JEs in the SAME batch with the exact netted total (161 = 50 + 111)',

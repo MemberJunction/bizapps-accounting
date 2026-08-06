@@ -232,7 +232,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
   /**
    * Shared teardown for Cancel and the engine's regenerate (batch MUST still be Pending):
    * clear the summary pointer (so 50023 doesn't trip), unlock the members, delete the summary.
-   * Owns NO transaction — the caller (Cancel, or regenerateBatch's rebuild transaction) does.
+   * Owns NO transaction — the caller (Cancel, or regenerateJournalEntryBatch's rebuild transaction) does.
    */
   public async TearDownSummaryAndUnlock(contextUser?: UserInfo): Promise<void> {
     const user = contextUser ?? this.ContextCurrentUser;

@@ -8,7 +8,7 @@ import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
 import {
   mjBizAppsAccountingJournalEntryBatchEntity,
 } from '@mj-biz-apps/accounting-entities';
-import { JournalEntryBatchDispatchClient, BatchDecision } from './journal-entry-batch-dispatch.client';
+import { JournalEntryBatchDispatchClient, JournalEntryBatchDecision } from './journal-entry-batch-dispatch.client';
 
 /** The generated batch Status union (rule 2c: derived, never hand-copied). */
 type BatchStatus = mjBizAppsAccountingJournalEntryBatchEntity['Status'];
@@ -16,7 +16,7 @@ type BatchStatus = mjBizAppsAccountingJournalEntryBatchEntity['Status'];
 /**
  * One batch row in the list, with its derived display + (lazily-loaded) CFO approval state.
  * Approval state is NOT a column on the batch — it lives in bizapps-tasks (a Task linked to the
- * batch + a terminal Task Decision), so we resolve it via the gate-backed `JEBatchApprovalState` query.
+ * batch + a terminal Task Decision), so we resolve it via the gate-backed `JournalEntryBatchApprovalState` query.
  */
 interface BatchRow {
   ID: string;
@@ -43,7 +43,7 @@ const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
  * gathers ALL pending JEs; the send splits by company at the ERP boundary.
  *
  * Lists ALL JE Batches (status / control totals + CFO approval state), and drives the engine via the
- * thin JournalEntryBatchDispatchClient (→ BatchDispatchResolver → CoreEntitiesServer buildBatch/approveBatch/sendBatch/gate):
+ * thin JournalEntryBatchDispatchClient (→ BatchDispatchResolver → CoreEntitiesServer buildJournalEntryBatch/approveJournalEntryBatch/sendJournalEntryBatch/gate):
  *   - Build batch  (ALL pending JEs → ONE Pending multi-company batch + approval task)
  *   - In-app CFO Approve / Reject  (recordDecision; an approval also flips the batch Pending→Approved)
  *   - Dispatch to ERP  (enabled only for an Approved batch; mock poster for v1)
@@ -111,7 +111,7 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
   // ─── actions ───────────────────────────────────────────────────────────────
 
   /** Record an in-app CFO Approve / Reject decision on a batch, then refresh its approval state. */
-  public async OnRecordDecision(row: BatchRow, decision: BatchDecision): Promise<void> {
+  public async OnRecordDecision(row: BatchRow, decision: JournalEntryBatchDecision): Promise<void> {
     if (row.Busy) return;
     row.Busy = true;
     this.clearActionMessage();
@@ -144,7 +144,7 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
     this.clearActionMessage();
     this.cdr.markForCheck();
     try {
-      const res = await this.client().RegenerateBatch(row.ID, row.TargetSystem || this.TargetSystem);
+      const res = await this.client().RegenerateJournalEntryBatch(row.ID, row.TargetSystem || this.TargetSystem);
       if (res.Success && res.NothingToBatch) {
         this.setActionMessage(`Regenerated batch ${row.JournalEntryBatchNumber}: no candidate journal entries remain.`, false);
         await this.loadBatches();
@@ -170,7 +170,7 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
     this.clearActionMessage();
     this.cdr.markForCheck();
     try {
-      const res = await this.client().DispatchBatch(row.ID);
+      const res = await this.client().DispatchJournalEntryBatch(row.ID);
       if (res.Success) {
         this.setActionMessage(
           `Dispatched batch ${row.JournalEntryBatchNumber} → ${res.Status}${res.ExternalJournalEntryBatchRef ? ` (ref ${res.ExternalJournalEntryBatchRef})` : ''}.`,

@@ -10,7 +10,7 @@
  *   L4  GenerateReversal — swapped amounts, both back-references, dimension tags CARRIED.
  *   L5  engine draft path — AccountingEngine merges duplicate lines and books through the
  *       encapsulated entity (the orders-server call path).
- *   L6  full batch cycle — buildBatch nets to a JournalEntryBatchSummary JE (exact netted totals),
+ *   L6  full batch cycle — buildJournalEntryBatch nets to a JournalEntryBatchSummary JE (exact netted totals),
  *       members lock; approve → dispatch (mock poster) → batch Posted, members + summary GLPosted.
  *   L7  batch lifecycle invariants on a SAVED batch — Posted is terminal (illegal transition
  *       rejected by the entity), and a batch cannot be BORN mid-lifecycle.
@@ -29,9 +29,9 @@ import {
   GLAccountLinkEntityServer,
   AccountingEngine,
   CreateJournalEntriesOperation,
-  buildBatch,
-  approveBatch,
-  sendBatch,
+  buildJournalEntryBatch,
+  approveJournalEntryBatch,
+  sendJournalEntryBatch,
   AutoApproveGate,
   TasksAppApprovalGate,
   mockErpPoster,
@@ -163,8 +163,8 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
       `SELECT SUM(l.DebitAmount) FROM ${SCHEMA}.JournalEntryLine l JOIN ${SCHEMA}.JournalEntry j ON j.ID=l.JournalEntryID
        WHERE j.CompanyID='${ctx.company.id}' AND j.Status='Pending' AND j.EntryTypeID<>'${ctx.batchSummaryTypeId}'`));
 
-    const result = await buildBatch(ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, AutoApproveGate);
-    expect(result, 'buildBatch returned null — expected pending JEs to batch').not.toBeNull();
+    const result = await buildJournalEntryBatch(ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, AutoApproveGate);
+    expect(result, 'buildJournalEntryBatch returned null — expected pending JEs to batch').not.toBeNull();
     ctx.createdBatchIds.push(result!.batchId);
 
     // Summary JE: exists, right shape, rides the lock machinery.
@@ -187,8 +187,8 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     expect(pendingLeft).toBe(0);
 
     // Approve → dispatch (mock poster) → Posted; members + summary GLPosted.
-    await approveBatch(result!.batchId, ctx.user.ID, ctx.user, provider);
-    const batch = await sendBatch(result!.batchId, ctx.user, { gate: AutoApproveGate, poster: mockErpPoster, provider });
+    await approveJournalEntryBatch(result!.batchId, ctx.user.ID, ctx.user, provider);
+    const batch = await sendJournalEntryBatch(result!.batchId, ctx.user, { gate: AutoApproveGate, poster: mockErpPoster, provider });
     expect(batch.Status).toBe('Posted');
     const notPosted = Number(await scalar(ctx.pool, `SELECT COUNT(*) FROM ${SCHEMA}.JournalEntry WHERE JournalEntryBatchID='${result!.batchId}' AND Status<>'GLPosted'`));
     expect(notPosted).toBe(0);
@@ -317,7 +317,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
       async onBatchBuilt(): Promise<string | null> { throw new Error('L11 injected task-raise failure'); },
     };
     await expect(
-      buildBatch(ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, failingGate),
+      buildJournalEntryBatch(ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, failingGate),
     ).rejects.toThrow('L11 injected task-raise failure');
 
     // Rollback proof — raw SQL underneath the entity layer: nothing was born, nothing was locked.
@@ -335,7 +335,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     // The fixture company's ACP has no ApprovalCFOUserID — the precondition must throw pre-write.
     const batchesBefore = Number(await scalar(ctx.pool, `SELECT COUNT(*) FROM ${SCHEMA}.JournalEntryBatch WHERE CompanyID='${ctx.company.id}'`));
     await expect(
-      buildBatch(ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, new TasksAppApprovalGate(provider)),
+      buildJournalEntryBatch(ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, new TasksAppApprovalGate(provider)),
     ).rejects.toThrow(/No CFO configured/);
     const batchesAfter = Number(await scalar(ctx.pool, `SELECT COUNT(*) FROM ${SCHEMA}.JournalEntryBatch WHERE CompanyID='${ctx.company.id}'`));
     expect(batchesAfter).toBe(batchesBefore);
@@ -349,7 +349,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     acp.ApprovalCFOUserID = ctx.user.ID;
     expect(await acp.Save(), `CFO config save: ${acp.LatestResult?.CompleteMessage}`).toBe(true);
 
-    const result = await buildBatch(
+    const result = await buildJournalEntryBatch(
       ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, new TasksAppApprovalGate(provider));
     ctx.createdBatchIds.push(result.batchId);
     try {
@@ -450,7 +450,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     // the guard closes) → approve must refuse with the footing message.
     const fuel = await createJE(false, 75, 'L17 fuel');
     void fuel;
-    const result = await buildBatch(ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, AutoApproveGate);
+    const result = await buildJournalEntryBatch(ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, AutoApproveGate);
     ctx.createdBatchIds.push(result.batchId);
     await ctx.pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET TotalDebits = TotalDebits + 999 WHERE ID='${result.batchId}'`);
 
@@ -474,7 +474,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
 
   it('L19 — owned collections: LoadMembers + LoadSummaryJournalEntry hydrate what the batch owns; entity Cancel() reverses the lock', async () => {
     const fuel = await createJE(true, 85, 'L19 fuel');
-    const result = await buildBatch(ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, AutoApproveGate);
+    const result = await buildJournalEntryBatch(ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, AutoApproveGate);
 
     const batch = await provider.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, ctx.user);
     expect(await batch.Load(result.batchId)).toBe(true);

@@ -47,9 +47,9 @@ export type { JournalEntryTypeRow } from './JournalEntryTypes.js';
 // S1 — batching engine: net a company's Pending JEs into a SINGLE-COMPANY batch (D7) whose
 // summary is a JournalEntryBatchSummary JournalEntry, lock + dispatch (CFO-approval gate + ERP-post seam).
 export {
-  buildBatch,
-  buildBatchFromExplicitIds,
-  buildBatchFromView,
+  buildJournalEntryBatch,
+  buildJournalEntryBatchFromExplicitIds,
+  buildJournalEntryBatchFromView,
   classifyViewEntries,
   previewBatch,
   pendingCandidateFilter,
@@ -58,10 +58,10 @@ export {
   pendingCompanies,
   EmptyJournalEntryBatchError,
   JournalEntryBatchFromViewError,
-  approveBatch,
-  sendBatch,
-  cancelBatch,
-  regenerateBatch,
+  approveJournalEntryBatch,
+  sendJournalEntryBatch,
+  cancelJournalEntryBatch,
+  regenerateJournalEntryBatch,
   netLines,
   resolveExternalAccount,
   mockErpPoster,

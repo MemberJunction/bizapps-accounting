@@ -234,7 +234,7 @@ WITH their features; new rows cover the new invariants._
 | **GLOBAL multi-company sweep (companyCount, per-company netting isolation)** | ✓ | ✓ | ✓ | ⚠ |
 | GL resolution — mapping override · inline · **Code fallback (AM-4)** + COA-mapping approval (Block 5) | — | ✓ | — | — |
 | Dimension-through-batch | ✓ | ✓ | ⚠ | ⚠ |
-| **approveBatch step (audit stamps · only-Pending guard · dispatch-before-approve refused)** | — | ✓ | ✓ | ✓ |
+| **approveJournalEntryBatch step (audit stamps · only-Pending guard · dispatch-before-approve refused)** | — | ✓ | ✓ | ✓ |
 | CFO gate: approve → dispatch → **Posted** | — | ✓ | ✓ | ✓ |
 | **Reject/deny → dispatch refused (both layers)** | — | ✓ | ✓ | ⚠ |
 | **No-CFO → build hard-fails** | — | ✓ | ✓ | — |
@@ -255,7 +255,7 @@ WITH their features; new rows cover the new invariants._
 ## Intentional-⚠ register (coverage placed at a cheaper/other tier on purpose — NOT shortcuts)
 
 - **Dimension-through-batch @ T3** — fully proven at **T2** (`block2` B5: same account × 2 dim values
-  → separate, tagged summary lines, via SQL). The API's `BuildJEBatchResult` is aggregate; the
+  → separate, tagged summary lines, via SQL). The API's `BuildJournalEntryBatchResult` is aggregate; the
   consolidation it *does* report (`SummaryLineCount`) is already asserted at T3. **No API change
   needed** (never grow the API to serve a test).
 - **Reject · netting-exact · reversal · read-model-exact · intercompany · multi-company @ T5** —
@@ -277,17 +277,17 @@ committed Tier-5 specs** yet — treat as a coverage gap to fill (Tier-5 `dashbo
 
 **Open questions for the human → see `instances/accounting-engine-dev/QUESTIONS.md`:**
 - ✅ **Batch reject semantics** (Q4) — RESOLVED 2026-07-08 (Robert: levels of locking). Reject now reverses the
-  **preliminary** lock: `cancelBatch` → batch Cancelled + entries back to the candidate pool. Proven in `block2`
-  (`#12 cancelBatch`) + live through MJAPI. Impl: migration `V202607081600` + `JournalEntryBatchEngine.cancelBatch`.
-- ✅ **buildBatch atomicity** (Q5) — RESOLVED 2026-07-08. A failed approval-task raise now auto-reverses the batch
+  **preliminary** lock: `cancelJournalEntryBatch` → batch Cancelled + entries back to the candidate pool. Proven in `block2`
+  (`#12 cancelJournalEntryBatch`) + live through MJAPI. Impl: migration `V202607081600` + `JournalEntryBatchEngine.cancelJournalEntryBatch`.
+- ✅ **buildJournalEntryBatch atomicity** (Q5) — RESOLVED 2026-07-08. A failed approval-task raise now auto-reverses the batch
   (reversible preliminary lock) instead of stranding a task-less orphan. Proven in `block2` (`no CFO → auto-reverse`).
 - ⏳ **Follow-on GAAP calls (Q12–Q15, high-priority for Robert):** reversal same-period-vs-forward-date, batch cutoff
   (oldest-forward), out-of-order approval, backdated-order JE date. Provisional answers coded; confirmations shape the
   deferred filter/backdating work (plan `batch-approval-lock-redesign.md` §13–14). Do NOT block the shipped reject fix.
 - ✅ Due-to/from semantics **confirmed** (Marcelo): Accounting does **no** intercompany netting — Payments owns it.
 
-**Batch-lock redesign (#12, 2026-07-08) coverage:** `block2` now **24/24** — adds `#12 cancelBatch` (reject-unlock),
-`#12 permanent lock` (approved → raw unlock rejected by trigger), `#12 regenerateBatch` (re-gathers a since-added JE),
+**Batch-lock redesign (#12, 2026-07-08) coverage:** `block2` now **24/24** — adds `#12 cancelJournalEntryBatch` (reject-unlock),
+`#12 permanent lock` (approved → raw unlock rejected by trigger), `#12 regenerateJournalEntryBatch` (re-gathers a since-added JE),
 and upgrades the `no CFO` test to assert auto-reverse. Live end-to-end validated through MJAPI (build→reject→Cancelled+freed;
 build→regenerate→jeCount grows; approve→dispatch→Posted). **GUI layer:** `specs/batching-reject.spec.ts` (Playwright, system
 Chrome) drives the live Explorer — Build→**Reject** (card flips to Cancelled + banner)→Build→**Regenerate** (rebuild banner),

@@ -1,7 +1,7 @@
 /**
  * batching-scenarios-fixture.ts — MULTI-COMPANY fixture for the Tier-3 batching SCENARIOS harness.
  *
- * 2026-07-06 rework (engine-meeting rulings, CH-4): buildBatch is GLOBAL — one build sweeps every
+ * 2026-07-06 rework (engine-meeting rulings, CH-4): buildJournalEntryBatch is GLOBAL — one build sweeps every
  * Pending JE across all companies into ONE multi-company batch. The old per-company-build
  * "independence" scenario is gone; the harness now proves the global sweep + per-company netting
  * isolation, and the reject / no-CFO scenarios need their JEs seeded in SEPARATE WAVES (each build
@@ -161,7 +161,7 @@ async function makeJEs(p: Pools, companyId: string, label: string, jeSpecs: JESp
 
 async function setup(p: Pools): Promise<void> {
   const stray = (await p.pool.request().query(`SELECT COUNT(*) n FROM ${SCHEMA}.JournalEntry WHERE Status='Pending'`)).recordset[0].n;
-  if (Number(stray) > 0) throw new Error(`${stray} stray Pending JE(s) exist — clean them up first (buildBatch sweeps ALL Pending JEs).`);
+  if (Number(stray) > 0) throw new Error(`${stray} stray Pending JE(s) exist — clean them up first (buildJournalEntryBatch sweeps ALL Pending JEs).`);
   const currency = await resolveCurrency(p.user);
   const counterpartyId = await ensureCounterpartyOrg(p.user);
   const flowId = randomUUID();

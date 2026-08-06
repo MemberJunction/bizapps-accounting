@@ -8,17 +8,17 @@ import { WorkspaceTabStore } from '../../../transfer-pending/workspace-tabs/work
 import { WorkspaceTab } from '../../../transfer-pending/workspace-tabs/workspace-tabs.types';
 import {
   JournalEntryBatchWorkspaceClient,
-  type BatchCriteria,
+  type JournalEntryBatchCriteria,
   type BatchPreview,
   type EntryTypeScope,
-  type BatchTargetSystem,
+  type JournalEntryBatchTargetSystem,
 } from './journal-entry-batch-workspace.client';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 
 /** One workspace tab's session state — the draft the operator is composing. */
 interface BatchDraft {
-  Criteria: BatchCriteria;
+  Criteria: JournalEntryBatchCriteria;
   /** Optional free-text label (JournalEntryBatch.Memo) — "what was this batch for". NOT identity
    *  (JournalEntryBatchNumber is); purely for findability. Editable pre-build, and it drives the tab caption. */
   Memo: string;
@@ -101,7 +101,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
     { Id: 'Manual', Label: 'Manual only' },
   ];
 
-  public readonly TargetSystems: readonly BatchTargetSystem[] = ['BusinessCentral'];
+  public readonly TargetSystems: readonly JournalEntryBatchTargetSystem[] = ['BusinessCentral'];
 
   ngOnInit(): void {
     this.refreshSub = this.pageRefresh.OnRefresh(() => this.Refresh());
@@ -260,7 +260,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
 
   // ─── criteria ──────────────────────────────────────────────────────────────
 
-  private defaultCriteria(): BatchCriteria {
+  private defaultCriteria(): JournalEntryBatchCriteria {
     return {
       // "Include unbatched through [now]" — the §2 default flow.
       Cutoff: this.toLocalInput(new Date()),

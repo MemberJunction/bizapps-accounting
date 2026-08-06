@@ -5,16 +5,16 @@
  * JournalEntryType — issue #24) instead of the retired JournalEntryBatchLineItem tables
  * (Amith's summary-JE model).
  *
- *   buildBatch(companyId, …): gather that company's Pending JEs → ONE JournalEntryBatch
+ *   buildJournalEntryBatch(companyId, …): gather that company's Pending JEs → ONE JournalEntryBatch
  *     (one batch per company per run, D7), net their lines to consolidated summary groups
  *     (one per GLAccount × Dimension-combo, Dr/Cr netted to one side), write the summary
  *     as a JournalEntryBatchSummary JournalEntry (header + JournalEntryLines + dimension tags) that
  *     carries the batch's JournalEntryBatchID so it rides the SAME derived lock machinery as the
  *     members, set the balanced control totals + SummaryJournalEntryID (trigger 50023
  *     verifies coherence), **lock** the member JEs to Batched, and raise the approval task.
- *   approveBatch(): the human sign-off — Pending→Approved (+ApprovedAt/ApprovedByUserID).
+ *   approveJournalEntryBatch(): the human sign-off — Pending→Approved (+ApprovedAt/ApprovedByUserID).
  *     Content is frozen from here (trg_JournalEntryBatch_Immutability, 50009).
- *   sendBatch(): require approval (gate seam + Status='Approved'), flip Approved→Sent,
+ *   sendJournalEntryBatch(): require approval (gate seam + Status='Approved'), flip Approved→Sent,
  *     post the summary JE's lines to the ERP (all-or-nothing per batch), and on
  *     confirmation flip Sent→Posted + the member JEs AND the summary JE Batched→GLPosted.
  *     Failure → Failed (retry + escalating alerts).
@@ -37,8 +37,8 @@
  *
  * THE §7.2 BATCH-REWORK SLICE LANDED 2026-07-29 (S-D of the donor port): criteria-driven
  * candidate filtering (cutoff/startDate/companies/type-codes — pendingCandidateFilter),
- * explicit-ID builds (buildBatchFromExplicitIds — re-verifies Pending, one batch per company),
- * view-defined batches (buildBatchFromView — snapshot + classify + loud rejects), and the
+ * explicit-ID builds (buildJournalEntryBatchFromExplicitIds — re-verifies Pending, one batch per company),
+ * view-defined batches (buildJournalEntryBatchFromView — snapshot + classify + loud rejects), and the
  * read-only previewBatch that runs the SAME filter/order/netting as the build. The
  * one-transaction-per-batch guarantee (D10 rev. 2026-07-29) is here too: build + summary +
  * locks + approval task + ApprovalTaskID stamp commit all-or-none in one provider transaction.
@@ -189,7 +189,7 @@ export function netLines(lines: NettableLine[]): NetGroup[] {
   return groups;
 }
 
-// ─── buildBatch ──────────────────────────────────────────────────────────────
+// ─── buildJournalEntryBatch ──────────────────────────────────────────────────────────────
 
 /**
  * Build a Pending SINGLE-COMPANY batch (D7) from that company's Pending JEs: a netted JournalEntryBatchSummary
@@ -205,7 +205,7 @@ export function netLines(lines: NettableLine[]): NetGroup[] {
  * Throws `EmptyJournalEntryBatchError` when there is nothing to batch (no candidates, or all groups net to
  * zero) — a batch with no summary line is never persisted.
  */
-export async function buildBatch(
+export async function buildJournalEntryBatch(
   companyId: string,
   targetSystem: JournalEntryBatchTargetSystem,
   batchedByUserId: string,
@@ -219,16 +219,16 @@ export async function buildBatch(
   if (jeIds.length === 0) {
     throw new EmptyJournalEntryBatchError(`Nothing to batch: company ${companyId} has no unbatched Pending journal entries matching the criteria.`);
   }
-  return buildBatchCore(companyId, jeIds, targetSystem, batchedByUserId, contextUser, provider, gate);
+  return buildJournalEntryBatchCore(companyId, jeIds, targetSystem, batchedByUserId, contextUser, provider, gate);
 }
 
 /**
  * Build a batch from a SPECIFIC (already-vetted) set of Pending JE IDs belonging to ONE company —
- * the shared one-transaction core of the oldest-forward buildBatch, the explicit-ID build, and the
+ * the shared one-transaction core of the oldest-forward buildJournalEntryBatch, the explicit-ID build, and the
  * view build. Throws EmptyJournalEntryBatchError when the set nets to zero — a batch with no summary line is
  * never persisted (Marcelo 2026-07-21); the empty case is a loud, explicit outcome, not a silent null.
  */
-async function buildBatchCore(
+async function buildJournalEntryBatchCore(
   companyId: string,
   jeIds: string[],
   targetSystem: JournalEntryBatchTargetSystem,
@@ -262,7 +262,7 @@ async function buildBatchCore(
         batch.ApprovalTaskID = approvalTaskId;
         batch.ApprovalTaskRaisedAt = new Date();
         if (!(await batch.Save())) {
-          throw new Error(`buildBatch: ApprovalTaskID stamp failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
+          throw new Error(`buildJournalEntryBatch: ApprovalTaskID stamp failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
         }
       }
     }
@@ -344,7 +344,7 @@ async function resolveEntryTypeIds(codes: string[], contextUser: UserInfo, p: Pr
   const rows = res.Results ?? [];
   const found = new Set(rows.map(r => r.Code));
   const missing = codes.filter(c => !found.has(c));
-  if (missing.length > 0) throw new Error(`buildBatch: unknown JournalEntryType code(s) in criteria: ${missing.join(', ')}`);
+  if (missing.length > 0) throw new Error(`buildJournalEntryBatch: unknown JournalEntryType code(s) in criteria: ${missing.join(', ')}`);
   return rows.map(r => r.ID);
 }
 
@@ -354,7 +354,7 @@ async function resolveEntryTypeIds(codes: string[], contextUser: UserInfo, p: Pr
  * outright — there is no legitimate value that needs escaping here, so refusing beats quoting.
  */
 function sqlGuid(id: string): string {
-  if (!/^[0-9a-fA-F-]{36}$/.test(id)) throw new Error(`buildBatch: invalid id in criteria: ${id}`);
+  if (!/^[0-9a-fA-F-]{36}$/.test(id)) throw new Error(`buildJournalEntryBatch: invalid id in criteria: ${id}`);
   return `'${id}'`;
 }
 
@@ -388,7 +388,7 @@ export class JournalEntryBatchFromViewError extends Error {
  * click — a stale selection is a loud "refresh and rebuild", never silently-written stale data),
  * then grouped by their header CompanyID and built ONE single-company batch per company (D7).
  */
-export async function buildBatchFromExplicitIds(
+export async function buildJournalEntryBatchFromExplicitIds(
   jeIds: string[],
   targetSystem: JournalEntryBatchTargetSystem,
   batchedByUserId: string,
@@ -403,13 +403,13 @@ export async function buildBatchFromExplicitIds(
     { EntityName: JE_ENTITY, ExtraFilter: `ID IN (${inList})`, Fields: ['ID', 'Status', 'CompanyID'], ResultType: 'simple', BypassCache: true },
     contextUser,
   );
-  if (!res.Success) throw new Error(`buildBatchFromExplicitIds: could not validate the selection: ${res.ErrorMessage ?? 'unknown'}`);
+  if (!res.Success) throw new Error(`buildJournalEntryBatchFromExplicitIds: could not validate the selection: ${res.ErrorMessage ?? 'unknown'}`);
   const rows = res.Results ?? [];
   const byId = new Map(rows.map(r => [r.ID.toLowerCase(), r]));
   const stale = jeIds.filter(id => byId.get(id.toLowerCase())?.Status !== 'Pending');
   if (stale.length > 0) {
     throw new JournalEntryBatchFromViewError(
-      `buildBatchFromExplicitIds: ${stale.length} selected entr${stale.length === 1 ? 'y is' : 'ies are'} no longer Pending ` +
+      `buildJournalEntryBatchFromExplicitIds: ${stale.length} selected entr${stale.length === 1 ? 'y is' : 'ies are'} no longer Pending ` +
       `(batched or posted since the preview): ${stale.join(', ')}. Refresh the preview and rebuild.`,
     );
   }
@@ -422,7 +422,7 @@ export async function buildBatchFromExplicitIds(
   }
   const results: BuildJournalEntryBatchResult[] = [];
   for (const [companyId, ids] of byCompany) {
-    results.push(await buildBatchCore(companyId, ids, targetSystem, batchedByUserId, contextUser, provider, gate));
+    results.push(await buildJournalEntryBatchCore(companyId, ids, targetSystem, batchedByUserId, contextUser, provider, gate));
   }
   return results;
 }
@@ -440,7 +440,7 @@ export interface BuildJournalEntryBatchFromViewOptions extends BuildJournalEntry
   excludeLocked?: boolean;
 }
 
-export async function buildBatchFromView(
+export async function buildJournalEntryBatchFromView(
   viewId: string,
   targetSystem: JournalEntryBatchTargetSystem,
   batchedByUserId: string,
@@ -463,7 +463,7 @@ export async function buildBatchFromView(
     );
   }
   if (excluded.length > 0) {
-    console.warn(`buildBatchFromView: excluded ${excluded.length} non-Pending entr${excluded.length === 1 ? 'y' : 'ies'} (overlap-safe): ${excluded.join(', ')}`);
+    console.warn(`buildJournalEntryBatchFromView: excluded ${excluded.length} non-Pending entr${excluded.length === 1 ? 'y' : 'ies'} (overlap-safe): ${excluded.join(', ')}`);
   }
   if (pending.length === 0) throw new EmptyJournalEntryBatchError('Batch-from-view: the view resolves to no batchable Pending entries.');
   let inWindow = pending;
@@ -475,7 +475,7 @@ export async function buildBatchFromView(
     inWindow = (winRes.Results ?? []).map(r => r.ID);
     if (inWindow.length === 0) throw new EmptyJournalEntryBatchError('Batch-from-view: no view entries fall inside the date window.');
   }
-  return buildBatchFromExplicitIds(inWindow, targetSystem, batchedByUserId, contextUser, provider, gate);
+  return buildJournalEntryBatchFromExplicitIds(inWindow, targetSystem, batchedByUserId, contextUser, provider, gate);
 }
 
 /**
@@ -566,7 +566,7 @@ async function createBatchHeader(
   batch.TotalEntries = jeCount;
   batch.TotalDebits = 0;
   batch.TotalCredits = 0;
-  if (!(await batch.Save())) throw new Error(`buildBatch: batch header save failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
+  if (!(await batch.Save())) throw new Error(`buildJournalEntryBatch: batch header save failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
   return batch;
 }
 
@@ -601,13 +601,13 @@ async function writeSummaryJournalEntry(
     }
   }
   if (!(await summary.Save())) {
-    throw new Error(`buildBatch: summary JE save failed: ${summary.LatestResult?.CompleteMessage ?? 'unknown'}`);
+    throw new Error(`buildJournalEntryBatch: summary JE save failed: ${summary.LatestResult?.CompleteMessage ?? 'unknown'}`);
   }
 
   // Preliminary lock: Pending→Batched with JournalEntryBatchID set (reversible while the batch stays Pending).
   summary.Status = 'Batched';
   if (!(await summary.Save())) {
-    throw new Error(`buildBatch: summary JE lock (Pending→Batched) failed — the summary must foot (50001): ${summary.LatestResult?.CompleteMessage ?? 'unknown'}`);
+    throw new Error(`buildJournalEntryBatch: summary JE lock (Pending→Batched) failed — the summary must foot (50001): ${summary.LatestResult?.CompleteMessage ?? 'unknown'}`);
   }
   return summary;
 }
@@ -630,7 +630,7 @@ async function setSummaryPointerAndTotals(
   batch.TotalDebits = totalDebits;
   batch.TotalCredits = totalCredits;
   batch.TotalEntries = jeCount;
-  if (!(await batch.Save())) throw new Error(`buildBatch: summary-pointer/control-totals save failed (coherence 50023): ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
+  if (!(await batch.Save())) throw new Error(`buildJournalEntryBatch: summary-pointer/control-totals save failed (coherence 50023): ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
 }
 
 /**
@@ -662,18 +662,18 @@ async function lockJournalEntries(jeIds: string[], batchId: string, contextUser:
     await je.Load(jeId);
     je.JournalEntryBatchID = batchId;
     je.Status = 'Batched';
-    if (!(await je.Save())) throw new Error(`buildBatch: failed to lock JE ${jeId}: ${je.LatestResult?.CompleteMessage ?? 'unknown'}`);
+    if (!(await je.Save())) throw new Error(`buildJournalEntryBatch: failed to lock JE ${jeId}: ${je.LatestResult?.CompleteMessage ?? 'unknown'}`);
   }
 }
 
-// ─── cancelBatch / regenerateBatch — reverse a PRELIMINARY (unapproved) lock ──
+// ─── cancelJournalEntryBatch / regenerateJournalEntryBatch — reverse a PRELIMINARY (unapproved) lock ──
 
 /**
  * Reverse an unapproved (Pending) batch: return its member journal entries to the candidate pool,
  * delete its JournalEntryBatchSummary JE, and mark it Cancelled. Valid ONLY while Status='Pending' (approval
  * makes the lock permanent — plan §7.3).
  */
-export async function cancelBatch(
+export async function cancelJournalEntryBatch(
   batchId: string, contextUser: UserInfo, provider: IMetadataProvider,
 ): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
   // Cancel is single-aggregate work (the batch reversing ITS OWN preliminary lock), so the logic
@@ -681,7 +681,7 @@ export async function cancelBatch(
   // this engine function is retained as the stable call-site for the ops/resolver era callers.
   const p = resolveProviders(provider);
   const batch = await p.md.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, contextUser);
-  if (!(await batch.Load(batchId))) throw new Error(`cancelBatch: batch ${batchId} not found`);
+  if (!(await batch.Load(batchId))) throw new Error(`cancelJournalEntryBatch: batch ${batchId} not found`);
   await batch.Cancel(contextUser);
   return batch;
 }
@@ -691,14 +691,14 @@ export async function cancelBatch(
  * re-gather ALL current candidates for the batch's company (every unbatched Pending JE, incl. ones
  * added since) and rebuild the netted summary on the SAME batch record.
  */
-export async function regenerateBatch(
+export async function regenerateJournalEntryBatch(
   batchId: string, targetSystem: JournalEntryBatchTargetSystem, contextUser: UserInfo, provider: IMetadataProvider,
 ): Promise<BuildJournalEntryBatchResult> {
   const p = resolveProviders(provider);
   const batch = await p.md.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, contextUser);
-  if (!(await batch.Load(batchId))) throw new Error(`regenerateBatch: batch ${batchId} not found`);
+  if (!(await batch.Load(batchId))) throw new Error(`regenerateJournalEntryBatch: batch ${batchId} not found`);
   if (batch.Status !== 'Pending') {
-    throw new Error(`regenerateBatch: batch ${batchId} is ${batch.Status}; only a Pending batch can be regenerated`);
+    throw new Error(`regenerateJournalEntryBatch: batch ${batchId} is ${batch.Status}; only a Pending batch can be regenerated`);
   }
 
   // ONE transaction (D10 rev. 2026-07-29): teardown + re-gather + rebuild commit all-or-none.
@@ -715,9 +715,9 @@ export async function regenerateBatch(
       // Nothing to rebuild — a batch with no summary line is never persisted (Marcelo 2026-07-21):
       // keep the teardown (members back to the pool), mark the batch Cancelled, and say so loudly.
       batch.Status = 'Cancelled';
-      if (!(await batch.Save())) throw new Error(`regenerateBatch: empty-cancel failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
+      if (!(await batch.Save())) throw new Error(`regenerateJournalEntryBatch: empty-cancel failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
       await dbProvider.CommitTransaction();
-      throw new EmptyJournalEntryBatchError(`regenerateBatch: no candidates remain for company ${batch.CompanyID} — batch ${batch.JournalEntryBatchNumber} cancelled (a batch with no summary line is never persisted).`);
+      throw new EmptyJournalEntryBatchError(`regenerateJournalEntryBatch: no candidates remain for company ${batch.CompanyID} — batch ${batch.JournalEntryBatchNumber} cancelled (a batch with no summary line is never persisted).`);
     }
 
     const { totalDebits, totalCredits } = summaryTotals(groups);
@@ -737,24 +737,24 @@ export async function regenerateBatch(
   }
 }
 
-// ─── approveBatch ────────────────────────────────────────────────────────────
+// ─── approveJournalEntryBatch ────────────────────────────────────────────────────────────
 
 /** The human sign-off: Pending → Approved (+audit). Content freezes here (trg_JournalEntryBatch_Immutability). */
-export async function approveBatch(
+export async function approveJournalEntryBatch(
   batchId: string, approvedByUserId: string, contextUser: UserInfo, provider: IMetadataProvider,
 ): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
   const p = resolveProviders(provider);
   const batch = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
-  if (!(await batch.Load(batchId))) throw new Error(`approveBatch: batch ${batchId} not found`);
-  if (batch.Status !== 'Pending') throw new Error(`approveBatch: batch ${batchId} is ${batch.Status}, only a Pending batch can be approved`);
+  if (!(await batch.Load(batchId))) throw new Error(`approveJournalEntryBatch: batch ${batchId} not found`);
+  if (batch.Status !== 'Pending') throw new Error(`approveJournalEntryBatch: batch ${batchId} is ${batch.Status}, only a Pending batch can be approved`);
   batch.Status = 'Approved';
   batch.ApprovedAt = new Date();
   batch.ApprovedByUserID = approvedByUserId;
-  if (!(await batch.Save())) throw new Error(`approveBatch: Pending→Approved failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
+  if (!(await batch.Save())) throw new Error(`approveJournalEntryBatch: Pending→Approved failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
   return batch;
 }
 
-// ─── sendBatch ─────────────────────────────────────────────────────────────
+// ─── sendJournalEntryBatch ─────────────────────────────────────────────────────────────
 
 export interface SendJournalEntryBatchOptions {
   gate: JournalEntryBatchApprovalGate;
@@ -768,18 +768,18 @@ export interface SendJournalEntryBatchOptions {
  * Approved→Sent, posts the summary JE's lines to the ERP (all-or-nothing), and on confirmation
  * flips Sent→Posted + the member JEs AND the summary JE Batched→GLPosted.
  */
-export async function sendBatch(batchId: string, contextUser: UserInfo, options: SendJournalEntryBatchOptions): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
+export async function sendJournalEntryBatch(batchId: string, contextUser: UserInfo, options: SendJournalEntryBatchOptions): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
   const p = resolveProviders(options.provider);
   const poster = options.poster ?? mockErpPoster;
   const batch = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
-  if (!(await batch.Load(batchId))) throw new Error(`sendBatch: batch ${batchId} not found`);
-  if (batch.Status !== 'Approved') throw new Error(`sendBatch: batch ${batchId} is ${batch.Status}, only an Approved batch can be sent`);
+  if (!(await batch.Load(batchId))) throw new Error(`sendJournalEntryBatch: batch ${batchId} not found`);
+  if (batch.Status !== 'Approved') throw new Error(`sendJournalEntryBatch: batch ${batchId} is ${batch.Status}, only an Approved batch can be sent`);
 
   await options.gate.assertApproved(batchId, contextUser); // throws if not CFO-approved
 
   batch.Status = 'Sent';
   batch.SentAt = new Date();
-  if (!(await batch.Save())) throw new Error(`sendBatch: Approved→Sent failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
+  if (!(await batch.Save())) throw new Error(`sendJournalEntryBatch: Approved→Sent failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
 
   const summaryLines = await loadSummaryLines(batch, contextUser, p);
   const postResult = await poster(batch, summaryLines, contextUser);
@@ -805,7 +805,7 @@ async function markBatchPosted(
   batch.ExternalJournalEntryBatchRef = externalJournalEntryBatchRef;
   batch.PostedAt = new Date();
   batch.Status = 'Posted';
-  if (!(await batch.Save())) throw new Error(`sendBatch: Sent→Posted failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
+  if (!(await batch.Save())) throw new Error(`sendJournalEntryBatch: Sent→Posted failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
   await markJournalEntriesGLPosted(batch.ID, externalJournalEntryBatchRef, contextUser, p);
   return batch;
 }
@@ -822,7 +822,7 @@ async function markJournalEntriesGLPosted(batchId: string, externalJournalEntryB
     je.Status = 'GLPosted';
     je.GLPostedAt = new Date();
     if (externalJournalEntryBatchRef) je.GLReferenceID = externalJournalEntryBatchRef;
-    if (!(await je.Save())) throw new Error(`sendBatch: JE ${row.ID} Batched→GLPosted failed: ${je.LatestResult?.CompleteMessage ?? 'unknown'}`);
+    if (!(await je.Save())) throw new Error(`sendJournalEntryBatch: JE ${row.ID} Batched→GLPosted failed: ${je.LatestResult?.CompleteMessage ?? 'unknown'}`);
   }
 }
 
@@ -916,7 +916,7 @@ export function perCompanySubtotals(groups: NetGroup[]): Array<{ CompanyID: stri
  * footer, and the out-of-order warning. Runs the SAME `pendingCandidateFilter`, the same
  * oldest-first order, and the same `netLines` the build runs, so the preview cannot drift from
  * what the build actually does — a preview computed a different way is a lie waiting to happen.
- * The build then reuses the operator's SELECTION (ids → buildBatchFromExplicitIds), never the
+ * The build then reuses the operator's SELECTION (ids → buildJournalEntryBatchFromExplicitIds), never the
  * computed artifacts: it re-verifies + re-nets inside the write transaction.
  *
  * @param includedIds when supplied, the netted summary reflects only these (the include/exclude

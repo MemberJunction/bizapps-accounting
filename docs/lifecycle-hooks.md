@@ -103,10 +103,10 @@ identical op over GraphQL `ExecuteRemoteOperation`.
 
 ## 3. Related (not `Save()` hooks)
 
-- **S1 batch dispatch — ✅** (`BatchingEngine.ts`): `buildBatch(targetSystem, …)` is **GLOBAL** — nets ALL
+- **S1 batch dispatch — ✅** (`JournalEntryBatchEngine.ts`): `buildJournalEntryBatch(targetSystem, …)` is **GLOBAL** — nets ALL
   Pending JEs (every company) into ONE multi-company batch (netting keys on company × account × dims; the
-  ERP-post seam splits by company, by **account number** — AM-4); `approveBatch` flips Pending→Approved with
-  audit stamps; `sendBatch` requires Approved + the CFO gate (`TasksAppApprovalGate` — per-company CFO
+  ERP-post seam splits by company, by **account number** — AM-4); `approveJournalEntryBatch` flips Pending→Approved with
+  audit stamps; `sendJournalEntryBatch` requires Approved + the CFO gate (`TasksAppApprovalGate` — per-company CFO
   **union**: one Task assigned to every involved company's CFO) → Sent → **Posted** (mock ERP poster for
   now) + JEs→GLPosted. Lifecycle: `Pending → Approved → Sent → Posted | Failed | Cancelled`.
 - **S3 scheduled-JE schedules — ✅ creation only** (`ScheduledJournalEntryService.createScheduledEntries`:

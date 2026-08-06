@@ -295,7 +295,7 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
   public get PreviewCount(): number { return this.PreviewEntries.length; }
   public get PreviewTotal(): number { return Math.round(this.PreviewEntries.reduce((s, e) => s + e.Amount, 0) * 100) / 100; }
 
-  /** Candidate = every unbatched (Pending) journal entry — exactly what buildBatch nets. */
+  /** Candidate = every unbatched (Pending) journal entry — exactly what buildJournalEntryBatch nets. */
   private async loadBuildCandidates(): Promise<void> {
     const res = await this.runView().RunView<{ ID: string; EntryNumber: string; EffectiveDate: string | null; EntryType: string; Description: string | null }>(
       { EntityName: JE_ENTITY, ExtraFilter: `Status='Pending'`, Fields: ['ID', 'EntryNumber', 'EffectiveDate', 'EntryType', 'Description'], OrderBy: 'EffectiveDate ASC', ResultType: 'simple' }, this.contextUser());
@@ -314,13 +314,13 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
     this.PreviewEnd = times.length ? new Date(Math.max(...times)) : null;
   }
 
-  public async OnBuildBatch(): Promise<void> {
+  public async OnBuildJournalEntryBatch(): Promise<void> {
     if (this.Building) return;
     this.Building = true;
     this.clearActionMessage();
     this.cdr.markForCheck();
     try {
-      const res = await new JournalEntryBatchDispatchClient(this.ProviderToUse as GraphQLDataProvider).BuildBatch(this.BuildTarget);
+      const res = await new JournalEntryBatchDispatchClient(this.ProviderToUse as GraphQLDataProvider).BuildJournalEntryBatch(this.BuildTarget);
       if (res.Success && res.NothingToBatch) {
         this.setActionMessage('No pending journal entries to batch.', false);
         this.BuildPreviewVisible = false;
