@@ -132,6 +132,53 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
   public FilterSource = '';
   public SearchText = '';
 
+  // ─── list-page standard chrome (fused subheader: strip + toolbar) ────────────
+
+  /** The strip's figures — the same counts the old header badges carried. */
+  public get SummaryFigures(): Array<{ Label: string; Value: string; Tone?: 'default' | 'credit' | 'muted' | 'success' | 'warning' | 'danger' | 'info' }> {
+    const figures: Array<{ Label: string; Value: string; Tone?: 'default' | 'credit' | 'muted' | 'success' | 'warning' | 'danger' | 'info' }> = [
+      { Label: 'Accounts', Value: String(this.Rows.length) },
+      { Label: 'Companies', Value: String(this.CompanyOptions.length) },
+    ];
+    if (this.OrphanCount > 0) figures.push({ Label: 'Broken parents', Value: String(this.OrphanCount), Tone: 'warning' });
+    return figures;
+  }
+
+  /** Account types as preset chips, with client-side counts — the fast path the selects buried. */
+  public get TypeChips(): Array<{ Key: string; Label: string; Count?: number | null }> {
+    return [
+      { Key: 'all', Label: 'All' },
+      ...this.AccountTypes.map((t) => ({ Key: t, Label: t, Count: this.Rows.filter((r) => r.AccountType === t).length })),
+    ];
+  }
+
+  public get ActiveTypeKeys(): string[] {
+    return this.FilterAccountType ? [this.FilterAccountType] : ['all'];
+  }
+
+  /** Single-select semantics (matching the old Type select): re-clicking the active chip clears. */
+  public OnTypeToggled(key: string): void {
+    this.FilterAccountType = key === 'all' || this.FilterAccountType === key ? '' : key;
+    this.cdr.markForCheck();
+  }
+
+  public AdvancedOpen = false;
+
+  /** Count pill on the Filters button — a hidden active filter must never silently shape the list. */
+  public get AdvancedCount(): number {
+    let n = 0;
+    if (this.FilterCompanyID) n++;
+    if (this.FilterActive) n++;
+    if (this.FilterSource) n++;
+    return n;
+  }
+
+  /** Client-side filtering — instant, no debounce needed. */
+  public OnToolbarSearch(text: string): void {
+    this.SearchText = text;
+    this.cdr.markForCheck();
+  }
+
   // --- editor ---
   public Draft: AccountDraft | null = null;
   public IsSaving = false;

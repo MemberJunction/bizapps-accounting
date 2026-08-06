@@ -43,6 +43,8 @@ import { ReportsCategoryResourceComponent } from './reports-category-resource.co
 import { JournalEntriesCategoryComponent } from './journal-entries-category.component';
 import { JournalEntriesCategoryResourceComponent } from './journal-entries-category-resource.component';
 import { AllJournalEntriesPageComponent } from './pages/all-journal-entries.page';
+import { AllBatchesPageComponent } from './pages/all-batches.page';
+import { BatchDetailPanelComponent } from './pages/batch-detail-panel.component';
 import { JEWorkspacePageComponent } from './pages/je-workspace.page';
 import { JEApprovalsPageComponent } from './pages/je-approvals.page';
 import { JournalEntryBatchWorkspacePageComponent } from './pages/journal-entry-batch-workspace.page';
@@ -55,6 +57,8 @@ import { GLAccountsPageComponent } from './pages/gl-accounts.page';
 import { JournalEntryDetailPanelComponent } from './pages/journal-entry-detail-panel.component';
 import { ShellRailComponent } from './shell-rail.component';
 import { ShellPagePendingComponent } from './pages/shell-page-pending.component';
+import { MJASummaryStripComponent } from '../shared/summary-strip.component';
+import { MJAListToolbarComponent } from '../shared/list-toolbar.component';
 
 /**
  * The app shell (UI plan §8.0): the category shells + their pages.
@@ -65,6 +69,8 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
  */
 @NgModule({
   declarations: [
+    AllBatchesPageComponent,
+    BatchDetailPanelComponent,
     AccountsCategoryComponent,
     AccountsCategoryResourceComponent,
     ConfigurationCategoryComponent,
@@ -89,6 +95,8 @@ import { ShellPagePendingComponent } from './pages/shell-page-pending.component'
   ],
   imports: [
     ShellPagePendingComponent, // standalone — shared with orders' shell
+    MJASummaryStripComponent, // standalone — the orders-idiom stats bubble (list-page standard)
+    MJAListToolbarComponent, // standalone — search + preset chips + Filters disclosure (list-page standard)
     ShellRailComponent, // standalone — the rail + its collapse; also shared with orders' shell
     CommonModule,
     FormsModule,

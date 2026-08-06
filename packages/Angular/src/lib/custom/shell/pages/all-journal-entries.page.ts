@@ -9,6 +9,8 @@ import { openBizDetail } from '../../shared/biz-detail-form';
 import { TIME_WINDOWS, TimeWindowId, timeWindowRange, toSqlDate, andFilters } from '../../../transfer-pending/list-scaffold/time-window';
 import { sqlLiteral, likeContains } from '../../../transfer-pending/list-scaffold/sql-filter';
 import { rowKeyToId } from '../../../transfer-pending/list-scaffold/grid-row-key';
+import { MJAPresetChip } from '../../shared/list-toolbar.component';
+import { MJASummaryFigure } from '../../shared/summary-strip.component';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 
@@ -64,6 +66,16 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
   @Output() CreateRequested = new EventEmitter<void>();
   public RequestCreate(): void {
     this.CreateRequested.emit();
+  }
+
+  /**
+   * The detail panel's "Open in workspace" — carries the entry's ID up so the category can
+   * `GoToPage('workspace', id)` (the shell's record-passing seam). The panel closes itself.
+   */
+  @Output() WorkspaceRequested = new EventEmitter<string>();
+  public OnOpenInWorkspace(id: string): void {
+    this.SelectedID = null;
+    this.WorkspaceRequested.emit(id);
   }
 
   private cdr = inject(ChangeDetectorRef);
@@ -145,7 +157,13 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
     // Journal Entry entity), but the ratified naming model (Marcelo 2026-07-17) calls it the MEMO —
     // the human label people scan by — so the column is TITLED "Memo". `width: 'auto'` gives it the
     // most room; the grid ellipsises overflow so a long memo stays on one readable line.
-    { field: 'Description', title: 'Memo', width: 'auto', sortable: false },
+    // `width: 'auto'` lets Memo claim the row's leftover width instead of truncating at a fixed size.
+    // `maxWidth` is the important half: without it, "fill the row" made this a ~900px column holding
+    // memos like "demo 3", which reads worse than the truncation it fixed. 420px comfortably fits the
+    // memo shapes we actually generate ("Netted summary for batch BATCH-000083" is the long one);
+    // whatever is left over goes to the grid's inert filler ([FillWidth]) so the rules still reach
+    // the card edge without any real column being stretched to get there.
+    { field: 'Description', title: 'Memo', width: 'auto', maxWidth: 420, sortable: false },
     { field: 'CompanyID', title: 'Company', width: 160, visible: false, sortable: true },
     { field: 'JournalEntryBatchID', title: 'Batch', width: 140, visible: false, sortable: true },
   ];
@@ -283,6 +301,68 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
     return this.statusCounts.get(status) ?? 0;
   }
 
+  // ─── list-page standard chrome (mirrors orders' All Orders — strip + chips + Filters) ────────
+
+  /**
+   * The strip's figures — the SAME counts the old header badges carried, restated in the orders
+   * summary-strip idiom. Still filter-honest: every number is a count of exactly what the grid
+   * shows (see refreshStats). A status with 0 matches is omitted, as before.
+   */
+  public get SummaryFigures(): MJASummaryFigure[] {
+    const figures: MJASummaryFigure[] = [
+      { Label: 'Scope', Value: this.ScopeLabel, Tone: 'info' },
+      { Label: 'Entries', Value: this.TotalCount === null ? '—' : String(this.TotalCount) },
+    ];
+    for (const s of STATUSES) {
+      const n = this.StatusCount(s);
+      if (n > 0) figures.push({ Label: s, Value: String(n), Tone: this.BadgeVariant(s) });
+    }
+    return figures;
+  }
+
+  /** The status lifecycle as preset chips, counts included — plus the leading "All". */
+  public get StatusChips(): MJAPresetChip[] {
+    return [
+      { Key: 'all', Label: 'All' },
+      ...STATUSES.map((s) => ({ Key: s, Label: s, Count: this.StatusCount(s) })),
+    ];
+  }
+
+  /** Which chips light up: "All" exactly when no status is selected (the empty-set-= -all rule). */
+  public get ActiveStatusKeys(): string[] {
+    return this.SelectedStatuses.size === 0 ? ['all'] : [...this.SelectedStatuses];
+  }
+
+  /** Chip clicks keep the existing multi-select semantics; "All" clears (as the old All button). */
+  public OnPresetToggled(key: string): void {
+    if (key === 'all') this.ShowAllStatuses();
+    else this.ToggleStatus(key as JEStatus);
+  }
+
+  /** Whether the Filters disclosure is open — presentation state only; filters apply regardless. */
+  public AdvancedOpen = false;
+
+  /**
+   * How many ADVANCED filters are active — the count pill on the Filters button, so a hidden
+   * filter can never silently shape the grid. The date window counts as ONE deviation (preset
+   * changed or custom range), because the preset and the calendar boxes are one filter.
+   */
+  public get AdvancedCount(): number {
+    let n = 0;
+    if (this.CompanyID) n++;
+    if (this.TypeFilter !== 'All') n++;
+    if (this.TimeWindow !== 'last90') n++;
+    return n;
+  }
+
+  /** Debounced search-as-you-type: each keystroke updates state; the refetch waits for a pause. */
+  private searchTimer: ReturnType<typeof setTimeout> | null = null;
+  public OnSearchChanged(text: string): void {
+    this.Search = text;
+    if (this.searchTimer) clearTimeout(this.searchTimer);
+    this.searchTimer = setTimeout(() => this.applyFilters(), 300);
+  }
+
   /** Stat-badge variant per status — the same lifecycle colouring the batches header uses. */
   public BadgeVariant(status: JEStatus): 'success' | 'warning' | 'info' | 'default' {
     switch (status) {
@@ -349,6 +429,7 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     // Unsubscribing is what keeps the header's Refresh page-aware: a destroyed page stops counting.
     this.refreshSub?.unsubscribe();
+    if (this.searchTimer) clearTimeout(this.searchTimer);
   }
   public Refresh(): void {
     this.RefreshToken++;

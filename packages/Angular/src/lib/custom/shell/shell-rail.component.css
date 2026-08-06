@@ -52,24 +52,25 @@
   min-height: 0;
 }
 
-/* ── The toggle — styled to MATCH a nav item row exactly ───────────────────────
-   It lives in MJ's [header] slot (inside the nav's 8px container padding), so it already shares the
-   items' icon column + spacing. These values are copied 1:1 from .mj-left-nav__item so it reads as
-   just another row: same padding, same 8px rounded-square HOVER (Marcelo — replaces the old full-width
-   highlight), same margin, same flex-start alignment. No border-right / background of its own. */
+/* ── The toggle — a compact chip, LOCKED in place across modes ─────────────────
+   It lives in MJ's [header] slot (inside the nav's 8px container padding). Deliberately NOT styled
+   as a nav row (Marcelo 2026-08-04): a lone hamburger row read as a broken nav item. Double-angles
+   are the glyphs; only the GLYPH flips on toggle — the chip itself NEVER moves (Marcelo 2026-08-04:
+   a control that relocates when clicked makes the user re-aim; lock it). The stable spot is the one
+   that exists in both widths: centred in the collapsed 60px band. margin-left is derived, not magic:
+   (60px rail − 38px chip)/2 = 11px from the rail edge, minus the nav's 8px container padding = 3px.
+   Same chip box in both modes, so the divider + items below sit at identical heights too. */
 .sr__toggle {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  /* fit-content, NOT 100% (Marcelo 2026-07-30): the hover highlight must hug the BUTTON, not paint
-     the full rail-width row like a nav item. The 12px side padding keeps the icon on the shared
-     optical icon column, so alignment with the items below is unchanged. */
+  align-items: center;
+  justify-content: center;
   width: fit-content;
-  padding: 10px 12px;
+  margin-left: 3px;
+  padding: 8px 10px;
   border: none;
   border-radius: 8px;
   background: transparent;
-  color: var(--mj-text-secondary);
+  color: var(--mj-text-muted);
   font-family: inherit;
   cursor: pointer;
   box-sizing: border-box;
@@ -89,15 +90,13 @@
   outline-offset: -2px;
 }
 
-/* Matches .mj-left-nav__icon exactly (18px / 13px, centred) so the arrow sits on the same optical
-   column as every rail icon above it — collapsed OR expanded, the column never moves. */
-/* 1:1 with .mj-left-nav__icon (incl. the margin-top:1px nudge) so the hamburger sits on the exact same
-   optical column + baseline as every nav icon. */
+/* 18px box = same footprint as .mj-left-nav__icon, so the collapsed (centred) chip sits on the same
+   optical column as the nav icons below it. Slightly smaller glyph than the nav icons — this is a
+   chrome control, not a destination, and the size difference reinforces that. */
 .sr__toggle-icon {
   width: 18px;
   text-align: center;
-  font-size: 13px;
-  margin-top: 1px;
+  font-size: 12px;
   flex-shrink: 0;
 }
 
@@ -121,9 +120,11 @@
     border: 0;
   }
 
-  /* With the text out of flow the icon is the only thing left; centre it in the narrow rail. */
-  .sr--collapsed ::ng-deep .mj-left-nav__item,
-  .sr--collapsed .sr__toggle {
+  /* With the text out of flow the icon is the only thing left; centre it in the narrow rail.
+     The toggle is deliberately NOT in this list — its base margin-left:3px already places it at
+     this exact centred position, and keeping it out of the override is what locks it in place
+     across expand/collapse (no re-aiming). */
+  .sr--collapsed ::ng-deep .mj-left-nav__item {
     justify-content: center;
     gap: 0;
     /* fit-content chip centred in the 60px rail (was width:100% + centred content). */

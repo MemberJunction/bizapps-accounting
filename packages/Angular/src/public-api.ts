@@ -102,6 +102,10 @@ export { ShellRailComponent } from './lib/custom/shell/shell-rail.component';
 // The workspace-tab framework (parked, framework-clean — TRANSFER-BACKLOG target: common -> MJ
 // base). Orders' Order editor uses the same session-tab semantics as the JE/Batch workspaces.
 export { WorkspaceTabStripComponent } from './lib/transfer-pending/workspace-tabs/workspace-tab-strip.component';
+// The full card (tab strip + identity band + scrollable body + footer). Exported so a sibling app
+// can adopt the whole workspace structure rather than re-deriving it from the strip — bizapps-contracts
+// is the first consumer. Same TRANSFER-BACKLOG destination as the strip.
+export { WorkspaceCardComponent } from './lib/transfer-pending/workspace-tabs/workspace-card.component';
 export { WorkspaceTabStore } from './lib/transfer-pending/workspace-tabs/workspace-tab-store';
 export type { WorkspaceTab, WorkspaceTabState } from './lib/transfer-pending/workspace-tabs/workspace-tabs.types';
 

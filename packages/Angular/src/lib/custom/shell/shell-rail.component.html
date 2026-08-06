@@ -16,10 +16,12 @@
     (ItemClicked)="onItemClicked($event)">
 
     <!-- The toggle lives INSIDE the nav via MJ's [header] slot (Marcelo 2026-07-21): being in the SAME
-         container as the nav items, it inherits the nav's padding + icon column, so it aligns and spaces
-         identically by construction (no hand-matching). It's styled to match a nav item row (rounded
-         hover, same padding). At the TOP so it's dock/taskbar-safe. fa-bars collapsed (click to open),
-         fa-outdent — the hamburger-with-left-arrow close glyph — expanded (click to collapse). -->
+         container as the nav items, it inherits the nav's padding, so it spaces identically by
+         construction. At the TOP so it's dock/taskbar-safe. NOT a hamburger (Marcelo 2026-08-04 — a
+         lone hamburger row read as a broken nav item): double-angles, the conventional rail-collapse
+         glyphs — « to collapse, » to expand. The chip is LOCKED in one spot (centred in the collapsed
+         60px band) in BOTH modes (Marcelo 2026-08-04): only the glyph flips on toggle, so the user
+         never re-aims, and the divider + items below never shift (the no-shift north star). -->
     <button
       header
       type="button"
@@ -30,8 +32,8 @@
       (click)="Toggle()">
       <i
         class="fa-solid sr__toggle-icon"
-        [class.fa-bars]="Collapsed"
-        [class.fa-outdent]="!Collapsed"
+        [class.fa-angles-right]="Collapsed"
+        [class.fa-angles-left]="!Collapsed"
         aria-hidden="true"></i>
     </button>
     <!-- Wordless divider between the toggle and the nav items (Marcelo 2026-07-29): the toggle is

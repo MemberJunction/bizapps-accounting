@@ -135,3 +135,33 @@
 .coa-field__label { font-size: 0.75rem; font-weight: 600; color: var(--mj-text-secondary); text-transform: uppercase; letter-spacing: 0.02em; }
 .coa-req { color: var(--mj-status-error-text); }
 .coa-field--check { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 8px; color: var(--mj-text-primary); font-size: 0.9rem; }
+
+/* The fused subheader (list-page standard) + the rounded tree card, matching the list pages. */
+.coa-subheader {
+  background: var(--mj-bg-surface);
+  border: 1px solid var(--mj-border-default);
+  border-radius: var(--mj-radius-lg);
+  margin: var(--mj-space-4) var(--mj-space-4) 0;
+}
+.coa-subheader mja-list-toolbar {
+  display: block;
+  border-top: 1px solid var(--mj-border-default);
+}
+.coa-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.coa-field__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mj-text-muted);
+}
+.coa-tree {
+  background: var(--mj-bg-surface);
+  border: 1px solid var(--mj-border-default);
+  border-radius: var(--mj-radius-lg);
+  overflow: hidden;
+}

@@ -1,69 +1,60 @@
-<mj-page-header-interior Title="GL accounts" Subtitle="Every account, in the company chart that owns it">
-  <div meta>
-    <mj-stat-badge [Count]="Rows.length" Label="accounts" Variant="default"></mj-stat-badge>
-    <mj-stat-badge [Count]="CompanyOptions.length" Label="companies" Variant="default"></mj-stat-badge>
-    @if (OrphanCount > 0) {
-      <mj-stat-badge
-        [Count]="OrphanCount"
-        Label="broken parents"
-        Icon="fa-solid fa-triangle-exclamation"
-        Variant="warning"
-        title="These accounts point at a parent that isn't in this chart, or their parent chain loops. They're shown at the top of their chart rather than hidden.">
-      </mj-stat-badge>
-    }
+<!-- The scrollable body ([Padding]=false: the page owns the 16px gutter so every bubble aligns,
+     per the list-page standard). NOTE body-interior is display:block; .gla-body restores a flex
+     column with definite height, so children may size with flex again. -->
+<mj-page-body-interior [Padding]="false">
+  <div class="gla-body">
+  <!-- The fused subheader (list-page standard, Marcelo 2026-08-04): no title card — the rail names
+       the page. Stats row + search/type-chips/Filters row in ONE band; Company/Status/Source narrow
+       from the Filters disclosure; the page-local "New account" verb rides the toolbar's actions
+       slot (an inline create with no workspace to route to). -->
+  <div class="gla-subheader">
+    <mja-summary-strip [Bare]="true" [Figures]="SummaryFigures" />
+    <mja-list-toolbar
+      [Bare]="true"
+      [Search]="SearchText"
+      SearchPlaceholder="Name, code or ID…"
+      [Presets]="TypeChips"
+      [ActiveKeys]="ActiveTypeKeys"
+      [HasAdvanced]="true"
+      [AdvancedCount]="AdvancedCount"
+      [(AdvancedOpen)]="AdvancedOpen"
+      (SearchChanged)="OnToolbarSearch($event)"
+      (PresetToggled)="OnTypeToggled($event)">
+      <span toolbar-actions>
+        <button type="button" mjButton Variant="primary" Size="sm" (click)="StartCreate()">
+          <i class="fa-solid fa-plus" aria-hidden="true"></i> New account
+        </button>
+      </span>
+      <label class="gla-field">
+        <span class="gla-field__label">Company</span>
+        <select class="mj-input" [(ngModel)]="FilterCompanyID" aria-label="Company">
+          <option value="">All companies</option>
+          @for (c of CompanyOptions; track c.ID) {
+            <option [value]="c.ID">{{ c.Name }}</option>
+          }
+        </select>
+      </label>
+      <label class="gla-field">
+        <span class="gla-field__label">Status</span>
+        <select class="mj-input" [(ngModel)]="FilterActive" aria-label="Status">
+          <option value="">Active &amp; inactive</option>
+          <option value="Active">Active only</option>
+          <option value="Inactive">Inactive only</option>
+        </select>
+      </label>
+      <label class="gla-field">
+        <!-- IsSystemSeeded exists for exactly this distinction: platform-shipped accounts vs.
+             deployment customizations. -->
+        <span class="gla-field__label">Source</span>
+        <select class="mj-input" [(ngModel)]="FilterSource" aria-label="Source">
+          <option value="">Seeded &amp; custom</option>
+          <option value="Seeded">System-seeded</option>
+          <option value="Custom">Custom</option>
+        </select>
+      </label>
+    </mja-list-toolbar>
   </div>
-  <!-- Filters on ONE line, search to the RIGHT of the drop-downs. -->
-  <div toolbar>
-    <label class="gla-field">
-      <span class="gla-field__label">Company</span>
-      <select class="mj-input" [(ngModel)]="FilterCompanyID" aria-label="Company">
-        <option value="">All companies</option>
-        @for (c of CompanyOptions; track c.ID) {
-          <option [value]="c.ID">{{ c.Name }}</option>
-        }
-      </select>
-    </label>
-    <label class="gla-field">
-      <span class="gla-field__label">Type</span>
-      <select class="mj-input" [(ngModel)]="FilterAccountType" aria-label="Account type">
-        <option value="">All types</option>
-        @for (t of AccountTypes; track t) {
-          <option [value]="t">{{ t }}</option>
-        }
-      </select>
-    </label>
-    <label class="gla-field">
-      <span class="gla-field__label">Status</span>
-      <select class="mj-input" [(ngModel)]="FilterActive" aria-label="Status">
-        <option value="">Active &amp; inactive</option>
-        <option value="Active">Active only</option>
-        <option value="Inactive">Inactive only</option>
-      </select>
-    </label>
-    <label class="gla-field">
-      <!-- IsSystemSeeded exists for exactly this distinction: platform-shipped accounts vs.
-           deployment customizations. -->
-      <span class="gla-field__label">Source</span>
-      <select class="mj-input" [(ngModel)]="FilterSource" aria-label="Source">
-        <option value="">Seeded &amp; custom</option>
-        <option value="Seeded">System-seeded</option>
-        <option value="Custom">Custom</option>
-      </select>
-    </label>
-    <label class="gla-field gla-field--search">
-      <span class="gla-field__label">Search</span>
-      <input class="mj-input" type="search" [(ngModel)]="SearchText" placeholder="Name, code or ID…" aria-label="Search accounts" />
-    </label>
-    <button type="button" mjButton Variant="flat" Size="sm" (click)="StartCreate()">
-      <i class="fa-solid fa-plus" aria-hidden="true"></i> New account
-    </button>
-  </div>
-</mj-page-header-interior>
 
-<!-- <mj-page-body-interior> owns the gutters that keep content off the rail and off the page edge.
-     NOTE it is display:block — children size with height/min-height, NEVER flex:1 (which is a no-op
-     here and collapses the list to zero height). -->
-<mj-page-body-interior>
   @if (LoadError) {
     <mj-alert Variant="error" [Message]="LoadError"></mj-alert>
   }
@@ -276,5 +267,6 @@
         </tbody>
       </table>
     }
+  </div>
   </div>
 </mj-page-body-interior>
