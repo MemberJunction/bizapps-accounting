@@ -50,7 +50,7 @@ test('Batches → build → Batch approvals → Reject cancels the batch (new na
   await scopeToCompany(page, fx!.companyName);
 
   // 1. Build a batch on the Batch workspace.
-  await railItem(page, 'Batches', 'Batch workspace');
+  await railItem(page, 'Journal Entry Batches', 'JE batch workspace');
   // The workspace DEFERS its query (e38fdda): a fresh tab shows no candidates until you Load them, so
   // Build stays disabled ("Nothing matches these criteria") until then. Load the entries first.
   const loadBtn = page.getByRole('button', { name: /Load entries/i }).first();
@@ -65,7 +65,7 @@ test('Batches → build → Batch approvals → Reject cancels the batch (new na
   await page.waitForTimeout(7000);
 
   // 2. Open the Batch approvals inbox — a Pending card with a Reject action.
-  await railItem(page, 'Batches', 'Batch approvals');
+  await railItem(page, 'Journal Entry Batches', 'JE batch approvals');
   const pendingCard = page.locator('.bd-card').filter({ has: page.getByRole('button', { name: /Reject/i }) }).first();
   await expect(pendingCard, 'a Pending batch card with a Reject action should be present').toBeVisible({ timeout: 30_000 });
 

@@ -52,7 +52,7 @@ test('Build→approve→dispatch, then Reverse the GLPosted JE from All journal 
   await scopeToCompany(page, fx!.companyName);
 
   // 1. Build → approve → dispatch, so the fixture's JEs become GLPosted (reversible).
-  await railItem(page, 'Batches', 'Batch workspace');
+  await railItem(page, 'Journal Entry Batches', 'JE batch workspace');
   const loadBtn = page.getByRole('button', { name: /Load entries/i }).first();
   await expect(loadBtn, 'the deferred-query Load-entries button').toBeVisible({ timeout: 30_000 });
   await loadBtn.click();
@@ -64,7 +64,7 @@ test('Build→approve→dispatch, then Reverse the GLPosted JE from All journal 
   if (await confirmBuild.isVisible().catch(() => false)) { await confirmBuild.click(); }
   await page.waitForTimeout(7000);
 
-  await railItem(page, 'Batches', 'Batch approvals');
+  await railItem(page, 'Journal Entry Batches', 'JE batch approvals');
   const pendingCard = page.locator('.bd-card').filter({ has: page.getByRole('button', { name: /Approve/i }) }).first();
   await expect(pendingCard).toBeVisible({ timeout: 30_000 });
   await pendingCard.getByRole('button', { name: /Approve/i }).first().click();

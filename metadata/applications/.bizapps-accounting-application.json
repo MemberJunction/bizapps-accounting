@@ -15,7 +15,7 @@
         "isDefault": true
       },
       {
-        "Label": "Batches",
+        "Label": "Journal Entry Batches",
         "Icon": "fa-solid fa-layer-group",
         "ResourceType": "Custom",
         "DriverClass": "BatchesCategoryResource",
@@ -51,7 +51,7 @@
     "ID": "08B5D905-6FB3-438B-94E5-2C5FF021B794"
   },
   "sync": {
-    "lastModified": "2026-07-31T01:15:52.225Z",
-    "checksum": "2eace700a7640584d6cf068a7a3de24fed2e8addb75ab2d6de4763a6bf69f750"
+    "lastModified": "2026-08-06T07:00:51.911Z",
+    "checksum": "b252f08f6e6182132156559ff9ea1d5cb92c6c48d36e7b60be2dab5921ac8137"
   }
 }

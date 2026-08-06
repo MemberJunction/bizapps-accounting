@@ -13,22 +13,87 @@ create + open questions for the human, recorded so dev can roll through and circ
 Tiers: **1** Vitest (unit) · **2** server (tsx, in-process direct SQL) · **3** API (GraphQL→MJAPI) ·
 **4** GUI/DOM (no-browser — parked, mjdev overlay) · **5** Playwright (browser e2e, pre-PR only).
 
-## ⚠ OPEN (2026-08-05, checkpoint before compact) — All-accounts standard-grid swap, spec red
+## ✅ RESOLVED (2026-08-06) — All-accounts standard-grid swap, spec red → root-caused, 3 fixes
 
 All accounts now renders the STANDARD mj-entity-data-grid (Marcelo's ask): toolbar filters/search
 feed GridParams.ExtraFilter (server-side; same predicate the client filter used), row-click opens
 the editor (per-row Edit/Retire buttons retired — the editor's Active checkbox is the retire path),
-tree indentation/orphan flags stay on the CoA page. LIVE-PROVEN by screenshot: grid renders, search
-'11201' returns exactly the 4 expected AR rows, zero console errors. Tier-4 dom spec pivoted to
-value-level GridParams asserts (jsdom can't paint AG grids) — green.
+tree indentation/orphan flags stay on the CoA page.
 
-**RED / open:** tier-5 accounts spec test 1 (create→rename→lock) times out on
-`.ag-row hasText NEW_CODE` at the rename step — yet the grid VISIBLY renders rows while
-`locator('.ag-row').count()` returns 0 on this page (a row-DOM/selector mismatch; note the rendered
-grid also shows a PARENT column not in GridColumns — investigate what DOM mj-entity-data-grid
-produces here vs All-JE where .ag-row works). Next step: dump the grid's row DOM (probe script at
-/tmp/gla-dom.mjs), fix the spec locator (or grid config), re-run the two accounts specs.
-Everything else in the UI-wave battery below still stands.
+The 2026-08-05 red spec had THREE stacked causes (the ".ag-row count 0 + phantom PARENT column"
+symptoms were ONE cause; two more surfaced beneath it as each fix landed):
+
+1. **Stale Explorer bundle.** The app dist WAS rebuilt after the swap, but the running ng serve
+   never picked it up — the browser still served the OLD hand-rolled table (plain rows → `.ag-row`
+   count 0; PARENT column = the old table's column, not saved grid state). The 2026-08-05
+   "live-proven by screenshot" note was therefore proof of the OLD page, not the new grid. Fix:
+   `mjdev restart accounting-revamp explorer`. Lesson: after an app rebuild, RESTART the Explorer
+   before believing any live evidence.
+2. **Grid height collapse (~4px).** `.gla-wrap` had card dressing only — no sizing — and
+   mj-entity-data-grid's :host is height:100%, so the grid collapsed to its borders; AG rows were
+   clipped invisible + unclickable (hit-test at row center → .gla-body). The EXACT regression
+   All-JE's CSS comment documents. Fix: `.gla-wrap` now carries the `.aje-grid` height chain
+   (flex 1 1 auto · min-height 320px · flex column); dead old-table CSS block deleted.
+3. **rowKey passed unparsed.** The grid's AfterRowClick rowKey is a CompositeKey concatenated
+   string ('ID|<uuid>'), NOT a bare ID — `OnGridRowClicked` fed it straight to UUIDsEqual, so the
+   find never matched and the editor silently never opened (spec timed out on
+   `expect(editor).toBeVisible()` with the row correctly [selected]). Fix: parse via the shared
+   `rowKeyToId` (all-batches + dispatch-status already did; only gl-accounts missed it). Tier-4
+   regression guard added: gl-accounts.dom.test.ts now clicks with the real 'ID|<uuid>' shape and
+   asserts the editor opens on that account.
+
+Also: stale fixture company `PWBATCH-MSGWZXIC GUI Batch Co` (leftover from the 2026-08-05
+externally-killed tier-5 run — kill skips afterAll teardown) torn down via the fixture's own
+teardown; new helper `test-harnesses/playwright/lib/find-stale-fixtures.ts` lists PWBATCH-*
+leftovers for future cleanup. Validation runs recorded below as they complete.
+
+**A FOURTH bug the spec caught while re-greening (2026-08-06):** post-save the grid showed the
+STALE pre-rename row. mj-entity-data-grid's `Params` setter DEEP-COMPARES
+(`RunViewParams.Equals`) and skips the refetch when the rebuilt params are equivalent — after a
+save, filters/search are unchanged, so `rebuildGridParams()` was a silent no-op for the grid.
+Worse, the audit showed All-JE / all-batches carried a **vestigial `RefreshToken` counter nothing
+consumed** — their header Refresh buttons never refetched the grid either when filters were
+unchanged. Fix on ALL FOUR grid pages (gl-accounts, all-journal-entries, all-batches,
+dispatch-status): `@ViewChild(EntityDataGridComponent)` + explicit `grid.Refresh()` in the page's
+`Refresh()` and post-save paths; RefreshToken deleted. A fifth find: the tier-4 mount was missing
+`EntityViewerModule`, so the grid rendered as an unknown element in jsdom (NG0304 caught by the
+keystone once the bundle was current) — added to the TestBed imports.
+
+**2026-08-06 re-green runs (this fix wave):**
+- Tier 1 units: **101/101 pass** (2 real suites: 44 + 57; 4 packages remain "No tests configured"
+  stubs — pre-existing gap, unchanged).
+- Tier 4 dom (full): **9/9 pass** across 5 files, incl. gl-accounts' new composite-rowKey →
+  editor-opens regression assert.
+- Tier 5 accounts spec: **2/2 pass** (create → rename → identity-lock 38s; Dimensions+CoA 29.7s).
+- Tier 5 FULL suite: **8/8 accounting specs pass** (10.3m); the sole failure is the PRE-KNOWN
+  `orders-product-catalog` blocker (Orders app not linked in this instance — same signature as the
+  2026-08-05 battery, unrelated to this branch).
+- Tier 2 (after tier-5, serialized on the DB): runtimes **50/50** (block0 10 · block1 11 ·
+  engine 12 · intercompany 17) + server vitest **25/25** = **75/75**, matching baseline.
+- Tier 3 wire (real client → MJAPI): **72/72** (batch-ops 37 · engine-op 11 · full-flow 24) on the
+  renamed op keys, matching baseline.
+- DB hygiene: `find-stale-fixtures` → zero PWBATCH-* leftovers.
+
+**2026-08-06 (later) — nav-label sweep (Marcelo: "nav tabs at the top, the side bar"):** top-nav
+category "Batches" → **"Journal Entry Batches"** (metadata DefaultNavItems Label, synced to the DB
+via `app sync --include applications` + API restart), CategoryTitle + both resource display names
+likewise; rail labels mirror the JE category's scheme — "All batches" → **"All journal entry
+batches"** (primary list spelled out) · "Batch workspace" → **"JE batch workspace"** · "Batch
+approvals" → **"JE batch approvals"** ("JE" abbreviation = existing house style, cf. "JE
+workspace"); Dashboard/Dispatch status unchanged. Page-internal prose ("this batch", "New batch",
+'Batched' status chips, BATCH- numbers) intentionally unchanged. Specs updated (stale-label case):
+4 batch specs' `railItem` calls + env.ts `NAV.batches`. **Validated live** (probe: rail + top nav
+render the new labels, zero console errors) **and by tier-5: the 4 batch-flow specs pass 4/4
+(5.3m)** driving the renamed nav end-to-end. Side-find while validating: the Entries column's
+"$1.00" currency dressing is an **MJ-core bug** (host GridColumnConfig type/format dropped +
+name-pattern currency heuristic) — filed in MJ-UPSTREAM.md 2026-08-06 with root cause + fix; the
+app keeps its correct column config so it heals when MJ fixes the mapping. A StateKey v1→v2 bump
+was tried on that theory and REVERTED (fresh state still renders currency — disproven).
+
+**Battery verdict 2026-08-06: FULL PYRAMID GREEN at baseline** — units 101 · tier-2 75 · tier-3 72
+· tier-4 9 · tier-5 8 (+1 pre-known orders blocker). The branch's uncommitted fix wave (4 grid
+pages' refresh, gl-accounts rowKey parse + CSS height chain, tier-4 module import + regression
+assert, find-stale-fixtures helper, Server index comment) awaits commit approval.
 
 ## ⭐ CURRENT STATE — 2026-08-05 UI-WAVE BATTERY (post-#43 merge + the chrome/control wave)
 

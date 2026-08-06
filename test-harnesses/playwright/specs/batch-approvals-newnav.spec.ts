@@ -55,7 +55,7 @@ test('Batches → build → Batch approvals → Approve → Dispatch advances to
   await scopeToCompany(page, fx!.companyName);
 
   // 1. Build a batch — the Build affordance lives on the Batch workspace rail page.
-  await railItem(page, 'Batches', 'Batch workspace');
+  await railItem(page, 'Journal Entry Batches', 'JE batch workspace');
   // The workspace DEFERS its query (e38fdda): a fresh tab shows no candidates until you Load them, so
   // Build stays disabled ("Nothing matches these criteria") until then. Load the entries first.
   const loadBtn = page.getByRole('button', { name: /Load entries/i }).first();
@@ -71,7 +71,7 @@ test('Batches → build → Batch approvals → Approve → Dispatch advances to
   await page.waitForTimeout(7000);
 
   // 2. Open the Batch approvals inbox — the built batch is a Pending, awaiting-approval card.
-  await railItem(page, 'Batches', 'Batch approvals');
+  await railItem(page, 'Journal Entry Batches', 'JE batch approvals');
   const pendingCard = page.locator('.bd-card').filter({ has: page.getByRole('button', { name: /Approve/i }) }).first();
   await expect(pendingCard, 'a Pending batch card with an Approve action should be present').toBeVisible({ timeout: 30_000 });
 

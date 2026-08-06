@@ -28,7 +28,7 @@ const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 })
 @RegisterClass(BaseDashboard, 'BatchesCategoryDashboard')
 export class BatchesCategoryComponent extends CategoryShellBase {
-  public CategoryTitle = 'Batches';
+  public CategoryTitle = 'Journal Entry Batches';
   public override get CategoryIcon(): string {
     return 'fa-solid fa-boxes-stacked';
   }
@@ -47,11 +47,15 @@ export class BatchesCategoryComponent extends CategoryShellBase {
         // carried no information); all five category rails standardize on a single flat group.
         items: [
           { id: 'dashboard', label: 'Dashboard', icon: 'fa-solid fa-gauge-high' },
-          { id: 'all-batches', label: 'All batches', icon: 'fa-solid fa-layer-group' },
-          { id: 'workspace', label: 'Batch workspace', icon: 'fa-solid fa-diagram-project' },
+          // Label scheme mirrors the JE category (Marcelo 2026-08-06, JournalEntryBatch label
+          // sweep): primary list spelled out ("All journal entries" ↔ "All journal entry
+          // batches"), tool pages take the established "JE" abbreviation ("JE workspace" ↔
+          // "JE batch workspace").
+          { id: 'all-batches', label: 'All journal entry batches', icon: 'fa-solid fa-layer-group' },
+          { id: 'workspace', label: 'JE batch workspace', icon: 'fa-solid fa-diagram-project' },
           {
             id: 'approvals',
-            label: 'Batch approvals',
+            label: 'JE batch approvals',
             icon: 'fa-solid fa-paper-plane',
             // Omit a zero badge — a grey "0" is noise, not information.
             badge: this.AwaitingApprovalCount > 0 ? this.AwaitingApprovalCount : undefined,
@@ -63,7 +67,7 @@ export class BatchesCategoryComponent extends CategoryShellBase {
   }
 
   async GetResourceDisplayName(_data: ResourceData): Promise<string> {
-    return 'Batches';
+    return 'Journal Entry Batches';
   }
 
   async GetResourceIconClass(_data: ResourceData): Promise<string> {
