@@ -125,6 +125,15 @@ export class AccountLinksPageComponent extends BaseAngularComponent implements O
     return haystack.some((v) => (v ?? '').toLowerCase().includes(q));
   }
 
+  /** Choice rows (were inline <option>s). */
+  public get RoleChoices(): ReadonlyArray<{ ID: string; Name: string }> {
+    return [{ ID: 'All', Name: 'All roles' }, ...this.Roles];
+  }
+  public readonly LinkStatusChoices: ReadonlyArray<{ Label: string; Value: string }> = [
+    { Label: 'Active only', Value: 'Active' },
+    { Label: 'All', Value: 'All' },
+  ];
+
   public OnFilterChanged(): void {
     this.cdr.markForCheck();
   }

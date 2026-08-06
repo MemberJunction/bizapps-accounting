@@ -52,8 +52,8 @@ const lookups: PipelineLookups = {
   },
   entryTypeByCode: (code) => {
     const k = (code ?? '').trim().toLowerCase();
-    if (k === 'manual') return { ID: JET.manual, Code: 'Manual', IsActive: true, IsBatchSummary: false };
-    if (k === 'retiredtype') return { ID: JET.retired, Code: 'RetiredType', IsActive: false, IsBatchSummary: false };
+    if (k === 'manual') return { ID: JET.manual, Code: 'Manual', IsActive: true, IsJournalEntryBatchSummary: false };
+    if (k === 'retiredtype') return { ID: JET.retired, Code: 'RetiredType', IsActive: false, IsJournalEntryBatchSummary: false };
     return undefined;
   },
   dimensionExists: (id) => id.toLowerCase() === DIM_DEPT,

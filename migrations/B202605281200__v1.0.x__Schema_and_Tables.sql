@@ -43,7 +43,7 @@
 --     'JE-{CompanyCode}-{FY}-{seq}' (D19).
 --   * JournalEntryBatch is SINGLE-COMPANY (D7) with an accountant-set
 --     PostingDate (D8); the aggregated summary is ONE JournalEntry
---     (EntryType='BatchSummary') referenced via SummaryJournalEntryID —
+--     (EntryType='JournalEntryBatchSummary') referenced via SummaryJournalEntryID —
 --     JournalEntryBatchLineItem + JournalEntryBatchLineDimension REMOVED
 --     (Amith's simplified summary model, D9). Approval-task pointer columns
 --     (ApprovalTaskID + ApprovalTaskRaisedAt, both-or-neither) added (D10).
@@ -69,8 +69,8 @@
 --     CK_JournalEntry_EntryType 17-value enum; JournalEntry.EntryType →
 --     EntryTypeID FK. Accounting seeds only its ledger-mechanics types
 --     (IsSystem=1, metadata/journal-entry-types/); domain types (OrderBooking,
---     PaymentReceipt, ...) become their owning app's metadata. IsBatchSummary
---     flag replaces the 'BatchSummary' magic string in triggers/queries; a
+--     PaymentReceipt, ...) become their owning app's metadata. IsJournalEntryBatchSummary
+--     flag replaces the 'JournalEntryBatchSummary' magic string in triggers/queries; a
 --     filtered unique index allows exactly one flagged row.
 --   * JournalEntryBatch.ApprovalTaskID is a REAL nullable FK to
 --     __mj_BizAppsTasks.Task (#22 item 1) — bizapps-tasks is a declared,
@@ -315,14 +315,14 @@ GO
 -- 2.9 JournalEntryBatch — SINGLE-COMPANY aggregation that ships to the ERP
 --     (plan D7/D8): header CompanyID; a singular accountant-set PostingDate that
 --     must match the GL; the aggregated summary is ONE JournalEntry
---     (its type flagged IsBatchSummary, EffectiveDate=PostingDate) referenced
+--     (its type flagged IsJournalEntryBatchSummary, EffectiveDate=PostingDate) referenced
 --     via SummaryJournalEntryID. Approval rides bizapps-tasks (D10): the batch
 --     commits atomically first, then the task-raise stamps ApprovalTaskID +
 --     ApprovalTaskRaisedAt in its own transaction (both-or-neither CHECK).
 ---------------------------------------------------------------------------
 CREATE TABLE __mj_BizAppsAccounting.JournalEntryBatch (
     ID UNIQUEIDENTIFIER NOT NULL DEFAULT NEWSEQUENTIALID(),
-    BatchNumber NVARCHAR(40) NOT NULL,
+    JournalEntryBatchNumber NVARCHAR(40) NOT NULL,
     CompanyID UNIQUEIDENTIFIER NOT NULL,
     PostingDate DATE NOT NULL,
     SummaryJournalEntryID UNIQUEIDENTIFIER NULL,
@@ -333,7 +333,7 @@ CREATE TABLE __mj_BizAppsAccounting.JournalEntryBatch (
     TotalEntries INT NOT NULL DEFAULT 0,
     TotalDebits DECIMAL(18,2) NOT NULL DEFAULT 0,
     TotalCredits DECIMAL(18,2) NOT NULL DEFAULT 0,
-    ExternalBatchRef NVARCHAR(100) NULL,
+    ExternalJournalEntryBatchRef NVARCHAR(100) NULL,
     ApprovedAt DATETIMEOFFSET NULL,
     ApprovedByUserID UNIQUEIDENTIFIER NULL,
     SentAt DATETIMEOFFSET NULL,
@@ -342,7 +342,7 @@ CREATE TABLE __mj_BizAppsAccounting.JournalEntryBatch (
     ApprovalTaskID UNIQUEIDENTIFIER NULL,
     ApprovalTaskRaisedAt DATETIMEOFFSET NULL,
     CONSTRAINT PK_JournalEntryBatch PRIMARY KEY (ID),
-    CONSTRAINT UQ_JournalEntryBatch_Number UNIQUE (BatchNumber),
+    CONSTRAINT UQ_JournalEntryBatch_Number UNIQUE (JournalEntryBatchNumber),
     CONSTRAINT CK_JournalEntryBatch_Status CHECK (Status IN ('Pending','Approved','Sent','Posted','Failed','Cancelled')),
     CONSTRAINT CK_JournalEntryBatch_Totals CHECK (TotalDebits >= 0 AND TotalCredits >= 0 AND TotalEntries >= 0),
     CONSTRAINT CK_JournalEntryBatch_TargetSystem CHECK (TargetSystem IN ('BusinessCentral','QuickBooks','NetSuite','Sage','Xero','Other')),
@@ -361,8 +361,8 @@ GO
 --      an accounting migration per new domain. Accounting seeds only the
 --      ledger-mechanics set it genuinely owns (IsSystem=1, via
 --      metadata/journal-entry-types/): Manual, Reversal, Adjustment,
---      OpeningBalance, BatchSummary, FXRevaluation, PeriodEndAccrual,
---      Writeoff. IsBatchSummary replaces the 'BatchSummary' magic string as
+--      OpeningBalance, JournalEntryBatchSummary, FXRevaluation, PeriodEndAccrual,
+--      Writeoff. IsJournalEntryBatchSummary replaces the 'JournalEntryBatchSummary' magic string as
 --      the batch-summary discriminator (a flag beats a string match).
 ---------------------------------------------------------------------------
 CREATE TABLE __mj_BizAppsAccounting.JournalEntryType (
@@ -371,7 +371,7 @@ CREATE TABLE __mj_BizAppsAccounting.JournalEntryType (
     Name NVARCHAR(100) NOT NULL,
     Description NVARCHAR(MAX) NULL,
     IsSystem BIT NOT NULL DEFAULT 0,
-    IsBatchSummary BIT NOT NULL DEFAULT 0,
+    IsJournalEntryBatchSummary BIT NOT NULL DEFAULT 0,
     IsActive BIT NOT NULL DEFAULT 1,
     CONSTRAINT PK_JournalEntryType PRIMARY KEY (ID),
     CONSTRAINT UQ_JournalEntryType_Code UNIQUE (Code)
@@ -381,25 +381,25 @@ GO
 -- Exactly ONE row may carry the batch-summary flag. Two flagged rows would
 -- silently split the member/netting exclusion — the same invisible,
 -- still-balanced failure mode the intercompany triggers guard against.
-CREATE UNIQUE INDEX UX_JournalEntryType_BatchSummary
-    ON __mj_BizAppsAccounting.JournalEntryType (IsBatchSummary)
-    WHERE IsBatchSummary = 1;
+CREATE UNIQUE INDEX UX_JournalEntryType_JournalEntryBatchSummary
+    ON __mj_BizAppsAccounting.JournalEntryType (IsJournalEntryBatchSummary)
+    WHERE IsJournalEntryBatchSummary = 1;
 GO
 
 EXEC sp_addextendedproperty @name = N'MS_Description',
     @value = N'Extensible classification of journal entries (issue #24, BA-D29). Replaces the former closed EntryType CHECK enum. Accounting seeds only the ledger-mechanics types it owns (IsSystem=1, via metadata/journal-entry-types); consuming apps (orders, AP, payroll, ...) seed their own domain types via mj sync push without touching this repo.',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting',
     @level1type = N'TABLE',  @level1name = N'JournalEntryType';
-EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'Stable machine code for the type (e.g. Manual, Reversal, BatchSummary, OrderBooking). Unique. Referenced by code; display uses Name.',
+EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'Stable machine code for the type (e.g. Manual, Reversal, JournalEntryBatchSummary, OrderBooking). Unique. Referenced by code; display uses Name.',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryType', @level2type = N'COLUMN', @level2name = N'Code';
 EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'Human-readable display name for the type.',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryType', @level2type = N'COLUMN', @level2name = N'Name';
 EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'What this entry type classifies and which app owns it.',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryType', @level2type = N'COLUMN', @level2name = N'Description';
-EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'1 = accounting''s own ledger-mechanics type (Manual, Reversal, BatchSummary, ...). Consumers must not repurpose or delete IsSystem rows.',
+EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'1 = accounting''s own ledger-mechanics type (Manual, Reversal, JournalEntryBatchSummary, ...). Consumers must not repurpose or delete IsSystem rows.',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryType', @level2type = N'COLUMN', @level2name = N'IsSystem';
-EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'1 = this type marks a batch''s aggregated summary JE. Batch member/netting/sweep queries exclude JEs of this type via a join on this flag (replaces the former ''BatchSummary'' magic-string match). A filtered unique index allows exactly one flagged row.',
-    @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryType', @level2type = N'COLUMN', @level2name = N'IsBatchSummary';
+EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'1 = this type marks a batch''s aggregated summary JE. Batch member/netting/sweep queries exclude JEs of this type via a join on this flag (replaces the former ''JournalEntryBatchSummary'' magic-string match). A filtered unique index allows exactly one flagged row.',
+    @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryType', @level2type = N'COLUMN', @level2name = N'IsJournalEntryBatchSummary';
 EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'Whether this type may be used on NEW journal entries. Inactive types remain for historical rows.',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryType', @level2type = N'COLUMN', @level2name = N'IsActive';
 GO
@@ -429,7 +429,7 @@ CREATE TABLE __mj_BizAppsAccounting.JournalEntry (
     -- JEs written at booking, plan D15; no schedule tables, no materializer)
     ReversesJournalEntryID UNIQUEIDENTIFIER NULL,
     ReversedByJournalEntryID UNIQUEIDENTIFIER NULL,
-    BatchID UNIQUEIDENTIFIER NULL,
+    JournalEntryBatchID UNIQUEIDENTIFIER NULL,
     GLPostedAt DATETIMEOFFSET NULL,
     GLReferenceID NVARCHAR(100) NULL,
     -- Optional attached source document (vendor bills, signed contracts, etc.)
@@ -446,14 +446,14 @@ CREATE TABLE __mj_BizAppsAccounting.JournalEntry (
     ),
     CONSTRAINT CK_JournalEntry_NoSelfReverse CHECK (ReversesJournalEntryID IS NULL OR ReversesJournalEntryID <> ID),
     CONSTRAINT CK_JournalEntry_NoSelfReversedBy CHECK (ReversedByJournalEntryID IS NULL OR ReversedByJournalEntryID <> ID),
-    -- The summary JE (its JournalEntryType flagged IsBatchSummary=1) carries
-    -- its batch's BatchID like any other JE in the batch's orbit, so it rides
+    -- The summary JE (its JournalEntryType flagged IsJournalEntryBatchSummary=1) carries
+    -- its batch's JournalEntryBatchID like any other JE in the batch's orbit, so it rides
     -- the SAME derived lock machinery (preliminary while its batch is Pending,
     -- permanent from approval, GLPosted at post). It is NOT a member: netting /
-    -- count / sweep queries exclude it via the type's IsBatchSummary flag (the
+    -- count / sweep queries exclude it via the type's IsJournalEntryBatchSummary flag (the
     -- ruled default exclusion — the type is THE discriminator; the batch's
     -- SummaryJournalEntryID is the redundant cross-check).
-    CONSTRAINT CK_JournalEntry_BatchedHasBatch CHECK (Status = 'Pending' OR BatchID IS NOT NULL),
+    CONSTRAINT CK_JournalEntry_BatchedHasJournalEntryBatch CHECK (Status = 'Pending' OR JournalEntryBatchID IS NOT NULL),
     CONSTRAINT CK_JournalEntry_GLPostedHasRef CHECK (Status <> 'GLPosted' OR (GLPostedAt IS NOT NULL))
 );
 GO
@@ -874,22 +874,22 @@ GO
 --     (approve/batch audit), JournalEntry (the aggregated summary JE)
 ---------------------------------------------------------------------------
 ALTER TABLE __mj_BizAppsAccounting.JournalEntryBatch
-    ADD CONSTRAINT FK_JEBatch_Company
+    ADD CONSTRAINT FK_JournalEntryBatch_Company
     FOREIGN KEY (CompanyID) REFERENCES __mj.Company(ID);
 GO
 
 ALTER TABLE __mj_BizAppsAccounting.JournalEntryBatch
-    ADD CONSTRAINT FK_JEBatch_SummaryJE
+    ADD CONSTRAINT FK_JournalEntryBatch_SummaryJE
     FOREIGN KEY (SummaryJournalEntryID) REFERENCES __mj_BizAppsAccounting.JournalEntry(ID);
 GO
 
 ALTER TABLE __mj_BizAppsAccounting.JournalEntryBatch
-    ADD CONSTRAINT FK_JEBatch_ApprovedBy
+    ADD CONSTRAINT FK_JournalEntryBatch_ApprovedBy
     FOREIGN KEY (ApprovedByUserID) REFERENCES __mj.[User](ID);
 GO
 
 ALTER TABLE __mj_BizAppsAccounting.JournalEntryBatch
-    ADD CONSTRAINT FK_JEBatch_BatchedBy
+    ADD CONSTRAINT FK_JournalEntryBatch_BatchedBy
     FOREIGN KEY (BatchedByUserID) REFERENCES __mj.[User](ID);
 GO
 
@@ -898,7 +898,7 @@ GO
 -- this runs. Nullable — NULL = task not yet raised (retryable, D10); the
 -- both-or-neither CHECK (CK_JournalEntryBatch_ApprovalTask) is unchanged.
 ALTER TABLE __mj_BizAppsAccounting.JournalEntryBatch
-    ADD CONSTRAINT FK_JEBatch_ApprovalTask
+    ADD CONSTRAINT FK_JournalEntryBatch_ApprovalTask
     FOREIGN KEY (ApprovalTaskID) REFERENCES __mj_BizAppsTasks.Task(ID);
 GO
 
@@ -914,8 +914,8 @@ ALTER TABLE __mj_BizAppsAccounting.JournalEntry
 GO
 
 ALTER TABLE __mj_BizAppsAccounting.JournalEntry
-    ADD CONSTRAINT FK_JE_Batch
-    FOREIGN KEY (BatchID) REFERENCES __mj_BizAppsAccounting.JournalEntryBatch(ID);
+    ADD CONSTRAINT FK_JE_JournalEntryBatch
+    FOREIGN KEY (JournalEntryBatchID) REFERENCES __mj_BizAppsAccounting.JournalEntryBatch(ID);
 GO
 
 ALTER TABLE __mj_BizAppsAccounting.JournalEntry
@@ -1196,7 +1196,7 @@ GO
 --     V202607081600 reversible-preliminary-lock rework, Robert 2026-07-08).
 --     A JE Batched into a STILL-PENDING (unapproved) batch is only
 --     PRELIMINARILY locked: the SANCTIONED reversal — Status Batched→Pending
---     AND BatchID→NULL, and NOTHING else, while the owning batch is still
+--     AND JournalEntryBatchID→NULL, and NOTHING else, while the owning batch is still
 --     Pending — is permitted. Once the batch is Approved (or beyond), the lock
 --     is PERMANENT. Every other mutation on a locked JE stays blocked; DELETE
 --     is blocked entirely. Reversals happen via NEW Pending JEs (plan §7).
@@ -1218,14 +1218,14 @@ BEGIN
     -- UPDATE: block changes to frozen fields when previous Status was locked.
     -- Allowed on a locked row: GLPostedAt, GLReferenceID, ReversedByJournalEntryID,
     -- Status Batched→GLPosted, and the reversible PRELIMINARY unlock (Status
-    -- Batched→Pending + BatchID→NULL while the owning batch is still Pending).
+    -- Batched→Pending + JournalEntryBatchID→NULL while the owning batch is still Pending).
     IF EXISTS (
         SELECT 1
         FROM deleted d
         JOIN inserted i ON i.ID = d.ID
         WHERE d.Status IN ('Batched','GLPosted')
           AND (
-            -- (A) any frozen field OTHER THAN BatchID changed → never allowed on a locked row
+            -- (A) any frozen field OTHER THAN JournalEntryBatchID changed → never allowed on a locked row
             i.EntryNumber                 <> d.EntryNumber                 OR
             i.CompanyID                   <> d.CompanyID                   OR
             i.EffectiveDate               <> d.EffectiveDate               OR
@@ -1235,25 +1235,25 @@ BEGIN
             ISNULL(i.LinkedRecordID,           N'')                                    <> ISNULL(d.LinkedRecordID,           N'')                                    OR
             ISNULL(i.ReversesJournalEntryID,   '00000000-0000-0000-0000-000000000000') <> ISNULL(d.ReversesJournalEntryID,   '00000000-0000-0000-0000-000000000000') OR
             ISNULL(i.FileID,                   '00000000-0000-0000-0000-000000000000') <> ISNULL(d.FileID,                   '00000000-0000-0000-0000-000000000000') OR
-            -- (B) BatchID changed, and this is NOT the sanctioned reversible preliminary unlock
+            -- (B) JournalEntryBatchID changed, and this is NOT the sanctioned reversible preliminary unlock
             (
-                ISNULL(i.BatchID, '00000000-0000-0000-0000-000000000000') <> ISNULL(d.BatchID, '00000000-0000-0000-0000-000000000000')
+                ISNULL(i.JournalEntryBatchID, '00000000-0000-0000-0000-000000000000') <> ISNULL(d.JournalEntryBatchID, '00000000-0000-0000-0000-000000000000')
                 AND NOT (
                     d.Status = 'Batched'
                     AND i.Status = 'Pending'
-                    AND i.BatchID IS NULL
-                    AND EXISTS (SELECT 1 FROM __mj_BizAppsAccounting.JournalEntryBatch b WHERE b.ID = d.BatchID AND b.Status = 'Pending')
+                    AND i.JournalEntryBatchID IS NULL
+                    AND EXISTS (SELECT 1 FROM __mj_BizAppsAccounting.JournalEntryBatch b WHERE b.ID = d.JournalEntryBatchID AND b.Status = 'Pending')
                 )
             )
           )
     )
     BEGIN
         ROLLBACK TRANSACTION;
-        THROW 50004, 'JournalEntry is locked (Status=Batched/GLPosted). Only GLPostedAt, GLReferenceID, ReversedByJournalEntryID, Status (Batched→GLPosted), and the reversible unlock (Batched→Pending + BatchID→NULL while the batch is still Pending) may change.', 1;
+        THROW 50004, 'JournalEntry is locked (Status=Batched/GLPosted). Only GLPostedAt, GLReferenceID, ReversedByJournalEntryID, Status (Batched→GLPosted), and the reversible unlock (Batched→Pending + JournalEntryBatchID→NULL while the batch is still Pending) may change.', 1;
     END;
 
     -- Disallow regressing Status backwards on a locked row. Batched→Pending is permitted ONLY as the
-    -- reversible preliminary unlock (BatchID cleared, owning batch still Pending); GLPosted never regresses.
+    -- reversible preliminary unlock (JournalEntryBatchID cleared, owning batch still Pending); GLPosted never regresses.
     IF EXISTS (
         SELECT 1
         FROM deleted d
@@ -1262,8 +1262,8 @@ BEGIN
            OR (
                d.Status = 'Batched' AND i.Status = 'Pending'
                AND NOT (
-                   i.BatchID IS NULL
-                   AND EXISTS (SELECT 1 FROM __mj_BizAppsAccounting.JournalEntryBatch b WHERE b.ID = d.BatchID AND b.Status = 'Pending')
+                   i.JournalEntryBatchID IS NULL
+                   AND EXISTS (SELECT 1 FROM __mj_BizAppsAccounting.JournalEntryBatch b WHERE b.ID = d.JournalEntryBatchID AND b.Status = 'Pending')
                )
            )
     )
@@ -1347,12 +1347,12 @@ GO
 ---------------------------------------------------------------------------
 -- 4.6 trg_JournalEntryBatch_Immutability
 --     Batches are content-frozen once APPROVED (locked by a human) and beyond
---     (Sent / Posted). Status / SentAt / PostedAt / ExternalBatchRef /
+--     (Sent / Posted). Status / SentAt / PostedAt / ExternalJournalEntryBatchRef /
 --     ErrorMessage are the only fields that may evolve after approval;
 --     deletion is blocked from Approved onward (Pending batches are
 --     mutable + deletable; Cancelled is a status, not a delete).
 ---------------------------------------------------------------------------
-CREATE TRIGGER __mj_BizAppsAccounting.trg_JEBatch_Immutability
+CREATE TRIGGER __mj_BizAppsAccounting.trg_JournalEntryBatch_Immutability
 ON __mj_BizAppsAccounting.JournalEntryBatch
 AFTER UPDATE, DELETE
 AS
@@ -1371,7 +1371,7 @@ BEGIN
         JOIN inserted i ON i.ID = d.ID
         WHERE d.Status IN ('Approved','Sent','Posted')
           AND (
-            i.BatchNumber          <> d.BatchNumber          OR
+            i.JournalEntryBatchNumber          <> d.JournalEntryBatchNumber          OR
             i.CompanyID            <> d.CompanyID            OR
             i.PostingDate          <> d.PostingDate          OR
             ISNULL(i.SummaryJournalEntryID, '00000000-0000-0000-0000-000000000000') <> ISNULL(d.SummaryJournalEntryID, '00000000-0000-0000-0000-000000000000') OR
@@ -1386,23 +1386,23 @@ BEGIN
     )
     BEGIN
         ROLLBACK TRANSACTION;
-        THROW 50009, 'JournalEntryBatch is locked (Status=Approved/Sent/Posted). Only Status / ApprovedAt / ApprovedByUserID / SentAt / PostedAt / ExternalBatchRef / ErrorMessage may evolve (CompanyID, PostingDate, SummaryJournalEntryID, and the approval-task pointer freeze at approval).', 1;
+        THROW 50009, 'JournalEntryBatch is locked (Status=Approved/Sent/Posted). Only Status / ApprovedAt / ApprovedByUserID / SentAt / PostedAt / ExternalJournalEntryBatchRef / ErrorMessage may evolve (CompanyID, PostingDate, SummaryJournalEntryID, and the approval-task pointer freeze at approval).', 1;
     END;
 END;
 GO
 
 ---------------------------------------------------------------------------
--- 4.6b trg_JEBatch_SummaryCoherence
+-- 4.6b trg_JournalEntryBatch_SummaryCoherence
 --      When a batch's SummaryJournalEntryID is set, the referenced JE must be
---      wired correctly: its JournalEntryType flagged IsBatchSummary=1,
---      BatchID = THIS batch, and the
+--      wired correctly: its JournalEntryType flagged IsJournalEntryBatchSummary=1,
+--      JournalEntryBatchID = THIS batch, and the
 --      same CompanyID. Catches every summary mis-wiring in one place (pointing
 --      at a regular JE, at another batch's summary, or across companies).
 --      Batch-side only, so the engine's create-summary-then-stamp-pointer order
 --      works in one transaction (stamp the pointer while the summary is locked
---      into the batch, i.e. Batched with BatchID set).
+--      into the batch, i.e. Batched with JournalEntryBatchID set).
 ---------------------------------------------------------------------------
-CREATE TRIGGER __mj_BizAppsAccounting.trg_JEBatch_SummaryCoherence
+CREATE TRIGGER __mj_BizAppsAccounting.trg_JournalEntryBatch_SummaryCoherence
 ON __mj_BizAppsAccounting.JournalEntryBatch
 AFTER INSERT, UPDATE
 AS
@@ -1416,14 +1416,14 @@ BEGIN
         WHERE b.SummaryJournalEntryID IS NOT NULL
           AND (
             s.ID IS NULL
-            OR ISNULL(st.IsBatchSummary, 0) = 0
-            OR ISNULL(s.BatchID, '00000000-0000-0000-0000-000000000000') <> b.ID
+            OR ISNULL(st.IsJournalEntryBatchSummary, 0) = 0
+            OR ISNULL(s.JournalEntryBatchID, '00000000-0000-0000-0000-000000000000') <> b.ID
             OR s.CompanyID <> b.CompanyID
           )
     )
     BEGIN
         ROLLBACK TRANSACTION;
-        THROW 50023, 'JournalEntryBatch.SummaryJournalEntryID must reference a JournalEntry whose JournalEntryType has IsBatchSummary=1, BatchID = this batch, and the batch''s CompanyID.', 1;
+        THROW 50023, 'JournalEntryBatch.SummaryJournalEntryID must reference a JournalEntry whose JournalEntryType has IsJournalEntryBatchSummary=1, JournalEntryBatchID = this batch, and the batch''s CompanyID.', 1;
     END;
 END;
 GO
@@ -1627,12 +1627,12 @@ END;
 GO
 
 ---------------------------------------------------------------------------
--- 5.2 spAssignNextBatchNumber
+-- 5.2 spAssignNextJournalEntryBatchNumber
 --     Atomically increments the GLOBAL singleton batch sequence and returns
 --     'BATCH-{seq:000000}'. (D-SEQ 2026-07-06: batches are multi-company.)
 ---------------------------------------------------------------------------
-CREATE PROCEDURE __mj_BizAppsAccounting.spAssignNextBatchNumber
-    @BatchNumber NVARCHAR(40) OUTPUT
+CREATE PROCEDURE __mj_BizAppsAccounting.spAssignNextJournalEntryBatchNumber
+    @JournalEntryBatchNumber NVARCHAR(40) OUTPUT
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -1656,7 +1656,7 @@ BEGIN
         END;
     COMMIT TRANSACTION;
 
-    SET @BatchNumber = N'BATCH-' + RIGHT(N'000000' + CAST(@NextSeq AS NVARCHAR(6)), 6);
+    SET @JournalEntryBatchNumber = N'BATCH-' + RIGHT(N'000000' + CAST(@NextSeq AS NVARCHAR(6)), 6);
 END;
 GO
 
@@ -1675,7 +1675,7 @@ GO
 --   above (5.1/5.2), guaranteeing the grant targets exactly those objects.
 ---------------------------------------------------------------------------
 GRANT EXECUTE ON __mj_BizAppsAccounting.spAssignNextJournalEntryNumber TO [cdp_Developer], [cdp_Integration];
-GRANT EXECUTE ON __mj_BizAppsAccounting.spAssignNextBatchNumber TO [cdp_Developer], [cdp_Integration];
+GRANT EXECUTE ON __mj_BizAppsAccounting.spAssignNextJournalEntryBatchNumber TO [cdp_Developer], [cdp_Integration];
 GO
 
 ---------------------------------------------------------------------------
@@ -1900,15 +1900,15 @@ EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'Aggregation ev
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch';
 EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'Unique identifier.',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'ID';
-EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'Gap-free batch number assigned by spAssignNextBatchNumber. Format ''BATCH-{CompanyCode}-{seq:000000}''.',
-    @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'BatchNumber';
+EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'Gap-free batch number assigned by spAssignNextJournalEntryBatchNumber. Format ''BATCH-{CompanyCode}-{seq:000000}''.',
+    @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'JournalEntryBatchNumber';
 EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'Target ERP for this batch: BusinessCentral | QuickBooks | NetSuite | Sage | Xero | Other.',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'TargetSystem';
 EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'When the batch was created (Pending JEs flipped to Batched).',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'BatchedAt';
 EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'User (or system identity for scheduled runs) that performed the batch.',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'BatchedByUserID';
-EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed triggers retry + escalation; Cancelled is terminal from Pending or unsent Approved (trg_JEBatch_Immutability).',
+EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed triggers retry + escalation; Cancelled is terminal from Pending or unsent Approved (trg_JournalEntryBatch_Immutability).',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'Status';
 EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'Count of JE rows in this batch (denormalized for fast batch dashboards).',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'TotalEntries';
@@ -1917,7 +1917,7 @@ EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'Sum of debits 
 EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'Sum of credits across all JE lines in the batch (functional currency).',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'TotalCredits';
 EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'ERP''s reference returned on send (used to correlate the consolidated JE posted in the ERP).',
-    @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'ExternalBatchRef';
+    @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'ExternalJournalEntryBatchRef';
 EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'When the batch was sent to the ERP.',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'SentAt';
 EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'Error message from a Failed send. JEs revert to Pending for retry.',
@@ -1950,7 +1950,7 @@ EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'When set, this
 EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'Back-pointer set on the original JE when a reversal is emitted against it.',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntry', @level2type = N'COLUMN', @level2name = N'ReversedByJournalEntryID';
 EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'Batch that locked this JE (set when Status transitions to Batched).',
-    @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntry', @level2type = N'COLUMN', @level2name = N'BatchID';
+    @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntry', @level2type = N'COLUMN', @level2name = N'JournalEntryBatchID';
 EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'When the ERP acknowledged the consolidated batch (Status transitions to GLPosted).',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntry', @level2type = N'COLUMN', @level2name = N'GLPostedAt';
 EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'ERP''s reference back to us for this JE (within the consolidated batch posting).',
@@ -2160,7 +2160,7 @@ EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'When the ERP c
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'PostedAt';
 EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'PER-COMPANY per-fiscal-year counter backing gap-free JournalEntry numbering JE-{CompanyCode}-{FY}-{seq} (plan D19). Consumed only by spAssignNextJournalEntryNumber.',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntrySequence';
-EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'GLOBAL singleton counter backing gap-free JournalEntryBatch numbering (plan D19: batch numbering stays global). One row, ID = 1. Consumed only by spAssignNextBatchNumber.',
+EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'GLOBAL singleton counter backing gap-free JournalEntryBatch numbering (plan D19: batch numbering stays global). One row, ID = 1. Consumed only by spAssignNextJournalEntryBatchNumber.',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatchSequence';
 GO
 
@@ -2173,7 +2173,7 @@ EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'The single com
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'CompanyID';
 EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'Singular, accountant-set posting date chosen at batch build (plan D8). Carried to the GL''s posting date and must match between systems; drives the ERP period. Document dates stay informational.',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'PostingDate';
-EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'The aggregated summary JournalEntry (its JournalEntryType flagged IsBatchSummary, EffectiveDate=PostingDate) that posts to the GL for this batch (plan D9). Its lines net debits/credits per GLAccount x dimension-combo. The summary carries this batch''s BatchID (same derived lock machinery as members) but is excluded from member/netting/sweep queries via its type''s IsBatchSummary flag.',
+EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'The aggregated summary JournalEntry (its JournalEntryType flagged IsJournalEntryBatchSummary, EffectiveDate=PostingDate) that posts to the GL for this batch (plan D9). Its lines net debits/credits per GLAccount x dimension-combo. The summary carries this batch''s JournalEntryBatchID (same derived lock machinery as members) but is excluded from member/netting/sweep queries via its type''s IsJournalEntryBatchSummary flag.',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'SummaryJournalEntryID';
 EXEC sp_addextendedproperty @name = N'MS_Description', @value = N'The bizapps-tasks approval Task raised for this batch (plan D10). Real FK to __mj_BizAppsTasks.Task (#22) — cross-app references point UP the dependency graph, and tasks installs before this app. Stamped together with ApprovalTaskRaisedAt in the task-raise transaction (both-or-neither CHECK). NULL = task not yet raised (retryable state).',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'ApprovalTaskID';
@@ -2520,7 +2520,7 @@ INSERT INTO [${mjSchema}].[EntityPermission]
          'e4635c26-6509-496e-b4fa-229cacd7c0a3',
          'MJ_BizApps_Accounting: Journal Entry Batch Sequences',
          'Journal Entry Batch Sequences',
-         'GLOBAL singleton counter backing gap-free JournalEntryBatch numbering (plan D19: batch numbering stays global). One row, ID = 1. Consumed only by spAssignNextBatchNumber.',
+         'GLOBAL singleton counter backing gap-free JournalEntryBatch numbering (plan D19: batch numbering stays global). One row, ID = 1. Consumed only by spAssignNextJournalEntryBatchNumber.',
          NULL,
          'JournalEntryBatchSequence',
          'vwJournalEntryBatchSequences',
@@ -8304,7 +8304,7 @@ GO
             100002,
             'Code',
             'Code',
-            'Stable machine code for the type (e.g. Manual, Reversal, BatchSummary, OrderBooking). Unique. Referenced by code; display uses Name.',
+            'Stable machine code for the type (e.g. Manual, Reversal, JournalEntryBatchSummary, OrderBooking). Unique. Referenced by code; display uses Name.',
             'nvarchar',
             80,
             0,
@@ -8493,7 +8493,7 @@ GO
             100005,
             'IsSystem',
             'Is System',
-            '1 = accounting''s own ledger-mechanics type (Manual, Reversal, BatchSummary, ...). Consumers must not repurpose or delete IsSystem rows.',
+            '1 = accounting''s own ledger-mechanics type (Manual, Reversal, JournalEntryBatchSummary, ...). Consumers must not repurpose or delete IsSystem rows.',
             'bit',
             1,
             1,
@@ -8518,7 +8518,7 @@ GO
          )
       END;
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '28678f8b-bc6f-474e-ac1b-6d0a677eddda' OR (EntityID = 'DC62BF31-B53B-434B-8A7E-2D5F35DECFCE' AND Name = 'IsBatchSummary')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '28678f8b-bc6f-474e-ac1b-6d0a677eddda' OR (EntityID = 'DC62BF31-B53B-434B-8A7E-2D5F35DECFCE' AND Name = 'IsJournalEntryBatchSummary')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -8554,9 +8554,9 @@ GO
             '28678f8b-bc6f-474e-ac1b-6d0a677eddda',
             'DC62BF31-B53B-434B-8A7E-2D5F35DECFCE', -- Entity: MJ_BizApps_Accounting: Journal Entry Types
             100006,
-            'IsBatchSummary',
-            'Is Batch Summary',
-            '1 = this type marks a batch''s aggregated summary JE. Batch member/netting/sweep queries exclude JEs of this type via a join on this flag (replaces the former ''BatchSummary'' magic-string match). A filtered unique index allows exactly one flagged row.',
+            'IsJournalEntryBatchSummary',
+            'Is Journal Entry Batch Summary',
+            '1 = this type marks a batch''s aggregated summary JE. Batch member/netting/sweep queries exclude JEs of this type via a join on this flag (replaces the former ''JournalEntryBatchSummary'' magic-string match). A filtered unique index allows exactly one flagged row.',
             'bit',
             1,
             1,
@@ -11038,7 +11038,7 @@ GO
          )
       END;
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'a642444d-d33e-4501-9cf4-80a609c71181' OR (EntityID = '4E9052F8-911B-4C9C-B2D3-592297319262' AND Name = 'BatchID')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'a642444d-d33e-4501-9cf4-80a609c71181' OR (EntityID = '4E9052F8-911B-4C9C-B2D3-592297319262' AND Name = 'JournalEntryBatchID')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -11074,8 +11074,8 @@ GO
             'a642444d-d33e-4501-9cf4-80a609c71181',
             '4E9052F8-911B-4C9C-B2D3-592297319262', -- Entity: MJ_BizApps_Accounting: Journal Entries
             100012,
-            'BatchID',
-            'Batch ID',
+            'JournalEntryBatchID',
+            'Journal Entry Batch ID',
             'Batch that locked this JE (set when Status transitions to Batched).',
             'uniqueidentifier',
             16,
@@ -16015,7 +16015,7 @@ GO
          )
       END;
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'fdf4b10b-17b8-4e60-b99b-53465df6945c' OR (EntityID = '165A5F89-44BC-4DFF-AD4B-BDC24F04C981' AND Name = 'BatchNumber')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'fdf4b10b-17b8-4e60-b99b-53465df6945c' OR (EntityID = '165A5F89-44BC-4DFF-AD4B-BDC24F04C981' AND Name = 'JournalEntryBatchNumber')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -16051,9 +16051,9 @@ GO
             'fdf4b10b-17b8-4e60-b99b-53465df6945c',
             '165A5F89-44BC-4DFF-AD4B-BDC24F04C981', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
             100002,
-            'BatchNumber',
-            'Batch Number',
-            'Gap-free batch number assigned by spAssignNextBatchNumber. Format ''BATCH-{CompanyCode}-{seq:000000}''.',
+            'JournalEntryBatchNumber',
+            'Journal Entry Batch Number',
+            'Gap-free batch number assigned by spAssignNextJournalEntryBatchNumber. Format ''BATCH-{CompanyCode}-{seq:000000}''.',
             'nvarchar',
             80,
             0,
@@ -16242,7 +16242,7 @@ GO
             100005,
             'SummaryJournalEntryID',
             'Summary Journal Entry ID',
-            'The aggregated summary JournalEntry (its JournalEntryType flagged IsBatchSummary, EffectiveDate=PostingDate) that posts to the GL for this batch (plan D9). Its lines net debits/credits per GLAccount x dimension-combo. The summary carries this batch''s BatchID (same derived lock machinery as members) but is excluded from member/netting/sweep queries via its type''s IsBatchSummary flag.',
+            'The aggregated summary JournalEntry (its JournalEntryType flagged IsJournalEntryBatchSummary, EffectiveDate=PostingDate) that posts to the GL for this batch (plan D9). Its lines net debits/credits per GLAccount x dimension-combo. The summary carries this batch''s JournalEntryBatchID (same derived lock machinery as members) but is excluded from member/netting/sweep queries via its type''s IsJournalEntryBatchSummary flag.',
             'uniqueidentifier',
             16,
             0,
@@ -16494,7 +16494,7 @@ GO
             100009,
             'Status',
             'Status',
-            'Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed triggers retry + escalation; Cancelled is terminal from Pending or unsent Approved (trg_JEBatch_Immutability).',
+            'Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed triggers retry + escalation; Cancelled is terminal from Pending or unsent Approved (trg_JournalEntryBatch_Immutability).',
             'nvarchar',
             40,
             0,
@@ -16708,7 +16708,7 @@ GO
          )
       END;
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '8217a849-499a-49da-acce-cfabfd01a756' OR (EntityID = '165A5F89-44BC-4DFF-AD4B-BDC24F04C981' AND Name = 'ExternalBatchRef')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '8217a849-499a-49da-acce-cfabfd01a756' OR (EntityID = '165A5F89-44BC-4DFF-AD4B-BDC24F04C981' AND Name = 'ExternalJournalEntryBatchRef')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -16744,8 +16744,8 @@ GO
             '8217a849-499a-49da-acce-cfabfd01a756',
             '165A5F89-44BC-4DFF-AD4B-BDC24F04C981', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
             100013,
-            'ExternalBatchRef',
-            'External Batch Ref',
+            'ExternalJournalEntryBatchRef',
+            'External Journal Entry Batch Ref',
             'ERP''s reference returned on send (used to correlate the consolidated JE posted in the ERP).',
             'nvarchar',
             200,
@@ -20569,13 +20569,13 @@ UPDATE [${mjSchema}].[EntityField] SET ValueListType='List' WHERE ID='6F3B1E86-A
    END;
 
 
-/* Create Entity Relationship: MJ_BizApps_Accounting: Journal Entry Batches -> MJ_BizApps_Accounting: Journal Entries (One To Many via BatchID) */
+/* Create Entity Relationship: MJ_BizApps_Accounting: Journal Entry Batches -> MJ_BizApps_Accounting: Journal Entries (One To Many via JournalEntryBatchID) */
    IF NOT EXISTS (
       SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '689585dd-d82f-436a-871c-51ab0368a6a9'
    )
    BEGIN
       INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
-                    VALUES ('689585dd-d82f-436a-871c-51ab0368a6a9', '165A5F89-44BC-4DFF-AD4B-BDC24F04C981', '4E9052F8-911B-4C9C-B2D3-592297319262', 'BatchID', 'One To Many', 1, 1, 1, GETUTCDATE(), GETUTCDATE())
+                    VALUES ('689585dd-d82f-436a-871c-51ab0368a6a9', '165A5F89-44BC-4DFF-AD4B-BDC24F04C981', '4E9052F8-911B-4C9C-B2D3-592297319262', 'JournalEntryBatchID', 'One To Many', 1, 1, 1, GETUTCDATE(), GETUTCDATE())
    END;
                     
 /* Create Entity Relationship: MJ_BizApps_Accounting: Tax Authorities -> MJ_BizApps_Accounting: Tax Liabilities (One To Many via TaxAuthorityID) */
@@ -24027,14 +24027,14 @@ IF NOT EXISTS (
 )
 CREATE INDEX IDX_AUTO_MJ_FKEY_JournalEntry_ReversedByJournalEntryID ON [${flyway:defaultSchema}].[JournalEntry] ([ReversedByJournalEntryID]);
 
--- Index for foreign key BatchID in table JournalEntry
+-- Index for foreign key JournalEntryBatchID in table JournalEntry
 IF NOT EXISTS (
     SELECT 1
     FROM sys.indexes
-    WHERE name = 'IDX_AUTO_MJ_FKEY_JournalEntry_BatchID' 
+    WHERE name = 'IDX_AUTO_MJ_FKEY_JournalEntry_JournalEntryBatchID' 
     AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[JournalEntry]')
 )
-CREATE INDEX IDX_AUTO_MJ_FKEY_JournalEntry_BatchID ON [${flyway:defaultSchema}].[JournalEntry] ([BatchID]);
+CREATE INDEX IDX_AUTO_MJ_FKEY_JournalEntry_JournalEntryBatchID ON [${flyway:defaultSchema}].[JournalEntry] ([JournalEntryBatchID]);
 
 -- Index for foreign key FileID in table JournalEntry
 IF NOT EXISTS (
@@ -24836,8 +24836,8 @@ CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateJournalEntry]
     @ReversesJournalEntryID uniqueidentifier = NULL,
     @ReversedByJournalEntryID_Clear bit = 0,
     @ReversedByJournalEntryID uniqueidentifier = NULL,
-    @BatchID_Clear bit = 0,
-    @BatchID uniqueidentifier = NULL,
+    @JournalEntryBatchID_Clear bit = 0,
+    @JournalEntryBatchID uniqueidentifier = NULL,
     @GLPostedAt_Clear bit = 0,
     @GLPostedAt datetimeoffset = NULL,
     @GLReferenceID_Clear bit = 0,
@@ -24865,7 +24865,7 @@ BEGIN
                 [LinkedRecordID],
                 [ReversesJournalEntryID],
                 [ReversedByJournalEntryID],
-                [BatchID],
+                [JournalEntryBatchID],
                 [GLPostedAt],
                 [GLReferenceID],
                 [FileID]
@@ -24884,7 +24884,7 @@ BEGIN
                 CASE WHEN @LinkedRecordID_Clear = 1 THEN NULL ELSE ISNULL(@LinkedRecordID, NULL) END,
                 CASE WHEN @ReversesJournalEntryID_Clear = 1 THEN NULL ELSE ISNULL(@ReversesJournalEntryID, NULL) END,
                 CASE WHEN @ReversedByJournalEntryID_Clear = 1 THEN NULL ELSE ISNULL(@ReversedByJournalEntryID, NULL) END,
-                CASE WHEN @BatchID_Clear = 1 THEN NULL ELSE ISNULL(@BatchID, NULL) END,
+                CASE WHEN @JournalEntryBatchID_Clear = 1 THEN NULL ELSE ISNULL(@JournalEntryBatchID, NULL) END,
                 CASE WHEN @GLPostedAt_Clear = 1 THEN NULL ELSE ISNULL(@GLPostedAt, NULL) END,
                 CASE WHEN @GLReferenceID_Clear = 1 THEN NULL ELSE ISNULL(@GLReferenceID, NULL) END,
                 CASE WHEN @FileID_Clear = 1 THEN NULL ELSE ISNULL(@FileID, NULL) END
@@ -24905,7 +24905,7 @@ BEGIN
                 [LinkedRecordID],
                 [ReversesJournalEntryID],
                 [ReversedByJournalEntryID],
-                [BatchID],
+                [JournalEntryBatchID],
                 [GLPostedAt],
                 [GLReferenceID],
                 [FileID]
@@ -24923,7 +24923,7 @@ BEGIN
                 CASE WHEN @LinkedRecordID_Clear = 1 THEN NULL ELSE ISNULL(@LinkedRecordID, NULL) END,
                 CASE WHEN @ReversesJournalEntryID_Clear = 1 THEN NULL ELSE ISNULL(@ReversesJournalEntryID, NULL) END,
                 CASE WHEN @ReversedByJournalEntryID_Clear = 1 THEN NULL ELSE ISNULL(@ReversedByJournalEntryID, NULL) END,
-                CASE WHEN @BatchID_Clear = 1 THEN NULL ELSE ISNULL(@BatchID, NULL) END,
+                CASE WHEN @JournalEntryBatchID_Clear = 1 THEN NULL ELSE ISNULL(@JournalEntryBatchID, NULL) END,
                 CASE WHEN @GLPostedAt_Clear = 1 THEN NULL ELSE ISNULL(@GLPostedAt, NULL) END,
                 CASE WHEN @GLReferenceID_Clear = 1 THEN NULL ELSE ISNULL(@GLReferenceID, NULL) END,
                 CASE WHEN @FileID_Clear = 1 THEN NULL ELSE ISNULL(@FileID, NULL) END
@@ -24973,8 +24973,8 @@ CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateJournalEntry]
     @ReversesJournalEntryID uniqueidentifier = NULL,
     @ReversedByJournalEntryID_Clear bit = 0,
     @ReversedByJournalEntryID uniqueidentifier = NULL,
-    @BatchID_Clear bit = 0,
-    @BatchID uniqueidentifier = NULL,
+    @JournalEntryBatchID_Clear bit = 0,
+    @JournalEntryBatchID uniqueidentifier = NULL,
     @GLPostedAt_Clear bit = 0,
     @GLPostedAt datetimeoffset = NULL,
     @GLReferenceID_Clear bit = 0,
@@ -24997,7 +24997,7 @@ BEGIN
         [LinkedRecordID] = CASE WHEN @LinkedRecordID_Clear = 1 THEN NULL ELSE ISNULL(@LinkedRecordID, [LinkedRecordID]) END,
         [ReversesJournalEntryID] = CASE WHEN @ReversesJournalEntryID_Clear = 1 THEN NULL ELSE ISNULL(@ReversesJournalEntryID, [ReversesJournalEntryID]) END,
         [ReversedByJournalEntryID] = CASE WHEN @ReversedByJournalEntryID_Clear = 1 THEN NULL ELSE ISNULL(@ReversedByJournalEntryID, [ReversedByJournalEntryID]) END,
-        [BatchID] = CASE WHEN @BatchID_Clear = 1 THEN NULL ELSE ISNULL(@BatchID, [BatchID]) END,
+        [JournalEntryBatchID] = CASE WHEN @JournalEntryBatchID_Clear = 1 THEN NULL ELSE ISNULL(@JournalEntryBatchID, [JournalEntryBatchID]) END,
         [GLPostedAt] = CASE WHEN @GLPostedAt_Clear = 1 THEN NULL ELSE ISNULL(@GLPostedAt, [GLPostedAt]) END,
         [GLReferenceID] = CASE WHEN @GLReferenceID_Clear = 1 THEN NULL ELSE ISNULL(@GLReferenceID, [GLReferenceID]) END,
         [FileID] = CASE WHEN @FileID_Clear = 1 THEN NULL ELSE ISNULL(@FileID, [FileID]) END
@@ -25471,7 +25471,7 @@ GO
 
 CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateJournalEntryBatch]
     @ID uniqueidentifier = NULL,
-    @BatchNumber nvarchar(40),
+    @JournalEntryBatchNumber nvarchar(40),
     @CompanyID uniqueidentifier,
     @PostingDate date,
     @SummaryJournalEntryID_Clear bit = 0,
@@ -25483,8 +25483,8 @@ CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateJournalEntryBatch]
     @TotalEntries int = NULL,
     @TotalDebits decimal(18, 2) = NULL,
     @TotalCredits decimal(18, 2) = NULL,
-    @ExternalBatchRef_Clear bit = 0,
-    @ExternalBatchRef nvarchar(100) = NULL,
+    @ExternalJournalEntryBatchRef_Clear bit = 0,
+    @ExternalJournalEntryBatchRef nvarchar(100) = NULL,
     @ApprovedAt_Clear bit = 0,
     @ApprovedAt datetimeoffset = NULL,
     @ApprovedByUserID_Clear bit = 0,
@@ -25510,7 +25510,7 @@ BEGIN
         INSERT INTO [${flyway:defaultSchema}].[JournalEntryBatch]
             (
                 [ID],
-                [BatchNumber],
+                [JournalEntryBatchNumber],
                 [CompanyID],
                 [PostingDate],
                 [SummaryJournalEntryID],
@@ -25521,7 +25521,7 @@ BEGIN
                 [TotalEntries],
                 [TotalDebits],
                 [TotalCredits],
-                [ExternalBatchRef],
+                [ExternalJournalEntryBatchRef],
                 [ApprovedAt],
                 [ApprovedByUserID],
                 [SentAt],
@@ -25534,7 +25534,7 @@ BEGIN
         VALUES
             (
                 @ID,
-                @BatchNumber,
+                @JournalEntryBatchNumber,
                 @CompanyID,
                 @PostingDate,
                 CASE WHEN @SummaryJournalEntryID_Clear = 1 THEN NULL ELSE ISNULL(@SummaryJournalEntryID, NULL) END,
@@ -25545,7 +25545,7 @@ BEGIN
                 ISNULL(@TotalEntries, 0),
                 ISNULL(@TotalDebits, 0),
                 ISNULL(@TotalCredits, 0),
-                CASE WHEN @ExternalBatchRef_Clear = 1 THEN NULL ELSE ISNULL(@ExternalBatchRef, NULL) END,
+                CASE WHEN @ExternalJournalEntryBatchRef_Clear = 1 THEN NULL ELSE ISNULL(@ExternalJournalEntryBatchRef, NULL) END,
                 CASE WHEN @ApprovedAt_Clear = 1 THEN NULL ELSE ISNULL(@ApprovedAt, NULL) END,
                 CASE WHEN @ApprovedByUserID_Clear = 1 THEN NULL ELSE ISNULL(@ApprovedByUserID, NULL) END,
                 CASE WHEN @SentAt_Clear = 1 THEN NULL ELSE ISNULL(@SentAt, NULL) END,
@@ -25560,7 +25560,7 @@ BEGIN
         -- No value provided, let database use its default (e.g., NEWSEQUENTIALID())
         INSERT INTO [${flyway:defaultSchema}].[JournalEntryBatch]
             (
-                [BatchNumber],
+                [JournalEntryBatchNumber],
                 [CompanyID],
                 [PostingDate],
                 [SummaryJournalEntryID],
@@ -25571,7 +25571,7 @@ BEGIN
                 [TotalEntries],
                 [TotalDebits],
                 [TotalCredits],
-                [ExternalBatchRef],
+                [ExternalJournalEntryBatchRef],
                 [ApprovedAt],
                 [ApprovedByUserID],
                 [SentAt],
@@ -25583,7 +25583,7 @@ BEGIN
         OUTPUT INSERTED.[ID] INTO @InsertedRow
         VALUES
             (
-                @BatchNumber,
+                @JournalEntryBatchNumber,
                 @CompanyID,
                 @PostingDate,
                 CASE WHEN @SummaryJournalEntryID_Clear = 1 THEN NULL ELSE ISNULL(@SummaryJournalEntryID, NULL) END,
@@ -25594,7 +25594,7 @@ BEGIN
                 ISNULL(@TotalEntries, 0),
                 ISNULL(@TotalDebits, 0),
                 ISNULL(@TotalCredits, 0),
-                CASE WHEN @ExternalBatchRef_Clear = 1 THEN NULL ELSE ISNULL(@ExternalBatchRef, NULL) END,
+                CASE WHEN @ExternalJournalEntryBatchRef_Clear = 1 THEN NULL ELSE ISNULL(@ExternalJournalEntryBatchRef, NULL) END,
                 CASE WHEN @ApprovedAt_Clear = 1 THEN NULL ELSE ISNULL(@ApprovedAt, NULL) END,
                 CASE WHEN @ApprovedByUserID_Clear = 1 THEN NULL ELSE ISNULL(@ApprovedByUserID, NULL) END,
                 CASE WHEN @SentAt_Clear = 1 THEN NULL ELSE ISNULL(@SentAt, NULL) END,
@@ -25633,7 +25633,7 @@ GO
 
 CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateJournalEntryBatch]
     @ID uniqueidentifier,
-    @BatchNumber nvarchar(40) = NULL,
+    @JournalEntryBatchNumber nvarchar(40) = NULL,
     @CompanyID uniqueidentifier = NULL,
     @PostingDate date = NULL,
     @SummaryJournalEntryID_Clear bit = 0,
@@ -25645,8 +25645,8 @@ CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateJournalEntryBatch]
     @TotalEntries int = NULL,
     @TotalDebits decimal(18, 2) = NULL,
     @TotalCredits decimal(18, 2) = NULL,
-    @ExternalBatchRef_Clear bit = 0,
-    @ExternalBatchRef nvarchar(100) = NULL,
+    @ExternalJournalEntryBatchRef_Clear bit = 0,
+    @ExternalJournalEntryBatchRef nvarchar(100) = NULL,
     @ApprovedAt_Clear bit = 0,
     @ApprovedAt datetimeoffset = NULL,
     @ApprovedByUserID_Clear bit = 0,
@@ -25667,7 +25667,7 @@ BEGIN
     UPDATE
         [${flyway:defaultSchema}].[JournalEntryBatch]
     SET
-        [BatchNumber] = ISNULL(@BatchNumber, [BatchNumber]),
+        [JournalEntryBatchNumber] = ISNULL(@JournalEntryBatchNumber, [JournalEntryBatchNumber]),
         [CompanyID] = ISNULL(@CompanyID, [CompanyID]),
         [PostingDate] = ISNULL(@PostingDate, [PostingDate]),
         [SummaryJournalEntryID] = CASE WHEN @SummaryJournalEntryID_Clear = 1 THEN NULL ELSE ISNULL(@SummaryJournalEntryID, [SummaryJournalEntryID]) END,
@@ -25678,7 +25678,7 @@ BEGIN
         [TotalEntries] = ISNULL(@TotalEntries, [TotalEntries]),
         [TotalDebits] = ISNULL(@TotalDebits, [TotalDebits]),
         [TotalCredits] = ISNULL(@TotalCredits, [TotalCredits]),
-        [ExternalBatchRef] = CASE WHEN @ExternalBatchRef_Clear = 1 THEN NULL ELSE ISNULL(@ExternalBatchRef, [ExternalBatchRef]) END,
+        [ExternalJournalEntryBatchRef] = CASE WHEN @ExternalJournalEntryBatchRef_Clear = 1 THEN NULL ELSE ISNULL(@ExternalJournalEntryBatchRef, [ExternalJournalEntryBatchRef]) END,
         [ApprovedAt] = CASE WHEN @ApprovedAt_Clear = 1 THEN NULL ELSE ISNULL(@ApprovedAt, [ApprovedAt]) END,
         [ApprovedByUserID] = CASE WHEN @ApprovedByUserID_Clear = 1 THEN NULL ELSE ISNULL(@ApprovedByUserID, [ApprovedByUserID]) END,
         [SentAt] = CASE WHEN @SentAt_Clear = 1 THEN NULL ELSE ISNULL(@SentAt, [SentAt]) END,
@@ -25954,7 +25954,7 @@ CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateJournalEntryType]
     @Description_Clear bit = 0,
     @Description nvarchar(MAX) = NULL,
     @IsSystem bit = NULL,
-    @IsBatchSummary bit = NULL,
+    @IsJournalEntryBatchSummary bit = NULL,
     @IsActive bit = NULL
 AS
 BEGIN
@@ -25971,7 +25971,7 @@ BEGIN
                 [Name],
                 [Description],
                 [IsSystem],
-                [IsBatchSummary],
+                [IsJournalEntryBatchSummary],
                 [IsActive]
             )
         OUTPUT INSERTED.[ID] INTO @InsertedRow
@@ -25982,7 +25982,7 @@ BEGIN
                 @Name,
                 CASE WHEN @Description_Clear = 1 THEN NULL ELSE ISNULL(@Description, NULL) END,
                 ISNULL(@IsSystem, 0),
-                ISNULL(@IsBatchSummary, 0),
+                ISNULL(@IsJournalEntryBatchSummary, 0),
                 ISNULL(@IsActive, 1)
             )
     END
@@ -25995,7 +25995,7 @@ BEGIN
                 [Name],
                 [Description],
                 [IsSystem],
-                [IsBatchSummary],
+                [IsJournalEntryBatchSummary],
                 [IsActive]
             )
         OUTPUT INSERTED.[ID] INTO @InsertedRow
@@ -26005,7 +26005,7 @@ BEGIN
                 @Name,
                 CASE WHEN @Description_Clear = 1 THEN NULL ELSE ISNULL(@Description, NULL) END,
                 ISNULL(@IsSystem, 0),
-                ISNULL(@IsBatchSummary, 0),
+                ISNULL(@IsJournalEntryBatchSummary, 0),
                 ISNULL(@IsActive, 1)
             )
     END
@@ -26043,7 +26043,7 @@ CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateJournalEntryType]
     @Description_Clear bit = 0,
     @Description nvarchar(MAX) = NULL,
     @IsSystem bit = NULL,
-    @IsBatchSummary bit = NULL,
+    @IsJournalEntryBatchSummary bit = NULL,
     @IsActive bit = NULL
 AS
 BEGIN
@@ -26055,7 +26055,7 @@ BEGIN
         [Name] = ISNULL(@Name, [Name]),
         [Description] = CASE WHEN @Description_Clear = 1 THEN NULL ELSE ISNULL(@Description, [Description]) END,
         [IsSystem] = ISNULL(@IsSystem, [IsSystem]),
-        [IsBatchSummary] = ISNULL(@IsBatchSummary, [IsBatchSummary]),
+        [IsJournalEntryBatchSummary] = ISNULL(@IsJournalEntryBatchSummary, [IsJournalEntryBatchSummary]),
         [IsActive] = ISNULL(@IsActive, [IsActive])
     WHERE
         [ID] = @ID

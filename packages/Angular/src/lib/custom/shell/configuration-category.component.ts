@@ -20,6 +20,17 @@ import { PageRefreshService } from '../../transfer-pending/shell-refresh/page-re
 })
 @RegisterClass(BaseDashboard, 'ConfigurationCategoryDashboard')
 export class ConfigurationCategoryComponent extends CategoryShellBase {
+  // Header create verb = the ACTIVE page's create (Marcelo 2026-08-05, orders-style header rule).
+  public CreateSignalCompanies = 0;
+
+  public get CreateVerb(): string | null {
+    return this.ActivePageId === 'companies' ? 'New company' : null;
+  }
+
+  public OnHeaderCreate(): void {
+    if (this.ActivePageId === 'companies') this.CreateSignalCompanies++;
+  }
+
   public CategoryTitle = 'Configuration';
   public override get CategoryIcon(): string {
     return 'fa-solid fa-gear';

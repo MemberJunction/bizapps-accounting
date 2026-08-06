@@ -87,7 +87,7 @@ describe('Company Setup dashboard (tier 4)', () => {
     expect(expectedUserCount).toBeGreaterThan(0);
   }, 60_000);
 
-  it('offers the New company action in the header (create-company affordance)', async () => {
+  it('ships NO local New-company button — the create verb lives in the CATEGORY header (Marcelo 2026-08-05)', async () => {
     await TestBed.configureTestingModule({ imports: [CompanySetupModule] }).compileComponents();
     const fixture = TestBed.createComponent(CompanySetupDashboardComponent);
     fixture.detectChanges();
@@ -96,7 +96,8 @@ describe('Company Setup dashboard (tier 4)', () => {
 
     const el: HTMLElement = fixture.nativeElement;
     const btn = [...el.querySelectorAll('button')].find((b) => /New company/i.test(b.textContent ?? ''));
-    expect(btn, 'the New company button must render in the header actions').toBeTruthy();
-    expect(btn!.disabled).toBe(false);
+    // The header create verb was HOISTED to the category shell (orders-style rule). The dashboard
+    // itself must ship no duplicate; its create path is the CreateSignal input the shell bumps.
+    expect(btn, 'no local New company button — the category header owns the verb').toBeUndefined();
   }, 60_000);
 });

@@ -34,13 +34,13 @@ describe('JournalEntryTypeEntityServer (system-row lock)', () => {
   let info: EntityInfo;
 
   beforeEach(() => {
-    info = createMockEntity(JET_ENTITY, ['ID', 'Code', 'Name', 'Description', 'IsSystem', 'IsBatchSummary', 'IsActive'], ['IsSystem', 'IsBatchSummary', 'IsActive']);
+    info = createMockEntity(JET_ENTITY, ['ID', 'Code', 'Name', 'Description', 'IsSystem', 'IsJournalEntryBatchSummary', 'IsActive'], ['IsSystem', 'IsJournalEntryBatchSummary', 'IsActive']);
     Metadata.Provider = { Entities: [info] } as any;
   });
 
   const loadedSystemRow = async (): Promise<JournalEntryTypeEntityServer> => {
     const row = new JournalEntryTypeEntityServer(info as any);
-    await row.LoadFromData({ ID: 'JET_REVERSAL', Code: 'Reversal', Name: 'Reversal', IsSystem: true, IsBatchSummary: false, IsActive: true });
+    await row.LoadFromData({ ID: 'JET_REVERSAL', Code: 'Reversal', Name: 'Reversal', IsSystem: true, IsJournalEntryBatchSummary: false, IsActive: true });
     return row;
   };
 
@@ -52,12 +52,12 @@ describe('JournalEntryTypeEntityServer (system-row lock)', () => {
     expect(result.Errors.some(e => /Code is immutable/.test(e.Message))).toBe(true);
   });
 
-  it('blocks flipping IsBatchSummary on a saved IsSystem row', async () => {
+  it('blocks flipping IsJournalEntryBatchSummary on a saved IsSystem row', async () => {
     const row = await loadedSystemRow();
-    row.IsBatchSummary = true;
+    row.IsJournalEntryBatchSummary = true;
     const result = row.Validate();
     expect(result.Success).toBe(false);
-    expect(result.Errors.some(e => /IsBatchSummary is immutable/.test(e.Message))).toBe(true);
+    expect(result.Errors.some(e => /IsJournalEntryBatchSummary is immutable/.test(e.Message))).toBe(true);
   });
 
   it('allows editing Name / IsActive on a system row', async () => {
@@ -69,7 +69,7 @@ describe('JournalEntryTypeEntityServer (system-row lock)', () => {
 
   it('blocks promoting a saved consumer row to IsSystem', async () => {
     const row = new JournalEntryTypeEntityServer(info as any);
-    await row.LoadFromData({ ID: 'JET_OB', Code: 'OrderBooking', Name: 'Order Booking', IsSystem: false, IsBatchSummary: false, IsActive: true });
+    await row.LoadFromData({ ID: 'JET_OB', Code: 'OrderBooking', Name: 'Order Booking', IsSystem: false, IsJournalEntryBatchSummary: false, IsActive: true });
     row.IsSystem = true;
     const result = row.Validate();
     expect(result.Success).toBe(false);
@@ -87,7 +87,7 @@ describe('JournalEntryTypeEntityServer (system-row lock)', () => {
     row.Code = 'VendorBill';
     row.Name = 'Vendor Bill';
     row.IsSystem = false;
-    row.IsBatchSummary = false;
+    row.IsJournalEntryBatchSummary = false;
     row.IsActive = true;
     expect(row.Validate().Success).toBe(true);
   });

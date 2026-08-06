@@ -19,9 +19,14 @@ import {
   MJStatBadgeComponent,
   MJAlertComponent,
   MJEmptyStateComponent,
+  MJDropdownComponent
 } from '@memberjunction/ng-ui-components';
 import { SharedGenericModule } from '@memberjunction/ng-shared-generic';
+import { EntityViewerModule } from '@memberjunction/ng-entity-viewer'; // <mj-entity-data-grid> (the house grid the page renders since 2026-08-05)
 import { GLAccountsPageComponent } from '../../src/lib/custom/shell/pages/gl-accounts.page';
+import { MJASummaryStripComponent } from '../../src/lib/custom/shared/summary-strip.component';
+import { MJACheckDropdownComponent } from '../../src/lib/custom/shared/check-dropdown.component';
+import { MJAListToolbarComponent } from '../../src/lib/custom/shared/list-toolbar.component';
 import { PageRefreshService } from '../../src/lib/transfer-pending/shell-refresh/page-refresh.service';
 
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
@@ -40,7 +45,7 @@ async function waitFor(fixture: ComponentFixture<GLAccountsPageComponent>, cond:
 async function mount(): Promise<ComponentFixture<GLAccountsPageComponent>> {
   await TestBed.configureTestingModule({
     declarations: [GLAccountsPageComponent],
-    imports: [CommonModule, FormsModule, SharedGenericModule, MJButtonDirective, MJPageHeaderInteriorComponent, MJPageBodyInteriorComponent, MJStatBadgeComponent, MJAlertComponent, MJEmptyStateComponent],
+    imports: [CommonModule, FormsModule, SharedGenericModule, EntityViewerModule, MJButtonDirective, MJPageHeaderInteriorComponent, MJPageBodyInteriorComponent, MJStatBadgeComponent, MJAlertComponent, MJEmptyStateComponent, MJASummaryStripComponent, MJAListToolbarComponent, MJACheckDropdownComponent, MJDropdownComponent],
     providers: [PageRefreshService],
   }).compileComponents();
   const fixture = TestBed.createComponent(GLAccountsPageComponent);
@@ -73,14 +78,30 @@ describe('All Accounts page (tier 4)', () => {
 
     // The rendered table shows the same row.
     const el: HTMLElement = fixture.nativeElement;
-    expect(el.textContent).toContain('Operating Cash');
+    // The table is the STANDARD mj-entity-data-grid now (2026-08-05). jsdom cannot paint the AG
+    // grid (TEST-ARCHITECTURE: virtualized grids are a tier-5 render concern), so the render
+    // anchor moved to tier 5; HERE we assert the component's QUERY is right at value level.
+    const comp2 = fixture.componentInstance;
+    expect(comp2.GridParams.EntityName).toBe(GL_ENTITY);
+    expect(comp2.GridParams.OrderBy).toBe('Company ASC, Code ASC');
+
+    // Row click → editor, with the grid's REAL rowKey shape: a CompositeKey concatenated string
+    // ('ID|<uuid>'), NOT a bare ID. Passing it unparsed silently never matched and the editor
+    // never opened (caught red at tier 5, 2026-08-06) — this pins the parse.
+    comp2.OnGridRowClicked(`ID|${String(anchor!.ID)}`);
+    fixture.detectChanges();
+    expect(comp2.Draft, 'clicking a grid row opens the editor on that account').toBeTruthy();
+    expect(comp2.Draft!.ID).toBe(anchor!.ID);
+    comp2.CancelEdit();
   }, 90_000);
 
   it('company filter narrows the Filtered view to exactly that company (client-side filter over loaded rows)', async () => {
     const fixture = await mount();
     const comp = fixture.componentInstance;
     const co1Expected = await new RunView().RunView({ EntityName: GL_ENTITY, ExtraFilter: `CompanyID='${DEMO_CO1}'`, Fields: ['ID'], MaxRows: 1, ResultType: 'simple' });
-    comp.FilterCompanyID = DEMO_CO1.toUpperCase();
+    comp.OnFilterCompanyIDsChanged([DEMO_CO1.toUpperCase()]); // multi-select filter (2026-08-05)
+    // The grid predicate must carry the SAME narrowing (server-side IN clause).
+    expect(comp.GridParams.ExtraFilter).toContain(`CompanyID IN ('${DEMO_CO1.toUpperCase()}')`);
     fixture.detectChanges();
     // `Filtered` is the template's data source — assert it matches the independent per-company count
     // and that no row outside the filter leaks through.

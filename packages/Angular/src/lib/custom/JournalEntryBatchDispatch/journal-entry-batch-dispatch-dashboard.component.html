@@ -1,15 +1,14 @@
 <mj-page-layout>
   <mj-page-header
-    Title="Batch Approvals"
+    Title="JE Batch Approvals"
     Icon="fa-solid fa-paper-plane"
-    Subtitle="Review, approve, and dispatch journal-entry batches to the ERP">
+    Subtitle="Review, approve, and dispatch journal entry batches to the ERP">
 
     <div meta>
-      <mj-stat-badge [Count]="Batches.length" Label="batches" />
+      <mj-stat-badge [Count]="Batches.length" Label="JE batches" />
     </div>
 
     <div actions>
-      <mj-refresh-button [Loading]="IsLoading" (Clicked)="loadData()"></mj-refresh-button>
     </div>
   </mj-page-header>
 
@@ -37,8 +36,8 @@
       @if (Batches.length === 0) {
         <mj-empty-state
           Icon="fa-solid fa-inbox"
-          Title="No batches yet"
-          Message="Batches built from the Batch Status page appear here for review, CFO approval, and dispatch to the ERP.">
+          Title="No journal entry batches yet"
+          Message="Journal entry batches built from the JE Batch Status page appear here for review, CFO approval, and dispatch to the ERP.">
         </mj-empty-state>
       } @else {
         <div class="bd-list">
@@ -47,7 +46,7 @@
               <div class="bd-card__head">
                 <div class="bd-card__title">
                   <i class="fa-solid fa-receipt"></i>
-                  <span class="bd-card__number">{{ row.BatchNumber }}</span>
+                  <span class="bd-card__number">{{ row.JournalEntryBatchNumber }}</span>
                   <span class="bd-card__target">→ {{ row.TargetSystem }}</span>
                 </div>
                 <div class="bd-card__badges">
@@ -75,10 +74,10 @@
                   <span class="bd-metric__label">Total Credits</span>
                   <span class="bd-metric__value">{{ row.TotalCredits | number:'1.2-2' }}</span>
                 </div>
-                @if (row.ExternalBatchRef) {
+                @if (row.ExternalJournalEntryBatchRef) {
                   <div class="bd-metric">
                     <span class="bd-metric__label">ERP Ref</span>
-                    <span class="bd-metric__value">{{ row.ExternalBatchRef }}</span>
+                    <span class="bd-metric__value">{{ row.ExternalJournalEntryBatchRef }}</span>
                   </div>
                 }
               </div>
@@ -112,7 +111,7 @@
                 }
                 @if (canRegenerate(row)) {
                   <button mjButton variant="secondary" size="sm" [disabled]="row.Busy" (click)="OnRegenerate(row)"
-                          title="Unlock this batch's entries and re-gather all current candidates into it.">
+                          title="Unlock this journal entry batch's entries and re-gather all current candidates into it.">
                     <i class="fa-solid fa-rotate"></i> Regenerate
                   </button>
                 }

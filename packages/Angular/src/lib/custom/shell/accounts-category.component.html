@@ -28,6 +28,13 @@
           <i class="fa-solid fa-arrow-rotate-right" aria-hidden="true"></i>
         </button>
       }
+      <!-- The active page's create verb, promoted to the header (Marcelo 2026-08-05) — same slot
+           orders' primary action occupies. Hidden on pages with nothing to create. -->
+      @if (CreateVerb) {
+        <button type="button" class="mj-btn mj-btn--primary" (click)="OnHeaderCreate()">
+          <i class="fa-solid fa-plus" aria-hidden="true"></i> {{ CreateVerb }}
+        </button>
+      }
     </div>
   </mj-page-header>
 
@@ -44,10 +51,10 @@
     <mj-left-nav-content>
       @switch (ActivePageId) {
         @case ('accounts') {
-          <mj-gl-accounts-page></mj-gl-accounts-page>
+          <mj-gl-accounts-page [CreateSignal]="CreateSignalAccounts"></mj-gl-accounts-page>
         }
         @case ('coa') {
-          <mj-chart-of-accounts-dashboard></mj-chart-of-accounts-dashboard>
+          <mj-chart-of-accounts-dashboard [CreateSignal]="CreateSignalCoa"></mj-chart-of-accounts-dashboard>
         }
         @case ('links') {
           <mj-account-links-page></mj-account-links-page>
@@ -61,7 +68,7 @@
           <mj-shell-page-pending [PageName]="'ERP account identity'"></mj-shell-page-pending>
         }
         @case ('dimensions') {
-          <mj-dimensions-page></mj-dimensions-page>
+          <mj-dimensions-page [CreateSignal]="CreateSignalDimensions"></mj-dimensions-page>
         }
         @default {
           <mj-shell-page-pending [PageName]="PendingPageName(ActivePageId)"></mj-shell-page-pending>

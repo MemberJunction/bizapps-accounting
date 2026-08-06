@@ -41,7 +41,7 @@ export interface MJAPresetChip {
                             [value]="Search"
                             (input)="SearchChanged.emit($any($event.target).value)"
                             [placeholder]="SearchPlaceholder"
-                            [attr.aria-label]="SearchPlaceholder" />
+                            [attr.aria-label]="SearchLabel" />
                     </div>
                 }
 
@@ -224,6 +224,12 @@ export class MJAListToolbarComponent {
     @Input() Search = '';
 
     @Input() SearchPlaceholder = 'Search…';
+    /**
+     * The search input's ACCESSIBLE NAME (aria-label) — distinct from the placeholder on purpose.
+     * A placeholder is hint copy, not a name; screen readers and role-based test locators need a
+     * stable, purpose-describing label. Pages should pass "Search <things>".
+     */
+    @Input() SearchLabel = 'Search';
 
     /** Render the trailing Filters disclosure button. */
     @Input() HasAdvanced = false;

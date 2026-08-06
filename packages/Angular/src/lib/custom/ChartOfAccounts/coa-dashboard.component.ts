@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, Input } from '@angular/core';
 import { takeUntil } from 'rxjs';
 import { BaseDashboard } from '@memberjunction/ng-shared';
 import { RegisterClass } from '@memberjunction/global';
@@ -132,14 +132,13 @@ export class ChartOfAccountsDashboardComponent extends BaseDashboard {
   public AdvancedOpen = false;
 
   public get AdvancedCount(): number {
-    return this.SelectedCompanyID !== 'All' ? 1 : 0;
+    return this.SelectedCompanyIDs.length ? 1 : 0;
   }
 
   public OnToolbarSearch(text: string): void {
     this.Search = text;
   }
 
-  private _selectedCompanyID = 'All';
   /** The scoped, fully-traversed tree — rebuilt whenever the company scope or data changes. */
   private scopedTree: TreeNode[] = [];
 
@@ -175,8 +174,8 @@ export class ChartOfAccountsDashboardComponent extends BaseDashboard {
     this.loadAccountTypeOptions();
     this.hydrateFromEngine();
     // Default the company scope to the first company (single, clean chart) — else show all.
-    if (this._selectedCompanyID === 'All' && this.Companies.length > 0) {
-      this._selectedCompanyID = this.Companies[0].ID;
+    if (this.SelectedCompanyIDs.length === 0 && this.Companies.length > 0) {
+      this.SelectedCompanyIDs = [this.Companies[0].ID];
       this.rebuildTree();
     }
     this.ensureEngineSubscription();
@@ -214,20 +213,32 @@ export class ChartOfAccountsDashboardComponent extends BaseDashboard {
 
   // ─── company scope ─────────────────────────────────────────────────────────
 
-  public get SelectedCompanyID(): string {
-    return this._selectedCompanyID;
+  /** Company rows shaped for the dropdowns — "Name (CODE)", the label the old <option>s composed. */
+  public get CompanyScopeOptions(): ReadonlyArray<{ ID: string; Name: string }> {
+    return (this.Companies ?? []).map((c) => ({ ID: c.ID, Name: `${c.Name} (${c.CompanyCode})` }));
   }
-  public set SelectedCompanyID(value: string) {
-    this._selectedCompanyID = value;
+
+  /** Parent rows shaped for the dropdown — "Code · Name". */
+  public get ParentChoices(): ReadonlyArray<{ ID: string; Label: string }> {
+    return (this.ParentOptions ?? []).map((p) => ({ ID: p.ID, Label: `${p.Code} · ${p.Name}` }));
+  }
+
+  public readonly ParentNoneDefault = { ID: null, Label: '— none (top level) —' };
+
+  /** MULTI-select company narrowing (Marcelo 2026-08-05): empty = every company's tree. */
+  public SelectedCompanyIDs: string[] = [];
+
+  public OnCompanyIDsChanged(ids: string[]): void {
+    this.SelectedCompanyIDs = ids;
     this.rebuildTree();
     this.cdr.markForCheck();
   }
 
-  /** Accounts within the current company scope (all companies when 'All'). */
+  /** Accounts within the current company scope (all companies when nothing is checked). */
   private scopedAccounts(): GLAccountRow[] {
-    if (this._selectedCompanyID === 'All') return this.AllAccounts;
-    const target = this._selectedCompanyID.toUpperCase();
-    return this.AllAccounts.filter(a => a.CompanyID.toUpperCase() === target);
+    if (this.SelectedCompanyIDs.length === 0) return this.AllAccounts;
+    const targets = new Set(this.SelectedCompanyIDs.map(x => x.toUpperCase()));
+    return this.AllAccounts.filter(a => targets.has(a.CompanyID.toUpperCase()));
   }
 
   private rebuildTree(): void {
@@ -336,6 +347,15 @@ export class ChartOfAccountsDashboardComponent extends BaseDashboard {
   }
 
   /** Open the same panel blank + editable to create a new account (scoped to the current company). */
+  /** Monotonic counter from the category header's "New account" verb — each bump opens the dialog. */
+  private _createSignal = 0;
+  @Input() set CreateSignal(v: number) {
+    if (v > this._createSignal) {
+      this._createSignal = v;
+      this.OnNewAccount();
+    }
+  }
+
   public OnNewAccount(): void {
     this.DialogError = null;
     this.Model = this.blankModel();
@@ -415,8 +435,9 @@ export class ChartOfAccountsDashboardComponent extends BaseDashboard {
 
   private blankModel(): AccountEditModel {
     // Null-safe: this runs once as a field initializer BEFORE the other fields are set, and again in OnNewAccount.
-    const sel = this._selectedCompanyID;
-    const companyID = sel && sel !== 'All' ? sel : (this.Companies?.[0]?.ID ?? '');
+    // Pre-pick the scoped company only when the scope narrows to exactly one.
+    const sel = this.SelectedCompanyIDs?.length === 1 ? this.SelectedCompanyIDs[0] : '';
+    const companyID = sel || (this.Companies?.[0]?.ID ?? '');
     return {
       ID: null, Code: '', Name: '', AccountType: this.AccountTypeOptions?.[0] ?? ('Asset' as AccountType),
       CompanyID: companyID, ParentGLAccountID: null, CurrencyCode: '', IsActive: true, Description: '',

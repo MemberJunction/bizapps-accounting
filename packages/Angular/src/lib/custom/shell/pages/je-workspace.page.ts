@@ -277,6 +277,11 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
    * Empty until a company is picked: an account list spanning companies would invite the exact
    * cross-company draft the engine rejects (MOD-12).
    */
+  /** The dropdowns' null-sentinel rows (mj-dropdown DefaultItem = the old <option [ngValue]="null">). */
+  public readonly CompanyPickDefault = { ID: null, Name: 'Pick a company…' };
+  public readonly AccountPickDefault = { ID: null, Label: 'Pick an account…' };
+  public readonly DimensionNoneDefault = { ID: null, Label: '—' };
+
   public get AccountOptions(): AccountOption[] {
     const companyId = this.Draft?.CompanyID;
     if (!companyId) return [];

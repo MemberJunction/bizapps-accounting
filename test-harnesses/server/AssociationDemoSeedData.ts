@@ -29,14 +29,14 @@
  *     emit them); no netting/provisioning is called.
  *
  * All JEs self-balance (triggers 50001 + per-company 50019 enforce it) and are posted to GLPosted
- * (via buildBatch + approveBatch + sendBatch with the AutoApproveGate) so the views — which filter Batched/GLPosted
+ * (via buildJournalEntryBatch + approveJournalEntryBatch + sendJournalEntryBatch with the AutoApproveGate) so the views — which filter Batched/GLPosted
  * — show data. This is DEMO data: it PERSISTS by design (unlike the test harnesses, there is no
  * teardown). Idempotency comes entirely from the static IDs.
  *
  * CONNECTS TO:
  *   ENTITIES: AccountingCompanyProfile (W1) · GLAccount · JournalEntry (W2) · JournalEntryLine ·
  *             Tax{Authority,Jurisdiction,Liability} · MJ_BizApps_Common Organizations
- *   ENGINE:   buildBatch / sendBatch (Block 2 batching → GLPosted)
+ *   ENGINE:   buildJournalEntryBatch / sendJournalEntryBatch (Block 2 batching → GLPosted)
  *   VIEWS:    vw_TrialBalance_AR · vw_AROpenByCustomer · vw_ARAging · vw_DefRevRollforward ·
  *             vw_SalesTaxLiability · vw_IntercompanyFlow
  *   PLAN:     §Block 4 (MH: AssociationDemoSeedData)
@@ -54,10 +54,13 @@ import {
   mjBizAppsAccountingTaxLiabilityEntity,
 } from '@mj-biz-apps/accounting-entities';
 import type { mjBizAppsCommonOrganizationEntity } from '@mj-biz-apps/common-entities';
+// Value import (not `import type`): used with `instanceof` to reach the server subclass's explicit
+// SeedDefaultChartOfAccounts() without a cast — see ensureCompany().
+import { AccountingCompanyProfileEntityServer } from '@mj-biz-apps/accounting-core-entities-server';
 
 import {
-  buildBatch, approveBatch, sendBatch, AutoApproveGate,
-  GetBatchSummaryEntryType, LookupJournalEntryTypeByCode, JournalEntryEntityServer,
+  buildJournalEntryBatch, approveJournalEntryBatch, sendJournalEntryBatch, AutoApproveGate,
+  GetJournalEntryBatchSummaryEntryType, LookupJournalEntryTypeByCode, JournalEntryEntityServer,
 } from '@mj-biz-apps/accounting-core-entities-server';
 
 // ─── Entity name constants ───────────────────────────────────────────────────
@@ -210,7 +213,7 @@ export async function seedAssociationDemo(contextUser: UserInfo, provider: IMeta
   // 2b. Ensure the orders-domain JournalEntryType rows this demo books with exist (issue #24).
   await ensureDemoEntryTypes(contextUser, provider);
 
-  // 3. Ensure each company's GL accounts carry an inline ERP mapping so buildBatch can post.
+  // 3. Ensure each company's GL accounts carry an inline ERP mapping so buildJournalEntryBatch can post.
   await ensureGLMapping(contextUser, co1);
   await ensureGLMapping(contextUser, co2);
   await ensureGLMapping(contextUser, co3);
@@ -328,6 +331,27 @@ async function ensureCompany(
       throw new Error(`ensureCompany: ACP save failed for ${name}: ${acp.LatestResult?.CompleteMessage ?? 'unknown'}`);
     }
   }
+
+  // Seed the starter chart EXPLICITLY. Until 2026-07-30 this happened by itself: saving a new
+  // profile fired the W1 auto-hook, which is why this seed could reference GL code 11201 without
+  // ever creating it. That hook was deliberately retired (it forced ten identity-locked accounts
+  // onto every company), leaving new companies with an EMPTY chart — which silently broke this seed.
+  // It stayed hidden because the instance already held accounts created under the old behaviour; it
+  // surfaces only on a from-scratch database, as `makeJE: GL code 11201 not found`.
+  //
+  // Deliberately OUTSIDE the `!exists` branch: the entity-side seed is idempotent (existing codes are
+  // skipped), and running it unconditionally makes this function self-healing. Seeding only on create
+  // would strand exactly the case that produced this bug — a company row that already exists from an
+  // earlier partial run but never got a chart.
+  if (acp instanceof AccountingCompanyProfileEntityServer) {
+    await acp.SeedDefaultChartOfAccounts();
+  } else {
+    throw new Error(
+      `ensureCompany: ${ACP_ENTITY} did not resolve to AccountingCompanyProfileEntityServer, so the ` +
+        `starter chart cannot be seeded. Import '@mj-biz-apps/accounting-core-entities-server' in the ` +
+        `harness entry point so the server subclass registers.`,
+    );
+  }
   report.Companies.push({ ID: companyId, Name: name, Created: !exists });
 
   const glByCode = await loadGLByCode(contextUser, companyId);
@@ -362,7 +386,7 @@ async function ensureOrganization(contextUser: UserInfo, orgId: string, name: st
 }
 
 // ─── GL ERP mapping (inline, idempotent) ──────────────────────────────────────
-// buildBatch hard-fails on an unmapped GL account. W1 leaves ExternalAccountID null, so set it to the
+// buildJournalEntryBatch hard-fails on an unmapped GL account. W1 leaves ExternalAccountID null, so set it to the
 // GL Code here. Idempotent: only saves when not already mapped.
 
 async function ensureGLMapping(contextUser: UserInfo, ctx: CompanyContext): Promise<void> {
@@ -415,7 +439,7 @@ async function ensureDemoEntryTypes(contextUser: UserInfo, provider: IMetadataPr
     row.Name = t.name;
     row.Description = t.description;
     row.IsSystem = false;
-    row.IsBatchSummary = false;
+    row.IsJournalEntryBatchSummary = false;
     row.IsActive = true;
     if (!(await row.Save())) throw new Error(`ensureDemoEntryTypes: save failed for '${t.code}': ${row.LatestResult?.CompleteMessage}`);
     map.set(t.code, row.ID);
@@ -473,7 +497,7 @@ async function makeJE(
 
 /** Build + approve + dispatch one SINGLE-COMPANY batch (D7) per company with Pending JEs → they become GLPosted. */
 async function postPending(contextUser: UserInfo, report: DemoSeedReport, provider: IMetadataProvider): Promise<void> {
-  const summaryType = await GetBatchSummaryEntryType(contextUser, provider);
+  const summaryType = await GetJournalEntryBatchSummaryEntryType(contextUser, provider);
   const rv = new RunView(provider as unknown as IRunViewProvider);
   const res = await rv.RunView<{ CompanyID: string }>(
     { EntityName: JE_ENTITY, ExtraFilter: `Status='Pending' AND EntryTypeID<>'${summaryType.ID}'`, Fields: ['CompanyID'], ResultType: 'simple', BypassCache: true },
@@ -482,10 +506,10 @@ async function postPending(contextUser: UserInfo, report: DemoSeedReport, provid
   const companyIds = [...new Set((res.Results ?? []).map(r => r.CompanyID))];
   if (companyIds.length === 0) throw new Error('postPending: no pending JEs to batch.');
   for (const companyId of companyIds) {
-    const built = await buildBatch(companyId, TARGET_SYSTEM, contextUser.ID, contextUser, provider, AutoApproveGate);
-    if (built === null) throw new Error(`postPending: buildBatch returned null for company ${companyId} (no pending JEs or all netted to zero).`);
-    await approveBatch(built.batchId, contextUser.ID, contextUser, provider);
-    const batch = await sendBatch(built.batchId, contextUser, { gate: AutoApproveGate, provider });
+    const built = await buildJournalEntryBatch(companyId, TARGET_SYSTEM, contextUser.ID, contextUser, provider, AutoApproveGate);
+    if (built === null) throw new Error(`postPending: buildJournalEntryBatch returned null for company ${companyId} (no pending JEs or all netted to zero).`);
+    await approveJournalEntryBatch(built.batchId, contextUser.ID, contextUser, provider);
+    const batch = await sendJournalEntryBatch(built.batchId, contextUser, { gate: AutoApproveGate, provider });
     if (batch.Status !== 'Posted') throw new Error(`postPending: batch should be Posted, got ${batch.Status}`);
     report.BatchesPosted += 1;
   }

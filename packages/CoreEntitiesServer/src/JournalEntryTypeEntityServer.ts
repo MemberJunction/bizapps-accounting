@@ -3,10 +3,10 @@
  *
  * The type table is deliberately open (consuming apps add their own rows), but the rows
  * accounting's own machinery keys on must not shift underneath it: triggers 50012/50023, the
- * batch pipeline, and GenerateReversal resolve by Code / IsBatchSummary. So IsSystem rows are
+ * batch pipeline, and GenerateReversal resolve by Code / IsJournalEntryBatchSummary. So IsSystem rows are
  * identity-locked at the entity layer (same pattern as GLAccountEntityServer's identity lock):
  *
- *   - An IsSystem row's Code / IsSystem / IsBatchSummary are IMMUTABLE (Name/Description/
+ *   - An IsSystem row's Code / IsSystem / IsJournalEntryBatchSummary are IMMUTABLE (Name/Description/
  *     IsActive stay editable — deactivating a system type is a legitimate configuration act).
  *   - An IsSystem row cannot be DELETED.
  *   - No row may GAIN IsSystem=1 after creation (system rows are seeded, not promoted).
@@ -29,7 +29,7 @@ export class JournalEntryTypeEntityServer extends mjBizAppsAccountingJournalEntr
       // The STORED value: OldValue when the field is being changed, current value otherwise.
       const wasSystem = isSystemField?.Dirty ? isSystemField.OldValue === true : this.IsSystem === true;
       if (wasSystem) {
-        for (const name of ['Code', 'IsSystem', 'IsBatchSummary'] as const) {
+        for (const name of ['Code', 'IsSystem', 'IsJournalEntryBatchSummary'] as const) {
           const field = this.Fields.find(f => f.Name === name);
           if (field?.Dirty) {
             result.Success = false;

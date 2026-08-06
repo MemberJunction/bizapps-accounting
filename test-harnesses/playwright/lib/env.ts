@@ -85,7 +85,7 @@ export const ACCOUNTING_APP_NAME = 'Accounting';
 
 /** Nav-item labels in the Accounting app's left rail (must match metadata DefaultNavItems Labels). */
 export const NAV = {
-  batches: 'Batches',
+  batches: 'Journal Entry Batches',
   trialBalanceAR: 'Trial Balance & AR',
   revenueTax: 'Revenue & Tax',
   batchStatus: 'Batch Status',

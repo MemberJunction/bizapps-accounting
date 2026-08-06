@@ -1,3 +1,4 @@
+import { MJACheckDropdownComponent } from './check-dropdown.component';
 /**
  * ReadModelsModule — now hosts ONLY the Batch Status dashboard + its Explorer resource shim
  * (embedded by the Batches category shell).
@@ -27,17 +28,16 @@ import {
   MJRefreshButtonComponent,
   MJEmptyStateComponent,
   MJDialogComponent,
-  MJDialogActionsComponent,
-} from '@memberjunction/ng-ui-components';
+  MJDialogActionsComponent, MJDropdownComponent } from '@memberjunction/ng-ui-components';
 
-import { BatchStatusDashboardComponent } from '../BatchStatus/batch-status-dashboard.component';
-import { BatchStatusResourceComponent } from '../BatchStatus/batch-status-resource.component';
+import { JournalEntryBatchStatusDashboardComponent } from '../JournalEntryBatchStatus/journal-entry-batch-status-dashboard.component';
+import { JournalEntryBatchStatusResourceComponent } from '../JournalEntryBatchStatus/journal-entry-batch-status-resource.component';
 
 @NgModule({
   declarations: [
-    BatchStatusDashboardComponent, BatchStatusResourceComponent,
+    JournalEntryBatchStatusDashboardComponent, JournalEntryBatchStatusResourceComponent,
   ],
-  imports: [
+  imports: [MJDropdownComponent, MJACheckDropdownComponent, 
     CommonModule,
     FormsModule,
     AgGridModule,
@@ -53,7 +53,7 @@ import { BatchStatusResourceComponent } from '../BatchStatus/batch-status-resour
     MJDialogActionsComponent,
   ],
   exports: [
-    BatchStatusDashboardComponent, BatchStatusResourceComponent,
+    JournalEntryBatchStatusDashboardComponent, JournalEntryBatchStatusResourceComponent,
   ],
 })
 export class ReadModelsModule {}

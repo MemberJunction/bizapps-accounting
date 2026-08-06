@@ -4,7 +4,7 @@ import type { CreateJournalEntryInput, CreateJournalEntryOutput } from '@mj-biz-
 /**
  * Thin typed client for the manual-JE Remote Operation (§8.1 JE workspace).
  *
- * Same shape + rationale as `BatchWorkspaceClient`: `Accounting.CreateJournalEntry` is a Remote
+ * Same shape + rationale as `JournalEntryBatchWorkspaceClient`: `Accounting.CreateJournalEntry` is a Remote
  * Operation, so `provider.RouteOperation` marshals it for us — this file exists to give the
  * component typed I/O, not to hand-roll transport.
  *

@@ -1,7 +1,7 @@
-import { Component, ChangeDetectionStrategy, ChangeDetectorRef, EventEmitter, inject, OnInit, OnDestroy, Output } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef, EventEmitter, inject, OnInit, OnDestroy, Output, ViewChild } from '@angular/core';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
 import { RunView, RunViewParams } from '@memberjunction/core';
-import { GridColumnConfig } from '@memberjunction/ng-entity-viewer';
+import { GridColumnConfig, EntityDataGridComponent } from '@memberjunction/ng-entity-viewer';
 import { mjBizAppsAccountingJournalEntryBatchEntityType } from '@mj-biz-apps/accounting-entities';
 import { CompanyScopeService, ScopeCompany } from '../../shared/company-scope.service';
 import { TIME_WINDOWS, TimeWindowId, timeWindowRange, toSqlDate, andFilters } from '../../../transfer-pending/list-scaffold/time-window';
@@ -71,7 +71,8 @@ export class AllBatchesPageComponent implements OnInit, OnDestroy {
   public SelectedStatuses = new Set<BatchStatus>();
 
   /** Per-page company narrowing — ANDs inside the app-wide scope, never widens it. */
-  public CompanyID: string | null = null;
+  /** MULTI-select company narrowing (Marcelo 2026-08-05): empty = no narrowing ("All companies"). */
+  public CompanyIDs: string[] = [];
 
   public Search = '';
 
@@ -85,15 +86,20 @@ export class AllBatchesPageComponent implements OnInit, OnDestroy {
   /** The row whose detail slide-in is open, if any. */
   public SelectedID: string | null = null;
 
-  public RefreshToken = 0;
+  /** The grid — its Params setter deep-compares and skips equal params, so refresh-with-unchanged-
+   *  filters must call the grid directly. (Replaces the vestigial RefreshToken counter.) */
+  @ViewChild(EntityDataGridComponent) private grid?: EntityDataGridComponent;
 
   public Columns: GridColumnConfig[] = [
-    { field: 'BatchNumber', title: 'Batch №', width: 150, sortable: true },
+    { field: 'JournalEntryBatchNumber', title: 'JE batch №', width: 150, sortable: true },
     { field: 'PostingDate', title: 'Posting date', width: 130, sortable: true },
     { field: 'Status', title: 'Status', width: 110, sortable: true },
     { field: 'TargetSystem', title: 'Target', width: 130, sortable: true },
-    // Explicit integer type: TotalEntries is a COUNT, and without this the grid's numeric
-    // default dressed it as currency ("$1.00" entries — observed live 2026-08-04).
+    // TotalEntries is a COUNT — but it still renders as currency ("$1.00" entries) because of an
+    // MJ-CORE gap (MJ-UPSTREAM.md 2026-08-06): mapColumnConfigToColDef drops the host column's
+    // type/format/formatter, then applyFieldFormatter's NAME-PATTERN heuristic (includes('total'))
+    // dresses the field as currency. This config is CORRECT per the GridColumnConfig contract and
+    // takes effect the moment MJ wires customFormat through — do not remove it.
     { field: 'TotalEntries', title: 'Entries', width: 100, sortable: true, type: 'number', format: '#,##0' },
     { field: 'TotalDebits', title: 'Debits', width: 130, sortable: true },
     { field: 'TotalCredits', title: 'Credits', width: 130, sortable: true },
@@ -123,7 +129,7 @@ export class AllBatchesPageComponent implements OnInit, OnDestroy {
     this.GridParams = {
       EntityName: BATCH_ENTITY,
       ExtraFilter: filter || undefined,
-      OrderBy: 'PostingDate DESC, BatchNumber DESC',
+      OrderBy: 'PostingDate DESC, JournalEntryBatchNumber DESC',
     };
     this.cdr.markForCheck();
     void this.refreshStats(filter);
@@ -135,7 +141,7 @@ export class AllBatchesPageComponent implements OnInit, OnDestroy {
       this.dateFilter(),
       this.statusFilter(),
       this.searchFilter(),
-      this.CompanyID ? `CompanyID='${sqlLiteral(this.CompanyID)}'` : null,
+      this.CompanyIDs.length ? `CompanyID IN (${this.CompanyIDs.map((id) => `'${sqlLiteral(id)}'`).join(',')})` : null,
       this.Scope.FilterFor('CompanyID'),
     );
   }
@@ -156,7 +162,7 @@ export class AllBatchesPageComponent implements OnInit, OnDestroy {
 
   /** Batch № + ERP reference + the full id — the strings a person actually pastes. */
   private searchFilter(): string | null {
-    return likeContains(['BatchNumber', 'ExternalBatchRef', 'ID'], this.Search);
+    return likeContains(['JournalEntryBatchNumber', 'ExternalJournalEntryBatchRef', 'ID'], this.Search);
   }
 
   // ─── overview stats (summary strip) ──────────────────────────────────────────
@@ -222,7 +228,7 @@ export class AllBatchesPageComponent implements OnInit, OnDestroy {
   public get SummaryFigures(): MJASummaryFigure[] {
     const figures: MJASummaryFigure[] = [
       { Label: 'Scope', Value: this.Scope.Label, Tone: 'info' },
-      { Label: 'Batches', Value: this.TotalCount === null ? '—' : String(this.TotalCount) },
+      { Label: 'JE batches', Value: this.TotalCount === null ? '—' : String(this.TotalCount) },
     ];
     for (const s of STATUSES) {
       const n = this.StatusCount(s);
@@ -256,9 +262,20 @@ export class AllBatchesPageComponent implements OnInit, OnDestroy {
   public AdvancedOpen = false;
 
   /** The date window counts as ONE deviation — the preset and the calendar are one filter. */
+  /** The checkbox-dropdown hands back the whole selection; store + refetch like any filter edit. */
+  public OnCompanyIDsChanged(ids: string[]): void {
+    this.CompanyIDs = ids;
+    this.OnFilterChanged();
+  }
+
+  /** Dropdown rows for the window filter — the shared windows plus the custom-range sentinel. */
+  public get WindowChoices(): ReadonlyArray<{ Id: string; Label: string }> {
+    return [...this.TimeWindows, { Id: 'custom', Label: 'Custom range' }];
+  }
+
   public get AdvancedCount(): number {
     let n = 0;
-    if (this.CompanyID) n++;
+    if (this.CompanyIDs.length) n++;
     if (this.TimeWindow !== 'last90') n++;
     return n;
   }
@@ -293,8 +310,8 @@ export class AllBatchesPageComponent implements OnInit, OnDestroy {
   }
 
   public Refresh(): void {
-    this.RefreshToken++;
     this.applyFilters();
+    void this.grid?.Refresh(); // unchanged params deep-equal → the setter skips; refetch explicitly
   }
 
   /** Row click → the batch detail slide-in. `rowKey` is CompositeKey form — parse it (grid-row-key). */

@@ -3,7 +3,7 @@ import { IRemoteOperationProvider, LogError } from '@memberjunction/core';
 /**
  * Thin typed client for the batch Remote Operations (§8.2).
  *
- * Deliberately NOT a hand-written GraphQL client: `Accounting.PreviewBatch` / `Accounting.BuildBatch`
+ * Deliberately NOT a hand-written GraphQL client: `Accounting.PreviewJournalEntryBatch` / `Accounting.BuildJournalEntryBatch`
  * are Remote Operations, so `provider.RouteOperation(key, input)` marshals them over the generic
  * ExecuteRemoteOperation mutation for us. This file exists only to give the component typed inputs
  * and to turn a failed RemoteOpResult into a thrown Error (the component's error path), rather than
@@ -15,20 +15,20 @@ import { IRemoteOperationProvider, LogError } from '@memberjunction/core';
  * is a ProviderBase)."
  */
 
-export type BatchTargetSystem = 'BusinessCentral' | 'NetSuite' | 'Other' | 'QuickBooks' | 'Sage' | 'Xero';
+export type JournalEntryBatchTargetSystem = 'BusinessCentral' | 'NetSuite' | 'Other' | 'QuickBooks' | 'Sage' | 'Xero';
 
 /** The mockup's 3-way entry-type control (NOT the entity's 16-value EntryType union). */
 export type EntryTypeScope = 'All' | 'System' | 'Manual';
 
 /** The §8.2 criteria panel's state. */
-export interface BatchCriteria {
+export interface JournalEntryBatchCriteria {
   /** `datetime-local` value (LOCAL time, as typed). Converted to a UTC instant on the wire. */
   Cutoff: string | null;
   CompanyIDs: string[];
   EntryTypeScope: EntryTypeScope;
   Source: 'Standard' | 'View';
   ViewID: string | null;
-  TargetSystem: BatchTargetSystem;
+  TargetSystem: JournalEntryBatchTargetSystem;
 }
 
 export interface BatchPreviewEntry {
@@ -62,12 +62,12 @@ export interface BatchPreview {
 
 export interface BuildOutcome {
   /** One id per batch built — the explicit selection can span companies (one batch each, D7). */
-  BatchIDs: string[];
+  JournalEntryBatchIDs: string[];
   /** True when every built batch carries its stamped approval task (one-transaction build). */
   ApprovalTaskRaised: boolean;
 }
 
-export class BatchWorkspaceClient {
+export class JournalEntryBatchWorkspaceClient {
   /**
    * A `datetime-local` string is LOCAL wall-clock with no zone. `new Date(local)` interprets it in
    * the browser's zone — which is exactly right here: the operator means "5pm my time". The engine
@@ -81,11 +81,11 @@ export class BatchWorkspaceClient {
 
   public async Preview(
     provider: IRemoteOperationProvider,
-    criteria: BatchCriteria,
+    criteria: JournalEntryBatchCriteria,
     includedIds: string[] | null,
     entryTypes: string[] | null,
   ): Promise<BatchPreview> {
-    const res = await provider.RouteOperation<Record<string, unknown>, BatchPreview>('Accounting.PreviewBatch', {
+    const res = await provider.RouteOperation<Record<string, unknown>, BatchPreview>('Accounting.PreviewJournalEntryBatch', {
       Cutoff: this.toInstant(criteria.Cutoff),
       CompanyIDs: criteria.CompanyIDs.length ? criteria.CompanyIDs : null,
       EntryTypeCodes: entryTypes,
@@ -93,15 +93,15 @@ export class BatchWorkspaceClient {
     });
     if (!res.Success || !res.Output) {
       const msg = res.ErrorMessage ?? 'Preview failed.';
-      LogError(`BatchWorkspaceClient.Preview: ${msg}`);
+      LogError(`JournalEntryBatchWorkspaceClient.Preview: ${msg}`);
       throw new Error(msg);
     }
     return res.Output;
   }
 
-  public async Build(provider: IRemoteOperationProvider, criteria: BatchCriteria, includedIds: string[]): Promise<BuildOutcome> {
+  public async Build(provider: IRemoteOperationProvider, criteria: JournalEntryBatchCriteria, includedIds: string[]): Promise<BuildOutcome> {
     const res = await provider.RouteOperation<Record<string, unknown>, BuildBatchOpOutput>(
-      'Accounting.BuildBatch',
+      'Accounting.BuildJournalEntryBatch',
       {
         TargetSystem: criteria.TargetSystem,
         // Always Explicit from the workspace: the operator SAW a list and ticked it, so the build must
@@ -115,19 +115,19 @@ export class BatchWorkspaceClient {
     );
     if (!res.Success || !res.Output) {
       const msg = res.ErrorMessage ?? 'Build failed.';
-      LogError(`BatchWorkspaceClient.Build: ${msg}`);
+      LogError(`JournalEntryBatchWorkspaceClient.Build: ${msg}`);
       throw new Error(msg);
     }
     const o = res.Output;
     const batches = o.Batches ?? [];
     return {
-      BatchIDs: batches.map(b => b.batchId),
+      JournalEntryBatchIDs: batches.map(b => b.batchId),
       ApprovalTaskRaised: batches.length > 0 && batches.every(b => !!b.approvalTaskId),
     };
   }
 }
 
-/** The `Accounting.BuildBatch` output: one engine BuildBatchResult per company batch built (D7). */
+/** The `Accounting.BuildJournalEntryBatch` output: one engine BuildJournalEntryBatchResult per company batch built (D7). */
 interface BuildBatchOpOutput {
   Batches: Array<{
     batchId: string;

@@ -1,8 +1,11 @@
-import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, OnInit, OnDestroy } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, Input, OnInit, OnDestroy } from '@angular/core';
 import { RunView, RunViewParams } from '@memberjunction/core';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
 import { GridColumnConfig } from '@memberjunction/ng-entity-viewer';
+import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
+import { CompositeKey } from '@memberjunction/core';
+import { openBizDetail, openBizCreate } from '../../shared/biz-detail-form';
 
 const DIM_ENTITY = 'MJ_BizApps_Accounting: Dimensions';
 const DIMVAL_ENTITY = 'MJ_BizApps_Accounting: Dimension Values';
@@ -35,12 +38,29 @@ export class DimensionsPageComponent extends BaseAngularComponent implements OnI
   private pageRefresh = inject(PageRefreshService);
   private refreshSub: { unsubscribe: () => void } | null = null;
 
+  private forms = inject(MJFormPresenterService);
+
   public Dimensions: DimensionRow[] = [];
   public SelectedID: string | null = null;
   public IsLoading = false;
   public LoadError: string | null = null;
   /** One box over the master list: the code + name a human knows, plus the ID they may paste. */
   public Search = '';
+  /** 'Active' narrows the master list to active dimensions; 'All' shows everything. */
+  public StatusFilter: 'Active' | 'All' = 'All';
+  public readonly StatusChoices: ReadonlyArray<{ Label: string; Value: string }> = [
+    { Label: 'All', Value: 'All' },
+    { Label: 'Active only', Value: 'Active' },
+  ];
+
+  /** Monotonic counter from the category header's "New dimension" verb (Marcelo 2026-08-05). */
+  private _createSignal = 0;
+  @Input() set CreateSignal(v: number) {
+    if (v > this._createSignal) {
+      this._createSignal = v;
+      this.CreateDimension();
+    }
+  }
   public ValueParams: RunViewParams = { EntityName: DIMVAL_ENTITY };
 
   public ValueColumns: GridColumnConfig[] = [
@@ -82,12 +102,32 @@ export class DimensionsPageComponent extends BaseAngularComponent implements OnI
    */
   public get FilteredDimensions(): DimensionRow[] {
     const q = this.Search.trim().toLowerCase();
-    if (!q) return this.Dimensions;
+    const pool = this.StatusFilter === 'Active' ? this.Dimensions.filter((d) => d.IsActive) : this.Dimensions;
+    if (!q) return pool;
     // Code + name lead — what a human knows. The ID matches too, for anyone pasting one.
     // Lowercased `includes`: a text match, not a UUID equality test.
-    return this.Dimensions.filter(
+    return pool.filter(
       (d) => d.Code.toLowerCase().includes(q) || d.Name.toLowerCase().includes(q) || d.ID.toLowerCase().includes(q),
     );
+  }
+
+  /** Open the dimension's own FORM in the standardized slide-in (read-only, edit on demand). */
+  public OpenDetails(id: string): void {
+    const row = this.Dimensions.find((d) => d.ID === id);
+    const ref = openBizDetail(this.forms, {
+      entityName: DIM_ENTITY,
+      primaryKey: CompositeKey.FromID(id),
+      title: row ? `Dimension ${row.Code} — ${row.Name}` : 'Dimension',
+      mode: 'slide-in',
+    });
+    // AfterSaved resolves with the saved record (or null on plain close) — reload either way a save happened.
+    void ref.AfterSaved().then((saved) => { if (saved) void this.load(); });
+  }
+
+  /** The category header's "New dimension" — a create form in the same slide-in surface. */
+  public CreateDimension(): void {
+    const ref = openBizCreate(this.forms, { entityName: DIM_ENTITY, title: 'New dimension', mode: 'slide-in' });
+    void ref.AfterSaved().then((saved) => { if (saved) void this.load(); });
   }
 
   public OnSearchChanged(): void {

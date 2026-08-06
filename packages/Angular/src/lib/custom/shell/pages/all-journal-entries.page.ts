@@ -1,8 +1,8 @@
-import { Component, ChangeDetectionStrategy, ChangeDetectorRef, EventEmitter, inject, OnInit, OnDestroy, Output } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef, EventEmitter, inject, OnInit, OnDestroy, Output, ViewChild } from '@angular/core';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
 import { RunViewParams, CompositeKey, Metadata, RunView } from '@memberjunction/core';
 import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
-import { GridColumnConfig } from '@memberjunction/ng-entity-viewer';
+import { GridColumnConfig, EntityDataGridComponent } from '@memberjunction/ng-entity-viewer';
 import { mjBizAppsAccountingJournalEntryEntity } from '@mj-biz-apps/accounting-entities';
 import { CompanyScopeService, ScopeCompany } from '../../shared/company-scope.service';
 import { openBizDetail } from '../../shared/biz-detail-form';
@@ -115,7 +115,8 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
    * Per-page company narrowing, mirroring All batches' Company select. This ANDs *inside* the
    * app-wide company scope (the rail chip) — it narrows the scope, it never widens it.
    */
-  public CompanyID: string | null = null;
+  /** MULTI-select company narrowing (Marcelo 2026-08-05): empty = no narrowing ("All companies"). */
+  public CompanyIDs: string[] = [];
 
   /**
    * `string`, not `JEType | 'All'`, on purpose: the options come from runtime metadata (see
@@ -145,8 +146,10 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
   /** The row whose detail slide-in is open, if any. */
   public SelectedID: string | null = null;
 
-  /** Bumped to force the grid to refetch (the header refresh control + post-mutation refetch). */
-  public RefreshToken = 0;
+  /** The grid itself — its Params setter DEEP-COMPARES and skips the refetch when the rebuilt
+   *  params are equivalent, so refresh-with-unchanged-filters must call the grid directly.
+   *  (Replaces the vestigial RefreshToken counter, which nothing consumed.) */
+  @ViewChild(EntityDataGridComponent) private grid?: EntityDataGridComponent;
 
   public Columns: GridColumnConfig[] = [
     { field: 'EntryNumber', title: 'Entry №', width: 140, sortable: true },
@@ -165,7 +168,7 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
     // the card edge without any real column being stretched to get there.
     { field: 'Description', title: 'Memo', width: 'auto', maxWidth: 420, sortable: false },
     { field: 'CompanyID', title: 'Company', width: 160, visible: false, sortable: true },
-    { field: 'BatchID', title: 'Batch', width: 140, visible: false, sortable: true },
+    { field: 'JournalEntryBatchID', title: 'JE batch', width: 140, visible: false, sortable: true },
   ];
 
   ngOnInit(): void {
@@ -214,7 +217,7 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
       this.statusFilter(),
       this.TypeFilter === 'All' ? null : `EntryType='${sqlLiteral(this.TypeFilter)}'`,
       this.searchFilter(),
-      this.CompanyID ? `CompanyID='${sqlLiteral(this.CompanyID)}'` : null,
+      this.CompanyIDs.length ? `CompanyID IN (${this.CompanyIDs.map((id) => `'${sqlLiteral(id)}'`).join(',')})` : null,
       // Company scope is app-wide: an empty selection means ALL, resolved inside the service so the
       // rule lives in exactly one place. ANDed with the per-page select above, which only narrows it.
       this.Scope.FilterFor('CompanyID'),
@@ -347,9 +350,25 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
    * filter can never silently shape the grid. The date window counts as ONE deviation (preset
    * changed or custom range), because the preset and the calendar boxes are one filter.
    */
+  /** The checkbox-dropdown hands back the whole selection; store + refetch like any filter edit. */
+  public OnCompanyIDsChanged(ids: string[]): void {
+    this.CompanyIDs = ids;
+    this.OnFilterChanged();
+  }
+
+  /** Dropdown rows for the entry-type filter — the 'All types' sentinel plus the metadata values. */
+  public get EntryTypeChoices(): ReadonlyArray<{ Label: string; Value: string }> {
+    return [{ Label: 'All types', Value: 'All' }, ...this.EntryTypes.map((t) => ({ Label: t, Value: t }))];
+  }
+
+  /** Dropdown rows for the window filter — the shared windows plus the custom-range sentinel. */
+  public get WindowChoices(): ReadonlyArray<{ Id: string; Label: string }> {
+    return [...this.TimeWindows, { Id: 'custom', Label: 'Custom range' }];
+  }
+
   public get AdvancedCount(): number {
     let n = 0;
-    if (this.CompanyID) n++;
+    if (this.CompanyIDs.length) n++;
     if (this.TypeFilter !== 'All') n++;
     if (this.TimeWindow !== 'last90') n++;
     return n;
@@ -432,8 +451,8 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
     if (this.searchTimer) clearTimeout(this.searchTimer);
   }
   public Refresh(): void {
-    this.RefreshToken++;
     this.applyFilters();
+    void this.grid?.Refresh(); // unchanged params deep-equal → the setter skips; refetch explicitly
   }
 
   /**

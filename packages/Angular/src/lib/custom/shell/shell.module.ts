@@ -1,3 +1,4 @@
+import { MJACheckDropdownComponent } from '../shared/check-dropdown.component';
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -17,8 +18,7 @@ import {
   MJRefreshButtonComponent,
   MJEmptyStateComponent,
   MjSlidePanelComponent,
-  MJAlertComponent,
-} from '@memberjunction/ng-ui-components';
+  MJAlertComponent, MJDropdownComponent } from '@memberjunction/ng-ui-components';
 
 import { CompanyScopeChipComponent } from '../shared/company-scope-chip.component';
 import { PageRefreshService } from '../../transfer-pending/shell-refresh/page-refresh.service';
@@ -27,7 +27,7 @@ import { WorkspaceTabStripComponent } from '../../transfer-pending/workspace-tab
 import { WorkspaceCardComponent } from '../../transfer-pending/workspace-tabs/workspace-card.component';
 import { WorkspaceTipDirective } from '../../transfer-pending/workspace-tabs/workspace-tip.directive';
 
-import { BatchDispatchModule } from '../BatchDispatch/batch-dispatch.module';
+import { JournalEntryBatchDispatchModule } from '../JournalEntryBatchDispatch/journal-entry-batch-dispatch.module';
 import { ChartOfAccountsModule } from '../ChartOfAccounts/chart-of-accounts.module';
 import { CompanySetupModule } from '../CompanySetup/company-setup.module';
 import { ReadModelsModule } from '../shared/read-models.module';
@@ -47,10 +47,10 @@ import { AllBatchesPageComponent } from './pages/all-batches.page';
 import { BatchDetailPanelComponent } from './pages/batch-detail-panel.component';
 import { JEWorkspacePageComponent } from './pages/je-workspace.page';
 import { JEApprovalsPageComponent } from './pages/je-approvals.page';
-import { BatchWorkspacePageComponent } from './pages/batch-workspace.page';
+import { JournalEntryBatchWorkspacePageComponent } from './pages/journal-entry-batch-workspace.page';
 import { DispatchStatusPageComponent } from './pages/dispatch-status.page';
 import { JeDashboardPageComponent } from './pages/je-dashboard.page';
-import { BatchesDashboardPageComponent } from './pages/batches-dashboard.page';
+import { JournalEntryBatchesDashboardPageComponent } from './pages/journal-entry-batches-dashboard.page';
 import { DimensionsPageComponent } from './pages/dimensions.page';
 import { AccountLinksPageComponent } from './pages/account-links.page';
 import { GLAccountsPageComponent } from './pages/gl-accounts.page';
@@ -64,7 +64,7 @@ import { MJAListToolbarComponent } from '../shared/list-toolbar.component';
  * The app shell (UI plan §8.0): the category shells + their pages.
  *
  * NgModule-declared to match this package's existing pattern (mirrors ReadModelsModule /
- * BatchDispatchModule). The standalone pieces we own (scope chip, tab strip) and MJ's standalone
+ * JournalEntryBatchDispatchModule). The standalone pieces we own (scope chip, tab strip) and MJ's standalone
  * chrome are imported, not declared.
  */
 @NgModule({
@@ -84,16 +84,16 @@ import { MJAListToolbarComponent } from '../shared/list-toolbar.component';
     AllJournalEntriesPageComponent,
     JEWorkspacePageComponent,
     JEApprovalsPageComponent,
-    BatchWorkspacePageComponent,
+    JournalEntryBatchWorkspacePageComponent,
     DispatchStatusPageComponent,
     JeDashboardPageComponent,
-    BatchesDashboardPageComponent,
+    JournalEntryBatchesDashboardPageComponent,
     DimensionsPageComponent,
     AccountLinksPageComponent,
     GLAccountsPageComponent,
     JournalEntryDetailPanelComponent,
   ],
-  imports: [
+  imports: [MJDropdownComponent, MJACheckDropdownComponent, 
     ShellPagePendingComponent, // standalone — shared with orders' shell
     MJASummaryStripComponent, // standalone — the orders-idiom stats bubble (list-page standard)
     MJAListToolbarComponent, // standalone — search + preset chips + Filters disclosure (list-page standard)
@@ -103,7 +103,7 @@ import { MJAListToolbarComponent } from '../shared/list-toolbar.component';
     SharedGenericModule,
     EntityViewerModule, // <mj-entity-data-grid> — the house grid
     // The Batches category HOSTS these existing dashboards (now on interior chrome, §6 sweep).
-    BatchDispatchModule, // <mj-batch-dispatch-dashboard> — Batch approvals
+    JournalEntryBatchDispatchModule, // <mj-batch-dispatch-dashboard> — Batch approvals
     ReadModelsModule, // <mj-batch-status-dashboard> + the read-model report dashboards
     ChartOfAccountsModule, // <mj-coa-dashboard> — Accounts
     CompanySetupModule, // <mj-company-setup-dashboard> — Configuration
@@ -140,10 +140,10 @@ import { MJAListToolbarComponent } from '../shared/list-toolbar.component';
     AllJournalEntriesPageComponent,
     JEWorkspacePageComponent,
     JEApprovalsPageComponent,
-    BatchWorkspacePageComponent,
+    JournalEntryBatchWorkspacePageComponent,
     DispatchStatusPageComponent,
     JeDashboardPageComponent,
-    BatchesDashboardPageComponent,
+    JournalEntryBatchesDashboardPageComponent,
     DimensionsPageComponent,
     AccountLinksPageComponent,
     GLAccountsPageComponent,

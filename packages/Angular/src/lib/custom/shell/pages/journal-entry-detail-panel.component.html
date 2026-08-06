@@ -20,7 +20,7 @@
             Label="Manual — awaiting review"
             Icon="fa-solid fa-user-check"
             Variant="warning"
-            title="Manual entries are intended to need CFO approval before batching (C.8). That gate is not yet in force, so this entry can still be picked up by a batch build.">
+            title="Manual entries are intended to need CFO approval before batching (C.8). That gate is not yet in force, so this entry can still be picked up by a JE batch build.">
           </mj-stat-badge>
         }
         @if (IsBalanced) {
@@ -35,9 +35,6 @@
       <div class="jed__actions">
         <button type="button" mjButton Variant="outline" Size="sm" (click)="GoToWorkspace()" title="Open this entry in the JE workspace (closes this panel)">
           <i class="fa-solid fa-diagram-project" aria-hidden="true"></i> Open in workspace
-        </button>
-        <button type="button" mjButton Variant="outline" Size="sm" (click)="PopOut()" title="Open the full entry (closes this panel)">
-          <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i> Open full
         </button>
         @if (h.OrderID) {
           <button type="button" mjButton Variant="outline" Size="sm" (click)="OpenSourceOrder()" title="Open the order that booked this entry">
@@ -76,8 +73,8 @@
         <dd>{{ h.EffectiveDate ? (h.EffectiveDate | date: 'mediumDate' : 'UTC') : '—' }}</dd>
         <dt>Description</dt>
         <dd>{{ h.Description || '—' }}</dd>
-        <dt>Batch</dt>
-        <dd>{{ BatchNumber ?? (h.BatchID ? 'in a batch' : 'Not batched') }}</dd>
+        <dt>JE batch</dt>
+        <dd>{{ JournalEntryBatchNumber ?? (h.JournalEntryBatchID ? 'in a journal entry batch' : 'Not batched') }}</dd>
         @if (h.GLPostedAt) {
           <dt>GL posted</dt>
           <!-- datetimeoffset = an INSTANT → local zone, no 'UTC' arg. -->

@@ -1,3 +1,4 @@
+import { MJACheckDropdownComponent } from '../shared/check-dropdown.component';
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -16,8 +17,7 @@ import {
   MJEmptyStateComponent,
   MJDialogComponent,
   MJDialogActionsComponent,
-  MJComboboxComponent,
-} from '@memberjunction/ng-ui-components';
+  MJComboboxComponent, MJDropdownComponent } from '@memberjunction/ng-ui-components';
 
 import { ChartOfAccountsDashboardComponent } from './coa-dashboard.component';
 import { ChartOfAccountsResourceComponent } from './coa-resource.component';
@@ -28,7 +28,7 @@ import { ChartOfAccountsResourceComponent } from './coa-resource.component';
  */
 @NgModule({
   declarations: [ChartOfAccountsDashboardComponent, ChartOfAccountsResourceComponent],
-  imports: [
+  imports: [MJDropdownComponent, MJACheckDropdownComponent, 
     MJASummaryStripComponent,
     MJAListToolbarComponent,
     CommonModule,

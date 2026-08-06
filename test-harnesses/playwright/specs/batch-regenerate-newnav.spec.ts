@@ -55,20 +55,20 @@ test('Build → late candidate → Regenerate re-gathers (5→6 entries, 600→7
   await scopeToCompany(page, fx!.companyName);
 
   // ── 1. Build (the workspace's deferred-query flow) ──────────────────────────
-  await railItem(page, 'Batches', 'Batch workspace');
+  await railItem(page, 'Journal Entry Batches', 'JE batch workspace');
   const loadBtn = page.getByRole('button', { name: /Load entries/i }).first();
   await expect(loadBtn).toBeVisible({ timeout: 30_000 });
   await loadBtn.click();
-  const buildBtn = page.getByRole('button', { name: /Build batch/i }).first();
+  const buildBtn = page.getByRole('button', { name: /Build JE batch/i }).first();
   await expect(buildBtn, 'Build enables once candidates load').toBeEnabled({ timeout: 30_000 });
   await buildBtn.click();
   await page.waitForTimeout(2000);
-  const confirm = page.getByRole('button', { name: /Build batch \(\d+\)/i }).first();
+  const confirm = page.getByRole('button', { name: /Build JE batch \(\d+\)/i }).first();
   if (await confirm.isVisible().catch(() => false)) { await confirm.click(); }
   await page.waitForTimeout(7000);
 
   // ── 2. The pending card shows the EXACT netted pre-state: 5 entries, 600.00 ─
-  await railItem(page, 'Batches', 'Batch approvals');
+  await railItem(page, 'Journal Entry Batches', 'JE batch approvals');
   const card = page.locator('.bd-card').filter({ has: page.getByRole('button', { name: /Regenerate/i }) }).first();
   await expect(card, 'a Pending batch card with Regenerate').toBeVisible({ timeout: 30_000 });
   await expect(card.getByText('3', { exact: true }).first(), 'Entries = 3 member JEs before regenerate').toBeVisible();
@@ -88,11 +88,11 @@ test('Build → late candidate → Regenerate re-gathers (5→6 entries, 600→7
   // ── 5. Reject → batch Cancelled, entries return to the candidate pool ───────
   await card.getByRole('button', { name: /Reject/i }).click();
   await page.waitForTimeout(5000);
-  await railItem(page, 'Batches', 'Batch workspace');
+  await railItem(page, 'Journal Entry Batches', 'JE batch workspace');
   const loadBtn2 = page.getByRole('button', { name: /Load entries/i }).first();
   await expect(loadBtn2).toBeVisible({ timeout: 30_000 });
   await loadBtn2.click();
-  const buildBtn2 = page.getByRole('button', { name: /Build batch/i }).first();
+  const buildBtn2 = page.getByRole('button', { name: /Build JE batch/i }).first();
   await expect(buildBtn2, 'all 6 JEs are back in the pool (buildable again)').toBeEnabled({ timeout: 30_000 });
 
   expectNoConsoleErrors(sink, 'batch regenerate flow');

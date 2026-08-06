@@ -15,7 +15,7 @@ type BatchStatus = NonNullable<mjBizAppsAccountingJournalEntryBatchEntityType['S
 /** The batch header this panel shows — every field a real column/view field on the batch view. */
 export interface BatchDetailHeader {
   ID: string;
-  BatchNumber: string;
+  JournalEntryBatchNumber: string;
   Status: BatchStatus;
   TargetSystem: string;
   PostingDate: Date | null;
@@ -25,7 +25,7 @@ export interface BatchDetailHeader {
   CompanyID: string;
   /** Denormalized company name carried by the batch view. */
   Company: string;
-  ExternalBatchRef: string | null;
+  ExternalJournalEntryBatchRef: string | null;
   ApprovedAt: Date | null;
   SentAt: Date | null;
   PostedAt: Date | null;
@@ -70,13 +70,13 @@ export class BatchDetailPanelComponent extends BaseAngularComponent {
 
   /** The batch to show. Setter-driven so the load fires exactly when the id changes. */
   @Input()
-  set BatchID(value: string | null) {
+  set JournalEntryBatchID(value: string | null) {
     const previous = this._batchID;
     this._batchID = value;
     if (value && value !== previous) void this.load(value);
     if (!value) this.reset();
   }
-  get BatchID(): string | null {
+  get JournalEntryBatchID(): string | null {
     return this._batchID;
   }
   private _batchID: string | null = null;
@@ -101,7 +101,7 @@ export class BatchDetailPanelComponent extends BaseAngularComponent {
   }
 
   public get Title(): string {
-    return this.Header ? `Batch ${this.Header.BatchNumber}` : 'Batch';
+    return this.Header ? `Batch ${this.Header.JournalEntryBatchNumber}` : 'Batch';
   }
 
   /** Typed as the badge's own union — strictTemplates rejects the widened `string`. */
@@ -148,7 +148,7 @@ export class BatchDetailPanelComponent extends BaseAngularComponent {
     openBizDetail(this.forms, {
       entityName: BATCH_ENTITY,
       primaryKey: CompositeKey.FromID(this.Header.ID),
-      title: `Batch ${this.Header.BatchNumber}`,
+      title: `Batch ${this.Header.JournalEntryBatchNumber}`,
       mode: 'dialog',
     });
     this.Closed.emit();
@@ -174,8 +174,8 @@ export class BatchDetailPanelComponent extends BaseAngularComponent {
             EntityName: BATCH_ENTITY,
             ExtraFilter: `ID='${id}'`,
             Fields: [
-              'ID', 'BatchNumber', 'Status', 'TargetSystem', 'PostingDate', 'TotalEntries',
-              'TotalDebits', 'TotalCredits', 'CompanyID', 'Company', 'ExternalBatchRef',
+              'ID', 'JournalEntryBatchNumber', 'Status', 'TargetSystem', 'PostingDate', 'TotalEntries',
+              'TotalDebits', 'TotalCredits', 'CompanyID', 'Company', 'ExternalJournalEntryBatchRef',
               'ApprovedAt', 'SentAt', 'PostedAt', 'ErrorMessage', 'ApprovalTaskID',
               'ApprovalTaskRaisedAt', 'SummaryJournalEntryID', '__mj_CreatedAt',
             ],
@@ -183,7 +183,7 @@ export class BatchDetailPanelComponent extends BaseAngularComponent {
           },
           {
             EntityName: JE_ENTITY,
-            ExtraFilter: `BatchID='${id}'`,
+            ExtraFilter: `JournalEntryBatchID='${id}'`,
             Fields: ['ID', 'EntryNumber', 'EntryType', 'Status', 'EffectiveDate', 'Description'],
             OrderBy: 'EntryNumber ASC',
             MaxRows: BatchDetailPanelComponent.MEMBER_ROWS,
@@ -194,12 +194,12 @@ export class BatchDetailPanelComponent extends BaseAngularComponent {
       );
 
       if (!headerRes.Success) {
-        this.LoadError = headerRes.ErrorMessage ?? 'This batch could not be loaded.';
+        this.LoadError = headerRes.ErrorMessage ?? 'This journal entry batch could not be loaded.';
         return;
       }
       const header = (headerRes.Results?.[0] ?? null) as BatchDetailHeader | null;
       if (!header) {
-        this.LoadError = 'This batch could not be found. It may have been deleted, or you may not have access to it.';
+        this.LoadError = 'This journal entry batch could not be found. It may have been deleted, or you may not have access to it.';
         return;
       }
       this.Header = header;

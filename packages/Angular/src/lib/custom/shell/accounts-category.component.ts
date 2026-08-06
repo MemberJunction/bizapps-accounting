@@ -20,6 +20,30 @@ import { PageRefreshService } from '../../transfer-pending/shell-refresh/page-re
 })
 @RegisterClass(BaseDashboard, 'AccountsCategoryDashboard')
 export class AccountsCategoryComponent extends CategoryShellBase {
+  // ── Header create verb (Marcelo 2026-08-05: every New-<x> lives in the CATEGORY header,
+  // orders-style). The verb is the ACTIVE PAGE's create — label and action swap with the page,
+  // and pages with no create show none. Signals are monotonic counters the pages watch via input.
+  public CreateSignalAccounts = 0;
+  public CreateSignalCoa = 0;
+  public CreateSignalDimensions = 0;
+
+  public get CreateVerb(): string | null {
+    switch (this.ActivePageId) {
+      case 'accounts': return 'New account';
+      case 'coa': return 'New account';
+      case 'dimensions': return 'New dimension';
+      default: return null;
+    }
+  }
+
+  public OnHeaderCreate(): void {
+    switch (this.ActivePageId) {
+      case 'accounts': this.CreateSignalAccounts++; break;
+      case 'coa': this.CreateSignalCoa++; break;
+      case 'dimensions': this.CreateSignalDimensions++; break;
+    }
+  }
+
   public CategoryTitle = 'Accounts';
   public override get CategoryIcon(): string {
     return 'fa-solid fa-sitemap';

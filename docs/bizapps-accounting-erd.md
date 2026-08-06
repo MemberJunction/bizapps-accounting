@@ -7,10 +7,24 @@
 > (≤5 entity boxes) so it renders full-size on a 13" laptop — open in VS Code
 > Markdown preview, or paste a block into https://mermaid.live to zoom.
 >
-> **Current as of 2026-07-27** (schema realignment, issues #22 + #24):
+> **Current as of 2026-08-06** — verified against the live `__mj_BizAppsAccounting` schema, not just
+> read forward from the migrations (24 tables, every column diffed; see
+> `test-harnesses/server/_maint-erd-drift.ts`, which reproduces the check).
+>
+> - **JournalEntryBatch rename** (Amith ruling, 2026-08-04/05) — every bare `Batch` identifier naming
+>   the entity now carries the full name: `JournalEntry.JournalEntryBatchID`,
+>   `JournalEntryBatch.JournalEntryBatchNumber`, `ExternalJournalEntryBatchRef`,
+>   `JournalEntryType.IsJournalEntryBatchSummary`, plus the sproc, triggers and constraints named off
+>   them. Unchanged on purpose: `BatchedAt`/`BatchedByUserID` and the `Batched` status (they name the
+>   action, not the entity) and the `BATCH-…` number format.
+> - **Tax model reworked (PR #28)** — `CustomerTaxProfile` is **DROPPED** (buyer-side exemption moved
+>   to bizapps-orders as `CustomerTaxExemption`) and **`CompanyTaxNexus` is REAL, not planned** — §7b
+>   below. `TaxRate.Rate` widened `DECIMAL(7,4) → DECIMAL(9,6)`; `CK_TaxRate_Source` dropped.
+>
+> **Earlier (2026-07-27, schema realignment, issues #22 + #24):**
 > - **NEW `JournalEntryType`** (BA-D29) — extensible JE classification replacing the closed
->   `EntryType` CHECK enum; `JournalEntry.EntryTypeID` FK; `IsBatchSummary` flag replaces the
->   `'BatchSummary'` magic string; accounting seeds only its 8 system rows, consuming apps
+>   `EntryType` CHECK enum; `JournalEntry.EntryTypeID` FK; `IsJournalEntryBatchSummary` flag replaces the
+>   `'JournalEntryBatchSummary'` magic string; accounting seeds only its 8 system rows, consuming apps
 >   seed their domain types.
 > - **DROPPED `AccountingCompanyProfile.DefaultPaymentTermsTypeID`** (BA-D30) — accounting
 >   never references its dependents, hard or soft; per-company default terms move to orders.
@@ -82,7 +96,7 @@ flowchart TD
             TaxJurisdiction[TaxJurisdiction]
             TaxRate[TaxRate]
             TaxLiability[TaxLiability]
-            CTP[CustomerTaxProfile]
+            CTN[CompanyTaxNexus]
         end
         subgraph Perms["Permissions (planned)"]
             UCR[UserCompanyRole]
@@ -115,7 +129,7 @@ flowchart TD
     IAM --> IAMD
     Dimension --> IAMD
     Company -->|single-company D7| Batch
-    Batch -->|BatchID: members + summary| JournalEntry
+    Batch -->|JournalEntryBatchID: members + summary| JournalEntry
     Batch -.->|SummaryJournalEntryID| JournalEntry
     User -->|batched / approved by| Batch
     Company --> JESeq
@@ -176,9 +190,10 @@ erDiagram
         uuid TargetCompanyID FK "reverse direction = a SEPARATE row"
         uuid DueToGLAccountID FK "Source's LIABILITY (trg 50024/50026)"
         uuid DueFromGLAccountID FK "Target's ASSET (trg 50025/50026)"
-        string Status "Active | Inactive"
+        string Status "Pending | Active | Disabled (default Pending)"
         datetimeoffset StartedAt "latest wins; Active tie refused (entity server)"
         datetimeoffset EndedAt "nullable - open window"
+        string Comments "nullable"
     }
     IntercompanyAccountMatchDimension {
         uuid ID PK
@@ -190,7 +205,7 @@ erDiagram
     }
     %% ---- batching ----
     Company ||--o{ JournalEntryBatch : "single-company (D7)"
-    JournalEntryBatch ||--o{ JournalEntry : "BatchID (members + summary, by IsBatchSummary type)"
+    JournalEntryBatch ||--o{ JournalEntry : "JournalEntryBatchID (members + summary, by IsJournalEntryBatchSummary type)"
     JournalEntryBatch |o--o| JournalEntry : "SummaryJournalEntryID"
     User ||--o{ JournalEntryBatch : "BatchedBy / ApprovedBy"
     Company ||--o{ JournalEntrySequence : "per-company per-FY numbering"
@@ -201,8 +216,8 @@ erDiagram
     Company ||--o{ TaxLiability : ""
     TaxAuthority ||--o{ TaxLiability : ""
     TaxJurisdiction ||--o{ TaxLiability : ""
-    Organization ||--o{ CustomerTaxProfile : ""
-    TaxJurisdiction |o--o{ CustomerTaxProfile : ""
+    Company ||--o{ CompanyTaxNexus : ""
+    TaxJurisdiction ||--o{ CompanyTaxNexus : ""
     %% ---- permissions (planned) ----
     User ||--o{ UserCompanyRole : ""
     Company ||--o{ UserCompanyRole : ""
@@ -240,6 +255,7 @@ erDiagram
         string ToCurrencyCode FK
         date RateDate
         decimal Rate
+        string Source "default Manual - part of the uniqueness key"
         bool IsActive
     }
     GLAccount {
@@ -260,7 +276,8 @@ erDiagram
         uuid ID PK
         string Name "AR | Sales | DefRev | SalesDiscounts | ReturnsAndAllowances | ..."
         string Description
-        string Status
+        string Status "Active | Inactive"
+        int Sequence "display/resolution order, default 0"
     }
     GLAccountLink {
         uuid ID PK
@@ -283,6 +300,7 @@ erDiagram
         uuid ID PK
         string Code UK
         string Name
+        string Description "nullable"
         bool IsActive
         int DisplayOrder
     }
@@ -298,10 +316,10 @@ erDiagram
     }
     JournalEntryType {
         uuid ID PK
-        string Code UK "Manual | Reversal | BatchSummary | consumer-seeded ..."
+        string Code UK "Manual | Reversal | JournalEntryBatchSummary | consumer-seeded ..."
         string Name
         bool IsSystem "accounting's own - do not repurpose"
-        bool IsBatchSummary "exactly one flagged row (filtered UX)"
+        bool IsJournalEntryBatchSummary "exactly one flagged row (filtered UX)"
         bool IsActive
     }
     JournalEntry {
@@ -316,7 +334,7 @@ erDiagram
         string LinkedRecordID "D25 origin pair - soft by nature"
         uuid ReversesJournalEntryID FK
         uuid ReversedByJournalEntryID FK
-        uuid BatchID FK "lock derives from batch status"
+        uuid JournalEntryBatchID FK "lock derives from batch status"
         uuid FileID FK
         datetimeoffset GLPostedAt
         string GLReferenceID
@@ -342,10 +360,10 @@ erDiagram
     }
     JournalEntryBatch {
         uuid ID PK
-        string BatchNumber UK "global sequence"
+        string JournalEntryBatchNumber UK "global sequence"
         uuid CompanyID FK
         date PostingDate "must match the GL (D8)"
-        uuid SummaryJournalEntryID FK "summary JE (type flagged IsBatchSummary)"
+        uuid SummaryJournalEntryID FK "summary JE (type flagged IsJournalEntryBatchSummary)"
         string TargetSystem
         string Status "Pending | Approved | Sent | Posted | Failed | Cancelled"
         datetimeoffset BatchedAt
@@ -357,7 +375,7 @@ erDiagram
         decimal TotalCredits
         uuid ApprovalTaskID "FK to __mj_BizAppsTasks.Task (#22)"
         datetimeoffset ApprovalTaskRaisedAt
-        string ExternalBatchRef
+        string ExternalJournalEntryBatchRef
         datetimeoffset SentAt
         datetimeoffset PostedAt
         string ErrorMessage
@@ -409,16 +427,17 @@ erDiagram
         date DueDate
         string FilingFrequency
     }
-    CustomerTaxProfile {
+    CompanyTaxNexus {
         uuid ID PK
-        uuid OrganizationID FK "common Organization"
+        uuid CompanyID FK "__mj.Company - OUR legal entity"
         uuid TaxJurisdictionID FK
-        string TaxIDNumber
-        bool IsExempt "cert required when exempt"
-        string ExemptionCertificateRef
-        date ExemptionExpiryDate
-        date EffectiveFrom
-        date EffectiveTo
+        string NexusType "Economic | Physical | Marketplace | Voluntary"
+        string RegistrationNumber
+        date RegisteredFrom
+        date RegisteredTo
+        date ObligationEndsAt "trailing nexus"
+        string Status "Active | Inactive"
+        string Comments
     }
     UserCompanyRole {
         uuid ID PK
@@ -503,7 +522,8 @@ erDiagram
         uuid ID PK
         string Name "Cash | AR | Sales | DefRev | SalesDiscounts | ReturnsAndAllowances | ..."
         string Description
-        string Status
+        string Status "Active | Inactive"
+        int Sequence "display/resolution order, default 0"
     }
     GLAccountLink {
         uuid ID PK
@@ -546,9 +566,10 @@ erDiagram
         uuid TargetCompanyID FK
         uuid DueToGLAccountID FK "Source's LIABILITY (trg 50024/50026)"
         uuid DueFromGLAccountID FK "Target's ASSET (trg 50025/50026)"
-        string Status "Active | Inactive"
+        string Status "Pending | Active | Disabled (default Pending)"
         datetimeoffset StartedAt "latest-StartedAt wins; ties rejected (entity server)"
         datetimeoffset EndedAt "nullable"
+        string Comments "nullable"
     }
     IntercompanyAccountMatchDimension {
         uuid ID PK
@@ -591,7 +612,7 @@ erDiagram
         string LinkedRecordID "D25 origin pair - soft by nature"
         uuid ReversesJournalEntryID FK "nullable - reverser typed Code=Reversal (50012)"
         uuid ReversedByJournalEntryID FK "nullable"
-        uuid BatchID FK "nullable - member lock derives from batch status"
+        uuid JournalEntryBatchID FK "nullable - member lock derives from batch status"
         uuid FileID FK "nullable - source document"
         datetimeoffset GLPostedAt "GL roundtrip - mutable after lock"
         string GLReferenceID "GL roundtrip"
@@ -619,6 +640,7 @@ erDiagram
         uuid ID PK
         string Code UK
         string Name
+        string Description "nullable"
         bool IsActive
         int DisplayOrder
     }
@@ -645,11 +667,11 @@ erDiagram
 
     JournalEntryType {
         uuid ID PK
-        string Code UK "Manual | Reversal | BatchSummary | consumer-seeded ..."
+        string Code UK "Manual | Reversal | JournalEntryBatchSummary | consumer-seeded ..."
         string Name
         string Description "nullable"
         bool IsSystem "accounting's own - never repurpose or delete"
-        bool IsBatchSummary "exactly ONE flagged row (filtered unique index)"
+        bool IsJournalEntryBatchSummary "exactly ONE flagged row (filtered unique index)"
         bool IsActive "inactive = no NEW entries; history keeps it"
     }
 ```
@@ -661,7 +683,7 @@ the per-entity soft-ref columns AND the `JournalEntryLink` table.
 
 **Entry types (BA-D29, issue #24):** the classification is an extensible lookup, not a closed enum.
 Accounting seeds only its ledger-mechanics rows (`IsSystem=1`, via `metadata/journal-entry-types/`):
-Manual, Reversal, Adjustment, OpeningBalance, BatchSummary, FXRevaluation, PeriodEndAccrual,
+Manual, Reversal, Adjustment, OpeningBalance, JournalEntryBatchSummary, FXRevaluation, PeriodEndAccrual,
 Writeoff. Domain types (OrderBooking, PaymentReceipt, ...) are seeded by their owning app via
 `mj sync push`. Triggers 50012 (reversal typing) and 50023 (summary coherence) join this table.
 
@@ -672,16 +694,16 @@ Writeoff. Domain types (OrderBooking, PaymentReceipt, ...) are seeded by their o
 ```mermaid
 erDiagram
     Company ||--o{ JournalEntryBatch : "CompanyID NOT NULL - single-company (D7)"
-    JournalEntryBatch ||--o{ JournalEntry : "BatchID - members AND the summary (discriminated by the type IsBatchSummary flag)"
+    JournalEntryBatch ||--o{ JournalEntry : "JournalEntryBatchID - members AND the summary (discriminated by the type IsJournalEntryBatchSummary flag)"
     JournalEntryBatch |o--o| JournalEntry : "SummaryJournalEntryID - coherence trigger 50023"
     User ||--o{ JournalEntryBatch : "BatchedBy / ApprovedBy"
 
     JournalEntryBatch {
         uuid ID PK
-        string BatchNumber UK "global sequence"
+        string JournalEntryBatchNumber UK "global sequence"
         uuid CompanyID FK
         date PostingDate "singular, accountant-set - must match the GL (D8)"
-        uuid SummaryJournalEntryID FK "type IsBatchSummary, EffectiveDate=PostingDate, same BatchID"
+        uuid SummaryJournalEntryID FK "type IsJournalEntryBatchSummary, EffectiveDate=PostingDate, same JournalEntryBatchID"
         string TargetSystem "BusinessCentral | QuickBooks | NetSuite | Sage | Xero | Other"
         string Status "Pending | Approved | Sent | Posted | Failed | Cancelled"
         datetimeoffset BatchedAt
@@ -693,7 +715,7 @@ erDiagram
         decimal TotalCredits
         uuid ApprovalTaskID "FK to __mj_BizAppsTasks.Task (#22) - both-or-neither with RaisedAt (CHECK)"
         datetimeoffset ApprovalTaskRaisedAt "nullable"
-        string ExternalBatchRef "nullable"
+        string ExternalJournalEntryBatchRef "nullable"
         datetimeoffset SentAt "nullable"
         datetimeoffset PostedAt "nullable"
         string ErrorMessage "nullable"
@@ -702,7 +724,7 @@ erDiagram
 
 **Lock model (derived, one machinery):** member + summary JEs lock preliminarily at build
 (`Batched`, batch still `Pending` — reversible unlock sanctioned), permanently at approval,
-`GLPosted` at post. Summary is excluded from netting/count/sweep via its type's `IsBatchSummary` flag (the
+`GLPosted` at post. Summary is excluded from netting/count/sweep via its type's `IsJournalEntryBatchSummary` flag (the
 discriminator); footing-trigger successor = pending Amith.
 
 ---
@@ -760,10 +782,10 @@ erDiagram
         uuid ID PK
         uuid TaxJurisdictionID FK
         string TaxCategory "Standard | Reduced | Zero | Exempt | Custom"
-        decimal Rate "DECIMAL(7,4), 0..1"
+        decimal Rate "DECIMAL(9,6), 0..1 - NOT (7,4); 4dp cannot hold e.g. San Mateo 9.375%"
         date EffectiveFrom
         date EffectiveTo "nullable, >= From"
-        string Source "Avalara | TaxJar | Manual (default Manual)"
+        string Source "free text, default Manual - NO CHECK, so a new rate feed is data not a migration"
     }
     TaxLiability {
         uuid ID PK
@@ -778,37 +800,43 @@ erDiagram
     }
 ```
 
-### 7b. CustomerTaxProfile — the BUYER's taxability
+### 7b. CompanyTaxNexus — where OUR legal entity must collect
 
 ```mermaid
 erDiagram
-    Organization ||--o{ CustomerTaxProfile : "OrganizationID (common Organization)"
-    TaxJurisdiction |o--o{ CustomerTaxProfile : "nullable - NULL = all jurisdictions"
+    Company ||--o{ CompanyTaxNexus : "CompanyID (__mj.Company)"
+    TaxJurisdiction ||--o{ CompanyTaxNexus : "TaxJurisdictionID"
 
-    CustomerTaxProfile {
+    CompanyTaxNexus {
         uuid ID PK
-        uuid OrganizationID FK
-        uuid TaxJurisdictionID FK "nullable - NULL means everywhere"
-        string TaxIDNumber "nullable"
-        bool IsExempt "exempt REQUIRES a certificate ref (CK)"
-        string ExemptionCertificateRef "nullable - the audit evidence"
-        date ExemptionExpiryDate "nullable"
-        date EffectiveFrom
-        date EffectiveTo "nullable, >= From"
+        uuid CompanyID FK
+        uuid TaxJurisdictionID FK
+        string NexusType "Economic | Physical | Marketplace | Voluntary (default Economic)"
+        string RegistrationNumber "nullable"
+        date RegisteredFrom
+        date RegisteredTo "nullable, >= From"
+        date ObligationEndsAt "nullable - trailing nexus, may outlast RegisteredTo"
+        string Status "Active | Inactive (default Active)"
+        string Comments "nullable"
     }
 ```
 
-Calculation is delegated (D17); these tables record, never author, rates. The two parties are
-deliberately separate: `TaxLiability` and the (planned) nexus are about the
-**seller** (our company's obligation to collect + what it owes); `CustomerTaxProfile` is about the
-**buyer** (this customer's exemption privilege, certificate-backed — `IsExempt=1` requires
-`ExemptionCertificateRef`, CHECK-enforced).
+Unique on `(CompanyID, TaxJurisdictionID, RegisteredFrom)`, so one company can re-register in the
+same jurisdiction over time without colliding. `NexusType` records **why** the obligation exists —
+Economic (crossed a revenue/transaction threshold), Physical (people, property or inventory in the
+state), Marketplace (a facilitator law attributes it), or Voluntary (registered without being
+required, a real and deliberate choice). `ObligationEndsAt` is separate from `RegisteredTo` because
+**trailing nexus** means the duty to collect routinely outlasts the registration itself.
 
-> **Planned, NOT in schema (orders pricing design §6, phase 4):** `CompanyTaxNexus`
-> (Company × TaxJurisdiction + registration number + dates — the seller-side "must company C
-> collect in jurisdiction J?" gate) and a tax-category scope on `CustomerTaxProfile` (keyed by an
-> accounting-owned tax category, never an orders product reference — BA-D30). Recorded here so the
-> gap list has one home; neither exists until its own baseline pass.
+Calculation is delegated (D17); these tables record, never author, rates. Both tax tables are about
+the **seller**: `TaxLiability` is what our company owes, `CompanyTaxNexus` is where it is obliged to
+collect in the first place.
+
+> **Buyer-side taxability is NOT here (PR #28).** `CustomerTaxProfile` was dropped from this schema
+> — "is this CUSTOMER exempt" is a customer-shaped concern, and accounting is the general JE/ERP
+> engine. It now lives in **bizapps-orders as `CustomerTaxExemption`**, where customer attributes
+> start. Any tax-category scope belongs there too, keyed by an accounting-owned tax category rather
+> than an orders product reference (BA-D30).
 
 ---
 

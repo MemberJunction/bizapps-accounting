@@ -52,19 +52,19 @@ test('Build→approve→dispatch, then Reverse the GLPosted JE from All journal 
   await scopeToCompany(page, fx!.companyName);
 
   // 1. Build → approve → dispatch, so the fixture's JEs become GLPosted (reversible).
-  await railItem(page, 'Batches', 'Batch workspace');
+  await railItem(page, 'Journal Entry Batches', 'JE batch workspace');
   const loadBtn = page.getByRole('button', { name: /Load entries/i }).first();
   await expect(loadBtn, 'the deferred-query Load-entries button').toBeVisible({ timeout: 30_000 });
   await loadBtn.click();
-  const buildBtn = page.getByRole('button', { name: /Build batch/i }).first();
-  await expect(buildBtn, 'Build batch enables once candidates load').toBeEnabled({ timeout: 30_000 });
+  const buildBtn = page.getByRole('button', { name: /Build JE batch/i }).first();
+  await expect(buildBtn, 'Build JE batch enables once candidates load').toBeEnabled({ timeout: 30_000 });
   await buildBtn.click();
   await page.waitForTimeout(2000);
-  const confirmBuild = page.getByRole('button', { name: /Build batch \(\d+\)/i }).first();
+  const confirmBuild = page.getByRole('button', { name: /Build JE batch \(\d+\)/i }).first();
   if (await confirmBuild.isVisible().catch(() => false)) { await confirmBuild.click(); }
   await page.waitForTimeout(7000);
 
-  await railItem(page, 'Batches', 'Batch approvals');
+  await railItem(page, 'Journal Entry Batches', 'JE batch approvals');
   const pendingCard = page.locator('.bd-card').filter({ has: page.getByRole('button', { name: /Approve/i }) }).first();
   await expect(pendingCard).toBeVisible({ timeout: 30_000 });
   await pendingCard.getByRole('button', { name: /Approve/i }).first().click();
@@ -80,8 +80,12 @@ test('Build→approve→dispatch, then Reverse the GLPosted JE from All journal 
   //    "click the first GLPosted row" version wrongly reversed demo data; never reach outside the fixture.)
   //    The reversal it creates lands in the fixture company, so the afterAll teardown cleans it.
   await railItem(page, 'Journal Entries', 'All journal entries');
-  const search = page.getByRole('searchbox', { name: /Search entries/i }).first();
-  if (await search.isVisible().catch(() => false)) { await search.fill(fx!.jeEntryNumber); await page.waitForTimeout(3000); }
+  const search = page.getByRole('searchbox', { name: /Search journal entries/i }).first();
+  // Unconditional: the old visibility guard silently skipped the search when the label didn't
+  // resolve — a hidden liveness skip. A missing search box is a failure.
+  await expect(search, 'the list-toolbar search renders').toBeVisible({ timeout: 15_000 });
+  await search.fill(fx!.jeEntryNumber);
+  await page.waitForTimeout(3000);
   const fixtureRow = page.locator('.ag-row').filter({ hasText: fx!.jeEntryNumber }).first();
   await expect(fixtureRow, `the fixture JE ${fx!.jeEntryNumber} (GLPosted after dispatch) should be present`).toBeVisible({ timeout: 30_000 });
   await fixtureRow.click();

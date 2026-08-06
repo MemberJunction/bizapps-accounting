@@ -10,7 +10,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { loginViaMagicLink } from '../lib/auth';
-import { openAccountingApp, openNavItem, captureConsoleErrors, expectNoConsoleErrors, resetCompanyScopeToAll, scopeToCompany } from '../lib/explorer';
+import { openAccountingApp, openNavItem, captureConsoleErrors, expectNoConsoleErrors, resetCompanyScopeToAll, scopeToCompany, pickMjDropdown } from '../lib/explorer';
 import { HARNESS_DIR } from '../lib/env';
 
 const WORKTREE_ROOT = path.resolve(HARNESS_DIR, '..', '..', '..', '..', '..');
@@ -55,17 +55,17 @@ test('JE workspace: balanced 2-line draft → Create entry → Pending JE confir
   await expect(page.getByRole('button', { name: /Create entry/i }).first(), 'create verb landed on the JE workspace').toBeVisible({ timeout: 30_000 });
 
   // Header: pick the fixture company (label-wrapped select → getByLabel works).
-  const company = page.getByLabel(/Company/i).first();
-  await company.selectOption({ label: fx!.companyName });
+  // The header company picker is an mj-dropdown now (2026-08-05 conversion).
+  await pickMjDropdown(page, page, 'Company', fx!.companyName);
   await page.waitForTimeout(2500); // accounts load for the picker
 
-  // Two line rows: GL select is each row's first select; Debit/Credit are the .num inputs.
-  const rows = page.locator('tr', { has: page.locator('select.mj-input') });
+  // Two line rows: the GL picker is each row's first mj-dropdown; Debit/Credit are the .num inputs.
+  const rows = page.locator('tr', { has: page.locator('mj-dropdown') });
   const row = (i: number) => rows.nth(i);
   const fillLine = async (i: number, glCode: string, side: 'debit' | 'credit', amount: string) => {
-    const gl = row(i).locator('select').first();
-    const opt = gl.locator('option', { hasText: glCode }).first();
-    await gl.selectOption({ label: (await opt.textContent())?.trim() ?? glCode });
+    await row(i).locator('mj-dropdown').first().click();
+    await page.locator('.mj-dropdown-panel .mj-dropdown-option', { hasText: glCode }).first().click();
+    await page.waitForTimeout(300);
     const nums = row(i).locator('input.num');
     await nums.nth(side === 'debit' ? 0 : 1).fill(amount);
   };
@@ -78,14 +78,23 @@ test('JE workspace: balanced 2-line draft → Create entry → Pending JE confir
   await create.click();
   await page.waitForTimeout(6000);
 
-  // The confirmation names the minted entry number.
-  await expect(page.getByText(/JE-[A-Z0-9]+-\d{4}-\d{6}/).first(), 'the created JE number is shown').toBeVisible({ timeout: 20_000 });
+  // The confirmation names the minted entry number — capture it for the listing check below.
+  const confirm = page.getByText(/JE-[A-Z0-9]+-\d{4}-\d{6}/).first();
+  await expect(confirm, 'the created JE number is shown').toBeVisible({ timeout: 20_000 });
+  const jeNumber = ((await confirm.textContent()) ?? '').match(/JE-[A-Z0-9]+-\d{4}-\d{6}/)?.[0];
+  if (!jeNumber) throw new Error('could not extract the minted JE number from the confirmation text');
 
-  // And it exists as a Pending row in All journal entries.
+  // And it exists as a Pending row in All journal entries — searched by its ENTRY NUMBER (the
+  // search contract is "Memo, entry № or ID"; an amount was never searchable). Unconditional:
+  // a missing search box is a failure, never a silent skip.
   await railItem(page, 'Journal Entries', 'All journal entries');
-  const search = page.getByRole('searchbox', { name: /Search entries/i }).first();
-  if (await search.isVisible().catch(() => false)) { await search.fill('77'); await page.waitForTimeout(2500); }
-  await expect(page.locator('.ag-row', { hasText: 'Pending' }).first(), 'the new entry lists as Pending').toBeVisible({ timeout: 30_000 });
+  const search = page.getByRole('searchbox', { name: /Search journal entries/i }).first();
+  await expect(search, 'the list-toolbar search renders').toBeVisible({ timeout: 15_000 });
+  await search.fill(jeNumber);
+  await page.waitForTimeout(2500);
+  const createdRow = page.locator('.ag-row').filter({ hasText: jeNumber }).first();
+  await expect(createdRow, `the created ${jeNumber} lists in All journal entries`).toBeVisible({ timeout: 30_000 });
+  await expect(createdRow, 'and it is Pending').toContainText('Pending');
 
   expectNoConsoleErrors(sink, 'JE creation via the workspace');
 });

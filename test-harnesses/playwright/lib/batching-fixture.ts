@@ -104,7 +104,7 @@ async function setup(p: Pools): Promise<void> {
   // W1 auto-hook is retired), so the fixture seeds the starter chart it depends on (11201/40100).
   await (acp as AccountingCompanyProfileEntityServer).SeedDefaultChartOfAccounts();
 
-  // Map every GL account to a BusinessCentral external account = its Code (so buildBatch can resolve).
+  // Map every GL account to a BusinessCentral external account = its Code (so buildJournalEntryBatch can resolve).
   await pool.request().query(`UPDATE ${SCHEMA}.GLAccount SET ExternalSystem='BusinessCentral', ExternalAccountID=Code WHERE CompanyID='${companyId}'`);
 
   // Resolve the AR + Revenue accounts for a balanced JE, and an open Month period.

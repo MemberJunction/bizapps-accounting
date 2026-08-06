@@ -32,15 +32,15 @@ async function main(): Promise<void> {
   if (!user) throw new Error('no context user');
 
   const rv = new RunView();
-  const batches = await rv.RunView<{ ID: string; BatchNumber: string; Status: string; TargetSystem: string; ExternalBatchRef: string | null; TotalEntries: number; BatchedAt: string | null }>(
+  const batches = await rv.RunView<{ ID: string; JournalEntryBatchNumber: string; Status: string; TargetSystem: string; ExternalJournalEntryBatchRef: string | null; TotalEntries: number; BatchedAt: string | null }>(
     { EntityName: BATCH_ENTITY, OrderBy: 'BatchedAt ASC', ResultType: 'simple', BypassCache: true }, user);
-  const jes = await rv.RunView<{ BatchID: string | null; Status: string }>(
-    { EntityName: JE_ENTITY, ExtraFilter: 'BatchID IS NOT NULL', Fields: ['BatchID', 'Status'], ResultType: 'simple', BypassCache: true }, user);
+  const jes = await rv.RunView<{ JournalEntryBatchID: string | null; Status: string }>(
+    { EntityName: JE_ENTITY, ExtraFilter: 'JournalEntryBatchID IS NOT NULL', Fields: ['JournalEntryBatchID', 'Status'], ResultType: 'simple', BypassCache: true }, user);
   const links = await rv.RunView<{ RecordID: string }>(
     { EntityName: TASK_LINK_ENTITY, Fields: ['RecordID'], ResultType: 'simple', BypassCache: true }, user);
 
   const jeByBatch = new Map<string, number>();
-  for (const j of jes.Results ?? []) if (j.BatchID) jeByBatch.set(j.BatchID, (jeByBatch.get(j.BatchID) ?? 0) + 1);
+  for (const j of jes.Results ?? []) if (j.JournalEntryBatchID) jeByBatch.set(j.JournalEntryBatchID, (jeByBatch.get(j.JournalEntryBatchID) ?? 0) + 1);
   const linkedBatchIds = new Set((links.Results ?? []).map(l => l.RecordID));
 
   console.log(`\nTotal batches: ${(batches.Results ?? []).length}\n`);
@@ -53,7 +53,7 @@ async function main(): Promise<void> {
     const isStuck = b.Status === 'Pending' && !hasTask;
     if (isStuck) stuck.push(b.ID);
     console.log(
-      `${(b.Status ?? '').padEnd(12)} | ${String(jeCount).padStart(3)} | ${(hasTask ? 'yes' : 'NO').padEnd(5)} | ${(b.BatchedAt ? new Date(b.BatchedAt).toISOString().slice(0, 19) : '').padEnd(20)} | ${(b.ExternalBatchRef ?? '—').padEnd(22)} | ${b.ID}${isStuck ? '   <-- STUCK (Pending, no approval task)' : ''}`,
+      `${(b.Status ?? '').padEnd(12)} | ${String(jeCount).padStart(3)} | ${(hasTask ? 'yes' : 'NO').padEnd(5)} | ${(b.BatchedAt ? new Date(b.BatchedAt).toISOString().slice(0, 19) : '').padEnd(20)} | ${(b.ExternalJournalEntryBatchRef ?? '—').padEnd(22)} | ${b.ID}${isStuck ? '   <-- STUCK (Pending, no approval task)' : ''}`,
     );
   }
   console.log(`\nStuck (Pending + no approval task, can't approve/reject in UI): ${stuck.length}`);

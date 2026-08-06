@@ -13,7 +13,175 @@ create + open questions for the human, recorded so dev can roll through and circ
 Tiers: **1** Vitest (unit) · **2** server (tsx, in-process direct SQL) · **3** API (GraphQL→MJAPI) ·
 **4** GUI/DOM (no-browser — parked, mjdev overlay) · **5** Playwright (browser e2e, pre-PR only).
 
-## ⭐ CURRENT STATE — 2026-07-30 DEMO-GATE RUN (Amith's demo flow, pre-PR-merge gate)
+## ✅ RESOLVED (2026-08-06) — All-accounts standard-grid swap, spec red → root-caused, 3 fixes
+
+All accounts now renders the STANDARD mj-entity-data-grid (Marcelo's ask): toolbar filters/search
+feed GridParams.ExtraFilter (server-side; same predicate the client filter used), row-click opens
+the editor (per-row Edit/Retire buttons retired — the editor's Active checkbox is the retire path),
+tree indentation/orphan flags stay on the CoA page.
+
+The 2026-08-05 red spec had THREE stacked causes (the ".ag-row count 0 + phantom PARENT column"
+symptoms were ONE cause; two more surfaced beneath it as each fix landed):
+
+1. **Stale Explorer bundle.** The app dist WAS rebuilt after the swap, but the running ng serve
+   never picked it up — the browser still served the OLD hand-rolled table (plain rows → `.ag-row`
+   count 0; PARENT column = the old table's column, not saved grid state). The 2026-08-05
+   "live-proven by screenshot" note was therefore proof of the OLD page, not the new grid. Fix:
+   `mjdev restart accounting-revamp explorer`. Lesson: after an app rebuild, RESTART the Explorer
+   before believing any live evidence.
+2. **Grid height collapse (~4px).** `.gla-wrap` had card dressing only — no sizing — and
+   mj-entity-data-grid's :host is height:100%, so the grid collapsed to its borders; AG rows were
+   clipped invisible + unclickable (hit-test at row center → .gla-body). The EXACT regression
+   All-JE's CSS comment documents. Fix: `.gla-wrap` now carries the `.aje-grid` height chain
+   (flex 1 1 auto · min-height 320px · flex column); dead old-table CSS block deleted.
+3. **rowKey passed unparsed.** The grid's AfterRowClick rowKey is a CompositeKey concatenated
+   string ('ID|<uuid>'), NOT a bare ID — `OnGridRowClicked` fed it straight to UUIDsEqual, so the
+   find never matched and the editor silently never opened (spec timed out on
+   `expect(editor).toBeVisible()` with the row correctly [selected]). Fix: parse via the shared
+   `rowKeyToId` (all-batches + dispatch-status already did; only gl-accounts missed it). Tier-4
+   regression guard added: gl-accounts.dom.test.ts now clicks with the real 'ID|<uuid>' shape and
+   asserts the editor opens on that account.
+
+Also: stale fixture company `PWBATCH-MSGWZXIC GUI Batch Co` (leftover from the 2026-08-05
+externally-killed tier-5 run — kill skips afterAll teardown) torn down via the fixture's own
+teardown; new helper `test-harnesses/playwright/lib/find-stale-fixtures.ts` lists PWBATCH-*
+leftovers for future cleanup. Validation runs recorded below as they complete.
+
+**A FOURTH bug the spec caught while re-greening (2026-08-06):** post-save the grid showed the
+STALE pre-rename row. mj-entity-data-grid's `Params` setter DEEP-COMPARES
+(`RunViewParams.Equals`) and skips the refetch when the rebuilt params are equivalent — after a
+save, filters/search are unchanged, so `rebuildGridParams()` was a silent no-op for the grid.
+Worse, the audit showed All-JE / all-batches carried a **vestigial `RefreshToken` counter nothing
+consumed** — their header Refresh buttons never refetched the grid either when filters were
+unchanged. Fix on ALL FOUR grid pages (gl-accounts, all-journal-entries, all-batches,
+dispatch-status): `@ViewChild(EntityDataGridComponent)` + explicit `grid.Refresh()` in the page's
+`Refresh()` and post-save paths; RefreshToken deleted. A fifth find: the tier-4 mount was missing
+`EntityViewerModule`, so the grid rendered as an unknown element in jsdom (NG0304 caught by the
+keystone once the bundle was current) — added to the TestBed imports.
+
+**2026-08-06 re-green runs (this fix wave):**
+- Tier 1 units: **101/101 pass** (2 real suites: 44 + 57; 4 packages remain "No tests configured"
+  stubs — pre-existing gap, unchanged).
+- Tier 4 dom (full): **9/9 pass** across 5 files, incl. gl-accounts' new composite-rowKey →
+  editor-opens regression assert.
+- Tier 5 accounts spec: **2/2 pass** (create → rename → identity-lock 38s; Dimensions+CoA 29.7s).
+- Tier 5 FULL suite: **8/8 accounting specs pass** (10.3m); the sole failure is the PRE-KNOWN
+  `orders-product-catalog` blocker (Orders app not linked in this instance — same signature as the
+  2026-08-05 battery, unrelated to this branch).
+- Tier 2 (after tier-5, serialized on the DB): runtimes **50/50** (block0 10 · block1 11 ·
+  engine 12 · intercompany 17) + server vitest **25/25** = **75/75**, matching baseline.
+- Tier 3 wire (real client → MJAPI): **72/72** (batch-ops 37 · engine-op 11 · full-flow 24) on the
+  renamed op keys, matching baseline.
+- DB hygiene: `find-stale-fixtures` → zero PWBATCH-* leftovers.
+
+**2026-08-06 (later) — nav-label sweep (Marcelo: "nav tabs at the top, the side bar"):** top-nav
+category "Batches" → **"Journal Entry Batches"** (metadata DefaultNavItems Label, synced to the DB
+via `app sync --include applications` + API restart), CategoryTitle + both resource display names
+likewise; rail labels mirror the JE category's scheme — "All batches" → **"All journal entry
+batches"** (primary list spelled out) · "Batch workspace" → **"JE batch workspace"** · "Batch
+approvals" → **"JE batch approvals"** ("JE" abbreviation = existing house style, cf. "JE
+workspace"); Dashboard/Dispatch status unchanged. Page-internal prose ("this batch", "New batch",
+'Batched' status chips, BATCH- numbers) intentionally unchanged. Specs updated (stale-label case):
+4 batch specs' `railItem` calls + env.ts `NAV.batches`. **Validated live** (probe: rail + top nav
+render the new labels, zero console errors) **and by tier-5: the 4 batch-flow specs pass 4/4
+(5.3m)** driving the renamed nav end-to-end. Side-find while validating: the Entries column's
+"$1.00" currency dressing is an **MJ-core bug** (host GridColumnConfig type/format dropped +
+name-pattern currency heuristic) — filed in MJ-UPSTREAM.md 2026-08-06 with root cause + fix; the
+app keeps its correct column config so it heals when MJ fixes the mapping. A StateKey v1→v2 bump
+was tried on that theory and REVERTED (fresh state still renders currency — disproven).
+
+**2026-08-06 (final) — full UI terminology audit (Marcelo: "change every corresponding piece to
+journal entry batch, except batched at / batched by / the Batched status").** Inventoried every
+user-visible string in the app (attribute-borne labels/titles/placeholders/aria-labels, template
+text, TS label/tooltip/message literals, and grid column headers) and swept **66 sites across 20
+files**. Rule applied and worth remembering: **NOUN forms referring to the entity are renamed; VERB
+forms are kept** — which is exactly the rationale behind the three agreed exceptions. So `BatchedAt`
+/ `BatchedByUserID` / the `Batched` status stay, and so do "batched", "batching", "unbatched" and
+"to batch" (26 + 24 + 12 + 5 + 3 occurrences, deliberate). `BATCH-…` numbers stay — that's data.
+Register: full "journal entry batch" in prose/messages; "JE batch" in compact chrome (buttons,
+column heads, placeholders, stat labels), matching the rail. Renamed surfaces include the page
+titles ("JE Batch Approvals", "JE Batch Status"), the create verb ("New JE batch"), the build
+button + preview dialog ("Build JE batch"), grid column heads ("JE batch №", "JE batch"), search
+placeholders/labels, every empty state and error message, and the workspace tab/identity/hint.
+Four tier-5 specs' `Build batch` locators updated (stale-label case — the button really was
+renamed). **Validated:** live probe confirms rendered rail/headers/buttons with **zero console
+errors** and no truncation (screenshots captured), and **tier 5 passes 6/6** — the four batch flows
+(approve · reject · regenerate · reversal) plus both accounts specs, all driving the swept UI.
+
+**Battery verdict 2026-08-06: FULL PYRAMID GREEN at baseline** — units 101 · tier-2 75 · tier-3 72
+· tier-4 9 · tier-5 8 (+1 pre-known orders blocker). The branch's uncommitted fix wave (4 grid
+pages' refresh, gl-accounts rowKey parse + CSS height chain, tier-4 module import + regression
+assert, find-stale-fixtures helper, Server index comment) awaits commit approval.
+
+## ⭐ CURRENT STATE — 2026-08-05 UI-WAVE BATTERY (post-#43 merge + the chrome/control wave)
+
+Scope: PR #43 merged into the rename branch (conflict-free; git followed the renames; the guarded
+sweep re-ran over #43's 16 arriving files — zero leftovers) plus the UI wave (Marcelo's 2026-08-05
+task list): JE panel "Open full" removed (workspace = the ONE open action) · ALL 34 native <select>s
+replaced with MJ controls (mj-dropdown CVA; new shared mja-check-dropdown CHECKBOX multi-select for
+company filters on All-JE / All-batches / All-accounts / CoA / batch-status — batch-workspace's
+company stays single: it is a BUILD CRITERION under single-company batches, MOD-15) · every inline
+mj-refresh-button removed and all five category headers on the orders-style outline refresh
+(dashboards subscribe to PageRefreshService, OPTIONAL injection — provided per category shell) ·
+create verbs hoisted: the category header shows the ACTIVE PAGE's create verb (New account / New
+dimension / New company), dashboard header-cards deleted · Dimensions page: status filter + New
+dimension + per-row details opening the record's real form in the MJ slide-in (openBizCreate added
+to the standardized helper) · slide-in audit: app already 100% on mj-slide-panel/MJFormPresenter —
+nothing to swap.
+
+| Tier | Suite | Result |
+|---|---|---|
+| 1 | Angular units | **125/125** |
+| 4 | GUI DOM suite | **9/9** (specs updated: TestBed imports for the new controls; company-setup asserts the create button's INTENTIONAL absence; gl-accounts drives the multi-select API) |
+| live | keystone sweep over every new surface (15 checks) | **15/15**, zero console/page errors (2 initial FAILs were probe-timing, re-proven individually) |
+| 5 | Playwright full suite (specs now drive mj-dropdown via pickMjDropdown) | **8/8 green** (10.8m) |
+| 5 | orders-product-catalog | pre-known 5y blocker — NOT a regression |
+
+Tiers 2/3 unaffected by this wave (server untouched) — last green on the rename battery below.
+Known follow-ups: mj-dropdown lacks an accessible-name input (host aria-label interim; MJ upstream
+candidate) · GLAccountLink demo seed/create-UI gap (diagnosed 2026-08-05, awaiting ruling).
+
+## ⭐ PRIOR STATE — 2026-08-05 JOURNALENTRYBATCH RENAME BATTERY (full pyramid vs the identifier refactor)
+
+Gate scope: Amith's ruling — every bare `Batch`-prefixed identifier naming the JournalEntryBatch
+entity renamed to the full prefix (`BatchID→JournalEntryBatchID`, `BatchNumber→JournalEntryBatchNumber`,
+`ExternalBatchRef→ExternalJournalEntryBatchRef`, `IsBatchSummary→IsJournalEntryBatchSummary`,
+`spAssignNextBatchNumber→spAssignNextJournalEntryBatchNumber`, `trg_JEBatch_*→trg_JournalEntryBatch_*`,
+FK/CK/UX names), applied by editing the consolidated baseline in place (house convention) +
+drop-schema → migrate → sync → codegen (verified NO-OP — baseline self-consistent) → build, then the
+Assoc Demo re-seed (6/6; NOTE: drop-schema strands the IsA PARENT rows in __mj.Company — the 3 demo
+parents had to be deleted before re-seed could recreate them). Deliberately unchanged: verb-form
+lifecycle columns (BatchedAt/BatchedByUserID), Status value 'Batched', the BATCH- number format,
+and compact DisplayNames ("Batch ID"). Branch: refactor/journal-entry-batch-rename.
+
+| Tier | Suite | Result |
+|---|---|---|
+| 1 | EngineBase / CoreEntitiesServer / Angular units | **57/57 · 44/44 · 125/125** |
+| 2 | block0 / block1 / engine-runtime / intercompany + server vitest | **10/10 · 11/11 · 12/12 · 17/17 · 25/25** |
+| 3 | engine-op-api / batch-ops-api / full-flow-api (wire) | **11/11 · 37/37 · 24/24** |
+| 4 | GUI DOM suite | **9/9** |
+| 5 | Playwright (8 demo-relevant specs incl. all three batch specs) | **8/8 green** (10.6m) |
+| 5 | orders-product-catalog | pre-known 5y blocker (orders unlinked) — NOT a regression |
+
+Round 2 (2026-08-05): DisplayNames renamed too (baseline + DB, codegen refreshed); server files/classes
+aligned (JournalEntryBatchEngine.ts, JournalEntryBatchOperations.ts, all exported bare-Batch
+identifiers; op WIRE KEYS deliberately unchanged pending ruling). Re-validated after: CES units
+44/44 · engine-runtime 12/12 · tier-3 wire 11/11 · 37/37 · 24/24 · tier-4 9/9 · tier-5 batch
+specs 3/3 (exact-value regenerate 600→711 proven).
+
+Round 3 (2026-08-05): op WIRE KEYS renamed (orders' tip verified zero-reference — heads-up filed
+as bizapps-orders#37) + Angular files/dirs/classes renamed (JournalEntryBatchDispatch/,
+JournalEntryBatchStatus/, journal-entry-batch-workspace.*, journal-entry-batches-dashboard.page,
+gui dom spec file). Selectors + @RegisterClass resource keys kept (metadata-bound); batches-category
+kept (nav-category name). Re-validated: full app build clean · Angular units 125/125 · tier-3 wire
+11/11 · 37/37 · 24/24 (driving the NEW op keys) · tier-4 9/9 · tier-5 batch specs 3/3.
+
+Harness notes: the three explicit-seed fixes (W1 auto-seed retirement) + the two MJ-5.51 locator
+fixes were re-applied on this branch (they also ship in PR #44's branch; identical edits, clean
+merge). Cross-app: bizapps-orders consumes these fields — it needs a companion rename sweep in its
+own repo once this lands.
+
+## ⭐ PRIOR STATE — 2026-07-30 DEMO-GATE RUN (Amith's demo flow, pre-PR-merge gate)
 
 Gate scope (Amith 2026-07-30): prove the full demo flow — company profile setup → GL accounts →
 JE/Lines → batching — before the PR merges. Company-create browser SAVE stays a **waived** gap
@@ -166,7 +334,7 @@ WITH their features; new rows cover the new invariants._
 | **GLOBAL multi-company sweep (companyCount, per-company netting isolation)** | ✓ | ✓ | ✓ | ⚠ |
 | GL resolution — mapping override · inline · **Code fallback (AM-4)** + COA-mapping approval (Block 5) | — | ✓ | — | — |
 | Dimension-through-batch | ✓ | ✓ | ⚠ | ⚠ |
-| **approveBatch step (audit stamps · only-Pending guard · dispatch-before-approve refused)** | — | ✓ | ✓ | ✓ |
+| **approveJournalEntryBatch step (audit stamps · only-Pending guard · dispatch-before-approve refused)** | — | ✓ | ✓ | ✓ |
 | CFO gate: approve → dispatch → **Posted** | — | ✓ | ✓ | ✓ |
 | **Reject/deny → dispatch refused (both layers)** | — | ✓ | ✓ | ⚠ |
 | **No-CFO → build hard-fails** | — | ✓ | ✓ | — |
@@ -187,7 +355,7 @@ WITH their features; new rows cover the new invariants._
 ## Intentional-⚠ register (coverage placed at a cheaper/other tier on purpose — NOT shortcuts)
 
 - **Dimension-through-batch @ T3** — fully proven at **T2** (`block2` B5: same account × 2 dim values
-  → separate, tagged summary lines, via SQL). The API's `BuildJEBatchResult` is aggregate; the
+  → separate, tagged summary lines, via SQL). The API's `BuildJournalEntryBatchResult` is aggregate; the
   consolidation it *does* report (`SummaryLineCount`) is already asserted at T3. **No API change
   needed** (never grow the API to serve a test).
 - **Reject · netting-exact · reversal · read-model-exact · intercompany · multi-company @ T5** —
@@ -209,17 +377,17 @@ committed Tier-5 specs** yet — treat as a coverage gap to fill (Tier-5 `dashbo
 
 **Open questions for the human → see `instances/accounting-engine-dev/QUESTIONS.md`:**
 - ✅ **Batch reject semantics** (Q4) — RESOLVED 2026-07-08 (Robert: levels of locking). Reject now reverses the
-  **preliminary** lock: `cancelBatch` → batch Cancelled + entries back to the candidate pool. Proven in `block2`
-  (`#12 cancelBatch`) + live through MJAPI. Impl: migration `V202607081600` + `BatchingEngine.cancelBatch`.
-- ✅ **buildBatch atomicity** (Q5) — RESOLVED 2026-07-08. A failed approval-task raise now auto-reverses the batch
+  **preliminary** lock: `cancelJournalEntryBatch` → batch Cancelled + entries back to the candidate pool. Proven in `block2`
+  (`#12 cancelJournalEntryBatch`) + live through MJAPI. Impl: migration `V202607081600` + `JournalEntryBatchEngine.cancelJournalEntryBatch`.
+- ✅ **buildJournalEntryBatch atomicity** (Q5) — RESOLVED 2026-07-08. A failed approval-task raise now auto-reverses the batch
   (reversible preliminary lock) instead of stranding a task-less orphan. Proven in `block2` (`no CFO → auto-reverse`).
 - ⏳ **Follow-on GAAP calls (Q12–Q15, high-priority for Robert):** reversal same-period-vs-forward-date, batch cutoff
   (oldest-forward), out-of-order approval, backdated-order JE date. Provisional answers coded; confirmations shape the
   deferred filter/backdating work (plan `batch-approval-lock-redesign.md` §13–14). Do NOT block the shipped reject fix.
 - ✅ Due-to/from semantics **confirmed** (Marcelo): Accounting does **no** intercompany netting — Payments owns it.
 
-**Batch-lock redesign (#12, 2026-07-08) coverage:** `block2` now **24/24** — adds `#12 cancelBatch` (reject-unlock),
-`#12 permanent lock` (approved → raw unlock rejected by trigger), `#12 regenerateBatch` (re-gathers a since-added JE),
+**Batch-lock redesign (#12, 2026-07-08) coverage:** `block2` now **24/24** — adds `#12 cancelJournalEntryBatch` (reject-unlock),
+`#12 permanent lock` (approved → raw unlock rejected by trigger), `#12 regenerateJournalEntryBatch` (re-gathers a since-added JE),
 and upgrades the `no CFO` test to assert auto-reverse. Live end-to-end validated through MJAPI (build→reject→Cancelled+freed;
 build→regenerate→jeCount grows; approve→dispatch→Posted). **GUI layer:** `specs/batching-reject.spec.ts` (Playwright, system
 Chrome) drives the live Explorer — Build→**Reject** (card flips to Cancelled + banner)→Build→**Regenerate** (rebuild banner),

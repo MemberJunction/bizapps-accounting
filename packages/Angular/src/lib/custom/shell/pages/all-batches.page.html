@@ -9,13 +9,14 @@
   <mja-summary-strip
     [Bare]="true"
     [Figures]="SummaryFigures"
-    Note="Counts follow the active filters — they describe the list below, not every batch ever built." />
+    Note="Counts follow the active filters — they describe the list below, not every journal entry batch ever built." />
 
   <!-- Search + status chips + the Filters disclosure (company + posting-date window inside). -->
   <mja-list-toolbar
     [Bare]="true"
     [Search]="Search"
-    SearchPlaceholder="Batch №, ERP reference or ID…"
+    SearchPlaceholder="JE batch №, ERP reference or ID…"
+    SearchLabel="Search journal entry batches"
     [Presets]="StatusChips"
     [ActiveKeys]="ActiveStatusKeys"
     [HasAdvanced]="true"
@@ -25,22 +26,25 @@
     (PresetToggled)="OnPresetToggled($event)">
     <label class="abt-field">
       <span class="abt-field__label">Company</span>
-      <select class="mj-input" [(ngModel)]="CompanyID" (ngModelChange)="OnFilterChanged()" aria-label="Company">
-        <option [ngValue]="null">All companies</option>
-        @for (co of Companies; track co.ID) {
-          <option [ngValue]="co.ID">{{ co.Name }}</option>
-        }
-      </select>
+      <!-- CHECKBOX multi-select (Marcelo 2026-08-05): narrow to any set of companies; empty = all. -->
+      <mja-check-dropdown
+        [Options]="Companies"
+        [SelectedIDs]="CompanyIDs"
+        AllLabel="All companies"
+        AriaLabel="Company"
+        (SelectedIDsChange)="OnCompanyIDsChanged($event)" />
     </label>
 
     <label class="abt-field">
       <span class="abt-field__label">Window</span>
-      <select class="mj-input" [(ngModel)]="TimeWindow" (ngModelChange)="OnWindowChanged()" aria-label="Posting-date window">
-        @for (w of TimeWindows; track w.Id) {
-          <option [value]="w.Id">{{ w.Label }}</option>
-        }
-        <option value="custom">Custom range</option>
-      </select>
+      <mj-dropdown
+        [Data]="WindowChoices"
+        TextField="Label"
+        ValueField="Id"
+        [ValuePrimitive]="true"
+        [(ngModel)]="TimeWindow"
+        (ngModelChange)="OnWindowChanged()"
+        aria-label="Posting-date window" />
     </label>
 
     <label class="abt-field abt-field--date">
@@ -78,7 +82,7 @@
 
 <!-- Row detail: identity, dispatch trail, totals, member entries; workspace + pop-out verbs. -->
 <mj-batch-detail-panel
-  [BatchID]="SelectedID"
+  [JournalEntryBatchID]="SelectedID"
   (Closed)="OnDetailClosed()"
   (OpenInWorkspace)="OnOpenInWorkspace($event)">
 </mj-batch-detail-panel>

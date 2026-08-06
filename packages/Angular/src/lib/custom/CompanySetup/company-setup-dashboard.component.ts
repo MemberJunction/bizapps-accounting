@@ -1,4 +1,5 @@
-import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, Input } from '@angular/core';
+import { PageRefreshService } from '../../transfer-pending/shell-refresh/page-refresh.service';
 import { BaseDashboard } from '@memberjunction/ng-shared';
 import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
 import { RegisterClass } from '@memberjunction/global';
@@ -83,8 +84,23 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
     return 'Company Setup';
   }
 
+  /** The category header's Refresh reaches this dashboard through the shared channel —
+   *  the inline mj-refresh-button was removed (Marcelo 2026-08-05: the header owns the ONE
+   *  refresh control, orders-style). Subscribing is also what makes the header button SHOW
+   *  while this page is mounted (CanRefreshActivePage = HasSubscriber). */
+  /** OPTIONAL: provided per category shell; a directly-mounted resource (or a bare TestBed) has none. */
+  private pageRefresh = inject(PageRefreshService, { optional: true });
+  private refreshSub: { unsubscribe: () => void } | null = null;
+
   protected initDashboard(): void {
+    this.refreshSub = this.pageRefresh?.OnRefresh(() => void this.loadData()) ?? null;
     // One-time setup; data loads in loadData().
+  }
+
+  public override ngOnDestroy(): void {
+    // Unsubscribing keeps the header's Refresh page-aware: a destroyed page stops counting.
+    this.refreshSub?.unsubscribe();
+    super.ngOnDestroy();
   }
 
   protected async loadData(): Promise<void> {
@@ -175,6 +191,15 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
    * seeds the company's default chart of accounts — the same path the test fixture uses. No keys
    * passed to the presenter = new-record form in edit mode.
    */
+  /** Monotonic counter from the category header's "New company" verb. */
+  private _createSignal = 0;
+  @Input() set CreateSignal(v: number) {
+    if (v > this._createSignal) {
+      this._createSignal = v;
+      void this.NewCompany();
+    }
+  }
+
   public async NewCompany(): Promise<void> {
     const ref = this.forms.Open({ EntityName: COMPANY_PROFILE_ENTITY, Presentation: 'dialog', Width: '94vw' });
     const saved = await ref.AfterSaved();

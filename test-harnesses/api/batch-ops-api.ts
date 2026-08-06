@@ -7,20 +7,20 @@
  * Integration-style (mirrors the orders headless E2E pattern + MJ's client-first transport
  * doctrine): one continuous business flow with EXACT-value asserts, not per-op smoke checks.
  *
- *   1. Accounting.BuildBatch (explicit CompanyID) — the fixture's 3 JEs net 6 lines → 3 summary
+ *   1. Accounting.BuildJournalEntryBatch (explicit CompanyID) — the fixture's 3 JEs net 6 lines → 3 summary
  *      lines, NETTED totals 600 (not the gross 800); approvalTaskId returned (one-transaction
  *      build, D10 rev. 2026-07-29).
  *   2. The ApprovalTaskID/RaisedAt stamp is on the batch row (verified over the wire).
  *   3. GetBatchApprovalState → not approved (with a reason).
  *   4. RecordBatchDecision Approved → approval state flips true.
- *   5. DispatchBatch → Posted + MOCK external ref.
+ *   5. DispatchJournalEntryBatch → Posted + MOCK external ref.
  *   6. Reject path: a new wire-created JE builds a second batch; RecordBatchDecision Rejected →
- *      batch Cancelled, the JE returns to the candidate pool (Pending, BatchID NULL).
- *   7. EmptyBatchError on the wire: an explicit build for a company with nothing to batch is a
+ *      batch Cancelled, the JE returns to the candidate pool (Pending, JournalEntryBatchID NULL).
+ *   7. EmptyJournalEntryBatchError on the wire: an explicit build for a company with nothing to batch is a
  *      loud failure, not a silent no-op.
  *
  * (The no-CompanyID SWEEP form is deliberately NOT exercised here: on a shared instance it would
- * batch other companies' Pending JEs. Its loop is per-company buildBatch + pendingCompanies, both
+ * batch other companies' Pending JEs. Its loop is per-company buildJournalEntryBatch + pendingCompanies, both
  * covered — the sweep composition is exercised by the seeded GUI tier instead.)
  *
  * Run from the INSTANCE WORKTREE ROOT:
@@ -111,9 +111,9 @@ function fixtureTeardown(companyId: string): void {
 interface BuildResultWire { batchId: string; summaryJournalEntryId: string; summaryLineCount: number; totalDebits: number; totalCredits: number; jeCount: number; approvalTaskId: string | null }
 interface BuildOutputWire { Batches: BuildResultWire[]; NothingToBatch: boolean }
 interface ApprovalStateWire { Approved: boolean; Reason?: string }
-interface DispatchWire { Status: string; ExternalBatchRef: string | null }
-interface BatchRow { ID: string; Status: string; ApprovalTaskID: string | null; ApprovalTaskRaisedAt: string | null; ExternalBatchRef: string | null }
-interface JERow { ID: string; Status: string; BatchID: string | null }
+interface DispatchWire { Status: string; ExternalJournalEntryBatchRef: string | null }
+interface BatchRow { ID: string; Status: string; ApprovalTaskID: string | null; ApprovalTaskRaisedAt: string | null; ExternalJournalEntryBatchRef: string | null }
+interface JERow { ID: string; Status: string; JournalEntryBatchID: string | null }
 
 async function main(): Promise<void> {
   console.log('=== Tier-3 API harness: batch Remote Operations over ExecuteRemoteOperation ===');
@@ -133,8 +133,8 @@ async function main(): Promise<void> {
 
   try {
     // 0. Preview FIRST (read-only, S-D): same filter/order/netting as the build — exact values.
-    console.log('\n0. Accounting.PreviewBatch (read-only, before any build):');
-    const prevRes = await executeOp(apiKey, 'Accounting.PreviewBatch', { CompanyIDs: [fx.companyId] });
+    console.log('\n0. Accounting.PreviewJournalEntryBatch (read-only, before any build):');
+    const prevRes = await executeOp(apiKey, 'Accounting.PreviewJournalEntryBatch', { CompanyIDs: [fx.companyId] });
     check('preview transport success', prevRes.success === true, `${prevRes.resultCode} ${prevRes.errorMessage ?? ''}`);
     const prev = opOutput<{ Candidates: { ID: string; EntryTypeCode: string; Amount: number }[]; TotalDebits: number; TotalCredits: number; PerCompany: { CompanyID: string; Debit: number; Credit: number }[]; OutOfOrderSkipCount: number }>(prevRes);
     check('3 candidates, oldest-first', prev.Candidates?.length === 3, `got ${prev.Candidates?.length}`);
@@ -145,15 +145,15 @@ async function main(): Promise<void> {
     // Excluding the two NEWER entries is not out-of-order; excluding the OLDEST while keeping a newer one is.
     const [oldest, , newest] = prev.Candidates.map(c => c.ID);
     const inclOldest = opOutput<{ OutOfOrderSkipCount: number; TotalDebits: number }>(
-      await executeOp(apiKey, 'Accounting.PreviewBatch', { CompanyIDs: [fx.companyId], IncludedJournalEntryIDs: [oldest] }));
+      await executeOp(apiKey, 'Accounting.PreviewJournalEntryBatch', { CompanyIDs: [fx.companyId], IncludedJournalEntryIDs: [oldest] }));
     check('keeping only the oldest → 0 skips, totals reflect the selection (500)', inclOldest.OutOfOrderSkipCount === 0 && inclOldest.TotalDebits === 500, JSON.stringify(inclOldest).slice(0, 120));
     const inclNewest = opOutput<{ OutOfOrderSkipCount: number }>(
-      await executeOp(apiKey, 'Accounting.PreviewBatch', { CompanyIDs: [fx.companyId], IncludedJournalEntryIDs: [newest] }));
+      await executeOp(apiKey, 'Accounting.PreviewJournalEntryBatch', { CompanyIDs: [fx.companyId], IncludedJournalEntryIDs: [newest] }));
     check('keeping only the NEWEST → 2 older entries flagged as skipped', inclNewest.OutOfOrderSkipCount === 2, JSON.stringify(inclNewest).slice(0, 120));
 
     // 1. Build — exact netted values (600, not the gross 800) + the stamped task id.
-    console.log('\n1. Accounting.BuildBatch (explicit CompanyID):');
-    const buildRes = await executeOp(apiKey, 'Accounting.BuildBatch', { TargetSystem: 'BusinessCentral', CompanyID: fx.companyId });
+    console.log('\n1. Accounting.BuildJournalEntryBatch (explicit CompanyID):');
+    const buildRes = await executeOp(apiKey, 'Accounting.BuildJournalEntryBatch', { TargetSystem: 'BusinessCentral', CompanyID: fx.companyId });
     check('transport success', buildRes.success === true, `${buildRes.resultCode} ${buildRes.errorMessage ?? ''}`);
     const build = opOutput<BuildOutputWire>(buildRes);
     check('ONE batch built for the company', build.Batches?.length === 1 && build.NothingToBatch === false, JSON.stringify(build).slice(0, 200));
@@ -166,29 +166,29 @@ async function main(): Promise<void> {
 
     // 2. The stamp is on the batch row — read over the wire.
     console.log('\n2. ApprovalTaskID stamp on the batch row:');
-    const rows = await wireRows<BatchRow>(apiKey, BATCH_ENTITY, `ID='${b.batchId}'`, ['ID', 'Status', 'ApprovalTaskID', 'ApprovalTaskRaisedAt', 'ExternalBatchRef']);
+    const rows = await wireRows<BatchRow>(apiKey, BATCH_ENTITY, `ID='${b.batchId}'`, ['ID', 'Status', 'ApprovalTaskID', 'ApprovalTaskRaisedAt', 'ExternalJournalEntryBatchRef']);
     check('batch row readable over the wire', rows.length === 1, `got ${rows.length}`);
     check('ApprovalTaskID matches the returned task id', (rows[0]?.ApprovalTaskID ?? '').toLowerCase() === (b.approvalTaskId ?? 'x').toLowerCase(), JSON.stringify(rows[0]));
     check('ApprovalTaskRaisedAt stamped', !!rows[0]?.ApprovalTaskRaisedAt, JSON.stringify(rows[0]));
 
     // 3-4. Approval state flips with the recorded decision.
     console.log('\n3. GetBatchApprovalState before approval:');
-    const pre = opOutput<ApprovalStateWire>(await executeOp(apiKey, 'Accounting.GetBatchApprovalState', { BatchID: b.batchId }));
+    const pre = opOutput<ApprovalStateWire>(await executeOp(apiKey, 'Accounting.GetJournalEntryBatchApprovalState', { JournalEntryBatchID: b.batchId }));
     check('not approved yet, with a reason', pre.Approved === false && !!pre.Reason, JSON.stringify(pre));
 
     console.log('\n4. RecordBatchDecision → Approved:');
-    const dec = await executeOp(apiKey, 'Accounting.RecordBatchDecision', { BatchID: b.batchId, Decision: 'Approved', Notes: `${fx.runTag} tier-3 approval` });
+    const dec = await executeOp(apiKey, 'Accounting.RecordJournalEntryBatchDecision', { JournalEntryBatchID: b.batchId, Decision: 'Approved', Notes: `${fx.runTag} tier-3 approval` });
     check('decision recorded', dec.success === true, `${dec.resultCode} ${dec.errorMessage ?? ''}`);
-    const post = opOutput<ApprovalStateWire>(await executeOp(apiKey, 'Accounting.GetBatchApprovalState', { BatchID: b.batchId }));
+    const post = opOutput<ApprovalStateWire>(await executeOp(apiKey, 'Accounting.GetJournalEntryBatchApprovalState', { JournalEntryBatchID: b.batchId }));
     check('approval state now TRUE', post.Approved === true, JSON.stringify(post));
 
     // 5. Dispatch — Approved → Sent → Posted via the mock poster.
-    console.log('\n5. DispatchBatch:');
-    const dispRes = await executeOp(apiKey, 'Accounting.DispatchBatch', { BatchID: b.batchId });
+    console.log('\n5. DispatchJournalEntryBatch:');
+    const dispRes = await executeOp(apiKey, 'Accounting.DispatchJournalEntryBatch', { JournalEntryBatchID: b.batchId });
     check('dispatch transport success', dispRes.success === true, `${dispRes.resultCode} ${dispRes.errorMessage ?? ''}`);
     const disp = opOutput<DispatchWire>(dispRes);
     check("Status === 'Posted'", disp.Status === 'Posted', JSON.stringify(disp));
-    check('mock external ref recorded', (disp.ExternalBatchRef ?? '').startsWith('MOCK-'), JSON.stringify(disp));
+    check('mock external ref recorded', (disp.ExternalJournalEntryBatchRef ?? '').startsWith('MOCK-'), JSON.stringify(disp));
 
     // 6. Reject path — a fresh wire-created JE, second batch, rejection reverses the lock.
     console.log('\n6. Reject path (new JE → build → reject):');
@@ -202,25 +202,25 @@ async function main(): Promise<void> {
     const jeOut = opOutput<CreateJournalEntryOutput>(await executeOp(apiKey, 'Accounting.CreateJournalEntry', draft));
     check('reject-path JE booked over the wire', jeOut.Success === true, JSON.stringify(jeOut.Errors));
     // Build it via Source='Explicit' — the workspace's include/exclude path (S-D), over the wire.
-    const build2 = opOutput<BuildOutputWire>(await executeOp(apiKey, 'Accounting.BuildBatch',
+    const build2 = opOutput<BuildOutputWire>(await executeOp(apiKey, 'Accounting.BuildJournalEntryBatch',
       { TargetSystem: 'BusinessCentral', Source: 'Explicit', JournalEntryIDs: [jeOut.JournalEntryID] }));
     const b2 = build2.Batches?.[0];
     check('explicit-ID build made one batch with exactly the selected JE', build2.Batches?.length === 1 && b2?.jeCount === 1 && b2?.totalDebits === 50, JSON.stringify(build2).slice(0, 200));
     // A stale selection is a LOUD refusal (the JE is now Batched).
-    const stale = await executeOp(apiKey, 'Accounting.BuildBatch',
+    const stale = await executeOp(apiKey, 'Accounting.BuildJournalEntryBatch',
       { TargetSystem: 'BusinessCentral', Source: 'Explicit', JournalEntryIDs: [jeOut.JournalEntryID] });
     check('re-building the same (now locked) selection refused with refresh guidance', stale.success === false && /no longer Pending/.test(stale.errorMessage ?? ''), JSON.stringify(stale).slice(0, 200));
-    const rej = await executeOp(apiKey, 'Accounting.RecordBatchDecision', { BatchID: b2.batchId, Decision: 'Rejected', Notes: `${fx.runTag} tier-3 reject` });
+    const rej = await executeOp(apiKey, 'Accounting.RecordJournalEntryBatchDecision', { JournalEntryBatchID: b2.batchId, Decision: 'Rejected', Notes: `${fx.runTag} tier-3 reject` });
     check('rejection recorded', rej.success === true, `${rej.resultCode} ${rej.errorMessage ?? ''}`);
-    const b2row = (await wireRows<BatchRow>(apiKey, BATCH_ENTITY, `ID='${b2.batchId}'`, ['ID', 'Status', 'ApprovalTaskID', 'ApprovalTaskRaisedAt', 'ExternalBatchRef']))[0];
+    const b2row = (await wireRows<BatchRow>(apiKey, BATCH_ENTITY, `ID='${b2.batchId}'`, ['ID', 'Status', 'ApprovalTaskID', 'ApprovalTaskRaisedAt', 'ExternalJournalEntryBatchRef']))[0];
     check("rejected batch is 'Cancelled'", b2row?.Status === 'Cancelled', JSON.stringify(b2row));
-    const jeRow = (await wireRows<JERow>(apiKey, JE_ENTITY, `ID='${jeOut.JournalEntryID}'`, ['ID', 'Status', 'BatchID']))[0];
-    check('rejected JE returned to the candidate pool (Pending, BatchID NULL)', jeRow?.Status === 'Pending' && jeRow?.BatchID === null, JSON.stringify(jeRow));
+    const jeRow = (await wireRows<JERow>(apiKey, JE_ENTITY, `ID='${jeOut.JournalEntryID}'`, ['ID', 'Status', 'JournalEntryBatchID']))[0];
+    check('rejected JE returned to the candidate pool (Pending, JournalEntryBatchID NULL)', jeRow?.Status === 'Pending' && jeRow?.JournalEntryBatchID === null, JSON.stringify(jeRow));
 
     // 8. REGENERATE over the wire (added 2026-07-30 — was tier-5-only): re-gather a Pending
     // batch in place after a late candidate lands. Exact values: 50 → 161 (50 + 111), 1 → 2 JEs.
-    console.log('\n8. Accounting.RegenerateBatch (late candidate re-gathered, exact totals):');
-    const build3 = opOutput<BuildOutputWire>(await executeOp(apiKey, 'Accounting.BuildBatch',
+    console.log('\n8. Accounting.RegenerateJournalEntryBatch (late candidate re-gathered, exact totals):');
+    const build3 = opOutput<BuildOutputWire>(await executeOp(apiKey, 'Accounting.BuildJournalEntryBatch',
       { TargetSystem: 'BusinessCentral', Source: 'Explicit', JournalEntryIDs: [jeOut.JournalEntryID] }));
     const b3 = build3.Batches?.[0];
     check('regen setup: rebuilt the pool JE into a fresh Pending batch', b3?.jeCount === 1 && b3?.totalDebits === 50, JSON.stringify(build3).slice(0, 200));
@@ -230,22 +230,22 @@ async function main(): Promise<void> {
     };
     const lateOut = opOutput<CreateJournalEntryOutput>(await executeOp(apiKey, 'Accounting.CreateJournalEntry', lateDraft));
     check('late candidate booked over the wire', lateOut.Success === true, JSON.stringify(lateOut.Errors));
-    // regenerateBatch returns a FLAT single-batch result (it rebuilds ONE batch in place),
-    // unlike BuildBatch's per-company Batches[] envelope.
+    // regenerateJournalEntryBatch returns a FLAT single-batch result (it rebuilds ONE batch in place),
+    // unlike BuildJournalEntryBatch's per-company Batches[] envelope.
     const rb = opOutput<{ batchId: string; jeCount: number; totalDebits: number; totalCredits: number; summaryLineCount: number }>(
-      await executeOp(apiKey, 'Accounting.RegenerateBatch', { BatchID: b3?.batchId, TargetSystem: 'BusinessCentral' }));
+      await executeOp(apiKey, 'Accounting.RegenerateJournalEntryBatch', { JournalEntryBatchID: b3?.batchId, TargetSystem: 'BusinessCentral' }));
     check('regenerate re-gathered BOTH JEs in the SAME batch with the exact netted total (161 = 50 + 111)',
       String(rb?.batchId ?? '').toLowerCase() === String(b3?.batchId ?? '').toLowerCase() && rb?.jeCount === 2 && rb?.totalDebits === 161 && rb?.totalCredits === 161,
       JSON.stringify(rb).slice(0, 250));
-    const lateRow = (await wireRows<JERow>(apiKey, JE_ENTITY, `ID='${lateOut.JournalEntryID}'`, ['ID', 'Status', 'BatchID']))[0];
+    const lateRow = (await wireRows<JERow>(apiKey, JE_ENTITY, `ID='${lateOut.JournalEntryID}'`, ['ID', 'Status', 'JournalEntryBatchID']))[0];
     check('the late JE is now a locked member of the SAME batch',
-      lateRow?.Status === 'Batched' && String(lateRow?.BatchID ?? '').toLowerCase() === String(b3?.batchId ?? '').toLowerCase(), JSON.stringify(lateRow));
-    const rej3 = await executeOp(apiKey, 'Accounting.RecordBatchDecision', { BatchID: b3?.batchId, Decision: 'Rejected', Notes: `${fx.runTag} tier-3 regen cleanup` });
+      lateRow?.Status === 'Batched' && String(lateRow?.JournalEntryBatchID ?? '').toLowerCase() === String(b3?.batchId ?? '').toLowerCase(), JSON.stringify(lateRow));
+    const rej3 = await executeOp(apiKey, 'Accounting.RecordJournalEntryBatchDecision', { JournalEntryBatchID: b3?.batchId, Decision: 'Rejected', Notes: `${fx.runTag} tier-3 regen cleanup` });
     check('regen batch rejected (pool restored for teardown)', rej3.success === true, `${rej3.resultCode} ${rej3.errorMessage ?? ''}`);
 
-    // 7→9. Empty build is LOUD on the wire (EmptyBatchError → failed op, never a silent no-op batch).
+    // 7→9. Empty build is LOUD on the wire (EmptyJournalEntryBatchError → failed op, never a silent no-op batch).
     console.log('\n9. Empty explicit build fails loudly:');
-    const emptyRes = await executeOp(apiKey, 'Accounting.BuildBatch', { TargetSystem: 'BusinessCentral', CompanyID: randomUUID() });
+    const emptyRes = await executeOp(apiKey, 'Accounting.BuildJournalEntryBatch', { TargetSystem: 'BusinessCentral', CompanyID: randomUUID() });
     check('op failed with the Nothing-to-batch message', emptyRes.success === false && /nothing to batch/i.test(emptyRes.errorMessage ?? ''), JSON.stringify(emptyRes).slice(0, 250));
   } catch (e) {
     check('wire flow completed without throwing', false, e instanceof Error ? e.message : String(e));

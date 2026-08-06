@@ -41,8 +41,8 @@ const INVARIANT_TRIGGERS = [
   'trg_JEL_Immutability',
   'trg_JEL_CompanyMatch',
   'trg_JE_CompanyMatch',
-  'trg_JEBatch_Immutability',
-  'trg_JEBatch_SummaryCoherence',
+  'trg_JournalEntryBatch_Immutability',
+  'trg_JournalEntryBatch_SummaryCoherence',
   'trg_ACP_NoChains',
   'trg_JE_ReversalConsistency',
 ];
@@ -62,7 +62,7 @@ export interface LiveCtx {
   dimValMktg: string;
   /** JournalEntryType Code → ID (issue #24). System codes from metadata; 'OrderBooking' ensured. */
   entryTypes: Map<string, string>;
-  /** The single IsBatchSummary=1 type's ID (member-exclusion filters + summary assertions). */
+  /** The single IsJournalEntryBatchSummary=1 type's ID (member-exclusion filters + summary assertions). */
   batchSummaryTypeId: string;
   /** JE IDs the tests created — teardown deletes exactly these (plus the fixture company orbit). */
   createdJEIds: string[];
@@ -117,7 +117,9 @@ async function createCompany(user: UserInfo, runTag: string, label = 'Live Harne
   const id = acp.ID;
   if (!(await acp.Save())) throw new Error(`fixture ACP save failed: ${acp.LatestResult?.CompleteMessage ?? 'unknown'}`);
 
-  // W1 (AccountingCompanyProfileEntityServer) seeded the default COA on first save — resolve the refs.
+  // W1 auto-seed RETIRED (Marcelo ruling 2026-07-30): a new company starts with an EMPTY chart and
+  // seeding is an explicit capability — same contract block0 W1.2 pins. Call it, then resolve the refs.
+  await (acp as unknown as { SeedDefaultChartOfAccounts(): Promise<void> }).SeedDefaultChartOfAccounts();
   const glRes = await rv.RunView<{ ID: string; Code: string }>(
     { EntityName: GL_ENTITY, ExtraFilter: `CompanyID='${id}'`, Fields: ['ID', 'Code'], ResultType: 'simple', BypassCache: true }, user);
   const byCode = new Map((glRes.Results ?? []).map(r => [r.Code, r.ID]));
@@ -159,21 +161,21 @@ export async function bootstrapLive(): Promise<LiveCtx> {
   // (mj sync push). The orders-domain 'OrderBooking' code the draft tests book with is ensured
   // here BY CODE (reference data — created if absent, reused and left in place otherwise).
   const jetRows = (await pool.request().query(
-    `SELECT ID, Code, IsBatchSummary FROM ${SCHEMA}.JournalEntryType`,
-  )).recordset as Array<{ ID: string; Code: string; IsBatchSummary: boolean }>;
+    `SELECT ID, Code, IsJournalEntryBatchSummary FROM ${SCHEMA}.JournalEntryType`,
+  )).recordset as Array<{ ID: string; Code: string; IsJournalEntryBatchSummary: boolean }>;
   const entryTypes = new Map(jetRows.map(r => [r.Code, r.ID]));
-  const missingSystem = ['Manual', 'Reversal', 'BatchSummary'].filter(c => !entryTypes.has(c));
+  const missingSystem = ['Manual', 'Reversal', 'JournalEntryBatchSummary'].filter(c => !entryTypes.has(c));
   if (missingSystem.length) {
     throw new Error(`JournalEntryType system rows missing: [${missingSystem.join(', ')}] — run mj sync push (metadata/journal-entry-types) before the live harness.`);
   }
   if (!entryTypes.has('OrderBooking')) {
     const obId = randomUUID();
     await pool.request().query(
-      `INSERT INTO ${SCHEMA}.JournalEntryType (ID, Code, Name, Description, IsSystem, IsBatchSummary, IsActive) ` +
+      `INSERT INTO ${SCHEMA}.JournalEntryType (ID, Code, Name, Description, IsSystem, IsJournalEntryBatchSummary, IsActive) ` +
       `VALUES ('${obId}','OrderBooking','Order Booking','Live-harness ensured orders-domain type (issue #24; bizapps-orders owns this row in production)',0,0,1)`);
     entryTypes.set('OrderBooking', obId);
   }
-  const batchSummaryTypeId = jetRows.find(r => r.IsBatchSummary)?.ID ?? entryTypes.get('BatchSummary')!;
+  const batchSummaryTypeId = jetRows.find(r => r.IsJournalEntryBatchSummary)?.ID ?? entryTypes.get('JournalEntryBatchSummary')!;
 
   return { pool, teardownPool, user: ctxUser, runTag, company, companyB, dimId, dimValSales, dimValMktg, entryTypes, batchSummaryTypeId, createdJEIds: [], createdBatchIds: [] };
 }

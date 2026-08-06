@@ -1,7 +1,10 @@
-import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, OnInit, OnDestroy } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, Input, OnInit, OnDestroy, ViewChild } from '@angular/core';
 import { UUIDsEqual, NormalizeUUID } from '@memberjunction/global';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
+import { RunViewParams } from '@memberjunction/core';
+import { GridColumnConfig, EntityDataGridComponent } from '@memberjunction/ng-entity-viewer';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
+import { rowKeyToId } from '../../../transfer-pending/list-scaffold/grid-row-key';
 import { CompanyScopeService } from '../../shared/company-scope.service';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import type { mjBizAppsAccountingGLAccountEntity } from '@mj-biz-apps/accounting-entities';
@@ -124,10 +127,39 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
   public LoadError: string | null = null;
 
   // --- filters (one line; search sits to the right of the drop-downs) ---
-  public FilterCompanyID = '';
+  /** MULTI-select company narrowing (Marcelo 2026-08-05): empty = no narrowing ("All companies"). */
+  public FilterCompanyIDs: string[] = [];
   public FilterAccountType = '';
   /** '' = any, 'Active' | 'Inactive'. */
   public FilterActive = '';
+
+  /** The checkbox-dropdown hands back the whole selection (client-side filter — no refetch needed). */
+  public OnFilterCompanyIDsChanged(ids: string[]): void {
+    this.FilterCompanyIDs = ids;
+    this.rebuildGridParams();
+  }
+
+  /** Currency rows shaped for the dropdown ("USD — US Dollar"). */
+  public get CurrencyChoices(): ReadonlyArray<{ Code: string; Label: string }> {
+    return this.CurrencyOptions.map((c) => ({ Code: c.Code, Label: `${c.Code} — ${c.Name}` }));
+  }
+
+  /** The editor dropdowns' empty-state rows (mj-dropdown DefaultItem = the '' sentinel each select had). */
+  public readonly OwningCompanyDefault = { ID: '', Name: 'Choose the owning company…' };
+  public readonly ParentNoneDefault = { ID: '', Label: 'None — top of the chart' };
+  public readonly CurrencyDefault = { Code: '', Label: 'Company’s functional currency' };
+
+  public readonly StatusChoices: ReadonlyArray<{ Label: string; Value: string }> = [
+    { Label: 'Active & inactive', Value: '' },
+    { Label: 'Active only', Value: 'Active' },
+    { Label: 'Inactive only', Value: 'Inactive' },
+  ];
+
+  public readonly SourceChoices: ReadonlyArray<{ Label: string; Value: string }> = [
+    { Label: 'Seeded & custom', Value: '' },
+    { Label: 'System-seeded', Value: 'Seeded' },
+    { Label: 'Custom', Value: 'Custom' },
+  ];
   /** '' = any, 'Seeded' = platform-shipped, 'Custom' = deployment customization. */
   public FilterSource = '';
   public SearchText = '';
@@ -159,15 +191,83 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
   /** Single-select semantics (matching the old Type select): re-clicking the active chip clears. */
   public OnTypeToggled(key: string): void {
     this.FilterAccountType = key === 'all' || this.FilterAccountType === key ? '' : key;
-    this.cdr.markForCheck();
+    this.rebuildGridParams();
   }
 
   public AdvancedOpen = false;
 
   /** Count pill on the Filters button — a hidden active filter must never silently shape the list. */
+  // ── the STANDARD MJ grid (Marcelo 2026-08-05) ─────────────────────────────────
+  /** Escape a value for an ExtraFilter literal (single quotes doubled). */
+  private sqlLit(v: string): string {
+    return v.replace(/'/g, "''");
+  }
+
+  /**
+   * The grid's query — the SAME predicate the old client-side filter applied, expressed as the
+   * entity view's ExtraFilter so the standard grid owns fetching/sorting/paging/state.
+   */
+  public GridParams: RunViewParams = { EntityName: GL_ENTITY };
+
+  /** The grid itself — needed because its Params setter DEEP-COMPARES and skips the refetch when
+   *  the rebuilt params are equivalent (same filters/search). After a save, the predicate hasn't
+   *  changed but the DATA has, so the refresh must be explicit. */
+  @ViewChild(EntityDataGridComponent) private grid?: EntityDataGridComponent;
+
+  public readonly GridColumns: GridColumnConfig[] = [
+    // Company first, always: an account only exists inside a company's chart.
+    { field: 'Company', title: 'Company', width: 180, sortable: true },
+    { field: 'Code', title: 'Code', width: 110, sortable: true },
+    { field: 'Name', title: 'Name', width: 'auto', maxWidth: 380, sortable: true },
+    { field: 'AccountType', title: 'Type', width: 110, sortable: true },
+    { field: 'CurrencyCode', title: 'Currency', width: 100, sortable: true },
+    { field: 'ExternalSystem', title: 'External system', width: 140, sortable: true },
+    { field: 'ExternalAccountID', title: 'External account ID', width: 160, sortable: true },
+    { field: 'IsActive', title: 'Active', type: 'boolean', width: 90, sortable: true },
+    { field: 'IsSystemSeeded', title: 'Seeded', type: 'boolean', width: 90, sortable: true },
+    { field: 'ID', title: 'ID', width: 280, sortable: true },
+  ];
+
+  /** Rebuild the grid predicate from the toolbar state. New object identity triggers a refetch. */
+  private rebuildGridParams(): void {
+    const parts: string[] = [];
+    if (this.FilterCompanyIDs.length) parts.push(`CompanyID IN (${this.FilterCompanyIDs.map((id) => `'${this.sqlLit(id)}'`).join(',')})`);
+    if (this.FilterAccountType) parts.push(`AccountType='${this.sqlLit(this.FilterAccountType)}'`);
+    if (this.FilterActive) parts.push(`IsActive=${this.FilterActive === 'Active' ? 1 : 0}`);
+    if (this.FilterSource) parts.push(`IsSystemSeeded=${this.FilterSource === 'Seeded' ? 1 : 0}`);
+    const q = this.SearchText.trim();
+    if (q) {
+      const like = this.sqlLit(q);
+      parts.push(`(Name LIKE '%${like}%' OR Code LIKE '%${like}%' OR CAST(ID AS NVARCHAR(50)) LIKE '%${like}%')`);
+    }
+    const scope = this.Scope.FilterFor('CompanyID');
+    if (scope) parts.push(scope);
+    this.GridParams = {
+      EntityName: GL_ENTITY,
+      ExtraFilter: parts.length ? parts.join(' AND ') : undefined,
+      OrderBy: 'Company ASC, Code ASC',
+    };
+    this.cdr.markForCheck();
+  }
+
+  /** Status/Source dropdowns re-query the grid like every other filter edit. */
+  public OnStatusOrSourceChanged(): void {
+    this.rebuildGridParams();
+  }
+
+  /** Row click = edit (the per-row Edit button retired with the hand-rolled table). The grid's
+   *  rowKey is a CompositeKey concatenated string ('ID|<uuid>'), not a bare ID — parse it (same
+   *  lesson the JE detail panel learned; see rowKeyToId). */
+  public OnGridRowClicked(rowKey: string): void {
+    const id = rowKeyToId(rowKey);
+    if (!id) return;
+    const row = this.Rows.find((r) => UUIDsEqual(r.ID, id));
+    if (row) this.StartEdit(row);
+  }
+
   public get AdvancedCount(): number {
     let n = 0;
-    if (this.FilterCompanyID) n++;
+    if (this.FilterCompanyIDs.length) n++;
     if (this.FilterActive) n++;
     if (this.FilterSource) n++;
     return n;
@@ -176,7 +276,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
   /** Client-side filtering — instant, no debounce needed. */
   public OnToolbarSearch(text: string): void {
     this.SearchText = text;
-    this.cdr.markForCheck();
+    this.rebuildGridParams();
   }
 
   // --- editor ---
@@ -188,6 +288,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
 
   ngOnInit(): void {
     this.refreshSub = this.pageRefresh.OnRefresh(() => this.Refresh());
+    this.rebuildGridParams(); // the grid queries immediately; the engine rows load alongside
     void this.load();
   }
 
@@ -198,6 +299,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
 
   public Refresh(): void {
     void this.load(true);
+    void this.grid?.Refresh(); // header Refresh must refetch the grid too — unchanged params won't
   }
 
   // ------------------------------------------------------------------ filtering
@@ -212,7 +314,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
    * visible) so an ID pasted from a log or a deep link still finds its row.
    */
   private matchesFilters(r: AccountRow, q: string): boolean {
-    if (this.FilterCompanyID && !UUIDsEqual(r.CompanyID, this.FilterCompanyID)) return false;
+    if (this.FilterCompanyIDs.length && !this.FilterCompanyIDs.some((id) => UUIDsEqual(r.CompanyID, id))) return false;
     if (this.FilterAccountType && r.AccountType !== this.FilterAccountType) return false;
     if (this.FilterActive === 'Active' && !r.IsActive) return false;
     if (this.FilterActive === 'Inactive' && r.IsActive) return false;
@@ -223,12 +325,12 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
   }
 
   public ClearFilters(): void {
-    this.FilterCompanyID = '';
+    this.FilterCompanyIDs = [];
     this.FilterAccountType = '';
     this.FilterActive = '';
     this.FilterSource = '';
     this.SearchText = '';
-    this.cdr.markForCheck();
+    this.rebuildGridParams();
   }
 
   public get OrphanCount(): number {
@@ -242,13 +344,23 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
 
   // ------------------------------------------------------------------ editor
 
+  /** Monotonic counter from the category header's "New account" verb — each bump opens the editor. */
+  private _createSignal = 0;
+  @Input() set CreateSignal(v: number) {
+    if (v > this._createSignal) {
+      this._createSignal = v;
+      this.StartCreate();
+    }
+  }
+
   public StartCreate(): void {
     // An account cannot exist outside a company's chart, so the company is a REQUIRED first choice,
     // not an optional afterthought. Pre-pick only when the choice is unambiguous.
     const only = this.CompanyOptions.length === 1 ? this.CompanyOptions[0].ID : '';
     this.Draft = {
       ID: null,
-      CompanyID: this.FilterCompanyID || only,
+      // Pre-pick the filtered company only when the filter narrows to EXACTLY one — else unambiguous-only.
+      CompanyID: (this.FilterCompanyIDs.length === 1 ? this.FilterCompanyIDs[0] : '') || only,
       Code: '',
       Name: '',
       AccountType: 'Asset',
@@ -369,6 +481,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
 
       this.Draft = null;
       await this.load(true);
+      void this.grid?.Refresh(); // params are unchanged post-save (deep-equal → setter skips), so refetch explicitly
     } catch (e) {
       this.EditorError = this.friendlySaveError(e instanceof Error ? e.message : String(e), 'The account could not be saved.');
     } finally {
@@ -451,6 +564,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
         return;
       }
       await this.load(true);
+      void this.grid?.Refresh(); // params are unchanged post-save (deep-equal → setter skips), so refetch explicitly
     } catch (e) {
       this.LoadError = e instanceof Error ? e.message : String(e);
     } finally {

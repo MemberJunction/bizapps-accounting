@@ -38,7 +38,7 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
     };
 
     const batchInfo = createMockEntity(BATCH_ENTITY, [
-      'ID', 'BatchNumber', 'CompanyID', 'PostingDate', 'SummaryJournalEntryID', 'TargetSystem',
+      'ID', 'JournalEntryBatchNumber', 'CompanyID', 'PostingDate', 'SummaryJournalEntryID', 'TargetSystem',
       'BatchedAt', 'BatchedByUserID', 'Status', 'TotalEntries', 'TotalDebits', 'TotalCredits',
       'ApprovedAt', 'ApprovedByUserID',
     ]);

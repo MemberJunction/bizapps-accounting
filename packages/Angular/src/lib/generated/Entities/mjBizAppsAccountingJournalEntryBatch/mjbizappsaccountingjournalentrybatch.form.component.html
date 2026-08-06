@@ -20,7 +20,7 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="BatchNumber"
+            FieldName="JournalEntryBatchNumber"
             Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
@@ -111,7 +111,7 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="ExternalBatchRef"
+            FieldName="ExternalJournalEntryBatchRef"
             Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
@@ -212,7 +212,7 @@
         @if (record.IsSaved) {
         <div>
             <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entries','BatchID')"
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entries','JournalEntryBatchID')"
                 [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entries')"
                 [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntries')"
                 [ShowToolbar]="false"

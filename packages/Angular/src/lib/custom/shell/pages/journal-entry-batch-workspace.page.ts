@@ -7,26 +7,26 @@ import { CompanyScopeService } from '../../shared/company-scope.service';
 import { WorkspaceTabStore } from '../../../transfer-pending/workspace-tabs/workspace-tab-store';
 import { WorkspaceTab } from '../../../transfer-pending/workspace-tabs/workspace-tabs.types';
 import {
-  BatchWorkspaceClient,
-  type BatchCriteria,
+  JournalEntryBatchWorkspaceClient,
+  type JournalEntryBatchCriteria,
   type BatchPreview,
   type EntryTypeScope,
-  type BatchTargetSystem,
-} from './batch-workspace.client';
+  type JournalEntryBatchTargetSystem,
+} from './journal-entry-batch-workspace.client';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 
 /** One workspace tab's session state — the draft the operator is composing. */
 interface BatchDraft {
-  Criteria: BatchCriteria;
+  Criteria: JournalEntryBatchCriteria;
   /** Optional free-text label (JournalEntryBatch.Memo) — "what was this batch for". NOT identity
-   *  (BatchNumber is); purely for findability. Editable pre-build, and it drives the tab caption. */
+   *  (JournalEntryBatchNumber is); purely for findability. Editable pre-build, and it drives the tab caption. */
   Memo: string;
   /** Ids the operator has UN-ticked. Kept as the exclusion set (not the inclusion set) so newly
    *  appearing candidates default to INCLUDED, which is what an oldest-forward sweep means. */
   ExcludedIDs: string[];
   /** Set once built — the tab becomes a read-only record of the batch. */
-  BuiltBatchNumber?: string;
+  BuiltJournalEntryBatchNumber?: string;
   /** The loaded preview — stored PER-TAB so switching tabs does NOT re-query the server (Marcelo
    *  2026-07-21). Null until the operator clicks Load / Apply (the query is deferred, never automatic). */
   Preview?: BatchPreview | null;
@@ -43,18 +43,18 @@ interface BatchDraft {
  * systems), preview right with include/exclude, the MOD-8 out-of-order warning, a live Dr = Cr
  * strip with per-company subtotals, and session tabs.
  *
- * Everything server-side goes through the `Accounting.PreviewBatch` / `Accounting.BuildBatch`
+ * Everything server-side goes through the `Accounting.PreviewJournalEntryBatch` / `Accounting.BuildJournalEntryBatch`
  * Remote Operations — the preview runs the SAME candidate filter and netting the build runs, so
  * what you see is what you get.
  */
 @Component({
   standalone: false,
   selector: 'mj-batch-workspace-page',
-  templateUrl: './batch-workspace.page.html',
-  styleUrls: ['./shell-table.css', './batch-workspace.page.css'],
+  templateUrl: './journal-entry-batch-workspace.page.html',
+  styleUrls: ['./shell-table.css', './journal-entry-batch-workspace.page.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class BatchWorkspacePageComponent extends BaseAngularComponent implements OnInit, OnDestroy {
+export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponent implements OnInit, OnDestroy {
   private cdr = inject(ChangeDetectorRef);
   /** The shell header's Refresh reaches this page only while it is the mounted one. */
   private pageRefresh = inject(PageRefreshService);
@@ -62,7 +62,7 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
   public Scope = inject(CompanyScopeService);
 
   private tabs = new WorkspaceTabStore<BatchDraft>();
-  private client = new BatchWorkspaceClient();
+  private client = new JournalEntryBatchWorkspaceClient();
 
   /** The active tab's loaded preview (per-tab, so tab switches don't re-query). Null until Load/Apply. */
   public get Preview(): BatchPreview | null {
@@ -88,13 +88,20 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
    * not exist server-side (see je-rules.awaitsApproval / QUESTIONS.md#q6), so 'All' really does mean
    * every Pending entry, manual ones included. Label says what the build does.
    */
+  /** Dropdown sentinel + choice rows (were inline <option>s). */
+  public readonly AllCompaniesDefault = { ID: null, Name: 'All companies' };
+  public readonly SourceChoices: ReadonlyArray<{ Label: string; Value: string }> = [
+    { Label: 'Standard (oldest-forward)', Value: 'Standard' },
+    { Label: 'From a saved view…', Value: 'View' },
+  ];
+
   public readonly EntryTypeScopes: ReadonlyArray<{ Id: EntryTypeScope; Label: string }> = [
     { Id: 'All', Label: 'All (system + manual)' },
     { Id: 'System', Label: 'System only' },
     { Id: 'Manual', Label: 'Manual only' },
   ];
 
-  public readonly TargetSystems: readonly BatchTargetSystem[] = ['BusinessCentral'];
+  public readonly TargetSystems: readonly JournalEntryBatchTargetSystem[] = ['BusinessCentral'];
 
   ngOnInit(): void {
     this.refreshSub = this.pageRefresh.OnRefresh(() => this.Refresh());
@@ -114,31 +121,31 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
   /**
    * An existing batch to open as a read-only record tab — the target of the batch detail panel's
    * "Open in workspace". The category passes its `PageParam` here (GoToPage('workspace', id)). The
-   * tab uses the same `BuiltBatchNumber` receipt mode a just-built batch gets: viewing where
+   * tab uses the same `BuiltJournalEntryBatchNumber` receipt mode a just-built batch gets: viewing where
    * batches live, never editing a built batch.
    */
   @Input()
-  set FocusBatchID(value: string | null) {
-    if (!value || value === this._focusBatchID) return;
-    this._focusBatchID = value;
+  set FocusJournalEntryBatchID(value: string | null) {
+    if (!value || value === this._focusJournalEntryBatchID) return;
+    this._focusJournalEntryBatchID = value;
     if (this.initialized) void this.openExistingBatch(value);
     else this.pendingFocusID = value;
   }
-  get FocusBatchID(): string | null {
-    return this._focusBatchID;
+  get FocusJournalEntryBatchID(): string | null {
+    return this._focusJournalEntryBatchID;
   }
-  private _focusBatchID: string | null = null;
+  private _focusJournalEntryBatchID: string | null = null;
   private pendingFocusID: string | null = null;
   private initialized = false;
 
   /** Load the batch and open it as a locked record tab labeled by batch number. */
   private async openExistingBatch(id: string): Promise<void> {
     const rv = RunView.FromMetadataProvider(this.ProviderToUse);
-    const res = await rv.RunView<{ ID: string; BatchNumber: string; Memo: string | null }>(
+    const res = await rv.RunView<{ ID: string; JournalEntryBatchNumber: string; Memo: string | null }>(
       {
         EntityName: 'MJ_BizApps_Accounting: Journal Entry Batches',
         ExtraFilter: `ID='${id}'`,
-        Fields: ['ID', 'BatchNumber', 'Memo'],
+        Fields: ['ID', 'JournalEntryBatchNumber', 'Memo'],
         ResultType: 'simple',
       },
       this.ProviderToUse.CurrentUser,
@@ -150,7 +157,7 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
     }
     this.tabs.Open({
       Id: `batch-view-${id}`,
-      Label: row.BatchNumber,
+      Label: row.JournalEntryBatchNumber,
       Icon: 'fa-solid fa-layer-group',
       Status: 'complete', // read-only record — a built batch is immutable from here
       State: {
@@ -159,7 +166,7 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
         Memo: row.Memo ?? '',
         Preview: null,
         PreviewStale: false,
-        BuiltBatchNumber: row.BatchNumber,
+        BuiltJournalEntryBatchNumber: row.JournalEntryBatchNumber,
       },
     });
     this.cdr.markForCheck();
@@ -177,14 +184,14 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
     return this.tabs.ActiveTab?.State ?? null;
   }
   public get IsBuilt(): boolean {
-    return !!this.Draft?.BuiltBatchNumber;
+    return !!this.Draft?.BuiltJournalEntryBatchNumber;
   }
 
   public openNewDraft(): void {
     const id = `draft-${this.tabs.Count + 1}-${Date.now()}`;
     this.tabs.Open({
       Id: id,
-      Label: 'New batch (draft)',
+      Label: 'New JE batch (draft)',
       Icon: 'fa-solid fa-pen-ruler',
       Status: 'draft',
       State: { Criteria: this.defaultCriteria(), ExcludedIDs: [], Memo: '', Preview: null, PreviewStale: false },
@@ -198,13 +205,13 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
 
   /**
    * The tab caption. Human fields lead: a typed memo IS the caption; else the built batch number;
-   * else a plain "New batch". BatchNumber stays the batch's identity — the memo only makes the tab
+   * else a plain "New batch". JournalEntryBatchNumber stays the batch's identity — the memo only makes the tab
    * (and later the All-Batches list) findable by a phrase the operator remembers.
    */
   private batchTabLabel(d: BatchDraft): string {
     const memo = d.Memo?.trim();
     if (memo) return memo;
-    return d.BuiltBatchNumber?.trim() || 'New batch';
+    return d.BuiltJournalEntryBatchNumber?.trim() || 'New JE batch';
   }
 
   /**
@@ -253,7 +260,7 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
 
   // ─── criteria ──────────────────────────────────────────────────────────────
 
-  private defaultCriteria(): BatchCriteria {
+  private defaultCriteria(): JournalEntryBatchCriteria {
     return {
       // "Include unbatched through [now]" — the §2 default flow.
       Cutoff: this.toLocalInput(new Date()),
@@ -357,7 +364,7 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
     if (scope === 'All') return null; // no clause
     if (scope === 'Manual') return ['Manual'];
     const all = AccountingEngineBase.Instance.JournalEntryTypes
-      .filter((t) => t.IsActive && !t.IsBatchSummary)
+      .filter((t) => t.IsActive && !t.IsJournalEntryBatchSummary)
       .map((t) => t.Code);
     return all.filter((c) => c !== 'Manual');
   }
@@ -430,7 +437,7 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
       const res = await this.client.Build(this.opProvider, d.Criteria, this.includedIds(d) ?? []);
 
       // A selection spanning companies builds one batch per company (D7) — show them all.
-      d.BuiltBatchNumber = res.BatchIDs.join(', ');
+      d.BuiltJournalEntryBatchNumber = res.JournalEntryBatchIDs.join(', ');
       if (this.tabs.ActiveId) {
         this.tabs.UpdateState(this.tabs.ActiveId, d, false);
         this.tabs.SetStatus(this.tabs.ActiveId, 'complete');
@@ -439,7 +446,7 @@ export class BatchWorkspacePageComponent extends BaseAngularComponent implements
       }
       // On confirm, refresh to a FRESH tab (Marcelo 2026-07-21) — the built batch stays in its own
       // read-only tab for review while a new draft is ready. (openNewDraft clears messages; set after.)
-      const builtNumber = d.BuiltBatchNumber;
+      const builtNumber = d.BuiltJournalEntryBatchNumber;
       const taskRaised = res.ApprovalTaskRaised;
       this.openNewDraft();
       this.ActionMessage = taskRaised

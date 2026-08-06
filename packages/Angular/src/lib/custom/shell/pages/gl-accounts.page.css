@@ -74,73 +74,7 @@
   color: var(--mj-text-secondary);
 }
 
-/* --- the list ---
-   A REAL bounded height + overflow-y:auto is what makes the sticky header work: `position: sticky`
-   only sticks inside a scrolling ancestor. Both axes are set explicitly, because per the CSS spec a
-   `visible` axis paired with a non-`visible` one computes to `auto` anyway. */
-.gla-wrap {
-  border: 1px solid var(--mj-border-default);
-  border-radius: 10px;
-  background: var(--mj-bg-surface);
-}
-.gla-grid {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12.5px;
-}
-.gla-grid th,
-.gla-grid td {
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--mj-border-subtle, var(--mj-border-default));
-  text-align: left;
-  white-space: nowrap;
-}
-.gla-grid thead th {
-  position: sticky;
-  top: 0;
-  background: var(--mj-bg-surface-card);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--mj-text-muted);
-  z-index: 1;
-}
-.gla-row--inactive td {
-  color: var(--mj-text-muted);
-}
-.gla-mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-.gla-code {
-  display: inline-block;
-}
-/* The arrow that says "this account rolls up into the one above" — otherwise ParentGLAccountID is
-   invisible and the indentation reads as decoration. */
-.gla-rollup {
-  font-size: 0.7em;
-  opacity: 0.45;
-  margin-right: 4px;
-}
-.gla-flag {
-  margin-left: 6px;
-  color: var(--mj-status-warning);
-}
-.gla-id {
-  font-size: 11px;
-  color: var(--mj-text-muted);
-}
-.gla-actions {
-  display: flex;
-  gap: 6px;
-}
-.gla-empty {
-  padding: 20px;
-  text-align: center;
-  color: var(--mj-text-muted);
-  font-style: italic;
-}
-
-/* The fused subheader (list-page standard) + the rounded table card, matching All JEs / batches. */
+/* The fused subheader (list-page standard) + the rounded grid card, matching All JEs / batches. */
 .gla-subheader {
   background: var(--mj-bg-surface);
   border: 1px solid var(--mj-border-default);
@@ -152,6 +86,14 @@
   border-top: 1px solid var(--mj-border-default);
 }
 .gla-wrap {
+  /* Same height chain as .aje-grid (the list idiom this page clones): mj-entity-data-grid's :host
+     is height:100%, so the wrapper MUST have real height or the grid collapses to its borders
+     (~4px) and AG Grid's rows are clipped invisible + unclickable. .gla-body is a flex column with
+     a definite height, so flex sizing is legal here. overflow:hidden rounds the grid to the card. */
+  flex: 1 1 auto;
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
   background: var(--mj-bg-surface);
   border: 1px solid var(--mj-border-default);
   border-radius: var(--mj-radius-lg);

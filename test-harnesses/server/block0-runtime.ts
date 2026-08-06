@@ -20,7 +20,7 @@
  *        (Period generation was RETIRED — no AccountingPeriod rows exist to assert.)
  *   W2  JournalEntry numbering (JournalEntryEntityServer): EntryNumber = JE-{FY}-{seq:000000}
  *        (GLOBAL per-fiscal-year sequence; two saves in one FY are strictly increasing)
- *   W3  JournalEntryBatch numbering (JournalEntryBatchEntityServer): BatchNumber = BATCH-{seq:000000}
+ *   W3  JournalEntryBatch numbering (JournalEntryBatchEntityServer): JournalEntryBatchNumber = BATCH-{seq:000000}
  *        (GLOBAL singleton sequence; two saves are strictly increasing)
  *
  * Everything created is torn down in a finally block (raw SQL — JEs/batches by tracked ID,
@@ -296,7 +296,7 @@ async function main(): Promise<void> {
   });
 
   // ─── W3 — batch numbering (still the GLOBAL singleton sequence; ⚠ DR-5: the column
-  // description promises BATCH-{CompanyCode}-{seq} but spAssignNextBatchNumber emits the
+  // description promises BATCH-{CompanyCode}-{seq} but spAssignNextJournalEntryBatchNumber emits the
   // global BATCH-{seq} — asserted here as the sproc actually behaves; see plans/donor-audit.md) ──
   const makeBatch = async (): Promise<mjBizAppsAccountingJournalEntryBatchEntity> => {
     const batch = await md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, user);
@@ -317,18 +317,18 @@ async function main(): Promise<void> {
   };
 
   let firstBatchSeq = 0;
-  await test('W3.1 JournalEntryBatch gets BatchNumber BATCH-{seq:000000} (global singleton sproc — DR-5 notes the description/sproc mismatch)', async () => {
+  await test('W3.1 JournalEntryBatch gets JournalEntryBatchNumber BATCH-{seq:000000} (global singleton sproc — DR-5 notes the description/sproc mismatch)', async () => {
     const batch = await makeBatch();
-    const num = batch.BatchNumber;
+    const num = batch.JournalEntryBatchNumber;
     const re = /^BATCH-\d{6}$/;
-    assert(re.test(num), `BatchNumber '${num}' does not match ${re}`);
+    assert(re.test(num), `JournalEntryBatchNumber '${num}' does not match ${re}`);
     firstBatchSeq = sequencePart(num);
   });
 
   await test('W3.2 second batch gets a strictly higher global sequence', async () => {
     const batch = await makeBatch();
-    const seq = sequencePart(batch.BatchNumber);
-    assert(seq > firstBatchSeq, `expected sequence > ${firstBatchSeq}, got ${seq} ('${batch.BatchNumber}')`);
+    const seq = sequencePart(batch.JournalEntryBatchNumber);
+    assert(seq > firstBatchSeq, `expected sequence > ${firstBatchSeq}, got ${seq} ('${batch.JournalEntryBatchNumber}')`);
   });
 
   // ─── Teardown — best-effort, FK-aware order ───────────────────────────────

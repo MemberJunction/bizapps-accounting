@@ -57,7 +57,7 @@ on every substantive change. (The Vitest unit tier is separate: pure logic, no D
    (including reversal JEs + every batch a tracked JE references) and delete by ID list.
    Keeps runs idempotent and lets you identify/purge orphans from a crashed run.
 
-7b. **buildBatch is GLOBAL — assert zero stray Pending JEs at bootstrap.** Any leftover Pending
+7b. **buildJournalEntryBatch is GLOBAL — assert zero stray Pending JEs at bootstrap.** Any leftover Pending
    JE gets swept into your test's batch and corrupts exact-value assertions. Every batching
    harness/fixture fails fast on `SELECT COUNT(*) … WHERE Status='Pending' > 0`.
 

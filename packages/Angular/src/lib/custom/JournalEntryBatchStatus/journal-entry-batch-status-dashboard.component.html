@@ -1,11 +1,11 @@
 <mj-page-layout>
   <mj-page-header
-    Title="Batch Status"
+    Title="JE Batch Status"
     Icon="fa-solid fa-list-check"
-    Subtitle="Journal-entry batches — filter, sort, and expand a batch to see its consolidated posting (debits first, then credits) by company and account">
+    Subtitle="Journal entry batches — filter, sort, and expand one to see its consolidated posting (debits first, then credits) by company and account">
 
     <div meta>
-      <mj-stat-badge Icon="fa-solid fa-layer-group" [Count]="FilteredCount" Label="batches" Variant="info" />
+      <mj-stat-badge Icon="fa-solid fa-layer-group" [Count]="FilteredCount" Label="JE batches" Variant="info" />
       @for (s of StatusOptions; track s) {
         @if (statusCount(s) > 0) {
           <mj-stat-badge [Count]="statusCount(s)" [Label]="s" [Variant]="BadgeVariant(s)" />
@@ -14,7 +14,6 @@
     </div>
 
     <div actions>
-      <mj-refresh-button [Loading]="IsLoading" (Clicked)="Reload()"></mj-refresh-button>
       <button mjButton variant="primary" size="sm" [disabled]="Building" (click)="OpenBuildPreview()">
         <i class="fa-solid fa-layer-group"></i> Build Batch
       </button>
@@ -30,17 +29,20 @@
         </div>
         <label class="bs-field">
           <span class="bs-field__label">Company</span>
-          <select class="mj-input" [value]="SelectedCompanyID ?? ''" (change)="OnCompanyChange($any($event.target).value)">
-            <option value="">All companies</option>
-            @for (co of Companies; track co.ID) { <option [value]="co.ID">{{ co.Name }}</option> }
-          </select>
+          <!-- CHECKBOX multi-select (Marcelo 2026-08-05): narrow to any set of companies; empty = all. -->
+          <mja-check-dropdown
+            [Options]="Companies"
+            [SelectedIDs]="SelectedCompanyIDs"
+            AllLabel="All companies"
+            AriaLabel="Company"
+            (SelectedIDsChange)="OnCompanyIDsChanged($event)" />
         </label>
         <label class="bs-field">
           <span class="bs-field__label">Target ERP</span>
-          <select class="mj-input" [value]="SelectedTarget ?? ''" (change)="OnTargetChange($any($event.target).value)">
-            <option value="">All systems</option>
-            @for (t of TargetOptions; track t) { <option [value]="t">{{ t }}</option> }
-          </select>
+          <mj-dropdown [Data]="TargetChoices" TextField="Label" ValueField="Value" [ValuePrimitive]="true"
+            [DefaultItem]="AllSystemsDefault"
+            [ngModel]="SelectedTarget" (ngModelChange)="OnTargetChange($event ?? '')"
+            aria-label="Target ERP" />
         </label>
         <label class="bs-field">
           <span class="bs-field__label">From</span>
@@ -76,8 +78,8 @@
     } @else if (LoadError) {
       <div class="bs-banner bs-banner--error" role="alert"><i class="fa-solid fa-triangle-exclamation"></i> {{ LoadError }}</div>
     } @else if (FilteredBatches.length === 0) {
-      <mj-empty-state Icon="fa-solid fa-inbox" Title="No batches"
-        Message="No journal-entry batches match the current filters. Build Batch nets all pending journal entries into a new batch.">
+      <mj-empty-state Icon="fa-solid fa-inbox" Title="No journal entry batches"
+        Message="No journal entry batches match the current filters. Build JE batch nets all pending journal entries into a new one.">
       </mj-empty-state>
     } @else {
       <div class="bs-table-region">
@@ -110,7 +112,7 @@
                 <td class="bs-num">{{ row.TotalDebits | number:'1.2-2' }}</td>
                 <td class="bs-num">{{ row.TotalCredits | number:'1.2-2' }}</td>
                 <td>{{ row.BatchedAt ? (row.BatchedAt | date:'yyyy-MM-dd HH:mm') : '—' }}</td>
-                <td class="bs-ref">{{ row.ExternalBatchRef ?? '—' }}</td>
+                <td class="bs-ref">{{ row.ExternalJournalEntryBatchRef ?? '—' }}</td>
               </tr>
               @if (row.Expanded) {
                 <tr class="bs-detail-row">
@@ -119,7 +121,7 @@
                       @if (row.DetailLoading) {
                         <mj-loading text="Loading entries…" size="small"></mj-loading>
                       } @else if (!row.Detail || row.Detail.Lines.length === 0) {
-                        <div class="bs-detail__empty">This batch has no consolidated movements.</div>
+                        <div class="bs-detail__empty">This journal entry batch has no consolidated movements.</div>
                       } @else {
                         <table class="bs-detail-table">
                           <thead>
@@ -162,7 +164,7 @@
 </mj-page-layout>
 
 <!-- Build-Batch preview: shows the time span + the journal entries a build will include, then confirms. -->
-<mj-dialog [Visible]="BuildPreviewVisible" Title="Build Batch — preview" [Width]="640" (Close)="CloseBuildPreview()">
+<mj-dialog [Visible]="BuildPreviewVisible" Title="Build JE batch — preview" [Width]="640" (Close)="CloseBuildPreview()">
   <div class="bs-preview">
     @if (PreviewLoading) {
       <mj-loading text="Gathering candidate journal entries…" size="small"></mj-loading>
@@ -170,9 +172,9 @@
       <div class="bs-preview__head">
         <label class="bs-field">
           <span class="bs-field__label">Target ERP</span>
-          <select class="mj-input" [value]="BuildTarget" (change)="OnBuildTargetChange($any($event.target).value)">
-            @for (t of TargetOptions; track t) { <option [value]="t">{{ t }}</option> }
-          </select>
+          <mj-dropdown [Data]="TargetOptions" [ValuePrimitive]="true"
+            [ngModel]="BuildTarget" (ngModelChange)="OnBuildTargetChange($event)"
+            aria-label="Build target system" />
         </label>
         <div class="bs-preview__facts">
           <div><span class="bs-field__label">Covers</span>
@@ -212,9 +214,9 @@
   </div>
 
   <mj-dialog-actions>
-    <button mjButton variant="primary" size="sm" [disabled]="Building || PreviewLoading || PreviewCount === 0" (click)="OnBuildBatch()">
+    <button mjButton variant="primary" size="sm" [disabled]="Building || PreviewLoading || PreviewCount === 0" (click)="OnBuildJournalEntryBatch()">
       @if (Building) { <i class="fa-solid fa-spinner fa-spin"></i> Building… }
-      @else { <i class="fa-solid fa-layer-group"></i> Build batch ({{ PreviewCount }}) }
+      @else { <i class="fa-solid fa-layer-group"></i> Build JE batch ({{ PreviewCount }}) }
     </button>
     <button mjButton variant="flat" size="sm" [disabled]="Building" (click)="CloseBuildPreview()">Cancel</button>
   </mj-dialog-actions>

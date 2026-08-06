@@ -7,7 +7,7 @@
  * within each company. These tests pin the behavior the live harness then proves end-to-end.
  */
 import { describe, it, expect } from 'vitest';
-import { netLines, type NettableLine } from '../BatchingEngine.js';
+import { netLines, type NettableLine } from '../JournalEntryBatchEngine.js';
 
 const GL_A = 'aaaaaaaa-0000-0000-0000-000000000001';
 const GL_B = 'bbbbbbbb-0000-0000-0000-000000000002';
@@ -75,7 +75,7 @@ describe('netLines (pure batch summarization)', () => {
     const creditTotal = groups.filter(g => g.side === 'Credit').reduce((s, g) => s - g.net, 0);
     expect(debitTotal).toBe(140);
     expect(creditTotal).toBe(140);
-    expect(debitTotal).toBe(creditTotal); // foots → trg_JEBatch_SummaryReconciles (50014) will pass
+    expect(debitTotal).toBe(creditTotal); // foots → trg_JournalEntryBatch_SummaryReconciles (50014) will pass
   });
 
   it('separates the SAME account into distinct groups by COMPANY (multi-company batches, CH-4)', () => {

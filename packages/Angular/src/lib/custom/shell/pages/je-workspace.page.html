@@ -61,12 +61,9 @@
             <span>Company</span>
             <!-- Scopes the account picker only. The engine derives the entry's company from the
                  lines' accounts (MOD-12), so this is never sent. -->
-            <select class="mj-input" [(ngModel)]="d.CompanyID" (ngModelChange)="OnCompanyChanged()">
-              <option [ngValue]="null">Pick a company…</option>
-              @for (c of Companies; track c.ID) {
-                <option [ngValue]="c.ID">{{ c.Name }}</option>
-              }
-            </select>
+            <mj-dropdown [Data]="Companies" TextField="Name" ValueField="ID" [ValuePrimitive]="true"
+              [DefaultItem]="CompanyPickDefault"
+              [(ngModel)]="d.CompanyID" (ngModelChange)="OnCompanyChanged()" aria-label="Company" />
           </label>
 
           <label class="jew__field">
@@ -114,31 +111,25 @@
               @for (line of d.Lines; track line.Key; let i = $index) {
                 <tr [class.jew__row--bad]="LineIssue(line) || EngineLineError(i)">
                   <td>
-                    <select
-                      class="mj-input"
+                    <mj-dropdown
+                      [Data]="AccountOptions" TextField="Label" ValueField="ID" [ValuePrimitive]="true"
+                      [DefaultItem]="AccountPickDefault"
                       [(ngModel)]="line.GLAccountID"
                       (ngModelChange)="touch()"
                       [mjTip]="AccountLabel(line.GLAccountID)"
                       [mjTipAlways]="true"
-                      [disabled]="IsCreated || !d.CompanyID">
-                      <option [ngValue]="null">Pick an account…</option>
-                      @for (a of AccountOptions; track a.ID) {
-                        <option [ngValue]="a.ID">{{ a.Label }}</option>
-                      }
-                    </select>
+                      [Disabled]="IsCreated || !d.CompanyID"
+                      aria-label="Account" />
                   </td>
                   @for (dim of DimensionColumns; track dim.ID) {
                     <td>
-                      <select
-                        class="mj-input"
+                      <mj-dropdown
+                        [Data]="dim.Values" TextField="Label" ValueField="ID" [ValuePrimitive]="true"
+                        [DefaultItem]="DimensionNoneDefault"
                         [ngModel]="DimensionValueFor(line, dim.ID)"
                         (ngModelChange)="SetDimensionValue(line, dim.ID, $event)"
-                        [disabled]="IsCreated">
-                        <option [ngValue]="null">—</option>
-                        @for (v of dim.Values; track v.ID) {
-                          <option [ngValue]="v.ID">{{ v.Label }}</option>
-                        }
-                      </select>
+                        [Disabled]="IsCreated"
+                        [attr.aria-label]="dim.Name" />
                     </td>
                   }
                   <td class="num">

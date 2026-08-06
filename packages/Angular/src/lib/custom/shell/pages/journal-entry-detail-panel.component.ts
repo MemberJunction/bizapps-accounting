@@ -31,7 +31,7 @@ export interface JEDetailHeader {
   /** Denormalized company name carried by vwJournalEntries — no lookup needed. */
   Company: string;
   OrderID: string | null;
-  BatchID: string | null;
+  JournalEntryBatchID: string | null;
   ReversedByJournalEntryID: string | null;
   ReversesJournalEntryID: string | null;
   /** datetimeoffset — an INSTANT. Rendered in the viewer's local zone. */
@@ -136,8 +136,10 @@ export class JournalEntryDetailPanelComponent extends BaseAngularComponent {
   @Output() Changed = new EventEmitter<void>();
   /**
    * "Open in workspace" — carries the entry ID; the host routes it to the JE workspace page via the
-   * category's `GoToPage('workspace', id)`. Same close-as-you-leave rule as PopOut: the workspace is
-   * the destination, so this panel gets out of the way.
+   * category's `GoToPage('workspace', id)`. Close-as-you-leave: the workspace is the destination,
+   * so this panel gets out of the way. This is the panel's ONE open action (Marcelo 2026-08-05):
+   * the old "Open full" pop-out to the MJ form host was removed — the workspace IS the full-depth
+   * home for an entry, so two open verbs were one too many.
    */
   @Output() OpenInWorkspace = new EventEmitter<string>();
 
@@ -150,7 +152,7 @@ export class JournalEntryDetailPanelComponent extends BaseAngularComponent {
 
   public Header: JEDetailHeader | null = null;
   public Lines: JEDetailLine[] = [];
-  public BatchNumber: string | null = null;
+  public JournalEntryBatchNumber: string | null = null;
   public ReversalEntryNumber: string | null = null;
   public ReversesEntryNumber: string | null = null;
 
@@ -207,27 +209,8 @@ export class JournalEntryDetailPanelComponent extends BaseAngularComponent {
   }
 
   /**
-   * Pop-out (↗) to the entry's full-depth home — the MJ form host.
-   *
-   * **The panel closes as part of opening it** (GUI feedback 2026-07-16): the slide-in sits ABOVE
-   * the main screen, so leaving it open meant "Open full" opened the full entry *behind* the panel
-   * that hid it. Opening the full record and staying open is never the intent — the end state is
-   * the full record, unobstructed.
-   */
-  public PopOut(): void {
-    if (!this.Header) return;
-    openBizDetail(this.forms, {
-      entityName: JE_ENTITY,
-      primaryKey: CompositeKey.FromID(this.Header.ID),
-      title: `Journal entry ${this.Header.EntryNumber}`,
-      mode: 'dialog',
-    });
-    this.Closed.emit();
-  }
-
-  /**
    * Cross-app deep link to the order that booked this entry (the GUI-review navigation fix).
-   * Same rule as PopOut: we hand the screen over, so this panel gets out of the way.
+   * Close-as-you-leave: we hand the screen over, so this panel gets out of the way.
    */
   public OpenSourceOrder(): void {
     if (!this.Header?.OrderID) return;
@@ -274,7 +257,7 @@ export class JournalEntryDetailPanelComponent extends BaseAngularComponent {
   private reset(): void {
     this.Header = null;
     this.Lines = [];
-    this.BatchNumber = null;
+    this.JournalEntryBatchNumber = null;
     this.ReversalEntryNumber = null;
     this.ReversesEntryNumber = null;
     this.ActionMessage = null;
@@ -299,7 +282,7 @@ export class JournalEntryDetailPanelComponent extends BaseAngularComponent {
             ExtraFilter: `ID='${id}'`,
             Fields: [
               'ID', 'EntryNumber', 'EntryType', 'Status', 'EffectiveDate', 'Description',
-              'CompanyID', 'Company', 'OrderID', 'BatchID', 'ReversedByJournalEntryID',
+              'CompanyID', 'Company', 'OrderID', 'JournalEntryBatchID', 'ReversedByJournalEntryID',
               'ReversesJournalEntryID', 'GLPostedAt', 'GLReferenceID', '__mj_CreatedAt',
             ],
             ResultType: 'simple',
@@ -347,7 +330,7 @@ export class JournalEntryDetailPanelComponent extends BaseAngularComponent {
 
   /** The single second round-trip: everything keyed on the ids the first read produced. */
   private async loadDetail(header: JEDetailHeader, rawLines: JELineRow[]): Promise<void> {
-    this.BatchNumber = null;
+    this.JournalEntryBatchNumber = null;
     this.ReversalEntryNumber = null;
     this.ReversesEntryNumber = null;
 
@@ -365,9 +348,9 @@ export class JournalEntryDetailPanelComponent extends BaseAngularComponent {
       slots.accounts = queries.length;
       queries.push(this.accountQuery(accountIDs));
     }
-    if (header.BatchID) {
+    if (header.JournalEntryBatchID) {
       slots.batch = queries.length;
-      queries.push({ EntityName: BATCH_ENTITY, ExtraFilter: `ID='${header.BatchID}'`, Fields: ['ID', 'BatchNumber'], ResultType: 'simple' });
+      queries.push({ EntityName: BATCH_ENTITY, ExtraFilter: `ID='${header.JournalEntryBatchID}'`, Fields: ['ID', 'JournalEntryBatchNumber'], ResultType: 'simple' });
     }
     if (relatedJEIds.length > 0) {
       slots.related = queries.length;
@@ -381,8 +364,8 @@ export class JournalEntryDetailPanelComponent extends BaseAngularComponent {
     this.Lines = rawLines.map((l) => this.toDetailLine(l, accounts, dims));
 
     if (slots.batch !== undefined) {
-      const row = (results[slots.batch]?.Results?.[0] ?? null) as { BatchNumber: string } | null;
-      this.BatchNumber = row?.BatchNumber ?? null;
+      const row = (results[slots.batch]?.Results?.[0] ?? null) as { JournalEntryBatchNumber: string } | null;
+      this.JournalEntryBatchNumber = row?.JournalEntryBatchNumber ?? null;
     }
     if (slots.related !== undefined) {
       this.applyReversalChain(header, (results[slots.related]?.Results ?? []) as Array<{ ID: string; EntryNumber: string }>);

@@ -13,6 +13,7 @@
       [Bare]="true"
       [Search]="SearchText"
       SearchPlaceholder="Name, code or ID…"
+      SearchLabel="Search accounts"
       [Presets]="TypeChips"
       [ActiveKeys]="ActiveTypeKeys"
       [HasAdvanced]="true"
@@ -20,37 +21,27 @@
       [(AdvancedOpen)]="AdvancedOpen"
       (SearchChanged)="OnToolbarSearch($event)"
       (PresetToggled)="OnTypeToggled($event)">
-      <span toolbar-actions>
-        <button type="button" mjButton Variant="primary" Size="sm" (click)="StartCreate()">
-          <i class="fa-solid fa-plus" aria-hidden="true"></i> New account
-        </button>
-      </span>
       <label class="gla-field">
         <span class="gla-field__label">Company</span>
-        <select class="mj-input" [(ngModel)]="FilterCompanyID" aria-label="Company">
-          <option value="">All companies</option>
-          @for (c of CompanyOptions; track c.ID) {
-            <option [value]="c.ID">{{ c.Name }}</option>
-          }
-        </select>
+        <!-- CHECKBOX multi-select (Marcelo 2026-08-05): narrow to any set of companies; empty = all. -->
+        <mja-check-dropdown
+          [Options]="CompanyOptions"
+          [SelectedIDs]="FilterCompanyIDs"
+          AllLabel="All companies"
+          AriaLabel="Company"
+          (SelectedIDsChange)="OnFilterCompanyIDsChanged($event)" />
       </label>
       <label class="gla-field">
         <span class="gla-field__label">Status</span>
-        <select class="mj-input" [(ngModel)]="FilterActive" aria-label="Status">
-          <option value="">Active &amp; inactive</option>
-          <option value="Active">Active only</option>
-          <option value="Inactive">Inactive only</option>
-        </select>
+        <mj-dropdown [Data]="StatusChoices" TextField="Label" ValueField="Value" [ValuePrimitive]="true"
+          [(ngModel)]="FilterActive" (ngModelChange)="OnStatusOrSourceChanged()" aria-label="Status" />
       </label>
       <label class="gla-field">
         <!-- IsSystemSeeded exists for exactly this distinction: platform-shipped accounts vs.
              deployment customizations. -->
         <span class="gla-field__label">Source</span>
-        <select class="mj-input" [(ngModel)]="FilterSource" aria-label="Source">
-          <option value="">Seeded &amp; custom</option>
-          <option value="Seeded">System-seeded</option>
-          <option value="Custom">Custom</option>
-        </select>
+        <mj-dropdown [Data]="SourceChoices" TextField="Label" ValueField="Value" [ValuePrimitive]="true"
+          [(ngModel)]="FilterSource" (ngModelChange)="OnStatusOrSourceChanged()" aria-label="Source" />
       </label>
     </mja-list-toolbar>
   </div>
@@ -87,12 +78,9 @@
                UNIQUE(CompanyID, Code)) — there is no pool of unowned accounts to hook up later.
                On edit the company is fixed: moving an account between charts would silently break
                its rollup parent and could collide with the target chart's codes. -->
-          <select class="mj-input" [(ngModel)]="Draft.CompanyID" [disabled]="!!Draft.ID" aria-label="Owning company">
-            <option value="">Choose the owning company…</option>
-            @for (c of CompanyOptions; track c.ID) {
-              <option [value]="c.ID">{{ c.Name }}</option>
-            }
-          </select>
+          <mj-dropdown [Data]="CompanyOptions" TextField="Name" ValueField="ID" [ValuePrimitive]="true"
+            [DefaultItem]="OwningCompanyDefault" [Disabled]="!!Draft.ID"
+            [(ngModel)]="Draft.CompanyID" aria-label="Owning company" />
           <span class="gla-help">{{ Draft.ID ? 'An account stays in the chart it was created in.' : 'This company will own the account.' }}</span>
         </label>
 
@@ -109,11 +97,8 @@
 
         <label class="gla-field">
           <span class="gla-field__label">Account type</span>
-          <select class="mj-input" [(ngModel)]="Draft.AccountType" aria-label="Account type">
-            @for (t of AccountTypes; track t) {
-              <option [value]="t">{{ t }}</option>
-            }
-          </select>
+          <mj-dropdown [Data]="AccountTypes" [ValuePrimitive]="true"
+            [(ngModel)]="Draft.AccountType" aria-label="Account type" />
         </label>
 
         <label class="gla-field gla-field--wide">
@@ -121,12 +106,9 @@
           <!-- The picker offers only THIS company's own accounts, minus this account and everything
                beneath it. That IS what a parent is: the account this one rolls up into, inside the
                same chart (e.g. 11200 Cash parents 11201 Cash — Operating). -->
-          <select class="mj-input" [(ngModel)]="Draft.ParentGLAccountID" [disabled]="!Draft.CompanyID" aria-label="Parent account">
-            <option value="">None — top of the chart</option>
-            @for (p of ParentOptions; track p.ID) {
-              <option [value]="p.ID">{{ p.Label }}</option>
-            }
-          </select>
+          <mj-dropdown [Data]="ParentOptions" TextField="Label" ValueField="ID" [ValuePrimitive]="true"
+            [DefaultItem]="ParentNoneDefault" [Disabled]="!Draft.CompanyID"
+            [(ngModel)]="Draft.ParentGLAccountID" aria-label="Parent account" />
           <span class="gla-help">
             The account this one rolls up into — always another account in {{ Draft.CompanyID ? 'this same company’s chart' : 'the owning company’s chart' }}.
             Leave as “None” for a top-level account.
@@ -135,12 +117,9 @@
 
         <label class="gla-field">
           <span class="gla-field__label">Currency</span>
-          <select class="mj-input" [(ngModel)]="Draft.CurrencyCode" aria-label="Currency">
-            <option value="">Company’s functional currency</option>
-            @for (c of CurrencyOptions; track c.Code) {
-              <option [value]="c.Code">{{ c.Code }} — {{ c.Name }}</option>
-            }
-          </select>
+          <mj-dropdown [Data]="CurrencyChoices" TextField="Label" ValueField="Code" [ValuePrimitive]="true"
+            [DefaultItem]="CurrencyDefault"
+            [(ngModel)]="Draft.CurrencyCode" aria-label="Currency" />
         </label>
 
         <label class="gla-field">
@@ -176,97 +155,29 @@
     </section>
   }
 
-  <div class="gla-wrap mjsh-tablewrap">
-    @if (IsLoading) {
-      <mj-loading text="Loading accounts…"></mj-loading>
-    } @else {
-      <table class="gla-grid mjsh-table">
-        <thead>
-          <tr>
-            <th>Company</th>
-            <th>Code</th>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Parent</th>
-            <th>Currency</th>
-            <th>External system</th>
-            <th>External account ID</th>
-            <th>Active</th>
-            <th>Source</th>
-            <th>ID</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (r of Filtered; track r.ID) {
-            <tr [class.gla-row--inactive]="!r.IsActive">
-              <!-- Company first, always: an account only exists inside a company's chart. -->
-              <td>{{ r.Company }}</td>
-              <td class="gla-mono">
-                <!-- Indentation IS the rollup — a child sits under its parent. -->
-                <span class="gla-code" [style.padding-left]="IndentFor(r)">
-                  @if (r.Depth > 0) {
-                    <i class="fa-solid fa-turn-up fa-rotate-90 gla-rollup" aria-hidden="true" title="Rolls up into the account above"></i>
-                  }
-                  {{ r.Code }}
-                </span>
-              </td>
-              <td>{{ r.Name }}</td>
-              <td>{{ r.AccountType }}</td>
-              <td>
-                {{ r.ParentLabel || '—' }}
-                @if (r.IsOrphan) {
-                  <i class="fa-solid fa-link-slash gla-flag" aria-hidden="true" title="This account's parent isn't in this chart. A rollup parent must be another account in the same company's chart."></i>
-                }
-                @if (r.InCycle) {
-                  <i class="fa-solid fa-rotate gla-flag" aria-hidden="true" title="This account's parent chain loops back on itself — the rollup is broken. Shown at the top of the chart."></i>
-                }
-              </td>
-              <td>{{ r.CurrencyCode || '—' }}</td>
-              <td>{{ r.ExternalSystem || '—' }}</td>
-              <td class="gla-mono">{{ r.ExternalAccountID || '—' }}</td>
-              <td>
-                <mj-stat-badge [Label]="r.IsActive ? 'Active' : 'Inactive'" [Variant]="r.IsActive ? 'success' : 'default'"></mj-stat-badge>
-              </td>
-              <td>
-                <mj-stat-badge [Label]="r.IsSystemSeeded ? 'Seeded' : 'Custom'" Variant="default"
-                  [title]="r.IsSystemSeeded ? 'Shipped by spSeedDefaultChartOfAccounts.' : 'Created for this deployment.'"></mj-stat-badge>
-              </td>
-              <td class="gla-mono gla-id" [title]="r.ID">{{ r.ID }}</td>
-              <td class="gla-actions">
-                <button type="button" mjButton Variant="flat" Size="sm" (click)="StartEdit(r)" title="Edit this account">
-                  <i class="fa-solid fa-pen" aria-hidden="true"></i> Edit
-                </button>
-                <!-- No Delete: an account referenced by a JE line or an account link can't be
-                     deleted (FK). Retiring it is the schema's own intended path — "Inactive
-                     accounts retain historical data." -->
-                <button
-                  type="button"
-                  mjButton
-                  Variant="flat"
-                  Size="sm"
-                  [disabled]="IsSaving"
-                  (click)="ToggleActive(r)"
-                  [title]="r.IsActive ? 'Retire this account — it stops being available for new journal-entry lines but keeps its history' : 'Return this account to use for new journal-entry lines'">
-                  {{ r.IsActive ? 'Retire' : 'Reactivate' }}
-                </button>
-              </td>
-            </tr>
-          } @empty {
-            <tr>
-              <td colspan="12" class="gla-empty">
-                @if (Rows.length === 0) {
-                  No accounts in scope. Every account belongs to a company’s chart — widen the company scope, or create one.
-                } @else {
-                  No accounts match these filters.
-                  <button type="button" mjButton Variant="flat" Size="sm" (click)="ClearFilters()">Clear filters</button>
-                }
-              </td>
-            </tr>
-          }
-        </tbody>
-      </table>
-    }
+  <!-- MJ's house grid (Marcelo 2026-08-05: All accounts uses the STANDARD mj-entity-data-grid,
+       same as All journal entries / All batches — §8 MJ-wins). The toolbar filters + search feed
+       the grid's ExtraFilter (server-side predicate, same shape the client filter used). Clicking
+       a row opens the editor above (per-row Edit/Retire buttons retired with the hand-rolled
+       table — the editor's Active checkbox is the retire path). Tree indentation + orphan/cycle
+       flags were the hand-rolled table's extra; the rollup STRUCTURE lives on the Chart of
+       accounts page (the tree view), so this page is the flat, sortable inventory. -->
+  <div class="gla-wrap">
+    <mj-entity-data-grid
+      [Params]="GridParams"
+      [Columns]="GridColumns"
+      PaginationMode="client"
+      [PageSize]="100"
+      [ShowPager]="true"
+      [AllowSorting]="true"
+      [ShowToolbar]="false"
+      [SelectionMode]="'single'"
+      KeyField="ID"
+      StateKey="mj.bizappsacct.grid.allAccounts.v1"
+      [AutoPersistState]="true"
+      Height="auto"
+      (AfterRowClick)="OnGridRowClicked($event.rowKey)">
+    </mj-entity-data-grid>
   </div>
   </div>
 </mj-page-body-interior>

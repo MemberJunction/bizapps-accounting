@@ -69,6 +69,16 @@ export class GLAccountFormComponentExtended extends mjBizAppsAccountingGLAccount
 
   // ─── filter handlers ───────────────────────────────────────────────────────
 
+  /** Choice rows for the tree filters (were inline <option>s). */
+  public get TypeChoices(): ReadonlyArray<{ Label: string; Value: string }> {
+    return [{ Label: 'All types', Value: 'all' }, ...this.AccountTypes.map((t) => ({ Label: t, Value: t }))];
+  }
+  public readonly StatusChoices: ReadonlyArray<{ Label: string; Value: string }> = [
+    { Label: 'All', Value: 'all' },
+    { Label: 'Active', Value: 'active' },
+    { Label: 'Inactive', Value: 'inactive' },
+  ];
+
   public async OnCompanyChange(companyID: string): Promise<void> {
     this.SelectedCompanyID = companyID;
     await this.loadTree();

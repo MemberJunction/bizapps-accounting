@@ -66,8 +66,13 @@ export function expectNoConsoleErrors(sink: ErrorSink, context: string): void {
 
 /** Open the top-left app-switcher and activate the Accounting app. */
 export async function openAccountingApp(page: Page): Promise<void> {
-  await page.locator('.app-switcher-button, [aria-label="Switch application"]').first().click();
-  const item = page.locator('.app-switcher-item', { hasText: new RegExp(`^${ACCOUNTING_APP_NAME}`) }).first();
+  await page.locator('.app-switcher-button, [aria-label*="Switch application"]').first().click();
+  // MJ 5.51 replaced the old `.app-switcher-item` list with an "Application launcher" dialog whose
+  // entries are LINKS (accessible name = the app name). Target by role, old class as fallback.
+  const item = page
+    .getByRole('link', { name: ACCOUNTING_APP_NAME, exact: true })
+    .or(page.locator('.app-switcher-item', { hasText: new RegExp(`^${ACCOUNTING_APP_NAME}`) }))
+    .first();
   await expect(item, 'Accounting app must appear in the app-switcher (else MJAPI metadata is stale — restart it)').toBeVisible({ timeout: 15_000 });
   await item.scrollIntoViewIfNeeded();
   await item.click();
@@ -78,7 +83,17 @@ export async function openAccountingApp(page: Page): Promise<void> {
 
 /** Click a left-rail nav item by its exact label and let the dashboard render. */
 export async function openNavItem(page: Page, label: string): Promise<void> {
-  const item = page.getByText(label, { exact: true }).first();
+  let item = page.getByText(label, { exact: true }).first();
+  // MJ 5.51 top-nav folds categories that don't fit the viewport into a "More navigation items"
+  // overflow. If the label isn't visible inline, open the overflow and re-resolve.
+  if (!(await item.isVisible().catch(() => false))) {
+    const more = page.getByRole('button', { name: /More navigation items/i }).first();
+    if (await more.isVisible().catch(() => false)) {
+      await more.click();
+      await page.waitForTimeout(400);
+      item = page.getByText(label, { exact: true }).first();
+    }
+  }
   await item.scrollIntoViewIfNeeded().catch(() => undefined);
   await item.click();
   await page.waitForTimeout(4500);
@@ -120,6 +135,17 @@ export async function scopeToCompany(page: Page, nameContains: string): Promise<
   await item.click(); // Toggle from All(empty) → exactly this company
   await page.locator('body').click({ position: { x: 500, y: 70 } }); // neutral close (see above)
   await page.waitForTimeout(3000); // pages re-query on scope change
+}
+
+/**
+ * Pick an option in an `mj-dropdown` (the app converted every native <select> to MJ controls,
+ * Marcelo 2026-08-05). The trigger carries the aria-label on the HOST element; the options render
+ * in a CDK overlay at document level as `.mj-dropdown-option` rows.
+ */
+export async function pickMjDropdown(scope: Page | Locator, page: Page, ariaLabel: string, optionText: string | RegExp): Promise<void> {
+  await scope.locator(`mj-dropdown[aria-label="${ariaLabel}"]`).first().click();
+  await page.locator('.mj-dropdown-panel .mj-dropdown-option', { hasText: optionText }).first().click();
+  await page.waitForTimeout(400);
 }
 
 /** The company <select> options (excludes disabled placeholders). */

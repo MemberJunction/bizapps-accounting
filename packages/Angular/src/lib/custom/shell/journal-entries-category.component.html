@@ -52,11 +52,11 @@
     <mj-left-nav-content>
       @switch (ActivePageId) {
         @case ('dashboard') {
-          <mj-je-dashboard-page (CreateRequested)="GoToPage('workspace')"></mj-je-dashboard-page>
+          <mj-je-dashboard-page></mj-je-dashboard-page>
         }
         @case ('all-entries') {
           <mj-all-journal-entries-page
-            (CreateRequested)="GoToPage('workspace')"
+           
             (WorkspaceRequested)="GoToPage('workspace', $event)">
           </mj-all-journal-entries-page>
         }

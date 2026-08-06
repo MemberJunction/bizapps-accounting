@@ -1,7 +1,7 @@
 /**
  * batching-scenarios-fixture.ts — MULTI-COMPANY fixture for the Tier-3 batching SCENARIOS harness.
  *
- * 2026-07-06 rework (engine-meeting rulings, CH-4): buildBatch is GLOBAL — one build sweeps every
+ * 2026-07-06 rework (engine-meeting rulings, CH-4): buildJournalEntryBatch is GLOBAL — one build sweeps every
  * Pending JE across all companies into ONE multi-company batch. The old per-company-build
  * "independence" scenario is gone; the harness now proves the global sweep + per-company netting
  * isolation, and the reject / no-CFO scenarios need their JEs seeded in SEPARATE WAVES (each build
@@ -161,7 +161,7 @@ async function makeJEs(p: Pools, companyId: string, label: string, jeSpecs: JESp
 
 async function setup(p: Pools): Promise<void> {
   const stray = (await p.pool.request().query(`SELECT COUNT(*) n FROM ${SCHEMA}.JournalEntry WHERE Status='Pending'`)).recordset[0].n;
-  if (Number(stray) > 0) throw new Error(`${stray} stray Pending JE(s) exist — clean them up first (buildBatch sweeps ALL Pending JEs).`);
+  if (Number(stray) > 0) throw new Error(`${stray} stray Pending JE(s) exist — clean them up first (buildJournalEntryBatch sweeps ALL Pending JEs).`);
   const currency = await resolveCurrency(p.user);
   const counterpartyId = await ensureCounterpartyOrg(p.user);
   const flowId = randomUUID();
@@ -201,7 +201,7 @@ async function teardownCompany(p: Pools, companyId: string, cfoPersonId: string 
   // dropped once no line items / JEs reference them, at the end).
   try {
     const r = await p.teardownPool.request().query(
-      `SELECT t.ID id FROM ${TASK_SCHEMA}.TaskLink l JOIN ${TASK_SCHEMA}.Task t ON t.ID=l.TaskID JOIN __mj.Entity e ON e.ID=l.EntityID WHERE e.Name='MJ_BizApps_Accounting: Journal Entry Batches' AND l.RecordID IN (SELECT DISTINCT BatchID FROM ${SCHEMA}.JournalEntryBatchLineItem WHERE CompanyID='${companyId}')`);
+      `SELECT t.ID id FROM ${TASK_SCHEMA}.TaskLink l JOIN ${TASK_SCHEMA}.Task t ON t.ID=l.TaskID JOIN __mj.Entity e ON e.ID=l.EntityID WHERE e.Name='MJ_BizApps_Accounting: Journal Entry Batches' AND l.RecordID IN (SELECT DISTINCT JournalEntryBatchID FROM ${SCHEMA}.JournalEntryBatchLineItem WHERE CompanyID='${companyId}')`);
     const taskIds = r.recordset.map((x: { id: string }) => `'${x.id}'`).join(',');
     if (taskIds) {
       await exec(`DELETE FROM ${TASK_SCHEMA}.TaskDecision WHERE TaskID IN (${taskIds})`);
@@ -229,7 +229,7 @@ async function teardownCompany(p: Pools, companyId: string, cfoPersonId: string 
       await exec(`DELETE FROM ${SCHEMA}.JournalEntry WHERE ID IN (${jeIdList})`);
     }
     await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatchLineItem WHERE CompanyID='${companyId}'`);
-    await exec(`DELETE b FROM ${SCHEMA}.JournalEntryBatch b WHERE NOT EXISTS (SELECT 1 FROM ${SCHEMA}.JournalEntryBatchLineItem li WHERE li.BatchID=b.ID) AND NOT EXISTS (SELECT 1 FROM ${SCHEMA}.JournalEntry je WHERE je.BatchID=b.ID)`);
+    await exec(`DELETE b FROM ${SCHEMA}.JournalEntryBatch b WHERE NOT EXISTS (SELECT 1 FROM ${SCHEMA}.JournalEntryBatchLineItem li WHERE li.JournalEntryBatchID=b.ID) AND NOT EXISTS (SELECT 1 FROM ${SCHEMA}.JournalEntry je WHERE je.JournalEntryBatchID=b.ID)`);
   } finally {
     for (const t of toggled) await exec(`ENABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
   }

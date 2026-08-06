@@ -11,8 +11,8 @@ const JET_REVERSAL = 'JET_REVERSAL';
 
 vi.mock('../JournalEntryTypes.js', () => ({
   LookupJournalEntryTypeByID: vi.fn(async (id: string) => {
-    if (id === JET_REVERSAL) return { ID: JET_REVERSAL, Code: 'Reversal', Name: 'Reversal', IsSystem: true, IsBatchSummary: false, IsActive: true };
-    if (id === JET_ORDERBOOKING) return { ID: JET_ORDERBOOKING, Code: 'OrderBooking', Name: 'Order Booking', IsSystem: false, IsBatchSummary: false, IsActive: true };
+    if (id === JET_REVERSAL) return { ID: JET_REVERSAL, Code: 'Reversal', Name: 'Reversal', IsSystem: true, IsJournalEntryBatchSummary: false, IsActive: true };
+    if (id === JET_ORDERBOOKING) return { ID: JET_ORDERBOOKING, Code: 'OrderBooking', Name: 'Order Booking', IsSystem: false, IsJournalEntryBatchSummary: false, IsActive: true };
     return null;
   }),
   RequireJournalEntryTypeID: vi.fn(async () => JET_REVERSAL),

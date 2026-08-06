@@ -23,6 +23,7 @@
     [Bare]="true"
     [Search]="Search"
     SearchPlaceholder="Memo, entry № or ID…"
+    SearchLabel="Search journal entries"
     [Presets]="StatusChips"
     [ActiveKeys]="ActiveStatusKeys"
     [HasAdvanced]="true"
@@ -32,32 +33,37 @@
     (PresetToggled)="OnPresetToggled($event)">
     <label class="aje-field">
       <span class="aje-field__label">Company</span>
-      <select class="mj-input" [(ngModel)]="CompanyID" (ngModelChange)="OnFilterChanged()" aria-label="Company">
-        <option [ngValue]="null">All companies</option>
-        @for (co of Companies; track co.ID) {
-          <option [ngValue]="co.ID">{{ co.Name }}</option>
-        }
-      </select>
+      <!-- CHECKBOX multi-select (Marcelo 2026-08-05): narrow to any set of companies; empty = all. -->
+      <mja-check-dropdown
+        [Options]="Companies"
+        [SelectedIDs]="CompanyIDs"
+        AllLabel="All companies"
+        AriaLabel="Company"
+        (SelectedIDsChange)="OnCompanyIDsChanged($event)" />
     </label>
 
     <label class="aje-field">
       <span class="aje-field__label">Entry type</span>
-      <select class="mj-input" [(ngModel)]="TypeFilter" (ngModelChange)="OnFilterChanged()" aria-label="Entry type">
-        <option value="All">All types</option>
-        @for (t of EntryTypes; track t) {
-          <option [value]="t">{{ t }}</option>
-        }
-      </select>
+      <mj-dropdown
+        [Data]="EntryTypeChoices"
+        TextField="Label"
+        ValueField="Value"
+        [ValuePrimitive]="true"
+        [(ngModel)]="TypeFilter"
+        (ngModelChange)="OnFilterChanged()"
+        aria-label="Entry type" />
     </label>
 
     <label class="aje-field">
       <span class="aje-field__label">Window</span>
-      <select class="mj-input" [(ngModel)]="TimeWindow" (ngModelChange)="OnWindowChanged()" aria-label="Time window">
-        @for (w of TimeWindows; track w.Id) {
-          <option [value]="w.Id">{{ w.Label }}</option>
-        }
-        <option value="custom">Custom range</option>
-      </select>
+      <mj-dropdown
+        [Data]="WindowChoices"
+        TextField="Label"
+        ValueField="Id"
+        [ValuePrimitive]="true"
+        [(ngModel)]="TimeWindow"
+        (ngModelChange)="OnWindowChanged()"
+        aria-label="Time window" />
     </label>
 
     <label class="aje-field aje-field--date">

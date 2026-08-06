@@ -1,4 +1,5 @@
 import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@angular/core';
+import { PageRefreshService } from '../../transfer-pending/shell-refresh/page-refresh.service';
 import { BaseDashboard } from '@memberjunction/ng-shared';
 import { RegisterClass } from '@memberjunction/global';
 import { ResourceData } from '@memberjunction/core-entities';
@@ -7,7 +8,7 @@ import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
 import {
   mjBizAppsAccountingJournalEntryBatchEntity,
 } from '@mj-biz-apps/accounting-entities';
-import { BatchDispatchClient, BatchDecision } from './batch-dispatch.client';
+import { JournalEntryBatchDispatchClient, JournalEntryBatchDecision } from './journal-entry-batch-dispatch.client';
 
 /** The generated batch Status union (rule 2c: derived, never hand-copied). */
 type BatchStatus = mjBizAppsAccountingJournalEntryBatchEntity['Status'];
@@ -15,17 +16,17 @@ type BatchStatus = mjBizAppsAccountingJournalEntryBatchEntity['Status'];
 /**
  * One batch row in the list, with its derived display + (lazily-loaded) CFO approval state.
  * Approval state is NOT a column on the batch — it lives in bizapps-tasks (a Task linked to the
- * batch + a terminal Task Decision), so we resolve it via the gate-backed `JEBatchApprovalState` query.
+ * batch + a terminal Task Decision), so we resolve it via the gate-backed `JournalEntryBatchApprovalState` query.
  */
 interface BatchRow {
   ID: string;
-  BatchNumber: string;
+  JournalEntryBatchNumber: string;
   Status: BatchStatus;
   TargetSystem: string;
   TotalEntries: number;
   TotalDebits: number;
   TotalCredits: number;
-  ExternalBatchRef: string | null;
+  ExternalJournalEntryBatchRef: string | null;
   ErrorMessage: string | null;
   /** undefined = not yet checked; null = unknown/error; true/false = gate result. */
   Approved?: boolean | null;
@@ -42,7 +43,7 @@ const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
  * gathers ALL pending JEs; the send splits by company at the ERP boundary.
  *
  * Lists ALL JE Batches (status / control totals + CFO approval state), and drives the engine via the
- * thin BatchDispatchClient (→ BatchDispatchResolver → CoreEntitiesServer buildBatch/approveBatch/sendBatch/gate):
+ * thin JournalEntryBatchDispatchClient (→ BatchDispatchResolver → CoreEntitiesServer buildJournalEntryBatch/approveJournalEntryBatch/sendJournalEntryBatch/gate):
  *   - Build batch  (ALL pending JEs → ONE Pending multi-company batch + approval task)
  *   - In-app CFO Approve / Reject  (recordDecision; an approval also flips the batch Pending→Approved)
  *   - Dispatch to ERP  (enabled only for an Approved batch; mock poster for v1)
@@ -50,12 +51,12 @@ const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 @Component({
   standalone: false,
   selector: 'mj-batch-dispatch-dashboard',
-  templateUrl: './batch-dispatch-dashboard.component.html',
-  styleUrls: ['./batch-dispatch-dashboard.component.css'],
+  templateUrl: './journal-entry-batch-dispatch-dashboard.component.html',
+  styleUrls: ['./journal-entry-batch-dispatch-dashboard.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 @RegisterClass(BaseDashboard, 'BatchDispatchDashboard')
-export class BatchDispatchDashboardComponent extends BaseDashboard {
+export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
   public IsLoading = false;
   public LoadError: string | null = null;
 
@@ -74,8 +75,23 @@ export class BatchDispatchDashboardComponent extends BaseDashboard {
     return 'Batch Approvals';
   }
 
+  /** The category header's Refresh reaches this dashboard through the shared channel —
+   *  the inline mj-refresh-button was removed (Marcelo 2026-08-05: the header owns the ONE
+   *  refresh control, orders-style). Subscribing is also what makes the header button SHOW
+   *  while this page is mounted (CanRefreshActivePage = HasSubscriber). */
+  /** OPTIONAL: provided per category shell; a directly-mounted resource (or a bare TestBed) has none. */
+  private pageRefresh = inject(PageRefreshService, { optional: true });
+  private refreshSub: { unsubscribe: () => void } | null = null;
+
   protected initDashboard(): void {
+    this.refreshSub = this.pageRefresh?.OnRefresh(() => void this.loadData()) ?? null;
     // One-time setup; data loads in loadData(). No persisted UI state for v1.
+  }
+
+  public override ngOnDestroy(): void {
+    // Unsubscribing keeps the header's Refresh page-aware: a destroyed page stops counting.
+    this.refreshSub?.unsubscribe();
+    super.ngOnDestroy();
   }
 
   protected async loadData(): Promise<void> {
@@ -95,7 +111,7 @@ export class BatchDispatchDashboardComponent extends BaseDashboard {
   // ─── actions ───────────────────────────────────────────────────────────────
 
   /** Record an in-app CFO Approve / Reject decision on a batch, then refresh its approval state. */
-  public async OnRecordDecision(row: BatchRow, decision: BatchDecision): Promise<void> {
+  public async OnRecordDecision(row: BatchRow, decision: JournalEntryBatchDecision): Promise<void> {
     if (row.Busy) return;
     row.Busy = true;
     this.clearActionMessage();
@@ -105,8 +121,8 @@ export class BatchDispatchDashboardComponent extends BaseDashboard {
       if (res.Success) {
         // A rejection reverses the preliminary lock: the batch is Cancelled and its entries return to the pool.
         const msg = decision === 'Rejected'
-          ? `Rejected batch ${row.BatchNumber} — cancelled; its journal entries returned to the candidate pool.`
-          : `Recorded "${decision}" on batch ${row.BatchNumber}.`;
+          ? `Rejected batch ${row.JournalEntryBatchNumber} — cancelled; its journal entries returned to the candidate pool.`
+          : `Recorded "${decision}" on batch ${row.JournalEntryBatchNumber}.`;
         this.setActionMessage(msg, false);
         await this.loadBatches(); // an approval flips Pending→Approved; a rejection flips Pending→Cancelled
       } else {
@@ -128,13 +144,13 @@ export class BatchDispatchDashboardComponent extends BaseDashboard {
     this.clearActionMessage();
     this.cdr.markForCheck();
     try {
-      const res = await this.client().RegenerateBatch(row.ID, row.TargetSystem || this.TargetSystem);
+      const res = await this.client().RegenerateJournalEntryBatch(row.ID, row.TargetSystem || this.TargetSystem);
       if (res.Success && res.NothingToBatch) {
-        this.setActionMessage(`Regenerated batch ${row.BatchNumber}: no candidate journal entries remain.`, false);
+        this.setActionMessage(`Regenerated batch ${row.JournalEntryBatchNumber}: no candidate journal entries remain.`, false);
         await this.loadBatches();
       } else if (res.Success) {
         this.setActionMessage(
-          `Regenerated batch ${row.BatchNumber}: ${res.JECount} JE(s) across ${res.CompanyCount} company(ies) → ${res.SummaryLineCount} summary line(s); Dr ${res.TotalDebits} / Cr ${res.TotalCredits}.`,
+          `Regenerated batch ${row.JournalEntryBatchNumber}: ${res.JECount} JE(s) across ${res.CompanyCount} company(ies) → ${res.SummaryLineCount} summary line(s); Dr ${res.TotalDebits} / Cr ${res.TotalCredits}.`,
           false,
         );
         await this.loadBatches();
@@ -154,10 +170,10 @@ export class BatchDispatchDashboardComponent extends BaseDashboard {
     this.clearActionMessage();
     this.cdr.markForCheck();
     try {
-      const res = await this.client().DispatchBatch(row.ID);
+      const res = await this.client().DispatchJournalEntryBatch(row.ID);
       if (res.Success) {
         this.setActionMessage(
-          `Dispatched batch ${row.BatchNumber} → ${res.Status}${res.ExternalBatchRef ? ` (ref ${res.ExternalBatchRef})` : ''}.`,
+          `Dispatched batch ${row.JournalEntryBatchNumber} → ${res.Status}${res.ExternalJournalEntryBatchRef ? ` (ref ${res.ExternalJournalEntryBatchRef})` : ''}.`,
           false,
         );
         await this.loadBatches();
@@ -214,7 +230,7 @@ export class BatchDispatchDashboardComponent extends BaseDashboard {
     );
     if (!res.Success) {
       this.Batches = [];
-      this.LoadError = res.ErrorMessage ?? 'Failed to load batches.';
+      this.LoadError = res.ErrorMessage ?? 'Failed to load journal entry batches.';
       return;
     }
     this.Batches = (res.Results ?? []).map(b => this.toRow(b));
@@ -227,13 +243,13 @@ export class BatchDispatchDashboardComponent extends BaseDashboard {
   private toRow(b: mjBizAppsAccountingJournalEntryBatchEntity): BatchRow {
     return {
       ID: b.ID,
-      BatchNumber: b.BatchNumber,
+      JournalEntryBatchNumber: b.JournalEntryBatchNumber,
       Status: b.Status,
       TargetSystem: b.TargetSystem,
       TotalEntries: b.TotalEntries,
       TotalDebits: b.TotalDebits,
       TotalCredits: b.TotalCredits,
-      ExternalBatchRef: b.ExternalBatchRef,
+      ExternalJournalEntryBatchRef: b.ExternalJournalEntryBatchRef,
       ErrorMessage: b.ErrorMessage,
     };
   }
@@ -248,8 +264,8 @@ export class BatchDispatchDashboardComponent extends BaseDashboard {
   // ─── plumbing ────────────────────────────────────────────────────────────
 
   /** A new client bound to the active GraphQL provider (multi-provider aware via ProviderToUse). */
-  private client(): BatchDispatchClient {
-    return new BatchDispatchClient(this.ProviderToUse as GraphQLDataProvider);
+  private client(): JournalEntryBatchDispatchClient {
+    return new JournalEntryBatchDispatchClient(this.ProviderToUse as GraphQLDataProvider);
   }
 
   /** A RunView scoped to the active provider (multi-provider aware). */
@@ -274,6 +290,6 @@ export class BatchDispatchDashboardComponent extends BaseDashboard {
 }
 
 /** Tree-shaking prevention — referencing the class is enough; called from public-api.ts. */
-export function LoadBatchDispatchDashboard(): void {
+export function LoadJournalEntryBatchDispatchDashboard(): void {
   // No-op. Static import + this call keep the @RegisterClass decorator from being shaken out.
 }

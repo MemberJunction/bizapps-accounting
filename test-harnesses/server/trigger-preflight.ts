@@ -20,10 +20,10 @@ import sql from 'mssql';
  *
  * CORRECTED 2026-07-26. This list had drifted badly from the schema and was checked against the
  * live DB: it named FIVE triggers that no longer exist (trg_JEBLI_Immutability,
- * trg_JEBatch_SummaryReconciles, trg_JEBLDimension_Immutability, trg_SJE_Immutability,
+ * trg_JournalEntryBatch_SummaryReconciles, trg_JEBLDimension_Immutability, trg_SJE_Immutability,
  * trg_SJELI_Immutability — retired with the batch-line-item and scheduled-JE tables in the
  * 2026-07-22 baseline rewrite, one of them merely RENAMED to SummaryCoherence) while omitting
- * THREE that do (trg_JEL_CompanyMatch, trg_JE_CompanyMatch, trg_JEBatch_SummaryCoherence).
+ * THREE that do (trg_JEL_CompanyMatch, trg_JE_CompanyMatch, trg_JournalEntryBatch_SummaryCoherence).
  *
  * That inverted the guard's purpose twice over: it would abort every live harness at bootstrap
  * with a false "Missing (5/12)", and the single-company enforcement triggers it failed to name
@@ -36,8 +36,8 @@ export const INVARIANT_TRIGGERS = [
   'trg_JEL_Immutability',
   'trg_JEL_CompanyMatch',
   'trg_JE_CompanyMatch',
-  'trg_JEBatch_Immutability',
-  'trg_JEBatch_SummaryCoherence',
+  'trg_JournalEntryBatch_Immutability',
+  'trg_JournalEntryBatch_SummaryCoherence',
   'trg_ACP_NoChains',
   'trg_JE_ReversalConsistency',
   // Intercompany pair integrity (BA-D26). Belongs in this floor for the same reason as the rest:

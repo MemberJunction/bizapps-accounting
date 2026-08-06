@@ -22,7 +22,7 @@ export class BatchesCategoryResourceComponent extends BaseResourceComponent impl
   }
 
   async GetResourceDisplayName(_data: ResourceData): Promise<string> {
-    return 'Batches';
+    return 'Journal Entry Batches';
   }
 
   async GetResourceIconClass(_data: ResourceData): Promise<string> {

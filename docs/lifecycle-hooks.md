@@ -23,7 +23,7 @@ friendly thing happen; the trigger is the floor that catches anything — even r
 |---|---|---|---|---|---|
 | **W1** | Profile init (TZ default; COA seed = explicit only, 2026-07-30) | `AccountingCompanyProfile` | a **new** profile is saved (`!IsSaved`) | TZ auto · seed via explicit `SeedDefaultChartOfAccounts()` | ✅ |
 | **W2** | JE numbering (GLOBAL) | `JournalEntry` | a **new** JE is saved with **no `EntryNumber`** | auto · `Save()` | ✅ |
-| **W3** | Batch numbering (GLOBAL) | `JournalEntryBatch` | a **new** batch is saved with **no `BatchNumber`** | auto · `Save()` | ✅ |
+| **W3** | Batch numbering (GLOBAL) | `JournalEntryBatch` | a **new** batch is saved with **no `JournalEntryBatchNumber`** | auto · `Save()` | ✅ |
 | **W4** | Adjusting-entry routing | — | — | — | 🚫 retired 2026-07-06 (periods removed, CH-1) |
 | **W5** | Realized FX auto-emit | — | — | — | 🚫 retired (Payments-side, §C1) |
 | **W6** | Reversal generation | `JournalEntry` | code **calls `generateReversal(reason)`** | explicit call | ✅ |
@@ -57,7 +57,7 @@ there is no company segment in the number anymore).
 
 ### W3 — Batch numbering *(✅ `JournalEntryBatchEntityServer.ts` + `SequenceService.ts`)*
 **Fires:** on a brand-new batch with no number.
-**Does:** `spAssignNextBatchNumber()` → **`BatchNumber = BATCH-{seq:000000}`** — a single **GLOBAL** counter
+**Does:** `spAssignNextJournalEntryBatchNumber()` → **`JournalEntryBatchNumber = BATCH-{seq:000000}`** — a single **GLOBAL** counter
 (batches are multi-company, CH-4).
 
 ### W6 — Reversal generation *(✅ `JournalEntryEntityServer.generateReversal(reason)`)*
@@ -103,10 +103,10 @@ identical op over GraphQL `ExecuteRemoteOperation`.
 
 ## 3. Related (not `Save()` hooks)
 
-- **S1 batch dispatch — ✅** (`BatchingEngine.ts`): `buildBatch(targetSystem, …)` is **GLOBAL** — nets ALL
+- **S1 batch dispatch — ✅** (`JournalEntryBatchEngine.ts`): `buildJournalEntryBatch(targetSystem, …)` is **GLOBAL** — nets ALL
   Pending JEs (every company) into ONE multi-company batch (netting keys on company × account × dims; the
-  ERP-post seam splits by company, by **account number** — AM-4); `approveBatch` flips Pending→Approved with
-  audit stamps; `sendBatch` requires Approved + the CFO gate (`TasksAppApprovalGate` — per-company CFO
+  ERP-post seam splits by company, by **account number** — AM-4); `approveJournalEntryBatch` flips Pending→Approved with
+  audit stamps; `sendJournalEntryBatch` requires Approved + the CFO gate (`TasksAppApprovalGate` — per-company CFO
   **union**: one Task assigned to every involved company's CFO) → Sent → **Posted** (mock ERP poster for
   now) + JEs→GLPosted. Lifecycle: `Pending → Approved → Sent → Posted | Failed | Cancelled`.
 - **S3 scheduled-JE schedules — ✅ creation only** (`ScheduledJournalEntryService.createScheduledEntries`:
