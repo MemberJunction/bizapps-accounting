@@ -49,7 +49,12 @@ import {
   type JournalEntryBatchPreviewResult,
 } from './JournalEntryBatchEngine.js';
 import { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
-import type { TaskDecisionOutcomeCode } from '@mj-biz-apps/tasks-core';
+import {
+  IsApprovalOutcome,
+  IsTaskDecisionOutcomeCode,
+  TaskDecisionOutcomeCodes,
+  type TaskDecisionOutcomeCode,
+} from '@mj-biz-apps/tasks-core';
 
 const PERSON_ENTITY = 'MJ_BizApps_Common: People';
 
@@ -209,9 +214,14 @@ export class DispatchJournalEntryBatchOperation extends BaseRemotableOperation<D
 
 // ─── Accounting.RecordJournalEntryBatchDecision ──────────────────────────────────────────
 
-/** The in-app CFO decision outcomes. Mirrors tasks-core's TaskDecisionOutcomeCode. */
-export type JournalEntryBatchDecisionOutcome = 'Approved' | 'ApprovedWithConditions' | 'Rejected';
-const VALID_DECISIONS: ReadonlySet<string> = new Set(['Approved', 'ApprovedWithConditions', 'Rejected']);
+/**
+ * The in-app CFO decision outcomes — tasks-core's set, not a copy of it.
+ *
+ * This was an independently-declared union plus a hand-written `Set` of the same three literals.
+ * Both compiled cleanly against a widened `TaskDecisionOutcomeCode`, so an outcome added in
+ * bizapps-tasks would have been rejected here as invalid while every type still checked.
+ */
+export type JournalEntryBatchDecisionOutcome = TaskDecisionOutcomeCode;
 
 export interface RecordJournalEntryBatchDecisionInput { JournalEntryBatchID: string; Decision: JournalEntryBatchDecisionOutcome; Notes?: string | null }
 export interface RecordJournalEntryBatchDecisionOutput { Recorded: true }
@@ -228,14 +238,15 @@ export class RecordJournalEntryBatchDecisionOperation extends BaseRemotableOpera
 
   protected async InternalExecute(input: RecordJournalEntryBatchDecisionInput, provider: IMetadataProvider, user: UserInfo): Promise<RecordJournalEntryBatchDecisionOutput> {
     if (!input?.JournalEntryBatchID) throw new Error('RecordBatchDecision: JournalEntryBatchID is required.');
-    if (!VALID_DECISIONS.has(input?.Decision)) {
-      throw new Error(`RecordBatchDecision: invalid decision '${input?.Decision}'. Expected Approved | ApprovedWithConditions | Rejected.`);
+    if (!IsTaskDecisionOutcomeCode(input?.Decision)) {
+      throw new Error(`RecordBatchDecision: invalid decision '${input?.Decision}'. Expected ${TaskDecisionOutcomeCodes.join(' | ')}.`);
     }
     const personId = await this.resolveCurrentPersonId(user, provider);
     await new TasksAppApprovalGate(provider).recordDecision(
-      input.JournalEntryBatchID, input.Decision as TaskDecisionOutcomeCode, personId, input.Notes ?? undefined, user);
+      input.JournalEntryBatchID, input.Decision, personId, input.Notes ?? undefined, user);
 
-    if (input.Decision === 'Approved' || input.Decision === 'ApprovedWithConditions') {
+    // Ask tasks what the outcome MEANS rather than re-deciding it here from literals.
+    if (IsApprovalOutcome(input.Decision)) {
       await approveJournalEntryBatch(input.JournalEntryBatchID, user.ID, user, provider);
     } else {
       await cancelJournalEntryBatch(input.JournalEntryBatchID, user, provider);

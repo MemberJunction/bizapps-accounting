@@ -31,7 +31,12 @@
  */
 import { IMetadataProvider, IRunViewProvider, UserInfo } from '@memberjunction/core';
 import { UUIDsEqual } from '@memberjunction/global';
-import { TaskOrchestrationService, type TaskDecisionOutcomeCode } from '@mj-biz-apps/tasks-core';
+import {
+  IsApprovalOutcome,
+  IsTaskDecisionOutcomeCode,
+  TaskOrchestrationService,
+  type TaskDecisionOutcomeCode,
+} from '@mj-biz-apps/tasks-core';
 import type {
   mjBizAppsTasksTaskEntity,
   mjBizAppsTasksTaskTypeEntity,
@@ -60,8 +65,10 @@ const APPROVAL_REQUEST_TASK_TYPE = 'Approval Request';
  *  (latent bug caught by live spec L13, 2026-07-29). */
 const USER_ENTITY = 'MJ: Users';
 
-/** Terminal outcomes that count as "approved to send". */
-const APPROVED_OUTCOME_CODES: ReadonlySet<TaskDecisionOutcomeCode> = new Set(['Approved', 'ApprovedWithConditions']);
+// Which terminal outcomes count as "approved to send" is tasks-core's answer, asked per row via
+// IsApprovalOutcome. It used to be a Set literal here. A Set of a subset of the union is a
+// perfectly legal value, so widening the union upstream produced no error and no warning — a new
+// approving outcome would simply have stopped counting as approved, and the batch would never send.
 
 /**
  * Real CFO-approval gate, backed by bizapps-tasks. Stateless — one instance can serve every batch.
@@ -217,7 +224,7 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate {
       contextUser,
     );
     return (res.Results ?? [])
-      .filter(o => APPROVED_OUTCOME_CODES.has(o.Code as TaskDecisionOutcomeCode))
+      .filter(o => IsTaskDecisionOutcomeCode(o.Code) && IsApprovalOutcome(o.Code))
       .map(o => o.ID);
   }
 }
