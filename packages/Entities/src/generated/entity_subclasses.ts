@@ -37,7 +37,7 @@ export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
         * * Description: What kind of entity this is in the accounting structure: LegalEntity | Subsidiary | Division | Department | Branch | Partner | JointVenture | CostCenter | Other.`),
     LegalStructureType: z.union([z.literal('C-Corp'), z.literal('International-GmbH'), z.literal('International-Ltd'), z.literal('International-Other'), z.literal('International-Pty'), z.literal('LLC'), z.literal('NonProfit-501c3'), z.literal('NonProfit-501c6'), z.literal('Other'), z.literal('Partnership'), z.literal('S-Corp'), z.literal('SoleProprietorship')]).nullable().describe(`
         * * Field Name: LegalStructureType
-        * * Display Name: Legal Structure Type
+        * * Display Name: Legal Structure
         * * SQL Data Type: nvarchar(30)
     * * Value List Type: List
     * * Possible Values 
@@ -86,13 +86,13 @@ export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
         * * Description: Short code used in JE numbering ('JE-{CompanyCode}-{FY}-{seq}'). Uppercase alphanumeric + dash/underscore. UNIQUE per deployment (BA-D15).`),
     FunctionalCurrencyCode: z.string().describe(`
         * * Field Name: FunctionalCurrencyCode
-        * * Display Name: Functional Currency Code
+        * * Display Name: Functional Currency
         * * SQL Data Type: char(3)
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Currencies (vwCurrencies.Code)
         * * Description: ISO 4217 currency code (CHAR(3)) for the functional currency. All JEs post in this currency; original-currency triple on JE lines records the source-transaction currency when different (BA-D10).`),
     ReportingCurrencyCode: z.string().nullable().describe(`
         * * Field Name: ReportingCurrencyCode
-        * * Display Name: Reporting Currency Code
+        * * Display Name: Reporting Currency
         * * SQL Data Type: char(3)
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Currencies (vwCurrencies.Code)
         * * Description: Reporting currency for consolidation. NULL = same as functional currency.`),
@@ -116,13 +116,13 @@ export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
         * * Description: If set, this profile uses the books (COA, periods, JEs) of the referenced profile (consolidated reporting). Chains are forbidden: the referenced profile must NOT itself have a parent (BA-D9; trigger trg_ACP_NoChains).`),
     ApprovalCFOUserID: z.string().nullable().describe(`
         * * Field Name: ApprovalCFOUserID
-        * * Display Name: Approval CFO User ID
+        * * Display Name: CFO User
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
         * * Description: The CFO (an __mj.User — a security identity) who must approve a Journal Entry Batch for this company before it dispatches to the ERP. Resolved by the bizapps-tasks approval gate. Nullable: companies without a configured CFO fall back to the role-based resolver.`),
     IsActive: z.boolean().describe(`
         * * Field Name: IsActive
-        * * Display Name: Is Active
+        * * Display Name: Active
         * * SQL Data Type: bit
         * * Default Value: 1
         * * Description: Whether this profile is currently active. Inactive companies cannot have new JEs.`),
@@ -138,7 +138,7 @@ export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
         * * Default Value: getutcdate()`),
     Name: z.string().describe(`
         * * Field Name: Name
-        * * Display Name: Name
+        * * Display Name: Company Name
         * * SQL Data Type: nvarchar(50)`),
     Description: z.string().describe(`
         * * Field Name: Description
@@ -158,27 +158,27 @@ export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
         * * SQL Data Type: nvarchar(255)`),
     FunctionalCurrencyCode_Virtual: z.string().describe(`
         * * Field Name: FunctionalCurrencyCode_Virtual
-        * * Display Name: Functional Currency Code (Virtual)
+        * * Display Name: Functional Currency (Virtual)
         * * SQL Data Type: nvarchar(80)`),
     ReportingCurrencyCode_Virtual: z.string().nullable().describe(`
         * * Field Name: ReportingCurrencyCode_Virtual
-        * * Display Name: Reporting Currency Code (Virtual)
+        * * Display Name: Reporting Currency (Virtual)
         * * SQL Data Type: nvarchar(80)`),
     ApprovalCFOUser: z.string().nullable().describe(`
         * * Field Name: ApprovalCFOUser
-        * * Display Name: Approval CFO User
+        * * Display Name: CFO User Name
         * * SQL Data Type: nvarchar(100)`),
     __mj_Latitude: z.number().nullable().describe(`
         * * Field Name: __mj_Latitude
-        * * Display Name: Mj Latitude
+        * * Display Name: Latitude
         * * SQL Data Type: decimal(10, 6)`),
     __mj_Longitude: z.number().nullable().describe(`
         * * Field Name: __mj_Longitude
-        * * Display Name: Mj Longitude
+        * * Display Name: Longitude
         * * SQL Data Type: decimal(10, 6)`),
     RootParentAccountingCompanyID: z.string().nullable().describe(`
         * * Field Name: RootParentAccountingCompanyID
-        * * Display Name: Root Parent Accounting Company
+        * * Display Name: Root Parent Company
         * * SQL Data Type: uniqueidentifier`),
 });
 
@@ -1056,17 +1056,29 @@ export const mjBizAppsAccountingJournalEntrySchema = z.object({
         * * Field Name: LinkedEntity
         * * Display Name: Linked Entity
         * * SQL Data Type: nvarchar(255)`),
+    ReversesJournalEntry: z.string().nullable().describe(`
+        * * Field Name: ReversesJournalEntry
+        * * Display Name: Reverses Journal Entry
+        * * SQL Data Type: nvarchar(40)`),
+    ReversedByJournalEntry: z.string().nullable().describe(`
+        * * Field Name: ReversedByJournalEntry
+        * * Display Name: Reversed By Journal Entry
+        * * SQL Data Type: nvarchar(40)`),
+    JournalEntryBatch: z.string().nullable().describe(`
+        * * Field Name: JournalEntryBatch
+        * * Display Name: Batch
+        * * SQL Data Type: nvarchar(40)`),
     File: z.string().nullable().describe(`
         * * Field Name: File
         * * Display Name: File
         * * SQL Data Type: nvarchar(500)`),
     RootReversesJournalEntryID: z.string().nullable().describe(`
         * * Field Name: RootReversesJournalEntryID
-        * * Display Name: Root Reverses Entry ID
+        * * Display Name: Root Reverses Journal Entry ID
         * * SQL Data Type: uniqueidentifier`),
     RootReversedByJournalEntryID: z.string().nullable().describe(`
         * * Field Name: RootReversedByJournalEntryID
-        * * Display Name: Root Reversed By Entry ID
+        * * Display Name: Root Reversed By Journal Entry ID
         * * SQL Data Type: uniqueidentifier`),
 });
 
@@ -1134,7 +1146,7 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * Description: The aggregated summary JournalEntry (its JournalEntryType flagged IsJournalEntryBatchSummary, EffectiveDate=PostingDate) that posts to the GL for this batch (plan D9). Its lines net debits/credits per GLAccount x dimension-combo. The summary carries this batch's JournalEntryBatchID (same derived lock machinery as members) but is excluded from member/netting/sweep queries via its type's IsJournalEntryBatchSummary flag.`),
     TargetSystem: z.union([z.literal('BusinessCentral'), z.literal('NetSuite'), z.literal('Other'), z.literal('QuickBooks'), z.literal('Sage'), z.literal('Xero')]).describe(`
         * * Field Name: TargetSystem
-        * * Display Name: Target ERP System
+        * * Display Name: Target System
         * * SQL Data Type: nvarchar(50)
     * * Value List Type: List
     * * Possible Values 
@@ -1191,7 +1203,7 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * Description: Sum of credits across all JE lines in the batch (functional currency).`),
     ExternalJournalEntryBatchRef: z.string().nullable().describe(`
         * * Field Name: ExternalJournalEntryBatchRef
-        * * Display Name: External ERP Reference
+        * * Display Name: External Batch Reference
         * * SQL Data Type: nvarchar(100)
         * * Description: ERP's reference returned on send (used to correlate the consolidated JE posted in the ERP).`),
     ApprovedAt: z.date().nullable().describe(`
@@ -1245,6 +1257,10 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * Field Name: Company
         * * Display Name: Company
         * * SQL Data Type: nvarchar(50)`),
+    SummaryJournalEntry: z.string().nullable().describe(`
+        * * Field Name: SummaryJournalEntry
+        * * Display Name: Summary Journal Entry
+        * * SQL Data Type: nvarchar(40)`),
     BatchedByUser: z.string().describe(`
         * * Field Name: BatchedByUser
         * * Display Name: Batched By User
@@ -1384,6 +1400,10 @@ export const mjBizAppsAccountingJournalEntryLineSchema = z.object({
         * * Display Name: Updated At
         * * SQL Data Type: datetimeoffset
         * * Default Value: getutcdate()`),
+    JournalEntry: z.string().describe(`
+        * * Field Name: JournalEntry
+        * * Display Name: Journal Entry
+        * * SQL Data Type: nvarchar(40)`),
     GLAccount: z.string().describe(`
         * * Field Name: GLAccount
         * * Display Name: GL Account
@@ -1500,7 +1520,7 @@ export const mjBizAppsAccountingTaxAuthoritySchema = z.object({
         * * Description: Unique identifier.`),
     Code: z.string().describe(`
         * * Field Name: Code
-        * * Display Name: Authority Code
+        * * Display Name: Code
         * * SQL Data Type: nvarchar(40)
         * * Description: Globally unique authority code, e.g. 'US-IRS', 'CA-BOE', 'EU-VAT-DE'.`),
     Name: z.string().describe(`
@@ -1531,11 +1551,11 @@ export const mjBizAppsAccountingTaxAuthoritySchema = z.object({
         * * Default Value: getutcdate()`),
     __mj_Latitude: z.number().nullable().describe(`
         * * Field Name: __mj_Latitude
-        * * Display Name: Mj Latitude
+        * * Display Name: Latitude
         * * SQL Data Type: decimal(10, 6)`),
     __mj_Longitude: z.number().nullable().describe(`
         * * Field Name: __mj_Longitude
-        * * Display Name: Mj Longitude
+        * * Display Name: Longitude
         * * SQL Data Type: decimal(10, 6)`),
 });
 
@@ -1605,7 +1625,7 @@ export const mjBizAppsAccountingTaxJurisdictionSchema = z.object({
         * * Description: Parent jurisdiction for nested scopes (e.g. county inside state).`),
     IsActive: z.boolean().describe(`
         * * Field Name: IsActive
-        * * Display Name: Active
+        * * Display Name: Is Active
         * * SQL Data Type: bit
         * * Default Value: 1
         * * Description: Whether this jurisdiction is currently active.`),
@@ -1629,15 +1649,15 @@ export const mjBizAppsAccountingTaxJurisdictionSchema = z.object({
         * * SQL Data Type: nvarchar(200)`),
     __mj_Latitude: z.number().nullable().describe(`
         * * Field Name: __mj_Latitude
-        * * Display Name: Mj Latitude
+        * * Display Name: Latitude
         * * SQL Data Type: decimal(10, 6)`),
     __mj_Longitude: z.number().nullable().describe(`
         * * Field Name: __mj_Longitude
-        * * Display Name: Mj Longitude
+        * * Display Name: Longitude
         * * SQL Data Type: decimal(10, 6)`),
     RootParentTaxJurisdictionID: z.string().nullable().describe(`
         * * Field Name: RootParentTaxJurisdictionID
-        * * Display Name: Root Parent Jurisdiction
+        * * Display Name: Root Parent Tax Jurisdiction
         * * SQL Data Type: uniqueidentifier`),
 });
 
@@ -1840,6 +1860,9 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
     /**
     * Validate() method override for MJ_BizApps_Accounting: Accounting Company Profiles entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
     * * CompanyCode: The Company Code must be between 2 and 20 characters in length, consist only of uppercase letters, numbers, underscores, or hyphens, and contain no lowercase characters or special symbols.
+    * * FiscalYearStartDay: The fiscal year start day must be a valid calendar day between 1 and 31.
+    * * FiscalYearStartMonth: The fiscal year start month must be a valid calendar month between 1 (January) and 12 (December).
+    * * Table-Level: A company cannot be assigned as its own parent accounting company.
     * @public
     * @method
     * @override
@@ -1847,6 +1870,9 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
     public override Validate(): ValidationResult {
         const result = super.Validate();
         this.ValidateCompanyCodeFormat(result);
+        this.ValidateFiscalYearStartDayRange(result);
+        this.ValidateFiscalYearStartMonthRange(result);
+        this.ValidateParentAccountingCompanyIDNotSelfReferencing(result);
         result.Success = result.Success && (result.Errors.length === 0);
 
         return result;
@@ -1873,6 +1899,59 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
     				ValidationErrorType.Failure
     			));
     		}
+    	}
+    }
+
+    /**
+    * The fiscal year start day must be a valid calendar day between 1 and 31.
+    * @param result - the ValidationResult object to add any errors or warnings to
+    * @public
+    * @method
+    */
+    public ValidateFiscalYearStartDayRange(result: ValidationResult) {
+    	if (this.FiscalYearStartDay != null && (this.FiscalYearStartDay < 1 || this.FiscalYearStartDay > 31)) {
+    		result.Errors.push(new ValidationErrorInfo(
+    			"FiscalYearStartDay",
+    			"The fiscal year start day must be between 1 and 31.",
+    			this.FiscalYearStartDay,
+    			ValidationErrorType.Failure
+    		));
+    	}
+    }
+
+    /**
+    * The fiscal year start month must be a valid calendar month between 1 (January) and 12 (December).
+    * @param result - the ValidationResult object to add any errors or warnings to
+    * @public
+    * @method
+    */
+    public ValidateFiscalYearStartMonthRange(result: ValidationResult) {
+    	if (this.FiscalYearStartMonth !== undefined && this.FiscalYearStartMonth !== null) {
+    		if (this.FiscalYearStartMonth < 1 || this.FiscalYearStartMonth > 12) {
+    			result.Errors.push(new ValidationErrorInfo(
+    				"FiscalYearStartMonth",
+    				"Fiscal year start month must be a valid calendar month between 1 and 12.",
+    				this.FiscalYearStartMonth,
+    				ValidationErrorType.Failure
+    			));
+    		}
+    	}
+    }
+
+    /**
+    * A company cannot be assigned as its own parent accounting company.
+    * @param result - the ValidationResult object to add any errors or warnings to
+    * @public
+    * @method
+    */
+    public ValidateParentAccountingCompanyIDNotSelfReferencing(result: ValidationResult) {
+    	if (this.ParentAccountingCompanyID != null && this.ParentAccountingCompanyID === this.ID) {
+    		result.Errors.push(new ValidationErrorInfo(
+    			"ParentAccountingCompanyID",
+    			"A company cannot be its own parent accounting company.",
+    			this.ParentAccountingCompanyID,
+    			ValidationErrorType.Failure
+    		));
     	}
     }
 
@@ -1917,7 +1996,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
 
     /**
     * * Field Name: LegalStructureType
-    * * Display Name: Legal Structure Type
+    * * Display Name: Legal Structure
     * * SQL Data Type: nvarchar(30)
     * * Value List Type: List
     * * Possible Values 
@@ -2022,7 +2101,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
 
     /**
     * * Field Name: FunctionalCurrencyCode
-    * * Display Name: Functional Currency Code
+    * * Display Name: Functional Currency
     * * SQL Data Type: char(3)
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Currencies (vwCurrencies.Code)
     * * Description: ISO 4217 currency code (CHAR(3)) for the functional currency. All JEs post in this currency; original-currency triple on JE lines records the source-transaction currency when different (BA-D10).
@@ -2036,7 +2115,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
 
     /**
     * * Field Name: ReportingCurrencyCode
-    * * Display Name: Reporting Currency Code
+    * * Display Name: Reporting Currency
     * * SQL Data Type: char(3)
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Currencies (vwCurrencies.Code)
     * * Description: Reporting currency for consolidation. NULL = same as functional currency.
@@ -2092,7 +2171,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
 
     /**
     * * Field Name: ApprovalCFOUserID
-    * * Display Name: Approval CFO User ID
+    * * Display Name: CFO User
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
     * * Description: The CFO (an __mj.User — a security identity) who must approve a Journal Entry Batch for this company before it dispatches to the ERP. Resolved by the bizapps-tasks approval gate. Nullable: companies without a configured CFO fall back to the role-based resolver.
@@ -2106,7 +2185,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
 
     /**
     * * Field Name: IsActive
-    * * Display Name: Is Active
+    * * Display Name: Active
     * * SQL Data Type: bit
     * * Default Value: 1
     * * Description: Whether this profile is currently active. Inactive companies cannot have new JEs.
@@ -2140,7 +2219,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
 
     /**
     * * Field Name: Name
-    * * Display Name: Name
+    * * Display Name: Company Name
     * * SQL Data Type: nvarchar(50)
     * * IS-A Source: Inherited from MJ: Companies
     */
@@ -2205,7 +2284,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
 
     /**
     * * Field Name: FunctionalCurrencyCode_Virtual
-    * * Display Name: Functional Currency Code (Virtual)
+    * * Display Name: Functional Currency (Virtual)
     * * SQL Data Type: nvarchar(80)
     */
     get FunctionalCurrencyCode_Virtual(): string {
@@ -2214,7 +2293,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
 
     /**
     * * Field Name: ReportingCurrencyCode_Virtual
-    * * Display Name: Reporting Currency Code (Virtual)
+    * * Display Name: Reporting Currency (Virtual)
     * * SQL Data Type: nvarchar(80)
     */
     get ReportingCurrencyCode_Virtual(): string | null {
@@ -2223,7 +2302,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
 
     /**
     * * Field Name: ApprovalCFOUser
-    * * Display Name: Approval CFO User
+    * * Display Name: CFO User Name
     * * SQL Data Type: nvarchar(100)
     */
     get ApprovalCFOUser(): string | null {
@@ -2232,7 +2311,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
 
     /**
     * * Field Name: __mj_Latitude
-    * * Display Name: Mj Latitude
+    * * Display Name: Latitude
     * * SQL Data Type: decimal(10, 6)
     */
     get __mj_Latitude(): number | null {
@@ -2241,7 +2320,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
 
     /**
     * * Field Name: __mj_Longitude
-    * * Display Name: Mj Longitude
+    * * Display Name: Longitude
     * * SQL Data Type: decimal(10, 6)
     */
     get __mj_Longitude(): number | null {
@@ -2250,7 +2329,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
 
     /**
     * * Field Name: RootParentAccountingCompanyID
-    * * Display Name: Root Parent Accounting Company
+    * * Display Name: Root Parent Company
     * * SQL Data Type: uniqueidentifier
     */
     get RootParentAccountingCompanyID(): string | null {
@@ -2699,6 +2778,57 @@ export class mjBizAppsAccountingCurrencySpotRateEntity extends BaseEntity<mjBizA
     }
 
     /**
+    * Validate() method override for MJ_BizApps_Accounting: Currency Spot Rates entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
+    * * Rate: The exchange rate must be greater than zero to ensure valid currency conversions.
+    * * Table-Level: The source currency and destination currency must be different. An exchange rate cannot be defined between the same currency.
+    * @public
+    * @method
+    * @override
+    */
+    public override Validate(): ValidationResult {
+        const result = super.Validate();
+        this.ValidateRateGreaterThanZero(result);
+        this.ValidateFromCurrencyCodeNotEqualToToCurrencyCode(result);
+        result.Success = result.Success && (result.Errors.length === 0);
+
+        return result;
+    }
+
+    /**
+    * The exchange rate must be greater than zero to ensure valid currency conversions.
+    * @param result - the ValidationResult object to add any errors or warnings to
+    * @public
+    * @method
+    */
+    public ValidateRateGreaterThanZero(result: ValidationResult) {
+    	if (this.Rate != null && this.Rate <= 0) {
+    		result.Errors.push(new ValidationErrorInfo(
+    			"Rate",
+    			"The exchange rate must be greater than zero.",
+    			this.Rate,
+    			ValidationErrorType.Failure
+    		));
+    	}
+    }
+
+    /**
+    * The source currency and destination currency must be different. An exchange rate cannot be defined between the same currency.
+    * @param result - the ValidationResult object to add any errors or warnings to
+    * @public
+    * @method
+    */
+    public ValidateFromCurrencyCodeNotEqualToToCurrencyCode(result: ValidationResult) {
+    	if (this.FromCurrencyCode != null && this.ToCurrencyCode != null && this.FromCurrencyCode === this.ToCurrencyCode) {
+    		result.Errors.push(new ValidationErrorInfo(
+    			"ToCurrencyCode",
+    			"The destination currency code ('" + this.ToCurrencyCode + "') cannot be the same as the source currency code ('" + this.FromCurrencyCode + "').",
+    			this.ToCurrencyCode,
+    			ValidationErrorType.Failure
+    		));
+    	}
+    }
+
+    /**
     * * Field Name: ID
     * * Display Name: ID
     * * SQL Data Type: uniqueidentifier
@@ -2855,6 +2985,40 @@ export class mjBizAppsAccountingDimensionValueEntity extends BaseEntity<mjBizApp
         const compositeKey: CompositeKey = new CompositeKey();
         compositeKey.KeyValuePairs.push({ FieldName: 'ID', Value: ID });
         return await super.InnerLoad(compositeKey, EntityRelationshipsToLoad);
+    }
+
+    /**
+    * Validate() method override for MJ_BizApps_Accounting: Dimension Values entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
+    * * Table-Level: The Effective To date must be on or after the Effective From date when both dates are provided.
+    * @public
+    * @method
+    * @override
+    */
+    public override Validate(): ValidationResult {
+        const result = super.Validate();
+        this.ValidateEffectiveToComparedToEffectiveFrom(result);
+        result.Success = result.Success && (result.Errors.length === 0);
+
+        return result;
+    }
+
+    /**
+    * The Effective To date must be on or after the Effective From date when both dates are provided.
+    * @param result - the ValidationResult object to add any errors or warnings to
+    * @public
+    * @method
+    */
+    public ValidateEffectiveToComparedToEffectiveFrom(result: ValidationResult) {
+    	if (this.EffectiveTo != null && this.EffectiveFrom != null) {
+    		if (new Date(this.EffectiveTo) < new Date(this.EffectiveFrom)) {
+    			result.Errors.push(new ValidationErrorInfo(
+    				"EffectiveTo",
+    				"The Effective To date cannot be earlier than the Effective From date.",
+    				this.EffectiveTo,
+    				ValidationErrorType.Failure
+    			));
+    		}
+    	}
     }
 
     /**
@@ -4103,6 +4267,7 @@ export class mjBizAppsAccountingIntercompanyAccountMatchEntity extends BaseEntit
     /**
     * Validate() method override for MJ_BizApps_Accounting: Intercompany Account Matches entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
     * * Table-Level: The Due To GL Account and Due From GL Account must be different to prevent an account from transacting with itself.
+    * * Table-Level: The end date and time must be after the start date and time if both are provided.
     * * Table-Level: The source company and target company must be different. A company cannot perform this transaction with itself.
     * @public
     * @method
@@ -4111,6 +4276,7 @@ export class mjBizAppsAccountingIntercompanyAccountMatchEntity extends BaseEntit
     public override Validate(): ValidationResult {
         const result = super.Validate();
         this.ValidateDueToAndDueFromGLAccountsAreDifferent(result);
+        this.ValidateEndedAtAfterStartedAt(result);
         this.ValidateSourceCompanyIDNotEqualToTargetCompanyID(result);
         result.Success = result.Success && (result.Errors.length === 0);
 
@@ -4131,6 +4297,25 @@ export class mjBizAppsAccountingIntercompanyAccountMatchEntity extends BaseEntit
     			this.DueToGLAccountID,
     			ValidationErrorType.Failure
     		));
+    	}
+    }
+
+    /**
+    * The end date and time must be after the start date and time if both are provided.
+    * @param result - the ValidationResult object to add any errors or warnings to
+    * @public
+    * @method
+    */
+    public ValidateEndedAtAfterStartedAt(result: ValidationResult) {
+    	if (this.StartedAt != null && this.EndedAt != null) {
+    		if (new Date(this.EndedAt).getTime() <= new Date(this.StartedAt).getTime()) {
+    			result.Errors.push(new ValidationErrorInfo(
+    				"EndedAt",
+    				"The end date and time must be after the start date and time.",
+    				this.EndedAt,
+    				ValidationErrorType.Failure
+    			));
+    		}
     	}
     }
 
@@ -4371,6 +4556,8 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     * * Table-Level: If the status is set to 'GLPosted', a GL posting date and time must be provided to ensure accurate financial tracking.
     * * Table-Level: Both Linked Entity ID and Linked Record ID must be provided together, or both must be left empty. This ensures that a link to an external record is always complete.
     * * Table-Level: A journal entry cannot be reversed by itself. If a reversing journal entry is specified, it must be a different entry.
+    * * Table-Level: A journal entry cannot be set to reverse itself. The reversing journal entry reference must point to a different journal entry.
+    * * Table-Level: A journal entry must be assigned to a batch unless its status is 'Pending'. This ensures all processed or posted entries are properly grouped for audit and posting integrity.
     * @public
     * @method
     * @override
@@ -4380,6 +4567,8 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
         this.ValidateGLPostedAtForPostedStatus(result);
         this.ValidateLinkedEntityAndRecordCoexistence(result);
         this.ValidateReversedByJournalEntryIDNotEqualToID(result);
+        this.ValidateReversesJournalEntryIDNotEqualToID(result);
+        this.ValidateStatusAndJournalEntryBatchID(result);
         result.Success = result.Success && (result.Errors.length === 0);
 
         return result;
@@ -4448,6 +4637,40 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     			ValidationErrorType.Failure
     		));
     	}
+    }
+
+    /**
+    * A journal entry cannot be set to reverse itself. The reversing journal entry reference must point to a different journal entry.
+    * @param result - the ValidationResult object to add any errors or warnings to
+    * @public
+    * @method
+    */
+    public ValidateReversesJournalEntryIDNotEqualToID(result: ValidationResult) {
+    	if (this.ReversesJournalEntryID != null && this.ReversesJournalEntryID === this.ID) {
+    		result.Errors.push(new ValidationErrorInfo(
+    			"ReversesJournalEntryID",
+    			"A journal entry cannot reverse itself. The Reverses Journal Entry ID must be different from the Journal Entry ID.",
+    			this.ReversesJournalEntryID,
+    			ValidationErrorType.Failure
+    		));
+    	}
+    }
+
+    /**
+    * A journal entry must be assigned to a batch unless its status is 'Pending'. This ensures all processed or posted entries are properly grouped for audit and posting integrity.
+    * @param result - the ValidationResult object to add any errors or warnings to
+    * @public
+    * @method
+    */
+    public ValidateStatusAndJournalEntryBatchID(result: ValidationResult) {
+        if (this.Status !== "Pending" && this.JournalEntryBatchID == null) {
+            result.Errors.push(new ValidationErrorInfo(
+                "JournalEntryBatchID",
+                "A Journal Entry Batch ID is required when the status is '" + this.Status + "'. Only 'Pending' journal entries can exist without a batch.",
+                this.JournalEntryBatchID,
+                ValidationErrorType.Failure
+            ));
+        }
     }
 
     /**
@@ -4707,6 +4930,33 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     }
 
     /**
+    * * Field Name: ReversesJournalEntry
+    * * Display Name: Reverses Journal Entry
+    * * SQL Data Type: nvarchar(40)
+    */
+    get ReversesJournalEntry(): string | null {
+        return this.Get('ReversesJournalEntry');
+    }
+
+    /**
+    * * Field Name: ReversedByJournalEntry
+    * * Display Name: Reversed By Journal Entry
+    * * SQL Data Type: nvarchar(40)
+    */
+    get ReversedByJournalEntry(): string | null {
+        return this.Get('ReversedByJournalEntry');
+    }
+
+    /**
+    * * Field Name: JournalEntryBatch
+    * * Display Name: Batch
+    * * SQL Data Type: nvarchar(40)
+    */
+    get JournalEntryBatch(): string | null {
+        return this.Get('JournalEntryBatch');
+    }
+
+    /**
     * * Field Name: File
     * * Display Name: File
     * * SQL Data Type: nvarchar(500)
@@ -4717,7 +4967,7 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
 
     /**
     * * Field Name: RootReversesJournalEntryID
-    * * Display Name: Root Reverses Entry ID
+    * * Display Name: Root Reverses Journal Entry ID
     * * SQL Data Type: uniqueidentifier
     */
     get RootReversesJournalEntryID(): string | null {
@@ -4726,7 +4976,7 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
 
     /**
     * * Field Name: RootReversedByJournalEntryID
-    * * Display Name: Root Reversed By Entry ID
+    * * Display Name: Root Reversed By Journal Entry ID
     * * SQL Data Type: uniqueidentifier
     */
     get RootReversedByJournalEntryID(): string | null {
@@ -4768,6 +5018,7 @@ export class mjBizAppsAccountingJournalEntryBatchSequenceEntity extends BaseEnti
     /**
     * Validate() method override for MJ_BizApps_Accounting: Journal Entry Batch Sequences entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
     * * ID: The ID of this record must be exactly 1, ensuring that only a single system configuration record exists.
+    * * NextSequenceNumber: The next sequence number must be a positive integer greater than zero to maintain sequence integrity.
     * @public
     * @method
     * @override
@@ -4775,6 +5026,7 @@ export class mjBizAppsAccountingJournalEntryBatchSequenceEntity extends BaseEnti
     public override Validate(): ValidationResult {
         const result = super.Validate();
         this.ValidateIdEqualsOne(result);
+        this.ValidateNextSequenceNumberGreaterThanZero(result);
         result.Success = result.Success && (result.Errors.length === 0);
 
         return result;
@@ -4792,6 +5044,23 @@ export class mjBizAppsAccountingJournalEntryBatchSequenceEntity extends BaseEnti
     			"ID",
     			"The ID for this record must be exactly 1.",
     			this.ID,
+    			ValidationErrorType.Failure
+    		));
+    	}
+    }
+
+    /**
+    * The next sequence number must be a positive integer greater than zero to maintain sequence integrity.
+    * @param result - the ValidationResult object to add any errors or warnings to
+    * @public
+    * @method
+    */
+    public ValidateNextSequenceNumberGreaterThanZero(result: ValidationResult) {
+    	if (this.NextSequenceNumber != null && this.NextSequenceNumber <= 0) {
+    		result.Errors.push(new ValidationErrorInfo(
+    			"NextSequenceNumber",
+    			"The next sequence number must be greater than zero.",
+    			this.NextSequenceNumber,
     			ValidationErrorType.Failure
     		));
     	}
@@ -4877,6 +5146,7 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
 
     /**
     * Validate() method override for MJ_BizApps_Accounting: Journal Entry Batches entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
+    * * Table-Level: Both the approval task ID and the time the approval task was raised must either be provided together, or both must be left blank.
     * * Table-Level: Ensures that the total debits, total credits, and total entries for a journal entry batch are non-negative values, maintaining financial data integrity.
     * @public
     * @method
@@ -4884,10 +5154,31 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     */
     public override Validate(): ValidationResult {
         const result = super.Validate();
+        this.ValidateApprovalTaskAndRaisedAtCoexistence(result);
         this.ValidateTotalsAreNonNegative(result);
         result.Success = result.Success && (result.Errors.length === 0);
 
         return result;
+    }
+
+    /**
+    * Both the approval task ID and the time the approval task was raised must either be provided together, or both must be left blank.
+    * @param result - the ValidationResult object to add any errors or warnings to
+    * @public
+    * @method
+    */
+    public ValidateApprovalTaskAndRaisedAtCoexistence(result: ValidationResult) {
+    	const hasTaskId = this.ApprovalTaskID !== null && this.ApprovalTaskID !== undefined;
+    	const hasRaisedAt = this.ApprovalTaskRaisedAt !== null && this.ApprovalTaskRaisedAt !== undefined;
+    
+    	if (hasTaskId !== hasRaisedAt) {
+    		result.Errors.push(new ValidationErrorInfo(
+    			"ApprovalTaskID",
+    			"Approval Task ID and Approval Task Raised At must either both be set or both be empty.",
+    			this.ApprovalTaskID,
+    			ValidationErrorType.Failure
+    		));
+    	}
     }
 
     /**
@@ -4993,7 +5284,7 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
 
     /**
     * * Field Name: TargetSystem
-    * * Display Name: Target ERP System
+    * * Display Name: Target System
     * * SQL Data Type: nvarchar(50)
     * * Value List Type: List
     * * Possible Values 
@@ -5106,7 +5397,7 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
 
     /**
     * * Field Name: ExternalJournalEntryBatchRef
-    * * Display Name: External ERP Reference
+    * * Display Name: External Batch Reference
     * * SQL Data Type: nvarchar(100)
     * * Description: ERP's reference returned on send (used to correlate the consolidated JE posted in the ERP).
     */
@@ -5237,6 +5528,15 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     */
     get Company(): string {
         return this.Get('Company');
+    }
+
+    /**
+    * * Field Name: SummaryJournalEntry
+    * * Display Name: Summary Journal Entry
+    * * SQL Data Type: nvarchar(40)
+    */
+    get SummaryJournalEntry(): string | null {
+        return this.Get('SummaryJournalEntry');
     }
 
     /**
@@ -5428,6 +5728,7 @@ export class mjBizAppsAccountingJournalEntryLineEntity extends BaseEntity<mjBizA
     * Validate() method override for MJ_BizApps_Accounting: Journal Entry Lines entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
     * * LineNumber: Journal entry line numbers must be greater than zero to ensure proper ordering and validity of the entry lines.
     * * Table-Level: Each journal entry line must have either a positive Debit amount or a positive Credit amount, but not both. One of these values must be greater than zero while the other must remain empty.
+    * * Table-Level: If original debit or credit amounts are specified, an exchange rate must be provided to ensure proper currency conversion logic.
     * * Table-Level: Ensures that if an original debit or credit amount is specified, its corresponding current debit or credit amount must also be provided. If no original amounts are specified, this requirement is bypassed.
     * * Table-Level: If an original debit or credit amount is specified, the original currency code must also be provided to ensure proper currency tracking.
     * * Table-Level: A journal entry line cannot have both an original debit amount and an original credit amount specified at the same time. It must have either only a debit, only a credit, or neither.
@@ -5439,6 +5740,7 @@ export class mjBizAppsAccountingJournalEntryLineEntity extends BaseEntity<mjBizA
         const result = super.Validate();
         this.ValidateLineNumberGreaterThanZero(result);
         this.ValidateDebitOrCreditAmount(result);
+        this.ValidateExchangeRateWhenOriginalAmountsPresent(result);
         this.ValidateOriginalAndCurrentAmounts(result);
         this.ValidateOriginalCurrencyCodeWhenOriginalAmountsExist(result);
         this.ValidateOriginalDebitAndCreditAmounts(result);
@@ -5503,6 +5805,23 @@ export class mjBizAppsAccountingJournalEntryLineEntity extends BaseEntity<mjBizA
                 ValidationErrorType.Failure
             ));
         }
+    }
+
+    /**
+    * If original debit or credit amounts are specified, an exchange rate must be provided to ensure proper currency conversion logic.
+    * @param result - the ValidationResult object to add any errors or warnings to
+    * @public
+    * @method
+    */
+    public ValidateExchangeRateWhenOriginalAmountsPresent(result: ValidationResult) {
+    	if ((this.OriginalDebitAmount != null || this.OriginalCreditAmount != null) && this.ExchangeRateUsed == null) {
+    		result.Errors.push(new ValidationErrorInfo(
+    			"ExchangeRateUsed",
+    			"An exchange rate must be provided when original debit or credit amounts are specified.",
+    			this.ExchangeRateUsed,
+    			ValidationErrorType.Failure
+    		));
+    	}
     }
 
     /**
@@ -5725,6 +6044,15 @@ export class mjBizAppsAccountingJournalEntryLineEntity extends BaseEntity<mjBizA
     */
     get __mj_UpdatedAt(): Date {
         return this.Get('__mj_UpdatedAt');
+    }
+
+    /**
+    * * Field Name: JournalEntry
+    * * Display Name: Journal Entry
+    * * SQL Data Type: nvarchar(40)
+    */
+    get JournalEntry(): string {
+        return this.Get('JournalEntry');
     }
 
     /**
@@ -6072,7 +6400,7 @@ export class mjBizAppsAccountingTaxAuthorityEntity extends BaseEntity<mjBizAppsA
 
     /**
     * * Field Name: Code
-    * * Display Name: Authority Code
+    * * Display Name: Code
     * * SQL Data Type: nvarchar(40)
     * * Description: Globally unique authority code, e.g. 'US-IRS', 'CA-BOE', 'EU-VAT-DE'.
     */
@@ -6145,7 +6473,7 @@ export class mjBizAppsAccountingTaxAuthorityEntity extends BaseEntity<mjBizAppsA
 
     /**
     * * Field Name: __mj_Latitude
-    * * Display Name: Mj Latitude
+    * * Display Name: Latitude
     * * SQL Data Type: decimal(10, 6)
     */
     get __mj_Latitude(): number | null {
@@ -6154,7 +6482,7 @@ export class mjBizAppsAccountingTaxAuthorityEntity extends BaseEntity<mjBizAppsA
 
     /**
     * * Field Name: __mj_Longitude
-    * * Display Name: Mj Longitude
+    * * Display Name: Longitude
     * * SQL Data Type: decimal(10, 6)
     */
     get __mj_Longitude(): number | null {
@@ -6341,7 +6669,7 @@ export class mjBizAppsAccountingTaxJurisdictionEntity extends BaseEntity<mjBizAp
 
     /**
     * * Field Name: IsActive
-    * * Display Name: Active
+    * * Display Name: Is Active
     * * SQL Data Type: bit
     * * Default Value: 1
     * * Description: Whether this jurisdiction is currently active.
@@ -6393,7 +6721,7 @@ export class mjBizAppsAccountingTaxJurisdictionEntity extends BaseEntity<mjBizAp
 
     /**
     * * Field Name: __mj_Latitude
-    * * Display Name: Mj Latitude
+    * * Display Name: Latitude
     * * SQL Data Type: decimal(10, 6)
     */
     get __mj_Latitude(): number | null {
@@ -6402,7 +6730,7 @@ export class mjBizAppsAccountingTaxJurisdictionEntity extends BaseEntity<mjBizAp
 
     /**
     * * Field Name: __mj_Longitude
-    * * Display Name: Mj Longitude
+    * * Display Name: Longitude
     * * SQL Data Type: decimal(10, 6)
     */
     get __mj_Longitude(): number | null {
@@ -6411,7 +6739,7 @@ export class mjBizAppsAccountingTaxJurisdictionEntity extends BaseEntity<mjBizAp
 
     /**
     * * Field Name: RootParentTaxJurisdictionID
-    * * Display Name: Root Parent Jurisdiction
+    * * Display Name: Root Parent Tax Jurisdiction
     * * SQL Data Type: uniqueidentifier
     */
     get RootParentTaxJurisdictionID(): string | null {

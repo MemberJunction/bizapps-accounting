@@ -19,7 +19,6 @@ export class mjBizAppsAccountingTaxJurisdictionFormComponent extends BaseFormCom
             { sectionKey: 'jurisdictionConfiguration', sectionName: 'Jurisdiction Configuration', isExpanded: true },
             { sectionKey: 'geographicScope', sectionName: 'Geographic Scope', isExpanded: true },
             { sectionKey: 'relationships', sectionName: 'Relationships', isExpanded: true },
-            { sectionKey: 'details', sectionName: 'Details', isExpanded: true },
             { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingTaxLiabilities', sectionName: 'Tax Liabilities', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingCompanyTaxNexus', sectionName: 'Company Tax Nexus', isExpanded: false },

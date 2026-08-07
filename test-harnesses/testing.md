@@ -13,6 +13,51 @@ create + open questions for the human, recorded so dev can roll through and circ
 Tiers: **1** Vitest (unit) · **2** server (tsx, in-process direct SQL) · **3** API (GraphQL→MJAPI) ·
 **4** GUI/DOM (no-browser — parked, mjdev overlay) · **5** Playwright (browser e2e, pre-PR only).
 
+## ✅ 2026-08-06 (final) — AI-enriched metadata baseline + the V-migration deviation layer
+
+Rebuilt the baseline's generated half with CodeGen's AI advanced-generation on (commit `c02112a`),
+then layered deliberate overrides as a **V migration** rather than hand-editing generated SQL.
+
+**Full pyramid GREEN, first clean sweep this session:** units **101/101** · tier-2 **75/75**
+(runtimes 50 + vitest 25) · tier-3 wire **72/72** · tier-4 **9/9** · tier-5 **8/8**.
+
+**What the AI added:** 291/291 field Categories (real form layouts), `DefaultInView` 9 → 106,
+`IsNameField` 9 → 12, search flags, `Validate()` bodies from CHECK constraints, and cleaner
+DisplayNames. Zero UUID churn — metadata IDs come from the baseline's INSERTs. Entity descriptions
+left hand-authored (23/23) with `EntityDescriptions` off on purpose.
+
+**`V202608062100` — the deviation layer.** V migrations run AFTER the baseline, so they survive
+every regeneration of its generated half; hand edits below the CODEGEN banner do not. It fixes two
+things the AI got wrong for an IS-A child, and pins both with the `AutoUpdate*` opt-outs so a later
+`codegen --ai` cannot revert them:
+- `Name` + `Description` (both NOT NULL, both mirrored/virtual, so sequenced last) were grouped into
+  a "Company Details" section rendering FIFTH — a create dialog that hides two required fields.
+  Moved to the leading "Accounting Profile" section.
+- `IsNameField` had been cleared on `Name` with nothing nominated, leaving the entity with no name
+  field. Restored. Filed upstream as **MJ#3551**.
+
+⚠ **A V migration fixes metadata, not files.** The Angular forms are generated, so the change only
+reaches the UI after a codegen run — and that run's output must NOT be folded into the baseline
+(the V migration is the source of truth). Sequence: V migration → migrate → codegen → commit the
+regenerated files.
+
+**Three tier-5 failures, none a defect:**
+1. `company-create` label `Name` → **`Company Name`** — the AI relabelled the mirrored parent field
+   for its origin. Clearer, and it no longer collides with the currency grid's own "Name" header.
+2. Same spec, `Functional Currency Code Virtual` → **`Functional Currency (Virtual)`**. Both are
+   stale-spec updates tracking intentional improvements, not weakened assertions.
+3. `orders-product-catalog` — **spec DELETED** (Marcelo, 2026-08-06). It drove the *Orders* app from
+   accounting's harness because orders had no Playwright harness of its own. That inverts the
+   dependency — orders depends on accounting, never the reverse. Orders needs its own harness.
+
+**Also learned:** `EntityFieldDescriptions`, `FormTabs`, `DefaultInViewFields` are **dead config
+knobs** — named in MJ's defaults, read by no code. Field descriptions come from
+`sp_addextendedproperty` in the DDL (192 → 168 of 297 fields documented; the other 129 are simply
+undocumented columns). AI codegen is also **not byte-reproducible** — re-running produces cosmetic
+DisplayName churn, so fold once and commit.
+
+Procedure for the orders/contracts agents: `reports/ai-codegen-enrichment/`.
+
 ## ✅ RESOLVED (2026-08-06) — All-accounts standard-grid swap, spec red → root-caused, 3 fixes
 
 All accounts now renders the STANDARD mj-entity-data-grid (Marcelo's ask): toolbar filters/search

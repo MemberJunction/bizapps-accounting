@@ -2943,6 +2943,18 @@ export class mjBizAppsAccountingJournalEntry_ {
     LinkedEntity?: string;
         
     @Field({nullable: true}) 
+    @MaxLength(40)
+    ReversesJournalEntry?: string;
+        
+    @Field({nullable: true}) 
+    @MaxLength(40)
+    ReversedByJournalEntry?: string;
+        
+    @Field({nullable: true}) 
+    @MaxLength(40)
+    JournalEntryBatch?: string;
+        
+    @Field({nullable: true}) 
     @MaxLength(500)
     File?: string;
         
@@ -3430,6 +3442,10 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @MaxLength(50)
     Company: string;
         
+    @Field({nullable: true}) 
+    @MaxLength(40)
+    SummaryJournalEntry?: string;
+        
     @Field() 
     @MaxLength(100)
     BatchedByUser: string;
@@ -3901,6 +3917,10 @@ export class mjBizAppsAccountingJournalEntryLine_ {
         
     @Field() 
     _mj__UpdatedAt: Date;
+        
+    @Field() 
+    @MaxLength(40)
+    JournalEntry: string;
         
     @Field() 
     @MaxLength(200)
