@@ -58,8 +58,11 @@ test('New company opens the real generated ACP form (required fields render); Ca
   const field = (label: string) => dialog.locator(`xpath=.//*[normalize-space(text())="${label}"]/..//input`).first();
   // Fill AND assert immediately — later popups (the currency picker's results grid has its own
   // "Name" column header) shadow these label lookups, so locators are only unambiguous NOW.
-  await field('Name').fill(NAME);
-  await expect(field('Name'), 'Name field rendered + filled').toHaveValue(NAME);
+  // The label is "Company Name", not "Name": this entity is an IS-A child of __mj.Company and the
+  // field is the mirrored parent Name, which CodeGen now labels for its origin (2026-08-06 AI
+  // metadata rebuild). More specific, and it no longer collides with that currency-grid header.
+  await field('Company Name').fill(NAME);
+  await expect(field('Company Name'), 'Company Name field rendered + filled').toHaveValue(NAME);
   await field('Company Code').fill(CODE);
   await expect(field('Company Code'), 'Company Code field rendered + filled').toHaveValue(CODE);
   // ── ⚠ CODED GAP 5x (2026-07-30): the full dialog-driven SAVE is not scripted. MJ's generated
@@ -72,7 +75,9 @@ test('New company opens the real generated ACP form (required fields render); Ca
   // company via ACP.Save on EVERY tier-5 batch spec run) and the New-company handler is
   // tier-4-covered. Upstream ask filed: stable locators (label association or data-testid) on
   // generated form fields.
-  await expect(dialog.getByText('Functional Currency Code Virtual').first(), 'currency picker rendered').toBeVisible();
+  // Label is "Functional Currency (Virtual)" since the 2026-08-06 AI metadata rebuild — CodeGen
+  // now renders the virtual-field suffix parenthetically instead of running the words together.
+  await expect(dialog.getByText('Functional Currency (Virtual)').first(), 'currency picker rendered').toBeVisible();
   const rosterBefore = await page.locator('.cs-listitem').count();
   await dialog.getByRole('button', { name: /^Cancel$/i }).first().click();
   await expect(dialog, 'Cancel closes the dialog').toBeHidden({ timeout: 15_000 });
