@@ -401,3 +401,7 @@ This repository provides the **AR subsidiary ledger of record + journal-entry pr
 **What does NOT live here**: trial balance / P&L / balance sheet generation, year-end closing, statistical accounts, fixed-asset depreciation as first-class, inventory/COGS, expense management. Those stay in the ERP or future BizApps* siblings.
 
 **Dependencies**: `__mj` (MJ core) → `bizapps-common` (Currency, CurrencyExchangeRate, Organization, Address) → **this repo** → `bizapps-orders` → `bizapps-contracts` → `aidp`.
+
+## Angular pinning model
+
+**Angular pinning model** (family-wide, 2026-08-07, with MemberJunction/MJ#3580): `@angular/*` peers in `packages/*` are **caret ranges at the platform pin** (`^21.1.3`) — compatibility claims, never exact. Each package that consumes Angular **anchors** the concrete version with exact `21.1.3` entries in its own `devDependencies`; the anchor is what actually installs. In the shared pnpm dev workspace `auto-install-peers=true` turns unanchored peer ranges into install instructions, which is how two copies of `@angular/core` ended up installed family-wide. Rev anchors with the era platform pin, never with MJ pins.
