@@ -10,11 +10,11 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Details Section -->
+    <!-- Intercompany Mapping Section -->
     <mj-collapsible-panel
-        SectionKey="details"
-        SectionName="Details"
-        Icon="fa fa-align-left"
+        SectionKey="intercompanyMapping"
+        SectionName="Intercompany Mapping"
+        Icon="fa fa-building"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -35,6 +35,16 @@
             [FormContext]="formContext"
             LinkType="Record"
         ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- Accounting Configuration Section -->
+    <mj-collapsible-panel
+        SectionKey="accountingConfiguration"
+        SectionName="Accounting Configuration"
+        Icon="fa fa-book"
+        [Form]="this"
+        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -53,6 +63,16 @@
             [FormContext]="formContext"
             LinkType="Record"
         ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- Operational Status Section -->
+    <mj-collapsible-panel
+        SectionKey="operationalStatus"
+        SectionName="Operational Status"
+        Icon="fa fa-clock"
+        [Form]="this"
+        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -85,6 +105,16 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- System Metadata Section -->
+    <mj-collapsible-panel
+        SectionKey="systemMetadata"
+        SectionName="System Metadata"
+        Icon="fa fa-cog"
+        [Form]="this"
+        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -114,7 +144,7 @@
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingIntercompanyAccountMatchDimensions"
         SectionName="Intercompany Account Match Dimensions"
-        Icon="fa fa-table"
+        Icon="fa fa-balance-scale"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"

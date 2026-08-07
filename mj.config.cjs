@@ -149,19 +149,32 @@ module.exports = {
   // ---------------------------------------------------------------------------
   // AI-Powered Advanced Generation Features
   // ---------------------------------------------------------------------------
-  // Default v3.x: Several features enabled by default
-  // advancedGeneration: {
-  //   enableAdvancedGeneration: true,
-  //   features: [
-  //     { name: 'EntityNames', enabled: false },
-  //     { name: 'DefaultInViewFields', enabled: true },
-  //     { name: 'EntityDescriptions', enabled: false },
-  //     { name: 'SmartFieldIdentification', enabled: true },
-  //     { name: 'TransitiveJoinIntelligence', enabled: true },
-  //     { name: 'FormLayoutGeneration', enabled: true },
-  //     { name: 'ParseCheckConstraints', enabled: true },
-  //   ],
-  // },
+  // AI enrichment policy for this app (Marcelo, 2026-08-06). Most of these features fire ONLY
+  // when an entity/field is newly created, so they take effect on a from-zero metadata rebuild
+  // (drop-schema -> migrate -> codegen --ai), not on an incremental run.
+  //
+  // OFF, deliberately:
+  //  - EntityNames: renames entities, which would break every 'MJ_BizApps_Accounting: ...' string
+  //    in this repo, its specs, and downstream apps. Never worth it.
+  //  - EntityDescriptions: all 23 entity descriptions are hand-authored in the baseline migration
+  //    and reviewed. Field-level descriptions are the real gap, so those stay on.
+  //
+  // `enableAdvancedGeneration` is intentionally NOT set here — mjdev's .mjrc.cjs overlay owns that
+  // switch and flips it per-run via `mjdev app codegen --ai`, so codegen stays token-free by default.
+  advancedGeneration: {
+    features: [
+      { name: 'FormLayoutGeneration', enabled: true },
+      { name: 'ParseCheckConstraints', enabled: true },
+      { name: 'VirtualEntityFieldDecoration', enabled: true },
+      { name: 'EntityFieldDescriptions', enabled: true },
+      { name: 'DefaultInViewFields', enabled: true },
+      { name: 'SmartFieldIdentification', enabled: true },
+      { name: 'TransitiveJoinIntelligence', enabled: true },
+      { name: 'FormTabs', enabled: true },
+      { name: 'EntityDescriptions', enabled: false },
+      { name: 'EntityNames', enabled: false },
+    ],
+  },
 
   // ---------------------------------------------------------------------------
   // SQL Output (for migrations)

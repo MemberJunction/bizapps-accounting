@@ -10,22 +10,32 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Details Section -->
+    <!-- Dimension Definition Section -->
     <mj-collapsible-panel
-        SectionKey="details"
-        SectionName="Details"
-        Icon="fa fa-align-left"
+        SectionKey="dimensionDefinition"
+        SectionName="Dimension Definition"
+        Icon="fa fa-tags"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
-            [ShowLabel]="true"
+            [ShowLabel]="false"
             FieldName="DimensionID"
             Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
             LinkType="Record"
         ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- Value Details Section -->
+    <mj-collapsible-panel
+        SectionKey="valueDetails"
+        SectionName="Value Details"
+        Icon="fa fa-info-circle"
+        [Form]="this"
+        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -45,12 +55,48 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
+            FieldName="IsActive"
+            Type="checkbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- Hierarchy Section -->
+    <mj-collapsible-panel
+        SectionKey="hierarchy"
+        SectionName="Hierarchy"
+        Icon="fa fa-project-diagram"
+        [Form]="this"
+        [FormContext]="formContext">
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
             FieldName="ParentDimensionValueID"
             Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
             LinkType="Record"
         ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="RootParentDimensionValueID"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- Validity Period Section -->
+    <mj-collapsible-panel
+        SectionKey="validityPeriod"
+        SectionName="Validity Period"
+        Icon="fa fa-calendar-alt"
+        [Form]="this"
+        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -67,14 +113,16 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="IsActive"
-            Type="checkbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- System Metadata Section -->
+    <mj-collapsible-panel
+        SectionKey="systemMetadata"
+        SectionName="System Metadata"
+        Icon="fa fa-cog"
+        [Form]="this"
+        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -91,14 +139,6 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="RootParentDimensionValueID"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
 
     </mj-collapsible-panel>
 
@@ -108,25 +148,25 @@
          RELATED ENTITY PANELS
          ======================================== -->
 
-    <!-- Dimension Values Section -->
+    <!-- Intercompany Account Match Dimensions Section -->
     <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingDimensionValues"
-        SectionName="Dimension Values"
-        Icon="fa fa-table"
+        SectionKey="mJBizAppsAccountingIntercompanyAccountMatchDimensions"
+        SectionName="Intercompany Account Match Dimensions"
+        Icon="fa fa-balance-scale"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingDimensionValues')"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingIntercompanyAccountMatchDimensions')"
         [DefaultExpanded]="false">
         @if (record.IsSaved) {
         <div>
             <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Dimension Values','ParentDimensionValueID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Dimension Values')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingDimensionValues')"
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Intercompany Account Match Dimensions','DimensionValueID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Intercompany Account Match Dimensions')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingIntercompanyAccountMatchDimensions')"
                 [ShowToolbar]="false"
                 (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingDimensionValues', $event.totalRowCount)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingIntercompanyAccountMatchDimensions', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>
@@ -137,7 +177,7 @@
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingJournalEntryLineDimensions"
         SectionName="Journal Entry Line Dimensions"
-        Icon="fa fa-table"
+        Icon="fa fa-tags"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"
@@ -158,25 +198,25 @@
         }
     </mj-collapsible-panel>
 
-    <!-- Intercompany Account Match Dimensions Section -->
+    <!-- Dimension Values Section -->
     <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingIntercompanyAccountMatchDimensions"
-        SectionName="Intercompany Account Match Dimensions"
-        Icon="fa fa-table"
+        SectionKey="mJBizAppsAccountingDimensionValues"
+        SectionName="Dimension Values"
+        Icon="fa fa-sitemap"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingIntercompanyAccountMatchDimensions')"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingDimensionValues')"
         [DefaultExpanded]="false">
         @if (record.IsSaved) {
         <div>
             <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Intercompany Account Match Dimensions','DimensionValueID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Intercompany Account Match Dimensions')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingIntercompanyAccountMatchDimensions')"
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Dimension Values','ParentDimensionValueID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Dimension Values')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingDimensionValues')"
                 [ShowToolbar]="false"
                 (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingIntercompanyAccountMatchDimensions', $event.totalRowCount)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingDimensionValues', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>
