@@ -10,11 +10,11 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Intercompany Configuration Section -->
+    <!-- Account Matching Section -->
     <mj-collapsible-panel
-        SectionKey="intercompanyConfiguration"
-        SectionName="Intercompany Configuration"
-        Icon="fa fa-cogs"
+        SectionKey="accountMatching"
+        SectionName="Account Matching"
+        Icon="fa fa-link"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -45,10 +45,10 @@
 
     </mj-collapsible-panel>
 
-    <!-- Dimension Definition Section -->
+    <!-- Dimension Configuration Section -->
     <mj-collapsible-panel
-        SectionKey="dimensionDefinition"
-        SectionName="Dimension Definition"
+        SectionKey="dimensionConfiguration"
+        SectionName="Dimension Configuration"
         Icon="fa fa-tags"
         [Form]="this"
         [FormContext]="formContext">
@@ -77,7 +77,7 @@
     <mj-collapsible-panel
         SectionKey="systemMetadata"
         SectionName="System Metadata"
-        Icon="fa fa-database"
+        Icon="fa fa-cog"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 

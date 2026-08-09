@@ -88,8 +88,12 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
   const getErrorText = (e: any): string => (typeof e === 'string' ? e : (e?.Message || e?.Error || e?.message || String(e)));
 
   describe('Line Collection & Visibility (PascalCase API)', () => {
-    it('initializes with empty lines array', () => {
-      expect(je.Lines).toEqual([]);
+    // `Lines` is a RelatedRecordCollection now, not a bare array — it tracks removals, stamps the
+    // foreign key and maintains the LineNumber sequence, none of which an array can do. Read
+    // through `.Items` / `.Count`.
+    it('initializes empty', () => {
+      expect(je.Lines.Count).toBe(0);
+      expect(je.Lines.Items).toEqual([]);
     });
 
     it('allows adding and removing lines via PascalCase AddLine and RemoveLine', () => {
@@ -106,14 +110,18 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
       je.AddLine(line1);
       je.AddLine(line2);
 
-      expect(je.Lines).toHaveLength(2);
+      expect(je.Lines.Count).toBe(2);
       expect(line1.LineNumber).toBe(1);
       expect(line2.LineNumber).toBe(2);
+      // The back-reference AddLine still sets by hand: the collection does not know about it, and
+      // JournalEntryLineEntityServer.ValidateAsync reads it for the single-company rule (D3).
       expect(line1.ParentJournalEntry).toBe(je);
 
       je.RemoveLine(line1);
-      expect(je.Lines).toHaveLength(1);
-      expect(je.Lines[0]).toBe(line2);
+      expect(je.Lines.Count).toBe(1);
+      expect(je.Lines.Items[0]).toBe(line2);
+      // Removal re-applies the sequence, so the survivor is renumbered — which is what
+      // UQ_JournalEntryLine_JE_LineNumber requires.
       expect(line2.LineNumber).toBe(1);
     });
   });

@@ -10,11 +10,11 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Currency Details Section -->
+    <!-- Exchange Rate Details Section -->
     <mj-collapsible-panel
-        SectionKey="currencyDetails"
-        SectionName="Currency Details"
-        Icon="fa fa-coins"
+        SectionKey="exchangeRateDetails"
+        SectionName="Exchange Rate Details"
+        Icon="fa fa-chart-line"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -35,16 +35,6 @@
             [FormContext]="formContext"
             LinkType="Record"
         ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Rate Information Section -->
-    <mj-collapsible-panel
-        SectionKey="rateInformation"
-        SectionName="Rate Information"
-        Icon="fa fa-chart-line"
-        [Form]="this"
-        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -69,9 +59,19 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- Configuration Section -->
+    <mj-collapsible-panel
+        SectionKey="configuration"
+        SectionName="Configuration"
+        Icon="fa fa-sliders-h"
+        [Form]="this"
+        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
-            [ShowLabel]="true"
+            [ShowLabel]="false"
             FieldName="IsActive"
             Type="checkbox"
             [EditMode]="EditMode"

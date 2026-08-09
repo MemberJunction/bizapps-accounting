@@ -14,7 +14,7 @@
     <mj-collapsible-panel
         SectionKey="accountingProfile"
         SectionName="Accounting Profile"
-        Icon="fa fa-info-circle"
+        Icon="fa fa-file-invoice"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -44,22 +44,6 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="JurisdictionCountry"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="JurisdictionRegion"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
             FieldName="FederalTaxID"
             Type="textbox"
             [EditMode]="EditMode"
@@ -76,13 +60,29 @@
 
     </mj-collapsible-panel>
 
-    <!-- Financial Settings Section -->
+    <!-- Jurisdiction and Operations Section -->
     <mj-collapsible-panel
-        SectionKey="financialSettings"
-        SectionName="Financial Settings"
-        Icon="fa fa-dollar-sign"
+        SectionKey="jurisdictionAndOperations"
+        SectionName="Jurisdiction and Operations"
+        Icon="fa fa-map-marker-alt"
         [Form]="this"
         [FormContext]="formContext">
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="JurisdictionCountry"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="JurisdictionRegion"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -91,6 +91,16 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- Financial Settings Section -->
+    <mj-collapsible-panel
+        SectionKey="financialSettings"
+        SectionName="Financial Settings"
+        Icon="fa fa-dollar-sign"
+        [Form]="this"
+        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -128,11 +138,11 @@
 
     </mj-collapsible-panel>
 
-    <!-- Administrative Settings Section -->
+    <!-- Accounting Governance Section -->
     <mj-collapsible-panel
-        SectionKey="administrativeSettings"
-        SectionName="Administrative Settings"
-        Icon="fa fa-sliders-h"
+        SectionKey="accountingGovernance"
+        SectionName="Accounting Governance"
+        Icon="fa fa-shield-alt"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -165,6 +175,32 @@
             [Record]="record"
             [ShowLabel]="true"
             FieldName="RootParentAccountingCompanyID"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- Details Section -->
+    <mj-collapsible-panel
+        SectionKey="details"
+        SectionName="Details"
+        Icon="fa fa-align-left"
+        [Form]="this"
+        [FormContext]="formContext">
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="__mj_Latitude"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="__mj_Longitude"
             Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
@@ -245,22 +281,6 @@
             [Record]="record"
             [ShowLabel]="true"
             FieldName="__mj_UpdatedAt"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="__mj_Latitude"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="__mj_Longitude"
             Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"

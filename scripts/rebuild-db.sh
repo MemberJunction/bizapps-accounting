@@ -57,7 +57,10 @@ PARSE
 
 : "${DB_DATABASE:?DB_DATABASE is not set — check .env}"
 
-MJ_VERSION="${MJ_CORE_VERSION:-v5.50.0}"
+# Tracks the MJ line this repo's package.json pins (^6.1.0-edge.0). A rebuild against v5 core now
+# installs a schema older than the code expects — Entity.GeneratedBaseViewName and
+# EntityRelationship.RelatedRecordCollection are both v6 columns, and CodeGen writes to them.
+MJ_VERSION="${MJ_CORE_VERSION:-v6.1.0-edge.1}"
 COMMON_REPO="${BIZAPPS_COMMON_REPO:-$ROOT/../bizapps-common}"
 TASKS_REPO="${BIZAPPS_TASKS_REPO:-$ROOT/../bizapps-tasks}"
 MJ="node $ROOT/node_modules/@memberjunction/cli/bin/run.js"
