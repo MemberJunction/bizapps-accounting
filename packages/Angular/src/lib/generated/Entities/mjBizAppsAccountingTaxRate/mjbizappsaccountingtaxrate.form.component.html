@@ -10,32 +10,22 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Jurisdiction Information Section -->
+    <!-- Jurisdiction and Category Section -->
     <mj-collapsible-panel
-        SectionKey="jurisdictionInformation"
-        SectionName="Jurisdiction Information"
+        SectionKey="jurisdictionAndCategory"
+        SectionName="Jurisdiction and Category"
         Icon="fa fa-map-marker-alt"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
-            [ShowLabel]="false"
+            [ShowLabel]="true"
             FieldName="TaxJurisdictionID"
             Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
             LinkType="Record"
         ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Tax Details Section -->
-    <mj-collapsible-panel
-        SectionKey="taxDetails"
-        SectionName="Tax Details"
-        Icon="fa fa-percentage"
-        [Form]="this"
-        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -44,6 +34,16 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- Rate and Validity Section -->
+    <mj-collapsible-panel
+        SectionKey="rateAndValidity"
+        SectionName="Rate and Validity"
+        Icon="fa fa-calendar-check"
+        [Form]="this"
+        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -52,24 +52,6 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="Source"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Validity Period Section -->
-    <mj-collapsible-panel
-        SectionKey="validityPeriod"
-        SectionName="Validity Period"
-        Icon="fa fa-calendar-alt"
-        [Form]="this"
-        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -83,6 +65,14 @@
             [ShowLabel]="true"
             FieldName="EffectiveTo"
             Type="datepicker"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="Source"
+            Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
