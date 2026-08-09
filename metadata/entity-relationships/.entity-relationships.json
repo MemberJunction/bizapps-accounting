@@ -1,0 +1,37 @@
+[
+  {
+    "_comments": [
+      "Declares Journal Entries -> Journal Entry Lines as a related-record collection (MJ 6.1).",
+      "",
+      "CodeGen reads RelatedRecordCollection and emits a typed `Lines` accessor onto the GENERATED",
+      "entity class, so both tiers get it. That replaces the hand-rolled collection on",
+      "JournalEntryEntityServer — `_lines`, `_deletedLines`, AddLine, RemoveLine, CreateLine and",
+      "LoadLines — which existed only on the server, so the Angular JE editor had to reach through a",
+      "service layer to compose an entry it could not model directly.",
+      "",
+      "This is the case MJ's own documentation uses as the worked example for a cross-record",
+      "invariant: debits must equal credits, validated over the complete set before the first row is",
+      "written. Declared here, that check runs in the BROWSER too.",
+      "",
+      "RelatedEntity and RelatedEntityJoinField are deliberately NOT set here — they are already",
+      "columns on this same row (Journal Entry Lines / JournalEntryID). Duplicating them would create",
+      "two sources of truth with the JSON copy winning silently.",
+      "",
+      "Sequence maintains LineNumber, which UQ_JournalEntryLine_JE_LineNumber requires to be unique",
+      "per entry and the column requires to be NOT NULL.",
+      "",
+      "Keyed by entity NAMES rather than the row's ID: EntityRelationship IDs are minted by CodeGen,",
+      "so a hardcoded UUID would stop matching the first time the database is rebuilt from zero."
+    ],
+    "fields": {
+      "RelatedRecordCollection": "@file:lines-collection.json"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: Journal Entries&RelatedEntity=MJ_BizApps_Accounting: Journal Entry Lines"
+    },
+    "sync": {
+      "lastModified": "2026-08-09T19:12:58.629Z",
+      "checksum": "488e55e9386d181b7f748126e844f123395804b65294e08b3c69030096abf400"
+    }
+  }
+]

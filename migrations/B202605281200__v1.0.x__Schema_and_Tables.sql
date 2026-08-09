@@ -2224,6 +2224,40 @@ GO
 -- =============================================================================
 
 -- =============================================================================
+-- SEED THE APPLICATION ROW THE GENERATED HALF POINTS AT.
+--
+-- WITHOUT THIS THE BASELINE CANNOT INSTALL INTO A FRESH DATABASE. CodeGen's output below inserts
+-- 69 ApplicationEntity rows carrying ApplicationID '08BC1CF8-7BBE-4798-A933-091BD87547BC', and
+-- nothing in this repository ever creates that Application: a from-zero `mj migrate` fails at
+--
+--     The INSERT statement conflicted with the FOREIGN KEY constraint "FK_ApplicationEntity_Application"
+--
+-- roughly 120 batches into the generated half. It stays invisible on any database that already has
+-- the row — which is every developer machine that installed an earlier revision — so the baseline
+-- looks correct right up until somebody installs it clean.
+--
+-- NOTE FOR REVIEW: `metadata/applications/.bizapps-accounting-application.json` pins a DIFFERENT id
+-- ('08B5D905-6FB3-438B-94E5-2C5FF021B794'), so `mj sync push` creates a SECOND Application rather
+-- than filling this one in. The two should be reconciled — but renumbering seeded metadata is the
+-- app owner's call, so this seeds exactly what the generated half references and no more.
+--
+-- Idempotent: re-running the baseline, or running it against a database that already has the row,
+-- does nothing.
+-- =============================================================================
+IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[Application] WHERE [ID] = '08BC1CF8-7BBE-4798-A933-091BD87547BC')
+BEGIN
+    -- Name and Path are the only NOT NULL columns without a default; everything else
+    -- (Status, NavigationStyle, DefaultSequence, AutoUpdatePath, ...) takes its column default.
+    INSERT INTO [${mjSchema}].[Application]
+        ([ID], [Name], [Path], [Description], [Icon], [DefaultForNewUser], [__mj_CreatedAt], [__mj_UpdatedAt])
+    VALUES
+        ('08BC1CF8-7BBE-4798-A933-091BD87547BC', 'Accounting', 'accounting',
+         'AR subledger, journal entries, and JE batch dispatch to the ERP',
+         'fa-solid fa-book', 0, GETUTCDATE(), GETUTCDATE());
+END
+GO
+
+-- =============================================================================
 -- END OF HAND-AUTHORED BASELINE (2026-07-06 revision).
 
 -- =============================================================================

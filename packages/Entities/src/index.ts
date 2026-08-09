@@ -14,3 +14,11 @@ export * from './generated/entity_subclasses'
  */
 export function LoadGeneratedEntities() {
 } 
+
+/**
+ * `JournalEntryEntity` — the shared (client + server) journal-entry subclass carrying the
+ * double-entry invariants: at least two lines, and debits equal to credits at penny precision.
+ * `JournalEntryEntityServer` extends it and adds everything that needs the database, so the rules
+ * run in the browser before a round trip AND on the server for every other caller.
+ */
+// export * from './JournalEntryEntity';  // restored once accounting CodeGen emits Lines
