@@ -3,7 +3,7 @@
     "Name": "Accounting",
     "Description": "AR subledger, journal entries, and JE batch dispatch to the ERP",
     "Icon": "fa-solid fa-book",
-    "DefaultForNewUser": false,
+    "DefaultForNewUser": true,
     "Color": "#0076b6",
     "DefaultSequence": 2010,
     "DefaultNavItems": [
@@ -51,7 +51,7 @@
     "ID": "08B5D905-6FB3-438B-94E5-2C5FF021B794"
   },
   "sync": {
-    "lastModified": "2026-08-09T05:01:52.121Z",
-    "checksum": "b252f08f6e6182132156559ff9ea1d5cb92c6c48d36e7b60be2dab5921ac8137"
+    "lastModified": "2026-08-09T18:40:05.474Z",
+    "checksum": "bda3246fdb9cc8c1afce4eb57aad609b6bd43dc6657dc878bfe1958c10542d5e"
   }
 }
