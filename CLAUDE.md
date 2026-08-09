@@ -405,3 +405,19 @@ This repository provides the **AR subsidiary ledger of record + journal-entry pr
 ## Angular pinning model
 
 **Angular pinning model** (family-wide, 2026-08-07, with MemberJunction/MJ#3580): `@angular/*` peers in `packages/*` are **caret ranges at the platform pin** (`^21.1.3`) — compatibility claims, never exact. Each package that consumes Angular **anchors** the concrete version with exact `21.1.3` entries in its own `devDependencies`; the anchor is what actually installs. In the shared pnpm dev workspace `auto-install-peers=true` turns unanchored peer ranges into install instructions, which is how two copies of `@angular/core` ended up installed family-wide. Rev anchors with the era platform pin, never with MJ pins.
+
+## UI architecture — READ BEFORE TOUCHING ANGULAR
+
+**[`docs/ui-architecture.md`](docs/ui-architecture.md) is binding for this repo.**
+
+The short version: **there is no data-access service layer.** Components bind directly to
+`BaseEntity` subclasses and call Remote Operation classes. Those are already strongly typed from the
+schema and already network-transparent — the same object works in the browser and on the server — so
+a service wrapping them replaces generated types with hand-written DTOs and loses the compiler.
+
+Angular services remain legitimate for Angular-shaped, non-persistent state — wizard step, selection,
+filter panels, router coordination. If a method on one loads, saves, validates or maps entity data,
+it is in the wrong place.
+
+The review test: *could a non-Angular host do this same work with the same objects?* If yes, the
+logic belongs on the entity, its shared subclass, or a Remote Operation.
