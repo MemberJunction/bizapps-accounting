@@ -4,7 +4,6 @@
     "autoCreateMissingRecords": true
   },
   "directoryOrder": [
-    "schema-info",
     "entities",
     "currencies",
     "journal-entry-types",
