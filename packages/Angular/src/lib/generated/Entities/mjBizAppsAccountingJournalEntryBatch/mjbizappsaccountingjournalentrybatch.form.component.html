@@ -10,11 +10,11 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Batch Details Section -->
+    <!-- Batch Information Section -->
     <mj-collapsible-panel
-        SectionKey="batchDetails"
-        SectionName="Batch Details"
-        Icon="fa fa-list-ol"
+        SectionKey="batchInformation"
+        SectionName="Batch Information"
+        Icon="fa fa-info-circle"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -45,51 +45,7 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="SummaryJournalEntryID"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-            LinkType="Record"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
             FieldName="TargetSystem"
-            Type="select"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Status and Lifecycle Section -->
-    <mj-collapsible-panel
-        SectionKey="statusAndLifecycle"
-        SectionName="Status and Lifecycle"
-        Icon="fa fa-sync-alt"
-        [Form]="this"
-        [FormContext]="formContext">
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="BatchedAt"
-            Type="datepicker"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="BatchedByUserID"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-            LinkType="Record"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="Status"
             Type="select"
             [EditMode]="EditMode"
             [FormContext]="formContext"
@@ -104,6 +60,15 @@
         Icon="fa fa-calculator"
         [Form]="this"
         [FormContext]="formContext">
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="SummaryJournalEntryID"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+            LinkType="Record"
+        ></mj-form-field>
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -133,6 +98,41 @@
             [ShowLabel]="true"
             FieldName="ExternalJournalEntryBatchRef"
             Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- Lifecycle and Status Section -->
+    <mj-collapsible-panel
+        SectionKey="lifecycleAndStatus"
+        SectionName="Lifecycle and Status"
+        Icon="fa fa-tasks"
+        [Form]="this"
+        [FormContext]="formContext">
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="BatchedAt"
+            Type="datepicker"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="BatchedByUserID"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+            LinkType="Record"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="Status"
+            Type="select"
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>

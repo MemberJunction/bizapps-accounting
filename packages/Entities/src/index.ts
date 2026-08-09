@@ -21,4 +21,4 @@ export function LoadGeneratedEntities() {
  * `JournalEntryEntityServer` extends it and adds everything that needs the database, so the rules
  * run in the browser before a round trip AND on the server for every other caller.
  */
-// export * from './JournalEntryEntity';  // restored once accounting CodeGen emits Lines
+export * from './JournalEntryEntity';

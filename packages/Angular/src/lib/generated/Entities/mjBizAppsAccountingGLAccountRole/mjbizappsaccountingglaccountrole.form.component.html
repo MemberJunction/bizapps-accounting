@@ -10,11 +10,11 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Role Configuration Section -->
+    <!-- Details Section -->
     <mj-collapsible-panel
-        SectionKey="roleConfiguration"
-        SectionName="Role Configuration"
-        Icon="fa fa-cog"
+        SectionKey="details"
+        SectionName="Details"
+        Icon="fa fa-align-left"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -49,16 +49,6 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- System Metadata Section -->
-    <mj-collapsible-panel
-        SectionKey="systemMetadata"
-        SectionName="System Metadata"
-        Icon="fa fa-database"
-        [Form]="this"
-        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -88,7 +78,7 @@
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingGLAccountLinks"
         SectionName="GL Account Links"
-        Icon="fa fa-book"
+        Icon="fa fa-book-open"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"

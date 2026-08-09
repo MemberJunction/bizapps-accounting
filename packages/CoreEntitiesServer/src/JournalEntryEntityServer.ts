@@ -31,6 +31,7 @@ import {
 import { RegisterClass } from '@memberjunction/global';
 import {
   mjBizAppsAccountingJournalEntryEntity,
+  JournalEntryEntity,
   mjBizAppsAccountingJournalEntryLineDimensionEntity,
 } from '@mj-biz-apps/accounting-entities';
 
@@ -47,9 +48,12 @@ const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
 const FILE_ENTITY = 'Files'; // __mj.File
 
 @RegisterClass(BaseEntity, JE_ENTITY)
-export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEntity {
-  private _lines: JournalEntryLineEntityServer[] = [];
-  private _deletedLines: JournalEntryLineEntityServer[] = [];
+export class JournalEntryEntityServer extends JournalEntryEntity {
+  // `_lines` and `_deletedLines` are gone. `Lines` is a RelatedRecordCollection on the GENERATED
+  // class, emitted from the RelatedRecordCollection metadata on the
+  // 'Journal Entries -> Journal Entry Lines' relationship, so it exists on BOTH tiers — which is
+  // what lets the browser compose an entry it previously had no type for. The collection also
+  // tracks removals itself (OnRemove: 'delete'), which is what `_deletedLines` was for.
 
   /**
    * BaseEntity SKIPS ValidateAsync by default (DefaultSkipAsyncValidation = true) — opt in, or
@@ -60,51 +64,34 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
     return false;
   }
 
-  /**
-   * Child JournalEntryLine instances attached to this Journal Entry.
-   * Gives full visibility of lines at the Journal Entry header level.
-   */
-  get Lines(): JournalEntryLineEntityServer[] {
-    return this._lines;
-  }
-
   // ─── Line Collection ─────────────────────────────────────────────────────────
 
-  /** Appends a line to this Journal Entry and sets its parent reference. */
+  /**
+   * Appends a line and sets the back-reference its own validation needs.
+   *
+   * A thin wrapper over `Lines.Add()` now. It survives because `ParentJournalEntry` does NOT come
+   * from the collection: `JournalEntryLineEntityServer.ValidateAsync` reads it to enforce the
+   * single-company isolation rule (D3), and a line added straight through `Lines.Add()` would have
+   * it undefined — so the GL-account company check would silently pass on every line.
+   *
+   * `Lines.Add()` stamps JournalEntryID and the LineNumber sequence, so neither is done here.
+   */
   public AddLine(line: JournalEntryLineEntityServer): void {
     if (!line) return;
     line.ParentJournalEntry = this;
-    if (this.ID) {
-      line.JournalEntryID = this.ID;
-    }
-    if (!line.LineNumber) {
-      line.LineNumber = this._lines.length + 1;
-    }
-    this._lines.push(line);
+    this.Lines.Add(line);
   }
 
-  /** Removes a line by object instance or array index. Tracks saved lines for deletion on Save(). */
+  /**
+   * Removes a line by instance or index.
+   *
+   * `Lines.Remove()` does everything the hand-rolled version did: it queues a persisted line for
+   * deletion (OnRemove: 'delete' — what `_deletedLines` tracked) and re-applies the LineNumber
+   * sequence so the survivors stay gap-free, which
+   * `UQ_JournalEntryLine_JE_LineNumber` requires.
+   */
   public RemoveLine(lineOrIndex: JournalEntryLineEntityServer | number): void {
-    let removedLine: JournalEntryLineEntityServer | null = null;
-    if (typeof lineOrIndex === 'number') {
-      if (lineOrIndex >= 0 && lineOrIndex < this._lines.length) {
-        removedLine = this._lines.splice(lineOrIndex, 1)[0];
-      }
-    } else {
-      const idx = this._lines.indexOf(lineOrIndex);
-      if (idx >= 0) {
-        removedLine = this._lines.splice(idx, 1)[0];
-      }
-    }
-
-    if (removedLine && removedLine.IsSaved) {
-      this._deletedLines.push(removedLine);
-    }
-
-    // Re-sequence remaining line numbers
-    this._lines.forEach((l, index) => {
-      l.LineNumber = index + 1;
-    });
+    this.Lines.Remove(lineOrIndex as never);
   }
 
   /** Instantiates a new line, attaches it to this JE, and returns it. */
@@ -115,45 +102,36 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
       user ?? this.ContextCurrentUser,
     );
     line.NewRecord();
-    line.JournalEntryID = this.ID;
-    line.LineNumber = this._lines.length + 1;
     this.AddLine(line);
     return line;
   }
 
-  /** Loads child lines (and their dimension tags — ONE bulk query) from database for this Journal Entry if saved. */
+  /**
+   * Loads the lines (and their dimension tags — ONE bulk query) for a saved Journal Entry.
+   *
+   * `Lines.Load()` does the query now, with the OrderBy the metadata declares. What stays here is
+   * everything the collection does not know about: the `ParentJournalEntry` back-reference each
+   * line's own validation reads for the single-company rule (D3), and the bulk dimension hydration
+   * that exists so N lines cost ONE dimension query instead of N.
+   */
   public async LoadLines(user?: UserInfo): Promise<JournalEntryLineEntityServer[]> {
     if (!this.IsSaved || !this.ID) {
-      return this._lines;
+      return this.Lines.Items as JournalEntryLineEntityServer[];
     }
-    const provider = this.ProviderToUse as unknown as IRunViewProvider;
-    const res = await provider.RunView<JournalEntryLineEntityServer>(
-      {
-        EntityName: JEL_ENTITY,
-        ExtraFilter: `JournalEntryID='${this.ID}'`,
-        OrderBy: 'LineNumber ASC',
-        ResultType: 'entity_object',
-      },
-      user ?? this.ContextCurrentUser,
-    );
-    // A failed LOAD must be loud — silently returning an empty Lines collection would make a
-    // real JE look line-less (and a reversal built from it would be wrong). Only saves use the
-    // boolean-return convention.
-    if (!res.Success) {
-      throw new Error(`JournalEntryEntityServer.LoadLines: failed to load lines for JE ${this.ID}: ${res.ErrorMessage ?? 'unknown error'}`);
-    }
-    this._lines = res.Results ?? [];
-    for (const line of this._lines) {
+    // force: a second call must re-read rather than hand back a stale set — callers use this to
+    // refresh after an external change.
+    await this.Lines.Load(true);
+    const lines = this.Lines.Items as JournalEntryLineEntityServer[];
+    for (const line of lines) {
       line.ParentJournalEntry = this;
     }
-    this._deletedLines = [];
     await this.hydrateLineDimensions(user);
-    return this._lines;
+    return lines;
   }
 
   /** One bulk JournalEntryLineDimension query for ALL lines, distributed onto each line's collection. */
   private async hydrateLineDimensions(user?: UserInfo): Promise<void> {
-    const lineIds = this._lines.map(l => l.ID).filter(Boolean);
+    const lineIds = this.Lines.Items.map(l => l.ID).filter(Boolean);
     if (lineIds.length === 0) return;
     const provider = this.ProviderToUse as unknown as IRunViewProvider;
     const inList = lineIds.map(id => `'${id}'`).join(',');
@@ -177,7 +155,7 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
       arr.push(dim);
       byLine.set(key, arr);
     }
-    for (const line of this._lines) {
+    for (const line of this.Lines.Items as JournalEntryLineEntityServer[]) {
       line.SetLoadedDimensions(byLine.get(line.ID.toLowerCase()) ?? []);
     }
   }
@@ -205,7 +183,7 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
   /** Synchronous in-memory validation of double-entry rules & invariants. */
   public override Validate(): ValidationResult {
     const result = super.Validate();
-    const lines = this._lines || [];
+    const lines = this.Lines.Items as JournalEntryLineEntityServer[];
 
     // Rule 1: A JE must have at least 2 line items
     if (lines.length < 2) {
@@ -316,7 +294,7 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
     }
 
     // Rule 6: Single-Company Isolation (Line GLAccounts must match header CompanyID) & Active GL Accounts
-    const lines = this._lines || [];
+    const lines = this.Lines.Items as JournalEntryLineEntityServer[];
     if (lines.length > 0 && this.CompanyID) {
       const glIds = [...new Set(lines.map(l => l.GLAccountID).filter(Boolean))];
       if (glIds.length > 0) {
@@ -395,41 +373,30 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
     try {
       await dbProvider.BeginTransaction();
 
-      // 1. Save header record first
-      const savedHeader = await super.Save(options);
-      if (!savedHeader) {
+      // THE HEADER AND ITS LINES, AS ONE GRAPH.
+      //
+      // This used to be three hand-written steps — save the header, delete the queued lines, then
+      // loop the active ones stamping JournalEntryID and LineNumber before saving each. MJ's graph
+      // save is exactly that sequence, so the code is gone rather than adapted:
+      //
+      //   · removals run BEFORE inserts, so a LineNumber freed by a removal is available to the
+      //     line about to take it — `UQ_JournalEntryLine_JE_LineNumber` needs that ordering, and
+      //     the hand-written version happened to get it right by luck of statement order
+      //   · the foreign key is stamped from the parent's key at execution time, so it is correct
+      //     even when the header is new and its ID is minted during this very save
+      //   · LineNumber comes from the declared Sequence policy
+      //   · every line is still written by its OWN Save(), so JournalEntryLineEntityServer's
+      //     dimension handling, validation and record-change tracking all fire exactly as before
+      //
+      // NOTE this deliberately does NOT pass IsGraphNodeSave. bizapps-orders does, because
+      // OrderEntityServer prices and books its lines itself and must keep ownership of when they
+      // are written. A journal entry has no such walk: the lines are complete when they arrive, so
+      // letting the graph persist them is the whole point.
+      const saved = await super.Save(options);
+      if (!saved) {
         throw new Error(
-          `Failed to save JournalEntry header: ${this.LatestResult?.CompleteMessage ?? 'unknown error'}`,
+          `Failed to save JournalEntry: ${this.LatestResult?.CompleteMessage ?? 'unknown error'}`,
         );
-      }
-
-      // 2. Process pending line deletions
-      if (this._deletedLines && this._deletedLines.length > 0) {
-        for (const line of this._deletedLines) {
-          const deleted = await line.Delete(options);
-          if (!deleted) {
-            throw new Error(
-              `Failed to delete line ${line.LineNumber}: ${line.LatestResult?.CompleteMessage ?? 'unknown error'}`,
-            );
-          }
-        }
-        this._deletedLines = [];
-      }
-
-      // 3. Save attached active lines
-      if (this._lines && this._lines.length > 0) {
-        let lineNum = 1;
-        for (const line of this._lines) {
-          line.JournalEntryID = this.ID;
-          line.LineNumber = lineNum++;
-
-          const savedLine = await line.Save(options);
-          if (!savedLine) {
-            throw new Error(
-              `Failed to save line ${line.LineNumber}: ${line.LatestResult?.CompleteMessage ?? 'unknown error'}`,
-            );
-          }
-        }
       }
 
       await dbProvider.CommitTransaction();
@@ -534,7 +501,7 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
     }
 
     // Make sure this JE's own lines (+ dimension tags) are hydrated to copy from.
-    if (this._lines.length === 0) {
+    if (this.Lines.Count === 0) {
       await this.LoadLines(user);
     }
 
@@ -547,7 +514,7 @@ export class JournalEntryEntityServer extends mjBizAppsAccountingJournalEntryEnt
     reversal.Description = `Reversal of ${this.EntryNumber}: ${reason}`;
     reversal.ReversesJournalEntryID = this.ID;
 
-    for (const orig of this._lines) {
+    for (const orig of this.Lines.Items as JournalEntryLineEntityServer[]) {
       const line = await reversal.CreateLine(user);
       line.GLAccountID = orig.GLAccountID;
       line.DebitAmount = orig.CreditAmount; // SWAP

@@ -46,8 +46,26 @@ DECLARE @EntityID UNIQUEIDENTIFIER =
     (SELECT ID FROM [${mjSchema}].[Entity]
      WHERE Name = 'MJ_BizApps_Accounting: Accounting Company Profiles');
 
+-- SKIP, DO NOT THROW, WHEN THE ENTITY METADATA IS NOT THERE YET.
+--
+-- This THREW, and that made `scripts/rebuild-db.sh` impossible to complete. The rebuild TRIMS the
+-- baseline's generated half so CodeGen can regenerate it from the bare schema — that is the whole
+-- point of the trim — which means the entity metadata this migration needs does not exist at the
+-- moment it runs. The script and this migration were mutually exclusive: a from-zero rebuild failed
+-- here every time, on a database that was otherwise perfectly healthy.
+--
+-- Skipping is correct on that path rather than merely convenient: CodeGen runs moments later and
+-- creates the entity, and it emits `Category` / `AutoUpdateCategory` for the fields it manages.
+--
+-- ⚠️ WORTH A FOLLOW-UP: on the from-zero path the pin below is therefore NOT applied, and flyway
+-- records this migration as run, so it will not retry. Field categorisation is METADATA and its home
+-- is `metadata/entities/` synced by `mj sync push` — which runs after CodeGen and would apply on both
+-- paths. This comment says so rather than quietly half-fixing it.
 IF @EntityID IS NULL
-    THROW 50100, 'V202608062100: AccountingCompanyProfile entity not found — CodeGen metadata must exist before this migration runs.', 1;
+BEGIN
+    PRINT 'V202608062100: AccountingCompanyProfile entity metadata not present (bare/rebuilt database) — skipping the form-layout pin. CodeGen will create the entity; see the note above.';
+    RETURN;
+END
 
 -- Surface the two REQUIRED mirrored fields in the leading section, and pin the choice.
 UPDATE [${mjSchema}].[EntityField]

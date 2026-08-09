@@ -16,10 +16,9 @@ export class mjBizAppsAccountingTaxAuthorityFormComponent extends BaseFormCompon
     override async ngOnInit() {
         await super.ngOnInit();
         this.initSections([
-            { sectionKey: 'authorityDetails', sectionName: 'Authority Details', isExpanded: true },
-            { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingTaxJurisdictions', sectionName: 'Tax Jurisdictions', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingTaxLiabilities', sectionName: 'Tax Liabilities', isExpanded: false }
+            { sectionKey: 'details', sectionName: 'Details', isExpanded: true },
+            { sectionKey: 'mJBizAppsAccountingTaxLiabilities', sectionName: 'Tax Liabilities', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingTaxJurisdictions', sectionName: 'Tax Jurisdictions', isExpanded: false }
         ]);
     }
 }

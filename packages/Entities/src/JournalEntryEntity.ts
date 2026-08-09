@@ -1,13 +1,4 @@
 /**
- * ⚠️ NOT YET EXPORTED — see the commented line in `index.ts`.
- *
- * This class reads `this.Lines`, which CodeGen emits onto the generated
- * `mjBizAppsAccountingJournalEntryEntity` from the `RelatedRecordCollection` metadata in
- * `metadata/entity-relationships/`. That metadata has to be pushed and CodeGen re-run against a
- * rebuilt `bizapps_accounting` before the property exists and this file compiles. Committed ahead of
- * that so the design is reviewable; wired up in the same PR once the database cycle has run.
- */
-/**
  * @fileoverview `JournalEntryEntity` — the double-entry rules, on BOTH tiers.
  *
  * WHY THIS LAYER EXISTS
