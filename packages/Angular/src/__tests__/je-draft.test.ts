@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { EntityInfo, Metadata } from '@memberjunction/core';
-import { JournalEntryEntity, JournalEntryLineEntity } from '@mj-biz-apps/accounting-entities';
+import {
+    JournalEntryEntity,
+    JournalEntryLineEntity,
+    mjBizAppsAccountingJournalEntryLineDimensionEntity as JournalEntryLineDimensionEntity,
+} from '@mj-biz-apps/accounting-entities';
 import {
   parseMoney,
   TextIssue,
@@ -31,6 +35,7 @@ import {
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
+const JELD_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Line Dimensions';
 
 /**
  * EntityInfo stubs, so `BaseEntity`'s constructor succeeds with no database.
@@ -67,11 +72,13 @@ function mockEntityInfo(name: string, fieldNames: string[]): EntityInfo {
 
 let jeInfo: EntityInfo;
 let jelInfo: EntityInfo;
+let jeldInfo: EntityInfo;
 
 beforeEach(() => {
   jeInfo = mockEntityInfo(JE_ENTITY, ['ID', 'CompanyID', 'EffectiveDate', 'EntryTypeID', 'Status', 'EntryNumber', 'Description']);
   jelInfo = mockEntityInfo(JEL_ENTITY, ['ID', 'JournalEntryID', 'LineNumber', 'GLAccountID', 'DebitAmount', 'CreditAmount', 'Description']);
-  const entities = [jeInfo, jelInfo];
+  jeldInfo = mockEntityInfo(JELD_ENTITY, ['ID', 'JournalEntryLineID', 'DimensionID', 'DimensionValueID']);
+  const entities = [jeInfo, jelInfo, jeldInfo];
 
   Metadata.Provider = {
     Entities: entities,
@@ -225,10 +232,23 @@ describe('toCreateInput', () => {
     expect(toCreateInput(state).Lines.length).toBe(2);
   });
 
-  it('sends only dimension pairs the operator actually chose', () => {
+  it('sends only COMPLETE dimension pairs, read off the line itself', () => {
+    // The picks live on the line's own `Dimensions` collection now, not in a component Map keyed by
+    // line id. A tag with an axis and no value is a half-made choice: values are never auto-created
+    // (CH-12), so an unmatched one is a mistake rather than a request, and it must not travel.
     const state = balanced();
     const [first] = LiveLines(state.Entry);
-    state.Dimensions.set(first.ID, { 'dim-fund': 'val-general', 'dim-program': null });
+
+    const chosen = new JournalEntryLineDimensionEntity(jeldInfo as never);
+    chosen.NewRecord();
+    chosen.DimensionID = 'dim-fund';
+    chosen.DimensionValueID = 'val-general';
+    first.Dimensions.Add(chosen);
+
+    const halfMade = new JournalEntryLineDimensionEntity(jeldInfo as never);
+    halfMade.NewRecord();
+    halfMade.DimensionID = 'dim-program';
+    first.Dimensions.Add(halfMade);
 
     const [line] = toCreateInput(state).Lines;
     expect(line.Dimensions).toEqual([{ DimensionID: 'dim-fund', DimensionValueID: 'val-general' }]);

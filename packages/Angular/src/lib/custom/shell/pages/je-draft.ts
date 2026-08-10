@@ -15,14 +15,15 @@ import type { JournalEntryEntity, JournalEntryLineEntity } from '@mj-biz-apps/ac
  * precision, and per line: an account, exactly one side, neither side negative. None of that lives
  * here any more.
  *
- * WHAT REMAINS HERE IS ACTUALLY UI STATE, and it is here for a reason rather than by inertia:
+ * WHAT REMAINS HERE IS ACTUALLY UI STATE, and it is one thing rather than a collection of leftovers:
  *
  *   · `Amounts` — the raw TEXT of each money box. `DebitAmount` is a number; a half-typed "8." is
  *     not one, and binding the entity directly would erase the decimal point the moment change
  *     detection ran. The text is the buffer, the entity is the value, and they meet at `SetAmount`.
- *   · `Dimensions` — the per-line analytical tags. `JournalEntryLine` declares no `Dimensions`
- *     related collection (the SERVER subclass hand-rolls one), so there is nothing on the client
- *     entity to hold them. They travel in the contract instead.
+ *
+ * The per-line dimension picks used to live here too, justified by "`JournalEntryLine` declares no
+ * `Dimensions` related collection". It does now, so they moved onto the line where they belong — and
+ * the justification had outlived its truth, which is the failure mode a comment is worst at showing.
  *
  * CONNECTS TO:
  *   ENTITY:   @mj-biz-apps/accounting-entities (JournalEntryEntity / JournalEntryLineEntity)
@@ -39,9 +40,6 @@ export interface JEDraftState {
      * VALUE, and this is what the operator has typed so far on the way to one.
      */
     Amounts: Map<string, JEAmountText>;
-
-    /** DimensionID → DimensionValueID, per line id. Only pre-existing values (CH-12: never auto-create). */
-    Dimensions: Map<string, Record<string, string | null>>;
 
     /** Set once submitted — the tab becomes a read-only record of the created entry. */
     CreatedEntryNumber?: string;
@@ -128,9 +126,13 @@ export function toCreateInput(state: JEDraftState): CreateJournalEntryInput {
     const Lines: JournalEntryLineDraft[] = LiveLines(state.Entry).map((l) => {
         const debit = l.DebitAmount ?? 0;
         const credit = l.CreditAmount ?? 0;
-        const dimensions = Object.entries(state.Dimensions.get(l.ID) ?? {})
-            .filter((entry): entry is [string, string] => !!entry[1])
-            .map(([DimensionID, DimensionValueID]) => ({ DimensionID, DimensionValueID }));
+        // Read off the LINE's own collection. Only complete pairs travel: a tag with an axis and no
+        // value is a half-made choice, and the engine rejects it (CH-12 — values are never
+        // auto-created, so an unmatched one is a mistake rather than a request).
+        const dimensions = l.Dimensions.Items.filter((d) => d.DimensionID && d.DimensionValueID).map((d) => ({
+            DimensionID: d.DimensionID as string,
+            DimensionValueID: d.DimensionValueID as string,
+        }));
 
         // The contract's optional Debit/CreditAmount means ABSENT, not zero — sending a zero would
         // read as a stated amount of nothing rather than as the side this line is not on.
