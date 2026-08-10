@@ -59,9 +59,9 @@ export interface DimensionColumn {
  *
  * CONNECTS TO:
  *   OP:     ./je-workspace.client → 'Accounting.CreateJournalEntry'
- *   ENTITY: JournalEntryEntity + its Lines collection — the model, and the SAME Validate() the
- *           server runs. There is no draft mirror any more; ./je-draft holds what is genuinely UI
- *           state (the raw text of each money box, and the per-line dimension picks).
+ *   ENTITY: JournalEntryEntity + its Lines collection, and each line's own Dimensions collection —
+ *           the model, and the SAME Validate() the server runs. There is no draft mirror any more;
+ *           ./je-draft holds the one thing that is genuinely UI state: the raw text of each money box.
  *   ENGINE: AccountingEngineBase (cached GL accounts + dimensions — no round-trip to populate)
  */
 @Component({
@@ -254,7 +254,7 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
 
   /** The per-tab state around an entry: the entity, plus the two things it has nowhere to hold. */
   private stateFor(entry: JournalEntryEntity): JEDraftState {
-    return { Entry: entry, Amounts: new Map(), Dimensions: new Map() };
+    return { Entry: entry, Amounts: new Map() };
   }
 
   /** Append a blank line to an entry, with its money boxes ready to be typed in. */
@@ -438,7 +438,6 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
     if (!d) return;
     d.Entry.Lines.Remove(line);
     d.Amounts.delete(line.ID);
-    d.Dimensions.delete(line.ID);
     // An editor with no rows offers nowhere to type. Removing the last line gives back a blank one.
     if (d.Entry.Lines.Count === 0) await this.addLineTo(d);
     this.touch();
@@ -496,16 +495,40 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
     return this.LineErrors.get(index) ?? null;
   }
 
+  /**
+   * The value tagged on this line for one dimension axis, read from the LINE.
+   *
+   * These lived in a component `Map<lineID, Record<dimensionID, valueID>>`, justified at the time by
+   * "`JournalEntryLine` declares no `Dimensions` related collection". That was true and is not any
+   * more — the collection is declared and available on both tiers — so the Map was a mirror kept
+   * alive by its own stale comment.
+   */
   public DimensionValueFor(line: JournalEntryLineEntity, dimensionId: string): string | null {
-    return this.Draft?.Dimensions.get(line.ID)?.[dimensionId] ?? null;
+    const key = dimensionId.toLowerCase();
+    const tag = line.Dimensions.Items.find((d) => String(d.DimensionID ?? '').toLowerCase() === key);
+    return tag?.DimensionValueID ?? null;
   }
 
-  public SetDimensionValue(line: JournalEntryLineEntity, dimensionId: string, value: string): void {
-    const d = this.Draft;
-    if (!d) return;
-    const picks = d.Dimensions.get(line.ID) ?? {};
-    picks[dimensionId] = value || null;
-    d.Dimensions.set(line.ID, picks);
+  /**
+   * Tag this line with a dimension value, or clear the tag.
+   *
+   * One row per axis: `UQ_JELDimension_Line_Dimension` says so, and picking a second value for the
+   * same axis REPLACES rather than adds. Clearing REMOVES the row — an axis with no value is an
+   * absent tag, not a tag pointing at nothing, and the engine rejects the latter.
+   */
+  public async SetDimensionValue(line: JournalEntryLineEntity, dimensionId: string, value: string): Promise<void> {
+    const key = dimensionId.toLowerCase();
+    const existing = line.Dimensions.Items.find((d) => String(d.DimensionID ?? '').toLowerCase() === key);
+
+    if (!value) {
+      if (existing) line.Dimensions.Remove(existing);
+    } else if (existing) {
+      existing.DimensionValueID = value;
+    } else {
+      const tag = await line.Dimensions.Create();
+      tag.DimensionID = dimensionId;
+      tag.DimensionValueID = value;
+    }
     this.touch();
   }
 
