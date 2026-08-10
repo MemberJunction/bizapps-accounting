@@ -62,6 +62,22 @@ const result = await rv.RunView<JournalEntryEntity>({
 });
 ```
 
+> **`ResultType: 'entity_object'` is load-bearing, not decoration.** `'simple'` — the default —
+> returns the **raw database shape**: no `BaseEntity` is constructed, so a `DATETIME` column arrives
+> as an ISO string, not a `Date`. `RunView<T>` takes a caller-supplied `T` with no relationship to
+> `ResultType`, so passing an entity type to a `'simple'` read compiles perfectly and is wrong at
+> runtime.
+>
+> The sibling orders app shipped that for months, and the instructive case is an oldest-first payment
+> allocator that sorted due dates with `localeCompare`: correct on ISO strings, and the day it
+> received `Date`s it would sort alphabetically by weekday name. Every allocation still summed
+> exactly to the payment — it was simply applied to the wrong invoices, and nothing reported it.
+> Accounting has more of this hazard than most: a posting date that slips a period balances just as
+> well as one that does not.
+>
+> **Want entity types, ask for entity objects.** Reach for `'simple'` only when you want cheap rows
+> for an aggregate and will treat them as raw database output.
+
 **Compose and save — one call, one transaction**
 
 ```typescript
