@@ -1,40 +1,127 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { EntityInfo, Metadata } from '@memberjunction/core';
+import { JournalEntryEntity, JournalEntryLineEntity } from '@mj-biz-apps/accounting-entities';
 import {
-  newDraftLine,
   parseMoney,
-  isLineEmpty,
+  TextIssue,
+  LiveLines,
   draftTotals,
-  lineIssue,
-  draftIssues,
   toCreateInput,
-  type JEDraftLine,
+  newAmountText,
   type JEDraftState,
 } from '../lib/custom/shell/pages/je-draft';
 
 /**
- * Tier 1 for the JE workspace's pure seam (§8.1).
+ * Tier 1 for what is LEFT of the JE workspace's pure seam (§8.1).
  *
- * These are the rules the operator feels while typing — money parsing, the one-side-only rule, the
- * balance check, and the mapping onto the engine contract. They mirror the server's guards, so the
- * exact values matter: a wrong tolerance or a dropped side books a real, wrong journal entry.
+ * WHAT USED TO BE HERE, AND WHY IT IS NOT. This file tested a `JEDraftState`/`JEDraftLine` mirror of
+ * the journal entry: its own money math, its own one-side-only rule, its own balance check. All of
+ * those are now `JournalEntryEntity.Validate()` and `JournalEntryLineEntity.Validate()` — the SAME
+ * calls the server makes — and they are tested where they live, against the entity, in
+ * `JournalEntryExtendedServer.test.ts`. Re-testing them through a screen-shaped copy is what let the
+ * two statements of each rule drift in the first place.
+ *
+ * WHAT REMAINS IS GENUINELY THE SCREEN'S, and the exact values still matter — a dropped side or a
+ * sent zero books a real, wrong journal entry:
+ *
+ *   · money TEXT parsing, and the one complaint the entity cannot make (a box holding a typo)
+ *   · which rows count as live
+ *   · the one-way mapping onto the engine contract
  */
 
-function line(over: Partial<JEDraftLine> = {}): JEDraftLine {
-  return { ...newDraftLine('k'), ...over };
+const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
+const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
+
+/**
+ * EntityInfo stubs, so `BaseEntity`'s constructor succeeds with no database.
+ *
+ * The same shape `JournalEntryExtendedServer.test.ts` uses. Kept local rather than shared because a
+ * test helper crossing package boundaries is a dependency the packages do not otherwise have.
+ */
+function mockEntityInfo(name: string, fieldNames: string[]): EntityInfo {
+  const info = Object.create(EntityInfo.prototype);
+  info.ID = `id-${name}`;
+  info.Name = name;
+  info.Status = 'Active';
+  info.AllowDirectSQL = true;
+
+  const fields = fieldNames.map((fn) => ({
+    Name: fn,
+    CodeName: fn,
+    Type: fn === 'ID' || fn.endsWith('ID') ? 'uniqueidentifier' : 'nvarchar',
+    TSType: 'string',
+    IsPrimaryKey: fn === 'ID',
+    AutoIncrement: false,
+    ReadOnly: false,
+    AllowsNull: true,
+  })) as unknown[];
+
+  Object.defineProperty(info, 'Fields', { get: () => fields, configurable: true });
+  Object.defineProperty(info, 'PrimaryKeys', {
+    get: () => (fields as Array<{ IsPrimaryKey: boolean }>).filter((f) => f.IsPrimaryKey),
+    configurable: true,
+  });
+  Object.defineProperty(info, 'HasInactiveFields', { get: () => false, configurable: true });
+  return info as EntityInfo;
 }
 
-/** A minimal balanced two-line draft — the shape most tests vary from. */
-function balancedDraft(over: Partial<JEDraftState> = {}): JEDraftState {
-  return {
-    CompanyID: 'c1',
-    EffectiveDate: '2026-07-16',
-    Description: 'Event deposit accrual',
-    Lines: [
-      line({ Key: 'a', GLAccountID: 'gl-cash', Debit: '860.00' }),
-      line({ Key: 'b', GLAccountID: 'gl-deposits', Credit: '860.00' }),
-    ],
-    ...over,
-  };
+let jeInfo: EntityInfo;
+let jelInfo: EntityInfo;
+
+beforeEach(() => {
+  jeInfo = mockEntityInfo(JE_ENTITY, ['ID', 'CompanyID', 'EffectiveDate', 'EntryTypeID', 'Status', 'EntryNumber', 'Description']);
+  jelInfo = mockEntityInfo(JEL_ENTITY, ['ID', 'JournalEntryID', 'LineNumber', 'GLAccountID', 'DebitAmount', 'CreditAmount', 'Description']);
+  const entities = [jeInfo, jelInfo];
+
+  Metadata.Provider = {
+    Entities: entities,
+    FindEntityByName: (name: string) => entities.find((e) => e.Name.toLowerCase() === name.toLowerCase()),
+    Config: { ActiveStatusAssertions: false },
+    BeginTransaction: async () => undefined,
+    CommitTransaction: async () => undefined,
+    RollbackTransaction: async () => undefined,
+  } as never;
+});
+
+interface LineSpec {
+  GLAccountID?: string;
+  Debit?: number;
+  Credit?: number;
+  Description?: string;
+}
+
+/** A composed entry with the given lines, plus the money text that produced them. */
+function draft(lines: LineSpec[], over: Partial<{ CompanyID: string; Description: string }> = {}): JEDraftState {
+  const entry = new JournalEntryEntity(jeInfo as never);
+  entry.NewRecord();
+  entry.CompanyID = over.CompanyID ?? 'c1';
+  entry.EffectiveDate = new Date('2026-07-16T00:00:00');
+  entry.Description = over.Description ?? 'Event deposit accrual';
+
+  const state: JEDraftState = { Entry: entry, Amounts: new Map(), Dimensions: new Map() };
+
+  for (const spec of lines) {
+    const line = new JournalEntryLineEntity(jelInfo as never);
+    line.NewRecord();
+    if (spec.GLAccountID) line.GLAccountID = spec.GLAccountID;
+    if (spec.Debit !== undefined) line.DebitAmount = spec.Debit;
+    if (spec.Credit !== undefined) line.CreditAmount = spec.Credit;
+    if (spec.Description !== undefined) line.Description = spec.Description;
+    entry.Lines.Add(line);
+    state.Amounts.set(line.ID, {
+      Debit: spec.Debit !== undefined ? String(spec.Debit) : '',
+      Credit: spec.Credit !== undefined ? String(spec.Credit) : '',
+    });
+  }
+  return state;
+}
+
+/** The shape most tests vary from: 860 in, 860 out. */
+function balanced(): JEDraftState {
+  return draft([
+    { GLAccountID: 'gl-cash', Debit: 860 },
+    { GLAccountID: 'gl-deposits', Credit: 860 },
+  ]);
 }
 
 describe('parseMoney', () => {
@@ -42,177 +129,134 @@ describe('parseMoney', () => {
     expect(parseMoney('860.00')).toBe(860);
   });
 
-  it('treats blank/whitespace as zero — an untouched side is not an error', () => {
+  it('treats blank and whitespace as zero — an untouched side is not an error', () => {
     expect(parseMoney('')).toBe(0);
     expect(parseMoney('   ')).toBe(0);
   });
 
-  it('strips thousands separators an accountant will paste in', () => {
-    expect(parseMoney('1,250.75')).toBe(1250.75);
+  it('strips thousands separators, because people type them', () => {
+    expect(parseMoney('1,250.50')).toBe(1250.5);
   });
 
-  it('returns NaN for a typo rather than silently booking zero', () => {
-    // The whole point: '8o0' must NOT become 0 and post a wrong entry.
-    expect(Number.isNaN(parseMoney('8o0'))).toBe(true);
+  it('returns NaN for a typo rather than coercing it to zero', () => {
+    // The whole point: a line that books as zero because somebody typed "8o" is a silently wrong
+    // journal entry that still balances.
+    expect(Number.isNaN(parseMoney('8o'))).toBe(true);
   });
 });
 
-describe('isLineEmpty', () => {
-  it('is true for an untouched row', () => {
-    expect(isLineEmpty(line())).toBe(true);
+describe('TextIssue', () => {
+  it('passes numbers and blanks', () => {
+    expect(TextIssue({ Debit: '860.00', Credit: '' })).toBeNull();
+    expect(TextIssue(newAmountText())).toBeNull();
   });
 
-  it('is false when any field carries intent', () => {
-    expect(isLineEmpty(line({ GLAccountID: 'gl-1' }))).toBe(false);
-    expect(isLineEmpty(line({ Debit: '5' }))).toBe(false);
-    expect(isLineEmpty(line({ Description: 'x' }))).toBe(false);
+  it('names a typo on either side', () => {
+    expect(TextIssue({ Debit: '8o', Credit: '' })).toBe('Amounts must be numbers.');
+    expect(TextIssue({ Debit: '', Credit: 'ten' })).toBe('Amounts must be numbers.');
+  });
+
+  it('says nothing about a row it has no text for', () => {
+    expect(TextIssue(undefined)).toBeNull();
+  });
+});
+
+describe('LiveLines', () => {
+  it('drops untouched rows and keeps everything else', () => {
+    const state = draft([
+      { GLAccountID: 'gl-cash', Debit: 860 },
+      {}, // the blank row the editor always leaves at the bottom
+      { GLAccountID: 'gl-deposits', Credit: 860 },
+    ]);
+    expect(LiveLines(state.Entry).length).toBe(2);
+  });
+
+  it('counts a row carrying only a memo — somebody typed it', () => {
+    const state = draft([{ Description: 'still working this out' }]);
+    expect(LiveLines(state.Entry).length).toBe(1);
   });
 });
 
 describe('draftTotals', () => {
   it('sums each side independently and ignores empty rows', () => {
-    const lines = [
-      line({ Key: 'a', GLAccountID: 'g1', Debit: '100' }),
-      line({ Key: 'b', GLAccountID: 'g2', Credit: '40' }),
-      line({ Key: 'c', GLAccountID: 'g3', Credit: '60' }),
-      line({ Key: 'd' }), // untouched — must not perturb the totals
-    ];
-    expect(draftTotals(lines)).toEqual({ Debits: 100, Credits: 100 });
+    const state = draft([
+      { GLAccountID: 'a', Debit: 302.59 },
+      { GLAccountID: 'b', Credit: 233.51 },
+      { GLAccountID: 'c', Credit: 69.08 },
+      {},
+    ]);
+    expect(draftTotals(state.Entry)).toEqual({ Debits: 302.59, Credits: 302.59 });
   });
 
-  it('does not let a NaN amount poison the totals', () => {
-    const lines = [line({ Key: 'a', GLAccountID: 'g1', Debit: 'oops' }), line({ Key: 'b', GLAccountID: 'g2', Credit: '60' })];
-    // The bad line contributes nothing (lineIssue reports it); credits still foot exactly.
-    expect(draftTotals(lines)).toEqual({ Debits: 0, Credits: 60 });
-  });
-});
-
-describe('lineIssue', () => {
-  it('passes a well-formed debit line', () => {
-    expect(lineIssue(line({ GLAccountID: 'g1', Debit: '10' }))).toBeNull();
-  });
-
-  it('ignores an untouched row', () => {
-    expect(lineIssue(line())).toBeNull();
-  });
-
-  it('rejects both sides at once — a line is a debit or a credit, never both', () => {
-    expect(lineIssue(line({ GLAccountID: 'g1', Debit: '10', Credit: '10' }))).toMatch(/not both/i);
-  });
-
-  it('rejects an amount with no account', () => {
-    expect(lineIssue(line({ Debit: '10' }))).toMatch(/account/i);
-  });
-
-  it('rejects a negative amount instead of quietly flipping the side', () => {
-    expect(lineIssue(line({ GLAccountID: 'g1', Debit: '-10' }))).toMatch(/negative/i);
-  });
-
-  it('rejects an account with no amount', () => {
-    expect(lineIssue(line({ GLAccountID: 'g1' , Description: 'x' }))).toMatch(/debit or a credit/i);
-  });
-});
-
-describe('draftIssues', () => {
-  it('accepts a balanced two-line draft', () => {
-    expect(draftIssues(balancedDraft())).toEqual([]);
-  });
-
-  it('requires at least two lines', () => {
-    const d = balancedDraft({ Lines: [line({ Key: 'a', GLAccountID: 'g1', Debit: '10' })] });
-    expect(draftIssues(d).some((i) => /two lines/i.test(i))).toBe(true);
-  });
-
-  it('requires an entry date', () => {
-    expect(draftIssues(balancedDraft({ EffectiveDate: '' })).some((i) => /date/i.test(i))).toBe(true);
-  });
-
-  it('reports an unbalanced draft with BOTH exact totals', () => {
-    const d = balancedDraft();
-    d.Lines[1].Credit = '860.01';
-    const issues = draftIssues(d);
-    // The operator needs the two numbers to find the typo — not just "unbalanced".
-    expect(issues.some((i) => i.includes('860.00') && i.includes('860.01'))).toBe(true);
-  });
-
-  it('accepts a one-cent-tolerance match (money is never compared with ===)', () => {
-    // 0.1 + 0.2 !== 0.3 in binary floating point; the entry is still balanced.
-    const d = balancedDraft({
-      Lines: [
-        line({ Key: 'a', GLAccountID: 'g1', Debit: '0.1' }),
-        line({ Key: 'b', GLAccountID: 'g2', Debit: '0.2' }),
-        line({ Key: 'c', GLAccountID: 'g3', Credit: '0.3' }),
-      ],
-    });
-    expect(draftIssues(d)).toEqual([]);
-  });
-
-  it('does not double-report: a malformed line suppresses the balance complaint', () => {
-    const d = balancedDraft();
-    d.Lines[0].Debit = 'oops';
-    const issues = draftIssues(d);
-    expect(issues.some((i) => /must be numbers/i.test(i))).toBe(true);
-    expect(issues.some((i) => /must equal credits/i.test(i))).toBe(false);
-  });
-
-  it('numbers issues by LIVE line, so a blank row above does not shift the label', () => {
-    const d = balancedDraft({
-      Lines: [
-        line({ Key: 'blank' }), // untouched — not a "line 1" for the operator
-        line({ Key: 'a', GLAccountID: 'g1', Debit: '10', Credit: '10' }),
-        line({ Key: 'b', GLAccountID: 'g2', Credit: '10' }),
-      ],
-    });
-    expect(draftIssues(d).some((i) => i.startsWith('Line 1:'))).toBe(true);
+  it('is zero for a draft nobody has typed in', () => {
+    expect(draftTotals(draft([{}, {}]).Entry)).toEqual({ Debits: 0, Credits: 0 });
   });
 });
 
 describe('toCreateInput', () => {
   it('maps a balanced draft onto the engine contract', () => {
-    const input = toCreateInput(balancedDraft());
-    expect(input.EntryType).toBe('Manual');
+    const input = toCreateInput(balanced());
     expect(input.EffectiveDate).toBe('2026-07-16');
+    expect(input.EntryType).toBe('Manual');
     expect(input.Description).toBe('Event deposit accrual');
-    expect(input.Lines).toHaveLength(2);
+    expect(input.Lines.length).toBe(2);
   });
 
   it('sends ONLY the side that carries an amount — absent, never zero', () => {
-    const [debitLine, creditLine] = toCreateInput(balancedDraft()).Lines;
+    // The contract's optional Debit/CreditAmount means ABSENT. A zero would read as a stated amount
+    // of nothing rather than as the side this line is not on.
+    const [debitLine, creditLine] = toCreateInput(balanced()).Lines;
     expect(debitLine.DebitAmount).toBe(860);
-    expect(debitLine).not.toHaveProperty('CreditAmount');
+    expect(debitLine.CreditAmount).toBeUndefined();
     expect(creditLine.CreditAmount).toBe(860);
-    expect(creditLine).not.toHaveProperty('DebitAmount');
+    expect(creditLine.DebitAmount).toBeUndefined();
   });
 
   it('never sends a CompanyID — the engine derives the company from the accounts (MOD-12)', () => {
-    expect(toCreateInput(balancedDraft())).not.toHaveProperty('CompanyID');
+    expect('CompanyID' in toCreateInput(balanced())).toBe(false);
   });
 
   it('drops empty rows so a trailing blank line does not reach the ledger', () => {
-    const d = balancedDraft();
-    d.Lines.push(line({ Key: 'trailing' }));
-    expect(toCreateInput(d).Lines).toHaveLength(2);
+    const state = draft([
+      { GLAccountID: 'gl-cash', Debit: 860 },
+      { GLAccountID: 'gl-deposits', Credit: 860 },
+      {},
+    ]);
+    expect(toCreateInput(state).Lines.length).toBe(2);
   });
 
   it('sends only dimension pairs the operator actually chose', () => {
-    const d = balancedDraft();
-    d.Lines[0].DimensionValueIDs = { 'dim-dept': 'val-events', 'dim-region': null };
-    const [first] = toCreateInput(d).Lines;
-    expect(first.Dimensions).toEqual([{ DimensionID: 'dim-dept', DimensionValueID: 'val-events' }]);
+    const state = balanced();
+    const [first] = LiveLines(state.Entry);
+    state.Dimensions.set(first.ID, { 'dim-fund': 'val-general', 'dim-program': null });
+
+    const [line] = toCreateInput(state).Lines;
+    expect(line.Dimensions).toEqual([{ DimensionID: 'dim-fund', DimensionValueID: 'val-general' }]);
   });
 
   it('omits Dimensions entirely when none are chosen', () => {
-    expect(toCreateInput(balancedDraft()).Lines[0]).not.toHaveProperty('Dimensions');
+    expect(toCreateInput(balanced()).Lines[0].Dimensions).toBeUndefined();
   });
 
   it('omits a blank memo rather than sending an empty string', () => {
-    expect(toCreateInput(balancedDraft({ Description: '   ' }))).not.toHaveProperty('Description');
+    const state = draft([{ GLAccountID: 'a', Debit: 1 }, { GLAccountID: 'b', Credit: 1 }], { Description: '   ' });
+    expect(state.Entry.Description?.trim()).toBe('');
+    expect(toCreateInput(state).Description).toBeUndefined();
   });
 
   it('trims a line description', () => {
-    const d = balancedDraft();
-    d.Lines[0].Description = '  cash in  ';
-    expect(toCreateInput(d).Lines[0].Description).toBe('cash in');
+    const state = draft([
+      { GLAccountID: 'a', Debit: 1, Description: '  deposit  ' },
+      { GLAccountID: 'b', Credit: 1 },
+    ]);
+    expect(toCreateInput(state).Lines[0].Description).toBe('deposit');
   });
 
+  it('formats the posting date from LOCAL parts, so it cannot slip a day', () => {
+    // `toISOString()` on a local-midnight Date lands on the previous day anywhere west of Greenwich,
+    // which files the entry in the wrong period — balanced, reconciling, and wrong.
+    const state = balanced();
+    state.Entry.EffectiveDate = new Date('2026-01-01T00:00:00');
+    expect(toCreateInput(state).EffectiveDate).toBe('2026-01-01');
+  });
 });

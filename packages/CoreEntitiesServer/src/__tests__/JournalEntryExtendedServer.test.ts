@@ -139,6 +139,48 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
       expect(result.Errors.some(e => getErrorText(e).includes('at least 2 line items'))).toBe(true);
     });
 
+    it('does not let TWO UNTOUCHED ROWS satisfy the double-entry rule', () => {
+      // The editor opens with blank rows and keeps one at the bottom, so `Lines.Count` is never the
+      // number of lines an entry HAS. Counting them all would let an empty draft pass — and the
+      // balance check would agree with it, because zero equals zero.
+      const blank1 = new JournalEntryLineEntityServer(jelEntityInfo as any);
+      blank1.NewRecord();
+      const blank2 = new JournalEntryLineEntityServer(jelEntityInfo as any);
+      blank2.NewRecord();
+      je.AddLine(blank1);
+      je.AddLine(blank2);
+
+      const result = je.Validate();
+      expect(result.Success).toBe(false);
+      expect(result.Errors.some(e => getErrorText(e).includes('Found 0 line(s)'))).toBe(true);
+    });
+
+    it('refuses a BLANK line among real ones, by number', () => {
+      // A blank row is quiet in the editor by design. Reaching a save it is a defect: GLAccountID is
+      // NOT NULL, so without this it fails at the insert with a constraint message instead of a
+      // sentence anyone can act on.
+      const line1 = new JournalEntryLineEntityServer(jelEntityInfo as any);
+      line1.NewRecord();
+      line1.GLAccountID = 'GL_1';
+      line1.DebitAmount = 100;
+
+      const line2 = new JournalEntryLineEntityServer(jelEntityInfo as any);
+      line2.NewRecord();
+      line2.GLAccountID = 'GL_2';
+      line2.CreditAmount = 100;
+
+      const blank = new JournalEntryLineEntityServer(jelEntityInfo as any);
+      blank.NewRecord();
+
+      je.AddLine(line1);
+      je.AddLine(line2);
+      je.AddLine(blank);
+
+      const result = je.Validate();
+      expect(result.Success).toBe(false);
+      expect(result.Errors.some(e => getErrorText(e).includes('Line 3 is blank'))).toBe(true);
+    });
+
     it('fails validation when debits and credits are unbalanced', () => {
       const line1 = new JournalEntryLineEntityServer(jelEntityInfo as any);
       line1.NewRecord();
@@ -222,7 +264,9 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
 
       const result = je.Validate();
       expect(result.Success).toBe(false);
-      expect(result.Errors.some(e => getErrorText(e).includes('Cannot specify both DebitAmount'))).toBe(true);
+      // The wording moved with the rule: it lives on `JournalEntryLineEntity`, the SHARED subclass, so
+      // the browser refuses this before a round trip and says the same thing when the server does.
+      expect(result.Errors.some(e => getErrorText(e).includes('is either a debit or a credit, not both'))).toBe(true);
     });
 
 
@@ -242,7 +286,7 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
 
       const result = je.Validate();
       expect(result.Success).toBe(false);
-      expect(result.Errors.some(e => getErrorText(e).includes('cannot be negative'))).toBe(true);
+      expect(result.Errors.some(e => getErrorText(e).includes('cannot have a negative'))).toBe(true);
     });
 
     it('fails async validation when the type is Reversal but ReversesJournalEntryID is missing (issue #24: rule moved to ValidateAsync)', async () => {

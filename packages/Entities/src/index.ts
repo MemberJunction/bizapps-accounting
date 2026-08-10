@@ -22,3 +22,10 @@ export function LoadGeneratedEntities() {
  * run in the browser before a round trip AND on the server for every other caller.
  */
 export * from './JournalEntryEntity';
+
+/**
+ * `JournalEntryLineEntity` — the shared (client + server) line subclass carrying the per-line
+ * rules: an account is required, exactly one side carries an amount, neither side is negative.
+ * `JournalEntryLineEntityServer` extends it and adds the rules that need reference data.
+ */
+export * from './JournalEntryLineEntity';

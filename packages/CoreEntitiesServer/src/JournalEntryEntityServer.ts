@@ -180,67 +180,38 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
 
   // ─── Validation ─────────────────────────────────────────────────────────────
 
-  /** Synchronous in-memory validation of double-entry rules & invariants. */
+  /**
+   * The one line-set rule the SHARED subclass deliberately cannot make.
+   *
+   * `super.Validate()` — `JournalEntryEntity` — already runs the double-entry invariants (at least
+   * two lines, debits equal credits at penny precision) and fans out to each line's own `Validate()`.
+   * All three were restated here, verbatim, in different words, so every unbalanced entry reported
+   * itself twice; that copy is gone.
+   *
+   * What is left is a rule that only makes sense on this side. A line the operator has not touched
+   * is quiet in the editor by design — the JE workspace opens with two blank rows, and nagging about
+   * them would train people to ignore the error list. But a blank line that reaches a SAVE is a
+   * defect: `GLAccountID` is NOT NULL, so it fails at the insert with a constraint message instead
+   * of a sentence anyone can act on. Callers that compose entries programmatically never produce
+   * one; this is here so that when something does, it says so.
+   */
   public override Validate(): ValidationResult {
     const result = super.Validate();
-    const lines = this.Lines.Items as JournalEntryLineEntityServer[];
 
-    // Rule 1: A JE must have at least 2 line items
-    if (lines.length < 2) {
+    const blank = (this.Lines.Items as JournalEntryLineEntityServer[])
+      .map((line, i) => ({ line, number: i + 1 }))
+      .filter(({ line }) => line.IsEmpty);
+
+    for (const { number } of blank) {
       result.Success = false;
       result.Errors.push(
         new ValidationErrorInfo(
           'JournalEntryEntityServer.Validate',
-          `A Journal Entry must have at least 2 line items (double-entry invariant). Found ${lines.length} line(s).`,
+          `Line ${number} is blank — a journal entry cannot be saved with an empty line. Remove it, or give it an account and an amount.`,
           null,
         ),
       );
     }
-
-    // Rule 2: Equal debits and credits overall, compared AT PENNY PRECISION.
-    //
-    // This was `totalDebits !== totalCredits` — exact float equality on accumulated sums — and it
-    // rejected entries that balance perfectly. A four-line entry of
-    //
-    //     Dr AR 302.59  /  Cr Sales 233.51 + Cr Tax 25.30 + Cr Shipping 43.78
-    //
-    // sums on the credit side to 302.59000000000003 in IEEE-754, so the comparison failed while the
-    // error message printed both sides as "302.59" — telling the caller two identical numbers were
-    // unequal. It stayed latent while entries had two or three lines and friendly amounts; the
-    // first four-line entry from bizapps-orders (goods, tax and shipping on one line) hit it.
-    //
-    // DebitAmount and CreditAmount are DECIMAL(18,2), so a penny IS the unit of account here and
-    // anything finer is an artefact of summing in binary floating point. Half a penny is therefore
-    // the correct tolerance: tight enough that no real imbalance passes — the smallest storable
-    // discrepancy is a whole penny, two hundred times the epsilon — and loose enough that
-    // accumulation order cannot decide whether a balanced entry is accepted.
-    const totalDebits = lines.reduce((sum, l) => sum + (l.DebitAmount ?? 0), 0);
-    const totalCredits = lines.reduce((sum, l) => sum + (l.CreditAmount ?? 0), 0);
-    if (Math.abs(totalDebits - totalCredits) >= 0.005) {
-      result.Success = false;
-      result.Errors.push(
-        new ValidationErrorInfo(
-          'JournalEntryEntityServer.Validate',
-          `Unbalanced Journal Entry: total debits (${totalDebits.toFixed(2)}) must equal total credits (${totalCredits.toFixed(2)}).`,
-          null,
-        ),
-      );
-    }
-
-    // Rule 3: Line-level validations
-    for (const line of lines) {
-      const lineVal = line.Validate();
-      if (!lineVal.Success) {
-        result.Success = false;
-        for (const err of lineVal.Errors) {
-          result.Errors.push(err);
-        }
-      }
-    }
-
-    // Rule 4 (reversal consistency) moved to ValidateAsync (issue #24): the 'Reversal'
-    // discriminator now lives on the JournalEntryType row EntryTypeID points at, and reading
-    // it is a DB lookup. trg_JE_ReversalConsistency (50012) remains the un-bypassable floor.
 
     return result;
   }
