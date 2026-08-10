@@ -1,5 +1,5 @@
 import { Component, ChangeDetectionStrategy, ChangeDetectorRef, ElementRef, Input, ViewChild, inject, OnInit } from '@angular/core';
-import { RunView, type IRemoteOperationProvider } from '@memberjunction/core';
+import { Metadata, type IRemoteOperationProvider } from '@memberjunction/core';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
 import { NormalizeUUID, UUIDsEqual } from '@memberjunction/global';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
@@ -9,16 +9,19 @@ import { WorkspaceTabStore } from '../../../transfer-pending/workspace-tabs/work
 import { WorkspaceTab } from '../../../transfer-pending/workspace-tabs/workspace-tabs.types';
 import { isBalanced } from '../../shared/je-rules';
 import { JEWorkspaceClient } from './je-workspace.client';
+import type { JournalEntryEntity, JournalEntryLineEntity } from '@mj-biz-apps/accounting-entities';
 import {
   type JEDraftState,
-  type JEDraftLine,
-  newDraftLine,
+  type JEAmountText,
+  newAmountText,
+  parseMoney,
   draftTotals,
-  draftIssues,
-  lineIssue,
-  isLineEmpty,
   toCreateInput,
+  LiveLines,
+  TextIssue,
 } from './je-draft';
+
+const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 
 /** An account offered by the picker — flattened so the template does no entity work. */
 export interface AccountOption {
@@ -42,8 +45,9 @@ export interface DimensionColumn {
  * Follows the approved mockup (`design-docs/ui-design/mockups/nav-shell-je-workspace.html`) with
  * three deliberate corrections, each forced by the actual contract rather than by taste:
  *
- *  1. **Company is a FILTER, not a field.** `JournalEntryDraft` has no CompanyID — the engine derives
- *     it from the lines' accounts (MOD-12). The select scopes the account picker; it is never sent.
+ *  1. **Company scopes the account picker and is never SENT.** The contract has no CompanyID — the
+ *     engine derives it from the lines' accounts (MOD-12). It is held on the entity because that is
+ *     where a company belongs, and simply left out of the submission.
  *  2. **Currency is display-only.** There are no FX fields in the v1 contract, so a currency select
  *     would be a control that does nothing. It reads the company's functional currency instead.
  *  3. **The verb is "Create entry", not "Submit for approval".** The C.8 CFO gate is designed but NOT
@@ -55,7 +59,9 @@ export interface DimensionColumn {
  *
  * CONNECTS TO:
  *   OP:     ./je-workspace.client → 'Accounting.CreateJournalEntry'
- *   PURE:   ./je-draft (money math, balance, contract mapping — tier 1)
+ *   ENTITY: JournalEntryEntity + its Lines collection — the model, and the SAME Validate() the
+ *           server runs. There is no draft mirror any more; ./je-draft holds what is genuinely UI
+ *           state (the raw text of each money box, and the per-line dimension picks).
  *   ENGINE: AccountingEngineBase (cached GL accounts + dimensions — no round-trip to populate)
  */
 @Component({
@@ -85,7 +91,7 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
 
   async ngOnInit(): Promise<void> {
     this.DimensionColumns = this.loadDimensionColumns();
-    this.openNewDraft();
+    await this.openNewDraft();
     this.initialized = true;
     if (this.pendingFocusID) {
       const id = this.pendingFocusID;
@@ -117,62 +123,41 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
   private pendingFocusID: string | null = null;
   private initialized = false;
 
-  /** Load the entry + its lines and open them as a locked receipt tab labeled by entry number. */
+  /**
+   * Load an existing entry as a locked receipt tab, labeled by its number.
+   *
+   * The entry and its lines are loaded as ENTITIES rather than as rows, because the editor renders
+   * exactly the same way for a receipt as for a draft — a second read shape for the same screen is a
+   * second set of field names to keep in step with the first.
+   */
   private async openExistingEntry(id: string): Promise<void> {
     try {
-      const rv = RunView.FromMetadataProvider(this.ProviderToUse);
-      const [headerRes, lineRes] = await rv.RunViews(
-        [
-          {
-            EntityName: 'MJ_BizApps_Accounting: Journal Entries',
-            ExtraFilter: `ID='${id}'`,
-            Fields: ['ID', 'EntryNumber', 'CompanyID', 'EffectiveDate', 'Description'],
-            ResultType: 'simple',
-          },
-          {
-            EntityName: 'MJ_BizApps_Accounting: Journal Entry Lines',
-            ExtraFilter: `JournalEntryID='${id}'`,
-            Fields: ['GLAccountID', 'DebitAmount', 'CreditAmount', 'Description', 'LineNumber'],
-            OrderBy: 'LineNumber ASC',
-            ResultType: 'simple',
-          },
-        ],
-        this.ProviderToUse.CurrentUser,
-      );
-      const header = (headerRes.Success ? headerRes.Results?.[0] : null) as
-        | { ID: string; EntryNumber: string; CompanyID: string; EffectiveDate: Date | string | null; Description: string | null }
-        | null;
-      if (!header) {
+      const md = new Metadata();
+      const entry = await md.GetEntityObject<JournalEntryEntity>(JE_ENTITY, this.ProviderToUse.CurrentUser);
+      if (!(await entry.Load(id))) {
         this.ActionMessage = 'That journal entry could not be loaded into the workspace.';
         this.ActionIsError = true;
         this.cdr.markForCheck();
         return;
       }
-      const rows = (lineRes.Success ? (lineRes.Results ?? []) : []) as Array<{
-        GLAccountID: string; DebitAmount: number | null; CreditAmount: number | null; Description: string | null;
-      }>;
-      const lines: JEDraftLine[] = rows.map((r) => ({
-        ...this.newLine(),
-        GLAccountID: r.GLAccountID,
-        Debit: r.DebitAmount ? String(r.DebitAmount) : '',
-        Credit: r.CreditAmount ? String(r.CreditAmount) : '',
-        Description: r.Description ?? '',
-      }));
-      const effective = header.EffectiveDate
-        ? (header.EffectiveDate instanceof Date ? header.EffectiveDate : new Date(header.EffectiveDate)).toISOString().slice(0, 10)
-        : new Date().toISOString().slice(0, 10);
+      await entry.Lines.Load();
+
+      const state = this.stateFor(entry);
+      state.CreatedEntryNumber = entry.EntryNumber;
+      // Seed the money boxes FROM the entity, so a receipt reads its own amounts rather than blanks.
+      for (const line of entry.Lines.Items as JournalEntryLineEntity[]) {
+        state.Amounts.set(line.ID, {
+          Debit: line.DebitAmount ? String(line.DebitAmount) : '',
+          Credit: line.CreditAmount ? String(line.CreditAmount) : '',
+        });
+      }
+
       this.tabs.Open({
         Id: `je-view-${id}`,
-        Label: header.EntryNumber,
+        Label: entry.EntryNumber ?? 'Entry',
         Icon: 'fa-solid fa-book-open',
         Status: 'complete', // locked receipt — viewing, never editing
-        State: {
-          CompanyID: header.CompanyID,
-          EffectiveDate: effective,
-          Description: header.Description ?? '',
-          Lines: lines.length > 0 ? lines : [this.newLine()],
-          CreatedEntryNumber: header.EntryNumber,
-        },
+        State: state,
       });
       this.clearMessages();
     } catch (e) {
@@ -198,13 +183,13 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
     return !!this.Draft?.CreatedEntryNumber;
   }
 
-  public openNewDraft(): void {
+  public async openNewDraft(): Promise<void> {
     this.tabs.Open({
       Id: `je-draft-${++this.keySeq}-${Date.now()}`,
       Label: 'New JE',
       Icon: 'fa-solid fa-pen-ruler',
       Status: 'draft',
-      State: this.defaultDraft(),
+      State: await this.defaultDraft(),
     });
     // Derive from the (empty) draft so the caption rule has a single source of truth from tab one.
     this.renameActiveTab(this.jeTabLabel());
@@ -220,7 +205,8 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
 
   public CloseTab(id: string): void {
     this.tabs.Close(id);
-    if (this.tabs.Count === 0) this.openNewDraft();
+    // Never leave the workspace with no tab — an empty shell reads as a page that failed to load.
+    if (this.tabs.Count === 0) void this.openNewDraft();
     this.clearMessages();
     this.cdr.markForCheck();
   }
@@ -243,19 +229,66 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
     if (this.tabs.ActiveId) this.CloseTab(this.tabs.ActiveId);
   }
 
-  private defaultDraft(): JEDraftState {
-    return {
-      // Seed from the app-wide scope when it names exactly one company — with several in scope we
-      // cannot know which one the operator means, so we ask rather than guess wrong.
-      CompanyID: this.Scope.SelectedIDs.length === 1 ? this.Scope.SelectedIDs[0] : null,
-      EffectiveDate: new Date().toISOString().slice(0, 10),
-      Description: '',
-      Lines: [this.newLine(), this.newLine()],
-    };
+  /** A fresh entry with the two blank lines double entry starts from. */
+  private async defaultDraft(): Promise<JEDraftState> {
+    const md = new Metadata();
+    const entry = await md.GetEntityObject<JournalEntryEntity>(JE_ENTITY, this.ProviderToUse.CurrentUser);
+    entry.NewRecord();
+    // Seed from the app-wide scope when it names exactly one company — with several in scope we
+    // cannot know which one the operator means, so we ask rather than guess wrong.
+    if (this.Scope.SelectedIDs.length === 1) entry.CompanyID = this.Scope.SelectedIDs[0];
+    entry.EffectiveDate = new Date();
+    entry.Status = 'Pending';
+    // The workspace is the MANUAL-entry home (§8.1), so the type is fixed rather than offered — a
+    // one-option select would be a control that cannot be operated. Stamped on the entity rather
+    // than left for the engine to resolve, because the entity validates its own required fields and
+    // an unset EntryTypeID would surface as an error about a control the screen does not have.
+    const manual = AccountingEngineBase.Instance.JournalEntryTypeByCode('Manual');
+    if (manual) entry.EntryTypeID = manual.ID;
+
+    const state = this.stateFor(entry);
+    await this.addLineTo(state);
+    await this.addLineTo(state);
+    return state;
   }
 
-  private newLine(): JEDraftLine {
-    return newDraftLine(`l-${++this.keySeq}`);
+  /** The per-tab state around an entry: the entity, plus the two things it has nowhere to hold. */
+  private stateFor(entry: JournalEntryEntity): JEDraftState {
+    return { Entry: entry, Amounts: new Map(), Dimensions: new Map() };
+  }
+
+  /** Append a blank line to an entry, with its money boxes ready to be typed in. */
+  private async addLineTo(state: JEDraftState): Promise<JournalEntryLineEntity> {
+    const line = (await state.Entry.Lines.Create()) as JournalEntryLineEntity;
+    state.Amounts.set(line.ID, newAmountText());
+    return line;
+  }
+
+  // ─── posting date ──────────────────────────────────────────────────────────
+
+  /**
+   * The posting date as `<input type="date">` wants it, and back.
+   *
+   * Formatted from the LOCAL parts rather than `toISOString()`: an entry posted on the 1st in a
+   * timezone behind UTC serialises as the 31st of the previous month, which files it in the wrong
+   * accounting period — balanced, reconciling against itself, and wrong.
+   */
+  public get EffectiveDateValue(): string {
+    const value = this.Draft?.Entry.EffectiveDate;
+    if (!value) return '';
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  }
+
+  public SetEffectiveDate(text: string): void {
+    const d = this.Draft;
+    if (!d) return;
+    // Parsed as LOCAL midnight (the `T00:00:00` is load-bearing): `new Date('2026-03-15')` is UTC
+    // midnight, which reads as the 14th anywhere west of Greenwich.
+    d.Entry.EffectiveDate = text ? new Date(`${text}T00:00:00`) : (null as unknown as Date);
+    this.touch();
   }
 
   // ─── company / accounts / dimensions ───────────────────────────────────────
@@ -266,7 +299,7 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
 
   /** The company's functional currency — display-only (no FX in the v1 contract). */
   public get FunctionalCurrency(): string | null {
-    const companyId = this.Draft?.CompanyID;
+    const companyId = this.Draft?.Entry.CompanyID ?? null;
     if (!companyId) return null;
     const profile = AccountingEngineBase.Instance.CompanyProfiles.find((p) => UUIDsEqual(p.ID, companyId));
     return profile?.FunctionalCurrencyCode ?? null;
@@ -283,7 +316,7 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
   public readonly DimensionNoneDefault = { ID: null, Label: '—' };
 
   public get AccountOptions(): AccountOption[] {
-    const companyId = this.Draft?.CompanyID;
+    const companyId = this.Draft?.Entry.CompanyID ?? null;
     if (!companyId) return [];
     // Dedupe by normalized ID (2026-07-30): the engine cache can hold a client-created row AND its
     // server-refreshed case-variant copy until the upstream BaseEngine `===`-PK fix lands
@@ -326,9 +359,12 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
     if (!d) return;
     // The old accounts belong to the previous company — keeping them would submit a cross-company
     // draft the engine rejects. Clear the selections, keep everything the operator typed.
-    for (const line of d.Lines) line.GLAccountID = null;
+    // Cast because the generated type describes a SAVED row, where GLAccountID is NOT NULL. An
+    // unsaved line legitimately has no account yet — that is the state the picker's "Pick an
+    // account…" row exists for, and the one this restores.
+    for (const line of this.Lines) line.GLAccountID = null as unknown as string;
     this.touch();
-    void this.recheckAccountsIfCacheEmpty(d.CompanyID);
+    void this.recheckAccountsIfCacheEmpty(d.Entry.CompanyID ?? null);
   }
 
   /**
@@ -379,8 +415,15 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
     window.addEventListener('pointerup', onUp);
   }
 
-  public AddLine(): void {
-    this.Draft?.Lines.push(this.newLine());
+  /** The rows the grid renders — the entity's own collection, not a copy of it. */
+  public get Lines(): JournalEntryLineEntity[] {
+    return (this.Draft?.Entry.Lines.Items ?? []) as JournalEntryLineEntity[];
+  }
+
+  public async AddLine(): Promise<void> {
+    const d = this.Draft;
+    if (!d) return;
+    await this.addLineTo(d);
     this.touch();
     // Scroll the new (last) row into view AFTER it renders. setTimeout(0) runs post-render; this only
     // reads/sets scrollTop (no change detection), so it's safe under zoneless OnPush.
@@ -390,16 +433,62 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
     }, 0);
   }
 
-  public RemoveLine(key: string): void {
+  public async RemoveLine(line: JournalEntryLineEntity): Promise<void> {
     const d = this.Draft;
     if (!d) return;
-    d.Lines = d.Lines.filter((l) => l.Key !== key);
-    if (d.Lines.length === 0) d.Lines.push(this.newLine());
+    d.Entry.Lines.Remove(line);
+    d.Amounts.delete(line.ID);
+    d.Dimensions.delete(line.ID);
+    // An editor with no rows offers nowhere to type. Removing the last line gives back a blank one.
+    if (d.Entry.Lines.Count === 0) await this.addLineTo(d);
     this.touch();
   }
 
-  public LineIssue(line: JEDraftLine): string | null {
-    return lineIssue(line);
+  /**
+   * Why this row cannot be submitted, or null.
+   *
+   * The rules are the ENTITY's — an account, exactly one side, neither side negative — so this asks
+   * the line rather than restating them. The one thing the entity cannot see is a money box holding
+   * something that is not a number: by the time it reaches `DebitAmount` a typo has already become
+   * `NaN`, which reads as "no amount" rather than as the mistake it is.
+   */
+  public LineIssue(line: JournalEntryLineEntity): string | null {
+    const typo = TextIssue(this.Draft?.Amounts.get(line.ID));
+    if (typo) return typo;
+    if (line.IsEmpty) return null;
+    const result = line.Validate();
+    return result.Success ? null : (result.Errors[0]?.Message ?? null);
+  }
+
+  // ─── money boxes ───────────────────────────────────────────────────────────
+
+  /**
+   * The RAW TEXT of a money box.
+   *
+   * Bound instead of `line.DebitAmount` because a half-typed "8." is not a number: binding the
+   * entity would erase the decimal point the instant change detection ran, and typing "8.50" would
+   * be impossible.
+   */
+  public AmountText(line: JournalEntryLineEntity, side: keyof JEAmountText): string {
+    return this.Draft?.Amounts.get(line.ID)?.[side] ?? '';
+  }
+
+  /** Keep the text as typed, and put the VALUE on the line. */
+  public SetAmount(line: JournalEntryLineEntity, side: keyof JEAmountText, text: string): void {
+    const d = this.Draft;
+    if (!d) return;
+    const amounts = d.Amounts.get(line.ID) ?? newAmountText();
+    amounts[side] = text;
+    d.Amounts.set(line.ID, amounts);
+
+    // A blank box is zero, not null: `null` on both sides is how the entity reads an untouched row,
+    // and a row the operator has cleared is not untouched.
+    const parsed = parseMoney(text);
+    const value = Number.isFinite(parsed) ? parsed : 0;
+    if (side === 'Debit') line.DebitAmount = value;
+    else line.CreditAmount = value;
+
+    this.touch();
   }
 
   /** The engine's own complaint about this row, if it named one. */
@@ -407,12 +496,16 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
     return this.LineErrors.get(index) ?? null;
   }
 
-  public DimensionValueFor(line: JEDraftLine, dimensionId: string): string | null {
-    return line.DimensionValueIDs[dimensionId] ?? null;
+  public DimensionValueFor(line: JournalEntryLineEntity, dimensionId: string): string | null {
+    return this.Draft?.Dimensions.get(line.ID)?.[dimensionId] ?? null;
   }
 
-  public SetDimensionValue(line: JEDraftLine, dimensionId: string, value: string): void {
-    line.DimensionValueIDs[dimensionId] = value || null;
+  public SetDimensionValue(line: JournalEntryLineEntity, dimensionId: string, value: string): void {
+    const d = this.Draft;
+    if (!d) return;
+    const picks = d.Dimensions.get(line.ID) ?? {};
+    picks[dimensionId] = value || null;
+    d.Dimensions.set(line.ID, picks);
     this.touch();
   }
 
@@ -436,7 +529,7 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
    */
   private jeTabLabel(): string {
     const d = this.Draft;
-    const memo = d?.Description?.trim();
+    const memo = d?.Entry.Description?.trim();
     if (memo) return memo;
     return d?.CreatedEntryNumber || 'New JE';
   }
@@ -454,7 +547,7 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
   // ─── balance strip ─────────────────────────────────────────────────────────
 
   public get Totals(): { Debits: number; Credits: number } {
-    return this.Draft ? draftTotals(this.Draft.Lines) : { Debits: 0, Credits: 0 };
+    return this.Draft ? draftTotals(this.Draft.Entry) : { Debits: 0, Credits: 0 };
   }
 
   public get IsBalanced(): boolean {
@@ -464,10 +557,35 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
 
   // ─── submit ────────────────────────────────────────────────────────────────
 
+  /**
+   * Everything blocking submission, in reading order.
+   *
+   * The double-entry rules come from `Entry.Validate()` — the SAME call the server makes — rather
+   * than from a hand-written list that says the same things in different words. What is added here
+   * is what the entity genuinely cannot know: that a money box holds a typo rather than a number,
+   * and that no company has been picked (the company scopes the account list; the engine derives the
+   * entry's own from the accounts).
+   */
   public get Issues(): string[] {
-    if (!this.Draft) return [];
-    const issues = draftIssues(this.Draft);
-    if (!this.Draft.CompanyID) issues.unshift('Pick a company to choose accounts from.');
+    const d = this.Draft;
+    if (!d) return [];
+
+    const issues: string[] = [];
+    if (!d.Entry.CompanyID) issues.push('Pick a company to choose accounts from.');
+    if (!d.Entry.EffectiveDate) issues.push('Pick an entry date.');
+
+    // Typos first: a box holding "8o" reads as no amount to everything downstream, so an unbalanced
+    // complaint about it would send the operator looking in the wrong place.
+    for (const [i, line] of LiveLines(d.Entry).entries()) {
+      const typo = TextIssue(d.Amounts.get(line.ID));
+      if (typo) issues.push(`Line ${i + 1}: ${typo}`);
+    }
+    if (issues.some((m) => m.includes('must be numbers'))) return issues;
+
+    const result = d.Entry.Validate();
+    if (!result.Success) {
+      for (const error of result.Errors) issues.push(error.Message);
+    }
     return issues;
   }
 
@@ -497,6 +615,9 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
       }
 
       d.CreatedEntryNumber = result.EntryNumber ?? result.JournalEntryID;
+      // Mirror the number onto the entity so the receipt tab reads its own identity rather than the
+      // component's copy of it. Only when there IS one — the column is NOT NULL once saved.
+      if (d.CreatedEntryNumber) d.Entry.EntryNumber = d.CreatedEntryNumber;
       if (this.tabs.ActiveId) {
         this.tabs.UpdateState(this.tabs.ActiveId, d, false);
         this.tabs.SetStatus(this.tabs.ActiveId, 'complete');
@@ -508,7 +629,7 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
       // operator can immediately enter the next entry. The just-created entry stays in its own tab,
       // read-only, for review. (openNewDraft clears messages, so set the confirmation after it.)
       const createdNumber = d.CreatedEntryNumber;
-      this.openNewDraft();
+      await this.openNewDraft();
       this.ActionMessage = `Created entry ${createdNumber} — Pending, in the unbatched pool. Its tab is kept for review; this is a fresh entry.`;
       this.ActionIsError = false;
     } catch (e) {
@@ -543,8 +664,8 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
   /** submitted-line index → editor-row index. Uses the SAME emptiness rule the mapping used. */
   private submittedToEditorIndexes(): number[] {
     const map: number[] = [];
-    this.Draft?.Lines.forEach((line, i) => {
-      if (!isLineEmpty(line)) map.push(i);
+    this.Lines.forEach((line, i) => {
+      if (!line.IsEmpty) map.push(i);
     });
     return map;
   }

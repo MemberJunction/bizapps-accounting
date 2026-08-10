@@ -26,6 +26,7 @@
 import { BaseEntity, ValidationErrorInfo, ValidationResult } from '@memberjunction/core';
 import { RegisterClass } from '@memberjunction/global';
 import { mjBizAppsAccountingJournalEntryEntity } from './generated/entity_subclasses';
+import { JournalEntryLineEntity } from './JournalEntryLineEntity';
 
 @RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Journal Entries')
 export class JournalEntryEntity extends mjBizAppsAccountingJournalEntryEntity {
@@ -58,15 +59,30 @@ export class JournalEntryEntity extends mjBizAppsAccountingJournalEntryEntity {
             return result; // the server subclass settles it against the database
         }
 
-        const lines = this.Lines.Items;
+        const lines = this.Lines.Items as JournalEntryLineEntity[];
+
+        // COUNT THE LINES SOMEBODY ACTUALLY TYPED IN.
+        //
+        // An editor opens with blank rows and keeps one at the bottom, so `Lines.Count` is never the
+        // number of lines the entry HAS. Counting them all would let an untouched two-row draft
+        // satisfy the double-entry rule with nothing on it — and the balance check would agree,
+        // because zero equals zero.
+        //
+        // Written as `!== true` rather than `!l.IsEmpty` DELIBERATELY. If the collection ever
+        // resolves to the generated class instead of this subclass — a registration that did not
+        // load, a host that imports the entities package differently — `IsEmpty` is `undefined`, and
+        // `!undefined` is `true`. Every line would read as blank and every entry in the system would
+        // be rejected as having no lines. This way the same accident makes lines count as REAL,
+        // which is the safe direction: a blank one still fails on its own rules a moment later.
+        const live = lines.filter((l) => l.IsEmpty !== true);
 
         // A JE must have at least two lines — that is what double entry MEANS.
-        if (lines.length < 2) {
+        if (live.length < 2) {
             result.Success = false;
             result.Errors.push(
                 new ValidationErrorInfo(
                     'Lines',
-                    `A Journal Entry must have at least 2 line items (double-entry invariant). Found ${lines.length} line(s).`,
+                    `A Journal Entry must have at least 2 line items (double-entry invariant). Found ${live.length} line(s).`,
                     null,
                 ),
             );
