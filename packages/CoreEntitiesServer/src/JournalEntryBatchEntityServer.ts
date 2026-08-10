@@ -59,7 +59,11 @@ const LEGAL_TRANSITIONS: Record<string, ReadonlyArray<string>> = {
 @RegisterClass(BaseEntity, BATCH_ENTITY)
 export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEntryBatchEntity {
 
-  private _members: mjBizAppsAccountingJournalEntryEntity[] | null = null;
+  // `Members` is a READ-ONLY RelatedRecordCollection on the generated class now. It replaces
+  // `_members`, a hand-rolled lazy cache with its own forceRefresh flag and its own invalidation —
+  // which is `Load(force)` and `IsLoaded` written again, per aggregate. Read-only and OnRemove
+  // 'refuse' make the comment this class already carried — "the batch never writes other aggregates"
+  // — something the collection enforces rather than something a reader has to honour.
   private _summary: mjBizAppsAccountingJournalEntryEntity | null | undefined = undefined;
 
   /** BaseEntity SKIPS ValidateAsync by default — opt in, or the coherence check never runs on Save. */
@@ -179,16 +183,9 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
    * re-read. READ-ONLY by convention: mutating members happens through their own entities /
    * the engine — the batch never writes other aggregates outside its sanctioned lock-release.
    */
-  public async LoadMembers(forceRefresh = false, contextUser?: UserInfo): Promise<mjBizAppsAccountingJournalEntryEntity[]> {
-    if (this._members && !forceRefresh) return this._members;
-    const rv = this.ProviderToUse as unknown as IRunViewProvider;
-    const res = await rv.RunView<mjBizAppsAccountingJournalEntryEntity>(
-      { EntityName: JE_ENTITY, ExtraFilter: `JournalEntryBatchID='${this.ID}'`, ResultType: 'entity_object', BypassCache: true },
-      contextUser ?? this.ContextCurrentUser,
-    );
-    if (!res.Success) throw new Error(`JournalEntryBatchEntityServer.LoadMembers failed: ${res.ErrorMessage ?? 'unknown'}`);
-    this._members = res.Results ?? [];
-    return this._members;
+  public async LoadMembers(forceRefresh = false, _contextUser?: UserInfo): Promise<readonly mjBizAppsAccountingJournalEntryEntity[]> {
+    await this.Members.Load(forceRefresh);
+    return this.Members.Items;
   }
 
   /** The netted JournalEntryBatchSummary journal entry this batch points at (null when none, e.g. cancelled). */
@@ -275,7 +272,9 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
       if (!(await je.Delete())) throw new Error(`batch teardown: delete summary JE failed: ${je.LatestResult?.CompleteMessage ?? 'unknown'}`);
     }
 
-    this._members = null;
+    // Force the next read to go to the database: the teardown above deleted rows this collection may
+    // be holding, and a stale member list is a batch claiming to lock entries that are gone.
+    await this.Members.Load(true);
     this._summary = undefined;
   }
 

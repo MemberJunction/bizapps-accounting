@@ -49,20 +49,6 @@ interface AccountRow {
 }
 
 /** The editor's working copy. Kept separate from the entity so a cancel is a genuine no-op. */
-interface AccountDraft {
-  ID: string | null;
-  CompanyID: string;
-  Code: string;
-  Name: string;
-  AccountType: AccountType;
-  ParentGLAccountID: string;
-  CurrencyCode: string;
-  ExternalSystem: string;
-  ExternalAccountID: string;
-  IsActive: boolean;
-  Description: string;
-}
-
 /** Filter option for the company drop-down. */
 interface CompanyOption {
   ID: string;
@@ -280,7 +266,15 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
   }
 
   // --- editor ---
-  public Draft: AccountDraft | null = null;
+  /**
+   * The account being edited — the ENTITY, not a copy of one.
+   *
+   * This was an `AccountDraft`: eleven fields, every one a `GLAccount` column, filled by hand in two
+   * places and copied back by `applyDraft`. Three statements of the same shape, and the compiler
+   * could not see that they were meant to agree. Binding the entity means the form writes the record
+   * it will save, and a column added to the table needs no second and third edit here.
+   */
+  public Draft: mjBizAppsAccountingGLAccountEntity | null = null;
   public IsSaving = false;
   public EditorError: string | null = null;
   /** The account being edited was seeded by the platform — worth knowing before you rename it. */
@@ -353,43 +347,39 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
     }
   }
 
-  public StartCreate(): void {
+  public async StartCreate(): Promise<void> {
     // An account cannot exist outside a company's chart, so the company is a REQUIRED first choice,
     // not an optional afterthought. Pre-pick only when the choice is unambiguous.
     const only = this.CompanyOptions.length === 1 ? this.CompanyOptions[0].ID : '';
-    this.Draft = {
-      ID: null,
-      // Pre-pick the filtered company only when the filter narrows to EXACTLY one — else unambiguous-only.
-      CompanyID: (this.FilterCompanyIDs.length === 1 ? this.FilterCompanyIDs[0] : '') || only,
-      Code: '',
-      Name: '',
-      AccountType: 'Asset',
-      ParentGLAccountID: '',
-      CurrencyCode: '',
-      ExternalSystem: '',
-      ExternalAccountID: '',
-      IsActive: true,
-      Description: '',
-    };
+    const entity = await this.ProviderToUse.GetEntityObject<mjBizAppsAccountingGLAccountEntity>(
+      GL_ENTITY,
+      this.ProviderToUse.CurrentUser,
+    );
+    entity.NewRecord();
+    // Pre-pick the filtered company only when the filter narrows to EXACTLY one — else unambiguous-only.
+    const company = (this.FilterCompanyIDs.length === 1 ? this.FilterCompanyIDs[0] : '') || only;
+    if (company) entity.CompanyID = company;
+    entity.AccountType = 'Asset';
+    entity.IsActive = true;
+    this.Draft = entity;
     this.EditingSeeded = false;
     this.EditorError = null;
     this.cdr.markForCheck();
   }
 
-  public StartEdit(r: AccountRow): void {
-    this.Draft = {
-      ID: r.ID,
-      CompanyID: r.CompanyID,
-      Code: r.Code,
-      Name: r.Name,
-      AccountType: r.AccountType,
-      ParentGLAccountID: r.ParentGLAccountID ?? '',
-      CurrencyCode: r.CurrencyCode ?? '',
-      ExternalSystem: r.ExternalSystem ?? '',
-      ExternalAccountID: r.ExternalAccountID ?? '',
-      IsActive: r.IsActive,
-      Description: r.Description ?? '',
-    };
+  public async StartEdit(r: AccountRow): Promise<void> {
+    // LOADED, not copied from the grid row. The row is a projection for a table; the editor needs the
+    // record, and loading it is also what makes the save a normal update rather than a re-assembly.
+    const entity = await this.ProviderToUse.GetEntityObject<mjBizAppsAccountingGLAccountEntity>(
+      GL_ENTITY,
+      this.ProviderToUse.CurrentUser,
+    );
+    if (!(await entity.Load(r.ID))) {
+      this.EditorError = `Could not load account ${r.Code}.`;
+      this.cdr.markForCheck();
+      return;
+    }
+    this.Draft = entity;
     this.EditingSeeded = r.IsSystemSeeded;
     this.EditorError = null;
     this.cdr.markForCheck();
@@ -409,7 +399,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
   public get ParentOptions(): ParentOption[] {
     const d = this.Draft;
     if (!d?.CompanyID) return [];
-    const excluded = d.ID ? this.selfAndDescendants(d.ID) : new Set<string>();
+    const excluded = d.IsSaved ? this.selfAndDescendants(d.ID) : new Set<string>();
     return this.Rows.filter((r) => UUIDsEqual(r.CompanyID, d.CompanyID) && !excluded.has(NormalizeUUID(r.ID)))
       .map((r) => ({ ID: r.ID, Label: `${r.Code} — ${r.Name}` }))
       .sort((a, b) => a.Label.localeCompare(b.Label));
@@ -460,22 +450,17 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
     this.EditorError = null;
     this.cdr.markForCheck();
     try {
-      const entity = await this.ProviderToUse.GetEntityObject<mjBizAppsAccountingGLAccountEntity>(GL_ENTITY, this.ProviderToUse.CurrentUser);
-      if (d.ID) {
-        const loaded = await entity.Load(d.ID);
-        if (!loaded) throw new Error(`Could not load account ${d.ID} to edit.`);
-      } else {
-        entity.NewRecord();
-      }
-      this.applyDraft(entity, d);
+      // Empty strings are NULL, not empty text: an optional FK or code left blank must be absent
+      // rather than a zero-length string the database would happily store and nothing would match.
+      this.blankToNull(d);
 
       // Save() returns a boolean and does NOT throw on a logical failure (a UNIQUE violation, a
       // permission denial) — reading the return value is the only way to know it worked.
-      const saved = await entity.Save();
+      const saved = await d.Save();
       if (!saved) {
         // MJ core already console-logs the full failure (SQL included) — here we only present the
         // human sentence; adding our own console.error would double-log and trip the test keystone.
-        this.EditorError = this.friendlySaveError(entity.LatestResult?.CompleteMessage, 'The account could not be saved.');
+        this.EditorError = this.friendlySaveError(d.LatestResult?.CompleteMessage, 'The account could not be saved.');
         return;
       }
 
@@ -496,14 +481,14 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
    * company is legal-looking and fails at the DB. The DB stays the authority — `Save()`'s return is
    * still checked — this just gets there first with a message a human can act on.
    */
-  private validateDraft(d: AccountDraft): string | null {
+  private validateDraft(d: mjBizAppsAccountingGLAccountEntity): string | null {
     if (!d.CompanyID) return 'Pick the company that will own this account — every account lives in exactly one company’s chart.';
-    if (!d.Code.trim()) return 'Code is required.';
-    if (!d.Name.trim()) return 'Name is required.';
+    if (!(d.Code ?? '').trim()) return 'Code is required.';
+    if (!(d.Name ?? '').trim()) return 'Name is required.';
 
-    const code = d.Code.trim().toLowerCase();
+    const code = (d.Code ?? '').trim().toLowerCase();
     const clash = this.Rows.find(
-      (r) => UUIDsEqual(r.CompanyID, d.CompanyID) && r.Code.trim().toLowerCase() === code && !(d.ID && UUIDsEqual(r.ID, d.ID)),
+      (r) => UUIDsEqual(r.CompanyID, d.CompanyID) && r.Code.trim().toLowerCase() === code && !(d.IsSaved && UUIDsEqual(r.ID, d.ID)),
     );
     if (clash) {
       const company = this.CompanyOptions.find((c) => UUIDsEqual(c.ID, d.CompanyID))?.Name ?? 'this company';
@@ -516,29 +501,35 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
       if (!UUIDsEqual(parent.CompanyID, d.CompanyID)) {
         return 'A parent account must belong to the same company — rollup happens inside one company’s chart.';
       }
-      if (d.ID && this.selfAndDescendants(d.ID).has(NormalizeUUID(d.ParentGLAccountID))) {
+      if (d.IsSaved && this.selfAndDescendants(d.ID).has(NormalizeUUID(d.ParentGLAccountID))) {
         return 'That account sits beneath this one — making it the parent would create a loop in the rollup.';
       }
     }
     return null;
   }
 
-  /** Typed generated properties only — never .Get()/.Set(). Empty strings become NULL. */
-  private applyDraft(entity: mjBizAppsAccountingGLAccountEntity, d: AccountDraft): void {
-    entity.CompanyID = d.CompanyID;
-    entity.Code = d.Code.trim();
-    entity.Name = d.Name.trim();
-    entity.AccountType = d.AccountType;
-    entity.ParentGLAccountID = d.ParentGLAccountID ? d.ParentGLAccountID : null;
-    entity.CurrencyCode = d.CurrencyCode ? d.CurrencyCode : null;
-    entity.ExternalSystem = d.ExternalSystem.trim() ? d.ExternalSystem.trim() : null;
-    entity.ExternalAccountID = d.ExternalAccountID.trim() ? d.ExternalAccountID.trim() : null;
-    entity.IsActive = d.IsActive;
-    entity.Description = d.Description.trim() ? d.Description.trim() : null;
-    // IsSystemSeeded is deliberately NOT written here. It records that
-    // `spSeedDefaultChartOfAccounts` created the row — a fact about provenance, not a user
-    // preference. Letting the UI set it would let a deployment customization claim to be
-    // platform-shipped, which is precisely the distinction the flag exists to preserve.
+  /**
+   * Trim the text fields and turn the blanks into NULL, in place on the entity.
+   *
+   * All that survives of `applyDraft`, which copied eleven fields from a mirror. The copying is gone
+   * — the form writes the entity — but this rule is not cosmetic: an empty string in an optional FK
+   * or code is a value the database stores and nothing ever matches, which reads as "set to nothing"
+   * and behaves as "set to something nobody can find".
+   *
+   * `IsSystemSeeded` is deliberately never written by this page. It records that
+   * `spSeedDefaultChartOfAccounts` created the row — provenance, not a user preference. Letting the
+   * UI set it would let a deployment customization claim to be platform-shipped, which is precisely
+   * the distinction the flag exists to preserve. Binding the entity makes that a rule about what the
+   * TEMPLATE offers rather than one enforced by a copier nobody can see.
+   */
+  private blankToNull(d: mjBizAppsAccountingGLAccountEntity): void {
+    d.Code = (d.Code ?? '').trim();
+    d.Name = (d.Name ?? '').trim();
+    d.ParentGLAccountID = d.ParentGLAccountID || null;
+    d.CurrencyCode = d.CurrencyCode || null;
+    d.ExternalSystem = (d.ExternalSystem ?? '').trim() || null;
+    d.ExternalAccountID = (d.ExternalAccountID ?? '').trim() || null;
+    d.Description = (d.Description ?? '').trim() || null;
   }
 
   /**

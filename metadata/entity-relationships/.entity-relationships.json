@@ -33,5 +33,55 @@
       "lastModified": "2026-08-09T19:12:58.629Z",
       "checksum": "488e55e9386d181b7f748126e844f123395804b65294e08b3c69030096abf400"
     }
+  },
+  {
+    "_comments": [
+      "Declares Journal Entry Lines -> Journal Entry Line Dimensions as a related-record collection.",
+      "",
+      "WHY. `JournalEntryLineEntityServer` hand-rolled this: `_dimensions`, `_deletedDimensions`,",
+      "AddDimension / RemoveDimension / CreateDimension, plus save and delete ordering written by hand.",
+      "It was the last of that pattern in this repo, and it was SERVER-ONLY — which is why the JE",
+      "workspace keeps its dimension picks in a component Map and maps them into the operation contract",
+      "instead of putting them on the line where they belong.",
+      "",
+      "No Sequence: a line's dimension tags are a SET, not an ordered list. UQ_JELDimension_Line_Dimension",
+      "already enforces one value per dimension per line, and stamping an order onto them would invent a",
+      "meaning the schema does not have."
+    ],
+    "fields": {
+      "RelatedRecordCollection": "@file:dimensions-collection.json"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: Journal Entry Lines&RelatedEntity=MJ_BizApps_Accounting: Journal Entry Line Dimensions"
+    },
+    "sync": {
+      "lastModified": "2026-08-10T16:57:21.580Z",
+      "checksum": "d83befacf1bf38198fe9e6c9d3f387c6ea5537ae5a3bf86acedcf56758bdbaad"
+    }
+  },
+  {
+    "_comments": [
+      "Declares Journal Entry Batches -> Journal Entries as a READ-ONLY related-record collection.",
+      "",
+      "WHY READ-ONLY, AND WHY THAT IS NOT A LIMITATION. `JournalEntryBatchEntityServer` already said",
+      "this in a comment — 'READ-ONLY by convention: mutating members happens through their own",
+      "entities / the engine — the batch never writes other aggregates outside its sanctioned",
+      "lock-release'. A convention in a comment is enforced by whoever read it. `ReadOnly: true` and",
+      "OnRemove 'refuse' make the collection say no instead.",
+      "",
+      "It replaces `_members`, a hand-rolled lazy cache with its own forceRefresh flag and its own",
+      "invalidation — which is `Load(force)` and `IsLoaded` with extra steps, written once per aggregate",
+      "and wrong in a different way each time."
+    ],
+    "fields": {
+      "RelatedRecordCollection": "@file:members-collection.json"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: Journal Entry Batches&RelatedEntity=MJ_BizApps_Accounting: Journal Entries"
+    },
+    "sync": {
+      "lastModified": "2026-08-10T16:57:21.599Z",
+      "checksum": "fa5637f6837939c3340f838d101c0ef25b8e5a10fc01cbc7b86fd76d4acdce65"
+    }
   }
 ]

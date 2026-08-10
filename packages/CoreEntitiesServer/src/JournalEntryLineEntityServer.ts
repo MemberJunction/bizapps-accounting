@@ -39,8 +39,10 @@ export class JournalEntryLineEntityServer extends JournalEntryLineEntity {
   /** Optional reference to the parent JournalEntryEntityServer object in memory. */
   public ParentJournalEntry?: any;
 
-  private _dimensions: mjBizAppsAccountingJournalEntryLineDimensionEntity[] = [];
-  private _deletedDimensions: mjBizAppsAccountingJournalEntryLineDimensionEntity[] = [];
+  // `Dimensions` is a RelatedRecordCollection on the GENERATED class now, declared in
+  // metadata/entity-relationships. It replaces `_dimensions` + `_deletedDimensions` and the
+  // Add/Remove/Create/Load/SetLoaded methods that reimplemented, by hand and server-only, exactly
+  // what the collection does: tracked removals, FK stamping, batched hydration, save ordering.
 
   /** Convenience getter for line net amount (Debit minus Credit). */
   get NetAmount(): number {
@@ -49,84 +51,44 @@ export class JournalEntryLineEntityServer extends JournalEntryLineEntity {
     return dr - cr;
   }
 
-  // ─── Dimensions collection ──────────────────────────────────────────────────
+  // ─── Dimensions ─────────────────────────────────────────────────────────────
+  //
+  // Thin wrappers over the collection, kept because four call sites across two engines use them and
+  // renaming those is churn with no meaning. Each one is now a single delegation rather than its own
+  // copy of collection bookkeeping.
 
-  /** The JournalEntryLineDimension children attached to this line. */
-  get Dimensions(): mjBizAppsAccountingJournalEntryLineDimensionEntity[] {
-    return this._dimensions;
-  }
-
-  /** Appends a dimension tag to this line (its FK is stamped at save when the line is new). */
+  /** Append a dimension tag. The FK is stamped by the collection, at save, when the line has an ID. */
   public AddDimension(dimension: mjBizAppsAccountingJournalEntryLineDimensionEntity): void {
-    if (!dimension) return;
-    if (this.ID) {
-      dimension.JournalEntryLineID = this.ID;
-    }
-    this._dimensions.push(dimension);
+    this.Dimensions.Add(dimension);
   }
 
-  /** Removes a dimension by object instance or array index. Tracks saved rows for deletion on Save(). */
+  /** Remove a tag by instance or index; a persisted one is queued for deletion. */
   public RemoveDimension(dimensionOrIndex: mjBizAppsAccountingJournalEntryLineDimensionEntity | number): void {
-    let removed: mjBizAppsAccountingJournalEntryLineDimensionEntity | null = null;
-    if (typeof dimensionOrIndex === 'number') {
-      if (dimensionOrIndex >= 0 && dimensionOrIndex < this._dimensions.length) {
-        removed = this._dimensions.splice(dimensionOrIndex, 1)[0];
-      }
-    } else {
-      const idx = this._dimensions.indexOf(dimensionOrIndex);
-      if (idx >= 0) {
-        removed = this._dimensions.splice(idx, 1)[0];
-      }
-    }
-    if (removed && removed.IsSaved) {
-      this._deletedDimensions.push(removed);
-    }
+    this.Dimensions.Remove(dimensionOrIndex);
   }
 
-  /** Instantiates a new dimension tag, attaches it to this line, and returns it. */
-  public async CreateDimension(user?: UserInfo): Promise<mjBizAppsAccountingJournalEntryLineDimensionEntity> {
-    const provider = this.ProviderToUse as unknown as IMetadataProvider;
-    const dimension = await provider.GetEntityObject<mjBizAppsAccountingJournalEntryLineDimensionEntity>(
-      JELD_ENTITY,
-      user ?? this.ContextCurrentUser,
-    );
-    dimension.NewRecord();
-    dimension.JournalEntryLineID = this.ID;
-    this.AddDimension(dimension);
-    return dimension;
-  }
-
-  /** Loads this line's dimension tags from the database if saved. */
-  public async LoadDimensions(user?: UserInfo): Promise<mjBizAppsAccountingJournalEntryLineDimensionEntity[]> {
-    if (!this.IsSaved || !this.ID) {
-      return this._dimensions;
-    }
-    const provider = this.ProviderToUse as unknown as IRunViewProvider;
-    const res = await provider.RunView<mjBizAppsAccountingJournalEntryLineDimensionEntity>(
-      {
-        EntityName: JELD_ENTITY,
-        ExtraFilter: `JournalEntryLineID='${this.ID}'`,
-        ResultType: 'entity_object',
-      },
-      user ?? this.ContextCurrentUser,
-    );
-    // Loud on failure (loads throw; saves return boolean): a silent empty here would make a
-    // tagged line look untagged to reversals, dispatch, and the UI.
-    if (!res.Success) {
-      throw new Error(`JournalEntryLineEntityServer.LoadDimensions: failed to load dimension tags for line ${this.ID}: ${res.ErrorMessage ?? 'unknown error'}`);
-    }
-    this._dimensions = res.Results ?? [];
-    this._deletedDimensions = [];
-    return this._dimensions;
+  /** A new tag, already attached to this line. */
+  public async CreateDimension(_user?: UserInfo): Promise<mjBizAppsAccountingJournalEntryLineDimensionEntity> {
+    return this.Dimensions.Create();
   }
 
   /**
-   * Used by JournalEntryEntityServer.LoadLines to distribute ONE bulk dimension query across
-   * its lines instead of one query per line. Replaces the in-memory collection wholesale.
+   * Load this line's tags.
+   *
+   * Throws on failure, as it always did: a silent empty here makes a tagged line look untagged to
+   * reversals, dispatch and the UI — and the collection throws for the same reason.
+   */
+  public async LoadDimensions(_user?: UserInfo): Promise<readonly mjBizAppsAccountingJournalEntryLineDimensionEntity[]> {
+    await this.Dimensions.Load();
+    return this.Dimensions.Items;
+  }
+
+  /**
+   * Used by `JournalEntryEntityServer.LoadLines` to distribute ONE bulk dimension query across its
+   * lines instead of one query per line.
    */
   public SetLoadedDimensions(dimensions: mjBizAppsAccountingJournalEntryLineDimensionEntity[]): void {
-    this._dimensions = dimensions;
-    this._deletedDimensions = [];
+    this.Dimensions.SetLoadedItems(dimensions);
   }
 
   // ─── Load / Save / Delete overrides ─────────────────────────────────────────
@@ -134,45 +96,29 @@ export class JournalEntryLineEntityServer extends JournalEntryLineEntity {
   public override async Load(ID: string, EntityRelationshipsToLoad?: string[]): Promise<boolean> {
     const ok = await super.Load(ID, EntityRelationshipsToLoad);
     if (ok) {
-      await this.LoadDimensions();
+      // `Load: 'explicit'`, so the tags still have to be asked for. Asked for HERE because every
+      // caller that loads a line to inspect it wants them, and a line whose tags are silently absent
+      // reads as untagged to intercompany resolution.
+      await this.Dimensions.Load();
     }
     return ok;
   }
 
+  // `Save()` is NOT overridden any more. Persisting the tags — removals first, then inserts with the
+  // FK stamped — is what the collection contributes to the entity's save plan, inside the same
+  // transaction the parent JE opens. The hand-written version did the same thing in the same order
+  // and had to be kept in step with it by hand.
+
   /**
-   * Persist the line, then its dimension children (removals first). When called from
-   * JournalEntryEntityServer.Save() this runs inside the parent's transaction, so the
-   * whole JE — header, lines, dimensions — commits or rolls back as one.
+   * Delete this line's dimension rows first (FK children), then the line itself.
+   *
+   * Still explicit: `OnRemove: 'delete'` governs a child REMOVED from the collection, which is a
+   * different event from the parent being deleted out from under it.
    */
-  public override async Save(options?: EntitySaveOptions): Promise<boolean> {
-    const savedLine = await super.Save(options);
-    if (!savedLine) return false;
-
-    for (const dim of this._deletedDimensions) {
-      const deleted = await dim.Delete();
-      if (!deleted) {
-        LogError(`JournalEntryLineEntityServer.Save: failed to delete dimension ${dim.ID}: ${dim.LatestResult?.CompleteMessage ?? 'unknown error'}`);
-        return false;
-      }
-    }
-    this._deletedDimensions = [];
-
-    for (const dim of this._dimensions) {
-      dim.JournalEntryLineID = this.ID;
-      const savedDim = await dim.Save(options);
-      if (!savedDim) {
-        LogError(`JournalEntryLineEntityServer.Save: failed to save dimension tag: ${dim.LatestResult?.CompleteMessage ?? 'unknown error'}`);
-        return false;
-      }
-    }
-    return true;
-  }
-
-  /** Delete this line's dimension rows first (FK children), then the line itself. */
   public override async Delete(options?: EntityDeleteOptions): Promise<boolean> {
     if (this.IsSaved) {
-      await this.LoadDimensions();
-      for (const dim of this._dimensions) {
+      await this.Dimensions.Load();
+      for (const dim of [...this.Dimensions.Items]) {
         if (!dim.IsSaved) continue;
         const deleted = await dim.Delete(options);
         if (!deleted) {
@@ -180,7 +126,7 @@ export class JournalEntryLineEntityServer extends JournalEntryLineEntity {
           return false;
         }
       }
-      this._dimensions = [];
+      this.Dimensions.Clear();
     }
     return super.Delete(options);
   }
@@ -235,7 +181,7 @@ export class JournalEntryLineEntityServer extends JournalEntryLineEntity {
    */
   private ValidateDimensions(result: ValidationResult): void {
     const seenDimensionIds = new Set<string>();
-    for (const dim of this._dimensions) {
+    for (const dim of this.Dimensions.Items) {
       if (!dim.DimensionID || !dim.DimensionValueID) {
         result.Success = false;
         result.Errors.push(
