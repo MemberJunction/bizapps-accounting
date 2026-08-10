@@ -1,0 +1,9 @@
+{
+  "Name": "Members",
+  "Source": "database",
+  "Load": "explicit",
+  "ReadOnly": true,
+  "OnRemove": "refuse",
+  "OrderBy": "EntryNumber ASC",
+  "ClearAfterSave": false
+}

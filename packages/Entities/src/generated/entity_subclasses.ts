@@ -4954,6 +4954,27 @@ export class mjBizAppsAccountingJournalEntryBatchSequenceEntity extends BaseEnti
  */
 @RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Journal Entry Batches')
 export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBizAppsAccountingJournalEntryBatchEntityType> {
+
+  /**
+  * Related records: MJ_BizApps_Accounting: Journal Entries
+  *
+  * Loads, validates and persists as one unit with this MJ_BizApps_Accounting: Journal Entry Batches record — see
+  * guides/TRANSACTIONS_AND_BATCHING_GUIDE.md. Declared by the RelatedRecordCollection metadata on
+  * the 'MJ_BizApps_Accounting: Journal Entry Batches → MJ_BizApps_Accounting: Journal Entries' relationship; edit that row, not this file.
+  * **Read-only.** Add/Create/Remove/Clear throw, the collection contributes nothing to a save,
+  * and it never reports Dirty.
+  */
+  public readonly Members = this.DeclareRelatedRecords<mjBizAppsAccountingJournalEntryEntity>({
+      Name: 'Members',
+        RelatedEntity: 'MJ_BizApps_Accounting: Journal Entries',
+        RelatedEntityJoinField: 'JournalEntryBatchID',
+        OrderBy: 'EntryNumber ASC',
+        Load: 'explicit',
+        OnRemove: 'refuse',
+        Source: 'database',
+        ReadOnly: true,
+  });
+
     /**
     * Loads the MJ_BizApps_Accounting: Journal Entry Batches record from the database
     * @param ID: string - primary key value to load the MJ_BizApps_Accounting: Journal Entry Batches record.
@@ -5490,6 +5511,25 @@ export class mjBizAppsAccountingJournalEntryLineDimensionEntity extends BaseEnti
  */
 @RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Journal Entry Lines')
 export class mjBizAppsAccountingJournalEntryLineEntity extends BaseEntity<mjBizAppsAccountingJournalEntryLineEntityType> {
+
+  /**
+  * Related records: MJ_BizApps_Accounting: Journal Entry Line Dimensions
+  *
+  * Loads, validates and persists as one unit with this MJ_BizApps_Accounting: Journal Entry Lines record — see
+  * guides/TRANSACTIONS_AND_BATCHING_GUIDE.md. Declared by the RelatedRecordCollection metadata on
+  * the 'MJ_BizApps_Accounting: Journal Entry Lines → MJ_BizApps_Accounting: Journal Entry Line Dimensions' relationship; edit that row, not this file.
+  *
+  */
+  public readonly Dimensions = this.DeclareRelatedRecords<mjBizAppsAccountingJournalEntryLineDimensionEntity>({
+      Name: 'Dimensions',
+        RelatedEntity: 'MJ_BizApps_Accounting: Journal Entry Line Dimensions',
+        RelatedEntityJoinField: 'JournalEntryLineID',
+        OrderBy: '__mj_CreatedAt ASC',
+        Load: 'explicit',
+        OnRemove: 'delete',
+        Source: 'database',
+  });
+
     /**
     * Loads the MJ_BizApps_Accounting: Journal Entry Lines record from the database
     * @param ID: string - primary key value to load the MJ_BizApps_Accounting: Journal Entry Lines record.

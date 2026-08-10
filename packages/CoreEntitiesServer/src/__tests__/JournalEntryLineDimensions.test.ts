@@ -71,13 +71,13 @@ describe('JournalEntryLineEntityServer — Dimensions collection', () => {
 
   describe('collection bookkeeping', () => {
     it('initializes with an empty Dimensions array', () => {
-      expect(line.Dimensions).toEqual([]);
+      expect(line.Dimensions.Items).toEqual([]);
     });
 
     it('AddDimension appends and stamps the line FK when the line has an ID', () => {
       const dim = newDimension('DIM_DEPT', 'VAL_SALES');
       line.AddDimension(dim);
-      expect(line.Dimensions).toHaveLength(1);
+      expect(line.Dimensions.Items).toHaveLength(1);
       if (line.ID) {
         expect(dim.JournalEntryLineID).toBe(line.ID);
       }
@@ -90,19 +90,19 @@ describe('JournalEntryLineEntityServer — Dimensions collection', () => {
       line.AddDimension(d2);
 
       line.RemoveDimension(d1);
-      expect(line.Dimensions).toHaveLength(1);
-      expect(line.Dimensions[0]).toBe(d2);
+      expect(line.Dimensions.Items).toHaveLength(1);
+      expect(line.Dimensions.Items[0]).toBe(d2);
 
       line.RemoveDimension(0);
-      expect(line.Dimensions).toHaveLength(0);
+      expect(line.Dimensions.Items).toHaveLength(0);
     });
 
     it('SetLoadedDimensions replaces the collection wholesale', () => {
       line.AddDimension(newDimension('DIM_A', 'VAL_1'));
       const loaded = [newDimension('DIM_B', 'VAL_2'), newDimension('DIM_C', 'VAL_3')];
       line.SetLoadedDimensions(loaded);
-      expect(line.Dimensions).toHaveLength(2);
-      expect(line.Dimensions[0].DimensionID).toBe('DIM_B');
+      expect(line.Dimensions.Items).toHaveLength(2);
+      expect(line.Dimensions.Items[0].DimensionID).toBe('DIM_B');
     });
   });
 
