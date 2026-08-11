@@ -40,6 +40,10 @@
         "name": "@mj-biz-apps/accounting-server",
         "role": "bootstrap",
         "startupExport": "LoadBizAppsAccountingServer"
+      },
+      {
+        "name": "@mj-biz-apps/accounting-core-entities-server",
+        "role": "library"
       }
     ],
     "client": [
