@@ -136,7 +136,9 @@ async function draft(
   entry.EffectiveDate = new Date('2026-07-16T00:00:00');
   entry.Description = over.Description ?? 'Event deposit accrual';
 
-  const state: JEDraftState = { Entry: entry, Amounts: new Map(), Dimensions: new Map() };
+  // No `Dimensions` map: the picks live on each line's own collection now, and `JEDraftState` no
+  // longer declares one. It survived here only because test files are not typechecked by the build.
+  const state: JEDraftState = { Entry: entry, Amounts: new Map() };
 
   for (const spec of lines) {
     // ISSUED BY THE COLLECTION. It stamps the foreign key at save and tracks the child for the save
