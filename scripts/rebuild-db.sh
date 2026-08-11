@@ -27,9 +27,9 @@
 # (${flyway:defaultSchema} = __mj_BizAppsTasks), so plain `mj migrate --schema` applies them.
 #
 # AFTER THIS, still by hand (they need judgement, not automation):
-#   npm run mj:codegen                     # regenerate entity metadata + SQL objects
+#   pnpm run mj:codegen                     # regenerate entity metadata + SQL objects
 #   scripts/append-codegen.sh              # append the generated SQL below the migration's banner
-#   npm run mj -- sync push --dir metadata # seed currencies + GL account roles
+#   pnpm run mj -- sync push --dir metadata # seed currencies + GL account roles
 #
 # Usage: scripts/rebuild-db.sh
 set -euo pipefail
@@ -116,8 +116,8 @@ $MJ migrate --schema __mj_BizAppsAccounting --dir "$ROOT/migrations"
 say "Done"
 cat <<'NEXT'
 Next, in order:
-  npm run mj:codegen
+  pnpm run mj:codegen
   scripts/append-codegen.sh
-  npm run mj -- sync push --dir metadata
-  npm run build
+  pnpm run mj -- sync push --dir metadata
+  pnpm run build
 NEXT

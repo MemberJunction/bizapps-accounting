@@ -23,7 +23,7 @@ grep -q "$MARKER" "$MIGRATION" || { echo "no CODEGEN OUTPUT banner in $MIGRATION
 
 shopt -s nullglob
 GENERATED=("$GENERATED_DIR"/*.sql)
-(( ${#GENERATED[@]} )) || { echo "no CodeGen output in $GENERATED_DIR — run 'npm run mj:codegen' first" >&2; exit 1; }
+(( ${#GENERATED[@]} )) || { echo "no CodeGen output in $GENERATED_DIR — run 'pnpm run mj:codegen' first" >&2; exit 1; }
 
 # Keep the hand-authored half plus the banner; drop whatever generated tail is already there.
 # The banner block ends at the LAST '-- ====' rule following the marker line, so the explanatory
