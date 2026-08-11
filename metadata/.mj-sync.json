@@ -8,7 +8,8 @@
     "currencies",
     "journal-entry-types",
     "gl-account-roles",
-    "applications"
+    "applications",
+    "entity-actions"
   ],
   "sqlLogging": {
     "enabled": true,
