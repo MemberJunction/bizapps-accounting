@@ -7,13 +7,13 @@
     "packages/*"
   ],
   "scripts": {
-    "prebuild": "node -e \"try { require.resolve('turbo') } catch (e) { console.error('\\n\u274c Dependencies not installed. Run: pnpm install\\n'); process.exit(1); }\"",
+    "prebuild": "node -e \"try { require.resolve('turbo') } catch (e) { console.error('\\n❌ Dependencies not installed. Run: pnpm install\\n'); process.exit(1); }\"",
     "build": "pnpm run build:stream",
     "build:stream": "turbo --log-order=stream build --filter=\"@mj-biz-apps/*\"",
     "build:generated": "turbo --log-order=stream build --filter=\"@mj-biz-apps/accounting-entities\" --filter=\"@mj-biz-apps/accounting-actions\"",
     "build:packages": "turbo --log-order=stream build --filter=\"@mj-biz-apps/accounting-*\"",
     "mj": "mj",
-    "mj:migrate": "mj migrate",
+    "mj:migrate": "mj migrate --schema __mj_BizAppsAccounting --dir ./migrations",
     "mj:codegen": "mj codegen",
     "install:deps": "pnpm install",
     "setup": "echo 'Please run: pnpm run mj:migrate && pnpm run mj:codegen && pnpm run build'",
