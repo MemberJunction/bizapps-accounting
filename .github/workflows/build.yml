@@ -5,12 +5,18 @@ on:
   push:
     branches: [next]
     paths:
+      # pnpm-workspace.yaml + package.json affect resolution (overrides,
+      # onlyBuiltDependencies, deps) — build must re-run when they change.
       - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'package.json'
       - 'packages/**'
   pull_request:
     branches: [next]
     paths:
       - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'package.json'
       - 'packages/**'
 
 concurrency:
