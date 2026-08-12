@@ -140,7 +140,7 @@ BAC uses a two-tier branching model (matching BCSaaS and MJ):
 
 ### pnpm Workspace Management
 - This is a **pnpm** workspace monorepo (`pnpm-workspace.yaml`; `pnpm@10.x` via the `packageManager` field). `pnpm-lock.yaml` is the only committed lockfile.
-- **Do not run `npm install` here** — it ignores the pnpm lockfile AND the dependency `overrides` (which live in `pnpm-workspace.yaml`, where npm can't see them), so it builds a differently-resolved tree and litters a `package-lock.json` that must not be committed.
+- **Do not run `npm install` here** — it ignores the pnpm lockfile AND the dependency overrides (they live in package.json's `pnpm.overrides`, which npm does not read), so it builds an unpinned, differently-resolved tree and litters a `package-lock.json` that must not be committed.
 - **IMPORTANT**: To add dependencies to a specific package:
   - Define dependencies in the individual package's package.json
   - Run `pnpm install` at the repository root (NOT within the package directory)

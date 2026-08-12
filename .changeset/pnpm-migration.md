@@ -8,8 +8,10 @@ package's code, types, metadata or migrations change — build tooling only, hen
 `packageManager` moves to `pnpm@10.33.0`, `package-lock.json` is replaced by
 `pnpm-lock.yaml`, and CI installs with `pnpm install --frozen-lockfile`. Two workspace
 settings are load-bearing and mirror MJ core: `linkWorkspacePackages: true` and the
-`onlyBuiltDependencies` allowlist. The npm `overrides` block moves to pnpm-workspace.yaml
-`overrides` (pnpm ignores npm's). `mj:migrate` gains `--schema __mj_BizAppsAccounting
+`onlyBuiltDependencies` allowlist. The npm `overrides` block moves to `pnpm.overrides`
+in package.json (matching bizapps-common) — pnpm reads neither npm's top-level field
+nor vice versa, so the pins live in the pnpm location and npm installs are unpinned.
+`mj:migrate` gains `--schema __mj_BizAppsAccounting
 --dir ./migrations` — bare `mj migrate` silently applied nothing (same fix as tasks).
 
 Also declares `@mj-biz-apps/accounting-core-entities-server` in mj-app.json's server

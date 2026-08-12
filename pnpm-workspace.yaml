@@ -38,21 +38,7 @@ onlyBuiltDependencies:
 packages:
   - 'packages/*'
 
-# Moved from package.json's npm `overrides` block in the pnpm migration — pnpm
-# ignores npm overrides; these are the same pins, applied by pnpm from here.
-overrides:
-  "@angular/animations": "21.1.3"
-  "@angular/build": "21.1.3"
-  "@angular/cli": "21.1.3"
-  "@angular/common": "21.1.3"
-  "@angular/compiler": "21.1.3"
-  "@angular/compiler-cli": "21.1.3"
-  "@angular/core": "21.1.3"
-  "@angular/forms": "21.1.3"
-  "@angular/localize": "21.1.3"
-  "@angular/platform-browser": "21.1.3"
-  "@angular/platform-browser-dynamic": "21.1.3"
-  "@angular/router": "21.1.3"
-  "@angular-devkit/build-angular": "21.1.3"
-  "@memberjunction/core": "^6.1.0-edge.0"
-  "@memberjunction/global": "^6.1.0-edge.0"
+# Dependency overrides live in package.json under `pnpm.overrides`, matching
+# bizapps-common. (pnpm does NOT read npm's top-level `overrides` field — verified:
+# a lockfile regenerated with only that field records no overrides at all — and npm
+# reads neither pnpm location. There is no single block both PMs honor.)
