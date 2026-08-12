@@ -58,22 +58,11 @@ module.exports = {
    * Build commands to run after code generation.
    */
   commands: [
-    { workingDirectory: './packages/Entities', command: 'npm', args: ['run', 'build'], when: 'after' },
-    { workingDirectory: './packages/Actions',  command: 'npm', args: ['run', 'build'], when: 'after' },
-    { workingDirectory: './packages/Server',   command: 'npm', args: ['run', 'build'], when: 'after' },
-    { workingDirectory: './packages/Angular',  command: 'npm', args: ['run', 'build'], when: 'after' },
+    { workingDirectory: './packages/Entities', command: 'pnpm', args: ['run', 'build'], when: 'after' },
+    { workingDirectory: './packages/Actions',  command: 'pnpm', args: ['run', 'build'], when: 'after' },
+    { workingDirectory: './packages/Server',   command: 'pnpm', args: ['run', 'build'], when: 'after' },
+    { workingDirectory: './packages/Angular',  command: 'pnpm', args: ['run', 'build'], when: 'after' },
   ],
-
-  /**
-   * Open App installer layout. This distribution puts its server/client apps
-   * under apps/ (not the MJ-repo default of packages/MJAPI + packages/MJExplorer),
-   * so the `mj app install` orchestrator needs these paths to wire dependency
-   * apps (e.g. bizapps-common) into the right workspaces.
-   */
-  openApps: {
-    serverPackagePath: 'apps/MJAPI',
-    clientPackagePath: 'apps/MJExplorer',
-  },
 
   // ============================================================================
   // OPTIONAL OVERRIDES

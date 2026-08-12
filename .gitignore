@@ -62,3 +62,6 @@ test-harnesses/playwright/.auth/
 test-harnesses/playwright/test-results/
 test-harnesses/playwright/playwright-report/
 test-harnesses/playwright/node_modules/
+# npm is not this repo's package manager (see .npmrc / CLAUDE.md); a stray `npm install`
+# must not produce a committable lockfile. pnpm-lock.yaml is the lockfile of record.
+package-lock.json

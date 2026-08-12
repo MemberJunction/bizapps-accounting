@@ -14,15 +14,17 @@ See `plans/bizapps-accounting-master.md` for the full design and current decisio
 ```
 bizapps-accounting/
   mj-app.json          - MJ Open App manifest
-  apps/
-    MJAPI/             - GraphQL API server (port 4102)
-    MJExplorer/        - Angular UI application (port 4302)
   packages/
-    Entities/          - @mj-biz-apps/accounting-entities (CodeGen-generated entity subclasses)
-    Actions/           - @mj-biz-apps/accounting-actions (CodeGen-generated action subclasses)
-    Server/            - @mj-biz-apps/accounting-server (server bootstrap + GraphQL resolvers)
-    Angular/           - @mj-biz-apps/accounting-ng (Angular bootstrap + form components)
+    Entities/           - @mj-biz-apps/accounting-entities (CodeGen-generated entity subclasses)
+    Actions/            - @mj-biz-apps/accounting-actions (CodeGen-generated action subclasses)
+    Server/             - @mj-biz-apps/accounting-server (server bootstrap + GraphQL resolvers)
+    CoreEntitiesServer/ - @mj-biz-apps/accounting-core-entities-server (server-only entity lifecycle hooks)
+    EngineBase/         - @mj-biz-apps/accounting-engine-base (shared engine base)
+    Angular/            - @mj-biz-apps/accounting-ng (Angular bootstrap + form components)
 ```
+
+There are no bundled host apps — the packages run inside a MemberJunction host, wired up via
+`mj-app.json` (dev-linked or installed into an MJ instance).
 
 ---
 
@@ -119,52 +121,43 @@ BAC uses a two-tier branching model (matching BCSaaS and MJ):
 1. Open a single PR from `next` → `main` ("Release vX.Y.Z" coordinating PR)
 2. Merge to `main` triggers `publish.yml`:
    - Validates, builds, runs `changeset version`, publishes to npm, tags the release, commits the version bump back to `main`
-   - Then automatically: checks out `next`, merges main into it, runs `npm install --package-lock-only`, commits the updated lockfile as `chore: Update package-lock.json with vX.Y.Z dependencies`, and pushes to `next`
+   - Then automatically: checks out `next`, merges main into it, runs `pnpm install --lockfile-only`, commits the updated lockfile as `chore: Update pnpm-lock.yaml with vX.Y.Z dependencies`, and pushes to `next`
 3. `next` is now ready for the next round of feature work, with a lockfile matching the just-published versions
 
 **Rules:**
 - **Never commit directly to `main`.** Always go through `next` first (except for the release coordinating PR itself).
-- **Never hand-author the `chore: Update package-lock.json with vX.Y.Z dependencies` commit on `next`.** That commit is created automatically by the publish workflow. If you find yourself wanting to write one manually, something is wrong upstream.
+- **Never hand-author the `chore: Update pnpm-lock.yaml with vX.Y.Z dependencies` commit on `next`.** That commit is created automatically by the publish workflow. If you find yourself wanting to write one manually, something is wrong upstream.
 - **Hotfixes that genuinely must bypass `next`** still go through a PR to `main`, but the next release-coordinating PR from `next` will need to merge main's hotfix commit back into next before merging next → main again. The publish workflow's automated merge-back handles this for you; you should rarely need to do it manually.
 
 ---
 
 ## Build Commands
-- Build all packages: `npm run build` (from repo root, uses Turborepo)
-- Build generated packages: `npm run build:generated`
-- Build API only: `npm run build:api`
-- Build Explorer only: `npm run build:explorer`
-- Start API server: `npm run start:api` (port 4102)
-- Start Explorer UI: `npm run start:explorer` (port 4302)
-- Build specific package: `cd packages/PackageName && npm run build`
-- **IMPORTANT**: When building individual packages for testing/compilation, always use `npm run build` in the specific package directory
+- Build all packages: `pnpm run build` (from repo root, uses Turborepo)
+- Build generated packages: `pnpm run build:generated`
+- Build publishable packages only: `pnpm run build:packages`
+- Build specific package: `cd packages/PackageName && pnpm run build`
+- **IMPORTANT**: When building individual packages for testing/compilation, always use `pnpm run build` in the specific package directory
 
-### Build Pipeline
-- MJExplorer uses the Angular `application` builder powered by ESBuild and Vite
-- Dev server uses Vite with HMR for fast iteration
-- Source maps are configured for full debugging support including local packages
-
-### NPM Workspace Management
-- This is an NPM workspace monorepo
+### pnpm Workspace Management
+- This is a **pnpm** workspace monorepo (`pnpm-workspace.yaml`; `pnpm@10.x` via the `packageManager` field). `pnpm-lock.yaml` is the only committed lockfile.
+- **Do not run `npm install` here** — it ignores the pnpm lockfile AND the dependency overrides (they live in package.json's `pnpm.overrides`, which npm does not read), so it builds an unpinned, differently-resolved tree and litters a `package-lock.json` that must not be committed.
 - **IMPORTANT**: To add dependencies to a specific package:
   - Define dependencies in the individual package's package.json
-  - Run `npm install` at the repository root (NOT within the package directory)
-  - Never run `npm install` inside individual package directories
+  - Run `pnpm install` at the repository root (NOT within the package directory)
+  - Never run an install inside individual package directories
 
 ## Development Workflow
-- **CRITICAL**: After making code changes, always compile the affected package by running `npm run build` in that package's directory to check for TypeScript errors
+- **CRITICAL**: After making code changes, always compile the affected package by running `pnpm run build` in that package's directory to check for TypeScript errors
 - Fix all compilation errors before proceeding with additional changes
 - **Tasks**: whenever you need to spin up tasks - if they do not require interaction with the user and if they are not interdependent in any way, ALWAYS spin up multiple parallel tasks to work together for faster responses
 
 ## Ports
 - MJAPI GraphQL server: **4102** (configured via `GRAPHQL_PORT` in `.env`)
-- MJExplorer Angular app: **4302** (configured in MJExplorer start script)
-- These avoid conflicts with other MJ dev environments (MJ uses 4001/4201, BizAppsCommon uses 4101/4301)
+- Explorer Angular app: **4302**
+- These are this app's conventional ports for a host running it standalone, chosen to avoid conflicts with other MJ dev environments (MJ uses 4001/4201, BizAppsCommon uses 4101/4301)
 
 ## Environment Configuration
-- The repo root `.env` file contains all configuration (DB, auth, AI keys, etc.)
-- `apps/MJAPI/.env` is a **symlink** to `../../.env` - do not create a separate file there
-- Angular environment files are in `apps/MJExplorer/src/environments/`
+- The repo root `.env` file contains all configuration (DB, auth, AI keys, etc.) — `scripts/rebuild-db.sh` and the `mj` CLI read it
 
 ---
 
@@ -313,10 +306,10 @@ This repo uses MemberJunction's CodeGen system to generate entity and action sub
 **Key rules:**
 - Never manually edit files in generated directories - CodeGen will overwrite them
 - Always run CodeGen after database schema changes
-- Run `npm run mj:codegen` from repo root to regenerate
+- Run `pnpm run mj:codegen` from repo root to regenerate
 
 ## Database Migrations
-- Run `npm run mj:migrate` from repo root
+- Run `pnpm run mj:migrate` from repo root
 - See MJ documentation for migration file format and conventions
 - Never include `__mj_CreatedAt`/`__mj_UpdatedAt` columns in CREATE TABLE - CodeGen handles them
 - Never create indexes for foreign key columns - CodeGen creates them automatically
@@ -327,7 +320,7 @@ This repo uses MemberJunction's CodeGen system to generate entity and action sub
 
 ### SQL Server is the source of truth; PostgreSQL is converted
 - Write all migrations as **T-SQL** in `migrations/` (`V<TS>__v<X.Y.x>__<description>.sql`).
-- The PostgreSQL counterparts in `migrations-pg/` are produced by the MJ converter (`@memberjunction/sql-converter`) via `npx mj sql-convert <file> --from tsql --to postgres --output migrations-pg/<file>.pg.sql --schema __mj_BizAppsAccounting`. PG-only patches use the `.pg-only.sql` extension.
+- The PostgreSQL counterparts in `migrations-pg/` are produced by the MJ converter (`@memberjunction/sql-converter`) via `pnpm exec mj sql-convert <file> --from tsql --to postgres --output migrations-pg/<file>.pg.sql --schema __mj_BizAppsAccounting`. PG-only patches use the `.pg-only.sql` extension.
 - **Never hand-edit `migrations-pg/*.pg.sql`** — fix the converter rule and re-convert. PG-only patches are the exception, and live next to the converted files.
 - CI runs `.github/workflows/pg-migrations.yml` on PRs that touch migrations or the converter to validate the PG output still applies cleanly to a fresh PG 17 database.
 - See `migrations-pg/README.md` for the conversion workflow and the MJ repo's `/pg-migrate` slash command for the deeper toolchain.
@@ -442,4 +435,4 @@ CodeGen runs *after* migrations — and if the change is really about metadata (
 form layout), its home is `metadata/` and `mj sync push`, not a migration.
 
 The review test: *if a colleague pulls this branch onto a database that already has last week's
-schema and runs `npm run mj:migrate`, do they get exactly the schema this branch describes?*
+schema and runs `pnpm run mj:migrate`, do they get exactly the schema this branch describes?*

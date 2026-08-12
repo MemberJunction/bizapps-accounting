@@ -213,7 +213,7 @@ SQL Server is the **source of truth** for migrations. PostgreSQL is supported vi
 
 ```
 migrations/                       ←  T-SQL, hand-written baseline (+ regenerated CodeGen output)
-migrations-pg/                    ←  PG, produced by `npx mj sql-convert`
+migrations-pg/                    ←  PG, produced by `pnpm exec mj sql-convert`
 ```
 
 At runtime, `mj migrate` reads `DB_PLATFORM` and picks the right directory. CI applies the PG set to a fresh `postgres:17` container on every migration-touching PR — a T-SQL migration cannot land without a working PG counterpart.
@@ -225,7 +225,7 @@ At runtime, `mj migrate` reads `DB_PLATFORM` and picks the right directory. CI a
 ```bash
 git clone https://github.com/MemberJunction/bizapps-accounting.git
 cd bizapps-accounting
-npm install
+pnpm install
 ```
 
 ### Configure Environment
@@ -246,18 +246,17 @@ MJ_CORE_SCHEMA=__mj
 ### Deploy and Build
 
 ```bash
-npm run mj:migrate                    # Apply migrations (creates __mj_BizAppsAccounting schema)
-npx mj-sync push --dir ./metadata     # Load seed metadata
-npm run mj:codegen                    # Generate TypeScript / GraphQL / Angular code
-npm run build                         # Build all packages (Turborepo)
+pnpm run mj:migrate                   # Apply migrations (creates __mj_BizAppsAccounting schema)
+pnpm run mj sync push --dir metadata  # Load seed metadata
+pnpm run mj:codegen                   # Generate TypeScript / GraphQL / Angular code
+pnpm run build                        # Build all packages (Turborepo)
 ```
 
 ### Run Development Servers
 
-```bash
-npm run start:api      # GraphQL server at http://localhost:4102
-npm run start:explorer # Angular app at http://localhost:4302
-```
+This repo no longer bundles host apps — there is no `apps/MJAPI` or `apps/MJExplorer` to start
+here. The packages run inside a MemberJunction host (declared via `mj-app.json`): dev-link or
+install the app into an MJ instance and run that host's MJAPI/Explorer.
 
 Ports are chosen to avoid colliding with concurrent MJ dev environments:
 
@@ -276,14 +275,12 @@ Ports are chosen to avoid colliding with concurrent MJ dev environments:
 bizapps-accounting/
 ├── mj-app.json                    # MJ Open App manifest (schema __mj_BizAppsAccounting)
 ├── mj.config.cjs                  # CodeGen config + SQL → PG placeholder rules
-├── apps/
-│   ├── MJAPI/                     # GraphQL API server (port 4102)
-│   └── MJExplorer/                # Angular UI application (port 4302)
 ├── packages/
 │   ├── Entities/                  # @mj-biz-apps/accounting-entities
 │   ├── Actions/                   # @mj-biz-apps/accounting-actions
 │   ├── Server/                    # @mj-biz-apps/accounting-server
 │   ├── CoreEntitiesServer/        # @mj-biz-apps/accounting-core-entities-server
+│   ├── EngineBase/                # @mj-biz-apps/accounting-engine-base
 │   └── Angular/                   # @mj-biz-apps/accounting-ng
 ├── migrations/                    # T-SQL baseline (source of truth)
 ├── migrations-pg/                 # PG migrations (converter output)

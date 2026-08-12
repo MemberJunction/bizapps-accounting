@@ -37,8 +37,8 @@ or backfill them before adding the constraint.
 Then regenerate the code CodeGen owns:
 
 ```bash
-npm run mj:migrate      # apply the new migration to your database
-npm run mj:codegen      # entity metadata, base views, CRUD procs, TypeScript
+pnpm run mj:migrate      # apply the new migration to your database
+pnpm run mj:codegen      # entity metadata, base views, CRUD procs, TypeScript
 ```
 
 ## What must NOT happen any more
@@ -62,6 +62,6 @@ form layout — its home is `metadata/` and `mj sync push`, not a migration at a
 ## The test to apply in review
 
 > If a colleague pulls this branch onto a database that already has last week's schema and runs
-> `npm run mj:migrate`, do they end up with exactly the schema this branch describes?
+> `pnpm run mj:migrate`, do they end up with exactly the schema this branch describes?
 
 If the answer requires them to drop their database, the change is in the wrong place.
