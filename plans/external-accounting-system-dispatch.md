@@ -22,8 +22,8 @@ exist yet — everything must be provable without them (capture-mode tests); cre
 | # | Decision |
 |---|----------|
 | D1 | Entity name **`ExternalAccountingSystem`**, accounting schema (`__mj_BizAppsAccounting`). Single entity — NO capability link-entity for now. |
-| D2 | Single **`DriverClass`** column; one adapter class per system; capabilities are methods on the base (`PostJournalEntryBatch` now, `VerifyPosted` now, `PullGLAccounts` later). |
-| D3 | ClassFactory keys are the adapter class's OWN name (`@RegisterClass(BaseExternalAccountingSystemAdapter, 'BusinessCentralAdapter')`) — never a domain enum. The catalog row holds the mapping. |
+| D2 | Single **`DriverClass`** column; one adapter class per system; capabilities are methods on the base (`PostJournalEntryBatch` now, `VerifyPosted` now, `PullGLAccounts` later). Each adapter selects + drives its own integration entirely under the hood; where it needs transport below the connector's public CRUD surface, it EXTENDS the vendor connector via a private inner subclass (single inheritance: the adapter's top-level parent is our base — required for ClassFactory keying; the vendor-connector extension is its internal transport). Connector copies are never edited for this. |
+| D3 | ClassFactory keys are the adapter class's OWN name (`@RegisterClass(BaseExternalAccountingSystemAdapter, 'BusinessCentralAccountingSystem')`) — never a domain enum. The catalog row holds the mapping. |
 | D4 | `JournalEntryBatch.TargetSystem` (string + CK enum) becomes **`ExternalAccountingSystemID` FK**. Old column dropped. |
 | D5 | Seed exactly two rows: `BusinessCentral` and `Mock`. |
 | D6 | Missing row / missing DriverClass registration / missing CompanyIntegration ⇒ **loud fail** (batch Sent→Failed with the reason). Mock is a real selectable row (`MockAdapter`) — testing it is an explicit selection, never a fallback. |
@@ -62,8 +62,8 @@ New migration `bizapps-accounting/migrations/V<real-UTC-timestamp>__v1.0.x__Exte
    `IsActive` BIT NOT NULL DEFAULT 1. Extended properties (MS_Description) on table + columns
    (match the style of the existing base migration).
 2. Seed (hardcoded UUIDs, uuidgen-minted — house rule, see orders baseline: ALL seed UUIDs hardcoded):
-   `BusinessCentral` (DriverClass `BusinessCentralAdapter`, IntegrationName `business-central`) ·
-   `Mock` (DriverClass `MockExternalAccountingSystemAdapter`, IntegrationName NULL).
+   `BusinessCentral` (DriverClass `BusinessCentralAccountingSystem`, IntegrationName `business-central`) ·
+   `Mock` (DriverClass `MockAccountingSystem`, IntegrationName NULL).
 3. FK swap on `JournalEntryBatch`: add `ExternalAccountingSystemID` uniqueidentifier NULL + FK →
    data-migrate `UPDATE ... SET ExternalAccountingSystemID = (row matching TargetSystem Name)` →
    **THROW if any row remains unmapped** (only BC/Mock are seeded; a dev DB with e.g. 'Xero'
@@ -102,10 +102,10 @@ into the migration (check `--check` first; see DEV-LOOPS.md).
   CompanyIntegration (loud errors: none / more than one). Reuse the engine's existing
   `resolveExternalAccount` for account numbers (its `targetSystem` param becomes the system Name —
   `GLAccount.ExternalSystem` stays a string matched against Name for now; FK-ing it is a later slice).
-- `MockAdapter.ts` — `@RegisterClass(base, 'MockExternalAccountingSystemAdapter')`; always succeeds,
+- `MockAccountingSystem.ts` — `@RegisterClass(base, 'MockAccountingSystem')`; always succeeds,
   ref `MOCK-<batchNumber>` (replaces `mockErpPoster`).
-- `BusinessCentralAdapter.ts` — `@RegisterClass(base, 'BusinessCentralAdapter')`; static import of
-  the connector. Flow: resolve CompanyIntegration → `ConnectorFactory` instance → build ONE OData
+- `BusinessCentralAccountingSystem.ts` — `@RegisterClass(base, 'BusinessCentralAccountingSystem')`; static
+  import of the connector; private `BcTransport extends BusinessCentralConnector` inner class. Flow: resolve CompanyIntegration → `ConnectorFactory` instance → build ONE OData
   `$batch` changeset: one POST per summary line to
   `/companies({companyId})/journals({journalId})/journalLines`
   (accountType `G/L Account`, accountNumber, postingDate = batch.PostingDate, documentNumber =
@@ -115,12 +115,16 @@ into the migration (check `--check` first; see DEV-LOOPS.md).
   clean `PostBatchResult`. Journal resolved by code from CompanyIntegration `Configuration.JournalCode`
   (default `GENERAL`). Status mapping is the critical craft here — no ambiguous success.
 
-Connector additions (in `repos/apps/connector-business-central`, OUR extraction — commit there,
-these are upstream-PR candidates, note them in the commit message):
-- `public async SubmitBatchChangeset(...)` — OData `$batch` multipart with a single changeset
-  (all-or-nothing server side), riding the existing transport (`MakeHTTPRequest` handles token
-  freshness/retry/backoff). Parse the multipart response into per-operation results.
-- `public async InvokeBoundAction(...)` — POST `<resource>/Microsoft.NAV.post` (204 = success).
+Transport access (ruled 2026-08-14, supersedes the earlier fork-edit idea): the connector copy is
+NOT modified. The BC adapter declares a PRIVATE transport subclass in its own file —
+`class BcTransport extends BusinessCentralConnector` — which is where the two BC-specific requests
+live, using the connector's protected `MakeHTTPRequest` (its documented extension seam; token
+freshness/retry/backoff inherited):
+- `SubmitBatchChangeset(...)` — ONE OData `$batch` multipart request with a single changeset
+  (all-or-nothing on BC's side). Parse the multipart response into per-operation results.
+- `PostJournalAction(...)` — POST `<journal>/Microsoft.NAV.post` (204 = success).
+Adding generic bound-action/$batch support to the base connector upstream is now an OPTIONAL
+nice-to-have PR, not a prerequisite.
 
 Dependency wiring (D9): accounting `mj-app.json` `dependencies` += `connector-business-central`;
 accounting CoreEntitiesServer `package.json` gains the required dep. Re-run `mjdev app relink` /
@@ -220,7 +224,7 @@ instance: batch Posted, `MOCK-…` ref, all JEs GLPosted · commit.
 - `PullGLAccounts` capability (next chapter; the base-class method slot + catalog row are the
   prepared landing zone). `GLAccount.ExternalSystem` → FK conversion rides that slice.
 - Sandbox credentials + live BC validation (blocked on Andrew; capture suite is the proof until then).
-- Upstream PRs to MemberJunction/Integrations (pin ranges, tsconfig, SubmitBatchChangeset,
-  InvokeBoundAction, monorepo-subpath linking) — on Marcelo's word.
+- Upstream PRs to MemberJunction/Integrations (pin ranges, tsconfig, optional generic $batch/bound-action
+  support on the base connector, monorepo-subpath linking) — on Marcelo's word.
 - Package-split of adapters; capability link-entity (AIModelVendor-style) if a system ever needs
   split classes.
