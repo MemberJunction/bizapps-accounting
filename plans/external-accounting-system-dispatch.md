@@ -103,14 +103,18 @@ Two MJ-core migration rules that WILL bite if missed (mj/CLAUDE.md):
   pre-sync definitions silently deletes properties). `mjdev app activate` runs exactly this
   sequence; don't hand-reorder it.
 
-Then the canonical loop (Marcelo's recipe, 2026-08-14 — from `~/MJDev` root):
+Then the canonical loop (Marcelo's recipe, corrected 2026-08-14 — from `~/MJDev` root):
 author the migration → `./bin/mjdev app migrate orders-mj6-ws bizapps-accounting` →
-`./bin/mjdev app codegen orders-mj6-ws bizapps-accounting` → **capture the codegen output INTO that
-same migration** (`./bin/mjdev app capture orders-mj6-ws bizapps-accounting`, `--check` first —
-it appends) → `mj sync push` if metadata changes are needed → any further DB changes that depend
-on the first round's changes/metadata → capture appends to the SAME migration again. Commit the
-generated code (new entity class, updated batch entity, forms) — committed codegen tail is
-authoritative; from-zero regen re-mints UUIDs, which is why capture-into-migration is mandatory.
+`./bin/mjdev app codegen orders-mj6-ws bizapps-accounting` → **capture the codegen output into that
+migration** (`./bin/mjdev app capture orders-mj6-ws bizapps-accounting`, `--check` first — capture
+appends to the LATEST migration) → `mj sync push` if metadata changes are needed.
+**Multi-round discipline (general rule; S1 EXPECTS ONE ROUND ONLY):** any FURTHER DB change gets a
+NEW migration, and from then on captures append to THAT migration until another is created —
+never re-append rounds to an older migration. If codegen depends on metadata, that metadata must
+itself be captured into a migration (a from-zero DB must replay to a codegen-consistent state —
+this is exactly what stage-test proves). Commit the generated code (new entity class, updated
+batch entity, forms) — committed codegen tail is authoritative; from-zero regen re-mints UUIDs,
+which is why capture-into-migration is mandatory.
 (JSONTypes are NOT in play here — ExternalAccountingSystem is all scalar columns.)
 
 **Gate S1:** `./bin/mjdev app stage-test orders-mj6-ws bizapps-accounting` green from zero
@@ -159,11 +163,14 @@ connector's PUBLIC surface. Findings that shrink the gap to ONE function:
   Edit it into OUR connector copy as a public method — `PostJournal(...)`: POST
   `<journal>/Microsoft.NAV.post` via the existing transport (204 = success) — commit in
   `repos/apps/connector-business-central` with an upstream-request note.
-- MADHAV REQUEST (Marcelo delivers / or files on MemberJunction/Integrations at his word), framed
-  as completing his own design: (1) `BusinessCentralConnector` override of `SupportsBatchWrite`/
-  `BatchCreateRecords` implementing a real OData `$batch` changeset; (2) the bound-action
-  INVOCATION surface his discovery metadata already catalogs (`boundActions`) — generic
-  `InvokeBoundAction`, with `journals → post` as the concrete need. When either lands, we drop
+- MADHAV REQUEST (Marcelo delivering directly), framed as completing his own design — exactly
+  TWO items, verified sufficient 2026-08-14: (1) `BusinessCentralConnector` override of
+  `SupportsBatchWrite`/`BatchCreateRecords` implementing a real OData `$batch` changeset;
+  (2) the bound-action INVOCATION surface his discovery metadata already catalogs
+  (`boundActions`) — generic `InvokeBoundAction` preferred, with `journals → post` as the
+  concrete need (generic ⇒ `cancel`/`receiveAndInvoice` come free later). NOT needed: `cancel`
+  (journals only catalog `post`; corrections = accounting-side reversal JEs), deletes
+  (journalLines DeleteAPIPath already configured), reads (covered). When either lands, we drop
   our copy's edit / inherit the upgrade with no adapter changes.
 
 Dependency wiring (D9): accounting `mj-app.json` `dependencies` += `connector-business-central`;
