@@ -30,7 +30,7 @@ exist yet — everything must be provable without them (capture-mode tests); cre
 | # | Decision |
 |---|----------|
 | D1 | Entity name **`ExternalAccountingSystem`**, accounting schema (`__mj_BizAppsAccounting`). Single entity — NO capability link-entity for now. |
-| D2 | Single **`DriverClass`** column; one adapter class per system; capabilities are methods on the base (`PostJournalEntryBatch` now, `VerifyPosted` now, `PullGLAccounts` later). Each adapter selects + drives its own integration entirely under the hood; where it needs transport below the connector's public CRUD surface, it EXTENDS the vendor connector via a private inner subclass (single inheritance: the adapter's top-level parent is our base — required for ClassFactory keying; the vendor-connector extension is its internal transport). Connector copies are never edited for this. |
+| D2 | Single **`DriverClass`** column; one adapter class per system; capabilities are methods on the base (`PostJournalEntryBatch` now, `VerifyPosted` now, `PullGLAccounts` later). Each adapter selects + drives its own integration under the hood, using the connector's PUBLIC surface only (no inner subclassing — ruled out by Marcelo 2026-08-14). Missing connector functionality is edited into our connector copy as public methods AND requested from Madhav upstream; we swap to his implementation when it lands. |
 | D3 | ClassFactory keys are the adapter class's OWN name (`@RegisterClass(BaseExternalAccountingSystemAdapter, 'BusinessCentralAccountingSystem')`) — never a domain enum. The catalog row holds the mapping. |
 | D4 | `JournalEntryBatch.TargetSystem` (string + CK enum) becomes **`ExternalAccountingSystemID` FK**. Old column dropped. |
 | D5 | Seed exactly two rows: `BusinessCentral` and `Mock`. |
@@ -38,7 +38,7 @@ exist yet — everything must be provable without them (capture-mode tests); cre
 | D7 | Catalog links to the Integration record by **`IntegrationName` string** (`'business-central'`; NULL for Mock) — not an ID FK across app-owned migrations. Resolve at runtime, loud error if absent. |
 | D8 | Adapters live in **`packages/CoreEntitiesServer/src/external-accounting-systems/`** (precedent: `TasksAppApprovalGate` lives engine-adjacent). Package split per system is a later, mechanical refactor if needed. |
 | D9 | Connector is a **required dependency**: `mj-app.json` `dependencies` gains `connector-business-central` AND the package dep is required (NOT an optional peer — codegen/migrations need it present before runtime). Static imports, no lazy guards. |
-| D10x | Dispatch is **three-phase**: (1) small `Sent` marker write BEFORE the ERP call; (2) ONE OData `$batch` changeset carrying all journal lines (+ `Microsoft.NAV.post` bound action) — rely on BC's changeset atomicity, adapter maps statuses carefully; (3) ONE local transaction for ALL post-confirmation writes (batch→Posted + ref, every member JE→GLPosted). |
+| D10x | Dispatch is **three-phase**: (1) small `Sent` marker write BEFORE the ERP call; (2) stage all summary lines into the BC journal via the engine's existing **`BatchCreateRecords`** surface (BaseIntegrationConnector — default loops singles; BC's journal is a STAGING area, nothing touches the GL yet), then **`Microsoft.NAV.post`** as the atomic commit point (BC refuses to post an unbalanced journal — all-or-nothing lives HERE, not in the line inserts); pre-flight clears stale staged lines carrying our documentNumber before a retry; (3) ONE local transaction for ALL post-confirmation writes (batch→Posted + ref, every member JE→GLPosted). A real OData `$batch` override of `BatchCreateRecords` in the BC connector is REQUESTED from Madhav (wire-efficiency + cleanliness, not correctness) — when it lands, zero adapter changes: the call site is already the batch surface. |
 | D11 | Phase-3 transaction uses the **provider transaction** (`dbProvider.BeginTransaction()/Commit/Rollback`) — matching the engine's own D10 build-transaction convention (`JournalEntryBatchEngine.ts:251-270`), NOT TransactionGroup. (Marcelo said "batch save"; the engine-side equivalent with identical guarantees is the provider transaction; TransactionGroup is the client-side vehicle. Flagged + accepted in planning.) No per-entity save loops outside the transaction. |
 | D12 | `VerifyPosted(documentNumber)` on the base contract — the Sent-limbo recovery probe (crash between phases 2 and 3). Expected to evolve. |
 
@@ -97,8 +97,11 @@ Two MJ-core migration rules that WILL bite if missed (mj/CLAUDE.md):
 - Any captured CodeGen `EntityField` INSERT must NEVER carry a literal `Sequence` — use an
   apply-time `MAX(Sequence)+1` expression (literal placeholders collide on fresh installs with an
   error that masquerades as an FK failure; there's a CI gate for this in MJ).
-- If any `metadata/` change rides along: `mj sync push` runs BEFORE codegen, or CodeGen silently
-  deletes properties regenerated from stale DB definitions.
+- Codegen/sync ordering is TWO-PASS (ADR-023 / the mjdev activate loop — Marcelo confirmed):
+  codegen pass 1 (`--skipfiles`) registers entities so sync can work → `mj sync push` → full
+  file-writing codegen AFTER sync (JSONTypes are read from the DB; a full codegen against
+  pre-sync definitions silently deletes properties). `mjdev app activate` runs exactly this
+  sequence; don't hand-reorder it.
 
 Then the standard app loop on the instance (from `~/MJDev` root):
 `./bin/mjdev app migrate orders-mj6-ws bizapps-accounting` → `./bin/mjdev app codegen orders-mj6-ws bizapps-accounting`
@@ -139,16 +142,19 @@ into the migration (check `--check` first; see DEV-LOOPS.md).
   clean `PostBatchResult`. Journal resolved by code from CompanyIntegration `Configuration.JournalCode`
   (default `GENERAL`). Status mapping is the critical craft here — no ambiguous success.
 
-Transport access (ruled 2026-08-14, supersedes the earlier fork-edit idea): the connector copy is
-NOT modified. The BC adapter declares a PRIVATE transport subclass in its own file —
-`class BcTransport extends BusinessCentralConnector` — which is where the two BC-specific requests
-live, using the connector's protected `MakeHTTPRequest` (its documented extension seam; token
-freshness/retry/backoff inherited):
-- `SubmitBatchChangeset(...)` — ONE OData `$batch` multipart request with a single changeset
-  (all-or-nothing on BC's side). Parse the multipart response into per-operation results.
-- `PostJournalAction(...)` — POST `<journal>/Microsoft.NAV.post` (204 = success).
-Adding generic bound-action/$batch support to the base connector upstream is now an OPTIONAL
-nice-to-have PR, not a prerequisite.
+Transport access (re-ruled 2026-08-14, supersedes both earlier approaches): adapters use the
+connector's PUBLIC surface. Findings that shrink the gap to ONE function:
+- The base engine ALREADY defines the batch-write surface: `SupportsBatchWrite` +
+  `BatchCreateRecords(ctxs)` (`mj/packages/Integration/engine/src/BaseIntegrationConnector.ts:~468`),
+  default = loop of singles. The adapter codes against `BatchCreateRecords` from day one; Madhav's
+  future BC override (real OData `$batch`) upgrades the wire behavior with NO adapter change.
+- The ONLY missing function is the journal-post bound action. Edit it into OUR connector copy as a
+  public method — `PostJournal(...)`: POST `<journal>/Microsoft.NAV.post` via the existing transport
+  (204 = success) — commit in `repos/apps/connector-business-central` with an upstream-request note.
+- MADHAV REQUEST (Marcelo delivers / or files on MemberJunction/Integrations at his word):
+  (1) `BusinessCentralConnector` override of `SupportsBatchWrite`/`BatchCreateRecords` implementing
+  a real OData `$batch` changeset; (2) a public journal-post (bound action) surface — generic
+  `InvokeBoundAction` or a BC-specific `PostJournal`. When either lands, we drop our copy's edit.
 
 Dependency wiring (D9): accounting `mj-app.json` `dependencies` += `connector-business-central`;
 accounting CoreEntitiesServer `package.json` gains the required dep. Re-run `mjdev app relink` /
