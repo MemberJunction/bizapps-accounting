@@ -1,0 +1,26 @@
+[
+  {
+    "_comments": [
+      "Journal Entry is a working form, not a hub. Keep every DisplayInForm related",
+      "grid first-class (Lines are already a declared collection). Do not apply the",
+      "smart ranker here — there is no installed-app flood on a JE."
+    ],
+    "fields": {
+      "Configuration": {
+        "UI": {
+          "Form": {
+            "Layout": "accordion",
+            "RelatedRolePolicy": "keep-all-primary"
+          }
+        }
+      }
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entries"
+    },
+    "sync": {
+      "lastModified": "2026-08-14T20:00:47.858Z",
+      "checksum": "8533672f58f2144c24cab786fc89fb8a8abe6844654b45ca0fb3c806d5b61059"
+    }
+  }
+]
