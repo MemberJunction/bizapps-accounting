@@ -364,7 +364,7 @@ erDiagram
         uuid CompanyID FK
         date PostingDate "must match the GL (D8)"
         uuid SummaryJournalEntryID FK "summary JE (type flagged IsJournalEntryBatchSummary)"
-        string TargetSystem
+        uuid ExternalAccountingSystemID FK "catalog row - frozen at approval (V202608142100)"
         string Status "Pending | Approved | Sent | Posted | Failed | Cancelled"
         datetimeoffset BatchedAt
         uuid BatchedByUserID FK
@@ -694,9 +694,20 @@ Writeoff. Domain types (OrderBooking, PaymentReceipt, ...) are seeded by their o
 ```mermaid
 erDiagram
     Company ||--o{ JournalEntryBatch : "CompanyID NOT NULL - single-company (D7)"
+    ExternalAccountingSystem ||--o{ JournalEntryBatch : "ExternalAccountingSystemID NOT NULL"
     JournalEntryBatch ||--o{ JournalEntry : "JournalEntryBatchID - members AND the summary (discriminated by the type IsJournalEntryBatchSummary flag)"
     JournalEntryBatch |o--o| JournalEntry : "SummaryJournalEntryID - coherence trigger 50023"
     User ||--o{ JournalEntryBatch : "BatchedBy / ApprovedBy"
+
+
+    ExternalAccountingSystem {
+        uuid ID PK
+        string Name UK "BusinessCentral | Mock (seeded); add rows for new ERPs"
+        string DisplayName
+        string DriverClass "adapter class name (ClassFactory key), e.g. BusinessCentralAccountingSystemAdapter"
+        string IntegrationName "nullable - __mj.Integration.Name (business-central); NULL for Mock"
+        bit IsActive
+    }
 
     JournalEntryBatch {
         uuid ID PK
@@ -704,7 +715,7 @@ erDiagram
         uuid CompanyID FK
         date PostingDate "singular, accountant-set - must match the GL (D8)"
         uuid SummaryJournalEntryID FK "type IsJournalEntryBatchSummary, EffectiveDate=PostingDate, same JournalEntryBatchID"
-        string TargetSystem "BusinessCentral | QuickBooks | NetSuite | Sage | Xero | Other"
+        uuid ExternalAccountingSystemID FK "ExternalAccountingSystem catalog (V202608142100; was the TargetSystem CHECK enum)"
         string Status "Pending | Approved | Sent | Posted | Failed | Cancelled"
         datetimeoffset BatchedAt
         uuid BatchedByUserID FK

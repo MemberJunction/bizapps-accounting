@@ -10,10 +10,10 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Intercompany Relationship Section -->
+    <!-- Company Mapping Section -->
     <mj-collapsible-panel
-        SectionKey="intercompanyRelationship"
-        SectionName="Intercompany Relationship"
+        SectionKey="companyMapping"
+        SectionName="Company Mapping"
         Icon="fa fa-building"
         [Form]="this"
         [FormContext]="formContext">
@@ -42,7 +42,7 @@
     <mj-collapsible-panel
         SectionKey="accountingConfiguration"
         SectionName="Accounting Configuration"
-        Icon="fa fa-book"
+        Icon="fa fa-file-invoice-dollar"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -66,11 +66,11 @@
 
     </mj-collapsible-panel>
 
-    <!-- Lifecycle Management Section -->
+    <!-- Lifecycle and Notes Section -->
     <mj-collapsible-panel
-        SectionKey="lifecycleManagement"
-        SectionName="Lifecycle Management"
-        Icon="fa fa-clock"
+        SectionKey="lifecycleAndNotes"
+        SectionName="Lifecycle and Notes"
+        Icon="fa fa-calendar-alt"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 

@@ -10,97 +10,68 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Entity Relationships Section -->
+    <!-- System Configuration Section -->
     <mj-collapsible-panel
-        SectionKey="entityRelationships"
-        SectionName="Entity Relationships"
-        Icon="fa fa-link"
+        SectionKey="systemConfiguration"
+        SectionName="System Configuration"
+        Icon="fa fa-cog"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="CompanyID"
+            FieldName="Name"
             Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
-            LinkType="Record"
         ></mj-form-field>
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="TaxAuthorityID"
+            FieldName="DisplayName"
             Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
-            LinkType="Record"
         ></mj-form-field>
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="TaxJurisdictionID"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-            LinkType="Record"
-        ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Financial Balances Section -->
-    <mj-collapsible-panel
-        SectionKey="financialBalances"
-        SectionName="Financial Balances"
-        Icon="fa fa-money-bill-wave"
-        [Form]="this"
-        [FormContext]="formContext">
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="AccruedAmount"
-            Type="number"
+            FieldName="Description"
+            Type="textarea"
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="RemittedAmount"
-            Type="number"
+            FieldName="IsActive"
+            Type="checkbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
 
     </mj-collapsible-panel>
 
-    <!-- Lifecycle and Scheduling Section -->
+    <!-- Integration Settings Section -->
     <mj-collapsible-panel
-        SectionKey="lifecycleAndScheduling"
-        SectionName="Lifecycle and Scheduling"
-        Icon="fa fa-calendar-alt"
+        SectionKey="integrationSettings"
+        SectionName="Integration Settings"
+        Icon="fa fa-plug"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="Status"
-            Type="select"
+            FieldName="DriverClass"
+            Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="DueDate"
-            Type="datepicker"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="FilingFrequency"
-            Type="select"
+            FieldName="IntegrationName"
+            Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
@@ -111,7 +82,7 @@
     <mj-collapsible-panel
         SectionKey="systemMetadata"
         SectionName="System Metadata"
-        Icon="fa fa-cog"
+        Icon="fa fa-database"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -134,6 +105,35 @@
     </mj-collapsible-panel>
 
     <mj-form-panel-slot Entity="{{record.EntityInfo.Name}}" Slot="after-fields" [Record]="record" [FormComponent]="this" [FormContext]="formContext"></mj-form-panel-slot>
+
+    <!-- ========================================
+         RELATED ENTITY PANELS
+         ======================================== -->
+
+    <!-- Journal Entry Batches Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingJournalEntryBatches"
+        SectionName="Journal Entry Batches"
+        Icon="fa fa-file-invoice-dollar"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingJournalEntryBatches')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entry Batches','ExternalAccountingSystemID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entry Batches')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntryBatches')"
+                [ShowToolbar]="false"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntryBatches', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
 
     <mj-form-panel-slot Entity="{{record.EntityInfo.Name}}" Slot="after-related" [Record]="record" [FormComponent]="this" [FormContext]="formContext"></mj-form-panel-slot>
 </mj-record-form-container>

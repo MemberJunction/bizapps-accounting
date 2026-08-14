@@ -15,8 +15,8 @@ export class mjBizAppsAccountingIntercompanyAccountMatchDimensionFormComponent e
     override async ngOnInit() {
         await super.ngOnInit();
         this.initSections([
-            { sectionKey: 'accountMatching', sectionName: 'Account Matching', isExpanded: true },
-            { sectionKey: 'dimensionConfiguration', sectionName: 'Dimension Configuration', isExpanded: true },
+            { sectionKey: 'intercompanyConfiguration', sectionName: 'Intercompany Configuration', isExpanded: true },
+            { sectionKey: 'dimensionDefinition', sectionName: 'Dimension Definition', isExpanded: true },
             { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false }
         ]);
     }

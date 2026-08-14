@@ -21,6 +21,7 @@ import { mjBizAppsAccountingCurrencyFormComponent } from "./Entities/mjBizAppsAc
 import { mjBizAppsAccountingCurrencySpotRateFormComponent } from "./Entities/mjBizAppsAccountingCurrencySpotRate/mjbizappsaccountingcurrencyspotrate.form.component";
 import { mjBizAppsAccountingDimensionValueFormComponent } from "./Entities/mjBizAppsAccountingDimensionValue/mjbizappsaccountingdimensionvalue.form.component";
 import { mjBizAppsAccountingDimensionFormComponent } from "./Entities/mjBizAppsAccountingDimension/mjbizappsaccountingdimension.form.component";
+import { mjBizAppsAccountingExternalAccountingSystemFormComponent } from "./Entities/mjBizAppsAccountingExternalAccountingSystem/mjbizappsaccountingexternalaccountingsystem.form.component";
 import { mjBizAppsAccountingGLAccountLinkDimensionFormComponent } from "./Entities/mjBizAppsAccountingGLAccountLinkDimension/mjbizappsaccountingglaccountlinkdimension.form.component";
 import { mjBizAppsAccountingGLAccountLinkFormComponent } from "./Entities/mjBizAppsAccountingGLAccountLink/mjbizappsaccountingglaccountlink.form.component";
 import { mjBizAppsAccountingGLAccountRoleFormComponent } from "./Entities/mjBizAppsAccountingGLAccountRole/mjbizappsaccountingglaccountrole.form.component";
@@ -48,6 +49,7 @@ declarations: [
     mjBizAppsAccountingCurrencySpotRateFormComponent,
     mjBizAppsAccountingDimensionValueFormComponent,
     mjBizAppsAccountingDimensionFormComponent,
+    mjBizAppsAccountingExternalAccountingSystemFormComponent,
     mjBizAppsAccountingGLAccountLinkDimensionFormComponent,
     mjBizAppsAccountingGLAccountLinkFormComponent,
     mjBizAppsAccountingGLAccountRoleFormComponent,
@@ -60,8 +62,7 @@ declarations: [
     mjBizAppsAccountingJournalEntryLineDimensionFormComponent,
     mjBizAppsAccountingJournalEntryLineFormComponent,
     mjBizAppsAccountingJournalEntrySequenceFormComponent,
-    mjBizAppsAccountingJournalEntryTypeFormComponent,
-    mjBizAppsAccountingTaxAuthorityFormComponent],
+    mjBizAppsAccountingJournalEntryTypeFormComponent],
 imports: [
     CommonModule,
     FormsModule,
@@ -78,6 +79,7 @@ export class GeneratedForms_SubModule_0 { }
 
 @NgModule({
 declarations: [
+    mjBizAppsAccountingTaxAuthorityFormComponent,
     mjBizAppsAccountingTaxJurisdictionFormComponent,
     mjBizAppsAccountingTaxLiabilityFormComponent,
     mjBizAppsAccountingTaxRateFormComponent],

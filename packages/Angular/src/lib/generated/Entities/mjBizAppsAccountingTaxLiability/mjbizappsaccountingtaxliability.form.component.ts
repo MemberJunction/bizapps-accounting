@@ -15,9 +15,9 @@ export class mjBizAppsAccountingTaxLiabilityFormComponent extends BaseFormCompon
     override async ngOnInit() {
         await super.ngOnInit();
         this.initSections([
-            { sectionKey: 'liabilityContext', sectionName: 'Liability Context', isExpanded: true },
-            { sectionKey: 'financialDetails', sectionName: 'Financial Details', isExpanded: true },
-            { sectionKey: 'filingAndCompliance', sectionName: 'Filing and Compliance', isExpanded: true },
+            { sectionKey: 'entityRelationships', sectionName: 'Entity Relationships', isExpanded: true },
+            { sectionKey: 'financialBalances', sectionName: 'Financial Balances', isExpanded: true },
+            { sectionKey: 'lifecycleAndScheduling', sectionName: 'Lifecycle and Scheduling', isExpanded: true },
             { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false }
         ]);
     }
