@@ -277,6 +277,10 @@ instance: batch Posted, `MOCK-…` ref, all JEs GLPosted · commit.
 
 ## 8 · Out of scope (explicitly deferred)
 
+- **Account-driven batch GROUPING at build + TargetSystem column removal** — accounting#68
+  (Amith ruling 2026-08-14: real edge case, harden later; dispatch-time account-first resolution
+  with loud mixed-system failure is the interim guarantee and is implemented in S3).
+
 - `PullGLAccounts` capability (next chapter; the base-class method slot + catalog row are the
   prepared landing zone). `GLAccount.ExternalSystem` → FK conversion rides that slice.
 - Sandbox credentials + live BC validation (blocked on Andrew; capture suite is the proof until then).
