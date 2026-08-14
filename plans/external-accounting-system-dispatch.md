@@ -31,10 +31,10 @@ exist yet — everything must be provable without them (capture-mode tests); cre
 |---|----------|
 | D1 | Entity name **`ExternalAccountingSystem`**, accounting schema (`__mj_BizAppsAccounting`). Single entity — NO capability link-entity for now. |
 | D2 | Single **`DriverClass`** column; one adapter class per system; capabilities are methods on the base (`PostJournalEntryBatch` now, `VerifyPosted` now, `PullGLAccounts` later). Each adapter selects + drives its own integration under the hood, using the connector's PUBLIC surface only (no inner subclassing — ruled out by Marcelo 2026-08-14). Missing connector functionality is edited into our connector copy as public methods AND requested from Madhav upstream; we swap to his implementation when it lands. |
-| D3 | ClassFactory keys are the adapter class's OWN name (`@RegisterClass(BaseExternalAccountingSystemAdapter, 'BusinessCentralAccountingSystem')`) — never a domain enum. The catalog row holds the mapping. |
+| D3 | ClassFactory keys are the adapter class's OWN name (`@RegisterClass(BaseExternalAccountingSystemAdapter, 'BusinessCentralAccountingSystemAdapter')`) — never a domain enum. The catalog row holds the mapping. |
 | D4 | `JournalEntryBatch.TargetSystem` (string + CK enum) becomes **`ExternalAccountingSystemID` FK**. Old column dropped. |
 | D5 | Seed exactly two rows: `BusinessCentral` and `Mock`. |
-| D6 | Missing row / missing DriverClass registration / missing CompanyIntegration ⇒ **loud fail** (batch Sent→Failed with the reason). Mock is a real selectable row (`MockAccountingSystem`) — testing it is an explicit selection, never a fallback. |
+| D6 | Missing row / missing DriverClass registration / missing CompanyIntegration ⇒ **loud fail** (batch Sent→Failed with the reason). Mock is a real selectable row (`MockAccountingSystemAdapter`) — testing it is an explicit selection, never a fallback. |
 | D7 | Catalog links to the Integration record by **`IntegrationName` string** (`'business-central'`; NULL for Mock) — not an ID FK across app-owned migrations. Resolve at runtime, loud error if absent. |
 | D8 | Adapters live in **`packages/CoreEntitiesServer/src/external-accounting-systems/`** (precedent: `TasksAppApprovalGate` lives engine-adjacent). Package split per system is a later, mechanical refactor if needed. |
 | D9 | Connector is a **required dependency**: `mj-app.json` `dependencies` gains `connector-business-central` AND the package dep is required (NOT an optional peer — codegen/migrations need it present before runtime). Static imports, no lazy guards. |
@@ -50,7 +50,7 @@ JournalEntryBatch.ExternalAccountingSystemID   (FK, was TargetSystem string)
 __mj_BizAppsAccounting.ExternalAccountingSystem row     (Name, DriverClass, IntegrationName, IsActive)
       │ ClassFactory.CreateInstance<BaseExternalAccountingSystemAdapter>(base, row.DriverClass)
       ▼
-BusinessCentralAccountingSystem | MockAccountingSystem   (CoreEntitiesServer/src/external-accounting-systems/)
+BusinessCentralAccountingSystemAdapter | MockAccountingSystemAdapter   (CoreEntitiesServer/src/external-accounting-systems/)
       │ row.IntegrationName → __mj.Integration ('business-central', seeded by connector app)
       │ batch.CompanyID + IntegrationID → __mj.CompanyIntegration (Configuration JSON + Credential — creds plug in HERE later)
       ▼
@@ -70,8 +70,8 @@ New migration `bizapps-accounting/migrations/V<real-UTC-timestamp>__v1.0.x__Exte
    `IsActive` BIT NOT NULL DEFAULT 1. Extended properties (MS_Description) on table + columns
    (match the style of the existing base migration).
 2. Seed (hardcoded UUIDs, uuidgen-minted — house rule, see orders baseline: ALL seed UUIDs hardcoded):
-   `BusinessCentral` (DriverClass `BusinessCentralAccountingSystem`, IntegrationName `business-central`) ·
-   `Mock` (DriverClass `MockAccountingSystem`, IntegrationName NULL).
+   `BusinessCentral` (DriverClass `BusinessCentralAccountingSystemAdapter`, IntegrationName `business-central`) ·
+   `Mock` (DriverClass `MockAccountingSystemAdapter`, IntegrationName NULL).
 3. FK swap on `JournalEntryBatch`: add `ExternalAccountingSystemID` uniqueidentifier NULL + FK →
    data-migrate `UPDATE ... SET ExternalAccountingSystemID = (row matching TargetSystem Name)` →
    **THROW if any row remains unmapped** (only BC/Mock are seeded; a dev DB with e.g. 'Xero'
@@ -136,9 +136,9 @@ which is why capture-into-migration is mandatory.
   CompanyIntegration (loud errors: none / more than one). Reuse the engine's existing
   `resolveExternalAccount` for account numbers (its `targetSystem` param becomes the system Name —
   `GLAccount.ExternalSystem` stays a string matched against Name for now; FK-ing it is a later slice).
-- `MockAccountingSystem.ts` — `@RegisterClass(base, 'MockAccountingSystem')`; always succeeds,
+- `MockAccountingSystemAdapter.ts` — `@RegisterClass(base, 'MockAccountingSystemAdapter')`; always succeeds,
   ref `MOCK-<batchNumber>` (replaces `mockErpPoster`).
-- `BusinessCentralAccountingSystem.ts` — `@RegisterClass(base, 'BusinessCentralAccountingSystem')`; static
+- `BusinessCentralAccountingSystemAdapter.ts` — `@RegisterClass(base, 'BusinessCentralAccountingSystemAdapter')`; static
   import of the connector; private `BcTransport extends BusinessCentralConnector` inner class. Flow: resolve CompanyIntegration → `ConnectorFactory` instance → build ONE OData
   `$batch` changeset: one POST per summary line to
   `/companies({companyId})/journals({journalId})/journalLines`
