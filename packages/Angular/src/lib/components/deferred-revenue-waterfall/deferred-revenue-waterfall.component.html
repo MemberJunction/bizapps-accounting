@@ -1,0 +1,112 @@
+<div class="mja-waterfall-wrap">
+    <!-- Header Summary KPI Strip -->
+    <div class="mja-waterfall-kpis">
+        <div class="mja-kpi-card">
+            <span class="mja-kpi-label">Deferred Balance Beg.</span>
+            <span class="mja-kpi-val">{{ FormatMoney(Summary.TotalDeferredBeginning) }}</span>
+        </div>
+        <div class="mja-kpi-card">
+            <span class="mja-kpi-label">Recognized YTD</span>
+            <span class="mja-kpi-val mja-val--green">{{ FormatMoney(Summary.TotalRecognizedYTD) }} ({{ Summary.PercentRecognized.toFixed(1) }}%)</span>
+        </div>
+        <div class="mja-kpi-card">
+            <span class="mja-kpi-label">Remaining Unearned</span>
+            <span class="mja-kpi-val mja-val--amber">{{ FormatMoney(Summary.TotalRemainingUnearned) }}</span>
+        </div>
+        <div class="mja-kpi-card">
+            <span class="mja-kpi-label">Monthly Run-Rate</span>
+            <span class="mja-kpi-val">{{ FormatMoney(Summary.MonthlyRunRate) }} / mo</span>
+        </div>
+    </div>
+
+    <!-- Progress Bar -->
+    <div class="mja-progress-track">
+        <div class="mja-progress-fill" [style.width.%]="Summary.PercentRecognized"></div>
+    </div>
+
+    @if (JournalEntries.length === 0) {
+        <div class="mja-empty-waterfall">
+            <i class="fa-solid fa-calendar-xmark"></i>
+            <span>No revenue recognition journal entries generated yet.</span>
+        </div>
+    } @else if (IsSingleItem && Rows.length === 1) {
+        <!-- ============================================================
+             ADAPTIVE SINGLE-ITEM MODE (TIMELINE CARDS FOR SINGLE SUB)
+             ============================================================ -->
+        <div class="mja-single-schedule-grid">
+            @for (cell of Rows[0].MonthlyCells; track cell.MonthKey) {
+                <div class="mja-month-card" [class.mja-month-card--active]="cell.Amount > 0" [class.mja-month-card--past]="cell.IsPastOrCurrent" (click)="OnCellClick(cell)">
+                    <div class="mja-month-head">
+                        <span class="mja-month-name">{{ cell.MonthLabel }}</span>
+                        @if (cell.IsPastOrCurrent && cell.Amount > 0) {
+                            <span class="mja-chip mja-chip--released"><i class="fa-solid fa-check"></i> Released</span>
+                        } @else if (cell.Amount > 0) {
+                            <span class="mja-chip mja-chip--scheduled">Scheduled</span>
+                        }
+                    </div>
+                    <div class="mja-month-amount">
+                        {{ cell.Amount > 0 ? FormatMoney(cell.Amount) : '—' }}
+                    </div>
+                    @if (cell.JournalEntry) {
+                        <div class="mja-month-entry-link">
+                            <i class="fa-solid fa-book-journal-whills"></i>
+                            <span>JE-{{ cell.JournalEntry.EntryNumber || cell.JournalEntry.ID.slice(0, 8) }}</span>
+                            <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    } @else {
+        <!-- ============================================================
+             MULTI-COHORT WATERFALL MATRIX TABLE
+             ============================================================ -->
+        <div class="mja-table-container">
+            <table class="mja-waterfall-table">
+                <thead>
+                    <tr>
+                        <th class="mja-col-origin">Subscription / Origin</th>
+                        <th class="mja-col-num">Total Value</th>
+                        @for (mh of MonthHeaders; track mh.Key) {
+                            <th class="mja-col-month">{{ mh.Label }}</th>
+                        }
+                        <th class="mja-col-num">Unearned Rem.</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @for (row of Rows; track row.OriginID) {
+                        <tr>
+                            <td class="mja-cell-origin">
+                                <strong>{{ row.OriginLabel }}</strong>
+                            </td>
+                            <td class="mja-cell-num">{{ FormatMoney(row.ContractValue) }}</td>
+                            @for (cell of row.MonthlyCells; track cell.MonthKey) {
+                                <td class="mja-cell-month" [class.mja-cell--has-val]="cell.Amount > 0" (click)="OnCellClick(cell)">
+                                    @if (cell.Amount > 0) {
+                                        <span class="mja-cell-amount" title="Click to view Journal Entry">
+                                            {{ FormatCompact(cell.Amount) }}
+                                        </span>
+                                    } @else {
+                                        <span class="mja-cell-dash">—</span>
+                                    }
+                                </td>
+                            }
+                            <td class="mja-cell-num mja-cell--unearned">{{ FormatMoney(row.RemainingUnearned) }}</td>
+                        </tr>
+                    }
+                    <!-- Total Row -->
+                    <tr class="mja-total-row">
+                        <td class="mja-cell-origin"><strong>TOTAL RECOGNIZED MONTHLY</strong></td>
+                        <td class="mja-cell-num"><strong>{{ FormatMoney(Summary.TotalDeferredBeginning) }}</strong></td>
+                        @for (mTot of Summary.MonthlyTotals; track mTot.MonthKey) {
+                            <td class="mja-cell-month mja-cell-total">
+                                <strong>{{ mTot.Amount > 0 ? FormatCompact(mTot.Amount) : '—' }}</strong>
+                            </td>
+                        }
+                        <td class="mja-cell-num mja-cell--unearned"><strong>{{ FormatMoney(Summary.TotalRemainingUnearned) }}</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

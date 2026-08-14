@@ -58,6 +58,8 @@ export { GeneratedFormsModule } from './lib/generated/generated-forms.module';
 export { CustomFormsModule } from './lib/custom/custom-forms.module';
 export { JournalEntryBatchDispatchModule } from './lib/custom/JournalEntryBatchDispatch/journal-entry-batch-dispatch.module';
 export { ReadModelsModule } from './lib/custom/shared/read-models.module';
+export { DeferredRevenueWaterfallComponent, type WaterfallMonthCell, type WaterfallRow, type WaterfallSummary } from './lib/components/deferred-revenue-waterfall/deferred-revenue-waterfall.component';
+export { DeferredRevenueWaterfallModule } from './lib/components/deferred-revenue-waterfall/deferred-revenue-waterfall.module';
 // Shared bizapps detail surfaces (slide-in + centered dialog over the MJ form host). Exported so orders reuses the
 // same two standardized surfaces across the suite.
 export { openBizDetail, type BizDetailMode, type BizDetailOptions } from './lib/custom/shared/biz-detail-form';
