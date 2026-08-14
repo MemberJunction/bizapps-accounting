@@ -1,0 +1,19 @@
+[
+  {
+    "_comment": "Nightly Business Central -> GL Account sync. A MJ: Scheduled Jobs record run by the scheduling-engine's IntegrationSyncScheduledJobDriver, which reads Configuration.CompanyIntegrationID and calls IntegrationEngine.RunSync. Authored INERT (Status=Paused); flip to Active at wiring time (see ../erp-account-sync/README.md). Engine computes NextRunAt from CronExpression on first poll (OwnerUserID/NextRunAt intentionally omitted — both nullable).",
+    "fields": {
+      "Name": "BizApps Accounting - Nightly Business Central GL Account Sync",
+      "JobTypeID": "@lookup:MJ: Scheduled Job Types.DriverClass=IntegrationSyncScheduledJobDriver",
+      "CronExpression": "0 2 * * *",
+      "Timezone": "UTC",
+      "Status": "Paused",
+      "Configuration": "{\"CompanyIntegrationID\":\"E82D3738-4F97-422E-89E7-F246B12DD966\",\"FullSync\":true}",
+      "RunImmediatelyIfNeverRun": false,
+      "NotifyOnFailure": true,
+      "Description": "Pulls the Business Central chart of accounts into GL Accounts nightly at 02:00 UTC. Paused until the BizApps Accounting - Business Central GL Account Sync company integration is wired (company + credentials) and activated."
+    },
+    "primaryKey": {
+      "ID": "4AF0FC23-CAF7-49B8-A941-7B08EBF8F32D"
+    }
+  }
+]

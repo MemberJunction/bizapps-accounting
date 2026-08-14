@@ -7,8 +7,10 @@
       "CompanyID": "@env:BIZAPPS_ACCOUNTING_COMPANY_ID",
       "IsActive": false,
       "IsExternalSystemReadOnly": true,
-      "ScheduleType": "Manual",
-      "Configuration": "{\"note\":\"Pull-only. Fetches BC general-ledger accounts and upserts GL Accounts keyed on ExternalAccountID.\"}"
+      "ScheduleType": "Cron",
+      "CronExpression": "0 2 * * *",
+      "ScheduleEnabled": false,
+      "Configuration": "{\"note\":\"Pull-only. Fetches BC general-ledger accounts and upserts GL Accounts keyed on ExternalAccountID. Nightly at 02:00 UTC via the erp-account-sync-schedule scheduled job; these Schedule* fields mirror that job for display.\"}"
     },
     "primaryKey": {
       "ID": "E82D3738-4F97-422E-89E7-F246B12DD966"

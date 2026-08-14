@@ -77,10 +77,23 @@ This config is authored **inert**. Before it can run:
 2. **Credentials** — create/attach a `MJ: Credentials` record holding the BC OAuth2 client-credentials
    (client id/secret, tenant, environment) and set `CompanyIntegration.CredentialID` to it.
 3. **Enable** — set `CompanyIntegration.IsActive` to `true`.
-4. **Un-gate the push** — this directory is listed in `metadata/.mj-sync.json` → `ignoreDirectories`,
-   so a routine `mj sync push` skips it (it would otherwise fail on the unresolved company/credential).
-   Remove `"erp-account-sync"` from `ignoreDirectories`, then `mj sync push` to create the
-   CompanyIntegration + entity map + field maps.
+4. **Un-gate the push** — `metadata/.mj-sync.json` → `ignoreDirectories` lists both `erp-account-sync`
+   and `erp-account-sync-schedule` so a routine `mj sync push` skips them (they would otherwise fail on
+   the unresolved company/credential). Remove both entries, then `mj sync push` to create the
+   CompanyIntegration + entity map + field maps **and** the nightly scheduled job.
+5. **Activate the nightly job** — the scheduled job (`../erp-account-sync-schedule/`) is authored with
+   `Status: "Paused"` so it never fires before wiring. Flip it to `Status: "Active"` (in the metadata
+   then re-push, or directly on the `MJ: Scheduled Jobs` record) to enable the nightly sync.
+
+## Nightly schedule
+
+Nightly syncing is a committed `MJ: Scheduled Jobs` record in `../erp-account-sync-schedule/`, run by
+the scheduling-engine's `IntegrationSyncScheduledJobDriver` (which reads `Configuration.CompanyIntegrationID`
+and calls `IntegrationEngine.RunSync`). It is set to `0 2 * * *` (02:00 UTC daily, `FullSync=true`) and
+`Status: "Paused"`. The engine computes `NextRunAt` from the cron on its first poll once the job is
+`Active`. The Company Integration's own `ScheduleType`/`CronExpression` fields mirror this job for display
+only — the scheduled job is the actual trigger. (Alternatively, the `IntegrationCreateSchedule` GraphQL
+mutation / integration client creates the equivalent job at runtime.)
 
 ## Running the sync
 
