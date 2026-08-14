@@ -26,7 +26,7 @@ exist yet — everything must be provable without them (capture-mode tests); cre
 | D3 | ClassFactory keys are the adapter class's OWN name (`@RegisterClass(BaseExternalAccountingSystemAdapter, 'BusinessCentralAccountingSystem')`) — never a domain enum. The catalog row holds the mapping. |
 | D4 | `JournalEntryBatch.TargetSystem` (string + CK enum) becomes **`ExternalAccountingSystemID` FK**. Old column dropped. |
 | D5 | Seed exactly two rows: `BusinessCentral` and `Mock`. |
-| D6 | Missing row / missing DriverClass registration / missing CompanyIntegration ⇒ **loud fail** (batch Sent→Failed with the reason). Mock is a real selectable row (`MockAdapter`) — testing it is an explicit selection, never a fallback. |
+| D6 | Missing row / missing DriverClass registration / missing CompanyIntegration ⇒ **loud fail** (batch Sent→Failed with the reason). Mock is a real selectable row (`MockAccountingSystem`) — testing it is an explicit selection, never a fallback. |
 | D7 | Catalog links to the Integration record by **`IntegrationName` string** (`'business-central'`; NULL for Mock) — not an ID FK across app-owned migrations. Resolve at runtime, loud error if absent. |
 | D8 | Adapters live in **`packages/CoreEntitiesServer/src/external-accounting-systems/`** (precedent: `TasksAppApprovalGate` lives engine-adjacent). Package split per system is a later, mechanical refactor if needed. |
 | D9 | Connector is a **required dependency**: `mj-app.json` `dependencies` gains `connector-business-central` AND the package dep is required (NOT an optional peer — codegen/migrations need it present before runtime). Static imports, no lazy guards. |
@@ -42,7 +42,7 @@ JournalEntryBatch.ExternalAccountingSystemID   (FK, was TargetSystem string)
 __mj_BizAppsAccounting.ExternalAccountingSystem row     (Name, DriverClass, IntegrationName, IsActive)
       │ ClassFactory.CreateInstance<BaseExternalAccountingSystemAdapter>(base, row.DriverClass)
       ▼
-BusinessCentralAdapter | MockAdapter            (CoreEntitiesServer/src/external-accounting-systems/)
+BusinessCentralAccountingSystem | MockAccountingSystem   (CoreEntitiesServer/src/external-accounting-systems/)
       │ row.IntegrationName → __mj.Integration ('business-central', seeded by connector app)
       │ batch.CompanyID + IntegrationID → __mj.CompanyIntegration (Configuration JSON + Credential — creds plug in HERE later)
       ▼
