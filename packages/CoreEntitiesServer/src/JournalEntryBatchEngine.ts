@@ -750,9 +750,26 @@ export async function sendJournalEntryBatch(batchId: string, contextUser: UserIn
 
   const summaryLines = await loadSummaryLines(batch, contextUser, p);
   const postResult = await poster(batch, summaryLines, contextUser);
-  return postResult.success
-    ? await markBatchPosted(batch, postResult.externalJournalEntryBatchRef ?? null, contextUser, p)
-    : await failBatch(batch, postResult.error ?? 'ERP post failed');
+  if (!postResult.success) return failBatch(batch, postResult.error ?? 'ERP post failed');
+
+  // Phase 3 (D10x): the ERP has CONFIRMED the post — every local consequence (batch→Posted + ref,
+  // every member/summary JE→GLPosted) commits in ONE provider transaction. A partial flip (the old
+  // per-save behavior) could leave a Posted batch with Batched JEs; now it's all-or-nothing. On
+  // rollback the batch STAYS Sent (the ERP-side post is real — Failed would misreport it); the
+  // documentNumber probe (adapter VerifyPosted) is the recovery path.
+  const dbProvider = options.provider as unknown as DatabaseProviderBase;
+  await dbProvider.BeginTransaction();
+  try {
+    const posted = await markBatchPosted(batch, postResult.externalJournalEntryBatchRef ?? null, contextUser, p);
+    await dbProvider.CommitTransaction();
+    return posted;
+  } catch (e) {
+    try { await dbProvider.RollbackTransaction(); } catch { /* rollback best-effort */ }
+    throw new Error(
+      `sendJournalEntryBatch: the ERP post for batch ${batch.JournalEntryBatchNumber} SUCCEEDED (ref ${postResult.externalJournalEntryBatchRef ?? 'n/a'}) ` +
+      `but recording it locally failed and was rolled back — batch remains Sent; reconcile via the document-number probe. Cause: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
 }
 
 /** The summary JE's lines — what the ERP receives. */
