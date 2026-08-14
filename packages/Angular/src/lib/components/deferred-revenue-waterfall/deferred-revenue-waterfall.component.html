@@ -24,89 +24,81 @@
         <div class="mja-progress-fill" [style.width.%]="Summary.PercentRecognized"></div>
     </div>
 
+    <!-- Multi-Term Legend (when 2+ terms are present) -->
+    @if (HasMultipleTerms) {
+        <div class="mja-term-legend">
+            <span class="mja-legend-title"><i class="fa-solid fa-layer-group"></i> Coverage Terms:</span>
+            <div class="mja-legend-chips">
+                @for (term of DistinctTerms; track term.ID) {
+                    <span class="mja-term-chip" [ngClass]="term.ColorClass">
+                        <i class="fa-solid fa-circle-dot"></i> {{ term.Label }}
+                    </span>
+                }
+            </div>
+        </div>
+    }
+
     @if (JournalEntries.length === 0) {
         <div class="mja-empty-waterfall">
             <i class="fa-solid fa-calendar-xmark"></i>
             <span>No revenue recognition journal entries generated yet.</span>
         </div>
-    } @else if (IsSingleItem && Rows.length === 1) {
+    } @else if (IsSingleItem || YearGroups.length > 0) {
         <!-- ============================================================
-             ADAPTIVE SINGLE-ITEM MODE (TIMELINE CARDS FOR SINGLE SUB)
+             TIMELINE VIEW WITH YEAR GROUPINGS & CLEAN SEPARATORS
              ============================================================ -->
-        <div class="mja-single-schedule-grid">
-            @for (cell of Rows[0].MonthlyCells; track cell.MonthKey) {
-                <div class="mja-month-card" [class.mja-month-card--active]="cell.Amount > 0" [class.mja-month-card--past]="cell.IsPastOrCurrent" (click)="OnCellClick(cell)">
-                    <div class="mja-month-head">
-                        <span class="mja-month-name">{{ cell.MonthLabel }}</span>
-                        @if (cell.IsPastOrCurrent && cell.Amount > 0) {
-                            <span class="mja-chip mja-chip--released"><i class="fa-solid fa-check"></i> Released</span>
-                        } @else if (cell.Amount > 0) {
-                            <span class="mja-chip mja-chip--scheduled">Scheduled</span>
+        <div class="mja-timeline-container">
+            @for (yearGroup of YearGroups; track yearGroup.Year) {
+                <div class="mja-year-section">
+                    <div class="mja-year-header">
+                        <div class="mja-year-title">
+                            <i class="fa-regular fa-calendar"></i>
+                            <span>{{ yearGroup.Year }}</span>
+                        </div>
+                        <div class="mja-year-meta">
+                            <span class="mja-year-stat">Year Total: <strong>{{ FormatMoney(yearGroup.TotalAmount) }}</strong></span>
+                            @if (yearGroup.ReleasedAmount > 0) {
+                                <span class="mja-year-stat mja-year-stat--green">Released: <strong>{{ FormatMoney(yearGroup.ReleasedAmount) }}</strong></span>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="mja-year-months-grid">
+                        @for (cell of yearGroup.Months; track cell.MonthKey) {
+                            <div class="mja-month-card" 
+                                 [class.mja-month-card--active]="cell.Amount > 0" 
+                                 [class.mja-month-card--past]="cell.IsPastOrCurrent" 
+                                 (click)="OnCellClick(cell)">
+                                <div class="mja-month-head">
+                                    <span class="mja-month-name">{{ cell.MonthLabel }}</span>
+                                    <div class="mja-month-badges">
+                                        @if (cell.TermLabel) {
+                                            <span class="mja-term-pill" [ngClass]="GetTermBadgeClass(cell.TermIndex || 0)">
+                                                {{ cell.TermLabel }}
+                                            </span>
+                                        }
+                                        @if (cell.IsPastOrCurrent && cell.Amount > 0) {
+                                            <span class="mja-chip mja-chip--released"><i class="fa-solid fa-check"></i> Released</span>
+                                        } @else if (cell.Amount > 0) {
+                                            <span class="mja-chip mja-chip--scheduled">Scheduled</span>
+                                        }
+                                    </div>
+                                </div>
+                                <div class="mja-month-amount">
+                                    {{ cell.Amount > 0 ? FormatMoney(cell.Amount) : '—' }}
+                                </div>
+                                @if (cell.JournalEntry) {
+                                    <div class="mja-month-entry-link">
+                                        <i class="fa-solid fa-book-journal-whills"></i>
+                                        <span>JE-{{ cell.JournalEntry.EntryNumber || cell.JournalEntry.ID.slice(0, 8) }}</span>
+                                        <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                                    </div>
+                                }
+                            </div>
                         }
                     </div>
-                    <div class="mja-month-amount">
-                        {{ cell.Amount > 0 ? FormatMoney(cell.Amount) : '—' }}
-                    </div>
-                    @if (cell.JournalEntry) {
-                        <div class="mja-month-entry-link">
-                            <i class="fa-solid fa-book-journal-whills"></i>
-                            <span>JE-{{ cell.JournalEntry.EntryNumber || cell.JournalEntry.ID.slice(0, 8) }}</span>
-                            <i class="fa-solid fa-arrow-up-right-from-square"></i>
-                        </div>
-                    }
                 </div>
             }
-        </div>
-    } @else {
-        <!-- ============================================================
-             MULTI-COHORT WATERFALL MATRIX TABLE
-             ============================================================ -->
-        <div class="mja-table-container">
-            <table class="mja-waterfall-table">
-                <thead>
-                    <tr>
-                        <th class="mja-col-origin">Subscription / Origin</th>
-                        <th class="mja-col-num">Total Value</th>
-                        @for (mh of MonthHeaders; track mh.Key) {
-                            <th class="mja-col-month">{{ mh.Label }}</th>
-                        }
-                        <th class="mja-col-num">Unearned Rem.</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @for (row of Rows; track row.OriginID) {
-                        <tr>
-                            <td class="mja-cell-origin">
-                                <strong>{{ row.OriginLabel }}</strong>
-                            </td>
-                            <td class="mja-cell-num">{{ FormatMoney(row.ContractValue) }}</td>
-                            @for (cell of row.MonthlyCells; track cell.MonthKey) {
-                                <td class="mja-cell-month" [class.mja-cell--has-val]="cell.Amount > 0" (click)="OnCellClick(cell)">
-                                    @if (cell.Amount > 0) {
-                                        <span class="mja-cell-amount" title="Click to view Journal Entry">
-                                            {{ FormatCompact(cell.Amount) }}
-                                        </span>
-                                    } @else {
-                                        <span class="mja-cell-dash">—</span>
-                                    }
-                                </td>
-                            }
-                            <td class="mja-cell-num mja-cell--unearned">{{ FormatMoney(row.RemainingUnearned) }}</td>
-                        </tr>
-                    }
-                    <!-- Total Row -->
-                    <tr class="mja-total-row">
-                        <td class="mja-cell-origin"><strong>TOTAL RECOGNIZED MONTHLY</strong></td>
-                        <td class="mja-cell-num"><strong>{{ FormatMoney(Summary.TotalDeferredBeginning) }}</strong></td>
-                        @for (mTot of Summary.MonthlyTotals; track mTot.MonthKey) {
-                            <td class="mja-cell-month mja-cell-total">
-                                <strong>{{ mTot.Amount > 0 ? FormatCompact(mTot.Amount) : '—' }}</strong>
-                            </td>
-                        }
-                        <td class="mja-cell-num mja-cell--unearned"><strong>{{ FormatMoney(Summary.TotalRemainingUnearned) }}</strong></td>
-                    </tr>
-                </tbody>
-            </table>
         </div>
     }
 </div>

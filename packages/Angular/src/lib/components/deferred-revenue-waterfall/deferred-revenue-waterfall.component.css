@@ -3,12 +3,13 @@
     flex-direction: column;
     gap: var(--mj-space-3, 12px);
     width: 100%;
+    min-width: 0;
     box-sizing: border-box;
 }
 
 .mja-waterfall-kpis {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
     gap: var(--mj-space-3, 12px);
     margin-bottom: var(--mj-space-2, 8px);
 }
@@ -21,6 +22,7 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
+    min-width: 0;
 }
 
 .mja-kpi-label {
@@ -29,6 +31,9 @@
     color: var(--mj-text-muted, #64748b);
     text-transform: uppercase;
     letter-spacing: 0.04em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .mja-kpi-val {
@@ -36,6 +41,9 @@
     font-weight: var(--mj-font-bold, 700);
     font-family: var(--mj-font-mono, monospace);
     color: var(--mj-text-primary, #0f172a);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .mja-val--green { color: var(--mj-color-success-700, #15803d); }
@@ -56,6 +64,71 @@
     transition: width 0.3s ease;
 }
 
+/* Multi-Term Legend */
+.mja-term-legend {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    background: var(--mj-bg-surface-sunken, #f8fafc);
+    border: 1px solid var(--mj-border-subtle, #f1f5f9);
+    border-radius: var(--mj-radius-md, 8px);
+    font-size: var(--mj-text-xs, 11px);
+}
+
+.mja-legend-title {
+    font-weight: var(--mj-font-bold, 700);
+    color: var(--mj-text-muted, #64748b);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.mja-legend-chips {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.mja-term-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: var(--mj-radius-full, 9999px);
+    font-weight: var(--mj-font-semibold, 600);
+    font-size: 11px;
+}
+
+/* Term Badges Palette */
+.mja-term-badge--t1 {
+    background: rgba(6, 182, 212, 0.15);
+    color: #0284c7;
+    border: 1px solid rgba(6, 182, 212, 0.35);
+}
+.mja-term-badge--t2 {
+    background: rgba(168, 85, 247, 0.15);
+    color: #9333ea;
+    border: 1px solid rgba(168, 85, 247, 0.35);
+}
+.mja-term-badge--t3 {
+    background: rgba(34, 197, 94, 0.15);
+    color: #16a34a;
+    border: 1px solid rgba(34, 197, 94, 0.35);
+}
+.mja-term-badge--t4 {
+    background: rgba(245, 158, 11, 0.15);
+    color: #d97706;
+    border: 1px solid rgba(245, 158, 11, 0.35);
+}
+.mja-term-badge--t5 {
+    background: rgba(244, 63, 94, 0.15);
+    color: #e11d48;
+    border: 1px solid rgba(244, 63, 94, 0.35);
+}
+
 .mja-empty-waterfall {
     padding: var(--mj-space-6, 24px);
     text-align: center;
@@ -67,40 +140,116 @@
     font-size: var(--mj-text-sm, 13px);
 }
 
-/* Single-Item Schedule Cards */
-.mja-single-schedule-grid {
+/* Timeline Container with Year Groupings */
+.mja-timeline-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--mj-space-4, 16px);
+    min-width: 0;
+}
+
+.mja-year-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: var(--mj-bg-surface-sunken, #f8fafc);
+    border: 1px solid var(--mj-border-subtle, #f1f5f9);
+    border-radius: var(--mj-radius-lg, 10px);
+    padding: 12px;
+    min-width: 0;
+}
+
+.mja-year-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 6px;
+    border-bottom: 1px dashed var(--mj-border-default, #e2e8f0);
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.mja-year-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--mj-text-sm, 13px);
+    font-weight: var(--mj-font-bold, 700);
+    color: var(--mj-text-primary, #0f172a);
+}
+
+.mja-year-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.mja-year-stat {
+    font-size: var(--mj-text-xs, 11px);
+    color: var(--mj-text-muted, #64748b);
+}
+
+.mja-year-stat--green {
+    color: var(--mj-color-success-700, #15803d);
+}
+
+.mja-year-months-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
     gap: var(--mj-space-2, 8px);
+    min-width: 0;
 }
 
 .mja-month-card {
     background: var(--mj-bg-surface-card, #ffffff);
     border: 1px solid var(--mj-border-default, #e2e8f0);
     border-radius: var(--mj-radius-sm, 6px);
-    padding: var(--mj-space-2, 8px) var(--mj-space-3, 10px);
+    padding: 8px 10px;
     display: flex;
     flex-direction: column;
     gap: 4px;
     cursor: pointer;
     transition: all 0.15s ease;
+    min-width: 0;
 }
 
 .mja-month-card:hover {
     border-color: var(--mj-brand-primary, #0076b6);
     box-shadow: var(--mj-shadow-xs, 0 1px 2px rgba(0,0,0,0.05));
+    transform: translateY(-1px);
 }
 
 .mja-month-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 4px;
+    flex-wrap: wrap;
 }
 
 .mja-month-name {
     font-size: var(--mj-text-xs, 11px);
     font-weight: var(--mj-font-bold, 700);
     color: var(--mj-text-primary, #0f172a);
+    white-space: nowrap;
+}
+
+.mja-month-badges {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    flex-wrap: wrap;
+}
+
+.mja-term-pill {
+    font-size: 8.5px;
+    font-weight: var(--mj-font-bold, 700);
+    padding: 1px 4px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
 }
 
 .mja-month-amount {
@@ -108,23 +257,33 @@
     font-weight: var(--mj-font-bold, 700);
     font-family: var(--mj-font-mono, monospace);
     color: var(--mj-brand-primary, #0076b6);
+    white-space: nowrap;
 }
 
 .mja-month-entry-link {
-    font-size: 10px;
+    font-size: 9.5px;
     color: var(--mj-text-muted, #64748b);
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 3px;
     margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mja-month-entry-link span {
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .mja-chip {
-    font-size: 9.5px;
+    font-size: 9px;
     font-weight: var(--mj-font-bold, 700);
-    padding: 1px 5px;
+    padding: 1px 4px;
     border-radius: var(--mj-radius-full, 9999px);
     text-transform: uppercase;
+    white-space: nowrap;
 }
 
 .mja-chip--released {
@@ -137,73 +296,15 @@
     color: var(--mj-brand-primary, #0076b6);
 }
 
-/* Multi-Item Matrix Table */
-.mja-table-container {
-    overflow-x: auto;
-    border: 1px solid var(--mj-border-default, #e2e8f0);
-    border-radius: var(--mj-radius-md, 8px);
-}
-
-.mja-waterfall-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: var(--mj-text-xs, 12px);
-}
-
-.mja-waterfall-table th {
-    background: var(--mj-bg-surface-header, #f8fafc);
-    padding: 8px 10px;
-    font-size: 11px;
-    font-weight: var(--mj-font-bold, 700);
-    color: var(--mj-text-muted, #64748b);
-    text-transform: uppercase;
-    border-bottom: 1px solid var(--mj-border-default, #e2e8f0);
-    white-space: nowrap;
-}
-
-.mja-col-origin { text-align: left; }
-.mja-col-num, .mja-col-month { text-align: right; }
-
-.mja-waterfall-table td {
-    padding: 8px 10px;
-    border-bottom: 1px solid var(--mj-border-default, #f1f5f9);
-    color: var(--mj-text-primary, #0f172a);
-    font-family: var(--mj-font-mono, monospace);
-    white-space: nowrap;
-}
-
-.mja-cell-origin {
-    text-align: left;
-    font-family: var(--mj-font-sans, inherit) !important;
-}
-
-.mja-cell-num { text-align: right; }
-.mja-cell-month { text-align: right; }
-
-.mja-cell--has-val {
-    cursor: pointer;
-}
-
-.mja-cell--has-val:hover {
-    background: var(--mj-color-brand-50, #e6f3f9);
-}
-
-.mja-cell-amount {
-    color: var(--mj-brand-primary, #0076b6);
-    font-weight: var(--mj-font-semibold, 600);
-}
-
-.mja-cell-dash {
-    color: var(--mj-text-muted, #94a3b8);
-}
-
-.mja-cell--unearned {
-    color: var(--mj-color-warning-700, #b45309);
-    font-weight: var(--mj-font-bold, 700);
-}
-
-.mja-total-row td {
-    background: var(--mj-bg-surface-header, #f8fafc);
-    font-weight: var(--mj-font-bold, 700);
-    border-top: 2px solid var(--mj-border-default, #cbd5e1);
+@media (max-width: 1024px) {
+    .mja-year-months-grid {
+        grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+        gap: 6px;
+    }
+    .mja-month-card {
+        padding: 6px 8px;
+    }
+    .mja-month-amount {
+        font-size: 12px;
+    }
 }
