@@ -161,9 +161,13 @@ connector's PUBLIC surface. Findings that shrink the gap to ONE function:
   2026-08-14: the framework CATALOGS bound actions (9 BC objects carry populated `boundActions`
   in the discovery metadata, incl. journals' `post`) but NO code in connector or engine reads or
   invokes them — the invocation half of the design is unbuilt, not deliberately restricted.
-  Edit it into OUR connector copy as a public method — `PostJournal(...)`: POST
-  `<journal>/Microsoft.NAV.post` via the existing transport (204 = success) — commit in
-  `repos/apps/connector-business-central` with an upstream-request note.
+  **RULED (Marcelo 2026-08-14): we add NO functionality to the connector — not even in our copy.
+  Madhav builds it.** Until his surface lands, `BusinessCentralAccountingSystemAdapter`'s post
+  step is an isolated private method that fails LOUDLY with 'journal post blocked on Integrations
+  upstream (Madhav request 2026-08-14)' — batch flips Sent→Failed with that reason; staging and
+  the Mock flow are fully provable meanwhile. Swap the method body to his API when it ships.
+  (Our connector copy keeps ONLY the compatibility fixes already committed — 6.x pins, tsconfig,
+  vendored schema-merge — which are linkability, not functionality.)
 - MADHAV REQUEST (Marcelo delivering directly), framed as completing his own design — exactly
   TWO items, verified sufficient 2026-08-14: (1) `BusinessCentralConnector` override of
   `SupportsBatchWrite`/`BatchCreateRecords` implementing a real OData `$batch` changeset;
