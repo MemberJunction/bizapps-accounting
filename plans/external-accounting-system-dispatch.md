@@ -103,12 +103,15 @@ Two MJ-core migration rules that WILL bite if missed (mj/CLAUDE.md):
   pre-sync definitions silently deletes properties). `mjdev app activate` runs exactly this
   sequence; don't hand-reorder it.
 
-Then the standard app loop on the instance (from `~/MJDev` root):
-`./bin/mjdev app migrate orders-mj6-ws bizapps-accounting` → `./bin/mjdev app codegen orders-mj6-ws bizapps-accounting`
-(AI enrichment runs if a key is configured — fine) → commit the generated code (new entity class,
-updated batch entity, forms) — committed codegen tail is authoritative; from-zero regen re-mints
-UUIDs, so capture what codegen emits via `./bin/mjdev app capture orders-mj6-ws bizapps-accounting`
-into the migration (check `--check` first; see DEV-LOOPS.md).
+Then the canonical loop (Marcelo's recipe, 2026-08-14 — from `~/MJDev` root):
+author the migration → `./bin/mjdev app migrate orders-mj6-ws bizapps-accounting` →
+`./bin/mjdev app codegen orders-mj6-ws bizapps-accounting` → **capture the codegen output INTO that
+same migration** (`./bin/mjdev app capture orders-mj6-ws bizapps-accounting`, `--check` first —
+it appends) → `mj sync push` if metadata changes are needed → any further DB changes that depend
+on the first round's changes/metadata → capture appends to the SAME migration again. Commit the
+generated code (new entity class, updated batch entity, forms) — committed codegen tail is
+authoritative; from-zero regen re-mints UUIDs, which is why capture-into-migration is mandatory.
+(JSONTypes are NOT in play here — ExternalAccountingSystem is all scalar columns.)
 
 **Gate S1:** `./bin/mjdev app stage-test orders-mj6-ws bizapps-accounting` green from zero
 (schema + seeds + FK + trigger present; old column gone) · codegen convergence clean
@@ -148,13 +151,20 @@ connector's PUBLIC surface. Findings that shrink the gap to ONE function:
   `BatchCreateRecords(ctxs)` (`mj/packages/Integration/engine/src/BaseIntegrationConnector.ts:~468`),
   default = loop of singles. The adapter codes against `BatchCreateRecords` from day one; Madhav's
   future BC override (real OData `$batch`) upgrades the wire behavior with NO adapter change.
-- The ONLY missing function is the journal-post bound action. Edit it into OUR connector copy as a
-  public method — `PostJournal(...)`: POST `<journal>/Microsoft.NAV.post` via the existing transport
-  (204 = success) — commit in `repos/apps/connector-business-central` with an upstream-request note.
-- MADHAV REQUEST (Marcelo delivers / or files on MemberJunction/Integrations at his word):
-  (1) `BusinessCentralConnector` override of `SupportsBatchWrite`/`BatchCreateRecords` implementing
-  a real OData `$batch` changeset; (2) a public journal-post (bound action) surface — generic
-  `InvokeBoundAction` or a BC-specific `PostJournal`. When either lands, we drop our copy's edit.
+- The ONLY missing function is the journal-post bound action (`Microsoft.NAV.post` — the atomic
+  commit that moves staged journal lines into the GL; BC refuses an unbalanced post). VERIFIED
+  2026-08-14: the framework CATALOGS bound actions (9 BC objects carry populated `boundActions`
+  in the discovery metadata, incl. journals' `post`) but NO code in connector or engine reads or
+  invokes them — the invocation half of the design is unbuilt, not deliberately restricted.
+  Edit it into OUR connector copy as a public method — `PostJournal(...)`: POST
+  `<journal>/Microsoft.NAV.post` via the existing transport (204 = success) — commit in
+  `repos/apps/connector-business-central` with an upstream-request note.
+- MADHAV REQUEST (Marcelo delivers / or files on MemberJunction/Integrations at his word), framed
+  as completing his own design: (1) `BusinessCentralConnector` override of `SupportsBatchWrite`/
+  `BatchCreateRecords` implementing a real OData `$batch` changeset; (2) the bound-action
+  INVOCATION surface his discovery metadata already catalogs (`boundActions`) — generic
+  `InvokeBoundAction`, with `journals → post` as the concrete need. When either lands, we drop
+  our copy's edit / inherit the upgrade with no adapter changes.
 
 Dependency wiring (D9): accounting `mj-app.json` `dependencies` += `connector-business-central`;
 accounting CoreEntitiesServer `package.json` gains the required dep. Re-run `mjdev app relink` /
