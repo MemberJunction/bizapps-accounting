@@ -1,0 +1,151 @@
+[
+  {
+    "_comment": "Business Central -> GLAccount pull-sync config. Maps the BC 'accounts' object (general-ledger accounts) onto MJ_BizApps_Accounting: GL Accounts via the integration engine. CREDS + COMPANY are wired LATER: set CredentialID and CompanyID (env var BIZAPPS_ACCOUNTING_COMPANY_ID) and flip IsActive=true when ready. See README.md.",
+    "fields": {
+      "Name": "BizApps Accounting - Business Central GL Account Sync",
+      "IntegrationID": "@lookup:MJ: Integrations.Name=business-central",
+      "CompanyID": "@env:BIZAPPS_ACCOUNTING_COMPANY_ID",
+      "IsActive": false,
+      "IsExternalSystemReadOnly": true,
+      "ScheduleType": "Manual",
+      "Configuration": "{\"note\":\"Pull-only. Fetches BC general-ledger accounts and upserts GL Accounts keyed on ExternalAccountID.\"}"
+    },
+    "primaryKey": {
+      "ID": "E82D3738-4F97-422E-89E7-F246B12DD966"
+    },
+    "relatedEntities": {
+      "MJ: Company Integration Entity Maps": [
+        {
+          "_comment": "accounts (BC general-ledger accounts, read-only) -> GL Accounts, Pull. Dedup is driven by the IsKeyField=true ExternalAccountID field map + the engine's Record Map.",
+          "fields": {
+            "CompanyIntegrationID": "@parent:ID",
+            "ExternalObjectName": "accounts",
+            "ExternalObjectLabel": "Accounts (General Ledger)",
+            "EntityID": "@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: GL Accounts",
+            "SyncDirection": "Pull",
+            "SyncEnabled": true,
+            "ConflictResolution": "SourceWins",
+            "DeleteBehavior": "DoNothing",
+            "Priority": 0,
+            "Status": "Active"
+          },
+          "primaryKey": {
+            "ID": "1A41CDDA-8468-4B41-A69A-106F344C60E7"
+          },
+          "relatedEntities": {
+            "MJ: Company Integration Field Maps": [
+              {
+                "_comment": "BC account id (SystemId GUID, non-editable PK) -> ExternalAccountID. KEY FIELD: this is what re-syncs match on.",
+                "fields": {
+                  "EntityMapID": "@parent:ID",
+                  "SourceFieldName": "id",
+                  "DestinationFieldName": "ExternalAccountID",
+                  "Direction": "SourceToDest",
+                  "IsKeyField": true,
+                  "IsRequired": true,
+                  "Priority": 10,
+                  "Status": "Active"
+                },
+                "primaryKey": {
+                  "ID": "A4808976-0ED5-43E7-B769-CBF5EB5BA4D1"
+                }
+              },
+              {
+                "_comment": "BC account number -> Code (GLAccount unique per (CompanyID, Code)).",
+                "fields": {
+                  "EntityMapID": "@parent:ID",
+                  "SourceFieldName": "number",
+                  "DestinationFieldName": "Code",
+                  "Direction": "SourceToDest",
+                  "IsRequired": true,
+                  "Priority": 20,
+                  "Status": "Active"
+                },
+                "primaryKey": {
+                  "ID": "B01A482C-AD79-498C-A03E-5C57B51AD0A3"
+                }
+              },
+              {
+                "_comment": "BC account displayName -> Name.",
+                "fields": {
+                  "EntityMapID": "@parent:ID",
+                  "SourceFieldName": "displayName",
+                  "DestinationFieldName": "Name",
+                  "Direction": "SourceToDest",
+                  "IsRequired": true,
+                  "Priority": 30,
+                  "Status": "Active"
+                },
+                "primaryKey": {
+                  "ID": "998CC3CD-4381-4B6E-BF34-AAFA707E09CA"
+                }
+              },
+              {
+                "_comment": "BC account category -> AccountType. Case-insensitive value map. Blank/heading categories (' ') fall to Default=null and FAIL the NOT NULL insert loudly (heading/total rows are not postable accounts and should not sync). Cost of Goods Sold folds to Expense.",
+                "fields": {
+                  "EntityMapID": "@parent:ID",
+                  "SourceFieldName": "category",
+                  "DestinationFieldName": "AccountType",
+                  "Direction": "SourceToDest",
+                  "IsRequired": true,
+                  "Priority": 40,
+                  "Status": "Active",
+                  "TransformPipeline": "[{\"Type\":\"lookup\",\"Config\":{\"Map\":{\"Assets\":\"Asset\",\"Liabilities\":\"Liability\",\"Equity\":\"Equity\",\"Income\":\"Revenue\",\"Cost of Goods Sold\":\"Expense\",\"Expense\":\"Expense\"},\"Default\":null},\"OnError\":\"Fail\"}]"
+                },
+                "primaryKey": {
+                  "ID": "2E3674DD-BDB6-4665-B507-BFB3DB71F7CB"
+                }
+              },
+              {
+                "_comment": "BC account blocked -> IsActive (negated). blocked=true means the account is blocked from posting, i.e. inactive.",
+                "fields": {
+                  "EntityMapID": "@parent:ID",
+                  "SourceFieldName": "blocked",
+                  "DestinationFieldName": "IsActive",
+                  "Direction": "SourceToDest",
+                  "Priority": 50,
+                  "Status": "Active",
+                  "TransformPipeline": "[{\"Type\":\"custom\",\"Config\":{\"Expression\":\"!value\"}}]"
+                },
+                "primaryKey": {
+                  "ID": "4540B677-2F26-4834-8BF3-0E46D220409B"
+                }
+              },
+              {
+                "_comment": "Constant -> ExternalSystem. SourceFieldName is a sentinel absent from BC records; the custom transform emits the literal regardless of input.",
+                "fields": {
+                  "EntityMapID": "@parent:ID",
+                  "SourceFieldName": "_constant",
+                  "DestinationFieldName": "ExternalSystem",
+                  "Direction": "SourceToDest",
+                  "Priority": 60,
+                  "Status": "Active",
+                  "TransformPipeline": "[{\"Type\":\"custom\",\"Config\":{\"Expression\":\"'BusinessCentral'\"}}]"
+                },
+                "primaryKey": {
+                  "ID": "870C0622-2814-487F-8040-2FD69276DB2F"
+                }
+              },
+              {
+                "_comment": "Constant -> CompanyID (NOT NULL FK). WIRING-TIME VALUE: replace the placeholder UUID below with the target __mj.Company ID (must equal BIZAPPS_ACCOUNTING_COMPANY_ID used on the CompanyIntegration). @env cannot resolve inside this transform JSON, so it is a literal placeholder by design.",
+                "fields": {
+                  "EntityMapID": "@parent:ID",
+                  "SourceFieldName": "_constant",
+                  "DestinationFieldName": "CompanyID",
+                  "Direction": "SourceToDest",
+                  "IsRequired": true,
+                  "Priority": 70,
+                  "Status": "Active",
+                  "TransformPipeline": "[{\"Type\":\"custom\",\"Config\":{\"Expression\":\"'00000000-0000-0000-0000-000000000000'\"}}]"
+                },
+                "primaryKey": {
+                  "ID": "C7926B46-68A8-4DD8-A3FC-6654BE289B77"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+]

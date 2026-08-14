@@ -21,6 +21,11 @@
     "mj-bizapps-tasks": {
       "version": ">=1.0.0 <2.0.0",
       "repository": "https://github.com/MemberJunction/bizapps-tasks"
+    },
+    "connector-business-central": {
+      "version": ">=1.0.0 <2.0.0",
+      "repository": "https://github.com/MemberJunction/Integrations",
+      "subpath": "Finance/BusinessCentral"
     }
   },
   "schema": {

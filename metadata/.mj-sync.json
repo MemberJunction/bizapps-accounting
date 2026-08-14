@@ -11,6 +11,10 @@
     "applications",
     "entity-actions"
   ],
+  "_comment_ignoreDirectories": "erp-account-sync is authored but held INERT until BC creds + target company are wired (see erp-account-sync/README.md). Remove it from ignoreDirectories to push the CompanyIntegration/entity-map/field-maps.",
+  "ignoreDirectories": [
+    "erp-account-sync"
+  ],
   "sqlLogging": {
     "enabled": true,
     "outputDirectory": "./sql_logging",
