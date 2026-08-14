@@ -19,7 +19,7 @@
  */
 import { IMetadataProvider, IRunViewProvider, RunView, UserInfo } from '@memberjunction/core';
 import { MJGlobal } from '@memberjunction/global';
-import type { IntegrationEntity, CompanyIntegrationEntity } from '@memberjunction/core-entities';
+import type { MJIntegrationEntity, MJCompanyIntegrationEntity } from '@memberjunction/core-entities';
 import type {
   mjBizAppsAccountingExternalAccountingSystemEntity,
   mjBizAppsAccountingJournalEntryBatchEntity,
@@ -71,14 +71,14 @@ export abstract class BaseExternalAccountingSystemAdapter {
     system: mjBizAppsAccountingExternalAccountingSystemEntity,
     contextUser: UserInfo,
     provider: IMetadataProvider,
-  ): Promise<IntegrationEntity> {
+  ): Promise<MJIntegrationEntity> {
     if (!system.IntegrationName) {
       throw new Error(
         `ExternalAccountingSystem '${system.Name}' has no IntegrationName — it is not connector-backed, so a connector-based adapter cannot serve it.`,
       );
     }
     const rv = new RunView(provider as unknown as IRunViewProvider);
-    const res = await rv.RunView<IntegrationEntity>(
+    const res = await rv.RunView<MJIntegrationEntity>(
       {
         EntityName: 'MJ: Integrations',
         ExtraFilter: `Name='${system.IntegrationName.replace(/'/g, "''")}'`,
@@ -104,12 +104,12 @@ export abstract class BaseExternalAccountingSystemAdapter {
    * until credentials arrive), 2+ is ambiguous; both fail loudly.
    */
   protected async ResolveCompanyIntegration(
-    integration: IntegrationEntity,
+    integration: MJIntegrationEntity,
     contextUser: UserInfo,
     provider: IMetadataProvider,
-  ): Promise<CompanyIntegrationEntity> {
+  ): Promise<MJCompanyIntegrationEntity> {
     const rv = new RunView(provider as unknown as IRunViewProvider);
-    const res = await rv.RunView<CompanyIntegrationEntity>(
+    const res = await rv.RunView<MJCompanyIntegrationEntity>(
       {
         EntityName: 'MJ: Company Integrations',
         ExtraFilter: `IntegrationID='${integration.ID}' AND IsActive=1`,

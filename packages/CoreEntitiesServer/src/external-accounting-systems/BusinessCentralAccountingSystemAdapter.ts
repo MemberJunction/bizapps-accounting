@@ -21,7 +21,7 @@
  *    cleaned by the next attempt's pre-flight.
  */
 import { RegisterClass } from '@memberjunction/global';
-import type { CompanyIntegrationEntity } from '@memberjunction/core-entities';
+import type { MJCompanyIntegrationEntity } from '@memberjunction/core-entities';
 import { ConnectorFactory, BaseIntegrationConnector } from '@memberjunction/integration-engine';
 import type { CreateRecordContext, CRUDResult } from '@memberjunction/integration-engine';
 import type { mjBizAppsAccountingJournalEntryLineEntity } from '@mj-biz-apps/accounting-entities';
@@ -85,7 +85,7 @@ export class BusinessCentralAccountingSystemAdapter extends BaseExternalAccounti
   /** Map every summary line to a BC journalLines create context (account number via the engine's resolver). */
   private async BuildLineContexts(
     context: PostJournalEntryBatchContext,
-    companyIntegration: CompanyIntegrationEntity,
+    companyIntegration: MJCompanyIntegrationEntity,
   ): Promise<CreateRecordContext[]> {
     const postingDate = this.FormatPostingDate(context.Batch.PostingDate);
     const documentNumber = context.Batch.JournalEntryBatchNumber;
@@ -145,7 +145,7 @@ export class BusinessCentralAccountingSystemAdapter extends BaseExternalAccounti
   private async PostStagedJournal(
     context: PostJournalEntryBatchContext,
     _connector: BaseIntegrationConnector,
-    _companyIntegration: CompanyIntegrationEntity,
+    _companyIntegration: MJCompanyIntegrationEntity,
   ): Promise<string> {
     throw new Error(
       `Journal post for batch ${context.Batch.JournalEntryBatchNumber} is blocked on the Integrations upstream: ` +
