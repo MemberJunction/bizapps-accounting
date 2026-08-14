@@ -16,9 +16,9 @@ export class mjBizAppsAccountingJournalEntryBatchFormComponent extends BaseFormC
     override async ngOnInit() {
         await super.ngOnInit();
         this.initSections([
-            { sectionKey: 'batchInformation', sectionName: 'Batch Information', isExpanded: true },
+            { sectionKey: 'batchDetails', sectionName: 'Batch Details', isExpanded: true },
+            { sectionKey: 'statusAndLifecycle', sectionName: 'Status and Lifecycle', isExpanded: true },
             { sectionKey: 'financialSummary', sectionName: 'Financial Summary', isExpanded: true },
-            { sectionKey: 'lifecycleAndStatus', sectionName: 'Lifecycle and Status', isExpanded: true },
             { sectionKey: 'approvalAndDispatch', sectionName: 'Approval and Dispatch', isExpanded: true },
             { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingJournalEntries', sectionName: 'Journal Entries', isExpanded: false }

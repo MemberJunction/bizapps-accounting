@@ -38,11 +38,11 @@
 
     </mj-collapsible-panel>
 
-    <!-- Target Record Section -->
+    <!-- Target Definition Section -->
     <mj-collapsible-panel
-        SectionKey="targetRecord"
-        SectionName="Target Record"
-        Icon="fa fa-database"
+        SectionKey="targetDefinition"
+        SectionName="Target Definition"
+        Icon="fa fa-crosshairs"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -107,6 +107,16 @@
 
     </mj-collapsible-panel>
 
+    <!-- Display Labels Section -->
+    <mj-collapsible-panel
+        SectionKey="displayLabels"
+        SectionName="Display Labels"
+        Icon="fa fa-tag"
+        [Form]="this"
+        [FormContext]="formContext">
+
+    </mj-collapsible-panel>
+
     <!-- System Metadata Section -->
     <mj-collapsible-panel
         SectionKey="systemMetadata"
@@ -143,7 +153,7 @@
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingGLAccountLinkDimensions"
         SectionName="GL Account Link Dimensions"
-        Icon="fa fa-list-ol"
+        Icon="fa fa-chart-pie"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"

@@ -2,7 +2,6 @@ import { Component } from '@angular/core';
 import { mjBizAppsAccountingExternalAccountingSystemEntity } from '@mj-biz-apps/accounting-entities';
 import { RegisterClass } from '@memberjunction/global';
 import { BaseFormComponent } from '@memberjunction/ng-base-forms';
-import {  } from "@memberjunction/ng-entity-viewer"
 
 @RegisterClass(BaseFormComponent, 'MJ_BizApps_Accounting: External Accounting Systems') // Tell MemberJunction about this class
 @Component({
@@ -17,9 +16,8 @@ export class mjBizAppsAccountingExternalAccountingSystemFormComponent extends Ba
         await super.ngOnInit();
         this.initSections([
             { sectionKey: 'systemConfiguration', sectionName: 'System Configuration', isExpanded: true },
-            { sectionKey: 'integrationSettings', sectionName: 'Integration Settings', isExpanded: true },
-            { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingJournalEntryBatches', sectionName: 'Journal Entry Batches', isExpanded: false }
+            { sectionKey: 'integrationDetails', sectionName: 'Integration Details', isExpanded: true },
+            { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false }
         ]);
     }
 }
