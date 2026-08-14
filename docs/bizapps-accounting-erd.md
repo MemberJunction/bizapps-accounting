@@ -364,7 +364,7 @@ erDiagram
         uuid CompanyID FK
         date PostingDate "must match the GL (D8)"
         uuid SummaryJournalEntryID FK "summary JE (type flagged IsJournalEntryBatchSummary)"
-        uuid ExternalAccountingSystemID FK "catalog row - frozen at approval (V202608142100)"
+        string TargetSystem
         string Status "Pending | Approved | Sent | Posted | Failed | Cancelled"
         datetimeoffset BatchedAt
         uuid BatchedByUserID FK
@@ -694,7 +694,6 @@ Writeoff. Domain types (OrderBooking, PaymentReceipt, ...) are seeded by their o
 ```mermaid
 erDiagram
     Company ||--o{ JournalEntryBatch : "CompanyID NOT NULL - single-company (D7)"
-    ExternalAccountingSystem ||--o{ JournalEntryBatch : "ExternalAccountingSystemID NOT NULL"
     JournalEntryBatch ||--o{ JournalEntry : "JournalEntryBatchID - members AND the summary (discriminated by the type IsJournalEntryBatchSummary flag)"
     JournalEntryBatch |o--o| JournalEntry : "SummaryJournalEntryID - coherence trigger 50023"
     User ||--o{ JournalEntryBatch : "BatchedBy / ApprovedBy"
@@ -715,7 +714,7 @@ erDiagram
         uuid CompanyID FK
         date PostingDate "singular, accountant-set - must match the GL (D8)"
         uuid SummaryJournalEntryID FK "type IsJournalEntryBatchSummary, EffectiveDate=PostingDate, same JournalEntryBatchID"
-        uuid ExternalAccountingSystemID FK "ExternalAccountingSystem catalog (V202608142100; was the TargetSystem CHECK enum)"
+        string TargetSystem "BusinessCentral | QuickBooks | NetSuite | Sage | Xero | Other - resolved against ExternalAccountingSystem.Name at dispatch"
         string Status "Pending | Approved | Sent | Posted | Failed | Cancelled"
         datetimeoffset BatchedAt
         uuid BatchedByUserID FK

@@ -31,7 +31,7 @@ THE ENGINE (EngineBase + CoreEntitiesServer)
    'Accounting.CreateJournalEntry'   the remotable op — same call in-process (orders-server) and over GraphQL
 Lifecycle hooks (CoreEntitiesServer) W1/W2/W3/W6/W9 BaseEntity.Save() overrides (W4/W7/W8 retired with periods)
 Batching (CoreEntitiesServer)        GLOBAL multi-company buildJournalEntryBatch → approveJournalEntryBatch → sendJournalEntryBatch → Posted
-ERP dispatch (CoreEntitiesServer)    ExternalAccountingSystem catalog (V202608142100) → DriverClass adapter
+ERP dispatch (CoreEntitiesServer)    ExternalAccountingSystem catalog (V202608142100; account/Name-driven routing, no batch FK) → DriverClass adapter
                                      (BusinessCentralAccountingSystemAdapter | MockAccountingSystemAdapter)
                                      → connector-business-central Open App (BC); loud-fail when unconfigured
 DB invariants (migrations)           12 triggers (incl. AM-4 per-company balance 50019/50023/50022)
