@@ -58,6 +58,12 @@ import type {
   mjBizAppsAccountingJournalEntryEntity,
   mjBizAppsAccountingJournalEntryLineEntity,
 } from '@mj-biz-apps/accounting-entities';
+import {
+  NetLines,
+  type DimRef,
+  type NetGroup,
+  type NettableLine,
+} from '@mj-biz-apps/accounting-engine-base';
 import { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 import { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
 import { GetJournalEntryBatchSummaryEntryType } from './JournalEntryTypes.js';
@@ -68,9 +74,6 @@ const JELD_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Line Dimensions';
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
 const JET_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Types';
-
-/** Cent-level tolerance — amounts are decimal(18,2), so anything under half a cent is "zero". */
-const NET_TOLERANCE = 0.005;
 
 /** The ERP targets the schema's CK_JournalEntryBatch_TargetSystem accepts. */
 export type JournalEntryBatchTargetSystem = 'BusinessCentral' | 'NetSuite' | 'Other' | 'QuickBooks' | 'Sage' | 'Xero';
@@ -83,21 +86,14 @@ function resolveProviders(provider: IMetadataProvider): Providers {
   return { md: provider, rv: provider as unknown as IRunViewProvider };
 }
 
-export interface DimRef { DimensionID: string; DimensionValueID: string }
+export type { DimRef, NettableLine, NetGroup };
 
-/** Pure netting input: one JE line, dimension-tagged. Company = the parent JE's header CompanyID (D3). */
-export interface NettableLine { companyId: string; glAccountId: string; debit: number; credit: number; dims: DimRef[] }
-
-/** Pure netting output: one consolidated summary group (Dr/Cr collapsed to a single side). */
-export interface NetGroup {
-  companyId: string;
-  glAccountId: string;
-  dims: DimRef[];
-  dimKey: string;
-  /** signed net = Σdebits − Σcredits; >0 → debit side, <0 → credit side. */
-  net: number;
-  side: 'Debit' | 'Credit';
-  sourceLineCount: number;
+/**
+ * @deprecated Import {@link NetLines} from `@mj-biz-apps/accounting-engine-base`.
+ * Kept so existing server callers (`previewBatch`, harnesses) keep compiling.
+ */
+export function netLines(lines: NettableLine[]): NetGroup[] {
+  return NetLines(lines);
 }
 
 export interface BuildJournalEntryBatchResult {
@@ -160,35 +156,6 @@ export class EmptyJournalEntryBatchError extends Error {
   }
 }
 
-// ─── Pure netting (unit-tested without a DB) ─────────────────────────────────
-
-/**
- * Collapse JE lines to consolidated summary groups: one per (Company × GLAccount × dimension-combo),
- * with debits netted against credits to a single side. Groups that net to ~zero drop out. In a
- * single-company batch the company key is constant — it stays in the key as a safety net so a
- * mixed-company input can never silently merge across companies. No I/O — pure + deterministic.
- */
-export function netLines(lines: NettableLine[]): NetGroup[] {
-  const map = new Map<string, { companyId: string; glAccountId: string; dims: DimRef[]; dimKey: string; debit: number; credit: number; sourceLineCount: number }>();
-  for (const line of lines) {
-    const dims = [...line.dims].sort((a, b) => a.DimensionID.localeCompare(b.DimensionID));
-    const dimKey = dims.map(d => `${d.DimensionID}:${d.DimensionValueID}`).join('|');
-    const key = `${line.companyId}#${line.glAccountId}#${dimKey}`;
-    let g = map.get(key);
-    if (!g) { g = { companyId: line.companyId, glAccountId: line.glAccountId, dims, dimKey, debit: 0, credit: 0, sourceLineCount: 0 }; map.set(key, g); }
-    g.debit += line.debit;
-    g.credit += line.credit;
-    g.sourceLineCount += 1;
-  }
-  const groups: NetGroup[] = [];
-  for (const g of map.values()) {
-    const net = Math.round((g.debit - g.credit) * 100) / 100;
-    if (Math.abs(net) <= NET_TOLERANCE) continue; // nets to zero — no summary line
-    groups.push({ companyId: g.companyId, glAccountId: g.glAccountId, dims: g.dims, dimKey: g.dimKey, net, side: net > 0 ? 'Debit' : 'Credit', sourceLineCount: g.sourceLineCount });
-  }
-  return groups;
-}
-
 // ─── buildJournalEntryBatch ──────────────────────────────────────────────────────────────
 
 /**
@@ -238,7 +205,7 @@ async function buildJournalEntryBatchCore(
   gate: JournalEntryBatchApprovalGate,
 ): Promise<BuildJournalEntryBatchResult> {
   const p = resolveProviders(provider);
-  const groups = netLines(await loadNettableLines(companyId, jeIds, contextUser, p));
+  const groups = NetLines(await loadNettableLines(companyId, jeIds, contextUser, p));
   if (groups.length === 0) {
     throw new EmptyJournalEntryBatchError(`Nothing to batch: company ${companyId}'s selected entries net to zero — no summary line would be produced.`);
   }
@@ -710,7 +677,7 @@ export async function regenerateJournalEntryBatch(
     await batch.TearDownSummaryAndUnlock(contextUser);
 
     const jeIds = await loadPendingJEIds(batch.CompanyID, contextUser, p);
-    const groups = netLines(await loadNettableLines(batch.CompanyID, jeIds, contextUser, p));
+    const groups = NetLines(await loadNettableLines(batch.CompanyID, jeIds, contextUser, p));
     if (groups.length === 0) {
       // Nothing to rebuild — a batch with no summary line is never persisted (Marcelo 2026-07-21):
       // keep the teardown (members back to the pool), mark the batch Cancelled, and say so loudly.
@@ -914,7 +881,7 @@ export function perCompanySubtotals(groups: NetGroup[]): Array<{ CompanyID: stri
  *
  * Powers the batch workspace: the candidate grid, the affected-accounts summary, the live Dr = Cr
  * footer, and the out-of-order warning. Runs the SAME `pendingCandidateFilter`, the same
- * oldest-first order, and the same `netLines` the build runs, so the preview cannot drift from
+ * oldest-first order, and the same `NetLines` the build runs, so the preview cannot drift from
  * what the build actually does — a preview computed a different way is a lie waiting to happen.
  * The build then reuses the operator's SELECTION (ids → buildJournalEntryBatchFromExplicitIds), never the
  * computed artifacts: it re-verifies + re-nets inside the write transaction.
@@ -952,7 +919,7 @@ export async function previewBatch(
 
   // Net exactly what a build of the INCLUDED set would net (grouped per company like the build).
   const lines = includedRows.length > 0 ? await loadNettableLinesUnscoped(includedRows.map(r => r.ID), contextUser, p) : [];
-  const groups = netLines(lines);
+  const groups = NetLines(lines);
   const { totalDebits, totalCredits } = summaryTotals(groups);
 
   // Σ debits per entry — the preview grid's money column.

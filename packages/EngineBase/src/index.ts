@@ -5,3 +5,4 @@
 export * from './contract.js';
 export * from './pipeline.js';
 export * from './AccountingEngineBase.js';
+export * from './journal-entry-netting.js';
