@@ -35,6 +35,10 @@ module.exports = {
   // npm packages instead. Common is kept out of CodeGen via excludeSchemas below.
   entityPackageName: '@mj-biz-apps/accounting-entities',
 
+  testing: {
+    checkModules: ['@mj-biz-apps/accounting-integration-tests'],
+  },
+
   // Additional schema info CodeGen can't infer from the DB. Declares the
   // AccountingCompanyProfile IS-A Company (Table-Per-Type) inheritance so
   // CodeGen sets Entity.ParentID, mirrors Company fields as virtual fields on
