@@ -1,0 +1,332 @@
+[
+  {
+    "_comments": [
+      "Journal Entry form: lines are the document body (also a declared collection)."
+    ],
+    "fields": {
+      "Configuration": {
+        "UI": {
+          "inclusion": "Primary"
+        }
+      }
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: Journal Entries&RelatedEntity=MJ_BizApps_Accounting: Journal Entry Lines&RelatedEntityJoinField=JournalEntryID"
+    }
+  },
+  {
+    "_comments": [
+      "Journal Entry form: reversing / reversed-by entries sit in More."
+    ],
+    "fields": {
+      "Configuration": {
+        "UI": {
+          "inclusion": "More"
+        }
+      }
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: Journal Entries&RelatedEntity=MJ_BizApps_Accounting: Journal Entries&RelatedEntityJoinField=ReversesJournalEntryID"
+    }
+  },
+  {
+    "_comments": [
+      "Journal Entry form: reversed-by inverse sits in More."
+    ],
+    "fields": {
+      "Configuration": {
+        "UI": {
+          "inclusion": "More"
+        }
+      }
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: Journal Entries&RelatedEntity=MJ_BizApps_Accounting: Journal Entries&RelatedEntityJoinField=ReversedByJournalEntryID"
+    }
+  },
+  {
+    "_comments": [
+      "Journal Entry form: posted order lines are not a JE working surface."
+    ],
+    "fields": {
+      "Configuration": {
+        "UI": {
+          "inclusion": "None"
+        }
+      }
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: Journal Entries&RelatedEntity=MJ_BizApps_Orders: Order Lines&RelatedEntityJoinField=JournalEntryID"
+    }
+  },
+  {
+    "_comments": [
+      "Journal Entry form: posted payment headers are not a JE working surface."
+    ],
+    "fields": {
+      "Configuration": {
+        "UI": {
+          "inclusion": "None"
+        }
+      }
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: Journal Entries&RelatedEntity=MJ_BizApps_Orders: Payment Headers&RelatedEntityJoinField=JournalEntryID"
+    }
+  },
+  {
+    "_comments": [
+      "JE Batch form: member entries stay first-class (read-only collection)."
+    ],
+    "fields": {
+      "Configuration": {
+        "UI": {
+          "inclusion": "Primary"
+        }
+      }
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: Journal Entry Batches&RelatedEntity=MJ_BizApps_Accounting: Journal Entries&RelatedEntityJoinField=JournalEntryBatchID"
+    }
+  },
+  {
+    "_comments": [
+      "GL Account form: child accounts stay first-class."
+    ],
+    "fields": {
+      "Configuration": {
+        "UI": {
+          "inclusion": "Primary"
+        }
+      }
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: GL Accounts&RelatedEntity=MJ_BizApps_Accounting: GL Accounts&RelatedEntityJoinField=ParentGLAccountID"
+    }
+  },
+  {
+    "_comments": [
+      "GL Account form: role links stay first-class."
+    ],
+    "fields": {
+      "Configuration": {
+        "UI": {
+          "inclusion": "Primary"
+        }
+      }
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: GL Accounts&RelatedEntity=MJ_BizApps_Accounting: GL Account Links&RelatedEntityJoinField=GLAccountID"
+    }
+  },
+  {
+    "_comments": [
+      "GL Account form: journal lines that post here sit in More."
+    ],
+    "fields": {
+      "Configuration": {
+        "UI": {
+          "inclusion": "More"
+        }
+      }
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: GL Accounts&RelatedEntity=MJ_BizApps_Accounting: Journal Entry Lines&RelatedEntityJoinField=GLAccountID"
+    }
+  },
+  {
+    "_comments": [
+      "GL Account form: intercompany Due-From matches sit in More."
+    ],
+    "fields": {
+      "Configuration": {
+        "UI": {
+          "inclusion": "More"
+        }
+      }
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: GL Accounts&RelatedEntity=MJ_BizApps_Accounting: Intercompany Account Matches&RelatedEntityJoinField=DueFromGLAccountID"
+    }
+  },
+  {
+    "_comments": [
+      "GL Account form: Due-To inverse is owned by the Due-From section — not a candidate."
+    ],
+    "fields": {
+      "Configuration": {
+        "UI": {
+          "inclusion": "None"
+        }
+      }
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: GL Accounts&RelatedEntity=MJ_BizApps_Accounting: Intercompany Account Matches&RelatedEntityJoinField=DueToGLAccountID"
+    }
+  },
+  {
+    "_comments": [
+      "Dimension form: values stay first-class."
+    ],
+    "fields": {
+      "Configuration": {
+        "UI": {
+          "inclusion": "Primary"
+        }
+      }
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: Dimensions&RelatedEntity=MJ_BizApps_Accounting: Dimension Values&RelatedEntityJoinField=DimensionID"
+    }
+  },
+  {
+    "_comments": [
+      "Dimension form: GL link tags sit in More."
+    ],
+    "fields": {
+      "Configuration": {
+        "UI": {
+          "inclusion": "More"
+        }
+      }
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: Dimensions&RelatedEntity=MJ_BizApps_Accounting: GL Account Link Dimensions&RelatedEntityJoinField=DimensionID"
+    }
+  },
+  {
+    "_comments": [
+      "Dimension form: JE line tags sit in More."
+    ],
+    "fields": {
+      "Configuration": {
+        "UI": {
+          "inclusion": "More"
+        }
+      }
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: Dimensions&RelatedEntity=MJ_BizApps_Accounting: Journal Entry Line Dimensions&RelatedEntityJoinField=DimensionID"
+    }
+  },
+  {
+    "_comments": [
+      "Dimension form: order-line tags sit in More."
+    ],
+    "fields": {
+      "Configuration": {
+        "UI": {
+          "inclusion": "More"
+        }
+      }
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: Dimensions&RelatedEntity=MJ_BizApps_Orders: Order Line Dimensions&RelatedEntityJoinField=DimensionID"
+    }
+  },
+  {
+    "_comments": [
+      "Currency form: spot rates stay first-class."
+    ],
+    "fields": {
+      "Configuration": {
+        "UI": {
+          "inclusion": "Primary"
+        }
+      }
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: Currencies&RelatedEntity=MJ_BizApps_Accounting: Currency Spot Rates&RelatedEntityJoinField=FromCurrencyCode"
+    }
+  },
+  {
+    "_comments": [
+      "Currency form: ToCurrency spot-rate inverse is owned by the FromCurrency section."
+    ],
+    "fields": {
+      "Configuration": {
+        "UI": {
+          "inclusion": "None"
+        }
+      }
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: Currencies&RelatedEntity=MJ_BizApps_Accounting: Currency Spot Rates&RelatedEntityJoinField=ToCurrencyCode"
+    }
+  },
+  {
+    "_comments": [
+      "Currency form: company profiles / GL accounts / JE lines that use this code are not a currency working surface."
+    ],
+    "fields": {
+      "Configuration": {
+        "UI": {
+          "inclusion": "None"
+        }
+      }
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: Currencies&RelatedEntity=MJ_BizApps_Accounting: Accounting Company Profiles&RelatedEntityJoinField=FunctionalCurrencyCode"
+    }
+  },
+  {
+    "_comments": [
+      "Tax Jurisdiction form: rates stay first-class."
+    ],
+    "fields": {
+      "Configuration": {
+        "UI": {
+          "inclusion": "Primary"
+        }
+      }
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: Tax Jurisdictions&RelatedEntity=MJ_BizApps_Accounting: Tax Rates&RelatedEntityJoinField=TaxJurisdictionID"
+    }
+  },
+  {
+    "_comments": [
+      "Tax Jurisdiction form: child jurisdictions stay first-class."
+    ],
+    "fields": {
+      "Configuration": {
+        "UI": {
+          "inclusion": "Primary"
+        }
+      }
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: Tax Jurisdictions&RelatedEntity=MJ_BizApps_Accounting: Tax Jurisdictions&RelatedEntityJoinField=ParentTaxJurisdictionID"
+    }
+  },
+  {
+    "_comments": [
+      "Tax Jurisdiction form: company nexus sits in More."
+    ],
+    "fields": {
+      "Configuration": {
+        "UI": {
+          "inclusion": "More"
+        }
+      }
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: Tax Jurisdictions&RelatedEntity=MJ_BizApps_Accounting: Company Tax Nexus&RelatedEntityJoinField=TaxJurisdictionID"
+    }
+  },
+  {
+    "_comments": [
+      "Tax Jurisdiction form: liabilities sit in More."
+    ],
+    "fields": {
+      "Configuration": {
+        "UI": {
+          "inclusion": "More"
+        }
+      }
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: Tax Jurisdictions&RelatedEntity=MJ_BizApps_Accounting: Tax Liabilities&RelatedEntityJoinField=TaxJurisdictionID"
+    }
+  }
+]
