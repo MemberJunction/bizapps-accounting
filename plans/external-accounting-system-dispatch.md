@@ -277,6 +277,12 @@ instance: batch Posted, `MOCK-…` ref, all JEs GLPosted · commit.
 
 ## 8 · Out of scope (explicitly deferred)
 
+- **External reference option B** (ruled 2026-08-14): v1 uses our documentNumber (= batch number)
+  as `ExternalJournalEntryBatchRef` — BC's `Microsoft.NAV.post` returns 204 with no reference.
+  Upgrade: post-post read of `generalLedgerEntries?$filter=documentNumber eq '…'` storing BC's own
+  entry-number range; implement TOGETHER with the real `VerifyPosted` (the same read serves both).
+  Documented in `BusinessCentralAccountingSystemAdapter.PostStagedJournal`'s doc block.
+
 - **Account-driven batch GROUPING at build + TargetSystem column removal** — accounting#68
   (Amith ruling 2026-08-14: real edge case, harden later; dispatch-time account-first resolution
   with loud mixed-system failure is the interim guarantee and is implemented in S3).

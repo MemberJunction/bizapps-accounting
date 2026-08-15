@@ -22,7 +22,8 @@
  */
 import { RegisterClass } from '@memberjunction/global';
 import type { MJCompanyIntegrationEntity } from '@memberjunction/core-entities';
-import { ConnectorFactory, BaseIntegrationConnector } from '@memberjunction/integration-engine';
+import { ConnectorFactory } from '@memberjunction/integration-engine';
+import { BusinessCentralConnector } from '@memberjunction/connector-business-central';
 import type { CreateRecordContext, CRUDResult } from '@memberjunction/integration-engine';
 import type { mjBizAppsAccountingJournalEntryLineEntity } from '@mj-biz-apps/accounting-entities';
 import { resolveExternalAccount } from '../JournalEntryBatchEngine.js';
@@ -51,7 +52,16 @@ export class BusinessCentralAccountingSystemAdapter extends BaseExternalAccounti
     try {
       const integration = await this.ResolveIntegration(context.System, context.ContextUser, context.Provider);
       const companyIntegration = await this.ResolveCompanyIntegration(integration, context.ContextUser, context.Provider);
-      const connector = ConnectorFactory.Resolve(integration);
+      const resolved = ConnectorFactory.Resolve(integration);
+      // Narrow NOW (design-in-advance, Marcelo 2026-08-14): the catalog row said BusinessCentral,
+      // so the Integration's ClassName must resolve to the BC connector — a mismatch is a
+      // misconfigured Integration row and must scream, not surface later as a weird API error.
+      if (!(resolved instanceof BusinessCentralConnector)) {
+        throw new Error(
+          `Integration '${integration.Name}' resolved to '${resolved.constructor.name}', not BusinessCentralConnector — its ClassName is misconfigured for a BusinessCentral catalog entry.`,
+        );
+      }
+      const connector: BusinessCentralConnector = resolved;
 
       const lineContexts = await this.BuildLineContexts(context, companyIntegration);
       const staged = await connector.BatchCreateRecords(lineContexts);
@@ -140,11 +150,19 @@ export class BusinessCentralAccountingSystemAdapter extends BaseExternalAccounti
    * discovery metadata but ships no invocation surface, and we add nothing to the connector
    * (Marcelo 2026-08-14 — Madhav builds it; requested same day: generic `InvokeBoundAction`
    * or a BC `PostJournal`). When his API lands, replace this method's body with that call
-   * (+ extract the posted journal's reference for the return) and delete the throw.
+   * and delete the throw.
+   *
+   * EXTERNAL REFERENCE (ruled 2026-08-14, option A now / option B later — tracked in the plan §8):
+   * `Microsoft.NAV.post` returns 204 No Content — BC hands back NO reference. v1 returns OUR
+   * documentNumber (= the batch number) as ExternalJournalEntryBatchRef: it is stamped on every
+   * posted G/L entry and searchable in BC's UI, so it is a functioning reference we control.
+   * UPGRADE (option B, implement with the real VerifyPosted — same read serves both): after the
+   * post, GET `generalLedgerEntries?$filter=documentNumber eq '<batchNumber>'` and store BC's own
+   * entry-number range as the reference; that read is also the Sent-limbo recovery probe.
    */
   private async PostStagedJournal(
     context: PostJournalEntryBatchContext,
-    _connector: BaseIntegrationConnector,
+    _connector: BusinessCentralConnector,
     _companyIntegration: MJCompanyIntegrationEntity,
   ): Promise<string> {
     throw new Error(

@@ -42,14 +42,12 @@ import {
   cancelJournalEntryBatch,
   pendingCompanies,
   EmptyJournalEntryBatchError,
-  type ErpPoster,
   type JournalEntryBatchTargetSystem,
   type BuildJournalEntryBatchResult,
   type BuildJournalEntryBatchOptions,
   type JournalEntryBatchPreviewResult,
 } from './JournalEntryBatchEngine.js';
 import { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
-import { ResolveExternalAccountingSystemAdapter } from './external-accounting-systems/BaseExternalAccountingSystemAdapter.js';
 import {
   IsApprovalOutcome,
   IsTaskDecisionOutcomeCode,
@@ -202,15 +200,10 @@ export interface DispatchJournalEntryBatchInput { JournalEntryBatchID: string }
 export interface DispatchJournalEntryBatchOutput { Status: string; ExternalJournalEntryBatchRef: string | null }
 
 /**
- * Dispatch an Approved batch to its external accounting system.
- *
- * The destination is METADATA-DRIVEN (plan D3/D13): the summary lines' GL accounts' ExternalSystem
- * decides where the batch goes (account-driven routing, v1 = the NON-SPLIT case: exactly one
- * distinct system across the lines, mixed ⇒ loud fail; the split-summary case is deferred). When
- * no account declares a system, the batch's own TargetSystem is the fallback selector. The name
- * resolves against the ExternalAccountingSystem catalog → DriverClass → ClassFactory adapter
- * (BusinessCentralAccountingSystemAdapter, MockAccountingSystemAdapter, …); every missing piece
- * fails loudly BEFORE any batch state changes (D6 — nothing ever falls back to Mock).
+ * Dispatch an Approved batch to its external accounting system. THIN by design (the four-surface
+ * doctrine): marshal the input and call the engine — routing (account-first, D13), catalog/adapter
+ * resolution, the three-phase state machine, and the one-transaction Posted flip ALL live in
+ * `sendJournalEntryBatch`. See the engine for the failure doctrine (D6 loud-fail; no Mock fallback).
  */
 @RegisterClass(BaseRemotableOperation, 'Accounting.DispatchJournalEntryBatch')
 export class DispatchJournalEntryBatchOperation extends BaseRemotableOperation<DispatchJournalEntryBatchInput, DispatchJournalEntryBatchOutput> {
@@ -218,67 +211,8 @@ export class DispatchJournalEntryBatchOperation extends BaseRemotableOperation<D
 
   protected async InternalExecute(input: DispatchJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<DispatchJournalEntryBatchOutput> {
     if (!input?.JournalEntryBatchID) throw new Error('DispatchJournalEntryBatch: JournalEntryBatchID is required.');
-
-    const batchRow = await this.loadBatchRow(input.JournalEntryBatchID, provider, user);
-    const summaryLines = await this.loadSummaryLineRows(batchRow, provider, user);
-    const systemName = await this.determineSystemName(batchRow, summaryLines, provider, user);
-    const { System, Adapter } = await ResolveExternalAccountingSystemAdapter(systemName, user, provider);
-
-    // Bridge the adapter into the engine's poster seam: the engine keeps owning the state machine
-    // (Approved→Sent→Posted/Failed + the one-transaction Posted flip); the adapter owns the wire.
-    const poster: ErpPoster = async (batch, lines, contextUser) => {
-      const result = await Adapter.PostJournalEntryBatch({ Batch: batch, SummaryLines: lines, System, ContextUser: contextUser, Provider: provider });
-      return { success: result.Success, externalJournalEntryBatchRef: result.ExternalRef, error: result.Error };
-    };
-
-    const batch = await sendJournalEntryBatch(input.JournalEntryBatchID, user, { gate: new TasksAppApprovalGate(provider), poster, provider });
+    const batch = await sendJournalEntryBatch(input.JournalEntryBatchID, user, { gate: new TasksAppApprovalGate(provider), provider });
     return { Status: batch.Status, ExternalJournalEntryBatchRef: batch.ExternalJournalEntryBatchRef ?? null };
-  }
-
-  private async loadBatchRow(batchId: string, provider: IMetadataProvider, user: UserInfo): Promise<{ ID: string; TargetSystem: string; SummaryJournalEntryID: string | null }> {
-    const rv = new RunView(provider as unknown as IRunViewProvider);
-    const res = await rv.RunView<{ ID: string; TargetSystem: string; SummaryJournalEntryID: string | null }>(
-      { EntityName: 'MJ_BizApps_Accounting: Journal Entry Batches', ExtraFilter: `ID='${batchId.replace(/'/g, "''")}'`, Fields: ['ID', 'TargetSystem', 'SummaryJournalEntryID'], ResultType: 'simple', BypassCache: true },
-      user,
-    );
-    const row = res.Success ? res.Results?.[0] : undefined;
-    if (!row) throw new Error(`DispatchJournalEntryBatch: batch ${batchId} not found${res.Success ? '' : `: ${res.ErrorMessage}`}`);
-    return row;
-  }
-
-  private async loadSummaryLineRows(batch: { SummaryJournalEntryID: string | null }, provider: IMetadataProvider, user: UserInfo): Promise<Array<{ GLAccountID: string }>> {
-    if (!batch.SummaryJournalEntryID) return [];
-    const rv = new RunView(provider as unknown as IRunViewProvider);
-    const res = await rv.RunView<{ GLAccountID: string }>(
-      { EntityName: 'MJ_BizApps_Accounting: Journal Entry Lines', ExtraFilter: `JournalEntryID='${batch.SummaryJournalEntryID}'`, Fields: ['GLAccountID'], ResultType: 'simple', BypassCache: true },
-      user,
-    );
-    return res.Success ? (res.Results ?? []) : [];
-  }
-
-  /** Account-driven routing (D13, non-split v1): one distinct account-declared system wins; mixed fails; none ⇒ the batch's TargetSystem. */
-  private async determineSystemName(
-    batch: { TargetSystem: string },
-    summaryLines: Array<{ GLAccountID: string }>,
-    provider: IMetadataProvider,
-    user: UserInfo,
-  ): Promise<string> {
-    const ids = [...new Set(summaryLines.map(l => l.GLAccountID))];
-    if (ids.length === 0) return batch.TargetSystem;
-    const rv = new RunView(provider as unknown as IRunViewProvider);
-    const res = await rv.RunView<{ ExternalSystem: string | null }>(
-      { EntityName: 'MJ_BizApps_Accounting: GL Accounts', ExtraFilter: `ID IN (${ids.map(i => `'${i}'`).join(',')})`, Fields: ['ExternalSystem'], ResultType: 'simple', BypassCache: true },
-      user,
-    );
-    if (!res.Success) throw new Error(`DispatchJournalEntryBatch: GL account lookup failed: ${res.ErrorMessage}`);
-    const declared = [...new Set((res.Results ?? []).map(r => r.ExternalSystem).filter((s): s is string => !!s && s.trim().length > 0))];
-    if (declared.length > 1) {
-      throw new Error(
-        `DispatchJournalEntryBatch: the summary lines' GL accounts declare ${declared.length} different external systems (${declared.join(', ')}) — ` +
-        `split-summary dispatch is not supported yet; the batch must resolve to ONE system.`,
-      );
-    }
-    return declared[0] ?? batch.TargetSystem;
   }
 }
 

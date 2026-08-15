@@ -53,6 +53,7 @@
  *   DOC:          plans/bizapps-accounting-master.md §7 (lifecycle + batching)
  */
 import { DatabaseProviderBase, IMetadataProvider, IRunViewProvider, UserInfo } from '@memberjunction/core';
+import type { mjBizAppsAccountingExternalAccountingSystemEntity } from '@mj-biz-apps/accounting-entities';
 import type {
   mjBizAppsAccountingJournalEntryBatchEntity,
   mjBizAppsAccountingJournalEntryEntity,
@@ -65,6 +66,10 @@ import {
   type NettableLine,
 } from '@mj-biz-apps/accounting-engine-base';
 import { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
+import {
+  BaseExternalAccountingSystemAdapter,
+  ResolveExternalAccountingSystemAdapter,
+} from './external-accounting-systems/BaseExternalAccountingSystemAdapter.js';
 import { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
 import { GetJournalEntryBatchSummaryEntryType } from './JournalEntryTypes.js';
 
@@ -725,31 +730,60 @@ export async function approveJournalEntryBatch(
 
 export interface SendJournalEntryBatchOptions {
   gate: JournalEntryBatchApprovalGate;
-  poster?: ErpPoster;
   /** The provider for this call — injected by the caller (required; no global fallback). */
   provider: IMetadataProvider;
+  /**
+   * TEST-ONLY seam: inject a pre-built adapter instead of resolving one from the
+   * ExternalAccountingSystem catalog (e.g. `new MockAccountingSystemAdapter()` in a harness).
+   * Production callers NEVER pass this — there is no default and no fallback: an unresolvable
+   * system fails loudly before any state changes (D6).
+   */
+  adapterOverride?: BaseExternalAccountingSystemAdapter;
 }
 
 /**
- * Send an APPROVED batch to the ERP. Requires the approval gate + Status='Approved'; then
- * Approved→Sent, posts the summary JE's lines to the ERP (all-or-nothing), and on confirmation
- * flips Sent→Posted + the member JEs AND the summary JE Batched→GLPosted.
+ * Send an APPROVED batch to its external accounting system. Requires the approval gate +
+ * Status='Approved'. The destination is METADATA-DRIVEN and ACCOUNT-FIRST (D13, non-split v1):
+ * the summary lines' GL accounts' ExternalSystem decides (exactly one distinct value wins; mixed
+ * systems fail loudly; none declared ⇒ the batch's TargetSystem string is the fallback selector),
+ * resolved against the ExternalAccountingSystem catalog → DriverClass → ClassFactory adapter.
+ *
+ * Three phases (D10x): (1) Approved→Sent — the small in-flight marker, saved BEFORE the external
+ * call; (2) the adapter posts (external HTTP — deliberately OUTSIDE any DB transaction: nothing
+ * can roll back the ERP; the adapter's own DB reads are read-only lookups and need no transaction
+ * either); (3) on confirmation, ONE provider transaction commits every local consequence
+ * (batch→Posted + ref, member + summary JEs→GLPosted).
  */
 export async function sendJournalEntryBatch(batchId: string, contextUser: UserInfo, options: SendJournalEntryBatchOptions): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
-  const p = resolveProviders(options.provider);
-  const poster = options.poster ?? mockErpPoster;
-  const batch = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
+  const provider = resolveProviders(options.provider);
+  const batch = await provider.md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
   if (!(await batch.Load(batchId))) throw new Error(`sendJournalEntryBatch: batch ${batchId} not found`);
   if (batch.Status !== 'Approved') throw new Error(`sendJournalEntryBatch: batch ${batchId} is ${batch.Status}, only an Approved batch can be sent`);
 
   await options.gate.assertApproved(batchId, contextUser); // throws if not CFO-approved
 
+  // Route + resolve the adapter BEFORE any state change — a missing catalog row / driver class /
+  // connection fails here, leaving the batch Approved (retryable after the config is fixed).
+  const summaryLines = await loadSummaryLines(batch, contextUser, provider);
+  const systemName = await determineExternalSystemName(batch, summaryLines, contextUser, provider);
+  let system: mjBizAppsAccountingExternalAccountingSystemEntity | null = null;
+  let adapter: BaseExternalAccountingSystemAdapter;
+  if (options.adapterOverride) {
+    adapter = options.adapterOverride;
+  } else {
+    const resolved = await ResolveExternalAccountingSystemAdapter(systemName, contextUser, options.provider);
+    system = resolved.System;
+    adapter = resolved.Adapter;
+  }
+
   batch.Status = 'Sent';
   batch.SentAt = new Date();
   if (!(await batch.Save())) throw new Error(`sendJournalEntryBatch: Approved→Sent failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
 
-  const summaryLines = await loadSummaryLines(batch, contextUser, p);
-  const postResult = await poster(batch, summaryLines, contextUser);
+  const result = await adapter.PostJournalEntryBatch({
+    Batch: batch, SummaryLines: summaryLines, System: system as mjBizAppsAccountingExternalAccountingSystemEntity, ContextUser: contextUser, Provider: options.provider,
+  });
+  const postResult: ErpPostResult = { success: result.Success, externalJournalEntryBatchRef: result.ExternalRef, error: result.Error };
   if (!postResult.success) return failBatch(batch, postResult.error ?? 'ERP post failed');
 
   // Phase 3 (D10x): the ERP has CONFIRMED the post — every local consequence (batch→Posted + ref,
@@ -760,7 +794,7 @@ export async function sendJournalEntryBatch(batchId: string, contextUser: UserIn
   const dbProvider = options.provider as unknown as DatabaseProviderBase;
   await dbProvider.BeginTransaction();
   try {
-    const posted = await markBatchPosted(batch, postResult.externalJournalEntryBatchRef ?? null, contextUser, p);
+    const posted = await markBatchPosted(batch, postResult.externalJournalEntryBatchRef ?? null, contextUser, provider);
     await dbProvider.CommitTransaction();
     return posted;
   } catch (e) {
@@ -770,6 +804,36 @@ export async function sendJournalEntryBatch(batchId: string, contextUser: UserIn
       `but recording it locally failed and was rolled back — batch remains Sent; reconcile via the document-number probe. Cause: ${e instanceof Error ? e.message : String(e)}`,
     );
   }
+}
+
+
+/**
+ * Account-first routing (D13, non-split v1): the summary lines' GL accounts' distinct non-null
+ * ExternalSystem values — exactly one wins; MIXED systems fail loudly (a batch/JE can never
+ * straddle ledgers: balance is a per-ledger property, so fragments would unbalance BOTH GLs —
+ * accounting#68 tracks build-time enforcement); none declared ⇒ the batch's TargetSystem string.
+ */
+async function determineExternalSystemName(
+  batch: mjBizAppsAccountingJournalEntryBatchEntity,
+  summaryLines: mjBizAppsAccountingJournalEntryLineEntity[],
+  contextUser: UserInfo,
+  p: Providers,
+): Promise<string> {
+  const ids = [...new Set(summaryLines.map(l => l.GLAccountID))];
+  if (ids.length === 0) return batch.TargetSystem;
+  const res = await p.rv.RunView<{ ExternalSystem: string | null }>(
+    { EntityName: GL_ENTITY, ExtraFilter: `ID IN (${ids.map(i => `'${i}'`).join(',')})`, Fields: ['ExternalSystem'], ResultType: 'simple', BypassCache: true },
+    contextUser,
+  );
+  if (!res.Success) throw new Error(`sendJournalEntryBatch: GL account lookup for routing failed: ${res.ErrorMessage}`);
+  const declared = [...new Set((res.Results ?? []).map(r => r.ExternalSystem).filter((s): s is string => !!s && s.trim().length > 0))];
+  if (declared.length > 1) {
+    throw new Error(
+      `sendJournalEntryBatch: the summary lines' GL accounts declare ${declared.length} different external systems (${declared.join(', ')}) — ` +
+      `a batch cannot straddle systems (accounting#68); it must resolve to ONE.`,
+    );
+  }
+  return declared[0] ?? batch.TargetSystem;
 }
 
 /** The summary JE's lines — what the ERP receives. */
