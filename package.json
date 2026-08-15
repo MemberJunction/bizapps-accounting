@@ -23,6 +23,7 @@
     "mergemain": "node ci/merge_main.mjs",
     "mergemain:update-lock": "node ci/merge_main_and_update_lock.mjs",
     "db:rebuild": "scripts/rebuild-db.sh",
+    "test:integration": "node test-harnesses/integration.mjs",
     "db:append-codegen": "scripts/append-codegen.sh"
   },
   "repository": {
