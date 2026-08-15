@@ -30,7 +30,11 @@
  *   GATE:   ./TasksAppApprovalGate (the bizapps-tasks-backed CFO gate; provider-injected)
  */
 import { BaseRemotableOperation, IMetadataProvider, IRunViewProvider, RunView, UserInfo } from '@memberjunction/core';
-import { RegisterClass } from '@memberjunction/global';
+import { RegisterClass, UUIDsEqual } from '@memberjunction/global';
+import type {
+  mjBizAppsAccountingJournalEntryBatchEntity,
+  mjBizAppsAccountingAccountingCompanyProfileEntity,
+} from '@mj-biz-apps/accounting-entities';
 import {
   buildJournalEntryBatch,
   buildJournalEntryBatchFromExplicitIds,
@@ -57,6 +61,8 @@ import {
 } from '@mj-biz-apps/tasks-core';
 
 const PERSON_ENTITY = 'MJ_BizApps_Common: People';
+const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
+const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 
 // ─── Accounting.PreviewJournalEntryBatch + Accounting.BuildJournalEntryBatch ─────────────────────────
 
@@ -247,11 +253,38 @@ export class RecordJournalEntryBatchDecisionOperation extends BaseRemotableOpera
 
     // Ask tasks what the outcome MEANS rather than re-deciding it here from literals.
     if (IsApprovalOutcome(input.Decision)) {
+      // Segregation of duties: only the batch's assigned per-company CFO may approve (flip the batch
+      // to Approved/dispatchable). Recording a decision is not authorization on its own — enforce the
+      // gate's contract (TasksAppApprovalGate: AccountingCompanyProfile.ApprovalCFOUserID) here, on the
+      // APPROVED path only. Rejections/other outcomes remain unchanged.
+      await this.requireAssignedCFO(input.JournalEntryBatchID, user, provider);
       await approveJournalEntryBatch(input.JournalEntryBatchID, user.ID, user, provider);
     } else {
       await cancelJournalEntryBatch(input.JournalEntryBatchID, user, provider);
     }
     return { Recorded: true };
+  }
+
+  /**
+   * Require that `user` is the assigned CFO for the batch's company before an Approved outcome takes
+   * effect. Resolves the batch's CompanyID → AccountingCompanyProfile.ApprovalCFOUserID and throws a
+   * clear authorization error unless it equals the caller. Mirrors TasksAppApprovalGate's per-company
+   * CFO field (no role fallback).
+   */
+  private async requireAssignedCFO(batchId: string, user: UserInfo, provider: IMetadataProvider): Promise<void> {
+    const batch = await provider.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, user);
+    if (!(await batch.Load(batchId))) throw new Error(`RecordBatchDecision: batch ${batchId} not found.`);
+    const acp = await provider.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, user);
+    if (!(await acp.Load(batch.CompanyID))) {
+      throw new Error(`RecordBatchDecision: no AccountingCompanyProfile for company ${batch.CompanyID}.`);
+    }
+    const cfoUserId = acp.ApprovalCFOUserID;
+    if (!cfoUserId) {
+      throw new Error(`RecordBatchDecision: no CFO configured for company ${batch.CompanyID}; only the assigned CFO may approve.`);
+    }
+    if (!UUIDsEqual(user.ID, cfoUserId)) {
+      throw new Error(`RecordBatchDecision: not authorized — only the assigned CFO may approve journal-entry batch ${batchId}.`);
+    }
   }
 
   /**
