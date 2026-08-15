@@ -16,7 +16,7 @@
     "test": "echo \"No tests configured yet\""
   },
   "author": "MemberJunction.com",
-  "license": "ISC",
+  "license": "BUSL-1.1",
   "dependencies": {
     "@mj-biz-apps/accounting-engine-base": "0.1.0",
     "@mj-biz-apps/accounting-entities": "0.1.0",
