@@ -1,0 +1,8 @@
+{
+  "reason": "The app has never had a PostgreSQL migration set. The baseline is 40k lines of CodeGen output and needs `mj migrate convert --split --bake-codegen` against a live PG instance, not a textual conversion.",
+  "note": "DEBT, recorded so it is visible rather than silent. Removing an entry means writing the port and replaying it against a real PostgreSQL instance. Adding one is not a way to skip that work.",
+  "unported": [
+    "B202605281200__v1.0.x__Schema_and_Tables.sql",
+    "V202608062100__v1.0.x__ACP_form_layout.sql"
+  ]
+}
