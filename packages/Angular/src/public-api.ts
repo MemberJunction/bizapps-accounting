@@ -56,6 +56,10 @@ import { CLASS_REGISTRATIONS } from './lib/generated/class-registrations-manifes
 export { CLASS_REGISTRATIONS } from './lib/generated/class-registrations-manifest';
 export { GeneratedFormsModule } from './lib/generated/generated-forms.module';
 export { CustomFormsModule } from './lib/custom/custom-forms.module';
+export { JournalEntryBatchHeaderPanel } from './lib/custom/form-panels/journal-entry-batch-header.panel';
+export { JournalEntryBatchOverviewPanel, JournalEntryBatchOverviewComponent } from './lib/custom/form-panels/journal-entry-batch-overview.panel';
+export { CompanyAccountingHeaderPanel } from './lib/custom/form-panels/company-accounting-header.panel';
+export { CompanyAccountingOverviewPanel, CompanyAccountingOverviewComponent } from './lib/custom/form-panels/company-accounting-overview.panel';
 export { JournalEntryBatchDispatchModule } from './lib/custom/JournalEntryBatchDispatch/journal-entry-batch-dispatch.module';
 export { ReadModelsModule } from './lib/custom/shared/read-models.module';
 // Shared bizapps detail surfaces (slide-in + centered dialog over the MJ form host). Exported so orders reuses the

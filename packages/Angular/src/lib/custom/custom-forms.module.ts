@@ -20,9 +20,24 @@ import { MJButtonDirective, MJEmptyStateComponent, MJDropdownComponent } from '@
 import { JournalEntryFormComponentExtended, LoadJournalEntryFormComponentExtended } from './JournalEntry/journal-entry-form.component';
 import { GLAccountFormComponentExtended, LoadGLAccountFormComponentExtended } from './GLAccount/gl-account-form.component';
 
+// Hero Headers & Overview Panels
+import { JournalEntryBatchHeaderPanel } from './form-panels/journal-entry-batch-header.panel';
+import { JournalEntryBatchOverviewPanel, JournalEntryBatchOverviewComponent } from './form-panels/journal-entry-batch-overview.panel';
+import { CompanyAccountingHeaderPanel } from './form-panels/company-accounting-header.panel';
+import { CompanyAccountingOverviewPanel, CompanyAccountingOverviewComponent } from './form-panels/company-accounting-overview.panel';
+
+const ACCOUNTING_PANELS = [
+  JournalEntryFormComponentExtended,
+  GLAccountFormComponentExtended,
+  JournalEntryBatchHeaderPanel,
+  JournalEntryBatchOverviewPanel,
+  CompanyAccountingHeaderPanel,
+  CompanyAccountingOverviewPanel,
+];
+
 @NgModule({
-  declarations: [JournalEntryFormComponentExtended, GLAccountFormComponentExtended],
-  imports: [MJDropdownComponent, 
+  declarations: [...ACCOUNTING_PANELS],
+  imports: [
     CommonModule,
     FormsModule,
     BaseFormsModule,
@@ -31,8 +46,15 @@ import { GLAccountFormComponentExtended, LoadGLAccountFormComponentExtended } fr
     SharedGenericModule,
     MJButtonDirective,
     MJEmptyStateComponent,
+    MJDropdownComponent,
+    JournalEntryBatchOverviewComponent,
+    CompanyAccountingOverviewComponent,
   ],
-  exports: [JournalEntryFormComponentExtended, GLAccountFormComponentExtended],
+  exports: [
+    ...ACCOUNTING_PANELS,
+    JournalEntryBatchOverviewComponent,
+    CompanyAccountingOverviewComponent,
+  ],
 })
 export class CustomFormsModule {}
 
