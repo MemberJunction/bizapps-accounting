@@ -45,7 +45,6 @@ import { JournalEntriesCategoryResourceComponent } from './journal-entries-categ
 import { AllJournalEntriesPageComponent } from './pages/all-journal-entries.page';
 import { AllBatchesPageComponent } from './pages/all-batches.page';
 import { BatchDetailPanelComponent } from './pages/batch-detail-panel.component';
-import { JEWorkspacePageComponent } from './pages/je-workspace.page';
 import { JEApprovalsPageComponent } from './pages/je-approvals.page';
 import { JournalEntryBatchWorkspacePageComponent } from './pages/journal-entry-batch-workspace.page';
 import { DispatchStatusPageComponent } from './pages/dispatch-status.page';
@@ -82,7 +81,6 @@ import { MJAListToolbarComponent } from '../shared/list-toolbar.component';
     JournalEntriesCategoryComponent,
     JournalEntriesCategoryResourceComponent,
     AllJournalEntriesPageComponent,
-    JEWorkspacePageComponent,
     JEApprovalsPageComponent,
     JournalEntryBatchWorkspacePageComponent,
     DispatchStatusPageComponent,
@@ -138,7 +136,6 @@ import { MJAListToolbarComponent } from '../shared/list-toolbar.component';
     JournalEntriesCategoryComponent,
     JournalEntriesCategoryResourceComponent,
     AllJournalEntriesPageComponent,
-    JEWorkspacePageComponent,
     JEApprovalsPageComponent,
     JournalEntryBatchWorkspacePageComponent,
     DispatchStatusPageComponent,

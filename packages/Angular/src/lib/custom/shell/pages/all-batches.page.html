@@ -79,10 +79,3 @@
   </div>
   </div>
 </mj-page-body-interior>
-
-<!-- Row detail: identity, dispatch trail, totals, member entries; workspace + pop-out verbs. -->
-<mj-batch-detail-panel
-  [JournalEntryBatchID]="SelectedID"
-  (Closed)="OnDetailClosed()"
-  (OpenInWorkspace)="OnOpenInWorkspace($event)">
-</mj-batch-detail-panel>

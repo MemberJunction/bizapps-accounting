@@ -30,8 +30,15 @@
       }
       <!-- The category's create verb, promoted from the page headers (Marcelo 2026-08-04) — the
            same slot orders' primary action occupies, so every app's top-right reads identically. -->
-      <button type="button" class="mj-btn mj-btn--primary" (click)="GoToPage('workspace')">
-        <i class="fa-solid fa-plus" aria-hidden="true"></i> New JE batch
+      @if (BuildMessage) {
+        <span role="status">{{ BuildMessage }}</span>
+      }
+      <button type="button" class="mj-btn mj-btn--primary" [disabled]="Building" (click)="BuildJournalEntryBatch()">
+        @if (Building) {
+          <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Building…
+        } @else {
+          <i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i> Build JE batch
+        }
       </button>
     </div>
   </mj-page-header>
@@ -52,18 +59,12 @@
           <mj-batches-dashboard-page></mj-batches-dashboard-page>
         }
         @case ('all-batches') {
-          <!-- The list-idiom page (2026-08-04) — replaced the old BatchStatus dashboard here; that
-               dashboard still exists and can host elsewhere if wanted. -->
           <mj-all-batches-page
-           
-            (WorkspaceRequested)="GoToPage('workspace', $event)">
+            (RecordOpened)="OpenJournalEntryBatch($event)">
           </mj-all-batches-page>
         }
         @case ('approvals') {
           <mj-batch-dispatch-dashboard></mj-batch-dispatch-dashboard>
-        }
-        @case ('workspace') {
-          <mj-batch-workspace-page [FocusJournalEntryBatchID]="PageParam"></mj-batch-workspace-page>
         }
         @case ('dispatch') {
           <mj-dispatch-status-page></mj-dispatch-status-page>

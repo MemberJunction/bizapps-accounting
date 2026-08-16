@@ -69,7 +69,18 @@ export class JournalEntryFormComponentExtended extends mjBizAppsAccountingJourna
 
   override async ngOnInit(): Promise<void> {
     await super.ngOnInit();
-    await this.loadLines();
+    if (this.record?.IsSaved) {
+      await this.loadLines();
+    }
+  }
+
+  /** After CreateJournalEntry, reload this Explorer tab as the minted entry. */
+  public async OnComposeCreated(id: string): Promise<void> {
+    if (!id || !this.record) return;
+    if (await this.record.Load(id)) {
+      await this.loadLines();
+      this.cdr.markForCheck();
+    }
   }
 
   // ─── status timeline ─────────────────────────────────────────────────────
