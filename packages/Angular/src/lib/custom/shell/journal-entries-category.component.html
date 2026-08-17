@@ -31,7 +31,7 @@
       }
       <!-- The category's create verb, promoted from the page headers (Marcelo 2026-08-04) — the
            same slot orders' primary action occupies, so every app's top-right reads identically. -->
-      <button type="button" class="mj-btn mj-btn--primary" (click)="GoToPage('workspace')">
+      <button type="button" class="mj-btn mj-btn--primary" (click)="OpenNewJournalEntry()">
         <i class="fa-solid fa-plus" aria-hidden="true"></i> New journal entry
       </button>
     </div>
@@ -56,15 +56,11 @@
         }
         @case ('all-entries') {
           <mj-all-journal-entries-page
-           
-            (WorkspaceRequested)="GoToPage('workspace', $event)">
+            (RecordOpened)="OpenJournalEntry($event)">
           </mj-all-journal-entries-page>
         }
-        @case ('workspace') {
-          <mj-je-workspace-page [FocusEntryID]="PageParam"></mj-je-workspace-page>
-        }
         @case ('approvals') {
-          <mj-je-approvals-page></mj-je-approvals-page>
+          <mj-je-approvals-page (RecordOpened)="OpenJournalEntry($event)"></mj-je-approvals-page>
         }
         @default {
           <mj-shell-page-pending [PageName]="PendingPageName(ActivePageId)"></mj-shell-page-pending>

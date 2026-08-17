@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, ChangeDetectorRef, ElementRef, Input, ViewChild, inject, OnInit } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef, ElementRef, EventEmitter, Input, Output, ViewChild, inject, OnInit } from '@angular/core';
 import { Metadata, type IRemoteOperationProvider } from '@memberjunction/core';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
 import { NormalizeUUID, UUIDsEqual } from '@memberjunction/global';
@@ -74,6 +74,13 @@ export interface DimensionColumn {
 export class JEWorkspacePageComponent extends BaseAngularComponent implements OnInit {
   private cdr = inject(ChangeDetectorRef);
   public Scope = inject(CompanyScopeService);
+
+  /**
+   * When hosted on the new-record form, create once and emit — do not open another draft tab.
+   * The form then Loads the minted entry so the Explorer tab becomes the viewer.
+   */
+  @Input() SingleShot = false;
+  @Output() Created = new EventEmitter<string>();
 
   private tabs = new WorkspaceTabStore<JEDraftState>();
   private client = new JEWorkspaceClient();
@@ -645,12 +652,12 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
         this.tabs.UpdateState(this.tabs.ActiveId, d, false);
         this.tabs.SetStatus(this.tabs.ActiveId, 'complete');
       }
-      // A memo-less entry now falls back to its freshly-minted number (touch() no longer fires on a
-      // locked receipt); a memo'd entry keeps its memo caption.
       this.renameActiveTab(this.jeTabLabel());
-      // On confirm, behave like a form that refreshes (Marcelo 2026-07-21): open a FRESH tab so the
-      // operator can immediately enter the next entry. The just-created entry stays in its own tab,
-      // read-only, for review. (openNewDraft clears messages, so set the confirmation after it.)
+      const createdId = result.JournalEntryID;
+      if (this.SingleShot && createdId) {
+        this.Created.emit(createdId);
+        return;
+      }
       const createdNumber = d.CreatedEntryNumber;
       await this.openNewDraft();
       this.ActionMessage = `Created entry ${createdNumber} — Pending, in the unbatched pool. Its tab is kept for review; this is a fresh entry.`;

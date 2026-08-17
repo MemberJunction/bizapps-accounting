@@ -2,10 +2,12 @@ import { Component, ChangeDetectionStrategy } from '@angular/core';
 import { RegisterClass } from '@memberjunction/global';
 import { BaseDashboard } from '@memberjunction/ng-shared';
 import { ResourceData } from '@memberjunction/core-entities';
-import { RunView } from '@memberjunction/core';
+import { CompositeKey, RunView } from '@memberjunction/core';
+import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
 import { MJLeftNavSection } from '@memberjunction/ng-ui-components';
 import { CategoryShellBase } from './category-shell.base';
 import { PageRefreshService } from '../../transfer-pending/shell-refresh/page-refresh.service';
+import { JournalEntryBatchDispatchClient } from '../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 
@@ -52,7 +54,6 @@ export class BatchesCategoryComponent extends CategoryShellBase {
           // batches"), tool pages take the established "JE" abbreviation ("JE workspace" ↔
           // "JE batch workspace").
           { id: 'all-batches', label: 'All journal entry batches', icon: 'fa-solid fa-layer-group' },
-          { id: 'workspace', label: 'JE batch workspace', icon: 'fa-solid fa-diagram-project' },
           {
             id: 'approvals',
             label: 'JE batch approvals',
@@ -76,6 +77,49 @@ export class BatchesCategoryComponent extends CategoryShellBase {
 
   protected async loadCategoryData(): Promise<void> {
     await this.loadApprovalBadge();
+  }
+
+  public Building = false;
+  public BuildMessage: string | null = null;
+  public BuildIsError = false;
+
+  public OpenJournalEntryBatch(id: string): void {
+    if (!id) return;
+    this.navigationService.OpenEntityRecord(BATCH_ENTITY, CompositeKey.FromID(id));
+  }
+
+  /**
+   * Build is the create verb for batches — they are not blank records.
+   * Same remote op the old workspace used, without the include/exclude session.
+   */
+  public async BuildJournalEntryBatch(): Promise<void> {
+    if (this.Building) return;
+    this.Building = true;
+    this.BuildMessage = null;
+    this.BuildIsError = false;
+    this.cdr.markForCheck();
+    try {
+      const client = new JournalEntryBatchDispatchClient(this.ProviderToUse as GraphQLDataProvider);
+      const res = await client.BuildJournalEntryBatch('BusinessCentral');
+      if (res.Success && res.NothingToBatch) {
+        this.BuildMessage = 'No pending journal entries to batch.';
+        this.BuildIsError = false;
+      } else if (res.Success && res.JournalEntryBatchID) {
+        this.BuildMessage = null;
+        await this.loadApprovalBadge();
+        this.OpenJournalEntryBatch(res.JournalEntryBatchID);
+      } else if (res.Success) {
+        this.BuildMessage = `Built ${res.JECount} journal entries across ${res.CompanyCount} company(ies).`;
+        this.BuildIsError = false;
+        await this.loadApprovalBadge();
+      } else {
+        this.BuildMessage = res.ErrorMessage ?? 'Build failed.';
+        this.BuildIsError = true;
+      }
+    } finally {
+      this.Building = false;
+      this.cdr.markForCheck();
+    }
   }
 
   /** Pending batches are the ones sitting in the approval inbox. Count-only read. */

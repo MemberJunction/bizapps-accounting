@@ -15,10 +15,20 @@ import { LinkDirectivesModule } from '@memberjunction/ng-link-directives';
 
 // Loading / empty-state + buttons.
 import { SharedGenericModule } from '@memberjunction/ng-shared-generic';
-import { MJButtonDirective, MJEmptyStateComponent, MJDropdownComponent } from '@memberjunction/ng-ui-components';
+import {
+  MJButtonDirective,
+  MJEmptyStateComponent,
+  MJDropdownComponent,
+  MJPageBodyInteriorComponent,
+  MJStatBadgeComponent,
+} from '@memberjunction/ng-ui-components';
 
 import { JournalEntryFormComponentExtended, LoadJournalEntryFormComponentExtended } from './JournalEntry/journal-entry-form.component';
 import { GLAccountFormComponentExtended, LoadGLAccountFormComponentExtended } from './GLAccount/gl-account-form.component';
+import { JEWorkspacePageComponent } from './shell/pages/je-workspace.page';
+import { WorkspaceTabStripComponent } from '../transfer-pending/workspace-tabs/workspace-tab-strip.component';
+import { WorkspaceCardComponent } from '../transfer-pending/workspace-tabs/workspace-card.component';
+import { WorkspaceTipDirective } from '../transfer-pending/workspace-tabs/workspace-tip.directive';
 
 // Hero Headers & Overview Panels
 import { JournalEntryBatchHeaderPanel } from './form-panels/journal-entry-batch-header.panel';
@@ -28,6 +38,7 @@ import { CompanyAccountingOverviewPanel, CompanyAccountingOverviewComponent } fr
 
 const ACCOUNTING_PANELS = [
   JournalEntryFormComponentExtended,
+  JEWorkspacePageComponent,
   GLAccountFormComponentExtended,
   JournalEntryBatchHeaderPanel,
   JournalEntryBatchOverviewPanel,
@@ -47,6 +58,11 @@ const ACCOUNTING_PANELS = [
     MJButtonDirective,
     MJEmptyStateComponent,
     MJDropdownComponent,
+    MJPageBodyInteriorComponent,
+    MJStatBadgeComponent,
+    WorkspaceTabStripComponent,
+    WorkspaceCardComponent,
+    WorkspaceTipDirective,
     JournalEntryBatchOverviewComponent,
     CompanyAccountingOverviewComponent,
   ],

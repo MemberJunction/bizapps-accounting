@@ -1,4 +1,13 @@
-@if (record) {
+@if (record && !record.IsSaved) {
+  <mj-record-form-container [Record]="record" [FormComponent]="this"
+      (Navigate)="OnFormNavigate($event)"
+      (DeleteRequested)="OnDeleteRequested()"
+      (FavoriteToggled)="OnFavoriteToggled()"
+      (HistoryRequested)="OnHistoryRequested()"
+      (ListManagementRequested)="OnListManagementRequested()">
+    <mj-je-workspace-page [SingleShot]="true" (Created)="OnComposeCreated($event)"></mj-je-workspace-page>
+  </mj-record-form-container>
+} @else if (record) {
 <mj-record-form-container [Record]="record" [FormComponent]="this"
     (Navigate)="OnFormNavigate($event)"
     (DeleteRequested)="OnDeleteRequested()"
