@@ -15,8 +15,8 @@ export class mjBizAppsAccountingCurrencySpotRateFormComponent extends BaseFormCo
     override async ngOnInit() {
         await super.ngOnInit();
         this.initSections([
-            { sectionKey: 'exchangeRateDetails', sectionName: 'Exchange Rate Details', isExpanded: true },
-            { sectionKey: 'configuration', sectionName: 'Configuration', isExpanded: true },
+            { sectionKey: 'currencyDetails', sectionName: 'Currency Details', isExpanded: true },
+            { sectionKey: 'rateInformation', sectionName: 'Rate Information', isExpanded: true },
             { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false }
         ]);
     }

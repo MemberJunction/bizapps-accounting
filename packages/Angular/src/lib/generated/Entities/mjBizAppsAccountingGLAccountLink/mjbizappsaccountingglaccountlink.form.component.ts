@@ -18,7 +18,7 @@ export class mjBizAppsAccountingGLAccountLinkFormComponent extends BaseFormCompo
         this.initSections([
             { sectionKey: 'accountingMapping', sectionName: 'Accounting Mapping', isExpanded: true },
             { sectionKey: 'targetRecord', sectionName: 'Target Record', isExpanded: true },
-            { sectionKey: 'lifecycleAndValidity', sectionName: 'Lifecycle and Validity', isExpanded: true },
+            { sectionKey: 'configuration', sectionName: 'Configuration', isExpanded: true },
             { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingGLAccountLinkDimensions', sectionName: 'GL Account Link Dimensions', isExpanded: false }
         ]);

@@ -16,7 +16,7 @@ export class mjBizAppsAccountingJournalEntryLineDimensionFormComponent extends B
         await super.ngOnInit();
         this.initSections([
             { sectionKey: 'journalEntryDetails', sectionName: 'Journal Entry Details', isExpanded: true },
-            { sectionKey: 'dimensionAssignment', sectionName: 'Dimension Assignment', isExpanded: true },
+            { sectionKey: 'dimensionConfiguration', sectionName: 'Dimension Configuration', isExpanded: true },
             { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false }
         ]);
     }

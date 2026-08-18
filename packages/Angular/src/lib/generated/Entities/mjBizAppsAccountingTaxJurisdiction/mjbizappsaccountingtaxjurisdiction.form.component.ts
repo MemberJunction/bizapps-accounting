@@ -16,16 +16,14 @@ export class mjBizAppsAccountingTaxJurisdictionFormComponent extends BaseFormCom
     override async ngOnInit() {
         await super.ngOnInit();
         this.initSections([
-            { sectionKey: 'jurisdictionDefinition', sectionName: 'Jurisdiction Definition', isExpanded: true },
-            { sectionKey: 'geographicScoping', sectionName: 'Geographic Scoping', isExpanded: true },
-            { sectionKey: 'hierarchyAndScope', sectionName: 'Hierarchy and Scope', isExpanded: true },
-            { sectionKey: 'statusAndMetadata', sectionName: 'Status and Metadata', isExpanded: false },
-            { sectionKey: 'details', sectionName: 'Details', isExpanded: true },
+            { sectionKey: 'jurisdictionConfiguration', sectionName: 'Jurisdiction Configuration', isExpanded: true },
+            { sectionKey: 'geographicScope', sectionName: 'Geographic Scope', isExpanded: true },
+            { sectionKey: 'relationships', sectionName: 'Relationships', isExpanded: true },
             { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingTaxJurisdictions', sectionName: 'Tax Jurisdictions', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingTaxLiabilities', sectionName: 'Tax Liabilities', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingCompanyTaxNexus', sectionName: 'Company Tax Nexus', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingTaxRates', sectionName: 'Tax Rates', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingTaxLiabilities', sectionName: 'Tax Liabilities', isExpanded: false }
+            { sectionKey: 'mJBizAppsAccountingTaxJurisdictions', sectionName: 'Tax Jurisdictions', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingTaxRates', sectionName: 'Tax Rates', isExpanded: false }
         ]);
     }
 }

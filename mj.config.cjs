@@ -133,7 +133,7 @@ module.exports = {
   // Exclude core (__mj) AND the bizapps-common dependency schema: common's
   // entities + resolvers ship in its installed @mj-biz-apps/common-* packages,
   // so this app's CodeGen must not regenerate them locally.
-  excludeSchemas: ['sys', 'staging', 'dbo', '__mj', '__mj_BizAppsCommon', '__mj_BizAppsTasks'],
+  excludeSchemas: ['sys', 'staging', 'dbo', '__mj', '__mj_BizAppsCommon', '__mj_BizAppsTasks', '__mj_BizAppsOrders', '__mj_BizAppsIssues', '__mj_BizAppsMarketing', '__mj_BizAppsATS', '__mj_BizAppsCommittees', '__mj_BizAppsCaliber', '__mj_BizAppsForms'],
   // excludeTables: [
   //   { schema: '%', table: 'sys%' },
   //   { schema: '%', table: 'flyway_schema_history' }

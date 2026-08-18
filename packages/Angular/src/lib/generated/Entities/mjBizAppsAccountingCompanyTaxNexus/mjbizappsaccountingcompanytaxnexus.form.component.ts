@@ -16,8 +16,8 @@ export class mjBizAppsAccountingCompanyTaxNexusFormComponent extends BaseFormCom
         await super.ngOnInit();
         this.initSections([
             { sectionKey: 'nexusConfiguration', sectionName: 'Nexus Configuration', isExpanded: true },
-            { sectionKey: 'nexusDetails', sectionName: 'Nexus Details', isExpanded: true },
-            { sectionKey: 'timelineAndObligations', sectionName: 'Timeline and Obligations', isExpanded: true },
+            { sectionKey: 'registrationDetails', sectionName: 'Registration Details', isExpanded: true },
+            { sectionKey: 'timelineAndValidity', sectionName: 'Timeline and Validity', isExpanded: true },
             { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false }
         ]);
     }
