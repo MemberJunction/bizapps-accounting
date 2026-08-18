@@ -17,10 +17,8 @@ export class mjBizAppsAccountingAccountingCompanyProfileFormComponent extends Ba
         await super.ngOnInit();
         this.initSections([
             { sectionKey: 'accountingProfile', sectionName: 'Accounting Profile', isExpanded: true },
-            { sectionKey: 'jurisdictionAndOperations', sectionName: 'Jurisdiction and Operations', isExpanded: true },
-            { sectionKey: 'financialSettings', sectionName: 'Financial Settings', isExpanded: true },
-            { sectionKey: 'accountingGovernance', sectionName: 'Accounting Governance', isExpanded: true },
-            { sectionKey: 'details', sectionName: 'Details', isExpanded: true },
+            { sectionKey: 'accountingSettings', sectionName: 'Accounting Settings', isExpanded: true },
+            { sectionKey: 'governanceAndHierarchy', sectionName: 'Governance and Hierarchy', isExpanded: true },
             { sectionKey: 'companyDetails', sectionName: 'Company Details', isExpanded: true },
             { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingAccountingCompanyProfiles', sectionName: 'Accounting Company Profiles', isExpanded: false }

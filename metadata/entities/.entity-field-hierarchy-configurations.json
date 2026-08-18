@@ -1,0 +1,126 @@
+[
+  {
+    "_comments": [
+      "Seeds Hierarchy.IsHierarchy=true in EntityField.Configuration for GLAccount.ParentGLAccountID."
+    ],
+    "fields": {
+      "Name": "MJ_BizApps_Accounting: GL Accounts"
+    },
+    "relatedEntities": {
+      "MJ: Entity Fields": [
+        {
+          "fields": {
+            "Configuration": {
+              "Hierarchy": {
+                "IsHierarchy": true
+              }
+            }
+          },
+          "primaryKey": {
+            "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: GL Accounts&Name=ParentGLAccountID"
+          },
+          "sync": {
+            "lastModified": "2026-08-18T21:35:42.361Z",
+            "checksum": "c9d7f02681366f41bfee4d9aea7fcd14c0e8d47223c47f20891c562673cfefa1"
+          }
+        }
+      ]
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: GL Accounts"
+    }
+  },
+  {
+    "_comments": [
+      "Seeds Hierarchy.IsHierarchy=true in EntityField.Configuration for TaxJurisdiction.ParentTaxJurisdictionID."
+    ],
+    "fields": {
+      "Name": "MJ_BizApps_Accounting: Tax Jurisdictions"
+    },
+    "relatedEntities": {
+      "MJ: Entity Fields": [
+        {
+          "fields": {
+            "Configuration": {
+              "Hierarchy": {
+                "IsHierarchy": true
+              }
+            }
+          },
+          "primaryKey": {
+            "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Tax Jurisdictions&Name=ParentTaxJurisdictionID"
+          },
+          "sync": {
+            "lastModified": "2026-08-18T21:35:42.300Z",
+            "checksum": "c9d7f02681366f41bfee4d9aea7fcd14c0e8d47223c47f20891c562673cfefa1"
+          }
+        }
+      ]
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Tax Jurisdictions"
+    }
+  },
+  {
+    "_comments": [
+      "Seeds Hierarchy.IsHierarchy=true in EntityField.Configuration for DimensionValue.ParentDimensionValueID."
+    ],
+    "fields": {
+      "Name": "MJ_BizApps_Accounting: Dimension Values"
+    },
+    "relatedEntities": {
+      "MJ: Entity Fields": [
+        {
+          "fields": {
+            "Configuration": {
+              "Hierarchy": {
+                "IsHierarchy": true
+              }
+            }
+          },
+          "primaryKey": {
+            "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Dimension Values&Name=ParentDimensionValueID"
+          },
+          "sync": {
+            "lastModified": "2026-08-18T21:35:42.331Z",
+            "checksum": "c9d7f02681366f41bfee4d9aea7fcd14c0e8d47223c47f20891c562673cfefa1"
+          }
+        }
+      ]
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Dimension Values"
+    }
+  },
+  {
+    "_comments": [
+      "Seeds Hierarchy.IsHierarchy=true in EntityField.Configuration for AccountingCompanyProfile.ParentAccountingCompanyID."
+    ],
+    "fields": {
+      "Name": "MJ_BizApps_Accounting: Accounting Company Profiles"
+    },
+    "relatedEntities": {
+      "MJ: Entity Fields": [
+        {
+          "fields": {
+            "Configuration": {
+              "Hierarchy": {
+                "IsHierarchy": true
+              }
+            }
+          },
+          "primaryKey": {
+            "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Accounting Company Profiles&Name=ParentAccountingCompanyID"
+          },
+          "sync": {
+            "lastModified": "2026-08-18T21:35:42.386Z",
+            "checksum": "c9d7f02681366f41bfee4d9aea7fcd14c0e8d47223c47f20891c562673cfefa1"
+          }
+        }
+      ]
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Accounting Company Profiles"
+    }
+  }
+]

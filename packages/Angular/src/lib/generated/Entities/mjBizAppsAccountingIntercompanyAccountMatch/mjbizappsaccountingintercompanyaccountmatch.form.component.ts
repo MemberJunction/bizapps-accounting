@@ -16,9 +16,9 @@ export class mjBizAppsAccountingIntercompanyAccountMatchFormComponent extends Ba
     override async ngOnInit() {
         await super.ngOnInit();
         this.initSections([
-            { sectionKey: 'intercompanyRelationship', sectionName: 'Intercompany Relationship', isExpanded: true },
+            { sectionKey: 'intercompanyMapping', sectionName: 'Intercompany Mapping', isExpanded: true },
             { sectionKey: 'accountingConfiguration', sectionName: 'Accounting Configuration', isExpanded: true },
-            { sectionKey: 'lifecycleManagement', sectionName: 'Lifecycle Management', isExpanded: true },
+            { sectionKey: 'operationalStatus', sectionName: 'Operational Status', isExpanded: true },
             { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingIntercompanyAccountMatchDimensions', sectionName: 'Intercompany Account Match Dimensions', isExpanded: false }
         ]);
