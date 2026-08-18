@@ -1,0 +1,310 @@
+.mja-waterfall-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: var(--mj-space-3, 12px);
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.mja-waterfall-kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: var(--mj-space-3, 12px);
+    margin-bottom: var(--mj-space-2, 8px);
+}
+
+.mja-kpi-card {
+    background: var(--mj-bg-surface-card);
+    border: 1px solid var(--mj-border-default);
+    border-radius: var(--mj-radius-md, 8px);
+    padding: var(--mj-space-3, 12px) var(--mj-space-4, 16px);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.mja-kpi-label {
+    font-size: var(--mj-text-xs, 11px);
+    font-weight: var(--mj-font-semibold, 600);
+    color: var(--mj-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mja-kpi-val {
+    font-size: var(--mj-text-md, 15px);
+    font-weight: var(--mj-font-bold, 700);
+    font-family: var(--mj-font-mono, monospace);
+    color: var(--mj-text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mja-val--green { color: var(--mj-status-success-text); }
+.mja-val--amber { color: var(--mj-status-warning-text); }
+
+.mja-progress-track {
+    background: var(--mj-border-default);
+    border-radius: var(--mj-radius-full, 9999px);
+    height: 6px;
+    width: 100%;
+    overflow: hidden;
+}
+
+.mja-progress-fill {
+    background: var(--mj-brand-primary);
+    height: 100%;
+    border-radius: var(--mj-radius-full, 9999px);
+    transition: width 0.3s ease;
+}
+
+/* Multi-Term Legend */
+.mja-term-legend {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    background: var(--mj-bg-surface-sunken);
+    border: 1px solid var(--mj-border-subtle);
+    border-radius: var(--mj-radius-md, 8px);
+    font-size: var(--mj-text-xs, 11px);
+}
+
+.mja-legend-title {
+    font-weight: var(--mj-font-bold, 700);
+    color: var(--mj-text-muted);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.mja-legend-chips {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.mja-term-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: var(--mj-radius-full, 9999px);
+    font-weight: var(--mj-font-semibold, 600);
+    font-size: 11px;
+}
+
+/* Term badges are categorical cohort colors — they must stay distinct across themes. */
+.mja-term-badge--t1 {
+    background: color-mix(in srgb, var(--mj-status-info) 15%, var(--mj-bg-surface));
+    color: var(--mj-status-info-text);
+    border: 1px solid color-mix(in srgb, var(--mj-status-info) 35%, transparent);
+}
+.mja-term-badge--t2 {
+    background: color-mix(in srgb, var(--mj-brand-primary) 15%, var(--mj-bg-surface));
+    color: var(--mj-brand-primary);
+    border: 1px solid color-mix(in srgb, var(--mj-brand-primary) 35%, transparent);
+}
+.mja-term-badge--t3 {
+    background: color-mix(in srgb, var(--mj-status-success) 15%, var(--mj-bg-surface));
+    color: var(--mj-status-success-text);
+    border: 1px solid color-mix(in srgb, var(--mj-status-success) 35%, transparent);
+}
+.mja-term-badge--t4 {
+    background: color-mix(in srgb, var(--mj-status-warning) 15%, var(--mj-bg-surface));
+    color: var(--mj-status-warning-text);
+    border: 1px solid color-mix(in srgb, var(--mj-status-warning) 35%, transparent);
+}
+.mja-term-badge--t5 {
+    background: color-mix(in srgb, var(--mj-status-error) 15%, var(--mj-bg-surface));
+    color: var(--mj-status-error-text);
+    border: 1px solid color-mix(in srgb, var(--mj-status-error) 35%, transparent);
+}
+
+.mja-empty-waterfall {
+    padding: var(--mj-space-6, 24px);
+    text-align: center;
+    color: var(--mj-text-muted);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--mj-space-2, 8px);
+    font-size: var(--mj-text-sm, 13px);
+}
+
+/* Timeline Container with Year Groupings */
+.mja-timeline-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--mj-space-4, 16px);
+    min-width: 0;
+}
+
+.mja-year-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: var(--mj-bg-surface-sunken);
+    border: 1px solid var(--mj-border-subtle);
+    border-radius: var(--mj-radius-lg, 10px);
+    padding: 12px;
+    min-width: 0;
+}
+
+.mja-year-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 6px;
+    border-bottom: 1px dashed var(--mj-border-default);
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.mja-year-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--mj-text-sm, 13px);
+    font-weight: var(--mj-font-bold, 700);
+    color: var(--mj-text-primary);
+}
+
+.mja-year-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.mja-year-stat {
+    font-size: var(--mj-text-xs, 11px);
+    color: var(--mj-text-muted);
+}
+
+.mja-year-stat--green {
+    color: var(--mj-status-success-text);
+}
+
+.mja-year-months-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: var(--mj-space-2, 8px);
+    min-width: 0;
+}
+
+.mja-month-card {
+    background: var(--mj-bg-surface-card);
+    border: 1px solid var(--mj-border-default);
+    border-radius: var(--mj-radius-sm, 6px);
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    min-width: 0;
+}
+
+.mja-month-card:hover {
+    border-color: var(--mj-brand-primary);
+    box-shadow: var(--mj-shadow-xs, 0 1px 2px rgba(0, 0, 0, 0.05));
+    transform: translateY(-1px);
+}
+
+.mja-month-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.mja-month-name {
+    font-size: var(--mj-text-xs, 11px);
+    font-weight: var(--mj-font-bold, 700);
+    color: var(--mj-text-primary);
+    white-space: nowrap;
+}
+
+.mja-month-badges {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    flex-wrap: wrap;
+}
+
+.mja-term-pill {
+    font-size: 8.5px;
+    font-weight: var(--mj-font-bold, 700);
+    padding: 1px 4px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+}
+
+.mja-month-amount {
+    font-size: var(--mj-text-sm, 13px);
+    font-weight: var(--mj-font-bold, 700);
+    font-family: var(--mj-font-mono, monospace);
+    color: var(--mj-brand-primary);
+    white-space: nowrap;
+}
+
+.mja-month-entry-link {
+    font-size: 9.5px;
+    color: var(--mj-text-muted);
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mja-month-entry-link span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mja-chip {
+    font-size: 9px;
+    font-weight: var(--mj-font-bold, 700);
+    padding: 1px 4px;
+    border-radius: var(--mj-radius-full, 9999px);
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.mja-chip--released {
+    background: var(--mj-status-success-bg);
+    color: var(--mj-status-success-text);
+}
+
+.mja-chip--scheduled {
+    background: color-mix(in srgb, var(--mj-brand-primary) 12%, var(--mj-bg-surface));
+    color: var(--mj-brand-primary);
+}
+
+@media (max-width: 1024px) {
+    .mja-year-months-grid {
+        grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+        gap: 6px;
+    }
+    .mja-month-card {
+        padding: 6px 8px;
+    }
+    .mja-month-amount {
+        font-size: 12px;
+    }
+}
