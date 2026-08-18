@@ -72,6 +72,15 @@ export { CompanyScopeService, type ScopeCompany } from './lib/custom/shared/comp
 // UX). Presentation only: orders resolves with its own fallback chain and hands the result in.
 export { GlResolutionPreviewComponent, type GlResolutionResult, type GlResolutionStep } from './lib/custom/shared/gl-resolution-preview.component';
 export { CompanyScopeChipComponent } from './lib/custom/shared/company-scope-chip.component';
+// Deferred-revenue waterfall — consumed by orders Subscription / Subscription Term / Order Header forms.
+export {
+    DeferredRevenueWaterfallComponent,
+    type WaterfallMonthCell,
+    type WaterfallRow,
+    type WaterfallSummary,
+    type WaterfallYearGroup,
+} from './lib/components/deferred-revenue-waterfall/deferred-revenue-waterfall.component';
+export { DeferredRevenueWaterfallModule } from './lib/components/deferred-revenue-waterfall/deferred-revenue-waterfall.module';
 // (CustomerARBaseComponent + ReadModelsClient DELETED 2026-07-29 — Amith PR-27 dead-code sweep.
 //  Their vw_* backends were removed 2026-07-22; when reporting returns (item f) the A/R reads get
 //  rebuilt on RunQuery per the four-surface doctrine, not resurrected from these. Git history has
