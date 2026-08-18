@@ -1,5 +1,6 @@
 {
   "name": "@mj-biz-apps/accounting-integration-tests",
+  "license": "BUSL-1.1",
   "type": "module",
   "version": "0.1.0",
   "private": true,
