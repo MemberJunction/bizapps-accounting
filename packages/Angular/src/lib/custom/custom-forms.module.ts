@@ -1,7 +1,7 @@
 /**
- * Hand-written custom form components and overrides for BizApps Accounting.
- * Components declared here are loaded AFTER the generated module so their
- * @RegisterClass decorators win the priority race vs. the generated forms.
+ * Hand-written form contributions and remaining custom forms for BizApps Accounting.
+ * Journal Entry identity / overview / lines / reversal are BaseFormPanel registrations
+ * on the generated form (no *Extended class). GL Account still overrides via @RegisterClass.
  */
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -23,8 +23,11 @@ import {
   MJStatBadgeComponent,
 } from '@memberjunction/ng-ui-components';
 
-import { JournalEntryFormComponentExtended, LoadJournalEntryFormComponentExtended } from './JournalEntry/journal-entry-form.component';
 import { GLAccountFormComponentExtended, LoadGLAccountFormComponentExtended } from './GLAccount/gl-account-form.component';
+import { JournalEntryHeaderPanel } from './form-panels/journal-entry-header.panel';
+import { JournalEntryOverviewPanel } from './form-panels/journal-entry-overview.panel';
+import { JournalEntryLinesPanel } from './form-panels/journal-entry-lines.panel';
+import { JournalEntryReversalPanel } from './form-panels/journal-entry-reversal.panel';
 import { JEWorkspacePageComponent } from './shell/pages/je-workspace.page';
 import { WorkspaceTabStripComponent } from '../transfer-pending/workspace-tabs/workspace-tab-strip.component';
 import { WorkspaceCardComponent } from '../transfer-pending/workspace-tabs/workspace-card.component';
@@ -41,13 +44,16 @@ import { CompanyProfileHierarchyPanel } from './form-panels/company-profile-hier
 import { TaxJurisdictionHierarchyPanel } from './form-panels/tax-jurisdiction-hierarchy.panel';
 
 const ACCOUNTING_PANELS = [
-  JournalEntryFormComponentExtended,
   JEWorkspacePageComponent,
   GLAccountFormComponentExtended,
   JournalEntryBatchHeaderPanel,
   JournalEntryBatchOverviewPanel,
   CompanyAccountingHeaderPanel,
   CompanyAccountingOverviewPanel,
+  JournalEntryHeaderPanel,
+  JournalEntryOverviewPanel,
+  JournalEntryLinesPanel,
+  JournalEntryReversalPanel,
 ];
 
 @NgModule({
@@ -88,6 +94,11 @@ export class CustomFormsModule {}
 
 /** Tree-shaking prevention — anchors the custom forms' @RegisterClass decorators. */
 export function LoadCustomForms(): void {
-  LoadJournalEntryFormComponentExtended();
+  LoadJournalEntryFormPanels();
   LoadGLAccountFormComponentExtended();
+}
+
+/** Tree-shaking prevention — anchors the JE form-panel @RegisterClassEx decorators. */
+export function LoadJournalEntryFormPanels(): void {
+  // No-op.
 }

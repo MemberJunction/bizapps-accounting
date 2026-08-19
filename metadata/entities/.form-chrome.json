@@ -9,8 +9,9 @@
       "Configuration": {
         "UI": {
           "Form": {
-            "Layout": "accordion",
-            "RelatedRolePolicy": "keep-all-primary"
+            "Layout": "left-nav",
+            "RelatedRolePolicy": "smart",
+            "PrimaryRelatedBudget": 4
           }
         }
       }
@@ -19,8 +20,8 @@
       "ID": "@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entries"
     },
     "sync": {
-      "lastModified": "2026-08-14T20:00:47.858Z",
-      "checksum": "8533672f58f2144c24cab786fc89fb8a8abe6844654b45ca0fb3c806d5b61059"
+      "lastModified": "2026-08-19T22:16:38.803Z",
+      "checksum": "8d7d4e12e5a3ecc7f548bdb430c2216f9e423cc12cb1a64817fd9ea5d76a6943"
     }
   }
 ]
