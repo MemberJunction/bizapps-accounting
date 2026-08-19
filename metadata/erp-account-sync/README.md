@@ -17,17 +17,20 @@ A single `MJ: Company Integrations` record with a nested entity map and field ma
 
 | BC `accounts` field | → | `GLAccount` field | transform |
 |---|---|---|---|
-| `id` (SystemId GUID) | → | `ExternalAccountID` | direct · **key field** (dedup) |
-| `number` | → | `Code` | direct |
+| `id` (SystemId GUID) | → | `ExternalAccountID` | direct · stored for traceability, **not** a match key |
+| `number` | → | `Code` | direct · **key field** (with `CompanyID`) |
 | `displayName` | → | `Name` | direct |
-| `category` | → | `AccountType` | `lookup` (Assets→Asset, Liabilities→Liability, Equity→Equity, Income→Revenue, Cost of Goods Sold→Expense, Expense→Expense) |
+| `category` | → | `AccountType` | decode BC's OData option-set encoding (`_x0020_` → space, …), then `lookup` (Assets→Asset, Liabilities→Liability, Equity→Equity, Income→Revenue, **Cost of Goods Sold→Expense**, Expense→Expense); blank/uncategorized → `Default=null` → fails loudly |
 | `blocked` | → | `IsActive` | `custom` `!value` |
 | — (constant) | → | `ExternalSystem` | `custom` `'BusinessCentral'` |
-| — (constant) | → | `CompanyID` | `custom` literal — **wiring-time placeholder** |
+| — (constant) | → | `CompanyID` | `custom` literal · **key field** · wiring-time placeholder |
 
-Re-sync dedups on `ExternalAccountID` (the `IsKeyField` map) plus the engine's Record Map, so it
-**upserts** GL accounts rather than duplicating them. Writes go through `GLAccount.Save()`, so the
-`GLAccountEntityServer` hooks and DB invariants still apply.
+Re-sync matches on **(`Code`, `CompanyID`)** so BC accounts **upsert** onto the pre-seeded chart —
+whose rows have no `ExternalAccountID` — instead of colliding on `UQ_GLAccount_CompanyID_Code`; the
+first sync adopts each seeded row and writes `ExternalAccountID` onto it. (`ExternalAccountID` is
+deliberately *not* a key field: key fields are AND-ed, and the seeded rows have it null, so keying on
+it would exclude them and re-introduce the insert collision.) Writes go through `GLAccount.Save()`, so
+the `GLAccountEntityServer` hooks and DB invariants still apply.
 
 ## Prerequisites — carried by the branch (replicable)
 
@@ -57,57 +60,88 @@ Because of that one declaration, installing this accounting app anywhere (`mj ap
 No host-specific setup and no manual `mj sync push` of the connector's metadata is required — the
 dependency handles all three.
 
-## Wiring-time values (set these when creds are ready, then enable)
+## Ships active — credentials are the one manual step
 
-**Why this part is per-environment, not auto-seeded.** The connector (above) replicates automatically
-because it is environment-independent. The mapping records here (`Company Integration` → entity map →
-field maps) are **not** seeded by install, by design: a `Company Integration` binds to a specific
-`__mj.Company` and a specific `MJ: Credentials` record, both of which only exist per deployment.
-Baking a placeholder company/credential into a seed migration would create broken rows on every
-install. So this directory is the **dev-time source of truth** for the mapping; each environment sets
-its company + credentials and pushes it once (steps below). The mapping *logic* (field maps,
-transforms) is identical everywhere — only the company/credential binding differs.
+This config is authored **active**: `mj sync push` creates the CompanyIntegration, its entity/field
+maps, and the nightly job (`../erp-account-sync-schedule/`), and they stand up live — `IsActive: true`,
+job `Status: "Active"`, and neither directory gated in `metadata/.mj-sync.json`. Two bindings are
+per-environment:
 
-This config is authored **inert**. Before it can run:
+### Company
 
-1. **Company** — set env var `BIZAPPS_ACCOUNTING_COMPANY_ID` to the target `__mj.Company` UUID
-   (resolved at push into `CompanyIntegration.CompanyID`), **and** replace the placeholder UUID
-   `00000000-0000-0000-0000-000000000000` in the `CompanyID` field map's `TransformPipeline` with the
-   same value (env vars cannot resolve inside the transform JSON). The two must match.
-2. **Credentials** — create/attach a `MJ: Credentials` record holding the BC OAuth2 client-credentials
-   (client id/secret, tenant, environment) and set `CompanyIntegration.CredentialID` to it.
-3. **Enable** — set `CompanyIntegration.IsActive` to `true`.
-4. **Un-gate the push** — `metadata/.mj-sync.json` → `ignoreDirectories` lists both `erp-account-sync`
-   and `erp-account-sync-schedule` so a routine `mj sync push` skips them (they would otherwise fail on
-   the unresolved company/credential). Remove both entries, then `mj sync push` to create the
-   CompanyIntegration + entity map + field maps **and** the nightly scheduled job.
-5. **Activate the nightly job** — the scheduled job (`../erp-account-sync-schedule/`) is authored with
-   `Status: "Paused"` so it never fires before wiring. Flip it to `Status: "Active"` (in the metadata
-   then re-push, or directly on the `MJ: Scheduled Jobs` record) to enable the nightly sync.
+Set env var `BIZAPPS_ACCOUNTING_COMPANY_ID` to the target `__mj.Company` UUID (resolved at push into
+`CompanyIntegration.CompanyID`), **and** replace the placeholder UUID
+`00000000-0000-0000-0000-000000000000` in the `CompanyID` field map's `TransformPipeline` with the same
+value (env vars cannot resolve inside the transform JSON). The two must match.
+
+### Credentials — created manually, per environment, and NEVER in this metadata
+
+> ⚠️ **Do not add an `MJ: Credentials` record, or a `CredentialID` value, to these files.** A Business
+> Central OAuth2 credential is a per-environment secret and deliberately lives **outside** metadata sync.
+
+Two reasons this cannot be shipped in metadata:
+
+- **`mj sync push` would clobber it.** Push manages every record it ships — it re-applies the committed
+  field values on every run. A credential committed here (even an *empty* stub meant to be "filled in
+  later") would be overwritten back to its committed state on the very next push, silently wiping the
+  real secret an operator entered. This is why the otherwise-appealing "ship an empty, self-documenting
+  credential slot" pattern does **not** work.
+- **Secrets don't belong in git.** The real client id / secret / tenant would be committed.
+
+So in **each** environment, wire the credential by hand:
+
+1. **Create it** — Explorer → **MJ: Credentials**, `CredentialType` **`business-central-oauth2`**,
+   supplying `azureClientId`, `azureClientSecret`, `azureTenantId`, `companyId`, `environmentName`. MJ
+   stores these as an encrypted blob in `Credential.Values`, so the environment must have field-level
+   encryption configured (an `EncryptionKey` + a key source such as AWS KMS) or the save fails.
+2. **Attach it** — set this CompanyIntegration's **`CredentialID`** to that record, on the pushed
+   CompanyIntegration (in Explorer).
+
+**Why the manual attachment survives re-pushes.** `mj sync push` writes only the fields **present** in
+each metadata record; fields omitted from the JSON are left untouched on existing rows.
+`.business-central-gl-accounts.json` deliberately **omits `CredentialID`**, so re-pushing the mapping
+never resets your attachment, and the credential record itself is never in metadata so it is never
+touched. **This omission is load-bearing — do not add `CredentialID` to the file.**
+
+**Until the credential is created and attached, the nightly run does not error — it completes quietly.**
+With no credential, `FetchChanges` throws at OAuth setup on the first page, which the integration engine
+records as a first-page **Warning**, not a failure: the run finishes **`Status = Success` with 0 records**,
+nothing is written to `GLAccount`, and — because the run is not marked failed — **`NotifyOnFailure` does not
+fire**. The missing-credential error is captured only in that run's **`ErrorLog` as a Warning**
+(`ErrorCode: CONNECTOR_ERROR`), visible in `MJ: Company Integration Runs` history but not surfaced
+proactively. The watermark is held, so once the credential is attached the next run back-fills the full
+chart. (If you want an active alert instead of a quiet 0-record run, add a pre-flight credential check or
+monitor for `TotalRecords = 0` / `ErrorLog` warnings — not wired here.)
 
 ## Nightly schedule
 
 Nightly syncing is a committed `MJ: Scheduled Jobs` record in `../erp-account-sync-schedule/`, run by
 the scheduling-engine's `IntegrationSyncScheduledJobDriver` (which reads `Configuration.CompanyIntegrationID`
 and calls `IntegrationEngine.RunSync`). It is set to `0 2 * * *` (02:00 UTC daily, `FullSync=true`) and
-`Status: "Paused"`. The engine computes `NextRunAt` from the cron on its first poll once the job is
-`Active`. The Company Integration's own `ScheduleType`/`CronExpression` fields mirror this job for display
-only — the scheduled job is the actual trigger. (Alternatively, the `IntegrationCreateSchedule` GraphQL
-mutation / integration client creates the equivalent job at runtime.)
+authored `Status: "Active"`. The engine computes `NextRunAt` from the cron on its first poll. The
+Company Integration's own `ScheduleType`/`CronExpression`/`ScheduleEnabled` fields mirror this job for
+display only — the scheduled job is the actual trigger. (Alternatively, the `IntegrationCreateSchedule`
+GraphQL mutation / integration client creates the equivalent job at runtime.)
 
 ## Running the sync
 
-Once wired, run the **"Run Integration Sync"** action against this Company Integration (manually,
-on a schedule via `ScheduleType`/`ScheduleEnabled`, or from a UI trigger). Pass `FullSync='true'` on
-the first run to ignore watermarks and pull the whole chart. The engine fetches the `accounts` object,
-maps + upserts `GLAccount` rows, and records watermarks + an audit run (`MJ: Company Integration Runs`).
-The Chart of Accounts pages display the results immediately.
+Besides the nightly job, you can run the **"Run Integration Sync"** action against this Company
+Integration on demand (manually or from a UI trigger). Pass `FullSync='true'` on the first run to
+ignore watermarks and pull the whole chart. The engine fetches the `accounts` object, maps + upserts
+`GLAccount` rows, and records watermarks + an audit run (`MJ: Company Integration Runs`). The Chart of
+Accounts pages display the results immediately.
 
 ## Caveats
 
-- BC `accounts` includes **heading/total rows** whose `category` is blank; those fall to the lookup's
-  `Default=null` and fail the `AccountType` NOT NULL insert **loudly** (they are not postable
-  accounts). If you want them silently skipped instead, add a source-side filter on the entity map or
-  change the transform's `OnError`.
-- `ExternalAccountID` matching assumes this integration targets a **single company**; account identity
-  is unique within a company.
+- BC `accounts` includes **heading/total rows** whose `category` is blank. There is **no source
+  filter** excluding them — the BC connector's `FetchChanges` pulls the whole `accounts` collection
+  and ignores entity-map query params — so they are fetched, fall to the lookup's `Default=null`, and
+  fail the `AccountType` NOT NULL insert **per-record**. The failure is contained to that one row —
+  the rest of the sync commits, but the run is reported `Failed` and each offending account is listed
+  in the run's error log, so once credentials are wired the nightly run reports `Failed` even when
+  every postable account synced fine. This **cannot** be fixed by entity-map config: a source-side
+  filter is ignored, and the lookup returns `Default=null` *without erroring* so the transform's
+  `OnError` never triggers. To actually skip heading/total rows you'd filter `accountType='Posting'`
+  in the connector itself.
+- `(Code, CompanyID)` matching assumes this integration targets a **single company**; account `Code` is
+  unique within a company (`UQ_GLAccount_CompanyID_Code`).

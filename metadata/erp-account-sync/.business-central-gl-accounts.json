@@ -1,15 +1,15 @@
 [
   {
-    "_comment": "Business Central -> GLAccount pull-sync config. Maps the BC 'accounts' object (general-ledger accounts) onto MJ_BizApps_Accounting: GL Accounts via the integration engine. CREDS + COMPANY are wired LATER: set CredentialID and CompanyID (env var BIZAPPS_ACCOUNTING_COMPANY_ID) and flip IsActive=true when ready. See README.md.",
+    "_comment": "Business Central -> GLAccount pull-sync config. Maps the BC 'accounts' object (general-ledger accounts) onto MJ_BizApps_Accounting: GL Accounts via the integration engine. Authored ACTIVE: `mj sync push` creates this CompanyIntegration, its entity/field maps, and (from the sibling dir) the nightly job. The one remaining per-environment step is credentials -- attach an MJ: Credentials record (CredentialType business-central-oauth2) via CredentialID and set the target company (CompanyID / env BIZAPPS_ACCOUNTING_COMPANY_ID). Until a credential is wired, each sync run completes QUIETLY as Success with 0 records: the missing-credential error throws inside FetchChanges on the first page, which the engine records as a Warning (not a failure), so the run is not marked failed and NotifyOnFailure does not fire -- the error appears only in the run's ErrorLog.",
     "fields": {
       "Name": "BizApps Accounting - Business Central GL Account Sync",
       "IntegrationID": "@lookup:MJ: Integrations.Name=business-central",
       "CompanyID": "@env:BIZAPPS_ACCOUNTING_COMPANY_ID",
-      "IsActive": false,
+      "IsActive": true,
       "IsExternalSystemReadOnly": true,
       "ScheduleType": "Cron",
       "CronExpression": "0 2 * * *",
-      "ScheduleEnabled": false,
+      "ScheduleEnabled": true,
       "Configuration": "{\"note\":\"Pull-only. Fetches BC general-ledger accounts and upserts GL Accounts keyed on ExternalAccountID. Nightly at 02:00 UTC via the erp-account-sync-schedule scheduled job; these Schedule* fields mirror that job for display.\"}"
     },
     "primaryKey": {
@@ -37,13 +37,13 @@
           "relatedEntities": {
             "MJ: Company Integration Field Maps": [
               {
-                "_comment": "BC account id (SystemId GUID, non-editable PK) -> ExternalAccountID. KEY FIELD: this is what re-syncs match on.",
+                "_comment": "BC account id (SystemId GUID) -> ExternalAccountID. Stored for reference/traceability; NOT a match key. Matching is on (Code, CompanyID) so BC accounts UPSERT onto the pre-seeded chart (whose rows have no ExternalAccountID); the first sync adopts each seeded row and writes this id onto it. Key fields are AND-ed, so making this a key field would exclude the seeded rows (null ExternalAccountID) and re-introduce the insert collision.",
                 "fields": {
                   "EntityMapID": "@parent:ID",
                   "SourceFieldName": "id",
                   "DestinationFieldName": "ExternalAccountID",
                   "Direction": "SourceToDest",
-                  "IsKeyField": true,
+                  "IsKeyField": false,
                   "IsRequired": true,
                   "Priority": 10,
                   "Status": "Active"
@@ -53,12 +53,13 @@
                 }
               },
               {
-                "_comment": "BC account number -> Code (GLAccount unique per (CompanyID, Code)).",
+                "_comment": "BC account number -> Code. KEY FIELD (with CompanyID): matches an existing GLAccount by (Code, CompanyID) so BC accounts UPSERT onto the seeded chart instead of colliding on UQ_GLAccount_CompanyID_Code.",
                 "fields": {
                   "EntityMapID": "@parent:ID",
                   "SourceFieldName": "number",
                   "DestinationFieldName": "Code",
                   "Direction": "SourceToDest",
+                  "IsKeyField": true,
                   "IsRequired": true,
                   "Priority": 20,
                   "Status": "Active"
@@ -83,7 +84,7 @@
                 }
               },
               {
-                "_comment": "BC account category -> AccountType. Case-insensitive value map. Blank/heading categories (' ') fall to Default=null and FAIL the NOT NULL insert loudly (heading/total rows are not postable accounts and should not sync). Cost of Goods Sold folds to Expense.",
+                "_comment": "BC account category -> AccountType. BC's OData API encodes option-set captions (_x0020_=space, _x002D_=hyphen, ...), so a decode step runs BEFORE the lookup - otherwise 'Cost of Goods Sold' arrives as 'Cost_x0020_of_x0020_Goods_x0020_Sold' and misses the map. There is NO source filter excluding structural heading/total rows: the BC connector's FetchChanges pulls the whole 'accounts' collection and ignores entity-map query params, so every row whose category is blank (heading/total rows, plus any un-categorized posting account) is fetched, falls to Default=null, and FAILS the AccountType NOT NULL insert per-record (that row is dead-lettered and the run is marked Failed; the other accounts sync). See README.",
                 "fields": {
                   "EntityMapID": "@parent:ID",
                   "SourceFieldName": "category",
@@ -92,7 +93,7 @@
                   "IsRequired": true,
                   "Priority": 40,
                   "Status": "Active",
-                  "TransformPipeline": "[{\"Type\":\"lookup\",\"Config\":{\"Map\":{\"Assets\":\"Asset\",\"Liabilities\":\"Liability\",\"Equity\":\"Equity\",\"Income\":\"Revenue\",\"Cost of Goods Sold\":\"Expense\",\"Expense\":\"Expense\"},\"Default\":null},\"OnError\":\"Fail\"}]"
+                  "TransformPipeline": "[{\"Type\":\"custom\",\"Config\":{\"Expression\":\"String(value).replace(/_x([0-9A-Fa-f]{4})_/g,function(m,h){return String.fromCharCode(parseInt(h,16));})\"},\"OnError\":\"Fail\"},{\"Type\":\"lookup\",\"Config\":{\"Map\":{\"Assets\":\"Asset\",\"Liabilities\":\"Liability\",\"Equity\":\"Equity\",\"Income\":\"Revenue\",\"Cost of Goods Sold\":\"Expense\",\"Expense\":\"Expense\"},\"Default\":null},\"OnError\":\"Fail\"}]"
                 },
                 "primaryKey": {
                   "ID": "2E3674DD-BDB6-4665-B507-BFB3DB71F7CB"
@@ -135,6 +136,7 @@
                   "SourceFieldName": "_constant",
                   "DestinationFieldName": "CompanyID",
                   "Direction": "SourceToDest",
+                  "IsKeyField": true,
                   "IsRequired": true,
                   "Priority": 70,
                   "Status": "Active",

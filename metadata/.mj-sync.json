@@ -11,11 +11,8 @@
     "applications",
     "entity-actions"
   ],
-  "_comment_ignoreDirectories": "erp-account-sync is authored but held INERT until BC creds + target company are wired (see erp-account-sync/README.md). Remove it from ignoreDirectories to push the CompanyIntegration/entity-map/field-maps.",
-  "ignoreDirectories": [
-    "erp-account-sync",
-    "erp-account-sync-schedule"
-  ],
+  "_comment_ignoreDirectories": "erp-account-sync and erp-account-sync-schedule are pushed by default (not ignored). mj sync push creates the Business Central CompanyIntegration, its entity/field maps, and the nightly job; they stand up ACTIVE and fail loudly until BC credentials + the target company are wired. Add either directory here only to intentionally hold it back from a push.",
+  "ignoreDirectories": [],
   "sqlLogging": {
     "enabled": true,
     "outputDirectory": "./sql_logging",
