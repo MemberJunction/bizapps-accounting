@@ -58,6 +58,10 @@ import { ShellRailComponent } from './shell-rail.component';
 import { ShellPagePendingComponent } from './pages/shell-page-pending.component';
 import { MJASummaryStripComponent } from '../shared/summary-strip.component';
 import { MJAListToolbarComponent } from '../shared/list-toolbar.component';
+import { JournalEntriesResourceComponent } from '../resources/journal-entries-resource.component';
+import { BatchesResourceComponent } from '../resources/batches-resource.component';
+import { ApprovalsResourceComponent } from '../resources/approvals-resource.component';
+import { DimensionsResourceComponent } from '../resources/dimensions-resource.component';
 
 /**
  * The app shell (UI plan §8.0): the category shells + their pages.
@@ -90,6 +94,10 @@ import { MJAListToolbarComponent } from '../shared/list-toolbar.component';
     AccountLinksPageComponent,
     GLAccountsPageComponent,
     JournalEntryDetailPanelComponent,
+    JournalEntriesResourceComponent,
+    BatchesResourceComponent,
+    ApprovalsResourceComponent,
+    DimensionsResourceComponent,
   ],
   imports: [MJDropdownComponent, MJACheckDropdownComponent, 
     ShellPagePendingComponent, // standalone — shared with orders' shell
@@ -145,6 +153,10 @@ import { MJAListToolbarComponent } from '../shared/list-toolbar.component';
     AccountLinksPageComponent,
     GLAccountsPageComponent,
     JournalEntryDetailPanelComponent,
+    JournalEntriesResourceComponent,
+    BatchesResourceComponent,
+    ApprovalsResourceComponent,
+    DimensionsResourceComponent,
   ],
 })
 export class AccountingShellModule {}
