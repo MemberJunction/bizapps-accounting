@@ -1,0 +1,114 @@
+@if (Record.IsSaved) {
+    <mj-collapsible-panel
+        SectionKey="overview"
+        SectionName="Overview"
+        Icon="fa-solid fa-chart-pie"
+        [Form]="FormComponent"
+        [FormContext]="FormContext"
+        [DefaultExpanded]="true">
+        <div class="mja-je-ov">
+            <div class="mja-je-ov-card mja-je-ov-card--wide">
+                <div class="mja-je-ov-card__h">
+                    <h3><i class="fa-solid fa-route" aria-hidden="true"></i> Lifecycle</h3>
+                </div>
+                <div class="mja-je-ov-card__b">
+                    <div class="mja-je-timeline" role="list" aria-label="Journal entry status">
+                        @for (step of Timeline; track step.Key; let last = $last) {
+                            <div class="mja-je-step" role="listitem" [class.mja-je-step--done]="step.Done" [class.mja-je-step--current]="step.Current">
+                                <span class="mja-je-step__dot"><i [class]="step.Icon" aria-hidden="true"></i></span>
+                                <span class="mja-je-step__label">{{ step.Label }}</span>
+                            </div>
+                            @if (!last) {
+                                <span class="mja-je-step__sep" [class.mja-je-step__sep--done]="step.Done"></span>
+                            }
+                        }
+                    </div>
+                    @if (AwaitsReview) {
+                        <p class="mja-je-ov-note mja-je-ov-note--pad">
+                            Awaiting review — the CFO gate is not yet in force; a Pending manual entry can still be batched.
+                        </p>
+                    }
+                </div>
+            </div>
+
+            <div class="mja-je-ov-card">
+                <div class="mja-je-ov-card__h">
+                    <h3><i class="fa-solid fa-layer-group" aria-hidden="true"></i> Posting</h3>
+                </div>
+                <div class="mja-je-ov-card__b">
+                    <div class="mja-je-ov-facts">
+                        <div>
+                            <div class="mja-je-ov-fact__l">Batch</div>
+                            <div class="mja-je-ov-fact__v">
+                                @if (Record.JournalEntryBatchID) {
+                                    <button type="button" class="mja-je-link" (click)="OpenBatch()">
+                                        {{ Record.JournalEntryBatch || 'Open batch' }}
+                                    </button>
+                                } @else {
+                                    Assigned when the next batch is built.
+                                }
+                            </div>
+                        </div>
+                        <div>
+                            <div class="mja-je-ov-fact__l">GL posted</div>
+                            <div class="mja-je-ov-fact__v">{{ PostedAtLabel }}</div>
+                        </div>
+                        <div>
+                            <div class="mja-je-ov-fact__l">GL reference</div>
+                            <div class="mja-je-ov-fact__v">{{ Record.GLReferenceID || '—' }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mja-je-ov-card">
+                <div class="mja-je-ov-card__h">
+                    <h3><i class="fa-solid fa-link" aria-hidden="true"></i> Source</h3>
+                </div>
+                <div class="mja-je-ov-card__b">
+                    @if (Record.LinkedEntity && Record.LinkedRecordID) {
+                        <div class="mja-je-ov-facts">
+                            <div>
+                                <div class="mja-je-ov-fact__l">Entity</div>
+                                <div class="mja-je-ov-fact__v">{{ Record.LinkedEntity }}</div>
+                            </div>
+                            <div>
+                                <div class="mja-je-ov-fact__l">Record</div>
+                                <div class="mja-je-ov-fact__v">
+                                    <button type="button" class="mja-je-link" (click)="OpenSource()">{{ Record.LinkedRecordID }}</button>
+                                </div>
+                            </div>
+                        </div>
+                    } @else {
+                        <p class="mja-je-ov-note">Manual entry — no source record.</p>
+                    }
+                </div>
+            </div>
+
+            <div class="mja-je-ov-card mja-je-ov-card--wide">
+                <div class="mja-je-ov-card__h">
+                    <h3><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Reversal</h3>
+                </div>
+                <div class="mja-je-ov-card__b">
+                    @if (Record.ReversesJournalEntryID) {
+                        <p class="mja-je-ov-note">
+                            This entry reverses
+                            <button type="button" class="mja-je-link" (click)="OpenReverses()">
+                                {{ Record.ReversesJournalEntry || 'the original entry' }}
+                            </button>.
+                        </p>
+                    } @else if (Record.ReversedByJournalEntryID) {
+                        <p class="mja-je-ov-note">
+                            Reversed by
+                            <button type="button" class="mja-je-link" (click)="OpenReversedBy()">
+                                {{ Record.ReversedByJournalEntry || 'another entry' }}
+                            </button>.
+                        </p>
+                    } @else {
+                        <p class="mja-je-ov-note">This entry has not been reversed.</p>
+                    }
+                </div>
+            </div>
+        </div>
+    </mj-collapsible-panel>
+}

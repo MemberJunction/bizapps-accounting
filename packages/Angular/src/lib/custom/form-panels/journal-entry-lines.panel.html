@@ -1,0 +1,108 @@
+<mj-collapsible-panel
+    SectionKey="lines"
+    SectionName="Lines"
+    Icon="fa-solid fa-list-ol"
+    Variant="related-entity"
+    [Form]="FormComponent"
+    [FormContext]="FormContext"
+    [BadgeCount]="FormComponent.GetSectionRowCount(SectionKey)"
+    [DefaultExpanded]="true">
+
+    <div class="mja-je-card">
+        <header class="mja-je-card__head">
+            <div class="mja-je-card__title-group">
+                <span class="mja-je-card__co">{{ Record.Company || 'Journal Entry' }}</span>
+                <span class="mja-je-card__sub">{{ LineCountLabel }}</span>
+            </div>
+            <div class="mja-je-card__aside">
+                <span class="mja-je-chip" [class.mja-je-chip--ok]="Balanced" [class.mja-je-chip--warn]="!Balanced">
+                    <i [class]="Balanced ? 'fa-solid fa-check' : 'fa-solid fa-scale-unbalanced'" aria-hidden="true"></i>
+                    {{ Balanced ? 'Balanced' : 'Out of balance by ' + VarianceLabel }}
+                </span>
+            </div>
+        </header>
+
+        @if (LinesLoading) {
+            <div class="mja-je-pad">
+                <mj-loading text="Loading lines…" size="small"></mj-loading>
+            </div>
+        } @else if (LinesError) {
+            <div class="mja-je-pad">
+                <div class="mja-je-banner mja-je-banner--error" role="alert">
+                    <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> {{ LinesError }}
+                </div>
+            </div>
+        } @else if (!Record.IsSaved) {
+            <div class="mja-je-pad">
+                <mj-empty-state Icon="fa-solid fa-inbox" Title="No lines yet" Message="Save the entry, then add lines."></mj-empty-state>
+            </div>
+        } @else if (Lines.length === 0) {
+            <div class="mja-je-pad">
+                <mj-empty-state Icon="fa-solid fa-inbox" Title="No lines" Message="This journal entry has no lines."></mj-empty-state>
+            </div>
+        } @else {
+            <table class="mja-je-table">
+                <thead>
+                    <tr>
+                        <th class="mja-je-th-num">#</th>
+                        <th>Account</th>
+                        <th>Description</th>
+                        <th class="mja-je-th-amt">Debit</th>
+                        <th class="mja-je-th-amt">Credit</th>
+                        <th>Dimensions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @for (line of Lines; track line.ID) {
+                        <tr>
+                            <td class="mja-je-td-num">
+                                <button type="button" class="mja-je-line-badge" (click)="OpenLine(line)" title="Open line record">
+                                    {{ line.LineNumber || '—' }}
+                                </button>
+                            </td>
+                            <td>
+                                <div class="mja-je-acctline">
+                                    @if (SplitAccount(line.GLAccount).code; as code) {
+                                        <span class="mja-je-acctline__code">{{ code }}</span>
+                                    }
+                                    <button type="button" class="mja-je-link mja-je-acctline__name" (click)="OpenAccount(line)">
+                                        {{ SplitAccount(line.GLAccount).name }}
+                                    </button>
+                                </div>
+                            </td>
+                            <td class="mja-je-td-desc">{{ line.Description || '—' }}</td>
+                            <td class="mja-je-td-amt" [class.mja-je-amt--quiet]="!line.DebitAmount">
+                                {{ line.DebitAmount ? FormatAmount(line.DebitAmount) : '—' }}
+                            </td>
+                            <td class="mja-je-td-amt" [class.mja-je-amt--quiet]="!line.CreditAmount">
+                                {{ line.CreditAmount ? FormatAmount(line.CreditAmount) : '—' }}
+                            </td>
+                            <td>
+                                <div class="mja-je-chips">
+                                    @for (dim of line.Dimensions.Items; track dim.ID) {
+                                        <span class="mja-je-dim">
+                                            <span class="mja-je-dim__key">{{ dim.Dimension }}</span>
+                                            <span class="mja-je-dim__sep">·</span>
+                                            <span class="mja-je-dim__val">{{ dim.DimensionValue }}</span>
+                                        </span>
+                                    }
+                                    @if (line.Dimensions.Items.length === 0) {
+                                        <span class="mja-je-dim-empty">—</span>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th colspan="3" class="mja-je-tf-total-label">Totals</th>
+                        <td class="mja-je-td-amt mja-je-tf-total">{{ DebitsLabel }}</td>
+                        <td class="mja-je-td-amt mja-je-tf-total">{{ CreditsLabel }}</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        }
+    </div>
+</mj-collapsible-panel>
