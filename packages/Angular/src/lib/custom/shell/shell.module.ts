@@ -58,6 +58,7 @@ import { ShellRailComponent } from './shell-rail.component';
 import { ShellPagePendingComponent } from './pages/shell-page-pending.component';
 import { MJASummaryStripComponent } from '../shared/summary-strip.component';
 import { MJAListToolbarComponent } from '../shared/list-toolbar.component';
+import { AccountingOverviewResourceComponent } from '../resources/accounting-overview-resource.component';
 import { JournalEntriesResourceComponent } from '../resources/journal-entries-resource.component';
 import { BatchesResourceComponent } from '../resources/batches-resource.component';
 import { ApprovalsResourceComponent } from '../resources/approvals-resource.component';
@@ -95,11 +96,13 @@ import { DimensionsResourceComponent } from '../resources/dimensions-resource.co
     GLAccountsPageComponent,
     JournalEntryDetailPanelComponent,
     JournalEntriesResourceComponent,
-    BatchesResourceComponent,
     ApprovalsResourceComponent,
     DimensionsResourceComponent,
   ],
-  imports: [MJDropdownComponent, MJACheckDropdownComponent, 
+  imports: [
+    AccountingOverviewResourceComponent,
+    BatchesResourceComponent,
+    MJDropdownComponent, MJACheckDropdownComponent, 
     ShellPagePendingComponent, // standalone — shared with orders' shell
     MJASummaryStripComponent, // standalone — the orders-idiom stats bubble (list-page standard)
     MJAListToolbarComponent, // standalone — search + preset chips + Filters disclosure (list-page standard)

@@ -158,6 +158,8 @@ export { PageRefreshService } from './lib/transfer-pending/shell-refresh/page-re
 export { CrossAppLinkService } from './lib/transfer-pending/cross-app-link/cross-app-link.service';
 
 // Top-level direct resources
+export { AccountingOverviewPageComponent } from './lib/custom/overview/accounting-overview.component';
+export { AccountingBatchesPageComponent } from './lib/custom/overview/accounting-batches.component';
 export { AccountingOverviewResourceComponent, LoadAccountingOverviewResource } from './lib/custom/resources/accounting-overview-resource.component';
 export { JournalEntriesResourceComponent, LoadJournalEntriesResource } from './lib/custom/resources/journal-entries-resource.component';
 export { BatchesResourceComponent, LoadBatchesResource } from './lib/custom/resources/batches-resource.component';
