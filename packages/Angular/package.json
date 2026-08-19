@@ -18,6 +18,7 @@
   "author": "MemberJunction.com",
   "license": "BUSL-1.1",
   "dependencies": {
+    "@memberjunction/ng-hierarchy-tree": "^6.1.0-edge.0",
     "@mj-biz-apps/accounting-engine-base": "0.1.0",
     "@mj-biz-apps/accounting-entities": "0.1.0",
     "ag-grid-angular": "^35.0.1",
@@ -35,6 +36,7 @@
     "@memberjunction/graphql-dataprovider": "^6.1.0-edge.0",
     "@memberjunction/ng-base-forms": "^6.1.0-edge.0",
     "@memberjunction/ng-entity-viewer": "^6.1.0-edge.0",
+    "@memberjunction/ng-hierarchy-tree": "^6.1.0-edge.0",
     "@memberjunction/ng-link-directives": "^6.1.0-edge.0",
     "@memberjunction/ng-shared": "^6.1.0-edge.0",
     "@memberjunction/ng-shared-generic": "^6.1.0-edge.0",

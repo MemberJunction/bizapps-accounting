@@ -35,6 +35,10 @@ import { JournalEntryBatchHeaderPanel } from './form-panels/journal-entry-batch-
 import { JournalEntryBatchOverviewPanel, JournalEntryBatchOverviewComponent } from './form-panels/journal-entry-batch-overview.panel';
 import { CompanyAccountingHeaderPanel } from './form-panels/company-accounting-header.panel';
 import { CompanyAccountingOverviewPanel, CompanyAccountingOverviewComponent } from './form-panels/company-accounting-overview.panel';
+import { GLAccountHierarchyPanel } from './form-panels/gl-account-hierarchy.panel';
+import { DimensionValueHierarchyPanel } from './form-panels/dimension-value-hierarchy.panel';
+import { CompanyProfileHierarchyPanel } from './form-panels/company-profile-hierarchy.panel';
+import { TaxJurisdictionHierarchyPanel } from './form-panels/tax-jurisdiction-hierarchy.panel';
 
 const ACCOUNTING_PANELS = [
   JournalEntryFormComponentExtended,
@@ -65,11 +69,19 @@ const ACCOUNTING_PANELS = [
     WorkspaceTipDirective,
     JournalEntryBatchOverviewComponent,
     CompanyAccountingOverviewComponent,
+    GLAccountHierarchyPanel,
+    DimensionValueHierarchyPanel,
+    CompanyProfileHierarchyPanel,
+    TaxJurisdictionHierarchyPanel,
   ],
   exports: [
     ...ACCOUNTING_PANELS,
     JournalEntryBatchOverviewComponent,
     CompanyAccountingOverviewComponent,
+    GLAccountHierarchyPanel,
+    DimensionValueHierarchyPanel,
+    CompanyProfileHierarchyPanel,
+    TaxJurisdictionHierarchyPanel,
   ],
 })
 export class CustomFormsModule {}
