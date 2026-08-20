@@ -113,3 +113,141 @@
 .gla-body .gla-subheader {
   margin-bottom: 0;
 }
+
+/* ---- Business Central sync log panel (why records failed to pull) ---- */
+.gla-synclog {
+  border: 1px solid var(--mj-border-default);
+  border-radius: 10px;
+  background: var(--mj-bg-surface);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.gla-synclog__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.gla-synclog__title {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--mj-text-primary);
+}
+.gla-synclog__muted,
+.gla-synclog__raw {
+  margin: 0;
+  color: var(--mj-text-muted);
+  font-size: 0.85rem;
+}
+.gla-synclog__raw {
+  padding: 0 12px 10px;
+  white-space: pre-wrap;
+}
+.gla-synclog__runs,
+.gla-synclog__errors {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.gla-synclog__run {
+  border: 1px solid var(--mj-border-default);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.gla-synclog__runhead {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  color: var(--mj-text-primary);
+}
+.gla-synclog__status {
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--mj-text-secondary);
+}
+.gla-synclog__company { font-weight: 600; }
+.gla-synclog__meta {
+  color: var(--mj-text-secondary);
+  font-size: 0.85rem;
+}
+.gla-synclog__errcount {
+  margin-left: auto;
+  font-weight: 600;
+  color: var(--mj-text-secondary);
+}
+.gla-synclog__errors { padding: 0 12px 10px; }
+.gla-synclog__error {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 0.85rem;
+}
+.gla-synclog__extid {
+  font-family: monospace;
+  color: var(--mj-text-muted);
+  min-width: 8ch;
+}
+.gla-synclog__msg { color: var(--mj-text-primary); }
+.gla-synclog__code {
+  color: var(--mj-text-muted);
+  font-size: 0.75rem;
+}
+
+/* ---- Failure-notification recipient row (inside the sync log panel) ---- */
+.gla-notify {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--mj-border-default);
+  border-radius: 8px;
+}
+.gla-notify__label {
+  font-weight: 600;
+  color: var(--mj-text-primary);
+}
+.gla-notify__user {
+  min-width: 22ch;
+}
+.gla-notify__ch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--mj-text-secondary);
+  font-size: 0.85rem;
+}
+
+/* ---- Nightly failure-alert settings panel (its own toggle, separate from the sync log) ---- */
+.gla-notifypanel {
+  border: 1px solid var(--mj-border-default);
+  border-radius: 10px;
+  background: var(--mj-bg-surface);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.gla-notifypanel__note {
+  margin: 0;
+  color: var(--mj-text-secondary);
+  font-size: 0.85rem;
+}
+.gla-notifypanel__current {
+  margin: 0;
+  color: var(--mj-text-primary);
+  font-size: 0.9rem;
+}

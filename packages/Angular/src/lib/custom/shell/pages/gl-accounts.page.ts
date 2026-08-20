@@ -2,6 +2,7 @@ import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, Input, O
 import { UUIDsEqual, NormalizeUUID } from '@memberjunction/global';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
 import { RunView, RunViewParams } from '@memberjunction/core';
+import type { MJScheduledJobEntity } from '@memberjunction/core-entities';
 import { GridColumnConfig, EntityDataGridComponent } from '@memberjunction/ng-entity-viewer';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
 import { rowKeyToId } from '../../../transfer-pending/list-scaffold/grid-row-key';
@@ -15,6 +16,8 @@ import type { ActionParam } from '@memberjunction/actions-base';
 const BC_INTEGRATION_NAME = 'business-central';
 /** MJ action (from @memberjunction/integration-actions) that runs a Company Integration sync. */
 const RUN_INTEGRATION_SYNC_ACTION = 'Run Integration Sync';
+/** DriverClass of the app's nightly BC fan-out scheduled job — used to find its job row for notification settings. */
+const BC_FANOUT_DRIVER_CLASS = 'BizAppsAccountingBCFanOutSyncDriver';
 
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
 
@@ -68,6 +71,45 @@ interface ParentOption {
   Label: string;
 }
 
+/** A read-only projection of MJ: Company Integration Runs for the sync-log panel. */
+interface SyncRunRow {
+  ID: string;
+  Company: string | null;
+  Status: string | null;
+  StartedAt: string | null;
+  TotalRecords: number | null;
+  ErrorLog: string | null;
+}
+
+/** One per-record failure parsed out of CompanyIntegrationRun.ErrorLog (a SyncRecordError). */
+interface SyncLogError {
+  ExternalID?: string;
+  ChangeType?: string;
+  ErrorMessage: string;
+  ErrorCode?: string;
+  Severity?: string;
+}
+
+/** One option in the failure-notification recipient dropdown. `ID: null` = the "No one" sentinel. */
+interface NotifyUserOption {
+  ID: string | null;
+  Label: string;
+}
+
+/** A sync run as shown in the log panel — run summary plus its parsed per-record failures. */
+interface SyncLogRun {
+  ID: string;
+  Company: string;
+  Status: string;
+  StartedDisplay: string;
+  TotalRecords: number;
+  ErrorCount: number;
+  Errors: SyncLogError[];
+  /** Set when ErrorLog is a plain string (fatal/cancel) rather than the per-record array. */
+  RawError: string | null;
+  Expanded: boolean;
+}
+
 /**
  * GL accounts — view and manage every account, across every company the user can see.
  *
@@ -119,9 +161,35 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
   public IsLoading = false;
   public LoadError: string | null = null;
 
-  /** Shared busy/feedback state for the toolbar's Run-sync and Clear verbs. */
+  /** Shared busy/feedback state for the toolbar's Sync verb. */
   public ActionBusy = false;
   public ActionMessage: string | null = null;
+
+  /** Business Central sync-log panel state (why records failed to pull). */
+  public ShowSyncLog = false;
+  public SyncLogLoading = false;
+  public SyncLogError: string | null = null;
+  public SyncLogRuns: SyncLogRun[] = [];
+
+  /**
+   * Failure-notification recipient for the nightly BC fan-out job. The recipient lives on the
+   * MJ: Scheduled Jobs row (NotifyUserID + channel flags); this lets an accounting admin set it
+   * in-app instead of hand-editing metadata. One recipient (MJ's native job model).
+   */
+  public ShowNotifySettings = false;
+  public NotifyJobID: string | null = null;
+  public NotifyRecipientID: string | null = null;
+  /** The recipient actually persisted on the job — drives the "currently notifying" line, which
+   *  stays put until the user Saves (distinct from the editable NotifyRecipientID). */
+  public NotifySavedRecipientID: string | null = null;
+  public NotifyViaEmail = false;
+  public NotifyViaInApp = true;
+  public NotifyUserOptions: NotifyUserOption[] = [];
+  public NotifySaving = false;
+  public NotifyMessage: string | null = null;
+  /** "No one" sentinel for the recipient dropdown — clears NotifyUserID so no failure alert is sent.
+   *  Typed as the mj-dropdown DefaultItem shape (Record<string, unknown>); ID:null clears the value. */
+  public readonly NotifyNoneDefault: Record<string, unknown> = { ID: null, Label: '— No one (no failure alert) —' };
 
   // --- filters (one line; search sits to the right of the drop-downs) ---
   /** MULTI-select company narrowing (Marcelo 2026-08-05): empty = no narrowing ("All companies"). */
@@ -407,6 +475,223 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
       return result?.Success ? null : `${ci.Name}: ${result?.Message ?? 'unknown error'}`;
     } catch (err) {
       return `${ci.Name}: ${err instanceof Error ? err.message : String(err)}`;
+    }
+  }
+
+  // ------------------------------------------------------------------ sync log
+
+  /** Show/hide the Business Central sync-log panel; loads on first open. */
+  public async ToggleSyncLog(): Promise<void> {
+    this.ShowSyncLog = !this.ShowSyncLog;
+    this.cdr.markForCheck();
+    if (this.ShowSyncLog) {
+      await this.LoadSyncLog();
+    }
+  }
+
+  /** Show/hide the nightly-sync failure-alert settings; loads current recipient on first open. */
+  public async ToggleNotifySettings(): Promise<void> {
+    this.ShowNotifySettings = !this.ShowNotifySettings;
+    this.cdr.markForCheck();
+    if (this.ShowNotifySettings) {
+      await this.LoadNotifySettings();
+    }
+  }
+
+  /** Human label for the recipient currently PERSISTED on the job (not the pending dropdown pick). */
+  public get NotifyRecipientLabel(): string {
+    if (!this.NotifySavedRecipientID) {
+      return 'no one';
+    }
+    const match = this.NotifyUserOptions.find((o) => o.ID === this.NotifySavedRecipientID);
+    return match ? match.Label : this.NotifySavedRecipientID;
+  }
+
+  /**
+   * Loads the recent Business Central sync runs and the per-record failures behind them. Reads
+   * CompanyIntegrationRun.ErrorLog (JSON array of SyncRecordError), so it covers BOTH manual button
+   * runs and the nightly fan-out job. Read-only projection — no mutation.
+   */
+  public async LoadSyncLog(): Promise<void> {
+    this.SyncLogLoading = true;
+    this.SyncLogError = null;
+    this.cdr.markForCheck();
+    try {
+      const rv = new RunView();
+      const res = await rv.RunView<SyncRunRow>({
+        EntityName: 'MJ: Company Integration Runs',
+        ExtraFilter: `Integration='${BC_INTEGRATION_NAME}'`,
+        Fields: ['ID', 'Company', 'Status', 'StartedAt', 'TotalRecords', 'ErrorLog'],
+        OrderBy: '__mj_CreatedAt DESC',
+        MaxRows: 25,
+        ResultType: 'simple',
+      });
+      if (!res.Success) {
+        this.SyncLogError = `Could not load the sync log: ${res.ErrorMessage}`;
+        this.SyncLogRuns = [];
+        return;
+      }
+      this.SyncLogRuns = res.Results.map((r) => this.toSyncLogRun(r));
+    } catch (err) {
+      this.SyncLogError = `Sync log error: ${err instanceof Error ? err.message : String(err)}`;
+      this.SyncLogRuns = [];
+    } finally {
+      this.SyncLogLoading = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  /** Expand/collapse one run's per-record failure list. */
+  public ToggleRunExpanded(run: SyncLogRun): void {
+    run.Expanded = !run.Expanded;
+    this.cdr.markForCheck();
+  }
+
+  private toSyncLogRun(r: SyncRunRow): SyncLogRun {
+    const parsed = this.parseErrorLog(r.ErrorLog);
+    return {
+      ID: r.ID,
+      Company: r.Company ?? '(unknown company)',
+      Status: r.Status ?? 'Unknown',
+      StartedDisplay: r.StartedAt ? new Date(r.StartedAt).toLocaleString() : '—',
+      TotalRecords: r.TotalRecords ?? 0,
+      ErrorCount: parsed.errors.length,
+      Errors: parsed.errors,
+      RawError: parsed.raw,
+      Expanded: false,
+    };
+  }
+
+  /**
+   * ErrorLog is `JSON.stringify(result.Errors.slice(0,100))` for per-record failures, but a plain
+   * string (or single object) for fatal/cancel cases — parse defensively and surface either shape.
+   */
+  private parseErrorLog(raw: string | null): { errors: SyncLogError[]; raw: string | null } {
+    if (!raw) {
+      return { errors: [], raw: null };
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return { errors: [], raw };
+    }
+    if (Array.isArray(parsed)) {
+      return { errors: parsed.map((e) => this.toSyncLogError(e)), raw: null };
+    }
+    if (parsed && typeof parsed === 'object' && 'ErrorMessage' in parsed) {
+      return { errors: [this.toSyncLogError(parsed)], raw: null };
+    }
+    return { errors: [], raw };
+  }
+
+  private toSyncLogError(entry: unknown): SyncLogError {
+    const o: Record<string, unknown> = entry && typeof entry === 'object' ? (entry as Record<string, unknown>) : {};
+    const str = (v: unknown): string | undefined => (typeof v === 'string' && v.length > 0 ? v : undefined);
+    return {
+      ExternalID: str(o['ExternalID']),
+      ChangeType: str(o['ChangeType']),
+      ErrorMessage: str(o['ErrorMessage']) ?? 'Unknown error',
+      ErrorCode: str(o['ErrorCode']),
+      Severity: str(o['Severity']),
+    };
+  }
+
+  // ------------------------------------------------------------- failure notification
+
+  /**
+   * Loads the nightly fan-out job's current failure-notification recipient + channels, and the list
+   * of active users to choose from. Read-only; the actual write happens in {@link SaveNotifySettings}.
+   */
+  public async LoadNotifySettings(): Promise<void> {
+    try {
+      const rv = new RunView();
+      const jobType = await rv.RunView<{ ID: string }>({
+        EntityName: 'MJ: Scheduled Job Types',
+        ExtraFilter: `DriverClass='${BC_FANOUT_DRIVER_CLASS}'`,
+        Fields: ['ID'],
+        ResultType: 'simple',
+        MaxRows: 1,
+      });
+      if (!jobType.Success || jobType.Results.length === 0) {
+        this.NotifyJobID = null;
+        return;
+      }
+      const job = await rv.RunView<{ ID: string; NotifyUserID: string | null; NotifyViaEmail: boolean; NotifyViaInApp: boolean }>({
+        EntityName: 'MJ: Scheduled Jobs',
+        ExtraFilter: `JobTypeID='${jobType.Results[0].ID}'`,
+        Fields: ['ID', 'NotifyUserID', 'NotifyViaEmail', 'NotifyViaInApp'],
+        OrderBy: '__mj_CreatedAt ASC',
+        ResultType: 'simple',
+        MaxRows: 1,
+      });
+      if (!job.Success || job.Results.length === 0) {
+        this.NotifyJobID = null;
+        return;
+      }
+      const j = job.Results[0];
+      this.NotifyJobID = j.ID;
+      this.NotifyRecipientID = j.NotifyUserID ?? null;
+      this.NotifySavedRecipientID = j.NotifyUserID ?? null;
+      this.NotifyViaEmail = !!j.NotifyViaEmail;
+      this.NotifyViaInApp = !!j.NotifyViaInApp;
+      this.NotifyUserOptions = await this.loadNotifyUserOptions();
+    } catch (err) {
+      this.NotifyMessage = `Could not load notification settings: ${err instanceof Error ? err.message : String(err)}`;
+    } finally {
+      this.cdr.markForCheck();
+    }
+  }
+
+  private async loadNotifyUserOptions(): Promise<NotifyUserOption[]> {
+    const rv = new RunView();
+    const users = await rv.RunView<{ ID: string; Name: string | null; Email: string | null }>({
+      EntityName: 'MJ: Users',
+      ExtraFilter: 'IsActive=1',
+      Fields: ['ID', 'Name', 'Email'],
+      OrderBy: 'Name',
+      ResultType: 'simple',
+      MaxRows: 1000,
+    });
+    if (!users.Success) {
+      return [];
+    }
+    return users.Results.map((u) => ({
+      ID: u.ID,
+      Label: u.Name ? (u.Email ? `${u.Name} (${u.Email})` : u.Name) : (u.Email ?? u.ID),
+    }));
+  }
+
+  /** Persists the chosen recipient + channels onto the nightly job (ensuring NotifyOnFailure stays on). */
+  public async SaveNotifySettings(): Promise<void> {
+    if (!this.NotifyJobID || this.NotifySaving) {
+      return;
+    }
+    this.NotifySaving = true;
+    this.NotifyMessage = null;
+    this.cdr.markForCheck();
+    try {
+      const job = await this.ProviderToUse.GetEntityObject<MJScheduledJobEntity>('MJ: Scheduled Jobs', this.ProviderToUse.CurrentUser);
+      if (!(await job.Load(this.NotifyJobID))) {
+        this.NotifyMessage = 'Could not load the scheduled job to save.';
+        return;
+      }
+      job.NotifyUserID = this.NotifyRecipientID;
+      job.NotifyViaEmail = this.NotifyViaEmail;
+      job.NotifyViaInApp = this.NotifyViaInApp;
+      job.NotifyOnFailure = true; // a recipient is meaningless unless failures actually notify
+      const saved = await job.Save();
+      if (saved) {
+        this.NotifySavedRecipientID = this.NotifyRecipientID;
+      }
+      this.NotifyMessage = saved
+        ? (this.NotifyRecipientID ? 'Saved — nightly-sync failures will notify the selected user.' : 'Saved — nightly-sync failure alerts are off (no recipient).')
+        : `Save failed: ${job.LatestResult?.CompleteMessage ?? 'unknown error'}`;
+    } catch (err) {
+      this.NotifyMessage = `Save error: ${err instanceof Error ? err.message : String(err)}`;
+    } finally {
+      this.NotifySaving = false;
+      this.cdr.markForCheck();
     }
   }
 

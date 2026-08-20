@@ -22,7 +22,7 @@
  * sanctioned remap mechanism). Code format/uniqueness are DB CHECK/UQ constraints.
  * A mis-created account is corrected by deactivating it and creating a new one.
  */
-import { BaseEntity, ValidationResult, ValidationErrorInfo } from '@memberjunction/core';
+import { BaseEntity, ValidationResult, ValidationErrorInfo, EntityDeleteOptions, LogError } from '@memberjunction/core';
 import { RegisterClass } from '@memberjunction/global';
 import { mjBizAppsAccountingGLAccountEntity } from '@mj-biz-apps/accounting-entities';
 
@@ -78,5 +78,34 @@ export class GLAccountEntityServer extends mjBizAppsAccountingGLAccountEntity {
     }
 
     return result;
+  }
+
+  /**
+   * GL accounts are NEVER hard-deleted — a "delete" is redirected to DEACTIVATION (IsActive=false),
+   * keeping the row so history (JE lines, GLAccountLink, IntercompanyAccountMatch) keeps resolving.
+   *
+   * This is the mechanism behind the chart-sync contract "an account removed/deactivated in Business
+   * Central is deactivated, not deleted": the integration engine's full-sync orphan sweep
+   * (`DeleteOrphanedRecords`) calls `entity.Delete()` DIRECTLY — it does NOT consult the entity map's
+   * DeleteBehavior — so an account no longer returned by BC would otherwise be HARD-deleted here
+   * (GLAccount is DeleteType=Hard): destroyed if unreferenced, or FK-blocked (left active) if
+   * referenced. Both are wrong. Redirecting Delete() to deactivate makes the sweep deactivate
+   * instead, and matches this class's stated lifecycle ("a mis-created account is corrected by
+   * deactivating it and creating a new one"). Idempotent: an already-inactive account is a no-op, so
+   * repeated nightly full-sync sweeps don't churn.
+   */
+  public override async Delete(_options?: EntityDeleteOptions): Promise<boolean> {
+    if (this.IsActive === false) {
+      return true; // already deactivated — nothing to do
+    }
+    this.IsActive = false;
+    const saved = await this.Save();
+    if (!saved) {
+      LogError(
+        `GLAccountEntityServer.Delete: failed to deactivate GLAccount ${this.Code ?? this.ID}: ` +
+        `${this.LatestResult?.CompleteMessage ?? 'unknown error'}`,
+      );
+    }
+    return saved;
   }
 }

@@ -21,7 +21,9 @@
       [(AdvancedOpen)]="AdvancedOpen"
       (SearchChanged)="OnToolbarSearch($event)"
       (PresetToggled)="OnTypeToggled($event)">
-      <button toolbar-actions type="button" mjButton variant="primary" size="sm" [disabled]="ActionBusy" (click)="RunSync()">Sync Accounts</button>
+      <button toolbar-actions type="button" mjButton variant="primary" size="sm" [disabled]="ActionBusy" (click)="RunSync()">Sync accounts</button>
+      <button toolbar-actions type="button" mjButton variant="outline" size="sm" [disabled]="SyncLogLoading" (click)="ToggleSyncLog()">{{ ShowSyncLog ? 'Hide sync log' : 'View sync log' }}</button>
+      <button toolbar-actions type="button" mjButton variant="outline" size="sm" (click)="ToggleNotifySettings()">{{ ShowNotifySettings ? 'Hide failure alerts' : 'Failure alerts' }}</button>
       <label class="gla-field">
         <span class="gla-field__label">Company</span>
         <!-- CHECKBOX multi-select (Marcelo 2026-08-05): narrow to any set of companies; empty = all. -->
@@ -53,6 +55,86 @@
 
   @if (ActionMessage) {
     <mj-alert Variant="info" [Message]="ActionMessage"></mj-alert>
+  }
+
+  @if (ShowSyncLog) {
+    <section class="gla-synclog" aria-label="Business Central sync log">
+      <header class="gla-synclog__head">
+        <h3 class="gla-synclog__title">Business Central sync log</h3>
+        <button type="button" mjButton variant="flat" size="sm" [disabled]="SyncLogLoading" (click)="LoadSyncLog()">Refresh</button>
+      </header>
+
+      @if (SyncLogLoading) {
+        <p class="gla-synclog__muted">Loading sync log…</p>
+      } @else if (SyncLogError) {
+        <mj-alert Variant="error" [Message]="SyncLogError"></mj-alert>
+      } @else if (SyncLogRuns.length === 0) {
+        <p class="gla-synclog__muted">No Business Central sync runs recorded yet.</p>
+      } @else {
+        <ul class="gla-synclog__runs">
+          @for (run of SyncLogRuns; track run.ID) {
+            <li class="gla-synclog__run">
+              <button type="button" class="gla-synclog__runhead" (click)="ToggleRunExpanded(run)"
+                [attr.aria-expanded]="run.Expanded">
+                <span class="gla-synclog__status">{{ run.Status }}</span>
+                <span class="gla-synclog__company">{{ run.Company }}</span>
+                <span class="gla-synclog__meta">{{ run.StartedDisplay }} · {{ run.TotalRecords }} record(s)</span>
+                @if (run.ErrorCount > 0) {
+                  <span class="gla-synclog__errcount">{{ run.ErrorCount }} failed</span>
+                }
+              </button>
+              @if (run.Expanded) {
+                @if (run.RawError) {
+                  <p class="gla-synclog__raw">{{ run.RawError }}</p>
+                } @else if (run.ErrorCount === 0) {
+                  <p class="gla-synclog__muted">No per-record errors recorded for this run.</p>
+                } @else {
+                  <ul class="gla-synclog__errors">
+                    @for (e of run.Errors; track $index) {
+                      <li class="gla-synclog__error">
+                        <span class="gla-synclog__extid">{{ e.ExternalID || '—' }}</span>
+                        <span class="gla-synclog__msg">{{ e.ErrorMessage }}</span>
+                        @if (e.ErrorCode) { <span class="gla-synclog__code">{{ e.ErrorCode }}</span> }
+                      </li>
+                    }
+                  </ul>
+                }
+              }
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  }
+
+  @if (ShowNotifySettings) {
+    <section class="gla-notifypanel" aria-label="Nightly sync failure alerts">
+      <header class="gla-synclog__head">
+        <h3 class="gla-synclog__title">Nightly sync failure alerts</h3>
+      </header>
+      <p class="gla-notifypanel__note">
+        These alerts fire only when the <strong>scheduled nightly</strong> Business Central sync fails.
+        The manual “Sync accounts” button does <strong>not</strong> notify anyone — check the sync log for its results.
+      </p>
+      @if (!NotifyJobID) {
+        <p class="gla-synclog__muted">The nightly Business Central sync job isn’t configured in this environment, so there’s nothing to notify on.</p>
+      } @else {
+        <p class="gla-notifypanel__current">Currently notifying: <strong>{{ NotifyRecipientLabel }}</strong></p>
+        <div class="gla-notify">
+          <span class="gla-notify__label">Notify</span>
+          <mj-dropdown class="gla-notify__user"
+            [Data]="NotifyUserOptions" TextField="Label" ValueField="ID" [ValuePrimitive]="true"
+            [DefaultItem]="NotifyNoneDefault"
+            [(ngModel)]="NotifyRecipientID" aria-label="Failure notification recipient" />
+          <label class="gla-notify__ch"><input class="mj-checkbox" type="checkbox" [(ngModel)]="NotifyViaInApp" /> In-app</label>
+          <label class="gla-notify__ch"><input class="mj-checkbox" type="checkbox" [(ngModel)]="NotifyViaEmail" /> Email</label>
+          <button type="button" mjButton variant="primary" size="sm" [disabled]="NotifySaving || !NotifyJobID" (click)="SaveNotifySettings()">Save</button>
+        </div>
+        @if (NotifyMessage) {
+          <p class="gla-synclog__muted">{{ NotifyMessage }}</p>
+        }
+      }
+    </section>
   }
 
   @if (OrphanCount > 0) {
