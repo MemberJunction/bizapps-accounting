@@ -155,24 +155,24 @@
                 }
               },
               {
-                "_comment": "Constant -> CompanyID (NOT NULL FK). WIRING-TIME VALUE: replace the placeholder UUID below with the target __mj.Company ID (must equal BIZAPPS_ACCOUNTING_COMPANY_ID used on the CompanyIntegration). @env cannot resolve inside this transform JSON, so it is a literal placeholder by design.",
+                "_comment": "MJCompanyID -> CompanyID (NOT NULL FK, key field). NO hardcoded id: the app-owned BizAppsAccountingBusinessCentralConnector stamps MJCompanyID onto every fetched record from the running CompanyIntegration's CompanyID, so this maps the id of whichever company/integration is being pulled. Match key is (Code, CompanyID); with the id stamped per integration, matching is correctly scoped per company. This makes the maps a company-agnostic template — no per-company literal to edit.",
                 "fields": {
                   "EntityMapID": "@parent:ID",
-                  "SourceFieldName": "_constant",
+                  "SourceFieldName": "MJCompanyID",
                   "DestinationFieldName": "CompanyID",
                   "Direction": "SourceToDest",
                   "IsKeyField": true,
                   "IsRequired": true,
                   "Priority": 70,
                   "Status": "Active",
-                  "TransformPipeline": "[{\"Type\":\"custom\",\"Config\":{\"Expression\":\"'4316D546-F5FD-4D75-BF58-60017FF633C4'\"}}]"
+                  "TransformPipeline": null
                 },
                 "primaryKey": {
                   "ID": "C7926B46-68A8-4DD8-A3FC-6654BE289B77"
                 },
                 "sync": {
-                  "lastModified": "2026-08-20T15:11:56.731Z",
-                  "checksum": "c2fbd3a41f0054a272c92e4767f88b9ecb9336f0a080e335b76b606d1ba4031f"
+                  "lastModified": "2026-08-20T19:48:31.571Z",
+                  "checksum": "c8ac2e537ca9666b59f4a2df0c3c133e9c63842bc34b306461a6d6a92373f961"
                 }
               }
             ]
@@ -185,7 +185,7 @@
       ]
     },
     "sync": {
-      "lastModified": "2026-08-20T15:11:56.558Z",
+      "lastModified": "2026-08-20T19:48:31.533Z",
       "checksum": "afe60375f3ede9e4a04fe460f0c596c3d1299bb8d1f7e34cdc6d27916436fa1e"
     }
   }
