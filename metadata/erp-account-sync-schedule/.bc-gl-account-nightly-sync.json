@@ -1,19 +1,23 @@
 [
   {
-    "_comment": "Nightly Business Central -> GL Account sync. An MJ: Scheduled Jobs record run by the scheduling-engine's IntegrationSyncScheduledJobDriver, which reads Configuration.CompanyIntegrationID and calls IntegrationEngine.RunSync. Authored ACTIVE (Status=Active): it runs nightly at 02:00 UTC. Until the referenced company integration has BC credentials wired, each run completes QUIETLY as Success with 0 records -- the missing-credential error is a first-page fetch Warning, so the run is not failed and NotifyOnFailure does not fire (the error is recorded only in the run's ErrorLog). Engine computes NextRunAt from CronExpression on first poll (OwnerUserID/NextRunAt intentionally omitted -- both nullable).",
+    "_comment": "Nightly Business Central -> GL Account sync. An MJ: Scheduled Jobs record run by the APP-OWNED BizAppsAccountingBCFanOutSyncDriver (in @mj-biz-apps/accounting-server, resolved via the scheduled-job-types record). FAN-OUT: Configuration carries IntegrationID (business-central), so the driver runs one IntegrationEngine.RunSync per active, credentialed Company Integration for that integration (filter IsActive=1 AND CredentialID IS NOT NULL), with per-company failure isolation. Onboarding a new BC company is additive: create its Company Integration (+ entity/field maps) and this one job picks it up -- no new scheduled job. Kept entirely in the app repo (the stock IntegrationSyncScheduledJobDriver targets a single CompanyIntegrationID). Authored ACTIVE (Status=Active): runs nightly at 02:00 UTC. A company whose credentials aren't wired yet completes QUIETLY as Success with 0 records (missing-credential error recorded only in that run's ErrorLog). Engine computes NextRunAt from CronExpression on first poll (OwnerUserID/NextRunAt intentionally omitted -- both nullable).",
     "fields": {
       "Name": "BizApps Accounting - Nightly Business Central GL Account Sync",
-      "JobTypeID": "@lookup:MJ: Scheduled Job Types.DriverClass=IntegrationSyncScheduledJobDriver",
+      "JobTypeID": "@lookup:MJ: Scheduled Job Types.DriverClass=BizAppsAccountingBCFanOutSyncDriver",
       "CronExpression": "0 2 * * *",
       "Timezone": "UTC",
       "Status": "Active",
-      "Configuration": "{\"CompanyIntegrationID\":\"E82D3738-4F97-422E-89E7-F246B12DD966\",\"FullSync\":true}",
+      "Configuration": "{\"IntegrationID\":\"3FD08940-E11D-4926-8149-6115F3B8ABF3\",\"FullSync\":true}",
       "RunImmediatelyIfNeverRun": false,
       "NotifyOnFailure": true,
-      "Description": "Pulls the Business Central chart of accounts into GL Accounts nightly at 02:00 UTC. Once the referenced company integration has its BC credentials wired the run pulls the chart; until then each run completes quietly as Success with 0 records, with the missing-credential error recorded only in the run's ErrorLog (no notification)."
+      "Description": "Pulls the Business Central chart of accounts into GL Accounts nightly at 02:00 UTC for ALL active, credentialed Business Central company integrations (fan-out via the app's BizAppsAccountingBCFanOutSyncDriver). Each company runs independently; a company without wired credentials completes quietly as Success with 0 records, with the missing-credential error recorded only in that run's ErrorLog (no notification)."
     },
     "primaryKey": {
       "ID": "4AF0FC23-CAF7-49B8-A941-7B08EBF8F32D"
+    },
+    "sync": {
+      "lastModified": "2026-08-20T16:58:32.940Z",
+      "checksum": "06faefa6ce7b7cce6a1bef574cb2f23f524e5ee667bf0253408ffbb9beb5f6b7"
     }
   }
 ]

@@ -1,13 +1,20 @@
 import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, Input, OnInit, OnDestroy, ViewChild } from '@angular/core';
 import { UUIDsEqual, NormalizeUUID } from '@memberjunction/global';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
-import { RunViewParams } from '@memberjunction/core';
+import { RunView, RunViewParams } from '@memberjunction/core';
 import { GridColumnConfig, EntityDataGridComponent } from '@memberjunction/ng-entity-viewer';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
 import { rowKeyToId } from '../../../transfer-pending/list-scaffold/grid-row-key';
 import { CompanyScopeService } from '../../shared/company-scope.service';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import type { mjBizAppsAccountingGLAccountEntity } from '@mj-biz-apps/accounting-entities';
+import { GraphQLActionClient, GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
+import type { ActionParam } from '@memberjunction/actions-base';
+
+/** Name of the erp-account-sync Company Integration that pulls GL accounts from Business Central. */
+const BC_INTEGRATION_NAME = 'business-central';
+/** MJ action (from @memberjunction/integration-actions) that runs a Company Integration sync. */
+const RUN_INTEGRATION_SYNC_ACTION = 'Run Integration Sync';
 
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
 
@@ -111,6 +118,10 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
 
   public IsLoading = false;
   public LoadError: string | null = null;
+
+  /** Shared busy/feedback state for the toolbar's Run-sync and Clear verbs. */
+  public ActionBusy = false;
+  public ActionMessage: string | null = null;
 
   // --- filters (one line; search sits to the right of the drop-downs) ---
   /** MULTI-select company narrowing (Marcelo 2026-08-05): empty = no narrowing ("All companies"). */
@@ -294,6 +305,109 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
   public Refresh(): void {
     void this.load(true);
     void this.grid?.Refresh(); // header Refresh must refetch the grid too — unchanged params won't
+  }
+
+  // ------------------------------------------------------------------ integration + clear verbs
+
+  /**
+   * Runs the Business Central → GL Accounts sync by invoking the 'Run Integration Sync' MJ action
+   * against the erp-account-sync Company Integration, then refreshes the list. The heavy lifting
+   * (fetch from BC, field mapping, GLAccount upsert) all lives server-side in the integration-engine.
+   */
+  public async RunSync(): Promise<void> {
+    if (this.ActionBusy) return;
+    this.ActionBusy = true;
+    this.ActionMessage = null;
+    this.cdr.markForCheck();
+    try {
+      const rv = new RunView();
+      const integration = await rv.RunView<{ ID: string }>({
+        EntityName: 'MJ: Integrations',
+        ExtraFilter: `Name='${BC_INTEGRATION_NAME}'`,
+        Fields: ['ID'],
+        ResultType: 'simple',
+        MaxRows: 1,
+      });
+      if (!integration.Success || integration.Results.length === 0) {
+        this.ActionMessage = `Business Central integration ('${BC_INTEGRATION_NAME}') is not registered in this environment.`;
+        return;
+      }
+
+      // Fan out over EVERY active, credentialed Business Central company integration — mirrors the
+      // nightly fan-out job, so the button syncs all companies, not just one.
+      const cis = await rv.RunView<{ ID: string; Name: string }>({
+        EntityName: 'MJ: Company Integrations',
+        ExtraFilter: `IntegrationID='${integration.Results[0].ID}' AND IsActive=1 AND CredentialID IS NOT NULL`,
+        Fields: ['ID', 'Name'],
+        OrderBy: 'Name',
+        ResultType: 'simple',
+      });
+      if (!cis.Success) {
+        this.ActionMessage = `Could not load Business Central company integrations: ${cis.ErrorMessage}`;
+        return;
+      }
+      if (cis.Results.length === 0) {
+        this.ActionMessage = 'No active, credentialed Business Central company integrations to sync.';
+        return;
+      }
+
+      const act = await rv.RunView<{ ID: string }>({
+        EntityName: 'MJ: Actions',
+        ExtraFilter: `Name='${RUN_INTEGRATION_SYNC_ACTION}'`,
+        Fields: ['ID'],
+        ResultType: 'simple',
+        MaxRows: 1,
+      });
+      if (!act.Success || act.Results.length === 0) {
+        this.ActionMessage = `The '${RUN_INTEGRATION_SYNC_ACTION}' action is not installed on this server.`;
+        return;
+      }
+
+      const client = new GraphQLActionClient(GraphQLDataProvider.Instance);
+      const failures: string[] = [];
+      for (const ci of cis.Results) {
+        const failure = await this.runIntegrationSyncForCompany(client, act.Results[0].ID, ci);
+        if (failure) {
+          failures.push(failure);
+        }
+      }
+
+      const total = cis.Results.length;
+      const succeeded = total - failures.length;
+      this.ActionMessage = failures.length === 0
+        ? `Business Central sync ran for ${total} company integration(s). Refreshing accounts…`
+        : `Business Central sync: ${succeeded}/${total} succeeded. Failed — ${failures.join('; ')}`;
+      if (succeeded > 0) {
+        this.Refresh();
+      }
+    } catch (err) {
+      this.ActionMessage = `Sync error: ${err instanceof Error ? err.message : String(err)}`;
+    } finally {
+      this.ActionBusy = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  /**
+   * Runs the Run Integration Sync action for ONE company integration. Returns null on success, or a
+   * "<name>: <error>" string on failure — FullSync='true' so a manual run ignores the incremental
+   * watermark and re-pulls the whole chart (matches the "Clear GL accounts" -> re-sync path).
+   */
+  private async runIntegrationSyncForCompany(
+    client: GraphQLActionClient,
+    actionID: string,
+    ci: { ID: string; Name: string },
+  ): Promise<string | null> {
+    const params: ActionParam[] = [
+      { Name: 'CompanyIntegrationID', Value: ci.ID, Type: 'Input' },
+      { Name: 'FullSync', Value: 'true', Type: 'Input' },
+    ];
+    try {
+      const result = await client.RunAction(actionID, params);
+      return result?.Success ? null : `${ci.Name}: ${result?.Message ?? 'unknown error'}`;
+    } catch (err) {
+      return `${ci.Name}: ${err instanceof Error ? err.message : String(err)}`;
+    }
   }
 
   // ------------------------------------------------------------------ filtering

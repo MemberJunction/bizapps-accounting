@@ -5,6 +5,7 @@
       "Name": "BizApps Accounting - Business Central GL Account Sync",
       "IntegrationID": "@lookup:MJ: Integrations.Name=business-central",
       "CompanyID": "@env:BIZAPPS_ACCOUNTING_COMPANY_ID",
+      "CredentialID": "@lookup:MJ: Credentials.Name=BC Sandbox Test",
       "IsActive": true,
       "IsExternalSystemReadOnly": true,
       "ScheduleType": "Cron",
@@ -50,6 +51,10 @@
                 },
                 "primaryKey": {
                   "ID": "A4808976-0ED5-43E7-B769-CBF5EB5BA4D1"
+                },
+                "sync": {
+                  "lastModified": "2026-08-20T15:11:56.642Z",
+                  "checksum": "b3c42ed75040b7fb4d47eaa1c64618c1e44c5d0b292e2c33417fbc179a02365d"
                 }
               },
               {
@@ -66,6 +71,10 @@
                 },
                 "primaryKey": {
                   "ID": "B01A482C-AD79-498C-A03E-5C57B51AD0A3"
+                },
+                "sync": {
+                  "lastModified": "2026-08-20T15:11:56.658Z",
+                  "checksum": "03ab62d64d105ff65f1e9b60701bd25647e73e273ab6bb43180cd25be201408d"
                 }
               },
               {
@@ -81,6 +90,10 @@
                 },
                 "primaryKey": {
                   "ID": "998CC3CD-4381-4B6E-BF34-AAFA707E09CA"
+                },
+                "sync": {
+                  "lastModified": "2026-08-20T15:11:56.672Z",
+                  "checksum": "6b6931c7fb48f91b8b4291d4f6820071db9861f0bf0abfc10571f4dbdc54d633"
                 }
               },
               {
@@ -97,6 +110,10 @@
                 },
                 "primaryKey": {
                   "ID": "2E3674DD-BDB6-4665-B507-BFB3DB71F7CB"
+                },
+                "sync": {
+                  "lastModified": "2026-08-20T15:11:56.686Z",
+                  "checksum": "23c1e389f6e9365c41f9e86d089c461fd36f81794daef4c52f7312fb5f6c7b42"
                 }
               },
               {
@@ -112,6 +129,10 @@
                 },
                 "primaryKey": {
                   "ID": "4540B677-2F26-4834-8BF3-0E46D220409B"
+                },
+                "sync": {
+                  "lastModified": "2026-08-20T15:11:56.702Z",
+                  "checksum": "9c60368c7badb0bc71f9e9d5c01d7b10d357fc00e5dad74bccf54d54bd6b888e"
                 }
               },
               {
@@ -127,6 +148,10 @@
                 },
                 "primaryKey": {
                   "ID": "870C0622-2814-487F-8040-2FD69276DB2F"
+                },
+                "sync": {
+                  "lastModified": "2026-08-20T15:11:56.717Z",
+                  "checksum": "02cae5601be9255ed8e233c0469801459c345bd6b8d06925783e08b9bcc0277f"
                 }
               },
               {
@@ -140,16 +165,28 @@
                   "IsRequired": true,
                   "Priority": 70,
                   "Status": "Active",
-                  "TransformPipeline": "[{\"Type\":\"custom\",\"Config\":{\"Expression\":\"'00000000-0000-0000-0000-000000000000'\"}}]"
+                  "TransformPipeline": "[{\"Type\":\"custom\",\"Config\":{\"Expression\":\"'4316D546-F5FD-4D75-BF58-60017FF633C4'\"}}]"
                 },
                 "primaryKey": {
                   "ID": "C7926B46-68A8-4DD8-A3FC-6654BE289B77"
+                },
+                "sync": {
+                  "lastModified": "2026-08-20T15:11:56.731Z",
+                  "checksum": "c2fbd3a41f0054a272c92e4767f88b9ecb9336f0a080e335b76b606d1ba4031f"
                 }
               }
             ]
+          },
+          "sync": {
+            "lastModified": "2026-08-20T15:11:56.598Z",
+            "checksum": "babed647159874c1bf3453ad7846ae7dab1596a7587468c2ac61b2cf0c8b0b36"
           }
         }
       ]
+    },
+    "sync": {
+      "lastModified": "2026-08-20T15:11:56.558Z",
+      "checksum": "afe60375f3ede9e4a04fe460f0c596c3d1299bb8d1f7e34cdc6d27916436fa1e"
     }
   }
 ]

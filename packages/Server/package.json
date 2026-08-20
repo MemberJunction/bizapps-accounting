@@ -28,7 +28,11 @@
   },
   "peerDependencies": {
     "@memberjunction/core": "^6.1.0-edge.0",
+    "@memberjunction/core-entities": "^6.1.0-edge.0",
     "@memberjunction/global": "^6.1.0-edge.0",
+    "@memberjunction/integration-engine": "^6.1.0-edge.0",
+    "@memberjunction/scheduling-base-types": "^6.1.0-edge.0",
+    "@memberjunction/scheduling-engine": "^6.1.0-edge.0",
     "@memberjunction/server": "^6.1.0-edge.0",
     "@memberjunction/sqlserver-dataprovider": "^6.1.0-edge.0",
     "@mj-biz-apps/common-server": ">=5.30.0",

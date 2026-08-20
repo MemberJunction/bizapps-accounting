@@ -15,6 +15,10 @@ import '@mj-biz-apps/accounting-actions';
 import '@mj-biz-apps/accounting-core-entities-server';
 import { LoadJournalEntryBatchOperations, LoadCreateJournalEntriesOperation, LoadCreateJournalEntryOperation, LoadGenerateReversalOperation } from '@mj-biz-apps/accounting-core-entities-server';
 
+// Custom scheduled-job driver: nightly Business Central fan-out sync across all active company
+// integrations. App-owned (kept out of the MJ platform); registered via @RegisterClass here.
+import { LoadBizAppsAccountingBCFanOutSyncDriver } from './custom/BizAppsAccountingBCFanOutSyncDriver.js';
+
 // Import generated GraphQL resolvers
 import './generated/generated.js';
 
@@ -56,4 +60,5 @@ export function LoadBizAppsAccountingServer(): void {
     LoadCreateJournalEntriesOperation(); // tree-shaking anchor for 'Accounting.CreateJournalEntries' (the SET op)
     LoadJournalEntryBatchOperations(); // tree-shaking anchor for the Accounting.BuildJournalEntryBatch/RegenerateJournalEntryBatch/DispatchJournalEntryBatch/RecordBatchDecision/GetBatchApprovalState ops
     LoadGenerateReversalOperation(); // tree-shaking anchor for 'Accounting.GenerateJournalEntryReversal'
+    LoadBizAppsAccountingBCFanOutSyncDriver(); // tree-shaking anchor for the BC fan-out scheduled-job driver
 }

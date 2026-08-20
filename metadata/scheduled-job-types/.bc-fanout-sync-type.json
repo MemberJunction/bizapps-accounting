@@ -1,0 +1,19 @@
+[
+  {
+    "_comment": "App-owned scheduled-job type for the Business Central multi-company fan-out sync. Its DriverClass points at BizAppsAccountingBCFanOutSyncDriver, a @RegisterClass driver in @mj-biz-apps/accounting-server (loaded into MJAPI via the app's server dynamic-package). The driver reads Configuration.IntegrationID and runs one IntegrationEngine.RunSync per active, credentialed Company Integration for that integration. Kept in the app repo on purpose -- the stock IntegrationSyncScheduledJobDriver targets a single CompanyIntegrationID; multi-company fan-out is an app concern, not an MJ platform change.",
+    "entity": "MJ: Scheduled Job Types",
+    "fields": {
+      "Name": "BizApps Accounting - Business Central Fan-Out Sync",
+      "Description": "Runs the Business Central GL account sync for every active, credentialed Company Integration of a given Integration in one job (fan-out), with per-company failure isolation. Configuration: { IntegrationID, EntityMapIDs?, FullSync?, SyncDirection? }. Driver: BizAppsAccountingBCFanOutSyncDriver (in @mj-biz-apps/accounting-server).",
+      "DriverClass": "BizAppsAccountingBCFanOutSyncDriver",
+      "NotificationsAvailable": true
+    },
+    "primaryKey": {
+      "ID": "ACD78AFA-B05E-48ED-8849-7233388713EF"
+    },
+    "sync": {
+      "lastModified": "2026-08-20T16:58:26.270Z",
+      "checksum": "27cb4b338f4b3838bddfe9610f37617afe7463b5f080f4045488e431937075b8"
+    }
+  }
+]

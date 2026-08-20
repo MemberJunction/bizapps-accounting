@@ -21,6 +21,7 @@
       [(AdvancedOpen)]="AdvancedOpen"
       (SearchChanged)="OnToolbarSearch($event)"
       (PresetToggled)="OnTypeToggled($event)">
+      <button toolbar-actions type="button" mjButton variant="primary" size="sm" [disabled]="ActionBusy" (click)="RunSync()">Sync Accounts</button>
       <label class="gla-field">
         <span class="gla-field__label">Company</span>
         <!-- CHECKBOX multi-select (Marcelo 2026-08-05): narrow to any set of companies; empty = all. -->
@@ -48,6 +49,10 @@
 
   @if (LoadError) {
     <mj-alert Variant="error" [Message]="LoadError"></mj-alert>
+  }
+
+  @if (ActionMessage) {
+    <mj-alert Variant="info" [Message]="ActionMessage"></mj-alert>
   }
 
   @if (OrphanCount > 0) {

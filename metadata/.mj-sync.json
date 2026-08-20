@@ -9,7 +9,8 @@
     "journal-entry-types",
     "gl-account-roles",
     "applications",
-    "entity-actions"
+    "entity-actions",
+    "scheduled-job-types"
   ],
   "_comment_ignoreDirectories": "erp-account-sync and erp-account-sync-schedule are pushed by default (not ignored). mj sync push creates the Business Central CompanyIntegration, its entity/field maps, and the nightly job; they stand up ACTIVE and fail loudly until BC credentials + the target company are wired. Add either directory here only to intentionally hold it back from a push.",
   "ignoreDirectories": [],
