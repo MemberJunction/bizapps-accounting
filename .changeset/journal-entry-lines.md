@@ -1,6 +1,6 @@
 ---
-"@mj-biz-apps/accounting-entities": minor
-"@mj-biz-apps/accounting-core-entities-server": minor
+"@mj-biz-apps/accounting-entities": patch
+"@mj-biz-apps/accounting-core-entities-server": patch
 ---
 
 Move journal entry lines onto an MJ 6.1 related-record collection.

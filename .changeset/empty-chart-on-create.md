@@ -1,6 +1,6 @@
 ---
-"@mj-biz-apps/accounting-core-entities-server": minor
-"@mj-biz-apps/accounting-ng": minor
+"@mj-biz-apps/accounting-core-entities-server": patch
+"@mj-biz-apps/accounting-ng": patch
 ---
 
 New companies start with an EMPTY chart of accounts: the W1 auto-seed on AccountingCompanyProfile
