@@ -12,12 +12,11 @@ on:
       - 'package.json'
       - 'packages/**'
   pull_request:
-    branches: [next]
-    paths:
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
-      - 'package.json'
-      - 'packages/**'
+    # No `paths` filter, and `main` included: the release PR (next -> main) is the
+    # highest-stakes merge in the repo — it publishes to npm — and was the ONE merge
+    # nothing built. Skipping on paths is only sound when the BASE is known green;
+    # main's package set has never been built, so it must run unconditionally.
+    branches: [next, main]
 
 concurrency:
   group: build-${{ github.ref }}
