@@ -144,6 +144,14 @@ jobs:
           if [ -n "$MJ_DEP" ]; then
             # Strip semver range prefix (^, ~, >=, etc.) to get the base version
             MJ_MIN=$(echo "$MJ_DEP" | sed 's/^[^0-9]*//')
+            # Drop any prerelease suffix: 6.1.0-edge.3 -> 6.1.0. MJ's own gate
+            # (OpenApp/Engine CoerceToBaseVersion) coerces the HOST version to its
+            # base tuple before matching, so an -edge.N floor in mjVersionRange
+            # cannot be enforced -- an edge.1 host coerces to 6.1.0 and satisfies
+            # ">=6.1.0-edge.3" too. Publishing the base tuple states exactly what is
+            # actually checked. The real edge floor lives in each package's npm
+            # ranges, where pnpm/npm DO honour prereleases strictly.
+            MJ_MIN=${MJ_MIN%%-*}
             # Next major = current major + 1
             MJ_NEXT_MAJOR="$(( $(echo "$MJ_MIN" | cut -d. -f1) + 1 )).0.0"
             MJ_RANGE=">=${MJ_MIN} <${MJ_NEXT_MAJOR}"
