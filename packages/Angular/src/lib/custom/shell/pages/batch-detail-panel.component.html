@@ -1,0 +1,94 @@
+<mj-slide-panel [Visible]="Visible" [Title]="Title" (Closed)="Close()">
+  <!-- .bdp owns the panel's internal gutters — mj-slide-panel's body has no padding of its own
+       (same rationale as the JE panel's .jed wrapper). -->
+  <div class="bdp">
+    @if (IsLoading) {
+      <mj-loading text="Loading batch…"></mj-loading>
+    } @else if (LoadError) {
+      <mj-alert Variant="error" [Message]="LoadError"></mj-alert>
+    } @else if (Header; as h) {
+      <!-- State strip: status, target system, and the MOD-14 missing-task warning. -->
+      <div class="bdp__chips">
+        <mj-stat-badge [Label]="h.Status" [Variant]="StatusVariant"></mj-stat-badge>
+        <mj-stat-badge [Label]="h.TargetSystem" Icon="fa-solid fa-building-columns" Variant="default"></mj-stat-badge>
+        @if (MissingApprovalTask) {
+          <mj-stat-badge
+            Label="No approval task"
+            Icon="fa-solid fa-link-slash"
+            Variant="warning"
+            title="This built journal entry batch has no approval task (MOD-14). It is valid — the task raise needs retrying, or nobody will be asked to approve it.">
+          </mj-stat-badge>
+        }
+      </div>
+
+      <!-- Header verbs — workspace first (the working destination), then the pop-out the element
+           doctrine requires. Both close this panel as they hand the screen over. -->
+      <div class="bdp__actions">
+        <button type="button" mjButton Variant="outline" Size="sm" (click)="GoToWorkspace()" title="Open this journal entry batch in the JE batch workspace (closes this panel)">
+          <i class="fa-solid fa-diagram-project" aria-hidden="true"></i> Open in workspace
+        </button>
+        <button type="button" mjButton Variant="outline" Size="sm" (click)="PopOut()" title="Open the full journal entry batch record (closes this panel)">
+          <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i> Open full
+        </button>
+      </div>
+
+      @if (h.Status === 'Failed' && h.ErrorMessage) {
+        <mj-alert Variant="error" [Message]="h.ErrorMessage"></mj-alert>
+      }
+
+      <!-- Identity + money. TotalDebits/Credits are the batch's own netted stored totals. -->
+      <dl class="bdp__facts">
+        <div><dt>Company</dt><dd>{{ h.Company }}</dd></div>
+        <div><dt>Posting date</dt><dd>{{ h.PostingDate ? (h.PostingDate | date: 'mediumDate' : 'UTC') : '—' }}</dd></div>
+        <div><dt>Entries</dt><dd>{{ h.TotalEntries }}</dd></div>
+        <div><dt>Total debits</dt><dd class="num">{{ h.TotalDebits | currency }}</dd></div>
+        <div><dt>Total credits</dt><dd class="num">{{ h.TotalCredits | currency }}</dd></div>
+        @if (h.ExternalJournalEntryBatchRef) {
+          <div><dt>ERP reference</dt><dd class="mono">{{ h.ExternalJournalEntryBatchRef }}</dd></div>
+        }
+        <div><dt>Created</dt><dd>{{ h.__mj_CreatedAt | date: 'medium' }}</dd></div>
+        @if (h.ApprovalTaskRaisedAt) {
+          <div><dt>Approval raised</dt><dd>{{ h.ApprovalTaskRaisedAt | date: 'medium' }}</dd></div>
+        }
+        @if (h.ApprovedAt) {
+          <div><dt>Approved</dt><dd>{{ h.ApprovedAt | date: 'medium' }}</dd></div>
+        }
+        @if (h.SentAt) {
+          <div><dt>Sent</dt><dd>{{ h.SentAt | date: 'medium' }}</dd></div>
+        }
+        @if (h.PostedAt) {
+          <div><dt>Posted</dt><dd>{{ h.PostedAt | date: 'medium' }}</dd></div>
+        }
+      </dl>
+
+      <!-- Member entries. The count is the TRUE total; the list is a bounded page of it. -->
+      <div class="bdp__members-head">
+        <span class="bdp__members-title">Entries in this journal entry batch</span>
+        <span class="bdp__members-count">{{ MemberCount }}</span>
+      </div>
+      @if (Members.length === 0) {
+        <div class="bdp__empty">No journal entries are attached to this journal entry batch.</div>
+      } @else {
+        <table class="bdp__members">
+          <thead>
+            <tr><th>Entry №</th><th>Type</th><th>Status</th><th>Effective</th><th>Memo</th></tr>
+          </thead>
+          <tbody>
+            @for (m of Members; track m.ID) {
+              <tr>
+                <td class="mono">{{ m.EntryNumber }}</td>
+                <td>{{ m.EntryType }}</td>
+                <td>{{ m.Status }}</td>
+                <td>{{ m.EffectiveDate ? (m.EffectiveDate | date: 'mediumDate' : 'UTC') : '—' }}</td>
+                <td class="bdp__memo">{{ m.Description || '—' }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+        @if (MembersTruncated) {
+          <div class="bdp__truncated">Showing the first {{ Members.length }} of {{ MemberCount }} entries — open the full journal entry batch for the rest.</div>
+        }
+      }
+    }
+  </div>
+</mj-slide-panel>

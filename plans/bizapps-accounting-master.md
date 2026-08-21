@@ -1,1178 +1,980 @@
-# BizAppsAccounting Master Plan
+# BizApps Accounting — Master Plan
 
-> **Status**: Plan / pre-implementation
-> **Target repo**: `MemberJunction/bizapps-accounting` (newly created public OSS repo)
-> **Depends on**: `plans/mj-core-changes.md` (MJ core additions to `__mj.Company`)
-> **Sibling plans**: `plans/aidp-master-plan.md` (the overarching context), eventual `bizapps-orders-master.md` and `bizapps-contracts-master.md` follow-ups
-> **Positioning**: **Accounts receivable subsidiary ledger of record + supporting JE primitives. Not a general ledger.**
+> **Status:** Single source of truth for the BizApps Accounting rebuild (consolidated 2026-07-22).
+> **Repo:** `MemberJunction/bizapps-accounting` · schema `__mj_BizAppsAccounting`.
+> **Positioning:** **Accounts-receivable subsidiary ledger of record + journal-entry primitives. Not a general ledger.**
+>
+> This document consolidates the entire prior plan chain (master plan + modification/update ledgers +
+> meeting rulings through 2026-07-22) into one current-state plan. It stands alone: there are no
+> companion ledgers, markers, or meeting docs — **git is the history**. Where a decision came from a
+> specific person's ruling, the attribution is noted inline so provenance survives without ledger
+> machinery.
 
 ---
 
 ## 0. Table of contents
 
-1. [Context and positioning](#1-context-and-positioning)
-2. [Decisions (BA-D1 through BA-D27)](#2-decisions-ba-d1-through-ba-d27)
-3. [Architecture and scope boundaries](#3-architecture-and-scope-boundaries)
-4. [Entity model](#4-entity-model)
-   - 4.1 GLAccount + hierarchy
-   - 4.2 AccountingCompanyProfile (IsA Company child)
-   - 4.3 Dimensions + DimensionValue + JE line tagging
-   - 4.4 AccountingPeriod
-   - 4.5 JournalEntry, JournalEntryLine, JournalEntryBatch, JournalEntryBatchLineItem
-   - 4.6 ChartOfAccountsMapping
-   - 4.7 Currency + CurrencyExchangeRate (in BizAppsCommon — referenced)
-   - 4.8 Tax: TaxAuthority, TaxJurisdiction, TaxRate, TaxLiability, TaxRemittance
-   - 4.9 Scheduled journal entries (revenue-recognition waterfall)
-   - 4.10 Account balance materialization
-5. [Database-level enforcement](#5-database-level-enforcement)
-6. [Multi-currency mechanics](#6-multi-currency-mechanics)
-7. [Period close workflow](#7-period-close-workflow)
-8. [JE lifecycle: Pending → Batched → GLPosted](#8-je-lifecycle-pending--batched--glposted)
-9. [Pluggable tax engine](#9-pluggable-tax-engine)
-10. [Reporting: read-model views + Skip-generated reports](#10-reporting-read-model-views--skip-generated-reports)
-11. [Integration with BizAppsOrders + future apps](#11-integration-with-bizappsorders--future-apps)
-12. [Migration of CDP `finance.*` data](#12-migration-of-cdp-finance-data)
-13. [Phasing and delivery](#13-phasing-and-delivery)
-14. [Open questions](#14-open-questions)
-15. [Out of scope (explicit)](#15-out-of-scope-explicit)
+1. [Context, positioning, and guiding principles](#1-context-positioning-and-guiding-principles)
+2. [Architecture and scope boundaries](#2-architecture-and-scope-boundaries)
+3. [Design decisions (current)](#3-design-decisions-current)
+4. [No periods — the timing model](#4-no-periods--the-timing-model)
+5. [Entity model](#5-entity-model)
+   - 5.1 GLAccount · 5.2 AccountingCompanyProfile · 5.3 GL account roles & links ·
+     5.4 Dimensions · 5.5 JournalEntry + JournalEntryLine · 5.6 JournalEntryBatch + summary lines ·
+     5.7 Currency · 5.8 Tax entities · 5.9 What is deliberately absent from the schema
+6. [Database-level enforcement](#6-database-level-enforcement)
+7. [JE lifecycle and batching workflow](#7-je-lifecycle-and-batching-workflow)
+8. [Multi-currency mechanics](#8-multi-currency-mechanics)
+9. [Intercompany](#9-intercompany)
+10. [Tax](#10-tax)
+11. [Reporting: read-model views](#11-reporting-read-model-views)
+12. [Permissions, roles, and company scope](#12-permissions-roles-and-company-scope)
+13. [UX direction](#13-ux-direction)
+14. [Integration contract with BizApps Orders](#14-integration-contract-with-bizapps-orders)
+15. [Migration of legacy CDP `finance.*` data](#15-migration-of-legacy-cdp-finance-data)
+16. [Build sequencing (current priorities)](#16-build-sequencing-current-priorities)
+17. [Open architecture questions](#17-open-architecture-questions)
+18. [Out of scope (explicit)](#18-out-of-scope-explicit)
+19. [Build inventory](#19-build-inventory-state-as-of-consolidation-2026-07-22)
 
 ---
 
-## 1. Context and positioning
+## 1. Context, positioning, and guiding principles
 
-BizAppsAccounting provides the **journal entry primitives and AR subsidiary ledger** for the MJ ecosystem. It is **not a general ledger**.
+BizApps Accounting provides the **journal-entry primitives and AR subsidiary ledger** for the MJ
+ecosystem. It is **not a general ledger**.
 
 ### What we ARE
 
-- **AR subsidiary ledger of record**: the system of record for customer-facing accounting events — invoices, payments, deferred revenue rollforward, sales tax accruals, commission accruals, partner rev share, all the JEs that originate from a customer transaction.
-- **Journal entry primitives**: balanced, immutable-once-batched, dimension-tagged, multi-currency-capable JE infrastructure that downstream apps (BizAppsOrders, future BizAppsPayroll, etc.) call into.
-- **Subledger period close**: lock our subledger periodically so audit trails are clean.
-- **Batching to external GL**: aggregate our JEs and push them to the ERP/GL system (Business Central, QuickBooks, NetSuite, Sage, etc.) per company per period.
+- **AR subsidiary ledger of record:** the system of record for customer-facing accounting events —
+  invoices, payments, deferred revenue rollforward, sales-tax accruals, and every JE that originates
+  from a customer transaction.
+- **Journal-entry primitives:** balanced, immutable-once-locked, dimension-tagged,
+  multi-currency-capable JE infrastructure that downstream apps (BizApps Orders, future
+  BizApps Payroll, etc.) call into.
+- **Batching to the external GL:** aggregate our JEs and post consolidated summaries to the ERP
+  (Business Central, QuickBooks, NetSuite, Sage) — the detail stays with us for drill-through.
 
 ### What we are NOT
 
-- **Not a general ledger.** The ERP/accounting system remains the system of record for the full GL.
-- **Not a financial-statement generator.** Trial Balance, P&L, Balance Sheet, Statement of Cash Flows come from the ERP.
-- **Not a year-end closing engine.** Year-end closing JEs (P&L → Retained Earnings) happen in the ERP.
-- **Not an expense-management system.** Expenses (vendor bills, payroll, fixed assets, etc.) live in the ERP or in future BizApps* siblings (BizAppsPayroll, BizAppsExpenseManagement, BizAppsFixedAssets).
-- **Not an inventory or COGS engine.** Out of scope.
+- **Not a general ledger.** The ERP remains the system of record for the full GL.
+- **Not a financial-statement generator.** TB / P&L / Balance Sheet / Cash Flows come from the ERP.
+- **Not a year-end closing engine.** ERP territory.
+- **Not an expense-management, inventory, or COGS system.** ERP or future BizApps siblings.
+- **Not a period-close system.** We keep **no accounting-period machinery at all** (see §4).
+
+### Guiding principles (Amith's design ethos)
+
+1. **Mirror real-world accounting practice and structure** so professional accountants and auditors
+   find the system approachable and auditable. Between "technically convenient" and "what a real
+   ledger does" — do what a real ledger does.
+2. **Integrity via the strictest practical DB-level controls (triggers).** No blockchain-style
+   store; trust a CFO-level human not to bypass the controls. The invariants must hold even against
+   direct SA access.
+3. **Pen, not pencil.** Mistakes are corrected with adjusting/correcting entries — locked history is
+   never edited or deleted.
+4. **The subledger philosophy of detail:** the GL never receives individual transactions — "we do
+   not send individual transactions, we aggregate and roll up… you never get individual JEs/dates
+   into the GL system" (Amith). The GL holds summaries plus a link back to our detail.
+5. **Deterministic test data:** generate our own seed/demo data and validate every change against it.
 
 ### Why this scope is the right boundary
 
-- The ERP investment is sunk and works. Replicating its full GL is wasted effort.
-- The subledger pattern is well-understood (Zuora → NetSuite, Stripe → QBO) and the boundary is clean.
-- Downstream apps (BizAppsOrders especially) need disciplined JE primitives. Providing those without ALSO providing a GL keeps the scope tractable.
-- Future `BizAppsGeneralLedger` could layer on top if needed for orgs without a separate ERP. Not in v1.
+The ERP investment is sunk and works; replicating its GL is wasted effort. The subledger pattern is
+well-understood (Zuora → NetSuite, Stripe → QBO) and the boundary is clean. Downstream apps need
+disciplined JE primitives — providing those without also providing a GL keeps scope tractable.
 
 ---
 
-## 2. Decisions (BA-D1 through BA-D27)
-
-These are accounting-layer decisions. References to `M*` decisions point to `plans/aidp-master-plan.md`.
-
-| # | Decision | Rationale |
-|---|----------|-----------|
-| **BA-D1** | **Subledger positioning** (see §1). BizAppsAccounting is an AR subsidiary ledger of record + JE primitives. The ERP remains the GL. | Sharp scope. Avoids re-implementing functionality that any ERP already does. |
-| **BA-D2** | **SQL Server first for development; PostgreSQL via conversion before release.** SQL Server / Azure SQL is the dev and source-of-truth dialect (migrations authored as T-SQL in `migrations/`). PostgreSQL remains a first-class supported target produced by MJ's `sql-converter` / `pg-migrate` tooling (`migrations-pg/`) and validated in CI, but the conversion is run at release time rather than maintained PG-native day to day. | Move fast on the dialect our local MJ stack and tooling already target, while still shipping PG support. Aligns with the "SQL Server is the source of truth; PostgreSQL is converted" rule in `CLAUDE.md`. We will 100% support PG. |
-| **BA-D3** | **UUID primary keys throughout.** No INT IDENTITY. | `M5`. Consistent with the rest of the rebuild. |
-| **BA-D4** | **`JournalEntry` is the top-level entity in BizAppsAccounting** with polymorphic origin links. Other apps emit JEs by calling into Accounting. | `M7`. Single source of truth for ledger postings; downstream apps call up. |
-| **BA-D5** | **Balanced-JE invariant enforced at DB level.** `CHECK` + deferrable constraint or trigger ensures `SUM(Debits) == SUM(Credits)` per JE before commit. | Cannot be bypassed by any code path including direct SA access. Audit guarantee. |
-| **BA-D6** | **JE lifecycle: `Pending → Batched → GLPosted`.** Drop the earlier `Posted` state — batching IS the lock event. Voided/Reversal pattern via separate JEs per `M10`. | Per AN-BC discussion. Cleaner. JEs sit in Pending until batch run, then lock. Reversals at business-entity level emit new Pending JEs. |
-| **BA-D7** | **Immutability after `Batched`.** `UPDATE` / `DELETE` of JournalEntry or JournalEntryLine where Status ∈ {`Batched`, `GLPosted`} blocked by DB trigger. Reversals via new JE only. | Audit trail by construction. SA-level bypass impossible. |
-| **BA-D8** | **First-class dimensions, optional.** `Dimension`, `DimensionValue`, `JournalEntryLineDimension`. Deployments that don't define dimensions get a flat chart with no penalty. | Matches modern ERP pattern (NetSuite, SAP). Lets deployments scale analytical capability without exploding the chart of accounts. |
-| **BA-D9** | **`AccountingCompanyProfile` is an IsA Disjoint child of `__mj.Company`.** Holds ALL company-attribute extensions, both accounting-specific (FunctionalCurrencyCode, FiscalYearStartMonth, books-sharing) AND general business attributes (EntityType, LegalStructureType, IncorporationDate, JurisdictionCountry/Region, FederalTaxID). | Per CM1 in `mj-core-changes.md`. MJ core stays minimal — nothing accounting OR business-attribute leaks into it. Country/Region concepts respect BizAppsCommon's ownership of geographic modeling (Address). For v1 we keep this as a single IsA child; if future apps want non-accounting access to EntityType etc., a `CompanyBusinessProfile` in BizAppsCommon with multi-level IsA can be introduced later. |
-| **BA-D10** | **Functional currency per `AccountingCompanyProfile`.** JEs always post in the Company's functional currency. JournalEntryLine carries `OriginalCurrency / OriginalAmount / ExchangeRateUsed` when source transaction is in a different currency. | `M12` mechanics. JE header has no Currency field — derived from Company. Realized FX gain/loss auto-emitted by engine on payment-to-AR rate mismatch. |
-| **BA-D11** | **REVISED 2026-06: `Currency` (and the exchange-rate table) are OWNED BY BizAppsAccounting, not BizAppsCommon.** Originally Currency/`CurrencyExchangeRate` were slated for BizAppsCommon so other apps could share the currency infra, but common never shipped them. Since BizAppsAccounting is a free OSS app, any app that needs currency can simply take a dependency on it — and we keep the infra under our own control. `Currency` now lives in `__mj_BizAppsAccounting` (seeded ISO-4217 set; landed in the v0.1.0 baseline migration). The exchange-rate table (provisional name `CurrencyExchangeRate`; `CurrencySpotRate` under consideration) is a follow-on FX-feature concern, also Accounting-owned. Pluggable provider via RegisterClass — ship `ExchangeRate-API`, `ECB`, `OpenExchangeRates`, `Manual`. **Auto-fetch disabled by default**; deployments opt in via Scheduled Job (weekly when enabled). | common never built Currency; OSS-dependency model lets consumers opt in without a shared-infra coupling. Avoid mystery cron eating API budget. |
-| **BA-D12** | **AccountingPeriod per `AccountingCompanyProfile`.** Each accounting-enabled Company has its own period set. Periods lock JE posting via DB constraint check. | Standard subledger pattern. Multi-company is the common case for BC. |
-| **BA-D13** | **Hard close**: once `AccountingPeriod.Status = 'Closed'`, no JE can post with EffectiveDate in that period. **No override.** Reopen requires admin role + reason + audit log entry. | `M9` discipline. Soft close erodes integrity over time. |
-| **BA-D14** | **Adjusting entries post to the next open period** with a `OriginalPeriodReference` field on the JE for traceability. | Standard accounting practice after period close. |
-| **BA-D15** | **JE numbering**: `JE-{AccountingCompanyProfile.CompanyCode}-{FiscalYear}-{seq}` like `JE-SIDECAR-2026-000001`. Sequence resets at fiscal year boundary, scoped per Company. Gap-free (cancelled/voided numbers not reused). | Familiar pattern for accountants. Per-Company per-FY scoping aligns with audit grouping. `CompanyCode` is stored on the IsA child (not MJ core) so no `__mj.Company` field is required. |
-| **BA-D16** | **JournalEntryBatch is the locking event** (not individual JE Post). Batching aggregates JEs by `(Company, AccountingPeriod, TargetSystem)`, locks them, and ships **one consolidated JE per Company** to the ERP. | Per AN-BC. Reduces noise in ERP. Audit trail preserved by the source JEs locked in our system. |
-| **BA-D17** | **No intercompany balancing JEs originate in Accounting.** That logic lives in BizAppsOrders (and other JE-emitting apps). Accounting just receives the JE emissions per leg. | Per AN-BC. Accounting is raw primitives; orchestration lives upstream. Keeps Accounting scope tight. |
-| **BA-D18** | **REVISED 2026-06: drop the cron-driven `Recurring*` tables.** The original `RecurringJournalEntryTemplate` / `RecurringJournalEntryTemplateLine` / `RecurringJournalEntry` trio is removed. The dominant in-scope need — deferred-revenue recognition — is served by **`ScheduledJournalEntry`** (BA-D25), a finite, origin-linked, known-amount waterfall. Finite amortization (prepaid, etc.) is also modeled as `ScheduledJournalEntry`. FX revaluation, whose amount depends on a live spot rate, becomes a programmatic engine action (BA-D27), not a stored template. | Per AN-BC call (2026-06-05). A cron template is the wrong primitive for rev-rec; "scheduled" (known amounts, materialized at period close) is what accountants actually reason about. Radical simplification — start clean, expand later. |
-| **BA-D19** | **Tax engine pluggable via `RegisterClass`/`ClassFactory`.** Ship Avalara + TaxJar adapters + local `TaxRate` table fallback. Underlying `TaxAuthority/Jurisdiction/Rate/Liability/Remittance` entities shared so adapter choice doesn't change schema. | `M13`. Per AN-BC. Avoids vendor lock-in. Local-mode users can manually maintain rates for simple cases. |
-| **BA-D20** | **No statistical accounts in v1.** | Per AN-BC. Statistical accounts power management reporting from a GL; we're not a GL. |
-| **BA-D21** | **No year-end closing JEs in v1.** | Per AN-BC. ERP territory. |
-| **BA-D22** | **Account balance materialization scoped to OUR accounts** — AR by Customer, Deferred Revenue by Subscription, Sales Tax Payable by Jurisdiction, Commission Payable by Salesperson. Closed-period balances materialized; open-period balances computed on demand. | Per AN-BC. We're a subledger; we don't materialize full GL balances. Performance-critical for AR aging and DefRev rollforward. |
-| **BA-D23** | **Reporting via Skip-generated interactive components** rendering against shipped read-model views (`vw_TrialBalance_AR`, `vw_GLDetail_Subledger`, `vw_AROpenByCustomer`, `vw_DefRevRollforward`, `vw_SalesTaxLiability`, `vw_ARtoGLRecon`, `vw_DimensionPL`, etc.). Reports in a "Report Gallery" MJ app (separate). | Per AN-BC. Skip generates UI; we ship the data layer. |
-| **BA-D24** | **JE generation is metadata-driven, not hardcoded.** Product / SubscriptionPlan / OrderType / etc. metadata in BizAppsOrders determines the JE pattern emitted (`Immediate`, `Ratable`, `Milestone`, `Custom`). Accounting receives the emitted JEs and validates them. | `M11` of master plan. New revrec policies via metadata, not code change. Accounting doesn't need to know about Order types — Orders generates correct JEs. |
-| **BA-D25** | **`ScheduledJournalEntry` + `ScheduledJournalEntryLineItem` (+ `ScheduledJournalEntryLineDimension`)** model the revenue-recognition / amortization waterfall. A scheduled entry is a **pre-computed FUTURE JE** with amounts known up front, a target accounting period, and an origin (Subscription/Term/Order/Contract soft refs). The **period-close engine materializes** each into a real Pending `JournalEntry` (Dr Deferred Revenue, Cr Revenue) on its target period, linking back via `GeneratedJournalEntryID`; the scheduled row locks once `Status='Generated'` (DB trigger). **The schedule itself (count, rounding — extra pennies front-loaded in entry 1 — uneven-start / no-lapse-gap rules) is computed UPSTREAM in BizAppsOrders** (per BA-D24/BA-D17) and persisted here via `AccountingService`. Single-date deferral (event tickets) is `ScheduleCount=1`. | Per AN-BC call. This is the deferred-income mechanism (subscriptions, Digital Now tickets). Accounting owns storage + materialization + the lockable audit trail; Orders owns the subscription-specific math. Replaces the dropped recurring trio (BA-D18). |
-| **BA-D26** | **`JournalEntryBatchLineItem` (+ `JournalEntryBatchLineDimension`) are the consolidated summary lines a batch ships to the ERP.** When a batch is built, the engine aggregates the locked JE lines of every JE in the batch, grouped by **GLAccount × dimension combo × side**, into one summary line each — that account×dimension granularity preserves departmental/segment breakdown so BC can still produce departmental P&Ls. The `JournalEntryLine` detail stays for drill-through. A DB trigger checks the summary foots to the batch control totals (and balances) at dispatch, and freezes the summary once `Status ∈ {Sent, Acknowledged}`. | Per AN-BC call ("journal entry batches need to have their own lines… we'll come back and fix that"). The batch is the lock event (BA-D16); the summary is what posts. Account×dimension chosen so dimensional financials survive summarization. |
-| **BA-D27** | **FX revaluation is a programmatic engine action, not a stored template.** Unrealized FX mark-to-market is computed by an action (driven from Orders / period close) using the live `CurrencySpotRate`, and the resulting JEs are stored as ordinary `JournalEntry` rows in Accounting. AR already holds the currency-specific balances. | Per AN-BC call. A reval amount can't live in a static template — it depends on the spot rate at close. Keep Accounting as core mechanics + storage; the math lives in an action that can expand later. |
-
----
-
-## 3. Architecture and scope boundaries
+## 2. Architecture and scope boundaries
 
 ### Dependency stack
 
 ```
-__mj                              (MJ core: Company, User, Role, File, Integration metadata)
+__mj                    MJ core: Company, User, Role, File
    ↑
-BizAppsCommon                     (Person, Organization, Address, ContactMethod, Relationship,
-                                   Currency, CurrencyExchangeRate)
+bizapps-common          Person, Organization, Address, ContactMethod
    ↑
-BizAppsAccounting   ◄── this plan (GLAccount, AccountingCompanyProfile [IsA Company],
-                                   AccountingPeriod, Dimension, DimensionValue,
-                                   JournalEntry, JournalEntryLine, JournalEntryLineDimension,
-                                   JournalEntryBatch, JournalEntryBatchLineItem,
-                                   ScheduledJournalEntry (+ line + dimension),
-                                   ChartOfAccountsMapping, Tax* entities,
-                                   AccountBalance, AccountBalanceByDimension)
+bizapps-tasks           Task primitives (batch-approval tasks run through it)
    ↑
-BizAppsOrders                     (Product, Order, Subscription, Payment, Invoice,
-                                   IntercompanyFlow, RevenueRecognitionSchedule
-                                   — emits JEs by calling into Accounting)
+bizapps-accounting  ◄── this plan
    ↑
-BizAppsContracts                  (Contract envelope, Term, Escalator, Renewal —
-                                   emits JEs for contract-level revrec overrides)
-   ↑
-aidp                              (Consumer: CashFlowCategory, ForecastRun, BudgetVersion,
-                                   ReconciliationRun, etc. — reads BizAppsAccounting data)
+bizapps-orders          Product, Order, OrderLine, Subscription, Payment —
+                        emits JEs by calling into Accounting (one JE per order line)
 ```
+
+- **Currency is OWNED by accounting** (`__mj_BizAppsAccounting.Currency`, seeded ISO-4217).
+  bizapps-common never shipped it; any app needing currency takes a dependency on this free OSS app.
+- **SQL Server first; PostgreSQL by conversion.** Migrations are authored as T-SQL; the PG
+  counterparts are produced by MJ's `sql-converter` tooling and validated in CI at release time.
+- **UUID primary keys throughout.** No INT IDENTITY.
 
 ### Boundary contracts
 
-**BizAppsAccounting receives from upstream apps**:
-- JE post requests (with header + balanced lines + dimension tags)
-- Rev-rec / amortization schedules (`ScheduledJournalEntry` rows, computed upstream — BA-D25)
-- Tax rate lookups (when an adapter is configured)
+**Accounting receives from upstream:** JE create requests (header + balanced lines + dimension
+tags) via the `Accounting.CreateJournalEntry` / `CreateJournalEntries` remote operations.
 
-**BizAppsAccounting provides to upstream apps**:
-- JE post primitives (transactional, atomic, balanced)
-- Account balance queries (open vs closed period semantics)
-- AR aging data (via read-model views)
-- Period status checks (is May closed? when does the next open period start?)
-- Tax calculation hooks (delegated to pluggable provider)
+**Accounting provides to upstream:** transactional, atomic, balanced JE creation; role-based GL
+account resolution (`AccountingEngineBase.ResolveLinkedAccount`); AR/balance data via read-model
+views.
 
-**BizAppsAccounting does NOT**:
-- Know about Orders, Subscriptions, Contracts, Payments — those are upstream-app concepts
-- Generate JEs autonomously (only as instructed by upstream apps, or by materializing `ScheduledJournalEntry` rows persisted upstream)
-- Push to external GL (the batching mechanism is provided, but the actual ERP connector lives in MJ Integration framework — see §11)
+**Accounting does NOT:** know about Orders/Subscriptions/Payments as concepts (only the generic
+polymorphic origin pair, D25); generate JEs autonomously; own the ERP connector (dispatch uses the BC REST API — §7.5);
+generate intercompany legs (§9); compute FX (§8); calculate tax (§10).
+
+### Standing migration practice (pre-production)
+
+While nothing is deployed, schema changes are made by **editing the ORIGINAL baseline migration in
+place**, rebuilding on a clean database, and re-running CodeGen — no incremental fix-up migrations
+(Amith, 2026-07-21). Once published, the publish-then-no-breaking-changes policy applies.
 
 ---
 
-## 4. Entity model
+## 3. Design decisions (current)
 
-### 4.1 GLAccount + hierarchy
+The current decision set. Each is the standing ruling — superseded ancestors live only in git.
 
-The chart of accounts mirrors the ERP's COA, but BizAppsAccounting owns its copy so JE line items have a stable reference.
+| # | Decision | Rationale / source |
+|---|----------|-----------|
+| D1 | **Subledger positioning** (§1). AR subsidiary ledger + JE primitives; the ERP is the GL. | Sharp scope; don't re-implement the ERP. |
+| D2 | **No accounting periods, no close machinery — the ERP owns periods.** No `AccountingPeriod` table, no period FK anywhere, no close guard. Batches land in the ERP's ACTIVE period; "that's not our job to worry about" (Amith). Accountants are responsible for batching entries into the right periods; any future timing rule detects by **DATE, never a period FK**. | Amith 2026-07-02, confirmed final by Marcelo 2026-07-14 after a brief manual-close detour was withdrawn same-day. Batch summaries lose date info anyway. |
+| D3 | **`JournalEntry` is SINGLE-COMPANY:** `CompanyID NOT NULL` header; every line's account belongs to that company (trigger-enforced). Upstream books one JE per order line, so each JE resolves to exactly one company. | Marcelo 2026-07-13 (locks are JE-grained → per-company independence); Robert concurs. |
+| D4 | **Balanced-JE invariant enforced at DB level** (deferred/transaction-scope trigger): `SUM(Debits) = SUM(Credits)` per JE. Cannot be bypassed by any code path. | Audit guarantee. |
+| D5 | **JE lifecycle `Pending → Batched → GLPosted`; batching is the lock event — with LEVELS.** Pre-approval batch = preliminary, REVERSIBLE lock; **approval = permanent lock**; **reject UNLOCKS** entries back to the candidate pool; an open batch can be regenerated. | Robert 2026-07-08. |
+| D6 | **Immutability after lock** enforced by DB trigger: `UPDATE`/`DELETE` blocked for locked JEs/lines except the GL-roundtrip fields (`GLPostedAt`, `GLReferenceID`, `Status`). Reversals via new JEs only. | Audit trail by construction. |
+| D7 | **Batches are SINGLE-COMPANY:** `JournalEntryBatch.CompanyID` header; one batch per company per run, on that company's own cadence. | Robert's proposal; Jeremy sign-off ("actually a better control" — per-company approvers = segregation of duties); Marcelo ruled independently. See §7.2 conditions. |
+| D8 | **The batch carries a SINGULAR accountant-set `PostingDate`; one aggregated JE per batch posts to the GL.** Posting date must match between systems; document date is informational only (never cross the two — Jeremy). | Amith's model; Jeremy "100% on board". |
+| D9 | **Batch summary granularity = GLAccount × dimension-combo (one aggregated Summary `JournalEntry`).** One net summary line per account×dimension group; null-dimension entries aggregate within their account group. The summary is modeled as **one aggregated `JournalEntry` typed with the `IsBatchSummary`-flagged `JournalEntryType` (BA-D29)** linked via `JournalEntryBatch.SummaryJournalEntryID`, reusing standard `JournalEntryLine` and `JournalEntryLineDimension` rows (`JournalEntryBatchLineItem` tables retired). | Amith 2026-06-28 → 2026-07-22 simplification. |
+| D10 | **Batch approval runs through bizapps-tasks** (CFO-level gate): the batch cannot dispatch until the approval task completes. Batch build and task-raise are **ONE transaction** — header + summary + JE locks + the approval Task + the `ApprovalTaskID`+`ApprovalTaskRaisedAt` stamp commit all-or-none; a task failure rolls back the whole build (the pre-write CFO precondition catches the no-approver config case before any write). `ApprovalTaskID` is intended as a **real FK** to the Task (findable, undeletable) — **soft ref interim** until the CodeGen cross-app-FK work ships (~MJ 5.51), then harden. | Amith (approval-via-tasks); Marcelo 2026-07-29 (one transaction, supersedes the 2026-07-16 two-transaction split). |
+| D11 | **Role-based polymorphic GL account mapping:** `GLAccountRole` + `GLAccountLink` (+ `GLAccountLinkDimension`) map accounts to Product / ProductCategory / Company by role, date-effective. Consumers resolve product → category tree → company default. | Amith 2026-07-02 engine meeting. Full rules §5.3. |
+| D12 | **Company default accounts = company-level `GLAccountLink` rows.** The five `AccountingCompanyProfile` default-account FK columns are REMOVED ("replaced by 5 rows in the GL account link table" — Amith 2026-07-21). There is no system-level default: "GL account defaults start at the company level." Required-role enforcement is parked for later. | Amith 2026-07-21 review. |
+| D13 | **`ChartOfAccountsMapping` is DROPPED** — "an appendage from a prior design… blow it away" (Amith). ERP account identity lives on `GLAccount` (`ExternalSystem` + `ExternalAccountID`); we are not the source of truth for the ERP's chart. | Amith 2026-07-21. |
+| D14 | **Contra-account roles:** `GLAccountRole` includes **Sales Discounts** and **Returns & Allowances**. Classical contra treatment: gross Cr Sales, discount as Dr Sales-Discounts, AR at net; absent a linked discounts account, net into Sales. | Amith 2026-07-21. |
+| D15 | **Deferred revenue = REAL forward-dated JEs written at booking.** No schedule tables, no materializer, no daily job (Robert: a wake-up job is "fragile — just create them"). A 12-month $1,200 sub → 12 × $100 Dr DefRev / Cr Revenue JEs, each with its own EffectiveDate. Changes/cancellations produce **correcting orders whose entries NET against what's staged** — staged entries are never edited or deleted. | Robert's model + Jeremy sign-off ("cleaner model than what I had in mind"). |
+| D16 | **All FX (realized + unrealized) is computed and posted UPSTREAM** (Orders/Payments). Accounting keeps only account refs, balance validation, and `vw_FxExposure`. FX overall is deferred until multi-currency activates; the responsibility is **unowned until Payments exists** (flagged, accepted). | Amith 2026-06-30. |
+| D17 | **Tax calculation is DELEGATED to a third-party engine** (Stripe Tax / Avalara / Vertex class) behind the `TaxCalculationProvider` seam. We (1) send inputs, (2) record what returns. Our tax tables are **snapshot/reference data** — never a rate authority we maintain or sync. | Robert 2026-07-14. Engine selection + launch timing open (§16). |
+| D18 | **Intercompany: accounting still GENERATES no legs — but it now owns the LOOKUP.** No leg generation, no netting, no settlement here; the emitter (Payments, in bizapps-orders) builds the entries. What changed 2026-07-26: the per-company-pair account mapping lives in THIS repo as `IntercompanyAccountMatch` (BA-D26), because it maps GL accounts and dimensions — accounting's own vocabulary — and every future consumer (AP as well as AR) needs the same answer. The reserved "4 accounts per unordered pair" shape is **superseded** by ordered pairs (BA-D27). **Intercompany legs arise on the PAYMENT side, not at booking** (Amith 2026-07-21). | Amith 2026-06-28 → 2026-07-21 → 2026-07-26. |
+| D19 | **JE numbering `JE-{CompanyCode}-{FY}-{seq}`** — per company, per fiscal year. Gap-free/consecutive numbering is NOT a requirement (Amith 2026-07-23: no such concept we care about) — the sequence is best-effort; gaps are acceptable. Batch numbering stays a global sequence (revisit if per-company batch numbering is wanted). | Familiar to accountants; FY from company settings. |
+| D20 | **No balance materialization.** Read-model views compute on demand; revisit only if read performance demands it. | Amith ("might kill this for the first version"). |
+| D21 | **Permissions = standard MJ roles + RLS; the app seeds its own roles** (Accounting User / Admin, optionally Manager). Company-scoped access via a `UserCompanyRole` grant table (per-company User/Approver/Admin + unscoped Global Admin). The CFO approver is a designated **`__mj.User`** link (a security identity — no Employee entity exists). | Robert 2026-07-09; mechanism ruled 2026-07-16. |
+| D22 | **Forms-first UX:** every core entity gets a first-class MJ Entity Form composed of widgets dashboards embed directly ("truly one UX"); no bespoke pop-ups — modal/slide-in surfaces render the entity form through MJ's form host. | Amith 2026-07-17. Full UX direction §13. |
+| D23 | **UTC everywhere.** Every persisted timestamp is UTC; `OperatingTimeZone` is presentation-only. | Standing convention. |
+| D24 | **Metadata-driven JE generation.** Upstream metadata (product type, roles, links) determines the JE pattern; accounting validates and stores. New rev-rec policies come from metadata, not code changes. | Original principle, unchanged. |
+| D25 | **JE provenance = ONE polymorphic origin pair on the header:** `JournalEntry.LinkedEntityID`/`LinkedRecordID` (nullable TOGETHER — CHECK; NULL = manual JE). Every JE has exactly one causal origin (per-line booking makes JE↔OrderLine 1:1; payment/tax/batch emitters are all single-origin; multi-record relationships like payment→orders live in domain tables such as `PaymentLine`). Replaces BOTH the as-built seven soft-ref columns (`OrderID`, `OrderLineID`, `SubscriptionID`, `PaymentID`, `ContractID`, `IntercompanyFlowID`, `TaxRemittanceID` — "junky duplicative soft fkeys") AND the as-built `JournalEntryLink` table (M:N machinery nothing needs; reintroduce alongside the pair only if a future emitter genuinely needs N links). `JournalEntryLine.OrderLineID` also drops (redundant under 1:1). All via in-place baseline edit. | Amith 2026-07-23. |
+| BA-D26 | **`IntercompanyAccountMatch` lives in accounting.** A per-company-pair lookup answering "when Source collects cash settling Target's line, which two accounts carry the obligation?" — `SourceCompanyID`, `TargetCompanyID`, `DueToGLAccountID`, `DueFromGLAccountID`, date-effective (`Status`/`StartedAt`/`EndedAt`) with GLAccountLink's exact resolution rule. Child `IntercompanyAccountMatchDimension` carries `Side` + `DimensionID` + **nullable `DimensionValueID`**. It is here rather than in orders because it maps GL accounts and dimensions, and a future AP app needs the identical lookup. Resolution: `AccountingEngineBase.ResolveIntercompanyAccounts`. | Amith 2026-07-26; design in bizapps-orders `plans/intercompany-balancing.md`. |
+| BA-D27 | **Pairs are ORDERED, not symmetric.** A row means "Source owes Target"; the reverse direction is a SEPARATE row. Supersedes D18's "4 accounts in one unordered row". Two reasons: the directions routinely use different accounts and are configured at different times, and a symmetric row is easy to read backwards — **and a backwards pair still BALANCES**, so no downstream check would ever report it. That same invisibility is why the orientation rules are enforced by DB trigger (50024/50025), the account-type rules too (50026), and why `ResolveIntercompanyAccounts` returns two named, company-stamped legs instead of the raw row. | Amith 2026-07-26. |
+| BA-D28 | **No `GLAccountRole` for intercompany.** Roles resolve per-RECORD (this product's revenue account); an intercompany account is per-company-PAIR and cannot be expressed that way. `IntercompanyAccountMatch` is the sole resolution path rather than a second competing one. A missing pair is a HARD failure at emit time — never a fallback to a default account, because a guessed account still balances. | Amith 2026-07-26. |
+| BA-D29 | **`JournalEntryType` lookup replaces the closed `EntryType` CHECK enum** (issue #24). A domain app could not classify its own entries without an accounting migration — a hard coupling in the wrong direction, since accounting cannot know what apps will exist. The classification stays (it is genuinely useful) but its closed-enum shape goes: `JournalEntryType` (`Code`/`Name`/`Description`/`IsSystem`/`IsBatchSummary`/`IsActive`, UQ Code) with `JournalEntry.EntryTypeID` FK. Accounting seeds ONLY the ledger-mechanics set it owns (`IsSystem=1`, metadata/journal-entry-types/): Manual, Reversal, Adjustment, OpeningBalance, BatchSummary, FXRevaluation, PeriodEndAccrual, Writeoff. Domain types (OrderBooking, PaymentReceipt, RevenueRecognition, Refund, ...) become their owning app's metadata (`mj sync push`). `IsBatchSummary` replaces the `'BatchSummary'` magic string as the batch-summary discriminator (a filtered unique index allows exactly one flagged row); triggers 50012/50023 now join the type table. Draft contract carries the CODE; the pipeline validates it against live reference data (`ENTRY_TYPE_UNKNOWN`/`_INACTIVE`). | Amith proposal (issue #24) + Marcelo ratification 2026-07-27. |
+| BA-D30 | **Accounting never references its own dependents — hard OR soft** (issue #22). `AccountingCompanyProfile.DefaultPaymentTermsTypeID` (a soft ref into `__mj_BizAppsOrders.PaymentTermsType`) is DROPPED: an FK would invert the app graph, and a soft ref is a hack encoding an orders concern in an accounting table. Per-company default payment terms will be modeled on the ORDERS side (an IsA extension on Company or a dedicated orders table). Standing rule: cross-app references must be real FKs and point UP the dependency graph only; the D25 origin pair (`LinkedEntityID` hard-FK to `__mj.Entity` + soft-by-nature `LinkedRecordID`) is the ONE sanctioned downstream-lineage mechanism. `JournalEntryBatch.ApprovalTaskID` hard-FK to bizapps-tasks is DEFERRED until bizapps-tasks installs cleanly as a dependency (issue #22 item 1; the both-or-neither CHECK stays). `mj-app.json`: the `mj-bizapps-common` range moved to the 5.x line so the installer resolves published common (5.32.0); `mj-bizapps-tasks` stays `>=1.0.0 <2.0.0` — tasks IS 1.2.0 today (Marcelo catch, 2026-07-27) and moves to 5.x only with the version-alignment memo. Package version bump deliberately deferred at PR-27; REQUIRED before production deployment (Amith PR-27 review, 2026-07-29). | Amith direction (issue #22) + Marcelo 2026-07-27. |
+| BA-D31 | **JE numbering: D19 per-company format STANDS; D-SEQ is RETIRED for JEs.** The 2026-07-06 D-SEQ global-sequence decision belonged to the multi-company era; the 2026-07-22 single-company rewrite already implemented per-company numbering (`JournalEntrySequence` keyed `(CompanyID, FiscalYear)`, `SequenceService` emitting `JE-{CompanyCode}-{FY}-{seq}`). A global counter cannot even define FY (fiscal calendars are per-company) and would put holes in every company's book. Pre-production + rebuild-from-zero practice = no historical numbers to reinterpret. Batches unchanged (`BatchNumber` stays a global sequence). Sequence MACHINERY stays: gap-freedom is not required (D19), so simplifying/retiring the counter table is licensed but unscoped. Consequence: `block0`/`engine-runtime` harness assertions update to the per-company format in their rewrite. | Marcelo ruling 2026-07-28 (resolves the §17.1 contradiction Amith deliberately left open). |
+| BA-D32 | **`GLAccountLink` keeps NO explicit `CompanyID` — company derives through the GL account FK** ("follow the FK and read it there; the engine caches both tables, the join costs nothing"). The derivation is safe because the **GLAccount identity lock is IMMEDIATE and UNCONDITIONAL** (Amith 2026-07-29): CompanyID/Code/AccountType/CurrencyCode are frozen the moment the record is created — NOT gated on JE-line references — which kills the drift/probe-C class at the root (an account that can never change can't re-aim its references). Corrections = deactivate + new account. Built with it: **the write-time tie guard** per (record, role, company, window) on `GLAccountLinkEntityServer` (same StartedAt among Active same-company links for one record+role = refused; a trigger backstop stays on the hardening backlog since overlap windows aren't expressible as a UNIQUE index) and **`forCompanyID` on `ResolveLinkedAccount`** (scopes resolution to the booking company for shared records; company derived through the cached GLAccount). Resolution is **not remotable** — GL accounts + links are read-heavy/write-light `AccountingEngineBase` cache citizens (client + server), the cache is source of truth for that validation. | Amith 2026-07-28 meeting + 2026-07-29 note (immediate lock; supersedes both the explicit-CompanyID package and the deferred-lock interim). Implemented 2026-07-29. |
+| BA-D33 | **Tax phase-4 placement** (from the orders pricing design §6, aligned with Amith). `CompanyTaxNexus` (Company × TaxJurisdiction + registration number + dates — the seller-side "must company C collect in jurisdiction J?" gate; row existence IS the answer, no row = deliberately no tax) comes INTO accounting — pure accounting vocabulary, property of the legal entity. The product-scoped exemption on `CustomerTaxProfile` also comes here BUT keyed by an ACCOUNTING-OWNED tax category (`TaxRate.TaxCategory` today; promoting it to a first-class lookup a la `JournalEntryType` is the expected shape) — NEVER by an orders product/category reference (BA-D30). Orders maps product → tax category on its side; its tax engine joins the halves reading UP the graph. | Direction agreed with Amith (orders #14/#15, 2026-07-28); builds in a future baseline pass, sequenced after the donor audit. |
+
+---
+
+## 4. No periods — the timing model
+
+Worth its own section because it shapes everything downstream:
+
+- There is **no `AccountingPeriod` table, no period FK, no close workflow, no close guard**. JEs
+  carry only dates (`EffectiveDate`). The ERP settles periods: a dispatched batch lands in the ERP's
+  active period.
+- **Period-boundary discipline is the ACCOUNTANT's, aided by the UI:** batch windows shouldn't
+  straddle a boundary that matters; the batch UI's presets (end-of-yesterday / end-of-week /
+  end-of-month) and the displayed swept date range are the guardrails — not engine machinery.
+- **Closed-period collisions HOLD-and-flag, never auto-roll** (Jeremy): if the ERP rejects a batch
+  because its posting date falls in a closed period, the batch/entry is flagged for review in an
+  exceptions surface. v1 = react to the BC rejection; a proactive BC period-status feedback loop is
+  a later enhancement.
+- A future timing/period-restriction system is a **recognized gap, deliberately deferred** (first
+  test sets run unrestricted). Design constraint locked in advance: detect by DATE, never a period FK.
+
+---
+
+## 5. Entity model
+
+### 5.0 ERD Diagrams
+
+#### Chart of Accounts, Roles & Account Links
+```mermaid
+erDiagram
+    Company ||--o| AccountingCompanyProfile : "IsA - same UUID"
+    AccountingCompanyProfile ||--o{ GLAccount : "owns COA"
+    GLAccount ||--o{ GLAccount : "ParentGLAccountID"
+    GLAccount ||--o{ GLAccountLink : "GLAccountID"
+    GLAccountRole ||--o{ GLAccountLink : "GLAccountRoleID"
+    GLAccountLink ||--o{ GLAccountLinkDimension : "GLAccountLinkID"
+    Dimension ||--o{ GLAccountLinkDimension : "DimensionID"
+    GLAccountLink }o--|| Company : "Company Default"
+    GLAccountLink }o--|| ProductCategory : "Category Default"
+    GLAccountLink }o--|| Product : "Product Specific"
+
+    GLAccount {
+        uuid ID PK
+        uuid CompanyID FK
+        string Code "ERP Account Code"
+        string Name
+        string AccountType "Asset|Liability|Equity|Revenue|Expense"
+        bool IsActive
+    }
+    GLAccountRole {
+        uuid ID PK
+        string Name "Cash|AR|Sales|DefRev|Discounts"
+        string Description
+        string Status
+    }
+    GLAccountLink {
+        uuid ID PK
+        uuid GLAccountID FK
+        uuid GLAccountRoleID FK
+        uuid EntityID "Polymorphic Entity"
+        string RecordID "Polymorphic Record"
+        string Status
+        datetimeoffset StartedAt
+        datetimeoffset EndedAt
+    }
+    GLAccountLinkDimension {
+        uuid ID PK
+        uuid GLAccountLinkID FK
+        uuid DimensionID FK
+        int Sequence
+    }
+```
+
+#### Journal Entries & Lines
+```mermaid
+erDiagram
+    Company ||--o{ JournalEntry : "CompanyID NOT NULL"
+    JournalEntry ||--|{ JournalEntryLine : "has lines"
+    GLAccount ||--o{ JournalEntryLine : "GLAccountID"
+    JournalEntryLine ||--o{ JournalEntryLineDimension : "JournalEntryLineID"
+    Dimension ||--o{ JournalEntryLineDimension : "DimensionID"
+    DimensionValue ||--o{ JournalEntryLineDimension : "DimensionValueID"
+    Dimension ||--o{ DimensionValue : "DimensionID"
+    JournalEntry ||--o{ JournalEntry : "ReversesJournalEntryID"
+    JournalEntry ||--o{ JournalEntryBatch : "BatchID FK"
+
+    JournalEntry {
+        uuid ID PK
+        string EntryNumber UK
+        uuid CompanyID FK
+        date EffectiveDate
+        uuid EntryTypeID FK "JournalEntryType (BA-D29)"
+        string Status "Pending|Batched|GLPosted"
+        uuid LinkedEntityID "Polymorphic origin (D25)"
+        string LinkedRecordID "Polymorphic origin record"
+        uuid BatchID FK
+    }
+    JournalEntryLine {
+        uuid ID PK
+        uuid JournalEntryID FK
+        int LineNumber
+        uuid GLAccountID FK
+        decimal DebitAmount
+        decimal CreditAmount
+    }
+    JournalEntryLineDimension {
+        uuid ID PK
+        uuid JournalEntryLineID FK
+        uuid DimensionID FK
+        uuid DimensionValueID FK
+    }
+```
+
+#### Batching & ERP Dispatch
+```mermaid
+erDiagram
+    Company ||--o{ JournalEntryBatch : "CompanyID NOT NULL"
+    JournalEntryBatch ||--o| JournalEntry : "SummaryJournalEntryID FK"
+    UserCompanyRole }o--|| Company : "permissions"
+
+    JournalEntryBatch {
+        uuid ID PK
+        string BatchNumber UK
+        uuid CompanyID FK
+        uuid SummaryJournalEntryID FK "Summary JournalEntry (type flagged IsBatchSummary)"
+        date PostingDate
+        string TargetSystem
+        string Status "Pending|Approved|Sent|Posted|Failed|Cancelled"
+        uuid ApprovalTaskID
+    }
+    UserCompanyRole {
+        uuid ID PK
+        uuid UserID FK
+        uuid CompanyID FK
+        uuid RoleID FK
+        bool IsActive
+    }
+```
+
+### 5.1 GLAccount
 
 ```sql
 __mj_BizAppsAccounting.GLAccount
-  ID UUID PK,
-  CompanyID UUID FK → __mj.Company,    -- which Company owns this account
-  Code NVARCHAR(40) NOT NULL,           -- e.g. '11101', '40100-SUB' — matches ERP code
+  ID UNIQUEIDENTIFIER PK,
+  CompanyID UNIQUEIDENTIFIER NOT NULL FK → __mj.Company,   -- accounts are company-owned
+  Code NVARCHAR(40) NOT NULL,            -- matches ERP code
   Name NVARCHAR(200) NOT NULL,
-  AccountType NVARCHAR(20) NOT NULL,    -- 'Asset' | 'Liability' | 'Equity' | 'Revenue' | 'Expense'
-  ParentGLAccountID UUID FK → GLAccount NULL,   -- hierarchical rollup
-  CurrencyCode CHAR(3) FK → BizAppsCommon.Currency,  -- account denomination
-  ExternalSystem NVARCHAR(50) NULL,     -- 'BusinessCentral' | 'QuickBooks' | ...
-  ExternalAccountID NVARCHAR(100) NULL, -- for sync identity
+  AccountType NVARCHAR(20) NOT NULL,     -- 'Asset' | 'Liability' | 'Equity' | 'Revenue' | 'Expense'
+  ParentGLAccountID UNIQUEIDENTIFIER NULL FK → GLAccount,  -- hierarchy
+  CurrencyCode CHAR(3) FK → Currency,
+  ExternalSystem NVARCHAR(50) NULL,      -- 'BusinessCentral' | ... (ERP identity lives HERE — D13)
+  ExternalAccountID NVARCHAR(100) NULL,
   IsActive BIT NOT NULL DEFAULT 1,
-  IsSystemSeeded BIT NOT NULL DEFAULT 0,  -- true for accounts the package seeds
+  IsSystemSeeded BIT NOT NULL DEFAULT 0,
   Description NVARCHAR(MAX),
   UNIQUE (CompanyID, Code)
 ```
 
-Seeded default COA (opinionated starter set, per AN-BC discussion):
+**Seeded COA is MINIMAL** (~10–12 essential subledger accounts: Cash, AR, Sales Tax Payable,
+Deferred Revenue, Commission Payable, Partner Rev Share Payable, Sales/Subscription Revenue, FX
+gain/loss). The rest sync from the ERP. "Radical simplification — lean on dimensions" (Amith).
 
-| Code | Name | Type |
-|---|---|---|
-| 11101 | Operating Cash | Asset |
-| 11201 | Accounts Receivable | Asset |
-| 11211 | Accounts Receivable - Intercompany | Asset |
-| 11301 | Deferred Costs | Asset |
-| 21101 | Accounts Payable | Liability |
-| 21201 | Sales Tax Payable | Liability |
-| 21202 | VAT Payable | Liability |
-| 21301 | Deferred Revenue | Liability |
-| 21401 | Commission Payable | Liability |
-| 21402 | Partner Rev Share Payable | Liability |
-| 21501 | Intercompany Payable | Liability |
-| 40100 | Sales Revenue | Revenue |
-| 40200 | Subscription Revenue | Revenue |
-| 40300 | Services Revenue | Revenue |
-| 40400 | Distribution Income | Revenue |
-| 40500 | Management Fee Revenue | Revenue |
-| 40900 | Other Revenue | Revenue |
-| 50100 | Sales Commission Expense | Expense |
-| 50200 | Partner Revenue Share Cost | Expense |
-| 50300 | Bad Debt Expense | Expense |
-| 50400 | Realized FX Gain/Loss | Expense (or contra-Revenue) |
-| 50500 | Unrealized FX Gain/Loss | Expense |
-| 90100 | Refunds | Contra-Revenue |
+There is **no global account pool** — accounts belong to companies.
 
-These are seeded with `IsSystemSeeded = 1`. Deployments can customize codes/names; the seed flag survives so we can identify "platform default" vs "deployment-customized" accounts.
+### 5.2 AccountingCompanyProfile (IsA Disjoint child of `__mj.Company`)
 
-### 4.2 AccountingCompanyProfile (IsA Disjoint child of `__mj.Company`)
-
-This child entity holds **all** Company-attribute extensions that BizAppsAccounting needs — both general business-profile fields (EntityType, LegalStructureType, IncorporationDate, FederalTaxID, JurisdictionCountry/Region) and accounting-specific fields (FunctionalCurrencyCode, FiscalYearStartMonth, books-sharing, default GL accounts). MJ core stays minimal; all these fields live here.
+Holds all Company-attribute extensions accounting needs — business-profile fields and
+accounting-specific fields. MJ core stays minimal.
 
 ```sql
 __mj_BizAppsAccounting.AccountingCompanyProfile
-  -- IsA Disjoint child of __mj.Company; ID is the SAME UUID as the parent Company
-  ID UUID PK FK → __mj.Company(ID),
-
-  -- General business-profile fields (per BA-D9; would otherwise have gone in MJ core
-  -- but kept here to avoid polluting MJ core with country/business concepts)
+  ID UNIQUEIDENTIFIER PK FK → __mj.Company(ID),   -- same UUID as the parent Company
+  -- Business profile
   EntityType NVARCHAR(30) NOT NULL DEFAULT 'Subsidiary',
-    -- 'LegalEntity' | 'Subsidiary' | 'Division' | 'Department' | 'Branch'
-    -- | 'Partner' | 'JointVenture' | 'CostCenter' | 'Other'
   LegalStructureType NVARCHAR(30) NULL,
-    -- 'LLC' | 'C-Corp' | 'S-Corp' | 'Partnership' | 'SoleProprietorship'
-    -- | 'NonProfit-501c3' | 'NonProfit-501c6' | 'International-Ltd'
-    -- | 'International-GmbH' | 'International-Pty' | 'International-Other' | 'Other'
   IncorporationDate DATE NULL,
-  JurisdictionCountry CHAR(2) NULL,           -- ISO 3166-1 alpha-2 (free-form string;
-                                               -- no FK to BizAppsCommon to keep dependency clean)
-  JurisdictionRegion NVARCHAR(50) NULL,       -- state/province sub-national, free-form
-  FederalTaxID NVARCHAR(40) NULL,             -- EIN, ABN, VAT registration, etc.
-  OperatingTimeZone NVARCHAR(60) NULL,        -- IANA tz (e.g. 'America/Chicago'); all storage is UTC/Zulu,
-                                               -- period & rev-rec boundaries evaluated in this zone (AN-BC note)
-  CompanyCode NVARCHAR(20) NOT NULL,          -- short code used in JE numbering
-                                               -- (e.g. 'SIDECAR', 'CIMATRI', 'BCHQ')
-                                               -- UNIQUE per deployment
-
-  -- Accounting-specific fields
-  FunctionalCurrencyCode CHAR(3) NOT NULL FK → BizAppsCommon.Currency,
-  ReportingCurrencyCode CHAR(3) FK → BizAppsCommon.Currency NULL,  -- if NULL, same as functional
+  JurisdictionCountry CHAR(2) NULL,
+  JurisdictionRegion NVARCHAR(50) NULL,
+  FederalTaxID NVARCHAR(40) NULL,
+  OperatingTimeZone NVARCHAR(60) NULL,    -- presentation only; storage is UTC (D23)
+  CompanyCode NVARCHAR(20) NOT NULL,      -- JE numbering; UNIQUE, uppercase
+  -- Accounting
+  FunctionalCurrencyCode CHAR(3) NOT NULL FK → Currency,
+  ReportingCurrencyCode CHAR(3) NULL,
   FiscalYearStartMonth TINYINT NOT NULL DEFAULT 1,
   FiscalYearStartDay TINYINT NOT NULL DEFAULT 1,
-  ParentAccountingCompanyID UUID FK → AccountingCompanyProfile NULL,
-    -- If set: this profile uses the books (COA, periods, JEs) of the referenced profile.
-    -- Validator: the referenced profile cannot itself have ParentAccountingCompanyID set (no chains).
-    -- Validator: ParentAccountingCompanyID and self.ID must be different.
-  DefaultPaymentTermsTypeID UUID FK NULL,     -- delegates to BizAppsOrders.PaymentTermsType
-  AROpenGLAccountID UUID FK → GLAccount NULL, -- which AR account is "the AR account"
-  DeferredRevenueGLAccountID UUID FK → GLAccount NULL,
-  SalesTaxPayableGLAccountID UUID FK → GLAccount NULL,
-  RealizedFXGainLossGLAccountID UUID FK → GLAccount NULL,
-  UnrealizedFXGainLossGLAccountID UUID FK → GLAccount NULL,
+  ParentAccountingCompanyID UNIQUEIDENTIFIER NULL,  -- "uses the books of"; no chains; not self
+  ApprovalCFOUserID UNIQUEIDENTIFIER NULL FK → __mj.User,  -- designated batch approver
   IsActive BIT NOT NULL DEFAULT 1,
-
   UNIQUE (CompanyCode)
 ```
 
-The IsA relationship is declared in MJ metadata. CodeGen produces a TypeScript class `AccountingCompanyProfileEntity` that inherits parent fields from `__mjCompanyEntity` and exposes both the business-profile and accounting-specific extensions defined above.
+**No default-GL-account FK columns** (D12): a company's default accounts are **five company-level
+`GLAccountLink` rows** (roles AR, Sales, Deferred Revenue, Sales Discounts, Returns & Allowances —
+plus whatever else a deployment links). Enforcement that a company carries all required role links
+is deferred ("we're going to come back to it" — Amith).
 
-**Validators (enforced via BaseEntity subclass + DB constraints)**:
-- `JurisdictionCountry` must match ISO 3166-1 alpha-2 codes if provided (validated at app level; free-form at DB level)
-- `LegalStructureType` only meaningful when `EntityType` ∈ {`LegalEntity`, `Subsidiary`, `JointVenture`, `Partner`}
-- `ParentAccountingCompanyID` cannot equal `ID` (self-reference forbidden)
-- `ParentAccountingCompanyID` cannot itself have a non-null `ParentAccountingCompanyID` (no chains)
-- `CompanyCode` UNIQUE and uppercase, max 20 chars, alphanumeric + dash/underscore only (enforced via CHECK constraint)
-
-### 4.3 Dimensions, DimensionValue, JE line tagging
-
-First-class analytical dimensions on JE lines. Optional — a deployment that defines no dimensions just has a flat chart.
+### 5.3 GL account roles & links (role-based polymorphic mapping)
 
 ```sql
-__mj_BizAppsAccounting.Dimension
-  ID UUID PK,
-  Code NVARCHAR(40) UNIQUE,             -- 'Department', 'CostCenter', 'Project', 'Region', etc.
-  Name NVARCHAR(100) NOT NULL,
-  Description NVARCHAR(MAX),
-  IsActive BIT NOT NULL DEFAULT 1,
-  DisplayOrder INT
+__mj_BizAppsAccounting.GLAccountRole        -- role registry: AR, Sales, Deferred Revenue,
+  ID, Name, Description, IsActive           -- Inventory, COGS, Sales Discounts, Returns & Allowances
 
-__mj_BizAppsAccounting.DimensionValue
-  ID UUID PK,
-  DimensionID UUID FK,
-  Code NVARCHAR(80) NOT NULL,           -- e.g. 'Marketing', 'WestCoast', 'ProductLaunch2026'
-  Name NVARCHAR(200) NOT NULL,
-  ParentDimensionValueID UUID FK → DimensionValue NULL,  -- hierarchical (Region → State → City)
-  IsActive BIT NOT NULL DEFAULT 1,
-  EffectiveFrom DATE, EffectiveTo DATE NULL,
-  UNIQUE (DimensionID, Code)
-
-__mj_BizAppsAccounting.JournalEntryLineDimension
-  ID UUID PK,
-  JournalEntryLineID UUID FK,
-  DimensionID UUID FK,
-  DimensionValueID UUID FK,
-  UNIQUE (JournalEntryLineID, DimensionID)
+__mj_BizAppsAccounting.GLAccountLink        -- polymorphic, date-effective account routing (as-built shape)
+  ID, GLAccountID FK, GLAccountRoleID FK,
+  EntityID UNIQUEIDENTIFIER NOT NULL,       -- polymorphic entity ref: Company | Product | ProductCategory
+  RecordID NVARCHAR(400) NOT NULL,          -- polymorphic target record
+  Status NVARCHAR(10) NOT NULL,             -- 'Pending' | 'Active' | 'Disabled'
+  StartedAt, EndedAt DATETIMEOFFSET NULL,   -- date-effective window (CHECK EndedAt > StartedAt)
+  Comments NVARCHAR(MAX) NULL
+  -- + GLAccountLinkDimension for analytical tags carried into resolved lines
 ```
 
-Reports can group/filter by any dimension. The default ERP reports (TB, P&L) consumed from the ERP side don't see dimensions — those are our analytics. Read-model views support dimension filters.
+**Resolution walk** (`AccountingEngineBase.ResolveLinkedAccount`): product link → up the
+product-company's OWN category tree → product-company company-default → loud tripwire if nothing
+resolves.
 
-Dimensions are tagged at **every** stage of a line's life via parallel tagging tables, so the analytical breakdown survives end to end: `JournalEntryLineDimension` (the posted JE line), `ScheduledJournalEntryLineDimension` (the not-yet-materialized rev-rec line — §4.9), and `JournalEntryBatchLineDimension` (the consolidated batch summary line that ships to the ERP — §4.5/BA-D26).
+**Company-scoping rules (LOCKED — Marcelo, Robert-confirmed):**
 
-### 4.4 AccountingPeriod
+1. **Categories are per-company rows** (`ProductCategory.CompanyID NOT NULL` on the orders side)
+   with identical-name display-collapse in the UI — no shared registry object. Robert: "five
+   companies, 5 t-shirt categories… crossing them, no."
+2. **Company is the resolver's INPUT** (the product's `CompanyID` is the source of truth). A
+   fallback may reduce specificity, never change company.
+3. **Anchor split (Robert):** the product-company anchors the **revenue side** (revenue / DefRev /
+   COGS accounts); the **AR + cash side anchors to the ORDER-owning company** (seller of record).
+4. **Enforcement tiers (creation-time; invalid data impossible):**
+   **HARD-BLOCK** — product- or category-level link to another company's account · two accounts on
+   one category for the same role · product without a CompanyID · product assigned to another
+   company's category. Enforced in the **engine** (typed errors) + a **DB validation trigger** as
+   the raw-SQL floor.
+   **WARN (incomplete, not invalid)** — assigning a product to a category with no route for its
+   company: legal, falls through to the company default; assignment-time warning with a pop-out to
+   fix the route.
+5. **Cross-company revenue flows are intercompany TRANSACTIONS** (due-to/due-from machinery), never
+   mapping routes — the mapping layer refuses cross-company entirely.
 
-Per `AccountingCompanyProfile`. Locks JE posting once closed.
+### 5.4 Dimensions
+
+First-class analytical dimensions on JE lines; optional (no dimensions = flat chart, no penalty).
 
 ```sql
-__mj_BizAppsAccounting.AccountingPeriod
-  ID UUID PK,
-  CompanyID UUID FK → __mj.Company,
-  PeriodType NVARCHAR(10) NOT NULL,     -- 'Month' | 'Quarter' | 'Year'
-  PeriodStart DATE NOT NULL,
-  PeriodEnd DATE NOT NULL,
-  FiscalYear INT NOT NULL,
-  FiscalQuarter TINYINT,
-  FiscalMonth TINYINT,
-  Status NVARCHAR(20) NOT NULL,         -- 'Open' | 'Closing' | 'Closed' | 'Reopened'
-  ClosedAt DATETIMEOFFSET NULL,
-  ClosedByUserID UUID FK → __mj.User NULL,
-  ReopenReason NVARCHAR(MAX) NULL,
-  ReopenedAt DATETIMEOFFSET NULL,
-  ReopenedByUserID UUID FK NULL,
-  UNIQUE (CompanyID, PeriodType, PeriodStart)
+Dimension        (ID, Code UNIQUE, Name, Description, IsActive, DisplayOrder)
+DimensionValue   (ID, DimensionID FK, Code, Name, ParentDimensionValueID NULL, IsActive,
+                  EffectiveFrom, EffectiveTo, UNIQUE (DimensionID, Code))
+JournalEntryLineDimension       (JournalEntryLineID, DimensionID, DimensionValueID,
+                                 UNIQUE (JournalEntryLineID, DimensionID))
+GLAccountLinkDimension          (GLAccountLinkID, DimensionID, Sequence — UNIQUE (link, dimension))
 ```
 
-Period generation is automated for the standard calendar but can be manually adjusted (e.g., 4-4-5 retail fiscal patterns) via a JE template or scheduled action.
+Dimension tags survive end-to-end: JE line → batch summary line (the netting key includes the
+dimension combo) → the ERP, so departmental/segment financials remain reproducible GL-side.
 
-### 4.5 JournalEntry, JournalEntryLine, JournalEntryBatch, JournalEntryBatchLineItem
+### 5.5 JournalEntry + JournalEntryLine
 
 ```sql
 __mj_BizAppsAccounting.JournalEntry
-  ID UUID PK,
-  EntryNumber NVARCHAR(40) NOT NULL,    -- 'JE-{Company.Code}-{FiscalYear}-{seq}'
-  CompanyID UUID FK → __mj.Company NOT NULL,
-  AccountingPeriodID UUID FK NOT NULL,
-  EffectiveDate DATE NOT NULL,          -- accounting date
-  EntryType NVARCHAR(40) NOT NULL,
-    -- 'OrderBooking' | 'PaymentReceipt' | 'RevenueRecognition'
-    -- | 'CommissionAccrual' | 'PartnerRevShare' | 'IntercompanyFlow'
-    -- | 'WaterfallDistribution' | 'Refund' | 'Writeoff' | 'Reversal'
-    -- | 'Manual' | 'TaxRemittance' | 'PeriodEndAccrual' | 'FXRevaluation'
-  Status NVARCHAR(20) NOT NULL,         -- 'Pending' | 'Batched' | 'GLPosted'
+  ID UNIQUEIDENTIFIER PK,
+  EntryNumber NVARCHAR(40) NOT NULL,     -- 'JE-{CompanyCode}-{FY}-{seq}' (D19)
+  CompanyID UNIQUEIDENTIFIER NOT NULL FK → __mj.Company,   -- SINGLE-company (D3)
+  EffectiveDate DATE NOT NULL,           -- the accounting date; NO period FK (D2)
+  EntryTypeID UNIQUEIDENTIFIER NOT NULL, -- FK to JournalEntryType (BA-D29): extensible lookup, consumers seed their own rows
+                                         -- | 'Refund' | 'Writeoff' | 'Reversal' | 'Manual' | 'BatchSummary' | ...
+  Status NVARCHAR(20) NOT NULL,          -- 'Pending' | 'Batched' | 'GLPosted'
   Description NVARCHAR(MAX),
-  -- Polymorphic origin (any combination, often one):
-  OrderID UUID NULL,                    -- BizAppsOrders.Order
-  OrderLineID UUID NULL,
-  SubscriptionID UUID NULL,
-  PaymentID UUID NULL,
-  ContractID UUID NULL,                 -- BizAppsContracts.Contract
-  RevRecScheduleID UUID NULL,           -- soft ref to upstream Orders RevenueRecognitionSchedule
-  IntercompanyFlowID UUID NULL,
-  ScheduledJournalEntryID UUID FK → ScheduledJournalEntry NULL,  -- internal: the scheduled row that materialized into this JE (BA-D25)
-  TaxRemittanceID UUID FK → TaxRemittance NULL,
-  -- Reversal references
-  ReversesJournalEntryID UUID FK → JournalEntry NULL,
-  ReversedByJournalEntryID UUID FK → JournalEntry NULL,
-  -- Adjusting entry reference
-  OriginalAccountingPeriodID UUID FK NULL,  -- if this is an adjusting entry to a closed period
+  -- Polymorphic origin (D25): exactly one causal source record; NULL/NULL = manual JE
+  LinkedEntityID UNIQUEIDENTIFIER NULL,   -- FK → __mj.Entity (OrderLine | Payment | ...)
+  LinkedRecordID NVARCHAR(400) NULL,      -- CHECK: both set or both NULL
+  -- Reversal chain
+  ReversesJournalEntryID UNIQUEIDENTIFIER NULL FK → JournalEntry,
+  ReversedByJournalEntryID UNIQUEIDENTIFIER NULL FK → JournalEntry,
   -- Lifecycle
-  BatchID UUID FK → JournalEntryBatch NULL,
+  BatchID UNIQUEIDENTIFIER NULL FK → JournalEntryBatch,
   GLPostedAt DATETIMEOFFSET NULL,
-  GLReferenceID NVARCHAR(100) NULL      -- ERP's reference back to us
+  GLReferenceID NVARCHAR(100) NULL
 
 __mj_BizAppsAccounting.JournalEntryLine
-  ID UUID PK,
-  JournalEntryID UUID FK NOT NULL,
-  LineNumber INT NOT NULL,
-  GLAccountID UUID FK NOT NULL,
-  -- Amounts in functional currency
-  DebitAmount DECIMAL(18,2) NULL,
+  ID UNIQUEIDENTIFIER PK,
+  JournalEntryID FK NOT NULL, LineNumber INT NOT NULL,
+  GLAccountID FK NOT NULL,               -- must belong to the header company (trigger)
+  DebitAmount DECIMAL(18,2) NULL,        -- exactly one side set (CHECK)
   CreditAmount DECIMAL(18,2) NULL,
-  -- Source currency (when different from functional)
-  OriginalCurrencyCode CHAR(3) FK → BizAppsCommon.Currency NULL,
-  OriginalDebitAmount DECIMAL(18,2) NULL,
-  OriginalCreditAmount DECIMAL(18,2) NULL,
+  OriginalCurrencyCode CHAR(3) NULL,     -- source-currency tracking (§8)
+  OriginalDebitAmount, OriginalCreditAmount DECIMAL(18,2) NULL,
   ExchangeRateUsed DECIMAL(18,8) NULL,
   Description NVARCHAR(MAX),
-  -- Granular drill references
-  OrderLineID UUID NULL,
-  CounterpartyOrganizationID UUID NULL,  -- e.g., Customer for AR lines
-  CHECK ((DebitAmount IS NOT NULL) <> (CreditAmount IS NOT NULL)),
-  CHECK ((OriginalDebitAmount IS NULL) = (OriginalCreditAmount IS NULL)),
+  -- (CounterpartyOrganizationID REMOVED 2026-07-29, Amith: customer attribution is handled at
+  --  the business-logic level in ORDERS — an unneeded appendage at the accounting level.)
   UNIQUE (JournalEntryID, LineNumber)
-  -- Balanced-JE invariant (SUM Debits == SUM Credits per JE) enforced via deferred constraint or trigger
-
-__mj_BizAppsAccounting.JournalEntryBatch
-  ID UUID PK,
-  BatchNumber NVARCHAR(40) UNIQUE,      -- 'BATCH-{Company.Code}-{seq}'
-  CompanyID UUID FK → __mj.Company NOT NULL,
-  AccountingPeriodID UUID FK NOT NULL,
-  TargetSystem NVARCHAR(50) NOT NULL,   -- 'BusinessCentral' | 'QuickBooks' | 'NetSuite' | ...
-  BatchedAt DATETIMEOFFSET NOT NULL,
-  BatchedByUserID UUID FK NOT NULL,
-  Status NVARCHAR(20) NOT NULL,         -- 'Pending' | 'Sent' | 'Acknowledged' | 'Failed'
-  -- Aggregate metrics
-  TotalEntries INT NOT NULL,
-  TotalDebits DECIMAL(18,2) NOT NULL,
-  TotalCredits DECIMAL(18,2) NOT NULL,
-  -- ERP roundtrip
-  ExternalBatchRef NVARCHAR(100),
-  SentAt DATETIMEOFFSET NULL,
-  AcknowledgedAt DATETIMEOFFSET NULL,
-  ErrorMessage NVARCHAR(MAX) NULL
-
-__mj_BizAppsAccounting.JournalEntryBatchLineItem      -- the SUMMARY lines that post to the ERP (BA-D26)
-  ID UUID PK,
-  BatchID UUID FK NOT NULL,
-  CompanyID UUID FK → __mj.Company NOT NULL,
-  GLAccountID UUID FK NOT NULL,
-  LineNumber INT NOT NULL,
-  DebitAmount DECIMAL(18,2) NULL,       -- exactly one of Debit/Credit set (one-side CHECK)
-  CreditAmount DECIMAL(18,2) NULL,
-  SourceLineCount INT NOT NULL,         -- how many JournalEntryLine rows rolled up here
-  ExternalAccountID NVARCHAR(100) NULL, -- target ERP account, resolved via ChartOfAccountsMapping at batch time
-  Description NVARCHAR(MAX) NULL
-  -- Built (grouped by GLAccount × dimension combo × side) when the batch is created while Pending.
-  -- Frozen once Status ∈ {Sent, Acknowledged}; must foot to TotalDebits/TotalCredits at dispatch (triggers).
-
-__mj_BizAppsAccounting.JournalEntryBatchLineDimension -- preserves dimension breakdown to the ERP (account × dimension)
-  ID UUID PK,
-  JournalEntryBatchLineItemID UUID FK NOT NULL,
-  DimensionID UUID FK NOT NULL,
-  DimensionValueID UUID FK NOT NULL
 ```
 
-The batch summary is the consolidated GL movement BC actually posts; the `JournalEntryLine` detail stays in our subledger for drill-through (per AN-BC: "your general ledger doesn't have all the details… it has the link back to the subledger"). Aggregating at **account × dimension** granularity (BA-D26) keeps departmental/segment financials reproducible on the ERP side.
+Notes:
 
-### 4.6 ChartOfAccountsMapping
+- **No `AccountingPeriodID`** anywhere (D2). **No `ScheduledJournalEntryID`** — the scheduled-JE
+  machinery is retired (D15) and the column drops with it (no lineage worth keeping,
+  pre-production — Marcelo 2026-07-21).
+- **No per-entity origin FK columns** (D25): the as-built baseline still carries `OrderID`,
+  `OrderLineID`, `SubscriptionID`, `PaymentID`, `ContractID`, `IntercompanyFlowID`,
+  `TaxRemittanceID` on `JournalEntry`, `OrderLineID` on `JournalEntryLine`, and the
+  `JournalEntryLink` table — all drop via in-place baseline edit, replaced by the single
+  `LinkedEntityID`/`LinkedRecordID` origin pair. With one JE per order line (orders D10) the
+  JE↔line mapping is 1:1, so neither a link table nor a line-level drill ref adds anything.
+- Forward-dated rev-rec JEs are ordinary rows in this table with future `EffectiveDate`s.
 
-Maps external GL account references to our `GLAccount` records. Critical for batch-to-ERP correctness.
+### 5.6 JournalEntryBatch (Simplified Summary Model)
 
 ```sql
-__mj_BizAppsAccounting.ChartOfAccountsMapping
-  ID UUID PK,
-  CompanyID UUID FK → __mj.Company NOT NULL,
-  ExternalSystem NVARCHAR(50) NOT NULL,
-  ExternalAccountID NVARCHAR(100) NOT NULL,
-  ExternalAccountName NVARCHAR(200),
-  InternalGLAccountID UUID FK NOT NULL,
-  EffectiveFrom DATE NOT NULL,
-  EffectiveTo DATE NULL,
-  ApprovedByUserID UUID FK NULL,        -- CFO-only per master plan Q12 closure
-  ApprovedAt DATETIMEOFFSET NULL,
-  ChangeNote NVARCHAR(MAX),
-  UNIQUE (CompanyID, ExternalSystem, ExternalAccountID, EffectiveFrom)
+__mj_BizAppsAccounting.JournalEntryBatch
+  ID UNIQUEIDENTIFIER PK,
+  BatchNumber NVARCHAR(40) UNIQUE,        -- global sequence (D19)
+  CompanyID UNIQUEIDENTIFIER NOT NULL FK → __mj.Company,  -- SINGLE-company batch (D7)
+  SummaryJournalEntryID UNIQUEIDENTIFIER NULL FK → JournalEntry, -- Aggregated summary JE (type flagged IsBatchSummary)
+  TargetSystem NVARCHAR(50) NOT NULL,     -- one company AND one target per batch
+  PostingDate DATE NOT NULL,              -- singular, accountant-set at build (D8);
+                                          -- default from the batch window; must match the GL
+  BatchedAt DATETIMEOFFSET NOT NULL, BatchedByUserID FK NOT NULL,
+  Status NVARCHAR(20) NOT NULL,           -- 'Pending' | 'Approved' | 'Sent' | 'Posted' | 'Failed' | 'Cancelled'
+  TotalEntries INT, TotalDebits DECIMAL(18,2), TotalCredits DECIMAL(18,2),
+  -- Approval task pointer (D10) — stamped in the batch-build transaction (one transaction,
+  -- 2026-07-29); CHECK forbids half-stamped
+  ApprovalTaskID UNIQUEIDENTIFIER NULL,   -- soft ref interim; hardens to a real FK when the CodeGen cross-app-FK work ships (~5.51)
+  ApprovalTaskRaisedAt DATETIMEOFFSET NULL,
+  -- ERP roundtrip
+  ExternalBatchRef NVARCHAR(100), SentAt, AcknowledgedAt, ErrorMessage
 ```
 
-When a new external GL account is detected via the BC connector sync, an admin must explicitly map it. Until mapped, JEs that would reference it are rejected (per `M16` / `D27` from master plan: hard-fail on unmapped GL movements).
+- **Simplified Summary Model:** Batch summary lines are modeled as **one aggregated `JournalEntry` (typed with the `IsBatchSummary`-flagged `JournalEntryType`, `EffectiveDate = PostingDate`)** linked via `SummaryJournalEntryID`.
+- Its lines (`JournalEntryLine`) net debits/credits per `(GLAccount × Dimension-combo)`, and tags (`JournalEntryLineDimension`) preserve dimensional breakdown. Dedicated `JournalEntryBatchLineItem` and `JournalEntryBatchLineDimension` schema tables are **retired/dropped** — reusing `JournalEntryLine` saves schema clutter and reuses 100% of line validation, DB constraints, and UI line viewer components out of the box.
+- **Lifecycle:** the summary JE is created at batch build already **`Batched`, carrying the
+  batch's `BatchID` like the members** — so it rides the ONE derived lock machinery: preliminary
+  until approval (regeneration uses the standard unlock→rebuild→relock), permanent after, and
+  `GLPosted` when the batch posts. It is distinguished from members purely by its type's `IsBatchSummary` flag (BA-D29 — a flag join, not a magic string).
+- **Default exclusion:** the `IsBatchSummary`-typed summary is excluded by default from batch-candidate
+  gathering (engine + UI — a summary can never be swept into a later batch) and from the
+  read-model views (an "include summaries" toggle is permissible).
+- **Query Partitioning:** Subledger detail queries exclude (and GL dispatch / summary queries select) JEs whose `JournalEntryType` has `IsBatchSummary = 1` — joined via `EntryTypeID`, or selected directly via `JournalEntryBatch.SummaryJournalEntryID`.
+- **Pending Amith's input:** (a) whether a dispatch-time trigger should still assert the summary
+  foots to the batch control totals, or the lock-at-creation + tests suffice; (b) whether
+  summaries should live in a separate table vs. this same-table model with default exclusion.
 
-### 4.7 Currency + CurrencyExchangeRate (OWNED BY BizAppsAccounting — revised, see BA-D11)
-
-> **REVISED 2026-06:** Currency now lives in `__mj_BizAppsAccounting`, not BizAppsCommon (common never shipped it). The `Currency` table + a seeded ISO-4217 set landed in the v0.1.0 baseline migration; all GL/JE/balance FKs reference `__mj_BizAppsAccounting.Currency(Code)`. The exchange-rate table below is a follow-on (not yet in the baseline). The schema sketches below are retained for shape; substitute schema `__mj_BizAppsAccounting` for `__mj_BizAppsCommon`.
+### 5.7 Currency
 
 ```sql
 __mj_BizAppsAccounting.Currency
-  ID UUID PK,
-  Code CHAR(3) UNIQUE NOT NULL,         -- ISO 4217 (USD, EUR, AUD, JPY, ...)
-  Name NVARCHAR(50),
-  Symbol NVARCHAR(10),
-  DecimalPlaces TINYINT NOT NULL DEFAULT 2,
-  IsActive BIT NOT NULL DEFAULT 1
-
-__mj_BizAppsCommon.CurrencyExchangeRate
-  ID UUID PK,
-  FromCurrencyCode CHAR(3) FK NOT NULL,
-  ToCurrencyCode CHAR(3) FK NOT NULL,
-  EffectiveDate DATETIMEOFFSET NOT NULL,
-  Rate DECIMAL(18,8) NOT NULL,
-  Source NVARCHAR(50) NOT NULL,         -- 'ExchangeRate-API' | 'ECB' | 'OpenExchangeRates' | 'Manual'
-  INDEX (FromCurrencyCode, ToCurrencyCode, EffectiveDate DESC)
+  ID, Code CHAR(3) UNIQUE NOT NULL,      -- ISO 4217, seeded
+  Name, Symbol, DecimalPlaces TINYINT NOT NULL DEFAULT 2, IsActive
 ```
 
-A `CurrencyExchangeRateProvider` abstract class (RegisterClass pattern) with implementations for each source. Default deployment ships with `ManualCurrencyExchangeRateProvider` (no auto-fetch). Deployments opt into automated fetch by configuring a Scheduled Action that invokes a non-manual provider on cron (default cadence: weekly).
+An exchange-rate table + pluggable rate providers (manual default, no auto-fetch) is the reserved
+follow-on shape — **deferred until multi-currency activates** (D16).
 
-### 4.8 Tax entities
+### 5.8 Tax entities (snapshot/reference — never a rate authority)
 
-```sql
-__mj_BizAppsAccounting.TaxAuthority
-  ID UUID PK,
-  Code NVARCHAR(40) UNIQUE,            -- 'US-IRS', 'CA-BOE', 'EU-VAT-DE', etc.
-  Name NVARCHAR(200) NOT NULL,
-  CountryCode CHAR(2),
-  IsActive BIT
+`TaxAuthority`, `TaxJurisdiction`, `TaxRate`, `TaxLiability`,
+`CustomerTaxProfile` (exemption status/certificates) — shapes as built in the baseline.
+Accounting keeps the tax ACCRUAL only (`TaxLiability`); remitting to the authority is an
+ERP/GL concern with no table here. Under D17
+these **record what the third-party engine returned** (multi-jurisdiction per line); there is no
+"Local" rate-authoring path and no rate-sync build. The `TaxCalculationProvider` abstract seam
+stands; the chosen engine is a provider implementation.
 
-__mj_BizAppsAccounting.TaxJurisdiction
-  ID UUID PK,
-  TaxAuthorityID UUID FK,
-  Code NVARCHAR(80) UNIQUE,
-  Name NVARCHAR(200) NOT NULL,
-  -- Geographic scope
-  CountryCode CHAR(2),
-  RegionCode NVARCHAR(50),             -- state/province
-  PostalCode NVARCHAR(20),             -- if scoped to specific zip range
-  PostalCodeStart, PostalCodeEnd,
-  CityName NVARCHAR(200),
-  ParentTaxJurisdictionID UUID FK → TaxJurisdiction NULL  -- nested (state → county → city)
+### 5.9 What is deliberately ABSENT from the schema
 
-__mj_BizAppsAccounting.TaxRate
-  ID UUID PK,
-  TaxJurisdictionID UUID FK NOT NULL,
-  TaxCategory NVARCHAR(50) NOT NULL,   -- 'Standard' | 'Reduced' | 'Zero' | 'Exempt' | 'Custom'
-  Rate DECIMAL(7,4) NOT NULL,          -- 0.0825 = 8.25%
-  EffectiveFrom DATE NOT NULL,
-  EffectiveTo DATE NULL,
-  Source NVARCHAR(50),                  -- 'Avalara' | 'TaxJar' | 'Manual'
-
-__mj_BizAppsAccounting.TaxLiability
-  ID UUID PK,
-  CompanyID UUID FK → __mj.Company,
-  TaxAuthorityID UUID FK,
-  TaxJurisdictionID UUID FK,
-  AccountingPeriodID UUID FK,
-  AccruedAmount DECIMAL(18,2) NOT NULL,
-  RemittedAmount DECIMAL(18,2) NOT NULL DEFAULT 0,
-  Status NVARCHAR(20),                  -- 'Open' | 'Filed' | 'Paid' | 'PartiallyPaid'
-  DueDate DATE,
-  FilingFrequency NVARCHAR(20)         -- 'Monthly' | 'Quarterly' | 'Annual'
-
-__mj_BizAppsAccounting.TaxRemittance
-  ID UUID PK,
-  TaxLiabilityID UUID FK,
-  RemittedAmount DECIMAL(18,2) NOT NULL,
-  RemittedDate DATE NOT NULL,
-  PaymentReference NVARCHAR(100),
-  PostedJournalEntryID UUID FK → JournalEntry
-
-__mj_BizAppsAccounting.CustomerTaxProfile
-  ID UUID PK,
-  OrganizationID UUID FK → BizAppsCommon.Organization,
-  TaxJurisdictionID UUID FK NULL,       -- where customer is taxable
-  TaxIDNumber NVARCHAR(100),            -- VAT registration, EIN, etc.
-  IsExempt BIT NOT NULL DEFAULT 0,
-  ExemptionCertificateRef NVARCHAR(200),
-  ExemptionExpiryDate DATE NULL,
-  EffectiveFrom DATE NOT NULL,
-  EffectiveTo DATE NULL
-```
-
-Tax rates can be populated by:
-- **Manual entry** (`TaxRate.Source = 'Manual'`) for simple cases (one-state vendor)
-- **Avalara adapter** (auto-sync rates per jurisdiction × category)
-- **TaxJar adapter** (alternative auto-sync)
-
-The tax engine itself (calculation logic at order time) lives in BizAppsOrders, calling `TaxCalculationProvider` (interface in BizAppsAccounting, implementations registered via `RegisterClass`).
-
-### 4.9 Scheduled journal entries (revenue-recognition waterfall) — BA-D25
-
-> **REVISED 2026-06:** the cron-driven `Recurring*` trio (BA-D18) is **removed**. Deferred-revenue recognition — the dominant in-scope need — is modeled as a finite, origin-linked, known-amount waterfall of **scheduled** future entries. FX revaluation moves to a programmatic action (§6.4 / BA-D27).
-
-When a subscription or event ticket is sold, revenue is parked in Deferred Revenue (a liability) and recognized over time. The upstream BizAppsOrders subscription engine computes the recognition schedule (count, per-period amounts with front-loaded rounding, uneven-start / no-lapse-gap handling — all per BA-D24/BA-D17) and calls `AccountingService` to persist a set of `ScheduledJournalEntry` rows. Each is a **pre-computed FUTURE JE** that the period-close engine materializes into a real Pending `JournalEntry` (Dr Deferred Revenue, Cr Revenue) on its target period.
-
-```sql
-__mj_BizAppsAccounting.ScheduledJournalEntry
-  ID UUID PK,
-  CompanyID UUID FK → __mj.Company,
-  EntryType NVARCHAR(40),               -- 'RevenueRecognition' | 'DeferredRevenueRelease'
-                                         -- | 'PrepaidAmortization' | 'DepreciationAccrual'
-                                         -- | 'PeriodEndAccrual' | 'Manual'
-  Status NVARCHAR(20),                  -- 'Scheduled' | 'Generated' | 'Cancelled' | 'Superseded'
-  ScheduleSequence INT,                 -- 1-based position in the waterfall (the "3" of "3 of 12")
-  ScheduleCount INT,                    -- total entries in the schedule (1 = single-date deferral, e.g. event ticket)
-  ScheduledEffectiveDate DATE,          -- accounting date the materialized JE will bear (period-end)
-  TargetAccountingPeriodID UUID FK NULL,-- resolved target period (null until that period exists)
-  CurrencyCode CHAR(3) FK,
-  TotalAmount DECIMAL(18,2),            -- gross recognized by this entry; lines carry Dr/Cr detail
-  -- Origin (soft refs to upstream BizAppsOrders / Contracts; NO FK)
-  SubscriptionID, SubscriptionTermID, OrderID, OrderLineID, ContractID, RevRecScheduleID UUID NULL,
-  -- Materialization (internal)
-  GeneratedJournalEntryID UUID FK → JournalEntry NULL,   -- the JE produced when this fired
-  GeneratedAt DATETIMEOFFSET NULL,
-  SupersededByScheduledJournalEntryID UUID FK → ScheduledJournalEntry NULL  -- on renewal/amendment
-
-__mj_BizAppsAccounting.ScheduledJournalEntryLineItem      -- mirrors JournalEntryLine; copied onto the materialized JE
-  ID, ScheduledJournalEntryID UUID FK, LineNumber INT, GLAccountID UUID FK,
-  DebitAmount DECIMAL(18,2) NULL, CreditAmount DECIMAL(18,2) NULL, Description NVARCHAR(MAX) NULL
-
-__mj_BizAppsAccounting.ScheduledJournalEntryLineDimension -- analytical tags carried through to the materialized line
-  ID, ScheduledJournalEntryLineItemID UUID FK, DimensionID UUID FK, DimensionValueID UUID FK
-```
-
-**Materialization** runs at period close (or a scheduled action): every `Scheduled` row whose target period ≤ the closing period generates a Pending `JournalEntry`, copies its lines + dimensions, sets `GeneratedJournalEntryID`, and flips to `Generated`. A DB trigger (`trg_SJE_Immutability`) then freezes the row so it can't drift from the JE it produced. Renewals/amendments that recompute a future schedule set the old rows to `Superseded` with `SupersededByScheduledJournalEntryID`.
-
-- **Single-date deferral** (event tickets — Digital Now): one `ScheduledJournalEntry`, `ScheduleCount=1`, target = the event's period.
-- **Ratable subscription**: N rows (e.g. 12 monthly), amounts even except sequence 1 which carries the rounding remainder (front-loaded per AN-BC).
-- **Finite amortization** (prepaid, depreciation register): also modeled here as `ScheduledJournalEntry` (`EntryType='PrepaidAmortization' | 'DepreciationAccrual'`) rather than a recurring template.
-
-### 4.10 Account balance materialization
-
-For closed-period balances only. Open period balances are computed on demand by summing relevant JournalEntryLines.
-
-```sql
-__mj_BizAppsAccounting.AccountBalance
-  ID UUID PK,
-  CompanyID UUID FK → __mj.Company,
-  GLAccountID UUID FK,
-  AccountingPeriodID UUID FK,
-  PeriodEndBalance DECIMAL(18,2) NOT NULL,
-  CurrencyCode CHAR(3),
-  ComputedAt DATETIMEOFFSET NOT NULL,
-  UNIQUE (CompanyID, GLAccountID, AccountingPeriodID)
-
-__mj_BizAppsAccounting.AccountBalanceByDimension
-  ID UUID PK,
-  CompanyID UUID FK,
-  GLAccountID UUID FK,
-  AccountingPeriodID UUID FK,
-  DimensionValueTagsJson NVARCHAR(MAX),  -- composite dimension key
-  PeriodEndBalance DECIMAL(18,2) NOT NULL
-```
-
-Subset of accounts materialized (per `BA-D22`):
-
-- All Asset and Liability accounts that we own (AR variants, DefRev, Sales Tax Payable, Commission Payable, Partner Rev Share Payable, Intercompany Payable/Receivable)
-- Revenue accounts (for monthly P&L aggregates — though P&L itself comes from ERP)
-- Subledger-specific accounts only — not the full chart
-
-Materialization runs as part of period close. Each `AccountingPeriod.Status` transition to `Closed` triggers a materialization job that computes all balances for that period.
+| Absent | Why |
+|---|---|
+| `AccountingPeriod` (+ period FKs, close machinery) | D2 — the ERP owns periods |
+| `ScheduledJournalEntry` trio + materializer op | D15 — rev-rec is real forward-dated JEs |
+| `AccountBalance` / `AccountBalanceByDimension` | D20 — views compute on demand |
+| `ChartOfAccountsMapping` | D13 — ERP identity lives on `GLAccount` |
+| ACP default-GL-account FK columns | D12 — company-level `GLAccountLink` rows |
+| `JournalEntryBatchLineItem.CompanyID` | D7 — the batch header carries the company |
+| `IntercompanyRelationship` wiring | D18 — Payments owns the wiring when built |
+| `Recurring*` template trio | Replaced by the forward-dated-JE model (D15) |
+| `JournalEntry` origin FK columns (`OrderID`, `OrderLineID`, `SubscriptionID`, `PaymentID`, `ContractID`, `IntercompanyFlowID`, `TaxRemittanceID`), `JournalEntryLine.OrderLineID`, and the `JournalEntryLink` table | D25 — provenance is the single polymorphic `LinkedEntityID`/`LinkedRecordID` origin pair on the JE header; all three still in the as-built baseline, drop pending |
 
 ---
 
-## 5. Database-level enforcement
+## 6. Database-level enforcement
 
-Beyond BaseEntity validators (which can be bypassed by direct SA access), critical invariants are enforced at the database level. Implementation in PostgreSQL via CHECK constraints, triggers, and PL/pgSQL functions.
+Critical invariants hold at the database level (T-SQL triggers/CHECKs), immune to app-layer bypass:
 
-### 5.1 CHECK constraints
-
-```sql
--- JournalEntryLine: exactly one of Debit/Credit is set
-ALTER TABLE JournalEntryLine ADD CONSTRAINT chk_je_line_one_side
-  CHECK ((DebitAmount IS NOT NULL) <> (CreditAmount IS NOT NULL));
-
--- Original amounts coexist or both NULL
-ALTER TABLE JournalEntryLine ADD CONSTRAINT chk_je_line_original_paired
-  CHECK ((OriginalDebitAmount IS NULL) = (OriginalCreditAmount IS NULL));
-
--- Original currency required if original amounts present
-ALTER TABLE JournalEntryLine ADD CONSTRAINT chk_je_line_original_currency
-  CHECK ((OriginalDebitAmount IS NULL) OR (OriginalCurrencyCode IS NOT NULL));
-
--- ExchangeRate required if original amounts present
-ALTER TABLE JournalEntryLine ADD CONSTRAINT chk_je_line_exchange_rate
-  CHECK ((OriginalDebitAmount IS NULL) OR (ExchangeRateUsed IS NOT NULL));
-
--- JE status valid transitions
-ALTER TABLE JournalEntry ADD CONSTRAINT chk_je_status
-  CHECK (Status IN ('Pending', 'Batched', 'GLPosted'));
-
--- AccountingPeriod status valid
-ALTER TABLE AccountingPeriod ADD CONSTRAINT chk_period_status
-  CHECK (Status IN ('Open', 'Closing', 'Closed', 'Reopened'));
-
--- JE EffectiveDate must be within the referenced AccountingPeriod
--- (enforced via trigger because period range is in another row)
-
--- AccountingCompanyProfile.AccountingCompanyID cannot equal self
-ALTER TABLE AccountingCompanyProfile ADD CONSTRAINT chk_acp_self
-  CHECK (AccountingCompanyID IS NULL OR AccountingCompanyID <> ID);
-```
-
-### 5.2 Deferrable balanced-JE constraint
-
-```sql
--- Enforced via DEFERRABLE trigger that fires at end of transaction
-CREATE OR REPLACE FUNCTION check_je_balanced() RETURNS TRIGGER AS $$
-BEGIN
-  IF (SELECT COALESCE(SUM(DebitAmount), 0) - COALESCE(SUM(CreditAmount), 0)
-      FROM JournalEntryLine WHERE JournalEntryID = NEW.ID) <> 0 THEN
-    RAISE EXCEPTION 'JournalEntry % is not balanced: Sum(Debits) != Sum(Credits)', NEW.EntryNumber;
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE CONSTRAINT TRIGGER trg_je_balanced
-  AFTER INSERT OR UPDATE ON JournalEntry
-  DEFERRABLE INITIALLY DEFERRED
-  FOR EACH ROW EXECUTE FUNCTION check_je_balanced();
-```
-
-### 5.3 Immutability triggers
-
-```sql
--- JournalEntry: cannot UPDATE if Status is Batched or GLPosted
-CREATE OR REPLACE FUNCTION enforce_je_immutability() RETURNS TRIGGER AS $$
-BEGIN
-  IF OLD.Status IN ('Batched', 'GLPosted') AND TG_OP = 'UPDATE' THEN
-    -- Allow ONLY the GLPostedAt + GLReferenceID + Status changes (the batch-to-GL roundtrip)
-    IF (NEW.EntryNumber <> OLD.EntryNumber
-        OR NEW.EffectiveDate <> OLD.EffectiveDate
-        OR NEW.EntryType <> OLD.EntryType
-        -- ... etc, every field except the allowed ones
-        ) THEN
-      RAISE EXCEPTION 'JournalEntry % is locked (status=%); only GL-roundtrip fields can update',
-        OLD.EntryNumber, OLD.Status;
-    END IF;
-  END IF;
-  IF OLD.Status IN ('Batched', 'GLPosted') AND TG_OP = 'DELETE' THEN
-    RAISE EXCEPTION 'JournalEntry % cannot be deleted (status=%); use reversal pattern',
-      OLD.EntryNumber, OLD.Status;
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_je_immutability BEFORE UPDATE OR DELETE ON JournalEntry
-  FOR EACH ROW EXECUTE FUNCTION enforce_je_immutability();
-
--- Same pattern for JournalEntryLine
--- Same pattern for JournalEntryBatch (cannot modify after Sent/Acknowledged)
-```
-
-### 5.4 Period-close enforcement
-
-```sql
--- Cannot insert a JE with EffectiveDate in a Closed period (except adjusting entries)
-CREATE OR REPLACE FUNCTION enforce_period_close() RETURNS TRIGGER AS $$
-DECLARE
-  v_period_status NVARCHAR(20);
-BEGIN
-  SELECT Status INTO v_period_status
-    FROM AccountingPeriod
-    WHERE ID = NEW.AccountingPeriodID;
-  IF v_period_status = 'Closed' AND NEW.OriginalAccountingPeriodID IS NULL THEN
-    RAISE EXCEPTION 'Cannot post JE to closed AccountingPeriod % without OriginalAccountingPeriodID reference (adjusting entry)',
-      NEW.AccountingPeriodID;
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_je_period_close BEFORE INSERT OR UPDATE ON JournalEntry
-  FOR EACH ROW EXECUTE FUNCTION enforce_period_close();
-```
-
-### 5.5 ChartOfAccountsMapping enforcement
-
-GL accounts referenced by a JE must have either:
-- A direct `GLAccount.ExternalAccountID` matching the target ERP's COA, OR
-- A `ChartOfAccountsMapping` row resolving the local GLAccount to the target ERP's account
-
-Enforced at batch time (when JEs are sent to ERP), not at JE insert (since you may post JEs for an account before mapping is finalized — that's a workflow issue).
+1. **One-side rule:** exactly one of Debit/Credit per line (CHECK); original amounts paired with
+   currency + rate (CHECKs).
+2. **Balanced-JE invariant:** SUM(Dr) = SUM(Cr) per JE, enforced at transaction scope.
+3. **Single-company rule:** every line's `GLAccount.CompanyID` equals the JE header's `CompanyID`
+   (trigger; typed engine error `MULTI_COMPANY_DRAFT` before it).
+4. **Immutability by status:** locked JEs/lines reject UPDATE/DELETE except GL-roundtrip fields;
+   batches freeze at Sent/Acknowledged.
+5. **Reversal consistency:** the reversal chain's cross-links stay coherent (trigger).
+6. **Batch footing (pending Amith's input):** whether a dispatch-time trigger asserts the summary
+   JE foots to the batch control totals, or the summary's lock-at-creation + tests suffice.
+7. **Approval-pointer coherence:** `ApprovalTaskID`/`ApprovalTaskRaisedAt` set together (CHECK).
+8. **Mapping validation floor:** the §5.3 hard-block rules carry a DB validation trigger under the
+   engine's typed errors.
 
 ---
 
-## 6. Multi-currency mechanics
-
-### 6.1 Functional currency posting
-
-JEs always post in the Company's `AccountingCompanyProfile.FunctionalCurrencyCode`. The header has no Currency field — derived from the Company.
-
-### 6.2 Original currency tracking on JE lines
-
-When an order or payment occurs in a non-functional currency:
-
-```sql
--- Example: AUD invoice for $1000 in a USD-functional Company at 0.66 USD/AUD
-JournalEntryLine record:
-  DebitAmount = 660.00              -- functional (USD)
-  CreditAmount = NULL
-  OriginalDebitAmount = 1000.00     -- original (AUD)
-  OriginalCreditAmount = NULL
-  OriginalCurrencyCode = 'AUD'
-  ExchangeRateUsed = 0.66
-```
-
-GL trial balance always tots in functional currency. Drill-into-line shows both.
-
-### 6.3 Realized FX gain/loss
-
-When an AR booked at rate X is paid at rate Y, the difference is realized FX gain/loss. Auto-emitted by the engine on payment receipt:
-
-```sql
--- Original AR booked at AUD 1000 @ 0.66 = USD 660
--- Payment received at AUD 1000 @ 0.64 = USD 640
--- Engine auto-generates this JE on payment:
-JournalEntry (EntryType = 'PaymentReceipt'):
-  Line 1: Dr Cash               USD 640    (OriginalCurrency=AUD, OriginalAmount=1000, ExchangeRate=0.64)
-  Line 2: Cr AR                 USD 660    (clears the original booking)
-  Line 3: Dr Realized FX Loss   USD 20     (the difference, in functional only)
--- Balanced: Dr 640+20 = Cr 660 ✓
-```
-
-The Realized FX Gain/Loss GL account is referenced via `AccountingCompanyProfile.RealizedFXGainLossGLAccountID`.
-
-### 6.4 Unrealized FX revaluation (programmatic action — BA-D27)
-
-At period close, a **programmatic mark-to-market action** (driven from BizAppsOrders / the period-close engine, not a stored template) walks every open foreign-currency balance (AR holds the currency-specific balances) and revalues it at the current `CurrencySpotRate`. The difference posts to Unrealized FX Gain/Loss as an ordinary `JournalEntry` (`EntryType='FXRevaluation'`) stored in Accounting. The action also emits the auto-reversal dated to the start of the next period, so the unrealized adjustment doesn't compound when the actual settlement occurs.
-
-This replaces the dropped `RecurringJournalEntry` FX template (BA-D18): a reval amount depends on the spot rate at close and can't live in a static template. Accounting stays the storage + mechanics layer; the math lives in an action that can expand later.
-
-### 6.5 Reporting currency translation
-
-For consolidation in `aidp`, each Company's functional-currency balances translate to the group reporting currency (USD for BC). Translation methodology:
-
-- **Assets/Liabilities**: current spot rate at period end
-- **Equity**: historical rate at original booking (rarely changes)
-- **P&L**: weighted-average rate for the period
-
-Translation lives in `aidp` analytics layer, not in Accounting itself. Accounting provides the functional-currency primitives; analytics handles the translation.
-
----
-
-## 7. Period close workflow
-
-### 7.1 Lifecycle
+## 7. JE lifecycle and batching workflow
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Open: period generated
-    Open --> Closing: admin initiates close
-    Closing --> Closed: validations pass
-    Closing --> Open: validations fail; back to Open
-    Closed --> Reopened: admin reopens with reason
-    Reopened --> Closing: re-initiate close
-    Reopened --> Closed: skip Closing if no new activity
+    [*] --> Pending : buildBatch - Preliminary Lock
+    Pending --> Approved : CFO Approval - Permanent Lock
+    Pending --> Cancelled : Reject Batch - Unlocks JEs
+    Pending --> Pending : Regenerate Batch
+    Approved --> Sent : Dispatch to ERP
+    Sent --> Posted : ERP Confirms Receipt
+    Sent --> Failed : ERP Rejection - Hold for Review
 ```
 
-### 7.2 Close prerequisites (validated during `Closing` state)
+### 7.1 States
 
-- All JEs in the period have `Status = 'Batched'` or `'GLPosted'` (no Pending JEs)
-- All batches for the period have `Status = 'Acknowledged'` (ERP confirmed receipt)
-- All TaxLiability records for the period have `Status` ∈ `{Open, Filed, Paid}` (i.e., not in an indeterminate state)
-- All `ScheduledJournalEntry` rows targeting the period have materialized (Status='Generated')
-- No critical recon variances open (defined per deployment)
+| Status | Meaning | Mutable? |
+|---|---|---|
+| `Pending` | Emitted by an upstream event or staged forward-dated rev-rec. Awaiting batch. | Yes |
+| `Batched` (unapproved batch) | In a Pending batch — **preliminary, reversible lock**: can't be double-batched, but reject/regenerate frees it. | No (but releasable) |
+| `Batched` (approved batch) | **Permanent lock** through dispatch. | No |
+| `GLPosted` | ERP acknowledged the batch. | Only GL-roundtrip fields |
 
-If any prerequisite fails, period stays in `Closing` status with the validation report visible. Admin must resolve and re-trigger.
+**Reversals (pen, not pencil):** business-entity reversals emit NEW Pending JEs cross-linked via
+`ReversesJournalEntryID`/`ReversedByJournalEntryID`. Both sides live in the ledger; the net is zero.
 
-### 7.3 Close action (transition `Closing → Closed`)
+### 7.2 Batch build
 
-1. Materialize all balances for the period into `AccountBalance` and `AccountBalanceByDimension`
-2. Set `AccountingPeriod.Status = 'Closed'`, `ClosedAt`, `ClosedByUserID`
-3. From this point, the period-close trigger (§5.4) prevents new JE posts to this period
-4. Emit a `PeriodClosed` event for downstream consumers (`aidp` recon, etc.)
+- `buildBatch(companyId, dateFilter)` gathers ONLY that company's Pending JEs — one batch per
+  company per run, each company on its own cadence.
+- **Standard filter semantics (Robert):** empty start date + populated end date/time — ALL unbatched
+  entries from earlier dates, ascending. A date-only end is inclusive of that whole date.
+- **Forward-dated entries are swept only if the filter reaches that far: default cutoff = today.**
+  Building a future-reaching batch requires explicitly setting the filter; batch approval displays
+  the swept date range **and the min/max `EffectiveDate` across the member JEs** — the approver
+  sees exactly what date span they are committing (Amith 2026-07-23). This date-awareness is the
+  only "scheduling" machinery the system has: forward-dated JEs just sit Pending until a window
+  reaches them.
+- **Arbitrary batches via MJ User Views:** build a view of desired records → "generate batch from
+  view"; the engine validates the view resolves ONLY unbatched entries (rejects loudly otherwise).
+- The whole batch (header + summary lines + dimensions + control totals + JE locks) commits in
+  **ONE transaction** — all rows or none (D10).
+- **Intercompany cadence conditions (Jeremy's acceptance conditions for single-company batches):**
+  (1) companies with an active intercompany relationship keep their batch cadences ALIGNED (the
+  batch UI should surface this); (2) the intercompany rec process tracks "posted in source, not yet
+  in ERP" as a reconciling-item TYPE, not a break.
 
-### 7.4 Reopen
+### 7.3 Approval
 
-Requires `Finance.Admin` role + a `ReopenReason`. Generates an audit-log entry. Closed → Reopened state. After any new activity, period must be re-closed (back through `Closing`).
+Raising the CFO approval task (bizapps-tasks) stamps the batch's task pointer in its own
+transaction. **Approve** → permanent lock, dispatch allowed. **Reject** → entries UNLOCK back to
+the candidate pool; the open batch can be regenerated. Regeneration of a batch invalidates any
+pending approval (mechanism for reset-vs-replace deliberately deferred). The enforced decider
+is the **Accounting Approver for the batch's company** (any-linked-person resolution is dev
+scaffolding only, replaced before non-dev use).
 
-### 7.5 Adjusting entries
+### 7.4 Dispatch
 
-Post-close JEs that adjust a previously-closed period don't actually post to the closed period. They post to the **next open period** with `OriginalAccountingPeriodID` set to the closed period for traceability. Reports filter to show "May actuals (as of 6/15 close) + June adjustments to May" if desired.
+One aggregated JE per batch (the summary JE) posts to the GL, dated `PostingDate`. Status walk:
+`Pending → Approved → Sent → Posted` (member JEs + the summary JE → `GLPosted`) ·
+`Sent → Failed` (ERP rejection — hold for review/retry) · `Pending → Cancelled` (reject —
+member JEs unlock back to the candidate pool). Closed-period rejections HOLD-and-flag (§4).
+
+### 7.5 BC dispatch mechanics (Jeremy/Robert, 2026-07-17)
+
+- **Straight to the API — no CSV intermediary:** BC REST API v2.0
+  (`companies({id})/journals({journalId})/journalLines`), Azure AD OAuth client-credentials — the
+  only supported SaaS path. Posting date is API-settable (verify with a test post).
+- **Separate, write-scoped app registration** just for journal posting (don't widen the existing
+  read-only reporting registration) — Jeremy's recommendation, Robert to confirm.
+- **External dependency:** BC company-config standardization (9+ BC companies with inconsistent
+  posting groups / number series / dimensions / journal templates). **Jeremy owns** researching +
+  standardizing before integration wiring; "simple and consistent is better."
 
 ---
 
-## 8. JE lifecycle: Pending → Batched → GLPosted
+## 8. Multi-currency mechanics
 
-### 8.1 States
+- **JEs post in the company's functional currency** (`FunctionalCurrencyCode`); the header carries
+  no currency field.
+- **Original-currency tracking on lines:** `OriginalCurrencyCode` / `OriginalDebit/CreditAmount` /
+  `ExchangeRateUsed` when the source transaction is in a different currency. Totals foot in
+  functional; drill-in shows both.
+- **All FX computation/posting is upstream** (D16) — accounting never generates FX entries. The
+  exchange-rate table, rate providers, revaluation, and reporting-currency translation are all
+  deferred until multi-currency activates.
+- Known open design point, deferred with FX: what multi-currency batch control totals MEAN when
+  currencies differ (Marcelo's lean: show totals in the current company's currency).
 
-| Status | Meaning | Mutable? | Triggers |
-|---|---|---|---|
-| `Pending` | Generated by an upstream business event (Order Posted, Payment Captured) or by a `ScheduledJournalEntry` materializing at period close. Sits awaiting next batch run. | Yes (only if no FK constraints prevent it; in practice, mutations happen via business-entity reversal which emits new Pending JEs) | None block |
-| `Batched` | Included in a `JournalEntryBatch` sent to the ERP. Locked. | **No** | Triggers reject UPDATE / DELETE |
-| `GLPosted` | ERP has confirmed receipt and posting. The batch's `Status = 'Acknowledged'`. | **No**, except for receiving the GL reference back | Triggers allow only the GLPostedAt / GLReferenceID / Status to change |
+---
 
-### 8.2 Reversals (per `M10`)
+## 9. Intercompany
 
-Business-entity-level reversals (Order with `ReversesOrderID`, Payment with `ReversesPaymentID`, etc.) emit **new** Pending JEs in the current open period. Original JEs stay where they are. The audit chain is:
+- **Accounting generates no legs, but owns the lookup** (D18, BA-D26). The emitter — the payment
+  path in bizapps-orders — builds the entries; this repo answers *which accounts*.
+- **Booking JEs carry NO intercompany legs** (Amith 2026-07-21): an order books one JE per order
+  line under the line's company (§14). Intercompany balancing arises on the **payment side**, when
+  cash collected by one entity settles a line owned by another.
+- **AR grain is settled** (Amith, 2026-07-26): A/R is **per company, per line**. The earlier
+  seller-of-record booking-leg model (Robert, 2026-07-20) is **withdrawn, not deferred** — it is no
+  longer an open item and no longer gates this work.
+
+### 9.1 `IntercompanyAccountMatch` (built 2026-07-26)
+
+| Column | Meaning |
+|---|---|
+| `SourceCompanyID` | The company that COLLECTED the cash and therefore owes. |
+| `TargetCompanyID` | The company that OWNS the line the cash settled, and is therefore owed. |
+| `DueToGLAccountID` | Intercompany **payable** — a **Liability** on Source's books. |
+| `DueFromGLAccountID` | Intercompany **receivable** — an **Asset** on Target's books. |
+| `Status` / `StartedAt` / `EndedAt` | Date-effective, resolved exactly as `GLAccountLink` is. |
+
+Child `IntercompanyAccountMatchDimension` adds `Side` (`DueTo`/`DueFrom`), `DimensionID`,
+`DimensionValueID` (**nullable**) and `Sequence`. The nullable value is the one real departure from
+`GLAccountLinkDimension`, which carries the Dimension alone because a transaction supplies the value
+from context. An intercompany leg has no such context — it is raised to balance *another* company's
+revenue, with no originating record to read a department from — so a value can be pinned here, and
+NULL keeps the take-it-from-context behaviour. `Side` exists because the two legs sit on different
+companies' books and routinely tag different values for the same Dimension.
+
+**Ordered, not symmetric** (BA-D27). One row is one direction.
+
+**Why the enforcement is heavier than it looks like it needs to be.** Every rule here guards a
+single failure mode: a mis-oriented or mis-typed pair still produces a **perfectly balanced**
+journal entry. It posts, every balance assertion passes, and the only symptom is two companies'
+balance sheets disagreeing months later. So:
+
+- `trg_IAM_AccountIntegrity` (50024/50025/50026) enforces in the DB, unbypassable, that DueTo
+  belongs to Source and is a Liability, and DueFrom belongs to Target and is an Asset.
+- `trg_IAMD_DimensionValueBelongs` (50027) keeps a pinned value inside its Dimension — these rows
+  are configuration and never pass through the draft pipeline that checks this for JE lines.
+- `IntercompanyAccountMatchEntityServer` repeats the orientation/type rules for a readable message,
+  and adds the one rule only it can: **two Active rows for the same pair sharing a `StartedAt` are
+  refused**. Overlapping windows are legitimate (that is how a mapping is superseded), but a tie
+  makes resolution arbitrary — the tie-break is a strict `>` — and both candidates balance.
+- `ResolveIntercompanyAccounts` returns two **named, company-stamped legs**, so a caller cannot
+  re-derive the orientation wrongly.
+
+Covered by `test-harnesses/server/intercompany-runtime.ts` (17 checks across all three layers) and
+16 mutation-verified unit tests in `packages/EngineBase`.
+
+**Settlement is named, not built.** These balances accumulate; clearing them when entities actually
+move money is a deliberate follow-on, and should be a decision rather than a surprise.
+
+---
+
+## 10. Tax
+
+Per D17: a third-party engine calculates; we send inputs (ship-to/customer address, product tax
+category, customer tax profile incl. exemptions) and record the multi-jurisdiction results per
+line. Our tax tables snapshot what returned. The `TaxCalculationProvider` seam stands.
+
+**Open (finance calls, not engineering):** engine selection (Stripe Tax = low-friction launch
+candidate; Avalara-class when non-Stripe channels/exemption-cert management matter) and launch
+timing (launching WITH tax vs without is an explicit business call). We sell to nonprofits —
+exemption-certificate handling matters; the profile is ours, cert validation may come from the
+engine.
+
+---
+
+## 11. Reporting: read-model views
+
+> **Creation deferred (2026-07-22):** the views are not in the baseline today; each is (re)built
+> as needed when a report ships.
+
+Shipped view layer (compute on demand — D20):
 
 ```
-Original Business Event (Order #100, Posted) → emits → JE #500 (Pending) → batched → Batched
-Reversal Business Event (Order #100-R, Posted) → emits → JE #501 (Pending; ReversesJournalEntryID=#500) → batched → Batched
+vw_TrialBalance_AR          AR-side trial balance per company
+vw_GLDetail_Subledger       all JE lines for our accounts, with dimension tags
+vw_AROpenByCustomer         open AR per customer per company
+vw_DefRevRollforward        DefRev beginning + additions + recognitions + ending
+vw_SalesTaxLiability        accrued + remitted per authority
+vw_ARtoGLRecon              our AR balance vs the ERP's (recon definition in progress)
+vw_DimensionPL              subledger revenue by dimension
+vw_FxExposure               foreign-currency open balances
 ```
 
-Both JEs exist in the GL. The net is zero. Auditability is preserved by the business-entity reversal link.
-
-### 8.3 Voiding a Pending JE
-
-A `Pending` JE that has been emitted but not yet batched, where the source business event itself is voided before batch run, results in:
-
-- The source business event's status changes to Voided (its own lifecycle)
-- The Pending JE is also voided (status flag or hard delete — TBD)
-- This is the **only** case where a JE can be effectively "deleted" without a reversal
-
-Open question (§14): hard-delete the Pending JE or just flag it as Voided and still include it in the batch with zero effect? Audit-purity argues for the latter.
-
-### 8.4 Batch run
-
-```
-1. Select all Pending JEs by (Company, AccountingPeriod, TargetSystem) where age > BatchInterval
-2. Group by Company → one batch per Company
-3. Create JournalEntryBatch record (Status='Pending')
-4. Set Status='Batched' and BatchID on each JE atomically (transaction)
-5. Send to ERP via Integration connector
-6. On Sent response from ERP, update Batch.Status='Sent', SentAt
-7. On Acknowledged response, update Batch.Status='Acknowledged', AcknowledgedAt
-   AND update each JE.Status='GLPosted', GLPostedAt, GLReferenceID
-8. On Failed, update Batch.Status='Failed', ErrorMessage; JEs revert to Pending for retry
-```
-
-The batch run is itself a Scheduled Action (cron-based, default daily). Manual trigger available for ad-hoc batching.
+Skip-generated interactive reports + a Report Gallery app are **deferred** (the views answer the
+essential questions now; report pages are mocked and sequenced behind the impact screens).
 
 ---
 
-## 9. Pluggable tax engine
+## 12. Permissions, roles, and company scope
 
-### 9.1 Interface
-
-```typescript
-// Lives in @memberjunction/bizapps-accounting (core package)
-export abstract class TaxCalculationProvider {
-  static readonly ProviderType: string;  // 'Avalara' | 'TaxJar' | 'Local' | ...
-
-  abstract calculateTax(
-    contextUser: User,
-    request: TaxCalculationRequest
-  ): Promise<TaxCalculationResult>;
-
-  abstract syncRates?(
-    contextUser: User,
-    jurisdictions: TaxJurisdiction[]
-  ): Promise<TaxRateSyncResult>;
-}
-
-export interface TaxCalculationRequest {
-  companyId: string;
-  customerOrganizationId: string;
-  shipToAddressId: string;
-  lines: TaxCalculationLine[];
-  calculationDate: Date;
-}
-
-export interface TaxCalculationLine {
-  orderLineId: string;
-  productId: string;
-  productTaxCategoryId: string;
-  amount: number;
-  currency: string;
-}
-
-export interface TaxCalculationResult {
-  lines: Array<{
-    orderLineId: string;
-    taxByJurisdiction: Array<{
-      taxJurisdictionId: string;
-      taxRateId: string;
-      taxableAmount: number;
-      taxAmount: number;
-    }>;
-    totalTax: number;
-  }>;
-}
-```
-
-### 9.2 Shipped implementations
-
-- **`LocalTaxCalculationProvider`** — reads from `TaxRate` table; supports manual rate entry; suitable for simple single-jurisdiction cases
-- **`AvalaraTaxCalculationProvider`** — calls Avalara API; auto-syncs rates; for US multi-state sales tax
-- **`TaxJarTaxCalculationProvider`** — calls TaxJar API; alternative to Avalara
-- **`HybridTaxCalculationProvider`** — uses local table for VAT/simple cases, falls back to Avalara for US sales tax
-
-Deployments configure their preferred provider via `RegisterClass` resolution.
-
-### 9.3 Tax rate sync
-
-For Avalara/TaxJar providers: a Scheduled Action runs the `syncRates()` method on configurable cadence (default monthly), pulling rates for jurisdictions where the deployment is registered. Updates `TaxRate` records with `Source='Avalara'` (or similar). Conflicts with manually-entered rates resolved per deployment policy (admin chooses keep-manual or accept-sync).
+- **Seeded roles** (Accounting User / Admin[/Manager]) + entity CRUD permissions + RLS (D21).
+- **Company-scoped access mechanism (ruled):** a `UserCompanyRole` grant table — per-company
+  User/Approver/Admin sibling roles + an unscoped Global Admin, audit columns, one Accounting MJ
+  role with RLS filters on all four operations. The A2 co-design (Marcelo + Robert) executes it;
+  v1 is non-blocking.
+- **Batch-approver enforcement** (the company's designated Accounting Approver) is required before
+  any non-dev use (§7.3).
+- **Company-scope UX semantics are deliberately UNRULED:** Marcelo's model is that selecting
+  companies makes the frontend behave **as if the others don't exist** (filter options, dropdowns,
+  everything) — not mere query filtering. A dedicated scope-planning pass from Marcelo will define
+  it; until then, no scope doctrine and no scope code.
 
 ---
 
-## 10. Reporting: read-model views + Skip-generated reports
+## 13. UX direction
 
-### 10.1 Read-model views shipped
+The binding UI-architecture direction (schema/engine remain this plan's core; these are the rules
+the UI work executes under):
 
-```sql
-vw_TrialBalance_AR              -- AR-side trial balance: AR + DefRev + Sales Tax Payable balances per Company per Period
-vw_GLDetail_Subledger           -- all JE lines for our accounts, with dimension tags
-vw_AROpenByCustomer             -- open AR balance per Customer per Company
-vw_DefRevRollforward            -- Deferred Revenue beginning + additions + recognitions + ending per Period
-vw_SalesTaxLiabilityByAuthority -- accrued + remitted per TaxAuthority per Period
-vw_ARtoGLRecon                  -- our AR balance vs ERP's AR account balance, per Company per Period
-vw_DimensionPL                  -- revenue (subledger) by dimension × period
-vw_ARAging                      -- AR aging buckets (current, 30-60, 60-90, 90+)
-vw_FxExposure                   -- foreign-currency open balances per Company per Currency
-vw_JEAuditTrail                 -- JE detail with origin (Order/Payment/Sub/etc.) for audit drill-through
-```
-
-### 10.2 Skip-generated interactive reports
-
-Spec'd in a follow-on doc `plans/bizapps-accounting-reports.md`. Each report has:
-- Title + description
-- Parameters (Company, Period, Dimension filters, Customer filter, etc.)
-- Output shape (table, chart, drill-through links)
-- Backing view
-
-Reports generated via `askskip.ai` as interactive components, rendered in MJ Explorer dashboards. Specific reports to generate:
-
-- AR Aging Detail
-- Deferred Revenue Rollforward
-- Sales Tax Liability Summary
-- AR-to-GL Reconciliation
-- Subledger Trial Balance
-- Revenue by Dimension
-- JE Audit Trail
-- FX Exposure
-- Period Close Status
-
-### 10.3 Report Gallery
-
-A separate "Report Gallery" MJ app (new) provides a centralized place to discover and run reports across BizApps* and aidp. Out of scope for this BizAppsAccounting plan but referenced for completeness.
+1. **Forms-first (Amith):** every core entity gets a first-class MJ Entity Form (extend the
+   generated form; the MJ agents-app forms are the reference implementation), composed of reusable
+   widgets that dashboards embed directly — the drill-in form and the dashboard panel are the same
+   components. No bespoke pop-ups: modal/slide-in surfaces render the entity form through MJ's form
+   host. Entity browse surfaces reuse `ng-entity-viewer` + User Views.
+2. **Form vs workspace boundary (Marcelo):** the entity form is the home of **simple one-record
+   edits + detail viewing**; the **workspace is the home of creation and advanced/multi-record
+   edits**. Process surfaces (criteria → preview → commit) are always workspaces. A pop-out lets a
+   record be opened in its workspace from its form.
+3. **Edit gating rides what MJ ships — NOTHING invented:** MJ has per-field ReadOnly metadata, a
+   form-wide EditMode, permission-gated Edit, layered validation, and atomic parent+children saves —
+   but no record-state-conditional lock. Therefore the **DB immutability triggers remain the sole
+   enforcement authority**; the forms merely set EditMode/hide Edit from record status (JE: Pending
+   editable, Batched+ read-only; batch: Pending editable, Approved+ read-only) and render the
+   state's REAL verbs (Generate reversal / Cancel / Refund) — never a disabled Save.
+4. **List idiom:** per-column filtering/sorting in the column headers (AG Grid native; sortable AND
+   filterable columns visually indicated, limited to indexed columns); the card above each list
+   shrinks to the time-span control + high-value preset chips (JE lists: Unbatched · Manual awaiting
+   approval · Batched · this month; Batches: Open · Awaiting approval · Dispatch failed · Held).
+5. **Chrome (Matt):** container queries, not media queries (Explorer panes split/pop out — layouts
+   respond to the CONTAINER); sticky page header + filters, only content scrolls; required-state
+   indicators (red-dot) on editor tabs with save gated on completeness; tables may run to pane
+   edges.
+6. **Manual JEs:** provenance unmistakable on every JE surface (origin lineage loud); creating is
+   authorization-gated; manual-ness visually prominent, never a subtle field.
 
 ---
 
-## 11. Integration with BizAppsOrders + future apps
+## 14. Integration contract with BizApps Orders
 
-### 11.1 Upstream API
+The accounting-facing shape of the order booking (the orders repo owns its own plan):
 
-BizAppsAccounting exposes a TypeScript API (and GraphQL via MJ) for upstream apps to invoke:
+- **One JE per ORDER LINE — and one JE per PAYMENT LINE** (Amith 2026-07-21, reaffirmed +
+  extended 2026-07-28): each order line and each payment line books its own single-company JE;
+  `OrderLine.JournalEntryID` carries the ref. The order header has no JE ref. There is no
+  order↔JE junction. **Display aggregation is UI-only:** an accounting-engine helper (Amith,
+  2026-07-28) groups the per-line JEs per order / per payment for presentation (grouped by
+  default, expandable to individual JEs) — never aggregated in the database.
+- **Booking pattern per line:** Dr line-company AR (net) · Cr Sales (gross) · Dr Sales-Discounts
+  for discounts (netting into Sales when the role is unlinked) · deferred-revenue-typed products
+  credit DefRev instead of Sales, with the recognition waterfall staged as forward-dated JEs (D15).
+- **Booked atomically with the order lock:** on the order's transition into its locked status, an
+  outer transaction saves the order, books the per-line JEs via the accounting engine, stamps each
+  `OrderLine.JournalEntryID`, and commits — ANY failure rolls back everything (a locked order
+  without JEs is an invalid state).
+- **Account resolution** comes from the role/link walk (§5.3) via the orders-side engine cache.
+- **Cross-app reference hardness:** `OrderLine.JournalEntryID` is a **SOFT ref for now** — it
+  becomes a **HARD, nullable FK** once the MJ CodeGen include-mode work lands (Marcelo owns that
+  PR). The JE origin pair (D25) is polymorphic and stays soft by nature. The go-forward standard: parent→required-dependency FKs are hard and
+  nullable up the tree.
+- Payments (cash application, intercompany clearing legs), subscriptions' correcting-order netting,
+  and tax-line recording all flow through the same `CreateJournalEntry` surface as they land.
 
-```typescript
-class AccountingService {
-  postJournalEntry(je: JournalEntryDraft): Promise<JournalEntry>;
-  postJournalEntryBatch(jes: JournalEntryDraft[]): Promise<JournalEntry[]>;
-  getAccountBalance(companyId: string, glAccountId: string, asOfDate: Date): Promise<Money>;
-  getPeriodStatus(companyId: string, date: Date): Promise<AccountingPeriod>;
-  getMappedGLAccount(companyId: string, externalSystem: string, externalAccountId: string): Promise<GLAccount>;
-  reverseJournalEntry(originalJeId: string, reason: string): Promise<JournalEntry>;
-  // Persist a rev-rec / amortization waterfall computed upstream (BA-D25). Accounting
-  // stores the ScheduledJournalEntry rows and materializes them at period close.
-  createScheduledJournalEntries(schedule: ScheduledJournalEntryDraft[]): Promise<ScheduledJournalEntry[]>;
-}
-```
+**Engine/API surface (accounting side):** `AccountingEngineBase` (client-safe cache + resolution) /
+`AccountingEngine` (server) · `Accounting.CreateJournalEntry` + atomic `CreateJournalEntries` (one
+TransactionGroup, all-or-none) · JE validation library (balance, single-company, account existence,
+typed errors) · sequence service (gap-free not required, D19). Big work rides **Remote Operations** — never bespoke
+resolvers or client-side multi-save choreography.
 
-### 11.2 BizAppsOrders consumption
-
-- Order Post → Orders calls `AccountingService.postJournalEntry()` with the AR booking pattern (Dr AR, Cr Sales/DefRev, Cr Sales Tax Payable)
-- Payment Capture → Orders calls with the cash-to-AR pattern (Dr Cash, Cr AR)
-- Subscription period rollover → Orders calls with revenue recognition (Dr DefRev, Cr Sales)
-- Refund/Reversal Order → Orders calls with the reversal JE that references the original via `ReversesJournalEntryID`
-- IntercompanyFlow Post → Orders calls **N times** for the N legs of an intercompany order (per `BA-D17`, the orchestration is in Orders; Accounting just receives each leg as a separate JE post)
-
-### 11.3 Future apps
-
-- **BizAppsPayroll** would emit payroll JEs (Dr Salaries, Cr Cash, Cr Tax Payable, Cr Benefits Payable)
-- **BizAppsExpenseManagement** would emit expense JEs (Dr Expense, Cr AP)
-- **BizAppsFixedAssets** would emit depreciation JEs (Dr Depreciation, Cr Accumulated Depreciation)
-- **BizAppsTreasury** would emit investment / cash management JEs
-
-All call the same `AccountingService` API. The pattern scales.
-
-### 11.4 Downstream consumption (aidp)
-
-aidp reads BizAppsAccounting via cross-schema queries (no Integration framework — same DB):
-- `JournalEntryLine` rows feed `ActualLine` aggregation
-- `AccountBalance` and `AccountBalanceByDimension` feed dashboards
-- Read-model views feed Skip-generated reports in aidp
+**Caching doctrine (Amith 2026-07-28):** read-heavy/write-light data — GL accounts, GL account
+links, intercompany matches, JE types — lives in the `AccountingEngineBase` cache (auto-refreshed,
+client + server), and **the cache serves as source of truth for write-time validation** of that
+data (refines the earlier DB-first-at-write-layer stance). Write-heavy data (JEs, JE lines) is
+never engine-cached; recent-transactional data uses the MJ Global LRU cache if caching is ever
+needed.
 
 ---
 
-## 12. Migration of CDP `finance.*` data
+## 15. Migration of legacy CDP `finance.*` data
 
-CDP today has:
-- `finance.GLAccount` (INT IDs) → migrate to `__mj_BizAppsAccounting.GLAccount` (UUID IDs via mapping)
-- `finance.JournalEntry`, `finance.JournalEntryDetail`, `finance.JournalEntryBatch` → migrate to corresponding new entities
-- Historical JE data: status mapping (legacy `Posted` → new `Batched` since batching IS the post in the new model)
-- Existing CDP `JournalEntry.ContractTermLineItemID` FK → re-target to BizAppsContracts.ContractTerm equivalent after Contracts migration
+CDP today has `finance.GLAccount` (INT identity IDs), `finance.JournalEntry`,
+`finance.JournalEntryDetail`, and `finance.JournalEntryBatch`. At cutover these migrate into
+`__mj_BizAppsAccounting`:
 
-Migration scripts under `migration/bizapps-accounting/` in the new aidp repo:
-1. Extract `finance.GLAccount` → transform → load to `BizAppsAccounting.GLAccount` with UUID mapping table
-2. Extract `finance.JournalEntry` + `finance.JournalEntryDetail` → transform → load to new schema; status mapping; UUID conversion
-3. Extract `finance.JournalEntryBatch` → load; status mapping
-4. Generate `ChartOfAccountsMapping` entries from existing data (one mapping per GLAccount × BC)
-5. Validate: row counts, trial balance comparison, FK integrity
-6. Re-link references after BizAppsOrders + Contracts migration completes
+1. Extract `finance.GLAccount` → transform → load to `GLAccount` with an INT→UUID mapping table;
+   populate `ExternalSystem` + `ExternalAccountID` from the existing BC account identities (this
+   replaces the retired mapping-table step — ERP identity lives on `GLAccount`, D13).
+2. Extract `finance.JournalEntry` + `finance.JournalEntryDetail` → transform → load; UUID
+   conversion; **status mapping: legacy `Posted` → new `Batched`** (batching IS the post in the
+   new model).
+3. Extract `finance.JournalEntryBatch` → load; status mapping.
+4. Re-link cross-app references (e.g. the legacy `JournalEntry.ContractTermLineItemID` FK) after
+   the Orders/Contracts migrations complete.
+5. Validate: row counts, trial-balance comparison, FK integrity.
 
-Cutover-weekend protocol per `plans/aidp-master-plan.md` §14.
-
----
-
-## 13. Phasing and delivery
-
-Modular delivery per `M23` from master plan: working modules demonstrable every 2–3 weeks.
-
-### Phase A: Foundation (Weeks 1–3)
-
-- [ ] PG-migrate verification (per `mj-core-changes.md`)
-- [ ] GLAccount + seeded default COA
-- [ ] AccountingCompanyProfile (IsA child of Company)
-- [ ] AccountingPeriod with manual generation
-- [ ] CHECK + DEFERRABLE constraints
-- [ ] CodeGen integration
-
-**Demo**: create an AccountingCompanyProfile for a Company, generate a period, see the seeded COA, manually post a balanced JE in MJ Explorer.
-
-### Phase B: JE primitives (Weeks 3–6)
-
-- [ ] JournalEntry + JournalEntryLine + JournalEntryBatch entities
-- [ ] Immutability triggers
-- [ ] Balanced-JE deferrable constraint
-- [ ] JE numbering sequences (per Company × FY)
-- [ ] Multi-currency: OriginalAmount/Currency/Rate fields
-- [ ] Realized FX gain/loss auto-emit on payment-to-AR mismatch
-- [ ] Period-close enforcement trigger
-- [ ] Batch generation and dispatch (mock target initially)
-
-**Demo**: post JEs in multiple currencies; see auto-FX line generation; close a period; attempt to post to closed period (blocked); reopen; batch JEs.
-
-### Phase C: Dimensions + ChartOfAccountsMapping (Weeks 6–8)
-
-- [ ] Dimension + DimensionValue + JournalEntryLineDimension
-- [ ] Dimension management UI in MJ Explorer
-- [ ] ChartOfAccountsMapping with admin-only approval workflow
-- [ ] Unmapped-GL hard-fail enforcement
-
-**Demo**: tag JE lines with Department + CostCenter dimensions; query a JE with dimension filters; sync external GL accounts via mock connector; admin approves new mappings.
-
-### Phase D: Tax (Weeks 8–11)
-
-- [ ] TaxAuthority, TaxJurisdiction, TaxRate, TaxLiability, TaxRemittance, CustomerTaxProfile
-- [ ] TaxCalculationProvider abstract + Local implementation
-- [ ] Avalara adapter (basic)
-- [ ] TaxJar adapter (basic)
-- [ ] Rate sync via Scheduled Action
-- [ ] Tax JE patterns documented
-
-**Demo**: calculate sales tax for an order via Local provider; switch to Avalara via config; sync rates; emit tax JE; close period with TaxLiability records.
-
-### Phase E: Scheduled JEs (rev-rec) + FX action + Account balance materialization (Weeks 11–13)
-
-- [ ] ScheduledJournalEntry + ScheduledJournalEntryLineItem + ScheduledJournalEntryLineDimension
-- [ ] Period-close materialization of `Scheduled` rows → Pending JEs (+ `trg_SJE_Immutability`)
-- [ ] Programmatic FX mark-to-market action (uses `CurrencySpotRate`; emits reval + next-period reversal)
-- [ ] AccountBalance + AccountBalanceByDimension
-- [ ] Period-close-triggered balance materialization
-
-**Demo**: persist a 12-month subscription rev-rec schedule (rounding front-loaded in entry 1); close successive periods; watch each scheduled row materialize into a Dr DefRev / Cr Revenue JE; run the FX action and see the reval + auto-reversal; see materialized balances per account and per dimension.
-
-### Phase F: Reports + read-model views (Weeks 13–15)
-
-- [ ] All `vw_*` read-model views
-- [ ] Skip-generated reports (in Report Gallery app) per `plans/bizapps-accounting-reports.md`
-- [ ] AR-to-GL recon definition
-
-**Demo**: query each shipped view; render an AR Aging report via Skip; demonstrate drill-through from a cell to underlying JE.
-
-### Phase G: Integration with BizAppsOrders (Weeks 15+)
-
-- [ ] AccountingService TypeScript API
-- [ ] BizAppsOrders calls AccountingService for Order Post, Payment Capture, Subscription rollover, Reversal
-- [ ] End-to-end demo: place a multi-currency, multi-company order; see JEs emit; capture payment; see Realized FX line; close period; see materialized balances reflect
-
-This is also when BizAppsOrders development would be in flight; cross-team coordination required.
-
-### Total: ~15 weeks of focused dev to a v1 ready for BC consumption
+Migration scripts live with the aidp migration tooling; cutover follows the aidp cutover-weekend
+protocol.
 
 ---
 
-## 14. Open questions
+## 16. Build sequencing (current priorities)
 
-1. **Pending JE void vs hard-delete**: when a source business event is voided before batch, should the Pending JE be hard-deleted or flagged as Voided and still emit-to-batch with zero effect? Audit-purity argues the latter; storage simplicity argues the former. **My lean**: flag-and-emit-zero. Confirms?
-2. **AccountingCompanyID validation depth**: should we allow multi-level "uses books of" chains (Company A → Company B → Company C)? I excluded chains in `BA-D9` for simplicity. Confirm.
-3. **Batch interval default**: daily by default? Some workflows want real-time (every minute), others weekly. Make configurable per deployment per TargetSystem. Confirm default cadence.
-4. **Tax provider default**: ship with `LocalTaxCalculationProvider` as default and require deployments to opt-in to Avalara/TaxJar? Or auto-suggest Avalara if the deployment has US TaxJurisdictions configured? **My lean**: Local as default; explicit opt-in to providers.
-5. **CurrencyExchangeRate provider default**: confirmed `ManualCurrencyExchangeRateProvider` as default in `BA-D11`. Verify the `ExchangeRate-API` free tier license is compatible with OSS distribution.
-6. **Seeded COA opinionation**: ship with the SaaS/services-oriented chart in §4.1, or ship with a minimal "AR + DefRev + Sales + Cash + Tax Payable" 8-account chart? Opinionated argues for adopter convenience; minimal argues for not stepping on deployment customization. **My lean**: ship the full ~20-account chart per §4.1 with all rows marked `IsSystemSeeded=1`; deployments customize freely.
-7. **`vw_TrialBalance_AR`**: should this view be exclusive to AR + DefRev + Sales Tax + Commission Payable + Partner Rev Share Payable (subledger accounts only), or include all accounts that our JEs ever touch? Subledger framing argues former. Confirms.
-8. **Multi-tenant SaaS deployment of BizAppsAccounting**: out of scope for v1 (BC is one tenant), but the architecture allows it via `__mj.Company` partitioning. Confirm we don't accidentally bake in single-tenant assumptions.
-9. **JE attachments**: should `JournalEntry` have a `FileID FK NULL → __mj.File` for attached source documents (PDFs of vendor bills, signed contracts, etc.)? **My lean**: yes; small add. Confirms.
-10. **Approval workflow for manual JEs**: should `EntryType = 'Manual'` JEs require an approval before they can go to `Batched`? Standard accounting practice has CFO-level approval for manual GL entries. **My lean**: yes — leverage MJ's approval framework (`__mj.ApprovalRequest`). Confirms.
+Ruling of record (Amith 2026-07-21, Marcelo re-prioritized 2026-07-22): **build first, iterate in
+the system** — get the database built and work through bugs against the running system; plans stay
+thin; Amith reviews the BUILT code.
 
----
-
-## 15. Out of scope (explicit)
-
-These were considered and excluded from v1 to maintain the subledger scope and v1 timeline:
-
-- **General ledger** functionality (Trial Balance for the FULL chart, P&L, Balance Sheet, Statement of Cash Flows). ERP territory.
-- **Year-end closing JEs** (P&L → Retained Earnings). ERP territory.
-- **Statistical accounts** (non-monetary tracking). Per `BA-D20`.
-- **Inventory and COGS** accounting. Future app.
-- **Fixed assets and depreciation** as first-class entities. Depreciation can be modeled as a `ScheduledJournalEntry` (finite, known-amount); a first-class FixedAsset entity is in a future `BizAppsFixedAssets`.
-- **Loan amortization** as first-class. Future.
-- **Multi-currency consolidation translation** (in `aidp` analytics layer instead).
-- **Bank reconciliation** workflow (consumers of `vw_FxExposure` and ERP recon do this; future enhancement).
-- **Cost accounting** (job costing, allocations across cost centers).
-- **Audit workpapers / evidence packages** (future BizAppsAudit app).
-- **Withholding tax** (out of v1; future enhancement).
-- **Approval workflows for routine JEs** (only Manual JEs require approval per Q10 above; routine JEs from upstream apps flow through).
+1. **NOW — Orders per-line booking** (the priority): the per-line JE factory + order Save rework +
+   `OrderLine.JournalEntryID`, with the contra-role seed (Sales Discounts, Returns & Allowances)
+   and company-default `GLAccountLink` rows seeded for testing.
+2. **Accounting schema cleanup — deferred, notated** (do later, deliberately): drop the 5 ACP
+   default-account FK columns (+ build the per-company role→account management UI), drop
+   `ChartOfAccountsMapping` (+ remove its page/service/op). Not needed for orders — the resolver
+   reads `GLAccountLink` regardless. **Provenance rework (D25) rides this wave:** drop the seven
+   `JournalEntry` origin FK columns, `JournalEntryLine.OrderLineID`, and the `JournalEntryLink`
+   table; add the `LinkedEntityID`/`LinkedRecordID` pair + both-or-neither CHECK (in-place
+   baseline edit).
+3. **Batch rework slice:** single-company batch header (D7), `PostingDate` (D8), approver
+   enforcement, dropping the batch-line `CompanyID` (entangled with the header move — do together).
+4. **Rev-rec rework:** retire the as-built ScheduledJournalEntry trio/materializer in favor of
+   forward-dated JEs (D15); batch-filter defaults + approval date-range display.
+5. **Cross-app FK hardening** once the CodeGen include-mode PR lands (Marcelo owns).
+6. **Later, triggers named:** timing/period-restriction system (if requirements emerge) · balance
+   materialization (if read performance demands) · FX/multi-currency activation · tax engine
+   selection + wiring (finance call) · manual-JE approval gate (with the roles work — does the gate
+   earn its place over "the RIGHT to create one carries the authority"? — Marcelo) · Report Gallery
+   pages · Users & Roles + Approvals settings screens (gated on A2 + approval-policy shape) ·
+   required-role-links enforcement on companies (Amith: "we'll come back to it").
 
 ---
 
-*v1 ships a focused subledger that BC will use as its AR / billing / subscription ledger of record. Open-source from day 1. The MJ ecosystem benefits; BC gets the platform it needs. Future BizApps* siblings extend coverage to payroll, expenses, fixed assets, and beyond.*
+## 17. Open architecture questions
+
+Only genuine unresolved tensions inside the architecture itself. Where we have a defensible
+default we proceed on it and the answer adjusts course.
+
+1. **The live server harnesses are stale and have been silently non-functional** (found
+   2026-07-26). `trigger-preflight.ts` listed FIVE triggers retired in the 2026-07-22 baseline
+   rewrite, so `assertInvariantTriggers` aborted every harness at bootstrap with a false
+   "Missing (5/12)" — which in turn hid that the harnesses themselves had drifted from the
+   rewritten schema. The list is now correct; the drift underneath it is not fixed, because two of
+   the three failures need a ruling rather than a patch:
+   - **`block0` / `engine-runtime`: JE numbering — RESOLVED 2026-07-28 (BA-D31).** Marcelo ruled:
+     D19 per-company format stands, D-SEQ retired for JEs (batches keep the global sequence);
+     sequence machinery stays, simplification licensed. The harnesses update to assert
+     `JE-{CompanyCode}-{FY}-{seq}` as part of their rewrite.
+   - **`block2`: asserts against `ChartOfAccountsMapping`**, a table DROPPED in the rewrite (its
+     service was retired 2026-07-23). That harness needs rewriting against the current design, not
+     repairing.
+   - **`block1`: bootstraps a `JournalEntryBatch` without `CompanyID`**, which the rewrite made
+     required (D7, single-company batches). Mechanical — **Amith offered to take it; accepted
+     2026-07-28.** block2 is ours, folded into the donor-vs-current audit.
+   Deliberately not fixed here: the numbering contradiction is a plan-level decision, and rewriting
+   block2 overlaps active work in this area.
+   **2026-07-27 status (schema realignment):** the stale `block0/1/2` + `engine-runtime` harnesses
+   additionally drifted on BA-D29 (they set/filter the removed `EntryType` string column) — fold
+   that into their eventual rewrite. Green live harnesses as of the realignment rebuild:
+   `phase2-encapsulation.live.test.ts` (vitest, 10/10 — has its own trigger check in
+   `live-bootstrap.ts`, so it was never gated by the broken preflight) and
+   `intercompany-runtime.ts` (17/17), both re-proven against the BA-D29/D30 schema.
+2. **Immutable ledger vs mutable account classification:** `GLAccount.AccountType` can change
+   after JEs reference the account, silently reclassifying locked history. Direction ruled
+   (lock-on-first-use + a retirement date); the enforcement mechanism lands with the schema-cleanup
+   slice.
+3. **Pending-JE void semantics:** when a source event voids before batching — hard-delete the
+   Pending JE, or flag it Voided and carry it at zero effect? (Audit purity leans flag.) The JE
+   lifecycle is otherwise fully specified; this branch is not.
+4. **Locking doctrine — NEEDS DISCUSSION (Marcelo + Amith session wanted, raised 2026-07-28).**
+   Probe finding on the intercompany build: `UPDATE GLAccount SET CompanyID = <other>` on a
+   pair's Due To account succeeds silently (IAM triggers fire on IAM writes only; the GLAccount
+   identity lock counts only JE-line references) — the pair becomes internally contradictory and
+   resolution stamps legs against the wrong books. The point-fix was deferred to the hardening
+   backlog (BA-D32 rev. 2026-07-28 — no explicit CompanyID; holes issue), but the symptom is
+   systemic: every invariant has grown its own ad-hoc lock (JE by status, GLAccount by
+   JE-reference, IAM ties by entity rule, GLAccountLink by nothing, JournalEntryType system rows
+   by entity lock) and each new table re-litigates what locks, when (once referenced? once
+   Active?), and how locked config is then maintained (edit-in-place vs supersede-by-window vs
+   end-date-and-replace). Wanted: ONE doctrine applied uniformly. **Tracking home: GitHub issue
+   #30 — the append-only "Swiss Cheese" hardening backlog (Amith PR-27 review, 2026-07-29:
+   agreed on locking, handled there).** The 2026-07-29 immediate-unconditional GLAccount identity
+   lock (BA-D32) settled the doctrine for the chart of accounts; the session decides the rest.
+5. **Two small questions pending Amith (asked 2026-07-28, #25 thread):** (a) was the
+   entity-only StartedAt tie guard deliberate? A filtered unique index
+   (`UNIQUE (Source, Target, StartedAt) WHERE Status='Active'`) can express it — offered for the
+   next baseline pass. (b) does he want a simple account-level intercompany designation (e.g.
+   `IsIntercompany` the pair triggers additionally require)? 50026's Liability/Asset check ruled
+   sufficient for now (Marcelo); designation would be validation vocabulary only, resolution
+   stays on the pair (BA-D28). Also feeds OQ-A (per-pair account provisioning).
+
+---
+
+## 18. Out of scope (explicit)
+
+General-ledger functionality (full TB / P&L / balance sheet / cash flows) · year-end closing JEs ·
+statistical accounts · inventory & COGS · fixed assets/depreciation as first-class ·
+loan amortization · consolidation translation (analytics layer) · bank reconciliation workflow ·
+cost accounting/allocations · audit workpapers · withholding tax · approval workflows for routine
+JEs (only Manual JEs are candidates — and even that gate is an open design question).
+
+---
+
+## 19. Build inventory (state as of consolidation, 2026-07-22)
+
+For orientation only — the plan above is the authority; this notes what already exists on the donor
+branch (`feature/je-entry-engine`) and is being re-landed deliberately on this branch.
+
+**Built + validated:** GLAccount/roles/links + resolution engine · AccountingCompanyProfile ·
+single-company JEs (numbering, balanced/immutability/reversal/single-company triggers) ·
+dimensions · batch engine with lock levels, view-driven batches, tasks-app approval gate ·
+`CreateJournalEntry`/`CreateJournalEntries` remote ops (atomic, typed errors) · read-model views ·
+seeded minimal COA + deterministic demo data · tiered test harnesses (unit / live server / API /
+Playwright) · orders-side per-line booking (factory + Save override + 8/8 harness, on the orders
+donor branch).
+
+**Built but pending rework to this plan's shape:** batches (as-built multi-company, no
+PostingDate) → D7/D8; ScheduledJournalEntry trio + materializer (as-built) → retire per D15; ACP
+default-account columns + ChartOfAccountsMapping + erp-mapping page (as-built) → remove per
+D12/D13.
+
+**Not yet built:** BC API dispatch (mock target today) · seeded roles/RLS + settings screens ·
+approver enforcement · report pages · tax-engine wiring · payments/intercompany machinery.

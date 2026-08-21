@@ -1,0 +1,71 @@
+<mj-page-layout>
+  <!-- FULL WIDTH, ABOVE the rail — MJ's canonical shell shape (admin-container), and what makes the
+       header stay put while the body scrolls: mj-page-layout is overflow:hidden, the header is a
+       natural-height sibling, and the body owns overflow-y:auto. Deliberately TIGHT: one line, no
+       subtitle, no stacking. -->
+  <!-- Header = the CATEGORY (Marcelo 2026-07-16): the sub-page name is already the rail's active
+       item inches away, so restating it bought nothing; the category is the context that ISN'T
+       otherwise on screen.
+       NO stat capsules (Marcelo 2026-07-29): live state under the title made the header busy,
+       broke its vertical alignment against stat-less categories, and duplicated what the rail
+       badges already say. State lives on the RAIL as actionable-only count badges (shown only
+       when action is needed; absence = healthy); the header stays a stable one-line orientation
+       bar. Scope chip + refresh stay in [actions] — controls, not state. -->
+  <mj-page-header [Title]="CategoryTitle" [Icon]="CategoryIcon">
+    <div actions>
+      <mj-company-scope-chip></mj-company-scope-chip>
+      <!-- Refreshes ONLY the page in the body — not the rail, not other pages in this category.
+           Exactly one page is instantiated by the @switch below, so it is the only subscriber
+           (see PageRefreshService). Hidden when the mounted page has nothing to reload, rather
+           than offering a button that does nothing. Icon-only outline, matching orders'
+           section-shell refresh (Marcelo 2026-08-04: one refresh idiom across the family). -->
+      @if (CanRefreshActivePage) {
+        <button
+          type="button"
+          class="mj-btn mj-btn--outline"
+          (click)="RefreshActivePage()"
+          aria-label="Refresh this page"
+          title="Refresh this page">
+          <i class="fa-solid fa-arrow-rotate-right" aria-hidden="true"></i>
+        </button>
+      }
+      <!-- The category's create verb, promoted from the page headers (Marcelo 2026-08-04) — the
+           same slot orders' primary action occupies, so every app's top-right reads identically. -->
+      <button type="button" class="mj-btn mj-btn--primary" (click)="OpenNewJournalEntry()">
+        <i class="fa-solid fa-plus" aria-hidden="true"></i> New journal entry
+      </button>
+    </div>
+  </mj-page-header>
+
+  <mj-page-body [Flex]="true" [Padding]="false" Direction="row">
+    <!-- MJ's canonical left rail (§8 MJ-wins). The scope chip rides its [header] slot, which is
+         why the rail needs no accounting knowledge. -->
+    <!-- The rail + its desktop icons-only collapse toggle. One wrapper, nine shells: see
+         shell-rail.component.ts for why the collapse is not in MJ's own left-nav (QUESTIONS.md#q27). -->
+    <mj-shell-rail
+      [Sections]="RailSections"
+      [ActiveId]="ActivePageId"
+      [MobileTitle]="CategoryTitle"
+      (ItemClicked)="OnRailItemClicked($event)">
+    </mj-shell-rail>
+
+    <mj-left-nav-content>
+      @switch (ActivePageId) {
+        @case ('dashboard') {
+          <mj-je-dashboard-page></mj-je-dashboard-page>
+        }
+        @case ('all-entries') {
+          <mj-all-journal-entries-page
+            (RecordOpened)="OpenJournalEntry($event)">
+          </mj-all-journal-entries-page>
+        }
+        @case ('approvals') {
+          <mj-je-approvals-page (RecordOpened)="OpenJournalEntry($event)"></mj-je-approvals-page>
+        }
+        @default {
+          <mj-shell-page-pending [PageName]="PendingPageName(ActivePageId)"></mj-shell-page-pending>
+        }
+      }
+    </mj-left-nav-content>
+  </mj-page-body>
+</mj-page-layout>

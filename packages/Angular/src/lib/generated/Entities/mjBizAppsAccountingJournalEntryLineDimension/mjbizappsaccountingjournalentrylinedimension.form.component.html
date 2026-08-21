@@ -10,22 +10,32 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Journal Entry Mapping Section -->
+    <!-- Journal Entry Details Section -->
     <mj-collapsible-panel
-        SectionKey="journalEntryMapping"
-        SectionName="Journal Entry Mapping"
-        Icon="fa fa-link"
+        SectionKey="journalEntryDetails"
+        SectionName="Journal Entry Details"
+        Icon="fa fa-book"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
-            [ShowLabel]="true"
+            [ShowLabel]="false"
             FieldName="JournalEntryLineID"
             Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
             LinkType="Record"
         ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- Dimension Configuration Section -->
+    <mj-collapsible-panel
+        SectionKey="dimensionConfiguration"
+        SectionName="Dimension Configuration"
+        Icon="fa fa-tags"
+        [Form]="this"
+        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -47,21 +57,11 @@
 
     </mj-collapsible-panel>
 
-    <!-- Dimension Details Section -->
-    <mj-collapsible-panel
-        SectionKey="dimensionDetails"
-        SectionName="Dimension Details"
-        Icon="fa fa-tag"
-        [Form]="this"
-        [FormContext]="formContext">
-
-    </mj-collapsible-panel>
-
     <!-- System Metadata Section -->
     <mj-collapsible-panel
         SectionKey="systemMetadata"
         SectionName="System Metadata"
-        Icon="fa fa-database"
+        Icon="fa fa-cog"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 

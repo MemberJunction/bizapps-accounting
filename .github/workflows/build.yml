@@ -5,13 +5,18 @@ on:
   push:
     branches: [next]
     paths:
-      - 'package-lock.json'
+      # pnpm-workspace.yaml + package.json affect resolution (overrides,
+      # onlyBuiltDependencies, deps) — build must re-run when they change.
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'package.json'
       - 'packages/**'
   pull_request:
-    branches: [next]
-    paths:
-      - 'package-lock.json'
-      - 'packages/**'
+    # No `paths` filter, and `main` included: the release PR (next -> main) is the
+    # highest-stakes merge in the repo — it publishes to npm — and was the ONE merge
+    # nothing built. Skipping on paths is only sound when the BASE is known green;
+    # main's package set has never been built, so it must run unconditionally.
+    branches: [next, main]
 
 concurrency:
   group: build-${{ github.ref }}
@@ -24,17 +29,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Must precede setup-node: `cache: 'pnpm'` needs pnpm already on PATH.
+      - uses: pnpm/action-setup@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: 'npm'
-          cache-dependency-path: 'package-lock.json'
+          cache: 'pnpm'
+          cache-dependency-path: 'pnpm-lock.yaml'
 
       - name: Validate repository.url in packages
         run: ./.github/scripts/validate-package-repository.sh
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Build all packages
-        run: npm run build:packages
+        run: pnpm run build:packages

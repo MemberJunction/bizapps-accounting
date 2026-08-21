@@ -16,7 +16,7 @@
     "test": "echo \"No tests configured yet\""
   },
   "author": "MemberJunction.com",
-  "license": "ISC",
+  "license": "BUSL-1.1",
   "devDependencies": {
     "typescript": "^5.9.3"
   },
@@ -27,12 +27,12 @@
     "class-validator": "^0.14.3"
   },
   "peerDependencies": {
-    "@memberjunction/core": "^5.38.0",
-    "@memberjunction/global": "^5.38.0",
-    "@memberjunction/server": "^5.38.0",
-    "@memberjunction/sqlserver-dataprovider": "^5.38.0",
-    "@mj-biz-apps/common-server": ">=5.30.0",
-    "@mj-biz-apps/common-entities": ">=5.30.0"
+    "@memberjunction/core": "^6.1.0-edge.3",
+    "@memberjunction/global": "^6.1.0-edge.3",
+    "@memberjunction/server": "^6.1.0-edge.3",
+    "@memberjunction/sqlserver-dataprovider": "^6.1.0-edge.3",
+    "@mj-biz-apps/common-server": "^5.34.0",
+    "@mj-biz-apps/common-entities": "^5.34.0"
   },
   "repository": {
     "type": "git",

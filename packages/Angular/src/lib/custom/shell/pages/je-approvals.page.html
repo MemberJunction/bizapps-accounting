@@ -1,0 +1,59 @@
+<mj-page-header-interior>
+  <div meta>
+    @if (Count > 0) {
+      <mj-stat-badge [Label]="Count + ' awaiting review'" Icon="fa-solid fa-user-check" Variant="warning"></mj-stat-badge>
+    } @else {
+      <mj-stat-badge Label="Nothing awaiting review" Icon="fa-solid fa-check" Variant="success"></mj-stat-badge>
+    }
+  </div>
+</mj-page-header-interior>
+
+<mj-page-body-interior>
+  <div class="jea">
+    <!-- The gap, stated on-screen. The verbs this page was designed around are not built, and the
+         entries listed here are NOT actually held back from batching. Saying so is the whole point:
+         a silent review queue would read as an enforced gate. -->
+    <div class="jea__notice" role="note">
+      <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+      <div>
+        <b>Review queue only — the approval gate is not yet in force.</b>
+        These entries can still be picked up by a batch build. Approve / Reject are not built:
+        a journal entry has no <code>Approved</code> state, and the C.8 policy is still open.
+        Until then, use this queue to review entries and raise anything wrong with its author.
+      </div>
+    </div>
+
+    @if (IsLoading) {
+      <mj-loading text="Loading the review queue…"></mj-loading>
+    } @else if (LoadError) {
+      <p class="jea__error" role="alert"><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i> {{ LoadError }}</p>
+    } @else if (Rows.length === 0) {
+      <p class="jea__empty">
+        <i class="fa-solid fa-check" aria-hidden="true"></i>
+        No manual entries are awaiting review in the companies you have in scope.
+      </p>
+    } @else {
+      <ul class="jea__inbox">
+        @for (r of Rows; track r.ID) {
+          <li class="jea__item">
+            <i class="fa-solid fa-book jea__icon" aria-hidden="true"></i>
+            <span class="jea__text">
+              <span class="jea__title">{{ r.EntryNumber }} · {{ r.Company }} · {{ r.Amount | currency: r.CurrencyCode }}</span>
+              <span class="jea__sub">
+                <!-- EffectiveDate is a DATE (no zone) — render it in UTC or it shifts a day for any
+                     user west of UTC. CreatedAt IS an instant, so local time is correct there. -->
+                {{ r.Description || 'No memo' }} · effective {{ r.EffectiveDate | date: 'mediumDate' : 'UTC' }}
+                · created {{ r.CreatedAt | date: 'mediumDate' }}
+              </span>
+            </span>
+            <span class="jea__action">
+              <button class="mj-btn mj-btn--primary" (click)="Review(r.ID)">
+                <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Review
+              </button>
+            </span>
+          </li>
+        }
+      </ul>
+    }
+  </div>
+</mj-page-body-interior>

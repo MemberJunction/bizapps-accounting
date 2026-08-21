@@ -10,11 +10,11 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Jurisdiction Hierarchy Section -->
+    <!-- Jurisdiction Configuration Section -->
     <mj-collapsible-panel
-        SectionKey="jurisdictionHierarchy"
-        SectionName="Jurisdiction Hierarchy"
-        Icon="fa fa-sitemap"
+        SectionKey="jurisdictionConfiguration"
+        SectionName="Jurisdiction Configuration"
+        Icon="fa fa-cog"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -26,33 +26,6 @@
             [FormContext]="formContext"
             LinkType="Record"
         ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="ParentTaxJurisdictionID"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-            LinkType="Record"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="RootParentTaxJurisdictionID"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Jurisdiction Details Section -->
-    <mj-collapsible-panel
-        SectionKey="jurisdictionDetails"
-        SectionName="Jurisdiction Details"
-        Icon="fa fa-info-circle"
-        [Form]="this"
-        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -138,13 +111,88 @@
 
     </mj-collapsible-panel>
 
-    <!-- Details Section -->
+    <!-- Relationships Section -->
     <mj-collapsible-panel
-        SectionKey="details"
-        SectionName="Details"
-        Icon="fa fa-align-left"
+        SectionKey="relationships"
+        SectionName="Relationships"
+        Icon="fa fa-sitemap"
         [Form]="this"
         [FormContext]="formContext">
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="ParentTaxJurisdictionID"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+            LinkType="Record"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="RootParentTaxJurisdictionID"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="ParentTaxJurisdictionIDDepth"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="ParentTaxJurisdictionIDPath"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="ParentTaxJurisdictionIDIsLeaf"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="ParentTaxJurisdictionIDChildCount"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- System Metadata Section -->
+    <mj-collapsible-panel
+        SectionKey="systemMetadata"
+        SectionName="System Metadata"
+        Icon="fa fa-database"
+        [Form]="this"
+        [FormContext]="formContext">
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="__mj_CreatedAt"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="__mj_UpdatedAt"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -164,57 +212,56 @@
 
     </mj-collapsible-panel>
 
-    <!-- System Metadata Section -->
-    <mj-collapsible-panel
-        SectionKey="systemMetadata"
-        SectionName="System Metadata"
-        Icon="fa fa-cog"
-        [Form]="this"
-        [FormContext]="formContext">
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="__mj_CreatedAt"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="__mj_UpdatedAt"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-
-    </mj-collapsible-panel>
-
     <mj-form-panel-slot Entity="{{record.EntityInfo.Name}}" Slot="after-fields" [Record]="record" [FormComponent]="this" [FormContext]="formContext"></mj-form-panel-slot>
 
     <!-- ========================================
          RELATED ENTITY PANELS
          ======================================== -->
 
-    <!-- Tax Rates Section -->
+    <!-- Tax Liabilities Section -->
     <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingTaxRates"
-        SectionName="Tax Rates"
-        Icon="fa fa-percentage"
+        SectionKey="mJBizAppsAccountingTaxLiabilities"
+        SectionName="Tax Liabilities"
+        Icon="fa fa-file-invoice-dollar"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingTaxRates')"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingTaxLiabilities')"
         [DefaultExpanded]="false">
         @if (record.IsSaved) {
         <div>
             <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Tax Rates','TaxJurisdictionID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Tax Rates')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingTaxRates')"
-                [ShowToolbar]="false"
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Tax Liabilities','TaxJurisdictionID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Tax Liabilities','TaxJurisdictionID')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingTaxLiabilities')"
+                [ShowToolbar]="true"
                 (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingTaxRates', $event.totalRowCount)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingTaxLiabilities', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- Company Tax Nexus Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingCompanyTaxNexus"
+        SectionName="Company Tax Nexus"
+        Icon="fa fa-landmark"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingCompanyTaxNexus')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Company Tax Nexus','TaxJurisdictionID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Company Tax Nexus','TaxJurisdictionID')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingCompanyTaxNexus')"
+                [ShowToolbar]="true"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingCompanyTaxNexus', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>
@@ -235,9 +282,9 @@
         <div>
             <mj-explorer-entity-data-grid
                 [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Tax Jurisdictions','ParentTaxJurisdictionID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Tax Jurisdictions')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Tax Jurisdictions','ParentTaxJurisdictionID')"
                 [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingTaxJurisdictions')"
-                [ShowToolbar]="false"
+                [ShowToolbar]="true"
                 (Navigate)="OnFormNavigate($event)"
                 (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingTaxJurisdictions', $event.totalRowCount)"
                 >
@@ -246,50 +293,25 @@
         }
     </mj-collapsible-panel>
 
-    <!-- Customer Tax Profiles Section -->
+    <!-- Tax Rates Section -->
     <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingCustomerTaxProfiles"
-        SectionName="Customer Tax Profiles"
-        Icon="fa fa-file-invoice-dollar"
+        SectionKey="mJBizAppsAccountingTaxRates"
+        SectionName="Tax Rates"
+        Icon="fa fa-percentage"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingCustomerTaxProfiles')"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingTaxRates')"
         [DefaultExpanded]="false">
         @if (record.IsSaved) {
         <div>
             <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Customer Tax Profiles','TaxJurisdictionID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Customer Tax Profiles')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingCustomerTaxProfiles')"
-                [ShowToolbar]="false"
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Tax Rates','TaxJurisdictionID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Tax Rates','TaxJurisdictionID')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingTaxRates')"
+                [ShowToolbar]="true"
                 (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingCustomerTaxProfiles', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
-    <!-- Tax Liabilities Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingTaxLiabilities"
-        SectionName="Tax Liabilities"
-        Icon="fa fa-file-invoice-dollar"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingTaxLiabilities')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Tax Liabilities','TaxJurisdictionID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Tax Liabilities')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingTaxLiabilities')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingTaxLiabilities', $event.totalRowCount)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingTaxRates', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>

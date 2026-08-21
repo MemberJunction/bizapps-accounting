@@ -21,7 +21,7 @@
             [Record]="record"
             [ShowLabel]="true"
             FieldName="Code"
-            Type="code"
+            Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
@@ -124,9 +124,9 @@
         <div>
             <mj-explorer-entity-data-grid
                 [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Tax Jurisdictions','TaxAuthorityID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Tax Jurisdictions')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Tax Jurisdictions','TaxAuthorityID')"
                 [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingTaxJurisdictions')"
-                [ShowToolbar]="false"
+                [ShowToolbar]="true"
                 (Navigate)="OnFormNavigate($event)"
                 (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingTaxJurisdictions', $event.totalRowCount)"
                 >
@@ -149,9 +149,9 @@
         <div>
             <mj-explorer-entity-data-grid
                 [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Tax Liabilities','TaxAuthorityID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Tax Liabilities')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Tax Liabilities','TaxAuthorityID')"
                 [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingTaxLiabilities')"
-                [ShowToolbar]="false"
+                [ShowToolbar]="true"
                 (Navigate)="OnFormNavigate($event)"
                 (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingTaxLiabilities', $event.totalRowCount)"
                 >

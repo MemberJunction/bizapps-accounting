@@ -35,6 +35,10 @@ module.exports = {
   // npm packages instead. Common is kept out of CodeGen via excludeSchemas below.
   entityPackageName: '@mj-biz-apps/accounting-entities',
 
+  testing: {
+    checkModules: ['@mj-biz-apps/accounting-integration-tests'],
+  },
+
   // Additional schema info CodeGen can't infer from the DB. Declares the
   // AccountingCompanyProfile IS-A Company (Table-Per-Type) inheritance so
   // CodeGen sets Entity.ParentID, mirrors Company fields as virtual fields on
@@ -58,22 +62,11 @@ module.exports = {
    * Build commands to run after code generation.
    */
   commands: [
-    { workingDirectory: './packages/Entities', command: 'npm', args: ['run', 'build'], when: 'after' },
-    { workingDirectory: './packages/Actions',  command: 'npm', args: ['run', 'build'], when: 'after' },
-    { workingDirectory: './packages/Server',   command: 'npm', args: ['run', 'build'], when: 'after' },
-    { workingDirectory: './packages/Angular',  command: 'npm', args: ['run', 'build'], when: 'after' },
+    { workingDirectory: './packages/Entities', command: 'pnpm', args: ['run', 'build'], when: 'after' },
+    { workingDirectory: './packages/Actions',  command: 'pnpm', args: ['run', 'build'], when: 'after' },
+    { workingDirectory: './packages/Server',   command: 'pnpm', args: ['run', 'build'], when: 'after' },
+    { workingDirectory: './packages/Angular',  command: 'pnpm', args: ['run', 'build'], when: 'after' },
   ],
-
-  /**
-   * Open App installer layout. This distribution puts its server/client apps
-   * under apps/ (not the MJ-repo default of packages/MJAPI + packages/MJExplorer),
-   * so the `mj app install` orchestrator needs these paths to wire dependency
-   * apps (e.g. bizapps-common) into the right workspaces.
-   */
-  openApps: {
-    serverPackagePath: 'apps/MJAPI',
-    clientPackagePath: 'apps/MJExplorer',
-  },
 
   // ============================================================================
   // OPTIONAL OVERRIDES
@@ -140,7 +133,7 @@ module.exports = {
   // Exclude core (__mj) AND the bizapps-common dependency schema: common's
   // entities + resolvers ship in its installed @mj-biz-apps/common-* packages,
   // so this app's CodeGen must not regenerate them locally.
-  excludeSchemas: ['sys', 'staging', 'dbo', '__mj', '__mj_BizAppsCommon'],
+  excludeSchemas: ['sys', 'staging', 'dbo', '__mj', '__mj_BizAppsCommon', '__mj_BizAppsTasks', '__mj_BizAppsOrders', '__mj_BizAppsIssues', '__mj_BizAppsMarketing', '__mj_BizAppsATS', '__mj_BizAppsCommittees', '__mj_BizAppsCaliber', '__mj_BizAppsForms'],
   // excludeTables: [
   //   { schema: '%', table: 'sys%' },
   //   { schema: '%', table: 'flyway_schema_history' }
@@ -149,19 +142,32 @@ module.exports = {
   // ---------------------------------------------------------------------------
   // AI-Powered Advanced Generation Features
   // ---------------------------------------------------------------------------
-  // Default v3.x: Several features enabled by default
-  // advancedGeneration: {
-  //   enableAdvancedGeneration: true,
-  //   features: [
-  //     { name: 'EntityNames', enabled: false },
-  //     { name: 'DefaultInViewFields', enabled: true },
-  //     { name: 'EntityDescriptions', enabled: false },
-  //     { name: 'SmartFieldIdentification', enabled: true },
-  //     { name: 'TransitiveJoinIntelligence', enabled: true },
-  //     { name: 'FormLayoutGeneration', enabled: true },
-  //     { name: 'ParseCheckConstraints', enabled: true },
-  //   ],
-  // },
+  // AI enrichment policy for this app (Marcelo, 2026-08-06). Most of these features fire ONLY
+  // when an entity/field is newly created, so they take effect on a from-zero metadata rebuild
+  // (drop-schema -> migrate -> codegen --ai), not on an incremental run.
+  //
+  // OFF, deliberately:
+  //  - EntityNames: renames entities, which would break every 'MJ_BizApps_Accounting: ...' string
+  //    in this repo, its specs, and downstream apps. Never worth it.
+  //  - EntityDescriptions: all 23 entity descriptions are hand-authored in the baseline migration
+  //    and reviewed. Field-level descriptions are the real gap, so those stay on.
+  //
+  // `enableAdvancedGeneration` is intentionally NOT set here — mjdev's .mjrc.cjs overlay owns that
+  // switch and flips it per-run via `mjdev app codegen --ai`, so codegen stays token-free by default.
+  advancedGeneration: {
+    features: [
+      { name: 'FormLayoutGeneration', enabled: true },
+      { name: 'ParseCheckConstraints', enabled: true },
+      { name: 'VirtualEntityFieldDecoration', enabled: true },
+      { name: 'EntityFieldDescriptions', enabled: true },
+      { name: 'DefaultInViewFields', enabled: true },
+      { name: 'SmartFieldIdentification', enabled: true },
+      { name: 'TransitiveJoinIntelligence', enabled: true },
+      { name: 'FormTabs', enabled: true },
+      { name: 'EntityDescriptions', enabled: false },
+      { name: 'EntityNames', enabled: false },
+    ],
+  },
 
   // ---------------------------------------------------------------------------
   // SQL Output (for migrations)

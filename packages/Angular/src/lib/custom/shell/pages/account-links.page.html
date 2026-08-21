@@ -1,0 +1,117 @@
+<mj-page-header-interior>
+  <div meta>
+    <mj-stat-badge [Count]="Rows.length" Label="links" Variant="default"></mj-stat-badge>
+    @if (UnmappedRoles.length > 0) {
+      <!-- A role with no active link IS an order that will fail to Confirm — this is the chip that
+           matters on this screen, which is orders' Confirm-failure landing target. -->
+      <mj-stat-badge
+        [Count]="UnmappedRoles.length"
+        Label="unmapped roles"
+        Icon="fa-solid fa-triangle-exclamation"
+        Variant="warning"
+        [title]="'No active link for: ' + UnmappedRoles.join(', ') + '. An order needing one of these roles cannot resolve an account and will fail to Confirm.'">
+      </mj-stat-badge>
+    }
+  </div>
+  <!-- Drop-downs together, search to their right — one line (Marcelo's filter-bar rule). -->
+  <div toolbar class="al-filters">
+    <label class="al-field">
+      <span class="al-field__label">Role</span>
+      <mj-dropdown [Data]="RoleChoices" TextField="Name" ValueField="ID" [ValuePrimitive]="true"
+        [(ngModel)]="RoleFilter" (ngModelChange)="OnFilterChanged()" aria-label="Role" />
+    </label>
+    <label class="al-field">
+      <span class="al-field__label">Status</span>
+      <mj-dropdown [Data]="LinkStatusChoices" TextField="Label" ValueField="Value" [ValuePrimitive]="true"
+        [(ngModel)]="StatusFilter" (ngModelChange)="OnFilterChanged()" aria-label="Status" />
+    </label>
+    <label class="al-field al-field--search">
+      <span class="al-field__label">Search</span>
+      <input
+        class="mj-input"
+        [(ngModel)]="Search"
+        (ngModelChange)="OnFilterChanged()"
+        placeholder="Name, account, role or ID…"
+        aria-label="Search links by record name, GL account, role or ID" />
+    </label>
+  </div>
+</mj-page-header-interior>
+
+<!-- Scrollable body — <mj-page-body-interior> is the interior primitive
+     <mj-left-nav-content> expects; it owns the gutters that keep content off the rail and
+     off the page edge. NOTE it is display:block, so children size with height/min-height,
+     never with flex. -->
+<mj-page-body-interior>
+@if (LoadError) {
+  <mj-alert Variant="error" [Message]="LoadError"></mj-alert>
+}
+
+@if (UnmappedRoles.length > 0) {
+  <mj-alert
+    Variant="warning"
+    [Message]="'These roles have no active link: ' + UnmappedRoles.join(', ') + '. An order that needs one of them cannot resolve a GL account and will fail at Confirm.'">
+  </mj-alert>
+}
+
+@if (Preview) {
+  <mj-gl-resolution-preview [Result]="Preview"></mj-gl-resolution-preview>
+}
+
+<div class="al-wrap mjsh-tablewrap">
+  @if (IsLoading) {
+    <mj-loading text="Loading account links…"></mj-loading>
+  } @else {
+    <table class="al-grid mjsh-table">
+      <thead>
+        <tr>
+          <th>Role</th>
+          <th>Target</th>
+          <th>Record</th>
+          <th>GL account</th>
+          <th>Effective</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (r of Filtered; track r.ID) {
+          <tr [class.al-row--active]="PreviewFor === r.ID">
+            <td>{{ r.GLAccountRole || '—' }}</td>
+            <td>{{ r.Entity || '—' }}</td>
+            <!-- Marcelo: "our database IDs are meaningless to them." So lead with the record's NAME
+                 where accounting can resolve it (companies, GL accounts, dimensions + their values),
+                 and say plainly when it can't — orders' Products/Categories live in an app this one
+                 must not depend on. The id stays beside it, copyable, and searchable in FULL. -->
+            <td class="al-target">
+              <span class="al-target__name" [class.al-target__name--unresolved]="!r.TargetName">{{ TargetLabel(r) }}</span>
+              <span class="al-mono al-target__id" [title]="r.RecordID">{{ r.RecordID.slice(0, 8) }}…</span>
+            </td>
+            <td>{{ r.GLAccount || r.GLAccountID }}</td>
+            <td>{{ (r.StartedAt | date: 'yyyy-MM-dd') || '—' }}{{ r.EndedAt ? ' → ' + (r.EndedAt | date: 'yyyy-MM-dd') : ' → open' }}</td>
+            <td>
+              <mj-stat-badge [Label]="r.Status" [Variant]="r.Status === 'Active' ? 'success' : 'default'"></mj-stat-badge>
+            </td>
+            <td>
+              <!-- "Why?" told the reader nothing (Marcelo 2026-07-16: "I don't know what the y
+                   button does or why it's there... that button is weird"). The label now names the
+                   thing it opens, and the chevron says a panel is coming. -->
+              <button
+                type="button"
+                mjButton
+                Variant="flat"
+                Size="sm"
+                title="Open the resolution pattern — the product → category → company chain that picks this record's account"
+                (click)="ShowPreview(r)">
+                <i class="fa-solid fa-diagram-project" aria-hidden="true"></i> Resolution pattern
+                <i class="fa-solid fa-chevron-right al-affordance" aria-hidden="true"></i>
+              </button>
+            </td>
+          </tr>
+        } @empty {
+          <tr><td colspan="7" class="al-empty">No account links match this filter.</td></tr>
+        }
+      </tbody>
+    </table>
+  }
+</div>
+</mj-page-body-interior>

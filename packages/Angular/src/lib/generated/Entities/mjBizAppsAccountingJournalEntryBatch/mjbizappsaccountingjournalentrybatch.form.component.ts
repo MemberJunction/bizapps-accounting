@@ -17,10 +17,10 @@ export class mjBizAppsAccountingJournalEntryBatchFormComponent extends BaseFormC
         await super.ngOnInit();
         this.initSections([
             { sectionKey: 'batchInformation', sectionName: 'Batch Information', isExpanded: true },
-            { sectionKey: 'timeline', sectionName: 'Timeline', isExpanded: true },
-            { sectionKey: 'auditAndUser', sectionName: 'Audit and User', isExpanded: true },
-            { sectionKey: 'processingStatus', sectionName: 'Processing Status', isExpanded: true },
             { sectionKey: 'financialSummary', sectionName: 'Financial Summary', isExpanded: true },
+            { sectionKey: 'batchLifecycle', sectionName: 'Batch Lifecycle', isExpanded: true },
+            { sectionKey: 'eRPIntegration', sectionName: 'ERP Integration', isExpanded: true },
+            { sectionKey: 'approvalAndProcessing', sectionName: 'Approval and Processing', isExpanded: true },
             { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingJournalEntries', sectionName: 'Journal Entries', isExpanded: false }
         ]);

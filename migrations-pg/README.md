@@ -21,7 +21,7 @@ The converter lives in [`@memberjunction/sql-converter`](https://github.com/Memb
 
 ```bash
 # One-shot for a single new file
-npx mj sql-convert \
+pnpm exec mj sql-convert \
   migrations/V<TS>__v<X.Y.x>__YourFile.sql \
   --from tsql --to postgres \
   --output migrations-pg/V<TS>__v<X.Y.x>__YourFile.pg.sql \
@@ -29,7 +29,7 @@ npx mj sql-convert \
   --verbose
 
 # Or batch the whole directory (only converts files missing a .pg.sql counterpart)
-npx mj migrate convert
+pnpm exec mj migrate convert
 ```
 
 The converter is **rule-based** ([`packages/SQLConverter/src/rules`](https://github.com/MemberJunction/MJ/tree/main/packages/SQLConverter/src/rules) in MJ). If the output contains `-- TODO:` comments, the converter cannot handle a pattern in your migration — **do not hand-fix the output**. Instead, fix the rule upstream in MJ, rebuild `sql-converter`, and re-convert here.

@@ -1,0 +1,115 @@
+/* GL accounts. Design tokens only — no hex/rgb literals, no .mj-btn overrides.
+
+   ⚠ These wrappers live inside <mj-page-body-interior>, which is display:block — so `flex: 1`
+   does NOT size them (it is a no-op and collapses the list to zero height). Size with
+   height/min-height; the percentage resolves against body-interior's flex-derived height. */
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  gap: 12px;
+}
+
+/* --- filters (one line, in the header's toolbar slot) --- */
+.gla-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.gla-field__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mj-text-muted);
+}
+.gla-field--search {
+  min-width: 220px;
+}
+.gla-field--wide {
+  grid-column: span 2;
+}
+.gla-help {
+  font-size: 11px;
+  color: var(--mj-text-muted);
+}
+
+/* --- editor --- */
+.gla-editor {
+  border: 1px solid var(--mj-border-default);
+  border-radius: 10px;
+  background: var(--mj-bg-surface);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.gla-editor__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.gla-editor__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--mj-text-primary);
+}
+.gla-editor__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.gla-editor__actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.gla-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--mj-text-secondary);
+}
+
+/* The fused subheader (list-page standard) + the rounded grid card, matching All JEs / batches. */
+.gla-subheader {
+  background: var(--mj-bg-surface);
+  border: 1px solid var(--mj-border-default);
+  border-radius: var(--mj-radius-lg);
+  margin-bottom: 12px;
+}
+.gla-subheader mja-list-toolbar {
+  display: block;
+  border-top: 1px solid var(--mj-border-default);
+}
+.gla-wrap {
+  /* Same height chain as .aje-grid (the list idiom this page clones): mj-entity-data-grid's :host
+     is height:100%, so the wrapper MUST have real height or the grid collapses to its borders
+     (~4px) and AG Grid's rows are clipped invisible + unclickable. .gla-body is a flex column with
+     a definite height, so flex sizing is legal here. overflow:hidden rounds the grid to the card. */
+  flex: 1 1 auto;
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  background: var(--mj-bg-surface);
+  border: 1px solid var(--mj-border-default);
+  border-radius: var(--mj-radius-lg);
+  overflow: hidden;
+}
+
+/* Page-owned gutter (body-interior [Padding]=false) — 16px, matching the list-page standard. */
+.gla-body {
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: var(--mj-space-4);
+}
+.gla-body .gla-subheader {
+  margin-bottom: 0;
+}

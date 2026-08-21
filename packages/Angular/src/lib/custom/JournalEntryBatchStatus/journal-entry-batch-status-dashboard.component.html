@@ -1,0 +1,223 @@
+<mj-page-layout>
+  <mj-page-header
+    Title="JE Batch Status"
+    Icon="fa-solid fa-list-check"
+    Subtitle="Journal entry batches — filter, sort, and expand one to see its consolidated posting (debits first, then credits) by company and account">
+
+    <div meta>
+      <mj-stat-badge Icon="fa-solid fa-layer-group" [Count]="FilteredCount" Label="JE batches" Variant="info" />
+      @for (s of StatusOptions; track s) {
+        @if (statusCount(s) > 0) {
+          <mj-stat-badge [Count]="statusCount(s)" [Label]="s" [Variant]="BadgeVariant(s)" />
+        }
+      }
+    </div>
+
+    <div actions>
+      <button mjButton variant="primary" size="sm" [disabled]="Building" (click)="OpenBuildPreview()">
+        <i class="fa-solid fa-layer-group"></i> Build Batch
+      </button>
+    </div>
+
+    <div toolbar>
+      <div class="bs-filters">
+        <div class="bs-toggles">
+          <button mjButton size="sm" [variant]="StatusVariant(AllStatusesShown)" (click)="ShowAllStatuses()">All</button>
+          @for (s of StatusOptions; track s) {
+            <button mjButton size="sm" [variant]="StatusVariant(IsStatusOn(s))" (click)="ToggleStatus(s)">{{ s }}</button>
+          }
+        </div>
+        <label class="bs-field">
+          <span class="bs-field__label">Company</span>
+          <!-- CHECKBOX multi-select (Marcelo 2026-08-05): narrow to any set of companies; empty = all. -->
+          <mja-check-dropdown
+            [Options]="Companies"
+            [SelectedIDs]="SelectedCompanyIDs"
+            AllLabel="All companies"
+            AriaLabel="Company"
+            (SelectedIDsChange)="OnCompanyIDsChanged($event)" />
+        </label>
+        <label class="bs-field">
+          <span class="bs-field__label">Target ERP</span>
+          <mj-dropdown [Data]="TargetChoices" TextField="Label" ValueField="Value" [ValuePrimitive]="true"
+            [DefaultItem]="AllSystemsDefault"
+            [ngModel]="SelectedTarget" (ngModelChange)="OnTargetChange($event ?? '')"
+            aria-label="Target ERP" />
+        </label>
+        <label class="bs-field">
+          <span class="bs-field__label">From</span>
+          <input type="date" class="mj-input" [value]="FromDate ?? ''" (change)="OnFromDateChange($any($event.target).value)" />
+        </label>
+        <label class="bs-field">
+          <span class="bs-field__label">To</span>
+          <input type="date" class="mj-input" [value]="ToDate ?? ''" (change)="OnToDateChange($any($event.target).value)" />
+        </label>
+        <div class="bs-field">
+          <span class="bs-field__label">Window</span>
+          <div class="bs-windows">
+            <button mjButton size="sm" [variant]="StatusVariant(IsWindowOn('today'))" (click)="ApplyWindow('today')">Today</button>
+            <button mjButton size="sm" [variant]="StatusVariant(IsWindowOn('7d'))" (click)="ApplyWindow('7d')">7 days</button>
+            <button mjButton size="sm" [variant]="StatusVariant(IsWindowOn('30d'))" (click)="ApplyWindow('30d')">30 days</button>
+            <button mjButton size="sm" variant="flat" (click)="ClearWindow()" title="Clear the date range">Clear</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </mj-page-header>
+
+  <mj-page-body>
+    @if (ActionMessage) {
+      <div class="bs-banner" [class.bs-banner--error]="ActionMessageIsError" [class.bs-banner--success]="!ActionMessageIsError" role="status">
+        <i class="fa-solid" [class.fa-circle-check]="!ActionMessageIsError" [class.fa-triangle-exclamation]="ActionMessageIsError"></i>
+        {{ ActionMessage }}
+      </div>
+    }
+
+    @if (IsLoading) {
+      <mj-loading text="Loading batch status…"></mj-loading>
+    } @else if (LoadError) {
+      <div class="bs-banner bs-banner--error" role="alert"><i class="fa-solid fa-triangle-exclamation"></i> {{ LoadError }}</div>
+    } @else if (FilteredBatches.length === 0) {
+      <mj-empty-state Icon="fa-solid fa-inbox" Title="No journal entry batches"
+        Message="No journal entry batches match the current filters. Build JE batch nets all pending journal entries into a new one.">
+      </mj-empty-state>
+    } @else {
+      <div class="bs-table-region">
+        <table class="bs-table">
+          <thead>
+            <tr>
+              <th class="bs-th--chev"></th>
+              <th class="bs-th--sort" (click)="SortBy('Status')">Status <i [class]="SortIcon('Status')"></i></th>
+              <th class="bs-th--sort" (click)="SortBy('TargetSystem')">Target <i [class]="SortIcon('TargetSystem')"></i></th>
+              <th class="bs-num">Cos.</th>
+              <th class="bs-th--sort bs-num" (click)="SortBy('TotalEntries')">JEs <i [class]="SortIcon('TotalEntries')"></i></th>
+              <th class="bs-th--sort" (click)="SortBy('StartDate')">Start <i [class]="SortIcon('StartDate')"></i></th>
+              <th class="bs-th--sort" (click)="SortBy('EndDate')">End <i [class]="SortIcon('EndDate')"></i></th>
+              <th class="bs-th--sort bs-num" (click)="SortBy('TotalDebits')">Debits <i [class]="SortIcon('TotalDebits')"></i></th>
+              <th class="bs-th--sort bs-num" (click)="SortBy('TotalCredits')">Credits <i [class]="SortIcon('TotalCredits')"></i></th>
+              <th class="bs-th--sort" (click)="SortBy('BatchedAt')">Batched <i [class]="SortIcon('BatchedAt')"></i></th>
+              <th>ERP Ref</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of FilteredBatches; track row.ID) {
+              <tr class="bs-row" [class.bs-row--open]="row.Expanded" (click)="ToggleExpand(row)">
+                <td class="bs-td--chev"><i class="fa-solid" [class.fa-chevron-right]="!row.Expanded" [class.fa-chevron-down]="row.Expanded"></i></td>
+                <td><span class="bs-pill" [attr.data-status]="row.Status">{{ row.Status }}</span></td>
+                <td>{{ row.TargetSystem }}</td>
+                <td class="bs-num">{{ row.CompanyIDs.length }}</td>
+                <td class="bs-num">{{ row.TotalEntries }}</td>
+                <td>{{ row.StartDate ? (row.StartDate | date:'yyyy-MM-dd') : '—' }}</td>
+                <td>{{ row.EndDate ? (row.EndDate | date:'yyyy-MM-dd') : '—' }}</td>
+                <td class="bs-num">{{ row.TotalDebits | number:'1.2-2' }}</td>
+                <td class="bs-num">{{ row.TotalCredits | number:'1.2-2' }}</td>
+                <td>{{ row.BatchedAt ? (row.BatchedAt | date:'yyyy-MM-dd HH:mm') : '—' }}</td>
+                <td class="bs-ref">{{ row.ExternalJournalEntryBatchRef ?? '—' }}</td>
+              </tr>
+              @if (row.Expanded) {
+                <tr class="bs-detail-row">
+                  <td class="bs-detail-cell" colspan="11">
+                    <div class="bs-detail">
+                      @if (row.DetailLoading) {
+                        <mj-loading text="Loading entries…" size="small"></mj-loading>
+                      } @else if (!row.Detail || row.Detail.Lines.length === 0) {
+                        <div class="bs-detail__empty">This journal entry batch has no consolidated movements.</div>
+                      } @else {
+                        <table class="bs-detail-table">
+                          <thead>
+                            <tr>
+                              <th>Company</th>
+                              <th>Account</th>
+                              <th class="bs-num">Debit</th>
+                              <th class="bs-num">Credit</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            @for (line of row.Detail.Lines; track $index) {
+                              <tr class="bs-detail-line" [class.bs-detail-line--credit]="line.Credit > 0">
+                                <td>{{ line.CompanyName }}</td>
+                                <td>{{ line.AccountName }}@if (line.AccountCode) {<span class="bs-detail-code"> · {{ line.AccountCode }}</span>}</td>
+                                <td class="bs-num">{{ line.Debit ? (line.Debit | number:'1.2-2') : '' }}</td>
+                                <td class="bs-num">{{ line.Credit ? (line.Credit | number:'1.2-2') : '' }}</td>
+                              </tr>
+                            }
+                          </tbody>
+                          <tfoot>
+                            <tr class="bs-detail-total">
+                              <td colspan="2">Totals</td>
+                              <td class="bs-num">{{ row.Detail.TotalDebits | number:'1.2-2' }}</td>
+                              <td class="bs-num">{{ row.Detail.TotalCredits | number:'1.2-2' }}</td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      }
+                    </div>
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </mj-page-body>
+</mj-page-layout>
+
+<!-- Build-Batch preview: shows the time span + the journal entries a build will include, then confirms. -->
+<mj-dialog [Visible]="BuildPreviewVisible" Title="Build JE batch — preview" [Width]="640" (Close)="CloseBuildPreview()">
+  <div class="bs-preview">
+    @if (PreviewLoading) {
+      <mj-loading text="Gathering candidate journal entries…" size="small"></mj-loading>
+    } @else {
+      <div class="bs-preview__head">
+        <label class="bs-field">
+          <span class="bs-field__label">Target ERP</span>
+          <mj-dropdown [Data]="TargetOptions" [ValuePrimitive]="true"
+            [ngModel]="BuildTarget" (ngModelChange)="OnBuildTargetChange($event)"
+            aria-label="Build target system" />
+        </label>
+        <div class="bs-preview__facts">
+          <div><span class="bs-field__label">Covers</span>
+            <strong>{{ PreviewStart ? (PreviewStart | date:'yyyy-MM-dd') : '—' }}</strong>
+            <span class="bs-preview__arrow">→</span>
+            <strong>{{ PreviewEnd ? (PreviewEnd | date:'yyyy-MM-dd') : '—' }}</strong>
+          </div>
+          <div><span class="bs-field__label">Entries</span> <strong>{{ PreviewCount }}</strong></div>
+        </div>
+      </div>
+
+      @if (PreviewCount === 0) {
+        <div class="bs-detail__empty">No pending journal entries to batch right now.</div>
+      } @else {
+        <div class="bs-preview__tablewrap">
+          <table class="bs-detail-table">
+            <thead>
+              <tr><th>Entry</th><th>Date</th><th>Type</th><th class="bs-num">Amount</th></tr>
+            </thead>
+            <tbody>
+              @for (e of PreviewEntries; track e.ID) {
+                <tr class="bs-detail-line">
+                  <td>{{ e.EntryNumber }}@if (e.Description) {<span class="bs-detail-code"> · {{ e.Description }}</span>}</td>
+                  <td>{{ e.EffectiveDate ? (e.EffectiveDate | date:'yyyy-MM-dd') : '—' }}</td>
+                  <td>{{ e.EntryType }}</td>
+                  <td class="bs-num">{{ e.Amount | number:'1.2-2' }}</td>
+                </tr>
+              }
+            </tbody>
+            <tfoot>
+              <tr class="bs-detail-total"><td colspan="3">Total</td><td class="bs-num">{{ PreviewTotal | number:'1.2-2' }}</td></tr>
+            </tfoot>
+          </table>
+        </div>
+      }
+    }
+  </div>
+
+  <mj-dialog-actions>
+    <button mjButton variant="primary" size="sm" [disabled]="Building || PreviewLoading || PreviewCount === 0" (click)="OnBuildJournalEntryBatch()">
+      @if (Building) { <i class="fa-solid fa-spinner fa-spin"></i> Building… }
+      @else { <i class="fa-solid fa-layer-group"></i> Build JE batch ({{ PreviewCount }}) }
+    </button>
+    <button mjButton variant="flat" size="sm" [disabled]="Building" (click)="CloseBuildPreview()">Cancel</button>
+  </mj-dialog-actions>
+</mj-dialog>

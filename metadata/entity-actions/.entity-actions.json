@@ -1,0 +1,202 @@
+[
+  {
+    "_comments": [
+      "JournalEntryBatch · AfterUpdate — ERP handoff confirmation / exception alerting.",
+      "plans/mj-entity-action-workflow-adoption.md §3, row 3.",
+      "",
+      "WHY AfterUpdate AND NOT BeforeUpdate/Validate: the batch lock trigger (error 50009) and the",
+      "balanced-JE constraint trigger are DEFERRABLE constraint triggers that fire at COMMIT. A",
+      "Before*/Validate binding runs INSIDE that same transaction and would be interleaved with them.",
+      "After* is dispatched outside it, so an alert can never deadlock or roll back a dispatch.",
+      "",
+      "THIS BINDING MUST NEVER WRITE TO THE BATCH. Once Status is Approved/Sent/Posted the batch lock",
+      "trigger allows only Status / ApprovedAt / ApprovedByUserID / SentAt / PostedAt /",
+      "ExternalJournalEntryBatchRef / ErrorMessage to change (error 50009); CompanyID, PostingDate,",
+      "SummaryJournalEntryID and the approval-task pointer freeze at approval. A binding that tried",
+      "would surface a raw trigger error from inside an action run, which is why it only reads.",
+      "",
+      "After* is fire-and-forget — NOT part of any all-or-none transaction. Nothing about the ledger",
+      "may depend on this having run. It is an alert, not a step in the dispatch.",
+      "",
+      "SHIPPED AS Pending, NOT Active. GenericDatabaseProvider dispatches only bindings whose",
+      "EntityAction.Status AND EntityActionInvocation.Status are both 'Active', so a Pending row is",
+      "inert. It is Pending for two reasons, both of which an administrator must resolve first:",
+      "",
+      "  1. NO TRANSITION FILTER EXISTS YET. The adoption doc assumed MJ#3408 seeded reusable",
+      "     'field changed' / 'field changed to value' ActionFilters. It did NOT — that is plan text in",
+      "     MJ's plans/entity-action-workflow-extensions.md only, and MJ's ActionFilter table has no",
+      "     Name column, so such a row is not even expressible as a reusable lookup. The real",
+      "     mechanism landed later (MJ commit df76df876d, 2026-08-08) as a filter row GENERATED per",
+      "     trigger, whose Code embeds the field and value as literal arguments:",
+      "         DidFieldChangeToValue('Status', 'Sent')",
+      "     against an ActionFilterContext the installed @memberjunction/actions-base@6.1.0-edge.1",
+      "     does NOT ship (no EntityChangeContext.js in its dist). Until that engine lands, AfterUpdate",
+      "     fires on EVERY save of a batch, not just the Pending→Sent transition — which is exactly the",
+      "     re-firing failure the doc warns about. Do not set this Active before then.",
+      "",
+      "  2. To / From / Provider are deployment configuration, not app metadata. They are deliberately",
+      "     absent below rather than filled with placeholders that would look configured.",
+      "",
+      "SCOPE IS DELIBERATELY UNSET. The doc calls for scoping to a Company, but ScopeRecordID must be a",
+      "concrete Company UUID and CK_EntityAction_Scope requires ScopeEntityID and ScopeRecordID to be",
+      "both NULL or both set — so a specific company cannot be seeded by an app repo that ships to many",
+      "tenants. Unset means 'applies to every batch', which is correct for a Pending template.",
+      "To narrow it, set ScopeEntityID to the MJ: Companies entity and ScopeRecordID to the company's",
+      "bare UUID (NOT MJ's 'ID|<guid>' CompositeKey form — the resolver compares String(fieldValue)).",
+      "Scoping is verified to work for this entity: EntityActionScopeResolver's default FK walk needs",
+      "EXACTLY ONE field on the subject entity pointing at MJ: Companies, and JournalEntryBatch has",
+      "exactly one (CompanyID). Zero or two or more would make the binding silently never fire."
+    ],
+    "fields": {
+      "EntityID": "@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entry Batches",
+      "ActionID": "@lookup:MJ: Actions.Name=Send Single Message",
+      "Status": "Pending",
+      "Sequence": 10,
+      "LoggingMode": "FailuresOnly"
+    },
+    "relatedEntities": {
+      "MJ: Entity Action Invocations": [
+        {
+          "fields": {
+            "EntityActionID": "@parent:ID",
+            "InvocationTypeID": "@lookup:MJ: Entity Action Invocation Types.Name=AfterUpdate",
+            "Status": "Pending"
+          },
+          "primaryKey": {
+            "ID": "283EAF55-CA5C-47BA-A722-8CFCDF5EBB99"
+          }
+        }
+      ],
+      "MJ: Entity Action Params": [
+        {
+          "fields": {
+            "EntityActionID": "@parent:ID",
+            "ActionParamID": "@lookup:MJ: Action Params.Name=MessageType&Action=Send Single Message",
+            "ValueType": "Static",
+            "Value": "Email"
+          },
+          "primaryKey": {
+            "ID": "69DB59DA-D62F-41C2-BB5E-F1DE828A1B24"
+          }
+        },
+        {
+          "fields": {
+            "EntityActionID": "@parent:ID",
+            "ActionParamID": "@lookup:MJ: Action Params.Name=Subject&Action=Send Single Message",
+            "ValueType": "Script",
+            "Value": "const b = EntityActionContext.entityObject;\nreturn `Journal entry batch ${b.JournalEntryBatchNumber} is now ${b.Status} (${b.TargetSystem})`;"
+          },
+          "primaryKey": {
+            "ID": "6C6577A1-7159-4E13-8415-DEFE0BE9D296"
+          }
+        },
+        {
+          "fields": {
+            "EntityActionID": "@parent:ID",
+            "ActionParamID": "@lookup:MJ: Action Params.Name=Body&Action=Send Single Message",
+            "ValueType": "Script",
+            "Value": "const b = EntityActionContext.entityObject;\nreturn [\n  `Batch ${b.JournalEntryBatchNumber} for ${b.Company} is now ${b.Status}.`,\n  `Target system: ${b.TargetSystem}`,\n  `Posting date: ${b.PostingDate}`,\n  `Entries: ${b.TotalEntries}   Debits: ${b.TotalDebits}   Credits: ${b.TotalCredits}`,\n  `External reference: ${b.ExternalJournalEntryBatchRef ?? '(none)'}`,\n  b.ErrorMessage ? `Error reported by the target system: ${b.ErrorMessage}` : ''\n].filter(Boolean).join('\\n');"
+          },
+          "primaryKey": {
+            "ID": "22AC42D2-A9BA-4095-B9E7-67C04ECB81DA"
+          }
+        }
+      ]
+    },
+    "primaryKey": {
+      "ID": "5C44B19D-8CE3-489D-A354-507A3B67A1C9"
+    }
+  },
+  {
+    "_comments": [
+      "JournalEntry · AfterCreate — threshold alerting on large or manual entries.",
+      "plans/mj-entity-action-workflow-adoption.md §3, row 4.",
+      "",
+      "AfterCreate is the only defensible invocation here. A JE is written together with its lines and",
+      "the debits=credits invariant is a DEFERRABLE constraint trigger checked at COMMIT, so at",
+      "BeforeCreate/Validate time the entry is not yet balanced and any binding that inspected it would",
+      "be reading a half-built entry. After* runs once the entry is real and committed.",
+      "",
+      "THIS BINDING MUST NEVER WRITE TO THE ENTRY. Once Status ∈ {Batched, GLPosted} the JE immutability",
+      "trigger allows only GLPostedAt / GLReferenceID / Status to change. It only reads.",
+      "",
+      "After* is fire-and-forget — never make the ledger depend on it having run.",
+      "",
+      "SHIPPED AS Pending. Two gaps an administrator must close first:",
+      "",
+      "  1. NO THRESHOLD IS EXPRESSED, so as written this alerts on EVERY journal entry created, which",
+      "     is not what anyone wants in production. Two things are missing. First, the transition/",
+      "     predicate ActionFilter mechanism is not in the installed engine (see the batch binding above).",
+      "     Second — and this is a schema fact, not an engine gap — the JournalEntry HEADER CARRIES NO",
+      "     AMOUNT. Debits and credits live on JournalEntryLine, so 'unusually large' cannot be decided",
+      "     from the record this binding receives. A real threshold has to sum the Lines collection,",
+      "     which is work for a purpose-built Action, not for a Script param.",
+      "     'Manual' entries ARE decidable from the header: EntryType = 'Manual'.",
+      "",
+      "  2. To / From / Provider are deployment configuration and are deliberately left unset.",
+      "",
+      "SCOPE IS DELIBERATELY UNSET, for the same reason as the batch binding. JournalEntry likewise has",
+      "exactly one FK to MJ: Companies (CompanyID), so the default FK-walk scope resolution will work",
+      "once an administrator sets ScopeEntityID + ScopeRecordID together."
+    ],
+    "fields": {
+      "EntityID": "@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entries",
+      "ActionID": "@lookup:MJ: Actions.Name=Send Single Message",
+      "Status": "Pending",
+      "Sequence": 10,
+      "LoggingMode": "FailuresOnly"
+    },
+    "relatedEntities": {
+      "MJ: Entity Action Invocations": [
+        {
+          "fields": {
+            "EntityActionID": "@parent:ID",
+            "InvocationTypeID": "@lookup:MJ: Entity Action Invocation Types.Name=AfterCreate",
+            "Status": "Pending"
+          },
+          "primaryKey": {
+            "ID": "F353336C-DB3E-430F-8C9E-26F1F112EF48"
+          }
+        }
+      ],
+      "MJ: Entity Action Params": [
+        {
+          "fields": {
+            "EntityActionID": "@parent:ID",
+            "ActionParamID": "@lookup:MJ: Action Params.Name=MessageType&Action=Send Single Message",
+            "ValueType": "Static",
+            "Value": "Email"
+          },
+          "primaryKey": {
+            "ID": "E15012DA-75EC-4861-9BDA-478CFBA679F0"
+          }
+        },
+        {
+          "fields": {
+            "EntityActionID": "@parent:ID",
+            "ActionParamID": "@lookup:MJ: Action Params.Name=Subject&Action=Send Single Message",
+            "ValueType": "Script",
+            "Value": "const je = EntityActionContext.entityObject;\nreturn `Journal entry ${je.EntryNumber} created (${je.EntryType})`;"
+          },
+          "primaryKey": {
+            "ID": "B280D66F-9AE0-407C-8F7D-49789464B34D"
+          }
+        },
+        {
+          "fields": {
+            "EntityActionID": "@parent:ID",
+            "ActionParamID": "@lookup:MJ: Action Params.Name=Body&Action=Send Single Message",
+            "ValueType": "Script",
+            "Value": "const je = EntityActionContext.entityObject;\nreturn [\n  `Journal entry ${je.EntryNumber} was created for ${je.Company}.`,\n  `Type: ${je.EntryType}`,\n  `Effective date: ${je.EffectiveDate}`,\n  `Status: ${je.Status}`,\n  `Description: ${je.Description ?? '(none)'}`\n].join('\\n');"
+          },
+          "primaryKey": {
+            "ID": "0EAF0E04-B20F-4B24-A898-4605F9711232"
+          }
+        }
+      ]
+    },
+    "primaryKey": {
+      "ID": "85B07BC1-D70F-4B53-A4CA-FA77B2E5D038"
+    }
+  }
+]

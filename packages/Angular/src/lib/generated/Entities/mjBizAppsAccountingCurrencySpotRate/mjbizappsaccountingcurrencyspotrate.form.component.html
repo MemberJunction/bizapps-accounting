@@ -10,11 +10,11 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Exchange Rate Details Section -->
+    <!-- Currency Details Section -->
     <mj-collapsible-panel
-        SectionKey="exchangeRateDetails"
-        SectionName="Exchange Rate Details"
-        Icon="fa fa-chart-line"
+        SectionKey="currencyDetails"
+        SectionName="Currency Details"
+        Icon="fa fa-money-bill-wave"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -35,6 +35,16 @@
             [FormContext]="formContext"
             LinkType="Record"
         ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- Rate Information Section -->
+    <mj-collapsible-panel
+        SectionKey="rateInformation"
+        SectionName="Rate Information"
+        Icon="fa fa-chart-line"
+        [Form]="this"
+        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -67,16 +77,6 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Display Information Section -->
-    <mj-collapsible-panel
-        SectionKey="displayInformation"
-        SectionName="Display Information"
-        Icon="fa fa-info-circle"
-        [Form]="this"
-        [FormContext]="formContext">
 
     </mj-collapsible-panel>
 

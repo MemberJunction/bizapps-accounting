@@ -1,0 +1,104 @@
+
+/* The gutter body-interior no longer provides ([Padding]=false) — 16px sides to match the
+   header-interior bubble's own margin, so all bubbles are the same width. */
+.aje-body {
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: var(--mj-space-4);
+}
+/* All journal entries — the list idiom other lists clone. Design tokens only.
+
+   HEIGHT CHAIN (this is load-bearing, not decoration): mj-entity-data-grid's own :host is
+   height:100%, so it renders nothing unless every ancestor gives it a real height. This component
+   is dynamically switched into <mj-left-nav-content>, so it must declare its own flex-column host.
+
+   ⚠ REGRESSION THIS COMMENT DID NOT PREVENT (2026-07-16): the grid is now inside
+   <mj-page-body-interior>, which is `display:block` — so `.aje-grid { flex: 1 }` became a NO-OP
+   (no flex parent), the grid collapsed to zero, and the page rendered blank. body-interior does
+   have a definite height (it is `flex:1 1 auto; min-height:0` inside this flex host), so the fix is
+   `height:100%` on the grid wrapper — a percentage resolves against it, whereas `flex` does not.
+   Rule of thumb: inside body-interior, size with height/min-height, NEVER with flex. */
+
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  gap: 12px;
+}
+
+
+.aje-filters {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.aje-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.aje-field--grow {
+  /* Search sits LAST, to the right of the drop-downs, and eats the slack so the whole filter set is
+     one line on the desktop. `flex` is safe HERE — .aje-filters IS a flex container (the body-interior
+     no-op trap in the header note applies only to the grid wrapper below). */
+  flex: 1 1 220px;
+}
+
+/* Status toggles — the All-batches control, same shape, same "All" affordance. */
+.aje-toggles {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+/* Native date inputs size to their content; pin them so From/To don't stretch the row. */
+.aje-field--date {
+  flex: 0 0 auto;
+}
+.aje-field--date .mj-input {
+  width: 150px;
+}
+
+.aje-field__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mj-text-muted);
+}
+
+.aje-grid {
+  /* flex is legal again: the parent .aje-body IS a flex column with a definite height (the old
+     height-not-flex warning applied to body-interior's display:block, which we now bypass).
+     The card dressing matches the other bubbles — surface, border, LG radius — and overflow:hidden
+     is what actually rounds the table: it clips AG Grid's square corners to the card. */
+  flex: 1 1 auto;
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  background: var(--mj-bg-surface);
+  border: 1px solid var(--mj-border-default);
+  border-radius: var(--mj-radius-lg);
+  overflow: hidden;
+}
+
+/* The fused subheader (Marcelo 2026-08-04): one band carrying stats + search/chips/filters, styled
+   like the interior header card it replaced — the page's single piece of top chrome. The internal
+   rule divides the stats row from the toolbar row, echoing header-interior's own row divider. */
+.aje-subheader {
+  background: var(--mj-bg-surface);
+  border: 1px solid var(--mj-border-default);
+  border-radius: var(--mj-radius-lg);
+}
+.aje-subheader mja-list-toolbar {
+  display: block;
+  border-top: 1px solid var(--mj-border-default);
+}

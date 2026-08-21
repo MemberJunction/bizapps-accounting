@@ -1,95 +1,94 @@
 /**
  * SequenceService — calls the DB-level atomic numbering stored procs from
- * TypeScript so EntityServer hooks can assign EntryNumber / BatchNumber
+ * TypeScript so EntityServer hooks can assign EntryNumber / JournalEntryBatchNumber
  * before super.Save() commits the row.
  *
- * The sprocs (spAssignNextJournalEntryNumber, spAssignNextBatchNumber) are
+ * The sprocs (spAssignNextJournalEntryNumber, spAssignNextJournalEntryBatchNumber) are
  * intentionally kept at DB level because they require atomic
  * HOLDLOCK+UPDLOCK read-modify-write semantics that don't translate to
  * app-level code under concurrency. Everything else moves to TypeScript.
+ *
+ * PROVIDER: injected, required — no global fallback. Callers are the entity
+ * servers, which pass their own ProviderToUse (so the sproc call rides the
+ * same connection context as the save it numbers).
  */
 
-import { LogError, Metadata, UserInfo } from '@memberjunction/core';
+import { IMetadataProvider, UserInfo } from '@memberjunction/core';
 import { SQLServerDataProvider } from '@memberjunction/sqlserver-dataprovider';
 
 const ACCOUNTING_SCHEMA = '__mj_BizAppsAccounting';
 
 /**
- * Atomically increments the per-(Company × FY) JE counter and returns the
- * formatted EntryNumber 'JE-{CompanyCode}-{FY}-{seq:000000}'.
- *
- * The Company's AccountingCompanyProfile must exist (the sproc fails loudly
- * otherwise); call this only from a JournalEntry pre-save hook where we
- * know the parent ACP is in place.
+ * Atomically increments the PER-COMPANY per-FiscalYear JE counter and returns
+ * the formatted EntryNumber 'JE-{CompanyCode}-{FY}-{seq:000000}' (plan D19:
+ * gap-free, per company, per fiscal year).
  */
 export async function getNextJournalEntryNumber(
   companyId: string,
   fiscalYear: number,
   contextUser: UserInfo,
+  provider: IMetadataProvider,
 ): Promise<string> {
-  const provider = getSqlServerProvider();
+  const sqlProvider = getSqlServerProvider(provider);
   const sql = `
     DECLARE @entryNumber NVARCHAR(40);
     EXEC ${ACCOUNTING_SCHEMA}.spAssignNextJournalEntryNumber
-        @CompanyID  = @CompanyID,
+        @CompanyID = @CompanyID,
         @FiscalYear = @FiscalYear,
         @EntryNumber = @entryNumber OUTPUT;
     SELECT @entryNumber AS EntryNumber;
   `;
-  const rows = await provider.ExecuteSQL(
+  // ExecuteSQL binds an OBJECT of parameters BY NAME (@CompanyID / @FiscalYear). An array
+  // is treated as positional (p0) — which would neither match the named @-params in the SQL
+  // above nor bind correctly (it would try to bind the element object itself). Pass an object.
+  const rows = await sqlProvider.ExecuteSQL(
     sql,
-    [
-      { name: 'CompanyID', value: companyId },
-      { name: 'FiscalYear', value: fiscalYear },
-    ],
+    { CompanyID: companyId, FiscalYear: fiscalYear },
     { isMutation: true, description: 'spAssignNextJournalEntryNumber' },
     contextUser,
   );
   const value = rows?.[0]?.EntryNumber;
   if (!value || typeof value !== 'string') {
     throw new Error(
-      `SequenceService.getNextJournalEntryNumber: sproc returned no value for CompanyID=${companyId} FiscalYear=${fiscalYear}`,
+      `SequenceService.getNextJournalEntryNumber: sproc returned no value for CompanyID=${companyId}, FiscalYear=${fiscalYear}`,
     );
   }
   return value;
 }
 
 /**
- * Atomically increments the per-Company batch counter and returns the
- * formatted BatchNumber 'BATCH-{CompanyCode}-{seq:000000}'.
+ * Atomically increments the GLOBAL singleton batch counter and returns the
+ * formatted JournalEntryBatchNumber 'BATCH-{seq:000000}'. (D-SEQ: batches are multi-company.)
  */
-export async function getNextBatchNumber(
-  companyId: string,
+export async function getNextJournalEntryBatchNumber(
   contextUser: UserInfo,
+  provider: IMetadataProvider,
 ): Promise<string> {
-  const provider = getSqlServerProvider();
+  const sqlProvider = getSqlServerProvider(provider);
   const sql = `
     DECLARE @batchNumber NVARCHAR(40);
-    EXEC ${ACCOUNTING_SCHEMA}.spAssignNextBatchNumber
-        @CompanyID    = @CompanyID,
-        @BatchNumber  = @batchNumber OUTPUT;
-    SELECT @batchNumber AS BatchNumber;
+    EXEC ${ACCOUNTING_SCHEMA}.spAssignNextJournalEntryBatchNumber
+        @JournalEntryBatchNumber  = @batchNumber OUTPUT;
+    SELECT @batchNumber AS JournalEntryBatchNumber;
   `;
-  const rows = await provider.ExecuteSQL(
+  const rows = await sqlProvider.ExecuteSQL(
     sql,
-    [{ name: 'CompanyID', value: companyId }],
-    { isMutation: true, description: 'spAssignNextBatchNumber' },
+    {},
+    { isMutation: true, description: 'spAssignNextJournalEntryBatchNumber' },
     contextUser,
   );
-  const value = rows?.[0]?.BatchNumber;
+  const value = rows?.[0]?.JournalEntryBatchNumber;
   if (!value || typeof value !== 'string') {
     throw new Error(
-      `SequenceService.getNextBatchNumber: sproc returned no value for CompanyID=${companyId}`,
+      'SequenceService.getNextJournalEntryBatchNumber: sproc returned no value',
     );
   }
   return value;
 }
 
-function getSqlServerProvider(): SQLServerDataProvider {
-  const provider = Metadata.Provider;
+function getSqlServerProvider(provider: IMetadataProvider): SQLServerDataProvider {
   if (!provider) {
-    LogError('SequenceService: Metadata.Provider is not initialized');
-    throw new Error('Metadata.Provider not initialized');
+    throw new Error('SequenceService: an IMetadataProvider must be injected — there is no global fallback');
   }
   return provider as SQLServerDataProvider;
 }

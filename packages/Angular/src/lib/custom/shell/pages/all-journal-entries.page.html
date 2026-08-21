@@ -1,0 +1,114 @@
+<!-- Sub-page of a left-nav shell. NO page-title card (Marcelo 2026-08-04): the rail already names
+     the page, and the verbs live in the CATEGORY header — the fused stats+toolbar subheader below
+     is the page's whole chrome (the orders All-Orders idiom, our list-page standard). -->
+<!-- The scrollable body is the interior primitive left-nav-content expects. [Padding]=false: the
+     page owns the gutter (16px sides) so the strip / toolbar / grid bubbles align edge-for-edge
+     with the header-interior bubble above (whose margin is 16px) — body-interior's responsive
+     24/32px default made every bubble narrower than the header (Marcelo 2026-08-04). -->
+<mj-page-body-interior [Padding]="false">
+  <div class="aje-body">
+  <!-- The ONE subheader band (Marcelo 2026-08-04): the title card is gone (the rail already names
+       the page) and the stats + toolbar fuse into a single subheader-styled card. Each figure is a
+       filtered COUNT over the SAME predicate the grid uses (MaxRows 1 + TotalRowCount — §0), so a
+       figure can never disagree with the rows; a zero-count status is hidden. -->
+  <div class="aje-subheader">
+  <mja-summary-strip
+    [Bare]="true"
+    [Figures]="SummaryFigures"
+    Note="Counts follow the active filters — they describe the list below, not the whole ledger." />
+
+  <!-- Search + status chips + the Filters disclosure (company / entry type / date window live
+       inside it — narrowing filters, one system, per the toolbar's ONE-FILTER-SYSTEM rule). -->
+  <mja-list-toolbar
+    [Bare]="true"
+    [Search]="Search"
+    SearchPlaceholder="Memo, entry № or ID…"
+    SearchLabel="Search journal entries"
+    [Presets]="StatusChips"
+    [ActiveKeys]="ActiveStatusKeys"
+    [HasAdvanced]="true"
+    [AdvancedCount]="AdvancedCount"
+    [(AdvancedOpen)]="AdvancedOpen"
+    (SearchChanged)="OnSearchChanged($event)"
+    (PresetToggled)="OnPresetToggled($event)">
+    <label class="aje-field">
+      <span class="aje-field__label">Company</span>
+      <!-- CHECKBOX multi-select (Marcelo 2026-08-05): narrow to any set of companies; empty = all. -->
+      <mja-check-dropdown
+        [Options]="Companies"
+        [SelectedIDs]="CompanyIDs"
+        AllLabel="All companies"
+        AriaLabel="Company"
+        (SelectedIDsChange)="OnCompanyIDsChanged($event)" />
+    </label>
+
+    <label class="aje-field">
+      <span class="aje-field__label">Entry type</span>
+      <mj-dropdown
+        [Data]="EntryTypeChoices"
+        TextField="Label"
+        ValueField="Value"
+        [ValuePrimitive]="true"
+        [(ngModel)]="TypeFilter"
+        (ngModelChange)="OnFilterChanged()"
+        aria-label="Entry type" />
+    </label>
+
+    <label class="aje-field">
+      <span class="aje-field__label">Window</span>
+      <mj-dropdown
+        [Data]="WindowChoices"
+        TextField="Label"
+        ValueField="Id"
+        [ValuePrimitive]="true"
+        [(ngModel)]="TimeWindow"
+        (ngModelChange)="OnWindowChanged()"
+        aria-label="Time window" />
+    </label>
+
+    <label class="aje-field aje-field--date">
+      <span class="aje-field__label">From</span>
+      <input type="date" class="mj-input" [(ngModel)]="FromDate" (ngModelChange)="OnDateChanged()" aria-label="Effective date from" />
+    </label>
+
+    <label class="aje-field aje-field--date">
+      <span class="aje-field__label">To</span>
+      <input type="date" class="mj-input" [(ngModel)]="ToDate" (ngModelChange)="OnDateChanged()" aria-label="Effective date to" />
+    </label>
+  </mja-list-toolbar>
+  </div>
+
+  <!-- MJ's house grid (§8 MJ-wins): AG Grid + RunView loading + server sorting + export + per-user
+       grid state.
+
+       PaginationMode="client" is an INTERIM choice, not the target. The plan wants server-side
+       paging ("keyset / Load more") for the thousands-of-JEs case, which is MJ's `infinite` mode —
+       but infinite mode currently renders a permanent "No data to display" overlay OVER a populated
+       grid, because the grid's empty state is gated on `rowData.length === 0` while infinite mode
+       feeds rows through AG's IDatasource and never fills `rowData`. Logged in MJ-UPSTREAM.md.
+       Switch back to infinite (with ShowPager off) the moment that lands. Our JE volume is small, so
+       client mode is honest and correct today. -->
+  <div class="aje-grid">
+  <!-- StateKey v1 -> v2 (2026-07-31): a saved grid state OVERRIDES [Columns] outright — titles, widths
+       AND order — so users were still being served widths captured before the auto-width work, and
+       edits to [Columns] had no effect for anyone who had ever opened this grid. Bumping the key
+       retires those saved states; the version suffix exists for exactly this. Bump it again after any
+       [Columns] change users must actually see. -->
+  <mj-entity-data-grid
+    [Params]="GridParams"
+    [Columns]="Columns"
+    PaginationMode="client"
+    [PageSize]="100"
+    [ShowPager]="true"
+    [AllowSorting]="true"
+    [ShowToolbar]="false"
+    [SelectionMode]="'single'"
+    KeyField="ID"
+    StateKey="mj.bizappsacct.grid.allJournalEntries.v2"
+    [AutoPersistState]="true"
+    Height="auto"
+    (AfterRowClick)="OnRowClicked($event.rowKey)">
+  </mj-entity-data-grid>
+  </div>
+  </div>
+</mj-page-body-interior>
