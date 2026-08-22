@@ -40,6 +40,7 @@ import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
 import { LookupJournalEntryTypeByID, RequireJournalEntryTypeID } from './JournalEntryTypes.js';
 import { getNextJournalEntryNumber } from './SequenceService.js';
+import { sqlGuidLiteral } from './sqlLiteral.js';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
@@ -434,8 +435,10 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
     const fileId = this.FileID;
     if (!fileId) return;
     const provider = this.ProviderToUse as unknown as IRunViewProvider;
+    // FileID is a client-settable FK column concatenated into the filter — validate it strictly as a
+    // UUID so a crafted value cannot inject predicates into this existence check (second-order SQLi).
     const res = await provider.RunView<{ ID: string }>(
-      { EntityName: FILE_ENTITY, ExtraFilter: `ID='${fileId}'`, Fields: ['ID'], ResultType: 'simple' },
+      { EntityName: FILE_ENTITY, ExtraFilter: `ID=${sqlGuidLiteral(fileId, 'JournalEntry.ValidateAttachment')}`, Fields: ['ID'], ResultType: 'simple' },
       this.ContextCurrentUser,
     );
     if (res.Success && res.Results.length === 0) {

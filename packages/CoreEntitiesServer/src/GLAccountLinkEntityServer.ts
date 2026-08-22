@@ -27,6 +27,7 @@
 import { BaseEntity, IRunViewProvider, ValidationResult, ValidationErrorInfo } from '@memberjunction/core';
 import { RegisterClass } from '@memberjunction/global';
 import { mjBizAppsAccountingGLAccountLinkEntity } from '@mj-biz-apps/accounting-entities';
+import { sqlGuidLiteral, sqlTextLiteral } from './sqlLiteral.js';
 
 const LINK_ENTITY = 'MJ_BizApps_Accounting: GL Account Links';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
@@ -62,10 +63,15 @@ export class GLAccountLinkEntityServer extends mjBizAppsAccountingGLAccountLinkE
 
     const startedAt = this.StartedAt ? new Date(this.StartedAt).toISOString() : null;
     const sameStart = startedAt === null ? `StartedAt IS NULL` : `StartedAt = '${startedAt}'`;
-    const notSelf = this.IsSaved ? ` AND ID <> '${this.ID}'` : '';
+    // These are client-settable columns concatenated into a filter — validate the UUID FKs strictly
+    // (a non-UUID value would inject predicates into the ambiguity guard's SELECT). RecordID is a
+    // POLYMORPHIC key that may legitimately be a non-UUID composite, so it is quote-escaped, not
+    // UUID-validated (the reader ResolveLinkedAccount treats it as an opaque string).
+    const ctx = 'GLAccountLinkEntityServer.checkNoAmbiguousTie';
+    const notSelf = this.IsSaved ? ` AND ID <> ${sqlGuidLiteral(this.ID, ctx)}` : '';
     const filter =
-      `EntityID = '${this.EntityID}' AND RecordID = '${this.RecordID.replace(/'/g, "''")}' ` +
-      `AND GLAccountRoleID = '${this.GLAccountRoleID}' AND Status = 'Active' AND ${sameStart}${notSelf}`;
+      `EntityID = ${sqlGuidLiteral(this.EntityID, ctx)} AND RecordID = ${sqlTextLiteral(this.RecordID)} ` +
+      `AND GLAccountRoleID = ${sqlGuidLiteral(this.GLAccountRoleID, ctx)} AND Status = 'Active' AND ${sameStart}${notSelf}`;
 
     const provider = this.ProviderToUse as unknown as IRunViewProvider;
     const res = await provider.RunView<{ ID: string; GLAccountID: string }>(
@@ -98,7 +104,7 @@ export class GLAccountLinkEntityServer extends mjBizAppsAccountingGLAccountLinkE
   private async companyOfAccount(glAccountId: string): Promise<string | null> {
     const provider = this.ProviderToUse as unknown as IRunViewProvider;
     const res = await provider.RunView<{ CompanyID: string }>(
-      { EntityName: GL_ENTITY, ExtraFilter: `ID='${glAccountId}'`, Fields: ['CompanyID'], MaxRows: 1, ResultType: 'simple', BypassCache: true },
+      { EntityName: GL_ENTITY, ExtraFilter: `ID=${sqlGuidLiteral(glAccountId, 'GLAccountLinkEntityServer.companyOfAccount')}`, Fields: ['CompanyID'], MaxRows: 1, ResultType: 'simple', BypassCache: true },
       this.ContextCurrentUser,
     );
     if (!res.Success) {

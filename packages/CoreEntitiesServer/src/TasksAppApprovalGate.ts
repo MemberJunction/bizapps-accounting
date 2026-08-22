@@ -143,7 +143,30 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate {
   ): Promise<void> {
     const task = await this.resolveBatchTask(batchId, contextUser);
     if (!task) throw new Error(`Batch ${batchId} has no approval Task to record a decision against.`);
+    // SECURITY (SoD): an APPROVING decision may only be recorded by the company's configured CFO.
+    // Enforced HERE — the single shared entry point for both the in-app approve control and the
+    // Tasks inbox — because assertApproved downstream checks only that SOME approving decision
+    // exists, not who authored it. Without this, any authenticated caller of the decision Remote
+    // Operation could approve any batch (including their own) and make it dispatchable to the ERP.
+    if (IsApprovalOutcome(outcome)) {
+      await this.assertCallerIsConfiguredCFO(batchId, contextUser);
+    }
     await this.orchestration.RecordDecision({ TaskID: task.ID, OutcomeCode: outcome, DecidedByPersonID: decidedByPersonId, Notes: notes }, contextUser);
+  }
+
+  /**
+   * Require the calling user to BE the batch company's configured CFO approver before an approving
+   * decision is recorded. Resolving the CFO throws when none is configured, so approval is denied in
+   * that case rather than allowed.
+   */
+  private async assertCallerIsConfiguredCFO(batchId: string, contextUser: UserInfo): Promise<void> {
+    const batch = await this.loadBatch(batchId, contextUser);
+    const cfoUserId = await this.resolveCFOUserIdForCompany(batch.CompanyID, contextUser);
+    if (!contextUser?.ID || !UUIDsEqual(cfoUserId, contextUser.ID)) {
+      throw new Error(
+        `Not authorized to approve batch ${batchId}: only the company's configured CFO approver may record an approving decision.`,
+      );
+    }
   }
 
   // ─── helpers ───────────────────────────────────────────────────────────────
