@@ -2,16 +2,19 @@
   "name": "@mj-biz-apps/accounting-integration-tests",
   "license": "BUSL-1.1",
   "type": "module",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "GraphQL-wire integration checks for BizApps Accounting.",
   "main": "dist/index.js",
-  "scripts": { "build": "tsc && tsc-alias -f", "test": "vitest run" },
+  "scripts": {
+    "build": "tsc && tsc-alias -f",
+    "test": "vitest run"
+  },
   "dependencies": {
     "@memberjunction/core": "^6.1.0-edge.3",
     "@memberjunction/global": "^6.1.0-edge.3",
     "@memberjunction/testing-integration": "^6.1.0-edge.3",
-    "@mj-biz-apps/accounting-entities": ">=0.1.0"
+    "@mj-biz-apps/accounting-entities": ">=0.1.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
