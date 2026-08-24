@@ -19,8 +19,10 @@ it disables.
   `SendJournalEntryBatchOptions`).
 - `AutoApproveGate` is deleted and no longer exported; `TasksAppApprovalGate` is the only gate this
   package ships.
-- Seeding/maintenance still needs "run without a tasks app". That is a fixture concern and now lives
-  in the harness as `NoApprovalWorkflowGate`, named for what it does.
+- No replacement ships. The demo seeder now uses the real gate (a seeding script knows who the
+  approver is, because it configures the CFO itself), so demo batches carry a real approval Task like
+  every other batch. The only surviving no-workflow stub is declared inline in the one live spec that
+  builds batches as scaffolding — a property of that test, not of this app.
 
 **Migration:** pass a gate explicitly. Production callers pass `new TasksAppApprovalGate(provider)`.
 A caller that genuinely wants no approval workflow must now write its own gate and say so.

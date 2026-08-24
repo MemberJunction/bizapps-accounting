@@ -165,8 +165,11 @@ export interface JournalEntryBatchApprovalGate {
 // argument — a bypass shaped like a policy, which typechecks and reads as safe at the call site.
 // It also proved nothing in tests: a stub that always says yes can only confirm the path it
 // disables (the gate double that earns its place is one that can FAIL — see L11's failingGate).
-// Seeding/maintenance genuinely needs "run without a tasks app"; that is a fixture concern and now
-// lives in the harness as NoApprovalWorkflowGate, named for what it actually does.
+// Nor is there a replacement anywhere shippable. The demo seeder now uses the REAL gate — a seeding
+// SCRIPT knows who the approver is (it configures the CFO itself), which is exactly what declarative
+// metadata cannot do — so demo batches carry a real approval Task like every other batch. The only
+// surviving no-workflow stub is declared INLINE in phase2-encapsulation.live.test.ts, for specs that
+// build a batch as scaffolding for something else. It is a property of those tests, not of this app.
 
 /**
  * Thrown when a build finds nothing to batch (no candidate JEs, or every group netted to zero so
@@ -740,8 +743,9 @@ export async function regenerateJournalEntryBatch(
  * status check, then `gate.assertApproved` throws) and decision-recorded-while-Pending (the gate is
  * satisfied, then send throws on the status). `Approve()` does both in ONE transaction.
  *
- * Retained for the seed/maintenance harnesses, which run with the harness's NoApprovalWorkflowGate:
- * no approval Task is raised at all, so there is no decision to record and no split to reintroduce.
+ * As of the AutoApproveGate removal this has exactly ONE caller left — a single line in
+ * phase2-encapsulation.live.test.ts, which could use `Approve()` too. It is kept only because that
+ * is a live spec that has not been re-run yet; once it has, this function should go.
  */
 export async function approveJournalEntryBatch(
   batchId: string, approvedByUserId: string, contextUser: UserInfo, provider: IMetadataProvider,

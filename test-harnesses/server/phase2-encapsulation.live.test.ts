@@ -39,7 +39,20 @@ import {
 import type { mjBizAppsAccountingAccountingCompanyProfileEntity } from '@mj-biz-apps/accounting-entities';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import { bootstrapLive, teardownLive, scalar, SCHEMA, type LiveCtx } from './live-bootstrap.js';
-import { NoApprovalWorkflowGate } from './NoApprovalWorkflowGate.js';
+
+/**
+ * No approval workflow — for the specs below that build a batch as SCAFFOLDING for something else
+ * (encapsulation, set-op atomicity), on the shared fixture company that deliberately has NO
+ * ApprovalCFOUserID (L12 asserts the precondition throws without one). Declared HERE, inline, for
+ * the same reason failingGate is: it is a property of these tests, not something the app ships.
+ *
+ * It is NOT "approved" — it is UNGATED. Never use it in a spec that is ABOUT approval; those use
+ * TasksAppApprovalGate (L13) or a double that refuses (failingGate, L11).
+ */
+const NoApprovalWorkflowGate: JournalEntryBatchApprovalGate = {
+  async assertApproved(): Promise<void> { /* no approval workflow in this fixture */ },
+  async recordDecision(): Promise<void> { /* no task, no decision */ },
+};
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
