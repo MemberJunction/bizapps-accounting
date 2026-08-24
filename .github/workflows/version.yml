@@ -49,8 +49,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - uses: changesets/action@v1
+      - uses: changesets/action@v2.1.1
         with:
+          # Pinned to an exact patch, not @v2. The input names are major-specific: v1 takes
+          # `version`/`publish`/`title`/`commit`, v2 takes `version-script`/`publish-script`/
+          # `pr-title`/`commit-message`. Actions silently IGNORES unknown inputs, so a
+          # mismatch does not fail — it runs the action's defaults. That is exactly what
+          # happened on the first run: v2 names against a @v1 pin meant `version-script` was
+          # dropped, plain `changeset version` ran, and the Version Packages PR came out
+          # missing the lockfile refresh and the mj-app.json sync. The giveaway was the PR
+          # title falling back to "Version Packages".
+          #
           # No `publish-script`: this workflow only ever versions.
           version-script: pnpm run version:ci
           pr-title: 'chore(release): version packages'
