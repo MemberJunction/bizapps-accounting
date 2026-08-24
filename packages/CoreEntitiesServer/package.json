@@ -29,7 +29,7 @@
     "@mj-biz-apps/tasks-entities": "^1.1.1",
     "@mj-biz-apps/accounting-engine-base": "0.1.0",
     "@memberjunction/integration-engine": "^6.1.0-edge.0",
-    "@memberjunction/connector-business-central": "^1.0.1"
+    "@memberjunction/connector-business-central": "^2.0.0"
   },
   "peerDependencies": {
     "@memberjunction/core": "^6.1.0-edge.0",

@@ -37,6 +37,15 @@ export interface PostJournalEntryBatchContext {
   ContextUser: UserInfo;
   /** The caller's provider — all reads/writes ride the request's transaction-capable provider. */
   Provider: IMetadataProvider;
+  /**
+   * Which dispatch CHANNEL this export came from — a manual push, or one named automated action.
+   * Business Central journal batches are long-lived, purpose-named containers meant to be REUSED
+   * (posting clears their lines and keeps the batch), so each channel owns one: `AIDP_MAN` for
+   * manual pushes, `AIDP_<KEY>` per automated action. Keeping channels in separate journals matters
+   * because `Microsoft.NAV.post` commits an ENTIRE journal, so anything sharing a container gets
+   * posted together. Defaults to `MAN`. Capped to 5 chars — BC's batch code is `Code[10]`.
+   */
+  Channel?: string;
 }
 
 /** Outcome of a post attempt. `Success: false` flips the batch Sent→Failed with `Error` as the reason. */

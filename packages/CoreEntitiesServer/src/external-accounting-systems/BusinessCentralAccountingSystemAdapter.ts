@@ -9,22 +9,72 @@
  * unbalanced journal, so all-or-nothing lives at the post step regardless of how lines
  * arrive. A retry pre-flight clears any stale UNPOSTED lines carrying our documentNumber.
  *
- * SURFACES (ruled 2026-08-14 — connector code is Madhav's; we add nothing to it):
- *  - Line staging uses the engine's existing `BatchCreateRecords` batch-write surface
- *    (today it loops singles; Madhav's real OData $batch override upgrades the wire with
- *    ZERO changes here — this call site is already the batch form).
- *  - Journal POST has no public surface anywhere in the framework yet (the discovery
- *    metadata catalogs journals' `post` bound action, but the invocation half is unbuilt).
- *    Requested from Madhav 2026-08-14 (`InvokeBoundAction`, with journals→post as the
- *    concrete need). Until it lands, `PostStagedJournal` fails LOUDLY — the batch flips
- *    Sent→Failed with the blocked-on-upstream reason; staged lines are harmless and are
- *    cleaned by the next attempt's pre-flight.
+ * SURFACES (connector code is Madhav's; we add nothing to it):
+ *  - Line staging uses the engine's `BatchCreateRecords` batch-write surface.
+ *  - Journal POST uses `connector.PostJournal(ci, journalId, user)`, added in
+ *    connector-business-central 1.2.0 (unblocked 2026-08-21; the previous loud
+ *    blocked-on-upstream throw is gone).
+ *
+ * ONE JOURNAL PER RUN — why this, and not a shared batch (researched 2026-08-21):
+ *
+ * NOTE ON PROVENANCE, so nobody over-trusts this: Microsoft's guidance prescribes a batch per
+ * ACTOR, not per operation — "a typical design is to have a journal batch for each user who
+ * enters lines" (alguidelines Journal Template-Batch-Line); batches "provide simultaneous access
+ * for multiple users to the same journal" (MS Learn ui-work-general-journals). Per-RUN is OUR
+ * extension of that, because a stable per-integration batch still races when two dispatches of
+ * the same integration overlap. BC does bless per-posting batches via the journal template's
+ * "Increment Batch Name" feature ("the posting following BATCH001 is automatically named
+ * BATCH002"), which likewise leaves the old batch behind.
+ * `Microsoft.NAV.post` posts an ENTIRE journal batch, not just the lines you added. Business
+ * Central offers NO lock or checkout for a journal batch; its documented isolation mechanism
+ * IS the batch ("a typical design is to have a journal batch for each user who enters lines"
+ * — alguidelines.dev Journal Template-Batch-Line; batches exist to "provide simultaneous
+ * access for multiple users to the same journal" — MS Learn ui-work-general-journals).
+ * So every dispatch mints its OWN journal:
+ *  - two concurrent writers (peer agents, two MJ instances on one tenant, a retry racing
+ *    itself) can never share a batch, so no lock is needed — isolation is structural;
+ *  - posting can never sweep up somebody else's staged lines. This is not hypothetical: the
+ *    probed sandbox holds 22 un-posted Bill.com lines worth 65,261.48 in its BDC_GJ journal,
+ *    which a shared-batch design would have posted along with ours;
+ *  - the pre-post line-count assertion therefore detects a BUG (or a human editing our batch
+ *    in the UI), never a race — which is why stopping and surfacing is a COMPLETE resolution
+ *    rather than something needing two systems to reconcile.
+ *
+ * THE JOURNAL CODE is `Code[10]` in BC — ten characters, hard limit. So it is derived, not
+ * descriptive: `AI` + 8 base36 chars of a SHA-256 of the batch's GUID.
+ *  - DETERMINISTIC, so a re-dispatch of the same batch resolves the SAME journal instead of
+ *    creating a second one (BC does not deduplicate POSTs, so retries would otherwise double);
+ *  - GUID-derived, so it is unique ACROSS databases — two MJ instances pointed at one tenant
+ *    need no shared sequence to avoid collisions;
+ *  - base36 (36^8 ~ 2.8e12) rather than hex truncation (16^8 ~ 4.3e9) for the same 10 chars,
+ *    and hashing rather than slicing so the output is uniform regardless of GUID generator.
+ * Truncation still makes collision POSSIBLE, and its failure mode is severe (staging into a
+ * stranger's journal), so `ResolveOrCreateJournal` GUARDS it: an existing journal is reused
+ * only if its displayName carries this batch's GUID. Anything else screams.
+ *
+ * ROLLBACK: deleting a journal cascades to its lines, so a failed staging deletes the journal
+ * and leaves nothing behind — and nothing ever reached the GL, because only `post` commits.
+ *
+ * LIFECYCLE — posting does NOT remove the journal. It removes the LINES ("when general journals
+ * are posted, the general journals before posting are deleted automatically"); the BATCH record
+ * persists, which is why this tenant carries empty DEFAULT and MONTHLY containers. A per-run
+ * journal would therefore accumulate one empty batch per dispatch forever, so a SUCCESSFUL post
+ * deletes the journal too. That is safe for traceability because BC stamps the batch name onto
+ * the posted entries ("the Batch Name will be saved in posted tables and entry tables"), and the
+ * per-line documentNumber remains the API-visible handle regardless.
+ *
+ * IDEMPOTENCY BOUNDARY (consequence of the above): deriving the code from the batch GUID makes a
+ * retry resolve the SAME journal only while that journal still exists — i.e. between staging and
+ * posting. Once posted-and-deleted, BC no longer holds the evidence, so re-dispatch protection
+ * must come from OUR side. Hence the ExternalJournalEntryBatchRef pre-check below: a batch that
+ * already carries a reference has already posted, and re-staging it would DOUBLE-POST.
  */
+import { createHash } from 'node:crypto';
 import { RegisterClass } from '@memberjunction/global';
 import type { MJCompanyIntegrationEntity } from '@memberjunction/core-entities';
 import { ConnectorFactory } from '@memberjunction/integration-engine';
 import { BusinessCentralConnector } from '@memberjunction/connector-business-central';
-import type { CreateRecordContext, CRUDResult } from '@memberjunction/integration-engine';
+import type { CreateRecordContext, CRUDResult, ExternalRecord } from '@memberjunction/integration-engine';
 import type { mjBizAppsAccountingJournalEntryLineEntity } from '@mj-biz-apps/accounting-entities';
 import { resolveExternalAccount } from '../JournalEntryBatchEngine.js';
 import {
@@ -34,10 +84,24 @@ import {
   VerifyPostedResult,
 } from './BaseExternalAccountingSystemAdapter.js';
 
-/** One staged line, resolved to BC's wire shape (account NUMBER — "the ERP knows nothing of our IDs"). */
+/**
+ * One staged line in BC's wire shape.
+ *
+ * `journalId` is REQUIRED: as of connector 2.0.0 `journalLines` addresses its nested path under
+ * the parent journal (`/companies({id})/journals({journalId})/journalLines`). The flat
+ * company-level form is structurally valid OData that Business Central refuses at runtime.
+ *
+ * ACCOUNT IDENTITY is either/or, never both. `resolveExternalAccount` returns GLAccount
+ * .ExternalAccountID when configured and falls back to the account Code, so it hands back a
+ * GUID on some installs and an account number on others. BC exposes a distinct field for each
+ * (`accountId` vs `accountNumber`) and sending a GUID as an account number is rejected, so the
+ * shape is chosen from the VALUE rather than assumed.
+ */
 interface BcJournalLineAttributes {
   accountType: 'G/L Account';
-  accountNumber: string;
+  journalId: string;
+  accountId?: string;
+  accountNumber?: string;
   postingDate: string; // yyyy-MM-dd
   documentNumber: string;
   /** Signed: debit positive, credit negative. */
@@ -45,6 +109,15 @@ interface BcJournalLineAttributes {
   description: string;
   [key: string]: unknown;
 }
+
+/** A resolved BC journal batch — the container this run stages into and then posts. */
+interface BcJournal {
+  Id: string;
+  Code: string;
+  Created: boolean;
+}
+
+const GUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 @RegisterClass(BaseExternalAccountingSystemAdapter, 'BusinessCentralAccountingSystemAdapter')
 export class BusinessCentralAccountingSystemAdapter extends BaseExternalAccountingSystemAdapter {
@@ -63,17 +136,39 @@ export class BusinessCentralAccountingSystemAdapter extends BaseExternalAccounti
       }
       const connector: BusinessCentralConnector = resolved;
 
-      const lineContexts = await this.BuildLineContexts(context, companyIntegration);
-      const staged = await connector.BatchCreateRecords(lineContexts);
-      const firstFailure = this.FirstFailure(staged);
-      if (firstFailure) {
+      // Already-posted guard. Deleting the journal after a successful post means BC no longer
+      // carries the evidence of the earlier run, so this is the only thing standing between a
+      // re-dispatch and a DOUBLE POST into the general ledger.
+      const priorRef = context.Batch.ExternalJournalEntryBatchRef;
+      if (priorRef) {
         return {
           Success: false,
-          Error: `Business Central rejected journal-line staging (line ${firstFailure.Index + 1}/${lineContexts.length}, HTTP ${firstFailure.Result.StatusCode}): ${firstFailure.Result.ErrorMessage ?? 'no message'}. No journal was posted (staging only).`,
+          Error: `Batch ${context.Batch.JournalEntryBatchNumber} already carries an external reference (${priorRef}), meaning it has already been posted to Business Central. `
+            + `Refusing to stage it again — a second post would duplicate the entries in the general ledger. `
+            + `If the earlier post genuinely failed, clear the reference deliberately after confirming against BC's general ledger entries.`,
         };
       }
 
-      const externalRef = await this.PostStagedJournal(context, connector, companyIntegration);
+      // Mint (or, on a retry, re-resolve) THIS run's own journal before staging anything.
+      const journal = await this.ResolveOrCreateJournal(connector, companyIntegration, context);
+
+      const lineContexts = await this.BuildLineContexts(context, companyIntegration, journal.Id);
+      const staged = await connector.BatchCreateRecords(lineContexts);
+      const firstFailure = this.FirstFailure(staged);
+      if (firstFailure) {
+        // Cascade-delete the journal so no half-staged lines survive. Nothing reached the GL:
+        // only `post` commits, and we never got there.
+        const cleanup = await this.TryDeleteJournal(connector, companyIntegration, context, journal.Id);
+        return {
+          Success: false,
+          Error: `Business Central rejected journal-line staging (line ${firstFailure.Index + 1}/${lineContexts.length}, HTTP ${firstFailure.Result.StatusCode}): ${firstFailure.Result.ErrorMessage ?? 'no message'}. `
+            + `No journal was posted (staging only). Journal ${journal.Code} ${cleanup}.`,
+        };
+      }
+
+
+      const externalRef = await this.PostStagedJournal(context, connector, companyIntegration, journal);
+
       return { Success: true, ExternalRef: externalRef };
     } catch (e) {
       return { Success: false, Error: e instanceof Error ? e.message : String(e) };
@@ -96,16 +191,17 @@ export class BusinessCentralAccountingSystemAdapter extends BaseExternalAccounti
   private async BuildLineContexts(
     context: PostJournalEntryBatchContext,
     companyIntegration: MJCompanyIntegrationEntity,
+    journalId: string,
   ): Promise<CreateRecordContext[]> {
     const postingDate = this.FormatPostingDate(context.Batch.PostingDate);
-    const documentNumber = context.Batch.JournalEntryBatchNumber;
+    const documentNumber = this.DocumentNumberFor(context);
     const contexts: CreateRecordContext[] = [];
     for (const line of context.SummaryLines) {
       contexts.push({
         CompanyIntegration: companyIntegration,
         ObjectName: 'journalLines',
         ContextUser: context.ContextUser,
-        Attributes: await this.BuildLineAttributes(line, postingDate, documentNumber, context),
+        Attributes: await this.BuildLineAttributes(line, postingDate, documentNumber, context, journalId),
       });
     }
     return contexts;
@@ -116,17 +212,33 @@ export class BusinessCentralAccountingSystemAdapter extends BaseExternalAccounti
     postingDate: string,
     documentNumber: string,
     context: PostJournalEntryBatchContext,
+    journalId: string,
   ): Promise<BcJournalLineAttributes> {
-    const accountNumber = await resolveExternalAccount(line.GLAccountID, 'BusinessCentral', context.ContextUser, context.Provider);
+    const account = await resolveExternalAccount(line.GLAccountID, 'BusinessCentral', context.ContextUser, context.Provider);
     const amount = (line.DebitAmount ?? 0) - (line.CreditAmount ?? 0);
+    // GUID -> accountId (BC's own key); anything else -> accountNumber (the chart code).
+    const accountKey: Pick<BcJournalLineAttributes, 'accountId' | 'accountNumber'> = GUID_RE.test(account)
+      ? { accountId: account }
+      : { accountNumber: account };
     return {
       accountType: 'G/L Account',
-      accountNumber,
+      journalId,
+      ...accountKey,
       postingDate,
       documentNumber,
       amount,
       description: (line.Description ?? `JE batch ${documentNumber}`).slice(0, 100),
     };
+  }
+
+  /**
+   * The `documentNumber` stamped on every line, and therefore on every posted G/L entry — this
+   * is the handle a human filters General Ledger Entries by to find what we sent. Prefixed so
+   * automated exports are identifiable and reversible by whoever owns the ledger. BC's
+   * Document No. is Code[20], so it is truncated rather than silently rejected at post time.
+   */
+  private DocumentNumberFor(context: PostJournalEntryBatchContext): string {
+    return `AIDP-${context.Batch.JournalEntryBatchNumber}`.slice(0, 20);
   }
 
   /** BC wants yyyy-MM-dd; PostingDate is a DATE stored UTC (house rule: UTC everywhere). */
@@ -141,34 +253,144 @@ export class BusinessCentralAccountingSystemAdapter extends BaseExternalAccounti
     return null;
   }
 
+  // ── journal lifecycle ─────────────────────────────────────────────────────────
+
+  /**
+   * This run's journal code: `AI` + 8 base36 chars of SHA-256(batch GUID) = exactly 10 chars,
+   * BC's `Code[10]` limit. Deterministic, so a retry resolves the same journal (see the header
+   * for why that matters — BC does not deduplicate POSTs).
+   */
+  private JournalCodeFor(context: PostJournalEntryBatchContext): string {
+    const channel = (context.Channel ?? 'MAN').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5) || 'MAN';
+    return `AIDP_${channel}`.slice(0, 10);
+  }
+
+  /** displayName carries the batch GUID — this is what makes the collision guard possible. */
+  private JournalDisplayNameFor(context: PostJournalEntryBatchContext): string {
+    return `AIDP ${(context.Channel ?? 'MAN').toUpperCase()} — automated journal entry export`;
+  }
+
+  /**
+   * Find this run's journal, or create it. Idempotent by construction: the code is derived from
+   * the batch, so a re-dispatch lands on the same journal rather than making a second one.
+   *
+   * COLLISION GUARD: the code is a truncated hash, so a stranger's journal could in principle
+   * carry it. Reusing that journal would stage our lines into someone else's batch and then post
+   * theirs too — the exact hazard this whole design exists to prevent. So a pre-existing journal
+   * is only adopted when its displayName carries OUR batch GUID; otherwise this throws.
+   */
+  private async ResolveOrCreateJournal(
+    connector: BusinessCentralConnector,
+    companyIntegration: MJCompanyIntegrationEntity,
+    context: PostJournalEntryBatchContext,
+  ): Promise<BcJournal> {
+    const code = this.JournalCodeFor(context);
+    const displayName = this.JournalDisplayNameFor(context);
+
+    const existing = await this.FetchAll(connector, companyIntegration, context, 'journals');
+    const match = existing.find(r => String(this.Field(r, 'code') ?? '').trim().toUpperCase() === code);
+    // The channel journal is a PERSISTENT container by design — reuse it. Posting empties it, so a
+    // healthy steady state is "exists, empty". No collision guard is needed now that codes are
+    // static and deliberate rather than hash-derived.
+    if (match) return { Id: String(this.Field(match, 'id')), Code: code, Created: false };
+
+    const created = await connector.CreateRecord({
+      CompanyIntegration: companyIntegration,
+      ObjectName: 'journals',
+      ContextUser: context.ContextUser,
+      Attributes: { code, displayName },
+    });
+    if (!created.Success || !created.ExternalID) {
+      throw new Error(
+        `Could not create the Business Central journal '${code}' for batch ${context.Batch.JournalEntryBatchNumber} `
+        + `(HTTP ${created.StatusCode}): ${created.ErrorMessage ?? 'no message'}. Nothing was staged.`,
+      );
+    }
+    return { Id: String(created.ExternalID), Code: code, Created: true };
+  }
+
+
+  /** Best-effort cascade cleanup. Returns a clause describing the outcome for the error message. */
+  private async TryDeleteJournal(
+    connector: BusinessCentralConnector,
+    companyIntegration: MJCompanyIntegrationEntity,
+    context: PostJournalEntryBatchContext,
+    journalId: string,
+  ): Promise<string> {
+    try {
+      const res = await connector.DeleteRecord({
+        CompanyIntegration: companyIntegration,
+        ObjectName: 'journals',
+        ContextUser: context.ContextUser,
+        ExternalID: journalId,
+      });
+      return res.Success
+        ? 'was deleted, so no staged lines remain'
+        : `could NOT be deleted (${res.ErrorMessage ?? 'no message'}) — staged lines may remain and need manual cleanup`;
+    } catch (e) {
+      return `could NOT be deleted (${e instanceof Error ? e.message : String(e)}) — staged lines may remain and need manual cleanup`;
+    }
+  }
+
+  /** Drain every page of an object. BatchSize is generous; HasMore drives the loop. */
+  private async FetchAll(
+    connector: BusinessCentralConnector,
+    companyIntegration: MJCompanyIntegrationEntity,
+    context: PostJournalEntryBatchContext,
+    objectName: string,
+  ): Promise<ExternalRecord[]> {
+    const out: ExternalRecord[] = [];
+    let cursor: string | undefined;
+    for (let guard = 0; guard < 100; guard++) {
+      const page = await connector.FetchChanges({
+        CompanyIntegration: companyIntegration,
+        ObjectName: objectName,
+        WatermarkValue: null,
+        BatchSize: 5000,
+        CurrentCursor: cursor,
+        ContextUser: context.ContextUser,
+      });
+      out.push(...(page.Records ?? []));
+      if (!page.HasMore) return out;
+      cursor = page.NextCursor;
+      if (!cursor) return out;
+    }
+    return out;
+  }
+
+  /** ExternalRecord puts the vendor payload under `Fields`, not on the record itself. */
+  private Field(record: ExternalRecord, key: string): unknown {
+    return record.Fields?.[key];
+  }
+
   // ── the atomic commit ─────────────────────────────────────────────────────────
 
   /**
-   * Post the staged journal — `Microsoft.NAV.post`, BC's atomic commit.
+   * Post the staged journal — `Microsoft.NAV.post`, BC's atomic commit, reached through the
+   * connector's `PostJournal` (connector-business-central >= 1.2.0). BC refuses an unbalanced
+   * journal, so all-or-nothing genuinely lives here regardless of how the lines arrived.
    *
-   * ⛔ BLOCKED ON UPSTREAM: the Integrations framework catalogs this bound action in its
-   * discovery metadata but ships no invocation surface, and we add nothing to the connector
-   * (Marcelo 2026-08-14 — Madhav builds it; requested same day: generic `InvokeBoundAction`
-   * or a BC `PostJournal`). When his API lands, replace this method's body with that call
-   * and delete the throw.
+   * IRREVERSIBLE: a posted journal is corrected with a reversing entry, never un-posted.
    *
-   * EXTERNAL REFERENCE (ruled 2026-08-14, option A now / option B later — tracked in the plan §8):
-   * `Microsoft.NAV.post` returns 204 No Content — BC hands back NO reference. v1 returns OUR
-   * documentNumber (= the batch number) as ExternalJournalEntryBatchRef: it is stamped on every
-   * posted G/L entry and searchable in BC's UI, so it is a functioning reference we control.
-   * UPGRADE (option B, implement with the real VerifyPosted — same read serves both): after the
-   * post, GET `generalLedgerEntries?$filter=documentNumber eq '<batchNumber>'` and store BC's own
-   * entry-number range as the reference; that read is also the Sent-limbo recovery probe.
+   * EXTERNAL REFERENCE: `post` returns 204 with no body, so BC hands back nothing. We return
+   * the JOURNAL CODE as ExternalJournalEntryBatchRef — the batch-level handle that maps our
+   * batch to the BC journal and can be re-derived from the batch GUID at any time. The per-line
+   * `documentNumber` is the complementary handle: it is stamped on every posted G/L entry, so it
+   * is what a human filters General Ledger Entries by to see what we sent.
    */
   private async PostStagedJournal(
     context: PostJournalEntryBatchContext,
-    _connector: BusinessCentralConnector,
-    _companyIntegration: MJCompanyIntegrationEntity,
+    connector: BusinessCentralConnector,
+    companyIntegration: MJCompanyIntegrationEntity,
+    journal: BcJournal,
   ): Promise<string> {
-    throw new Error(
-      `Journal post for batch ${context.Batch.JournalEntryBatchNumber} is blocked on the Integrations upstream: ` +
-      `the Business Central connector has no bound-action surface yet (Microsoft.NAV.post; requested from Madhav 2026-08-14). ` +
-      `Lines are staged in the BC journal only — nothing reached the GL; the next attempt's pre-flight cleans them.`,
-    );
+    const posted = await connector.PostJournal(companyIntegration, journal.Id, context.ContextUser);
+    if (!posted.Success) {
+      throw new Error(
+        `Business Central refused to post journal ${journal.Code} for batch ${context.Batch.JournalEntryBatchNumber} `
+        + `(HTTP ${posted.StatusCode}): ${posted.ErrorMessage ?? 'no message'}. Lines remain STAGED — nothing reached the general ledger.`,
+      );
+    }
+    return journal.Code;
   }
 }
