@@ -29,7 +29,7 @@
  *     emit them); no netting/provisioning is called.
  *
  * All JEs self-balance (triggers 50001 + per-company 50019 enforce it) and are posted to GLPosted
- * (via buildJournalEntryBatch + approveJournalEntryBatch + sendJournalEntryBatch with the AutoApproveGate) so the views — which filter Batched/GLPosted
+ * (via buildJournalEntryBatch + approveJournalEntryBatch + sendJournalEntryBatch with the NoApprovalWorkflowGate) so the views — which filter Batched/GLPosted
  * — show data. This is DEMO data: it PERSISTS by design (unlike the test harnesses, there is no
  * teardown). Idempotency comes entirely from the static IDs.
  *
@@ -59,9 +59,11 @@ import type { mjBizAppsCommonOrganizationEntity } from '@mj-biz-apps/common-enti
 import { AccountingCompanyProfileEntityServer } from '@mj-biz-apps/accounting-core-entities-server';
 
 import {
-  buildJournalEntryBatch, approveJournalEntryBatch, sendJournalEntryBatch, AutoApproveGate,
+  buildJournalEntryBatch, approveJournalEntryBatch, sendJournalEntryBatch,
   GetJournalEntryBatchSummaryEntryType, LookupJournalEntryTypeByCode, JournalEntryEntityServer,
 } from '@mj-biz-apps/accounting-core-entities-server';
+
+import { NoApprovalWorkflowGate } from './NoApprovalWorkflowGate.js';
 
 // ─── Entity name constants ───────────────────────────────────────────────────
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
@@ -506,10 +508,10 @@ async function postPending(contextUser: UserInfo, report: DemoSeedReport, provid
   const companyIds = [...new Set((res.Results ?? []).map(r => r.CompanyID))];
   if (companyIds.length === 0) throw new Error('postPending: no pending JEs to batch.');
   for (const companyId of companyIds) {
-    const built = await buildJournalEntryBatch(companyId, TARGET_SYSTEM, contextUser.ID, contextUser, provider, AutoApproveGate);
+    const built = await buildJournalEntryBatch(companyId, TARGET_SYSTEM, contextUser.ID, contextUser, provider, NoApprovalWorkflowGate);
     if (built === null) throw new Error(`postPending: buildJournalEntryBatch returned null for company ${companyId} (no pending JEs or all netted to zero).`);
     await approveJournalEntryBatch(built.batchId, contextUser.ID, contextUser, provider);
-    const batch = await sendJournalEntryBatch(built.batchId, contextUser, { gate: AutoApproveGate, provider });
+    const batch = await sendJournalEntryBatch(built.batchId, contextUser, { gate: NoApprovalWorkflowGate, provider });
     if (batch.Status !== 'Posted') throw new Error(`postPending: batch should be Posted, got ${batch.Status}`);
     report.BatchesPosted += 1;
   }

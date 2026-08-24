@@ -32,7 +32,6 @@ import {
   buildJournalEntryBatch,
   approveJournalEntryBatch,
   sendJournalEntryBatch,
-  AutoApproveGate,
   TasksAppApprovalGate,
   mockErpPoster,
   type JournalEntryBatchApprovalGate,
@@ -40,6 +39,7 @@ import {
 import type { mjBizAppsAccountingAccountingCompanyProfileEntity } from '@mj-biz-apps/accounting-entities';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import { bootstrapLive, teardownLive, scalar, SCHEMA, type LiveCtx } from './live-bootstrap.js';
+import { NoApprovalWorkflowGate } from './NoApprovalWorkflowGate.js';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
@@ -163,7 +163,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
       `SELECT SUM(l.DebitAmount) FROM ${SCHEMA}.JournalEntryLine l JOIN ${SCHEMA}.JournalEntry j ON j.ID=l.JournalEntryID
        WHERE j.CompanyID='${ctx.company.id}' AND j.Status='Pending' AND j.EntryTypeID<>'${ctx.batchSummaryTypeId}'`));
 
-    const result = await buildJournalEntryBatch(ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, AutoApproveGate);
+    const result = await buildJournalEntryBatch(ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, NoApprovalWorkflowGate);
     expect(result, 'buildJournalEntryBatch returned null — expected pending JEs to batch').not.toBeNull();
     ctx.createdBatchIds.push(result!.batchId);
 
@@ -188,7 +188,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
 
     // Approve → dispatch (mock poster) → Posted; members + summary GLPosted.
     await approveJournalEntryBatch(result!.batchId, ctx.user.ID, ctx.user, provider);
-    const batch = await sendJournalEntryBatch(result!.batchId, ctx.user, { gate: AutoApproveGate, poster: mockErpPoster, provider });
+    const batch = await sendJournalEntryBatch(result!.batchId, ctx.user, { gate: NoApprovalWorkflowGate, poster: mockErpPoster, provider });
     expect(batch.Status).toBe('Posted');
     const notPosted = Number(await scalar(ctx.pool, `SELECT COUNT(*) FROM ${SCHEMA}.JournalEntry WHERE JournalEntryBatchID='${result!.batchId}' AND Status<>'GLPosted'`));
     expect(notPosted).toBe(0);
@@ -451,7 +451,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     // the guard closes) → approve must refuse with the footing message.
     const fuel = await createJE(false, 75, 'L17 fuel');
     void fuel;
-    const result = await buildJournalEntryBatch(ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, AutoApproveGate);
+    const result = await buildJournalEntryBatch(ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, NoApprovalWorkflowGate);
     ctx.createdBatchIds.push(result.batchId);
     await ctx.pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET TotalDebits = TotalDebits + 999 WHERE ID='${result.batchId}'`);
 
@@ -475,7 +475,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
 
   it('L19 — owned collections: LoadMembers + LoadSummaryJournalEntry hydrate what the batch owns; entity Cancel() reverses the lock', async () => {
     const fuel = await createJE(true, 85, 'L19 fuel');
-    const result = await buildJournalEntryBatch(ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, AutoApproveGate);
+    const result = await buildJournalEntryBatch(ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, NoApprovalWorkflowGate);
 
     const batch = await provider.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, ctx.user);
     expect(await batch.Load(result.batchId)).toBe(true);

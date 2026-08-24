@@ -2,7 +2,7 @@
  * _maint-clean-batches.ts — one-off demo cleanup. Resolves STUCK batches (Pending + no approval task, so the
  * UI can't approve/reject them) and tidies the list:
  *   1. cancelJournalEntryBatch() each stuck batch  → its JEs unlock back to Pending, summaries deleted, batch → Cancelled
- *   2. buildJournalEntryBatch(AutoApproveGate) → approve → send  → sweep all Pending JEs to Posted (can't re-stick)
+ *   2. buildJournalEntryBatch(NoApprovalWorkflowGate) → approve → send  → sweep all Pending JEs to Posted (can't re-stick)
  *   3. delete every empty Cancelled batch row  → list shows only real (Posted) batches
  * Run from the instance worktree root:
  *   npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/_maint-clean-batches.ts
@@ -13,11 +13,12 @@ import path from 'path';
 import { Metadata, RunView } from '@memberjunction/core';
 import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
 import { finishAndExit } from './harness-exit.js';
+import { NoApprovalWorkflowGate } from './NoApprovalWorkflowGate.js';
 import '@memberjunction/server-bootstrap-lite';
 import '@mj-biz-apps/common-entities';
 import '@mj-biz-apps/accounting-entities';
 import '@mj-biz-apps/accounting-core-entities-server';
-import { cancelJournalEntryBatch, buildJournalEntryBatch, approveJournalEntryBatch, sendJournalEntryBatch, AutoApproveGate } from '@mj-biz-apps/accounting-core-entities-server';
+import { cancelJournalEntryBatch, buildJournalEntryBatch, approveJournalEntryBatch, sendJournalEntryBatch } from '@mj-biz-apps/accounting-core-entities-server';
 import type { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
@@ -51,15 +52,15 @@ async function main(): Promise<void> {
     console.log(`  cancelled ${b.ID} (JEs freed → Pending)`);
   }
 
-  // ── 2. sweep all Pending JEs into one fresh batch → Posted (AutoApproveGate) ──
+  // ── 2. sweep all Pending JEs into one fresh batch → Posted (NoApprovalWorkflowGate) ──
   const pend = await rv.RunView<{ ID: string }>({ EntityName: JE_ENTITY, ExtraFilter: `Status='Pending'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true }, user);
   const pendCount = (pend.Results ?? []).length;
   console.log(`Pending JEs to sweep: ${pendCount}`);
   if (pendCount > 0) {
-    const built = await buildJournalEntryBatch('BusinessCentral', user.ID, user, AutoApproveGate);
+    const built = await buildJournalEntryBatch('BusinessCentral', user.ID, user, NoApprovalWorkflowGate);
     if (built) {
       await approveJournalEntryBatch(built.batchId, user.ID, user);
-      const posted = await sendJournalEntryBatch(built.batchId, user, { gate: AutoApproveGate });
+      const posted = await sendJournalEntryBatch(built.batchId, user, { gate: NoApprovalWorkflowGate });
       console.log(`  swept ${built.jeCount} JE(s) → batch ${built.batchId} → ${posted.Status} (${posted.ExternalJournalEntryBatchRef})`);
     } else {
       console.log('  buildJournalEntryBatch netted nothing (JEs may not net to a balanced summary) — left Pending.');

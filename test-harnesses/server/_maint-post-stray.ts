@@ -1,6 +1,6 @@
 /**
  * _maint-post-stray.ts — one-off maintenance: sweep every currently-Pending JE into ONE batch and run it
- * through approve → send → Posted (mock ERP, AutoApproveGate). Clears the block2 harness clean-slate guard
+ * through approve → send → Posted (mock ERP, NoApprovalWorkflowGate). Clears the block2 harness clean-slate guard
  * by completing the demo order JE(s) lifecycle to GLPosted — good demo data (a fully-flowed order) per
  * plan §10. Idempotent-ish: does nothing when nothing is Pending. Run from the instance worktree root:
  *   npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/_maint-post-stray.ts
@@ -11,11 +11,12 @@ import path from 'path';
 import { RunView } from '@memberjunction/core';
 import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
 import { finishAndExit } from './harness-exit.js';
+import { NoApprovalWorkflowGate } from './NoApprovalWorkflowGate.js';
 import '@memberjunction/server-bootstrap-lite';
 import '@mj-biz-apps/common-entities';
 import '@mj-biz-apps/accounting-entities';
 import '@mj-biz-apps/accounting-core-entities-server';
-import { buildJournalEntryBatch, approveJournalEntryBatch, sendJournalEntryBatch, AutoApproveGate } from '@mj-biz-apps/accounting-core-entities-server';
+import { buildJournalEntryBatch, approveJournalEntryBatch, sendJournalEntryBatch } from '@mj-biz-apps/accounting-core-entities-server';
 
 async function main(): Promise<void> {
   dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
@@ -35,11 +36,11 @@ async function main(): Promise<void> {
   console.log(`Pending JEs before: ${pending.length}`);
   if (pending.length === 0) { finishAndExit('Nothing Pending — no-op.', 0, pool); return; }
 
-  const built = await buildJournalEntryBatch('BusinessCentral', user.ID, user, AutoApproveGate);
+  const built = await buildJournalEntryBatch('BusinessCentral', user.ID, user, NoApprovalWorkflowGate);
   if (!built) { finishAndExit('buildJournalEntryBatch returned null (nothing netted).', 0, pool); return; }
   console.log(`Built batch ${built.batchId}: ${built.jeCount} JE(s), ${built.summaryLineCount} summary line(s), ${built.totalDebits}/${built.totalCredits}`);
   await approveJournalEntryBatch(built.batchId, user.ID, user);
-  const posted = await sendJournalEntryBatch(built.batchId, user, { gate: AutoApproveGate });
+  const posted = await sendJournalEntryBatch(built.batchId, user, { gate: NoApprovalWorkflowGate });
   console.log(`Batch ${built.batchId} → ${posted.Status} (ref ${posted.ExternalJournalEntryBatchRef})`);
   finishAndExit(`Posted ${built.jeCount} previously-Pending JE(s). Clean slate for block2.`, 0, pool);
 }

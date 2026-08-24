@@ -159,13 +159,14 @@ export interface JournalEntryBatchApprovalGate {
   ): Promise<void>;
 }
 
-/** Test/seed gate — always approved. Real deployments use the bizapps-tasks-backed gate. */
-export const AutoApproveGate: JournalEntryBatchApprovalGate = {
-  async assertApproved() { /* always approved */ },
-  // Nothing to record: this gate raises no approval Task, so there is no decision row to write and
-  // no half-approved state to reach. A no-op keeps it a complete gate rather than a special case.
-  async recordDecision() { /* no task, no decision */ },
-};
+// There is deliberately NO always-approves gate here any more. `AutoApproveGate` used to be the
+// DEFAULT for the three build entry points above and was exported from this package, so "no CFO
+// precondition, no approval Task raised, dispatch ungated" was what a consumer got by OMITTING an
+// argument — a bypass shaped like a policy, which typechecks and reads as safe at the call site.
+// It also proved nothing in tests: a stub that always says yes can only confirm the path it
+// disables (the gate double that earns its place is one that can FAIL — see L11's failingGate).
+// Seeding/maintenance genuinely needs "run without a tasks app"; that is a fixture concern and now
+// lives in the harness as NoApprovalWorkflowGate, named for what it actually does.
 
 /**
  * Thrown when a build finds nothing to batch (no candidate JEs, or every group netted to zero so
@@ -201,7 +202,7 @@ export async function buildJournalEntryBatch(
   batchedByUserId: string,
   contextUser: UserInfo,
   provider: IMetadataProvider,
-  gate: JournalEntryBatchApprovalGate = AutoApproveGate,
+  gate: JournalEntryBatchApprovalGate,
   options: BuildJournalEntryBatchOptions = {},
 ): Promise<BuildJournalEntryBatchResult> {
   const p = resolveProviders(provider);
@@ -384,7 +385,7 @@ export async function buildJournalEntryBatchFromExplicitIds(
   batchedByUserId: string,
   contextUser: UserInfo,
   provider: IMetadataProvider,
-  gate: JournalEntryBatchApprovalGate = AutoApproveGate,
+  gate: JournalEntryBatchApprovalGate,
 ): Promise<BuildJournalEntryBatchResult[]> {
   if (jeIds.length === 0) throw new EmptyJournalEntryBatchError('Nothing to batch: no journal entries were selected.');
   const p = resolveProviders(provider);
@@ -436,7 +437,7 @@ export async function buildJournalEntryBatchFromView(
   batchedByUserId: string,
   contextUser: UserInfo,
   provider: IMetadataProvider,
-  gate: JournalEntryBatchApprovalGate = AutoApproveGate,
+  gate: JournalEntryBatchApprovalGate,
   options: BuildJournalEntryBatchFromViewOptions = {},
 ): Promise<BuildJournalEntryBatchResult[]> {
   const p = resolveProviders(provider);
@@ -739,8 +740,8 @@ export async function regenerateJournalEntryBatch(
  * status check, then `gate.assertApproved` throws) and decision-recorded-while-Pending (the gate is
  * satisfied, then send throws on the status). `Approve()` does both in ONE transaction.
  *
- * Retained for the AutoApproveGate seed/maintenance harnesses, where the gate raises no approval
- * Task at all — there is no decision to record, so there is no split to reintroduce.
+ * Retained for the seed/maintenance harnesses, which run with the harness's NoApprovalWorkflowGate:
+ * no approval Task is raised at all, so there is no decision to record and no split to reintroduce.
  */
 export async function approveJournalEntryBatch(
   batchId: string, approvedByUserId: string, contextUser: UserInfo, provider: IMetadataProvider,
