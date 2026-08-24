@@ -1,4 +1,21 @@
-# Blocks a release PR (next -> main) while changesets are still pending.
+# The one gate a release has to pass. Two assertions, both aggregate, both about the release
+# as a whole rather than about any single contributing PR:
+#
+#   1. no changesets may still be pending
+#   2. if migrations/ changed since the last released tag, the version bump must be at
+#      least a minor
+#
+# Assertion 2 replaces the old publish-time version prediction, and it deliberately does NOT
+# live on PRs into `next`. A per-PR form of it over-constrains: changesets AGGREGATE, so one
+# minor in the release window already makes the release a minor, and demanding that every
+# migrations-touching PR carry its own minor fails people who correctly relied on a minor
+# already sitting in `.changeset/`. Someone adding a small follow-up migration with a patch
+# changeset is not making a mistake. The property we actually care about is a property of the
+# release, so it is checked once, here, where the whole release is visible and the fix is to
+# raise a single changeset.
+#
+# Consequence worth stating: contributors never have to think about bump levels while doing
+# ordinary work. It becomes a question exactly once, when a version is being cut.
 #
 # Without this the failure lands too late: publish.yml refuses to run, but by then the
 # merge has already happened and `main` holds unversioned work. This check fails on the
@@ -26,6 +43,9 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true # both assertions compare against the last v* tag
 
       - name: No changesets may be pending on a release PR
         run: |
@@ -38,3 +58,33 @@ jobs:
           VERSION=$(jq -r .version packages/Entities/package.json)
           echo "No pending changesets — this PR releases $VERSION"
           echo "Releasing **$VERSION**" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: A release carrying migrations must be at least a minor
+        run: |
+          LAST_TAG=$(git tag --list 'v*' --sort=-v:refname | head -1)
+          if [ -z "$LAST_TAG" ]; then
+            echo "No v* tag yet — nothing to compare against"
+            exit 0
+          fi
+
+          MIGRATIONS=$(git --no-pager diff --name-only "$LAST_TAG" HEAD -- migrations/ || true)
+          if [ -z "$MIGRATIONS" ]; then
+            echo "No migration changes since $LAST_TAG — any bump level is fine"
+            exit 0
+          fi
+
+          VERSION=$(jq -r .version packages/Entities/package.json)
+          PREV=${LAST_TAG#v}
+          # Versions are already resolved by the time a release PR exists — the Version
+          # Packages PR consumed the changesets on `next` — so compare the numbers directly
+          # instead of re-deriving intent from changeset files.
+          IFS='.' read -r PMAJ PMIN _ <<< "$PREV"
+          IFS='.' read -r NMAJ NMIN _ <<< "$VERSION"
+          if [ "$NMAJ" -gt "$PMAJ" ] || { [ "$NMAJ" -eq "$PMAJ" ] && [ "$NMIN" -gt "$PMIN" ]; }; then
+            echo "$PREV -> $VERSION is a minor or major bump, and migrations changed — ok"
+            exit 0
+          fi
+
+          echo "::error::This release changes migrations/ but only bumps $PREV -> $VERSION, a patch. A consumer upgrading on a patch would not expect schema changes. Raise one changeset on next to minor, merge the Version Packages PR, then update this release PR. Migrations changed since $LAST_TAG:"
+          echo "$MIGRATIONS" | sed 's/^/  /'
+          exit 1
