@@ -1,0 +1,40 @@
+# Blocks a release PR (next -> main) while changesets are still pending.
+#
+# Without this the failure lands too late: publish.yml refuses to run, but by then the
+# merge has already happened and `main` holds unversioned work. This check fails on the
+# PR instead, so the fix — merge the Version Packages PR into `next` first — happens
+# before anything reaches the release branch.
+#
+# A merge queue would be the heavier way to get the same property, and it does not fit:
+# a queue gates on checks and merge order, and `main` only ever takes one release PR at a
+# time. A required status check on the PR is the whole mechanism needed.
+#
+# To make this blocking rather than advisory, add "release-readiness" to the required
+# status checks on the `main-next-protect` ruleset. Until then it shows as a red check.
+name: Release readiness
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release-readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No changesets may be pending on a release PR
+        run: |
+          PENDING=$(find .changeset -name "*.md" -not -name "README.md" 2>/dev/null | wc -l | tr -d ' ')
+          if [ "$PENDING" -ne 0 ]; then
+            echo "::error::$PENDING changeset(s) are still pending. Versioning happens on next: merge the open \"Version Packages\" PR there first, then re-open or update this release PR. Merging now would put unversioned work on main, and publish.yml would refuse to run."
+            find .changeset -name "*.md" -not -name "README.md" | sed 's/^/  /'
+            exit 1
+          fi
+          VERSION=$(jq -r .version packages/Entities/package.json)
+          echo "No pending changesets — this PR releases $VERSION"
+          echo "Releasing **$VERSION**" >> "$GITHUB_STEP_SUMMARY"

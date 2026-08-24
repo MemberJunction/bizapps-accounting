@@ -35,6 +35,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          fetch-tags: true # the bump-level check compares migrations/ against the last v* tag
 
       # Must precede setup-node: `cache: 'pnpm'` needs pnpm already on PATH.
       - uses: pnpm/action-setup@v4
@@ -47,6 +48,41 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # Ported from publish.yml's old "Determine next expected version" step. That step
+      # predicted the bump independently and aborted the release on a mismatch, which is how
+      # a migrations-bearing release was stopped from shipping as a patch. Under the split
+      # there is nothing left to compare at publish time — changesets alone decide the
+      # version — so the check moves here, to the one place where a wrong bump level is still
+      # cheap to fix: the Version Packages PR, before anything is published.
+      - name: Check the bump level matches what changed
+        run: |
+          PENDING=$(find .changeset -name "*.md" -not -name "README.md" 2>/dev/null | wc -l | tr -d ' ')
+          if [ "$PENDING" -eq 0 ]; then
+            echo "No pending changesets — nothing to check"
+            exit 0
+          fi
+
+          LAST_TAG=$(git tag --list 'v*' --sort=-v:refname | head -1)
+          if [ -z "$LAST_TAG" ]; then
+            echo "No v* tag yet — cannot compare, skipping"
+            exit 0
+          fi
+
+          MIGRATIONS_CHANGED=$(git --no-pager diff --name-only "$LAST_TAG" HEAD -- migrations/ || true)
+          if [ -z "$MIGRATIONS_CHANGED" ]; then
+            echo "No migration changes since $LAST_TAG — any bump level is fine"
+            exit 0
+          fi
+
+          if grep -qhE '^"@mj-biz-apps/.*":[[:space:]]*(minor|major)' .changeset/*.md; then
+            echo "Migrations changed since $LAST_TAG and a minor/major changeset is present — ok"
+            exit 0
+          fi
+
+          echo "::error::migrations/ changed since $LAST_TAG but every pending changeset is a patch. A release that ships migrations is a minor at least — a consumer upgrading on a patch would not expect schema changes. Raise one changeset to minor. Files changed:"
+          echo "$MIGRATIONS_CHANGED"
+          exit 1
 
       - uses: changesets/action@v1
         with:
