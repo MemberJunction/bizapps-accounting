@@ -49,13 +49,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Ported from publish.yml's old "Determine next expected version" step. That step
-      # predicted the bump independently and aborted the release on a mismatch, which is how
-      # a migrations-bearing release was stopped from shipping as a patch. Under the split
-      # there is nothing left to compare at publish time — changesets alone decide the
-      # version — so the check moves here, to the one place where a wrong bump level is still
-      # cheap to fix: the Version Packages PR, before anything is published.
-      - name: Check the bump level matches what changed
+      # WARNS only. The enforcing version of this lives in bump-level.yml, on each PR, where
+      # the scope is that PR's own diff and the author can still fix it in place. By the time
+      # a release has aggregated, "migrations changed since the last tag but no minor is
+      # pending" has plausible innocent explanations, and failing the Version Packages PR
+      # would strand the release with no good next move. So: surface it, do not block it.
+      - name: Warn if the aggregate bump level looks low
         run: |
           PENDING=$(find .changeset -name "*.md" -not -name "README.md" 2>/dev/null | wc -l | tr -d ' ')
           if [ "$PENDING" -eq 0 ]; then
@@ -80,9 +79,8 @@ jobs:
             exit 0
           fi
 
-          echo "::error::migrations/ changed since $LAST_TAG but every pending changeset is a patch. A release that ships migrations is a minor at least — a consumer upgrading on a patch would not expect schema changes. Raise one changeset to minor. Files changed:"
-          echo "$MIGRATIONS_CHANGED"
-          exit 1
+          echo "::warning::migrations/ changed since $LAST_TAG but every pending changeset is a patch. Usually a release shipping schema changes should be a minor. Check whether a changeset needs raising — bump-level.yml enforces this per PR, so this is either a deliberate exemption or something that slipped in before that check existed. Files changed:"
+          echo "$MIGRATIONS_CHANGED" | sed 's/^/  /'
 
       - uses: changesets/action@v1
         with:

@@ -1,0 +1,64 @@
+# A PR that changes migrations/ must carry a minor (or major) changeset.
+#
+# Replaces the old publish-time check, which computed an expected version from
+# "did migrations/ change since the last v* tag" and hard-failed on a mismatch before
+# publishing. The property was worth keeping; the timing and the scope were not.
+#
+# Scope: this compares THIS PR's own diff, not everything since the last tag. The
+# since-the-tag form is wrong per-PR — once one PR lands migrations with a minor
+# changeset, every later patch-level PR in the same release window would fail against it.
+# Asking "does this PR touch migrations, and does this PR's changeset say minor" is local,
+# has no false positives, and tells the person who wrote it while they are still in it.
+#
+# Escape hatch: label the PR `bump-level-exempt`. Some migrations genuinely are not a
+# feature — a re-captured baseline, a comment fix — and a gate with no exit invites people
+# to fight it rather than think.
+name: Bump level
+
+on:
+  pull_request:
+    branches: [next, main]
+
+permissions:
+  contents: read
+
+jobs:
+  bump-level:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: "!contains(github.event.pull_request.labels.*.name, 'bump-level-exempt')"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: A migrations change needs a minor changeset
+        env:
+          BASE: ${{ github.base_ref }}
+        run: |
+          git fetch --quiet origin "$BASE"
+          RANGE="origin/$BASE...HEAD"
+
+          MIGRATIONS=$(git --no-pager diff --name-only "$RANGE" -- migrations/ || true)
+          if [ -z "$MIGRATIONS" ]; then
+            echo "This PR does not touch migrations/ — nothing to check"
+            exit 0
+          fi
+
+          # Only changesets ADDED by this PR count: an inherited one belongs to someone else's change.
+          ADDED=$(git --no-pager diff --name-only --diff-filter=A "$RANGE" -- '.changeset/*.md' | grep -v 'README.md' || true)
+          if [ -z "$ADDED" ]; then
+            echo "::error::This PR changes migrations/ but adds no changeset. A release carrying schema changes needs one, at minor. Files:"
+            echo "$MIGRATIONS" | sed 's/^/  /'
+            exit 1
+          fi
+
+          if echo "$ADDED" | xargs grep -qhE '^"@mj-biz-apps/.*":[[:space:]]*(minor|major)'; then
+            echo "migrations/ changed and this PR's changeset is minor or major — ok"
+            exit 0
+          fi
+
+          echo "::error::This PR changes migrations/ but its changeset is patch-only. A consumer upgrading on a patch would not expect schema changes — raise it to minor, or label the PR 'bump-level-exempt' if this migration genuinely is not a feature. Migrations:"
+          echo "$MIGRATIONS" | sed 's/^/  /'
+          echo "Changesets added:"; echo "$ADDED" | sed 's/^/  /'
+          exit 1
