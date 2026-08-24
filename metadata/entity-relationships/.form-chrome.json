@@ -59,44 +59,6 @@
   },
   {
     "_comments": [
-      "Journal Entry form: posted order lines are not a JE working surface."
-    ],
-    "fields": {
-      "Configuration": {
-        "UI": {
-          "inclusion": "None"
-        }
-      }
-    },
-    "primaryKey": {
-      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: Journal Entries&RelatedEntity=MJ_BizApps_Orders: Order Lines&RelatedEntityJoinField=JournalEntryID"
-    },
-    "sync": {
-      "lastModified": "2026-08-15T02:45:44.224Z",
-      "checksum": "9cefa22b1ba112e419ae4bb1b3a7c0523ed4d83203e6d34e454e6ae81d2a1f62"
-    }
-  },
-  {
-    "_comments": [
-      "Journal Entry form: posted payment headers are not a JE working surface."
-    ],
-    "fields": {
-      "Configuration": {
-        "UI": {
-          "inclusion": "None"
-        }
-      }
-    },
-    "primaryKey": {
-      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: Journal Entries&RelatedEntity=MJ_BizApps_Orders: Payment Headers&RelatedEntityJoinField=JournalEntryID"
-    },
-    "sync": {
-      "lastModified": "2026-08-15T02:45:44.279Z",
-      "checksum": "9cefa22b1ba112e419ae4bb1b3a7c0523ed4d83203e6d34e454e6ae81d2a1f62"
-    }
-  },
-  {
-    "_comments": [
       "JE Batch form: member entries stay first-class (read-only collection)."
     ],
     "fields": {
@@ -192,7 +154,7 @@
   },
   {
     "_comments": [
-      "GL Account form: Due-To inverse is owned by the Due-From section — not a candidate."
+      "GL Account form: Due-To inverse is owned by the Due-From section \u2014 not a candidate."
     ],
     "fields": {
       "Configuration": {
@@ -263,25 +225,6 @@
     },
     "sync": {
       "lastModified": "2026-08-15T02:45:44.440Z",
-      "checksum": "58975efd1d9187857b888d0129194c7b3c6f8248bca208c86585ea58e2517426"
-    }
-  },
-  {
-    "_comments": [
-      "Dimension form: order-line tags sit in More."
-    ],
-    "fields": {
-      "Configuration": {
-        "UI": {
-          "inclusion": "More"
-        }
-      }
-    },
-    "primaryKey": {
-      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: Dimensions&RelatedEntity=MJ_BizApps_Orders: Order Line Dimensions&RelatedEntityJoinField=DimensionID"
-    },
-    "sync": {
-      "lastModified": "2026-08-15T02:45:44.474Z",
       "checksum": "58975efd1d9187857b888d0129194c7b3c6f8248bca208c86585ea58e2517426"
     }
   },
