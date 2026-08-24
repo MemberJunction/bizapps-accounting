@@ -34,3 +34,14 @@ and `scripts/append-codegen.sh`, where it was the default argument.
 `pnpm install --frozen-lockfile` failed on `next`, on PRs to `main`, and on every
 feature branch — `ERR_PNPM_OUTDATED_LOCKFILE`. The publish workflow's own
 `mergemain:update-lock` step exists to prevent exactly this; a hand-run bump skips it.
+
+**Three cross-schema form-chrome entries removed.** `metadata/entity-relationships/.form-chrome.json`
+configured `inclusion` for relationships whose related entity lives in **bizapps-orders** — Journal
+Entries → Order Lines and → Payment Headers, and Dimensions → Order Line Dimensions. Those
+relationship rows exist only because orders' tables carry the FKs, so CodeGen creates them when
+orders installs: on a database with accounting and no orders there are none, the `@lookup:` resolved
+nothing, and `mj sync push` aborted with a full transaction rollback. Accounting's metadata could not
+be applied on any host that installs it without orders — every standalone install. Removed here and
+re-homed in orders, which may legally reference accounting's entities (MemberJunction/bizapps-orders#92).
+No behaviour is lost: `inclusion` is layer 1 of the runtime chrome stack, not a CodeGen input.
+
