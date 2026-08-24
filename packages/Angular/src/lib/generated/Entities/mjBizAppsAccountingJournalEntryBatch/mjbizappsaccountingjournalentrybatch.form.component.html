@@ -10,11 +10,11 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Batch Details Section -->
+    <!-- Batch Information Section -->
     <mj-collapsible-panel
-        SectionKey="batchDetails"
-        SectionName="Batch Details"
-        Icon="fa fa-list-ol"
+        SectionKey="batchInformation"
+        SectionName="Batch Information"
+        Icon="fa fa-info-circle"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -45,6 +45,24 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
+            FieldName="TargetSystem"
+            Type="select"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- Financial Summary Section -->
+    <mj-collapsible-panel
+        SectionKey="financialSummary"
+        SectionName="Financial Summary"
+        Icon="fa fa-calculator"
+        [Form]="this"
+        [FormContext]="formContext">
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
             FieldName="SummaryJournalEntryID"
             Type="textbox"
             [EditMode]="EditMode"
@@ -54,19 +72,35 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="TargetSystem"
-            Type="select"
+            FieldName="TotalEntries"
+            Type="number"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="TotalDebits"
+            Type="number"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="TotalCredits"
+            Type="number"
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
 
     </mj-collapsible-panel>
 
-    <!-- Status and Lifecycle Section -->
+    <!-- Batch Lifecycle Section -->
     <mj-collapsible-panel
-        SectionKey="statusAndLifecycle"
-        SectionName="Status and Lifecycle"
-        Icon="fa fa-sync-alt"
+        SectionKey="batchLifecycle"
+        SectionName="Batch Lifecycle"
+        Icon="fa fa-flag"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -97,42 +131,34 @@
 
     </mj-collapsible-panel>
 
-    <!-- Financial Summary Section -->
+    <!-- ERP Integration Section -->
     <mj-collapsible-panel
-        SectionKey="financialSummary"
-        SectionName="Financial Summary"
-        Icon="fa fa-calculator"
+        SectionKey="eRPIntegration"
+        SectionName="ERP Integration"
+        Icon="fa fa-sync"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="TotalEntries"
-            Type="number"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="TotalDebits"
-            Type="number"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="TotalCredits"
-            Type="number"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
             FieldName="ExternalJournalEntryBatchRef"
             Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="SentAt"
+            Type="datepicker"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="PostedAt"
+            Type="datepicker"
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
@@ -147,10 +173,10 @@
 
     </mj-collapsible-panel>
 
-    <!-- Approval and Dispatch Section -->
+    <!-- Approval and Processing Section -->
     <mj-collapsible-panel
-        SectionKey="approvalAndDispatch"
-        SectionName="Approval and Dispatch"
+        SectionKey="approvalAndProcessing"
+        SectionName="Approval and Processing"
         Icon="fa fa-check-double"
         [Form]="this"
         [FormContext]="formContext">
@@ -170,22 +196,6 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
             LinkType="Record"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="SentAt"
-            Type="datepicker"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="PostedAt"
-            Type="datepicker"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
         ></mj-form-field>
         <mj-form-field 
             [Record]="record"
@@ -253,9 +263,9 @@
         <div>
             <mj-explorer-entity-data-grid
                 [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entries','JournalEntryBatchID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entries')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entries','JournalEntryBatchID')"
                 [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntries')"
-                [ShowToolbar]="false"
+                [ShowToolbar]="true"
                 (Navigate)="OnFormNavigate($event)"
                 (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntries', $event.totalRowCount)"
                 >

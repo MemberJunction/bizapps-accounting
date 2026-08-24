@@ -169,9 +169,9 @@
         <div>
             <mj-explorer-entity-data-grid
                 [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entry Line Dimensions','JournalEntryLineID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entry Line Dimensions')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entry Line Dimensions','JournalEntryLineID')"
                 [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntryLineDimensions')"
-                [ShowToolbar]="false"
+                [ShowToolbar]="true"
                 (Navigate)="OnFormNavigate($event)"
                 (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntryLineDimensions', $event.totalRowCount)"
                 >

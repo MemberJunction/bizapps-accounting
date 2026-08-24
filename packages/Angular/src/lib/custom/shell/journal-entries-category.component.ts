@@ -2,7 +2,7 @@ import { Component, ChangeDetectionStrategy } from '@angular/core';
 import { RegisterClass } from '@memberjunction/global';
 import { BaseDashboard } from '@memberjunction/ng-shared';
 import { ResourceData } from '@memberjunction/core-entities';
-import { RunView } from '@memberjunction/core';
+import { CompositeKey, RunView } from '@memberjunction/core';
 import { MJLeftNavSection } from '@memberjunction/ng-ui-components';
 import { CategoryShellBase } from './category-shell.base';
 import { PageRefreshService } from '../../transfer-pending/shell-refresh/page-refresh.service';
@@ -13,7 +13,6 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 export type JournalEntriesPageId =
   | 'dashboard'
   | 'all-entries'
-  | 'workspace'
   | 'approvals';
 
 /**
@@ -53,7 +52,6 @@ export class JournalEntriesCategoryComponent extends CategoryShellBase {
         items: [
           { id: 'dashboard', label: 'Dashboard', icon: 'fa-solid fa-gauge-high' },
           { id: 'all-entries', label: 'All journal entries', icon: 'fa-solid fa-table-list' },
-          { id: 'workspace', label: 'JE workspace', icon: 'fa-solid fa-diagram-project' },
           {
             id: 'approvals',
             label: 'Awaiting approval',
@@ -76,6 +74,16 @@ export class JournalEntriesCategoryComponent extends CategoryShellBase {
 
   protected async loadCategoryData(): Promise<void> {
     await this.loadApprovalBadge();
+  }
+
+  /** New JE is an Explorer record tab — same path as Orders' New order. */
+  public OpenNewJournalEntry(): void {
+    this.navigationService.OpenNewEntityRecord(JE_ENTITY);
+  }
+
+  public OpenJournalEntry(id: string): void {
+    if (!id) return;
+    this.navigationService.OpenEntityRecord(JE_ENTITY, CompositeKey.FromID(id));
   }
 
 

@@ -71,10 +71,10 @@
 
     </mj-collapsible-panel>
 
-    <!-- Hierarchy and Rollup Section -->
+    <!-- Hierarchy and Currency Section -->
     <mj-collapsible-panel
-        SectionKey="hierarchyAndRollup"
-        SectionName="Hierarchy and Rollup"
+        SectionKey="hierarchyAndCurrency"
+        SectionName="Hierarchy and Currency"
         Icon="fa fa-sitemap"
         [Form]="this"
         [FormContext]="formContext">
@@ -90,24 +90,6 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="RootParentGLAccountID"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Financial Settings Section -->
-    <mj-collapsible-panel
-        SectionKey="financialSettings"
-        SectionName="Financial Settings"
-        Icon="fa fa-money-bill"
-        [Form]="this"
-        [FormContext]="formContext">
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
             FieldName="CurrencyCode"
             Type="textbox"
             [EditMode]="EditMode"
@@ -117,19 +99,51 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="IsActive"
-            Type="checkbox"
+            FieldName="RootParentGLAccountID"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="ParentGLAccountIDDepth"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="ParentGLAccountIDPath"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="ParentGLAccountIDIsLeaf"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="ParentGLAccountIDChildCount"
+            Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
 
     </mj-collapsible-panel>
 
-    <!-- Integration Details Section -->
+    <!-- Integration Settings Section -->
     <mj-collapsible-panel
-        SectionKey="integrationDetails"
-        SectionName="Integration Details"
-        Icon="fa fa-exchange-alt"
+        SectionKey="integrationSettings"
+        SectionName="Integration Settings"
+        Icon="fa fa-plug"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -145,6 +159,14 @@
             [ShowLabel]="true"
             FieldName="ExternalAccountID"
             Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="IsActive"
+            Type="checkbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
@@ -191,31 +213,6 @@
          RELATED ENTITY PANELS
          ======================================== -->
 
-    <!-- Intercompany Account Matches (Due To GL Account) Section -->
-    <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingIntercompanyAccountMatchesDueToGLAccountID"
-        SectionName="Intercompany Account Matches (Due To GL Account)"
-        Icon="fa fa-balance-scale"
-        Variant="related-entity"
-        [Form]="this"
-        [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingIntercompanyAccountMatchesDueToGLAccountID')"
-        [DefaultExpanded]="false">
-        @if (record.IsSaved) {
-        <div>
-            <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Intercompany Account Matches','DueToGLAccountID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Intercompany Account Matches')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingIntercompanyAccountMatchesDueToGLAccountID')"
-                [ShowToolbar]="false"
-                (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingIntercompanyAccountMatchesDueToGLAccountID', $event.totalRowCount)"
-                >
-            </mj-explorer-entity-data-grid>
-        </div>
-        }
-    </mj-collapsible-panel>
-
     <!-- Intercompany Account Matches (Due From GL Account) Section -->
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingIntercompanyAccountMatchesDueFromGLAccountID"
@@ -230,9 +227,9 @@
         <div>
             <mj-explorer-entity-data-grid
                 [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Intercompany Account Matches','DueFromGLAccountID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Intercompany Account Matches')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Intercompany Account Matches','DueFromGLAccountID')"
                 [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingIntercompanyAccountMatchesDueFromGLAccountID')"
-                [ShowToolbar]="false"
+                [ShowToolbar]="true"
                 (Navigate)="OnFormNavigate($event)"
                 (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingIntercompanyAccountMatchesDueFromGLAccountID', $event.totalRowCount)"
                 >
@@ -241,25 +238,25 @@
         }
     </mj-collapsible-panel>
 
-    <!-- GL Account Links Section -->
+    <!-- Intercompany Account Matches (Due To GL Account) Section -->
     <mj-collapsible-panel
-        SectionKey="mJBizAppsAccountingGLAccountLinks"
-        SectionName="GL Account Links"
-        Icon="fa fa-book"
+        SectionKey="mJBizAppsAccountingIntercompanyAccountMatchesDueToGLAccountID"
+        SectionName="Intercompany Account Matches (Due To GL Account)"
+        Icon="fa fa-balance-scale"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"
-        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingGLAccountLinks')"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingIntercompanyAccountMatchesDueToGLAccountID')"
         [DefaultExpanded]="false">
         @if (record.IsSaved) {
         <div>
             <mj-explorer-entity-data-grid
-                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: GL Account Links','GLAccountID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: GL Account Links')"
-                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingGLAccountLinks')"
-                [ShowToolbar]="false"
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Intercompany Account Matches','DueToGLAccountID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Intercompany Account Matches','DueToGLAccountID')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingIntercompanyAccountMatchesDueToGLAccountID')"
+                [ShowToolbar]="true"
                 (Navigate)="OnFormNavigate($event)"
-                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingGLAccountLinks', $event.totalRowCount)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingIntercompanyAccountMatchesDueToGLAccountID', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>
@@ -270,7 +267,7 @@
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingJournalEntryLines"
         SectionName="Journal Entry Lines"
-        Icon="fa fa-book"
+        Icon="fa fa-file-invoice-dollar"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"
@@ -280,11 +277,36 @@
         <div>
             <mj-explorer-entity-data-grid
                 [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entry Lines','GLAccountID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entry Lines')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entry Lines','GLAccountID')"
                 [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntryLines')"
-                [ShowToolbar]="false"
+                [ShowToolbar]="true"
                 (Navigate)="OnFormNavigate($event)"
                 (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntryLines', $event.totalRowCount)"
+                >
+            </mj-explorer-entity-data-grid>
+        </div>
+        }
+    </mj-collapsible-panel>
+
+    <!-- GL Account Links Section -->
+    <mj-collapsible-panel
+        SectionKey="mJBizAppsAccountingGLAccountLinks"
+        SectionName="GL Account Links"
+        Icon="fa fa-book-open"
+        Variant="related-entity"
+        [Form]="this"
+        [FormContext]="formContext"
+        [BadgeCount]="GetSectionRowCount('mJBizAppsAccountingGLAccountLinks')"
+        [DefaultExpanded]="false">
+        @if (record.IsSaved) {
+        <div>
+            <mj-explorer-entity-data-grid
+                [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: GL Account Links','GLAccountID')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: GL Account Links','GLAccountID')"
+                [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingGLAccountLinks')"
+                [ShowToolbar]="true"
+                (Navigate)="OnFormNavigate($event)"
+                (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingGLAccountLinks', $event.totalRowCount)"
                 >
             </mj-explorer-entity-data-grid>
         </div>
@@ -305,9 +327,9 @@
         <div>
             <mj-explorer-entity-data-grid
                 [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: GL Accounts','ParentGLAccountID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: GL Accounts')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: GL Accounts','ParentGLAccountID')"
                 [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingGLAccounts')"
-                [ShowToolbar]="false"
+                [ShowToolbar]="true"
                 (Navigate)="OnFormNavigate($event)"
                 (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingGLAccounts', $event.totalRowCount)"
                 >

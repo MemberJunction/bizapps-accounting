@@ -16,7 +16,7 @@ export class mjBizAppsAccountingJournalEntryTypeFormComponent extends BaseFormCo
     override async ngOnInit() {
         await super.ngOnInit();
         this.initSections([
-            { sectionKey: 'classificationDetails', sectionName: 'Classification Details', isExpanded: true },
+            { sectionKey: 'typeClassification', sectionName: 'Type Classification', isExpanded: true },
             { sectionKey: 'configuration', sectionName: 'Configuration', isExpanded: true },
             { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingJournalEntries', sectionName: 'Journal Entries', isExpanded: false }

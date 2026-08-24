@@ -56,8 +56,8 @@ export class AllBatchesPageComponent implements OnInit, OnDestroy {
   /** Kept for host parity with the other list pages; the category's header owns the verb today. */
   @Output() CreateRequested = new EventEmitter<void>();
 
-  /** The detail panel's "Open in workspace" — routed by the category via GoToPage('workspace', id). */
-  @Output() WorkspaceRequested = new EventEmitter<string>();
+  /** Row click — the category opens the Explorer record tab. */
+  @Output() RecordOpened = new EventEmitter<string>();
 
   public readonly TimeWindows = TIME_WINDOWS;
   public readonly Statuses = STATUSES;
@@ -318,17 +318,11 @@ export class AllBatchesPageComponent implements OnInit, OnDestroy {
   public OnRowClicked(rowKey: string | null | undefined): void {
     const id = rowKeyToId(rowKey);
     if (!id) return;
-    this.SelectedID = id;
-    this.cdr.markForCheck();
+    this.RecordOpened.emit(id);
   }
 
   public OnDetailClosed(): void {
     this.SelectedID = null;
     this.cdr.markForCheck();
-  }
-
-  public OnOpenInWorkspace(id: string): void {
-    this.SelectedID = null;
-    this.WorkspaceRequested.emit(id);
   }
 }

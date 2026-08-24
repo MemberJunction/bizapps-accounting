@@ -2,7 +2,7 @@ import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, Input } 
 import { takeUntil } from 'rxjs';
 import { BaseDashboard } from '@memberjunction/ng-shared';
 import { RegisterClass } from '@memberjunction/global';
-import { Metadata } from '@memberjunction/core';
+import { Metadata, CompositeKey } from '@memberjunction/core';
 import { ResourceData } from '@memberjunction/core-entities';
 import { mjBizAppsAccountingGLAccountEntity } from '@mj-biz-apps/accounting-entities';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
@@ -330,24 +330,17 @@ export class ChartOfAccountsDashboardComponent extends BaseDashboard {
     }
   }
 
-  // ─── account dialog (view / edit / create) ────────────────────────────────────
+  // ─── account navigation (Explorer record tab) ────────────────────────────────
 
-  /** Open the clean, curated account panel in read-only VIEW mode (loads the full record). */
+  /** Open the GL Account entity record in an Explorer tab via NavigationService. */
   public async OpenAccount(row: GLAccountRow): Promise<void> {
-    this.DialogError = null;
-    const entity = await this.md.GetEntityObject<mjBizAppsAccountingGLAccountEntity>(GL_ACCOUNT_ENTITY);
-    if (!(await entity.Load(row.ID))) {
-      this.DialogError = `Could not load account ${row.Code}.`;
+    if (!row?.ID) return;
+    if (this.navigationService) {
+      this.navigationService.OpenEntityRecord(GL_ACCOUNT_ENTITY, CompositeKey.FromID(row.ID));
     }
-    this.Model = this.modelFromEntity(entity);
-    this.savedModel = { ...this.Model };
-    this.DialogMode = 'view';
-    this.DialogVisible = true;
-    this.cdr.markForCheck();
   }
 
-  /** Open the same panel blank + editable to create a new account (scoped to the current company). */
-  /** Monotonic counter from the category header's "New account" verb — each bump opens the dialog. */
+  /** Monotonic counter from the header's "New account" verb. */
   private _createSignal = 0;
   @Input() set CreateSignal(v: number) {
     if (v > this._createSignal) {
@@ -357,12 +350,9 @@ export class ChartOfAccountsDashboardComponent extends BaseDashboard {
   }
 
   public OnNewAccount(): void {
-    this.DialogError = null;
-    this.Model = this.blankModel();
-    this.savedModel = null;
-    this.DialogMode = 'create';
-    this.DialogVisible = true;
-    this.cdr.markForCheck();
+    if (this.navigationService) {
+      this.navigationService.OpenNewEntityRecord(GL_ACCOUNT_ENTITY);
+    }
   }
 
   public StartEdit(): void { this.DialogMode = 'edit'; this.DialogError = null; this.cdr.markForCheck(); }

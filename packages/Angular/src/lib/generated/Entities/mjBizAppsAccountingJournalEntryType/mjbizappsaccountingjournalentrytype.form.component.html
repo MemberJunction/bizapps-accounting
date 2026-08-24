@@ -10,10 +10,10 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Classification Details Section -->
+    <!-- Type Classification Section -->
     <mj-collapsible-panel
-        SectionKey="classificationDetails"
-        SectionName="Classification Details"
+        SectionKey="typeClassification"
+        SectionName="Type Classification"
         Icon="fa fa-tag"
         [Form]="this"
         [FormContext]="formContext">
@@ -124,9 +124,9 @@
         <div>
             <mj-explorer-entity-data-grid
                 [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entries','EntryTypeID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entries')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entries','EntryTypeID')"
                 [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntries')"
-                [ShowToolbar]="false"
+                [ShowToolbar]="true"
                 (Navigate)="OnFormNavigate($event)"
                 (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntries', $event.totalRowCount)"
                 >

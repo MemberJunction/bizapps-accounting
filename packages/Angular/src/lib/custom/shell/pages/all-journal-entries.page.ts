@@ -68,15 +68,8 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
     this.CreateRequested.emit();
   }
 
-  /**
-   * The detail panel's "Open in workspace" — carries the entry's ID up so the category can
-   * `GoToPage('workspace', id)` (the shell's record-passing seam). The panel closes itself.
-   */
-  @Output() WorkspaceRequested = new EventEmitter<string>();
-  public OnOpenInWorkspace(id: string): void {
-    this.SelectedID = null;
-    this.WorkspaceRequested.emit(id);
-  }
+  /** Row click — the category opens the Explorer record tab. */
+  @Output() RecordOpened = new EventEmitter<string>();
 
   private cdr = inject(ChangeDetectorRef);
   /** The shell header's Refresh reaches this page only while it is the mounted one. */
@@ -469,8 +462,7 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
   public OnRowClicked(rowKey: string | null | undefined): void {
     const id = rowKeyToId(rowKey);
     if (!id) return;
-    this.SelectedID = id;
-    this.cdr.markForCheck();
+    this.RecordOpened.emit(id);
   }
 
   public OnDetailClosed(): void {

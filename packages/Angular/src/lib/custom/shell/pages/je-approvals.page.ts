@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, ChangeDetectorRef, inject, OnInit, OnDestroy } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef, EventEmitter, inject, OnInit, OnDestroy, Output } from '@angular/core';
 import { RunView } from '@memberjunction/core';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
@@ -68,6 +68,8 @@ export class JEApprovalsPageComponent extends BaseAngularComponent implements On
   public LoadError: string | null = null;
   public SelectedID: string | null = null;
 
+  @Output() RecordOpened = new EventEmitter<string>();
+
   ngOnInit(): void {
     this.subscribeToShellRefresh();
     void this.load();
@@ -91,8 +93,7 @@ export class JEApprovalsPageComponent extends BaseAngularComponent implements On
   }
 
   public Review(id: string): void {
-    this.SelectedID = id;
-    this.cdr.markForCheck();
+    this.RecordOpened.emit(id);
   }
 
   public OnDetailClosed(): void {

@@ -49,6 +49,13 @@ import { LoadBatchesCategoryResource } from './lib/custom/shell/batches-category
 import { LoadJournalEntriesCategory } from './lib/custom/shell/journal-entries-category.component';
 import { LoadJournalEntriesCategoryResource } from './lib/custom/shell/journal-entries-category-resource.component';
 
+// Direct top-level Explorer resources
+import { LoadAccountingOverviewResource, AccountingOverviewResourceComponent } from './lib/custom/resources/accounting-overview-resource.component';
+import { LoadJournalEntriesResource, JournalEntriesResourceComponent } from './lib/custom/resources/journal-entries-resource.component';
+import { LoadBatchesResource, BatchesResourceComponent } from './lib/custom/resources/batches-resource.component';
+import { LoadApprovalsResource, ApprovalsResourceComponent } from './lib/custom/resources/approvals-resource.component';
+import { LoadDimensionsResource, DimensionsResourceComponent } from './lib/custom/resources/dimensions-resource.component';
+
 // Import class registrations manifest
 import { CLASS_REGISTRATIONS } from './lib/generated/class-registrations-manifest';
 
@@ -56,6 +63,14 @@ import { CLASS_REGISTRATIONS } from './lib/generated/class-registrations-manifes
 export { CLASS_REGISTRATIONS } from './lib/generated/class-registrations-manifest';
 export { GeneratedFormsModule } from './lib/generated/generated-forms.module';
 export { CustomFormsModule } from './lib/custom/custom-forms.module';
+export { JournalEntryBatchHeaderPanel } from './lib/custom/form-panels/journal-entry-batch-header.panel';
+export { JournalEntryBatchOverviewPanel, JournalEntryBatchOverviewComponent } from './lib/custom/form-panels/journal-entry-batch-overview.panel';
+export { CompanyAccountingHeaderPanel } from './lib/custom/form-panels/company-accounting-header.panel';
+export { CompanyAccountingOverviewPanel, CompanyAccountingOverviewComponent } from './lib/custom/form-panels/company-accounting-overview.panel';
+export { GLAccountHierarchyPanel } from './lib/custom/form-panels/gl-account-hierarchy.panel';
+export { DimensionValueHierarchyPanel } from './lib/custom/form-panels/dimension-value-hierarchy.panel';
+export { CompanyProfileHierarchyPanel } from './lib/custom/form-panels/company-profile-hierarchy.panel';
+export { TaxJurisdictionHierarchyPanel } from './lib/custom/form-panels/tax-jurisdiction-hierarchy.panel';
 export { JournalEntryBatchDispatchModule } from './lib/custom/JournalEntryBatchDispatch/journal-entry-batch-dispatch.module';
 export { ReadModelsModule } from './lib/custom/shared/read-models.module';
 // Shared bizapps detail surfaces (slide-in + centered dialog over the MJ form host). Exported so orders reuses the
@@ -68,6 +83,15 @@ export { CompanyScopeService, type ScopeCompany } from './lib/custom/shared/comp
 // UX). Presentation only: orders resolves with its own fallback chain and hands the result in.
 export { GlResolutionPreviewComponent, type GlResolutionResult, type GlResolutionStep } from './lib/custom/shared/gl-resolution-preview.component';
 export { CompanyScopeChipComponent } from './lib/custom/shared/company-scope-chip.component';
+// Deferred-revenue waterfall — consumed by orders Subscription / Subscription Term / Order Header forms.
+export {
+    DeferredRevenueWaterfallComponent,
+    type WaterfallMonthCell,
+    type WaterfallRow,
+    type WaterfallSummary,
+    type WaterfallYearGroup,
+} from './lib/components/deferred-revenue-waterfall/deferred-revenue-waterfall.component';
+export { DeferredRevenueWaterfallModule } from './lib/components/deferred-revenue-waterfall/deferred-revenue-waterfall.module';
 // (CustomerARBaseComponent + ReadModelsClient DELETED 2026-07-29 — Amith PR-27 dead-code sweep.
 //  Their vw_* backends were removed 2026-07-22; when reporting returns (item f) the A/R reads get
 //  rebuilt on RunQuery per the four-surface doctrine, not resurrected from these. Git history has
@@ -133,12 +157,29 @@ export { PageRefreshService } from './lib/transfer-pending/shell-refresh/page-re
 // must go through NavigationService, not an <a href>. Both apps' plans specify these links.
 export { CrossAppLinkService } from './lib/transfer-pending/cross-app-link/cross-app-link.service';
 
+// Top-level direct resources
+export { AccountingOverviewPageComponent } from './lib/custom/overview/accounting-overview.component';
+export { AccountingBatchesPageComponent } from './lib/custom/overview/accounting-batches.component';
+export { AccountingOverviewResourceComponent, LoadAccountingOverviewResource } from './lib/custom/resources/accounting-overview-resource.component';
+export { JournalEntriesResourceComponent, LoadJournalEntriesResource } from './lib/custom/resources/journal-entries-resource.component';
+export { BatchesResourceComponent, LoadBatchesResource } from './lib/custom/resources/batches-resource.component';
+export { ApprovalsResourceComponent, LoadApprovalsResource } from './lib/custom/resources/approvals-resource.component';
+export { DimensionsResourceComponent, LoadDimensionsResource } from './lib/custom/resources/dimensions-resource.component';
+
 /**
  * Bootstrap function called during MJExplorer initialization.
  * Static imports above handle most registration; the explicit Load* calls below
  * anchor the custom resource components' + custom forms' @RegisterClass decorators against tree-shaking.
  */
 export function LoadBizAppsAccountingClient(): void {
+    // Top-level direct nav resources
+    LoadAccountingOverviewResource();
+    LoadBatchesResource();
+    LoadJournalEntriesResource();
+    LoadApprovalsResource();
+    LoadChartOfAccountsResource();
+    LoadDimensionsResource();
+
     // Stage 1 — Batch Dispatch.
     LoadJournalEntryBatchDispatchDashboard();
     LoadJournalEntryBatchDispatchResource();
@@ -152,13 +193,12 @@ export function LoadBizAppsAccountingClient(): void {
     // Custom forms (Journal Entry, GL Account).
     LoadCustomForms();
 
-    // Chart of Accounts tree + Company Setup hub. (Approvals inbox removed — redundant with Batches.)
-    LoadChartOfAccountsResource();
+    // Chart of Accounts tree + Company Setup hub.
     void ChartOfAccountsModule;
     LoadCompanySetupResource();
     void CompanySetupModule;
 
-    // UI wave §8.0 — category shells (Explorer app nav items -> mj-left-nav + pages).
+    // Category shells (kept for backwards compatibility if deep-linked)
     LoadJournalEntriesCategory();
     LoadJournalEntriesCategoryResource();
     LoadBatchesCategory();

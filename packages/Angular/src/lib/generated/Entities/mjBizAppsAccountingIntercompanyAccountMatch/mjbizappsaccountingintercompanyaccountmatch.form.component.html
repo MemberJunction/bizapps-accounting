@@ -10,10 +10,10 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Company Mapping Section -->
+    <!-- Intercompany Mapping Section -->
     <mj-collapsible-panel
-        SectionKey="companyMapping"
-        SectionName="Company Mapping"
+        SectionKey="intercompanyMapping"
+        SectionName="Intercompany Mapping"
         Icon="fa fa-building"
         [Form]="this"
         [FormContext]="formContext">
@@ -42,7 +42,7 @@
     <mj-collapsible-panel
         SectionKey="accountingConfiguration"
         SectionName="Accounting Configuration"
-        Icon="fa fa-file-invoice-dollar"
+        Icon="fa fa-book"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -66,11 +66,11 @@
 
     </mj-collapsible-panel>
 
-    <!-- Lifecycle and Notes Section -->
+    <!-- Operational Status Section -->
     <mj-collapsible-panel
-        SectionKey="lifecycleAndNotes"
-        SectionName="Lifecycle and Notes"
-        Icon="fa fa-calendar-alt"
+        SectionKey="operationalStatus"
+        SectionName="Operational Status"
+        Icon="fa fa-clock"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -154,9 +154,9 @@
         <div>
             <mj-explorer-entity-data-grid
                 [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Intercompany Account Match Dimensions','IntercompanyAccountMatchID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Intercompany Account Match Dimensions')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Intercompany Account Match Dimensions','IntercompanyAccountMatchID')"
                 [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingIntercompanyAccountMatchDimensions')"
-                [ShowToolbar]="false"
+                [ShowToolbar]="true"
                 (Navigate)="OnFormNavigate($event)"
                 (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingIntercompanyAccountMatchDimensions', $event.totalRowCount)"
                 >

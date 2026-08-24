@@ -8,38 +8,17 @@
     "DefaultSequence": 2010,
     "DefaultNavItems": [
       {
-        "Label": "Journal Entries",
-        "Icon": "fa-solid fa-book-open",
+        "Label": "Overview",
+        "Icon": "fa-solid fa-gauge-high",
         "ResourceType": "Custom",
-        "DriverClass": "JournalEntriesCategoryResource",
+        "DriverClass": "AccountingOverviewResource",
         "isDefault": true
       },
       {
-        "Label": "Journal Entry Batches",
+        "Label": "Batches",
         "Icon": "fa-solid fa-layer-group",
         "ResourceType": "Custom",
-        "DriverClass": "BatchesCategoryResource",
-        "isDefault": false
-      },
-      {
-        "Label": "Accounts",
-        "Icon": "fa-solid fa-sitemap",
-        "ResourceType": "Custom",
-        "DriverClass": "AccountsCategoryResource",
-        "isDefault": false
-      },
-      {
-        "Label": "Reports",
-        "Icon": "fa-solid fa-chart-column",
-        "ResourceType": "Custom",
-        "DriverClass": "ReportsCategoryResource",
-        "isDefault": false
-      },
-      {
-        "Label": "Configuration",
-        "Icon": "fa-solid fa-gear",
-        "ResourceType": "Custom",
-        "DriverClass": "ConfigurationCategoryResource",
+        "DriverClass": "BatchesResource",
         "isDefault": false
       }
     ]
@@ -51,7 +30,7 @@
     "ID": "08BC1CF8-7BBE-4798-A933-091BD87547BC"
   },
   "sync": {
-    "lastModified": "2026-08-14T22:13:36.727Z",
-    "checksum": "bda3246fdb9cc8c1afce4eb57aad609b6bd43dc6657dc878bfe1958c10542d5e"
+    "lastModified": "2026-08-19T00:08:27.789Z",
+    "checksum": "2352f066e595171bb9dbb91eb378cbab86667370a8eecd44ab5c07ac0b32eb60"
   }
 }

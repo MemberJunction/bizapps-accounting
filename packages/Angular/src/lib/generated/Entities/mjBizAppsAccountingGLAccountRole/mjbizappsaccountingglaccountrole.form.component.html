@@ -98,9 +98,9 @@
         <div>
             <mj-explorer-entity-data-grid
                 [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: GL Account Links','GLAccountRoleID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: GL Account Links')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: GL Account Links','GLAccountRoleID')"
                 [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingGLAccountLinks')"
-                [ShowToolbar]="false"
+                [ShowToolbar]="true"
                 (Navigate)="OnFormNavigate($event)"
                 (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingGLAccountLinks', $event.totalRowCount)"
                 >

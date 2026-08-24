@@ -38,11 +38,11 @@
 
     </mj-collapsible-panel>
 
-    <!-- Target Definition Section -->
+    <!-- Target Record Section -->
     <mj-collapsible-panel
-        SectionKey="targetDefinition"
-        SectionName="Target Definition"
-        Icon="fa fa-crosshairs"
+        SectionKey="targetRecord"
+        SectionName="Target Record"
+        Icon="fa fa-link"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -65,11 +65,11 @@
 
     </mj-collapsible-panel>
 
-    <!-- Lifecycle and Validity Section -->
+    <!-- Configuration Section -->
     <mj-collapsible-panel
-        SectionKey="lifecycleAndValidity"
-        SectionName="Lifecycle and Validity"
-        Icon="fa fa-clock"
+        SectionKey="configuration"
+        SectionName="Configuration"
+        Icon="fa fa-sliders-h"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -104,16 +104,6 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
-
-    </mj-collapsible-panel>
-
-    <!-- Display Labels Section -->
-    <mj-collapsible-panel
-        SectionKey="displayLabels"
-        SectionName="Display Labels"
-        Icon="fa fa-tag"
-        [Form]="this"
-        [FormContext]="formContext">
 
     </mj-collapsible-panel>
 
@@ -153,7 +143,7 @@
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingGLAccountLinkDimensions"
         SectionName="GL Account Link Dimensions"
-        Icon="fa fa-chart-pie"
+        Icon="fa fa-sitemap"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"
@@ -163,9 +153,9 @@
         <div>
             <mj-explorer-entity-data-grid
                 [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: GL Account Link Dimensions','GLAccountLinkID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: GL Account Link Dimensions')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: GL Account Link Dimensions','GLAccountLinkID')"
                 [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingGLAccountLinkDimensions')"
-                [ShowToolbar]="false"
+                [ShowToolbar]="true"
                 (Navigate)="OnFormNavigate($event)"
                 (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingGLAccountLinkDimensions', $event.totalRowCount)"
                 >
