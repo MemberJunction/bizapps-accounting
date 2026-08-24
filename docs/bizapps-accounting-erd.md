@@ -1,7 +1,7 @@
 # BizApps Accounting — full ERD (CURRENT schema, sectioned)
 
 > The at-a-glance schema reference for `__mj_BizAppsAccounting` (baseline
-> `migrations/B202605281200__v1.0.x__Schema_and_Tables.sql`); MJ entity names are
+> `migrations/B202605281200__v0.1.x__Schema_and_Tables.sql`); MJ entity names are
 > `MJ_BizApps_Accounting: <PluralName>`. Keep it current with every migration
 > (repo convention — Definition of Done). Each section is deliberately NARROW
 > (≤5 entity boxes) so it renders full-size on a 13" laptop — open in VS Code

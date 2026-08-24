@@ -43,7 +43,7 @@ pnpm run mj:codegen      # entity metadata, base views, CRUD procs, TypeScript
 
 ## What must NOT happen any more
 
-**Do not edit the baseline** (`migrations/B202605281200__v1.0.x__Schema_and_Tables.sql`), above or
+**Do not edit the baseline** (`migrations/B202605281200__v0.1.x__Schema_and_Tables.sql`), above or
 below the CodeGen banner. Its generated half is still replaced wholesale by `append-codegen.sh` when
 CodeGen runs against a bare database — that is why a hand edit below the banner disappears — but the
 hand-authored half above it is now equally off limits, because it has already been applied
