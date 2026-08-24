@@ -49,21 +49,26 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - uses: changesets/action@v2.1.1
+      - uses: changesets/action@v1
         with:
-          # Pinned to an exact patch, not @v2. The input names are major-specific: v1 takes
-          # `version`/`publish`/`title`/`commit`, v2 takes `version-script`/`publish-script`/
-          # `pr-title`/`commit-message`. Actions silently IGNORES unknown inputs, so a
-          # mismatch does not fail — it runs the action's defaults. That is exactly what
-          # happened on the first run: v2 names against a @v1 pin meant `version-script` was
-          # dropped, plain `changeset version` ran, and the Version Packages PR came out
-          # missing the lockfile refresh and the mj-app.json sync. The giveaway was the PR
-          # title falling back to "Version Packages".
+          # Pinned to v1 because this repo runs Changesets CLI v2 (`@changesets/cli ^2.29.8`).
+          # The action version-gates on the CLI major and v2.x refuses outright:
+          #   "This version of the Changesets action is designed to work with Changesets CLI
+          #    v3. Changesets CLI v2 is not supported; use Changesets action v1 instead."
+          # Moving to action v2 therefore means upgrading the CLI to v3 first — a separate
+          # change with its own changeset-format and config implications, not a pin bump.
           #
-          # No `publish-script`: this workflow only ever versions.
-          version-script: pnpm run version:ci
-          pr-title: 'chore(release): version packages'
-          commit-message: 'chore(release): version packages'
+          # Input names are major-specific, and Actions IGNORES unknown inputs rather than
+          # failing, so a mismatch silently runs the action's defaults. v1 takes
+          # `version`/`publish`/`title`/`commit`; v2 takes `version-script`/`publish-script`/
+          # `pr-title`/`commit-message`. Passing v2 names to v1 is what produced a Version
+          # Packages PR with no lockfile refresh and no mj-app.json sync — the tell was the
+          # PR title falling back to the default "Version Packages".
+          #
+          # No `publish` input: this workflow only ever versions.
+          version: pnpm run version:ci
+          title: 'chore(release): version packages'
+          commit: 'chore(release): version packages'
           # NOTE: with the default GITHUB_TOKEN, PRs this action opens do NOT trigger other
           # workflows (GitHub's anti-recursion rule), so build.yml will not run on the
           # Version Packages PR and `--frozen-lockfile` goes unverified until merge. Swap in
