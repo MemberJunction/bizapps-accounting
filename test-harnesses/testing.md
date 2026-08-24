@@ -409,6 +409,27 @@ WITH their features; new rows cover the new invariants._
 
 ## Ledger — tests still to create + open questions (roll-through: log, proceed, circle back)
 
+**2026-08-24 — atomic JE-batch approval (`fix/atomic-je-batch-approval`), tier-1 only:** new suite
+`packages/CoreEntitiesServer/src/__tests__/JournalEntryBatchApprove.test.ts` — **11/11 pass** — covering
+`JournalEntryBatchEntityServer.Approve` (gate decision + batch Status in ONE transaction): both halves
+commit together; a failure in EITHER half rolls back BOTH; and the two half-approved states that were
+reachable before (Approved-with-no-decision, decision-recorded-while-Pending) are unreachable through
+`Approve()`. Assertions are checked against a modelled pending/commit/rollback world, so "no
+half-approved state" is what a later reader (gate / dispatcher) would actually see, not a call count.
+**Mutation-verified**: deleting the rollback reds 2 tests; deleting the `recordDecision` call reds 7.
+- **Not run (needs a DB, no instance stood up for this fix):** tier-2 live `phase2-encapsulation.live.test.ts`
+  (its `failingGate` literal gained a no-op `recordDecision` — compile-only change, unverified at runtime),
+  tiers 3-5. GAP to fill: a live L-spec proving the rollback against real rows, mirroring L11.
+- **Pre-existing red, NOT caused by this branch - the documented `CoreEntitiesServer units 42/42`
+  baseline below is stale.** On `origin/next` at MJ `6.1.0-edge.3` the package suite is **22 failed |
+  26 passed (48)**; with this branch it is **22 failed | 37 passed (59)** - same 22, verified by running
+  the suite on a stashed-clean tree. Cause: MJ core's `EntityFieldInfo` gained
+  `ValueIsPermittedByValueList` (the Issue #3969 value-list guard) and `EntityField.Validate` now calls
+  it, but four suites mock fields as plain objects, so `Validate()` throws
+  `ef.ValueIsPermittedByValueList is not a function`. Repo-side fix: the field mocks need the method (or
+  real `EntityFieldInfo` instances). Files: `JournalEntryBatchInvariants`, `JournalEntryExtendedServer`,
+  `JournalEntryLineDimensions`, `JournalEntryTypeEntityServer`.
+
 **Tests to create — ✗ GAP (management UI, 2026-07-08):** the new Explorer dashboards below were validated
 **ad-hoc** with headed Playwright walks (rendered + drove the flow, **0 console/pageerror**) but have **NO
 committed Tier-5 specs** yet — treat as a coverage gap to fill (Tier-5 `dashboards.spec.ts` pattern):

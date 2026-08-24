@@ -16,7 +16,7 @@
  *                                                            all-pending sweep when CompanyID is omitted
  *   Accounting.RegenerateJournalEntryBatch       → regenerateJournalEntryBatch(...) rebuild a Pending batch in place; empty → cancel + throw
  *   Accounting.DispatchJournalEntryBatch         → sendJournalEntryBatch(...)       Approved→Sent→Posted via the mock ERP poster (v1)
- *   Accounting.RecordJournalEntryBatchDecision   → gate.recordDecision + approveJournalEntryBatch | cancelJournalEntryBatch (in-app CFO approve/reject)
+ *   Accounting.RecordJournalEntryBatchDecision   → JournalEntryBatchEntityServer.Approve (decision + status, ONE transaction) | gate.recordDecision + cancelJournalEntryBatch (in-app CFO approve/reject)
  *   Accounting.GetJournalEntryBatchApprovalState → gate.assertApproved probe (read-only: is this batch dispatchable?)
  *
  * These are thin by design — every rule (netting, the one-transaction build incl. the approval
@@ -26,7 +26,8 @@
  * writes land on the caller's transaction-capable provider.
  *
  * CONNECTS TO:
- *   ENGINE: ./JournalEntryBatchEngine (buildJournalEntryBatch · regenerateJournalEntryBatch · sendJournalEntryBatch · approveJournalEntryBatch · cancelJournalEntryBatch)
+ *   ENGINE: ./JournalEntryBatchEngine (buildJournalEntryBatch · regenerateJournalEntryBatch · sendJournalEntryBatch · cancelJournalEntryBatch)
+ *   ENTITY: ./JournalEntryBatchEntityServer (Approve — decision + status in one transaction)
  *   GATE:   ./TasksAppApprovalGate (the bizapps-tasks-backed CFO gate; provider-injected)
  */
 import { BaseRemotableOperation, IMetadataProvider, IRunViewProvider, RunView, UserInfo } from '@memberjunction/core';
@@ -38,7 +39,6 @@ import {
   previewBatch,
   regenerateJournalEntryBatch,
   sendJournalEntryBatch,
-  approveJournalEntryBatch,
   cancelJournalEntryBatch,
   pendingCompanies,
   mockErpPoster,
@@ -49,6 +49,7 @@ import {
   type JournalEntryBatchPreviewResult,
 } from './JournalEntryBatchEngine.js';
 import { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
+import { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
 import {
   IsApprovalOutcome,
   IsTaskDecisionOutcomeCode,
@@ -57,6 +58,7 @@ import {
 } from '@mj-biz-apps/tasks-core';
 
 const PERSON_ENTITY = 'MJ_BizApps_Common: People';
+const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 
 // ─── Accounting.PreviewJournalEntryBatch + Accounting.BuildJournalEntryBatch ─────────────────────────
 
@@ -242,16 +244,30 @@ export class RecordJournalEntryBatchDecisionOperation extends BaseRemotableOpera
       throw new Error(`RecordBatchDecision: invalid decision '${input?.Decision}'. Expected ${TaskDecisionOutcomeCodes.join(' | ')}.`);
     }
     const personId = await this.resolveCurrentPersonId(user, provider);
-    await new TasksAppApprovalGate(provider).recordDecision(
-      input.JournalEntryBatchID, input.Decision, personId, input.Notes ?? undefined, user);
+    const gate = new TasksAppApprovalGate(provider);
+    const notes = input.Notes ?? undefined;
 
     // Ask tasks what the outcome MEANS rather than re-deciding it here from literals.
     if (IsApprovalOutcome(input.Decision)) {
-      await approveJournalEntryBatch(input.JournalEntryBatchID, user.ID, user, provider);
+      // ONE call, ONE transaction: the decision row and the batch's own Status commit together.
+      // This used to be recordDecision(...) followed by approveJournalEntryBatch(...) — two
+      // independent writes, so a failure between them left the batch half-approved (the gate
+      // satisfied but the batch still Pending, or vice versa) and only this call site knew to do
+      // both. The pairing is now the entity's, where no caller can forget half of it.
+      const batch = await this.loadBatch(input.JournalEntryBatchID, provider, user);
+      await batch.Approve(input.Decision, personId, notes, gate, user);
     } else {
+      await gate.recordDecision(input.JournalEntryBatchID, input.Decision, personId, notes, user);
       await cancelJournalEntryBatch(input.JournalEntryBatchID, user, provider);
     }
     return { Recorded: true };
+  }
+
+  /** The batch as its server subclass — `Approve()` is what pairs the decision with the status. */
+  private async loadBatch(batchId: string, provider: IMetadataProvider, user: UserInfo): Promise<JournalEntryBatchEntityServer> {
+    const batch = await provider.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, user);
+    if (!(await batch.Load(batchId))) throw new Error(`RecordBatchDecision: batch ${batchId} not found.`);
+    return batch;
   }
 
   /**

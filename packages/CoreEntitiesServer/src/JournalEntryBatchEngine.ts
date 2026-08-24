@@ -64,6 +64,7 @@ import {
   type NetGroup,
   type NettableLine,
 } from '@mj-biz-apps/accounting-engine-base';
+import type { TaskDecisionOutcomeCode } from '@mj-biz-apps/tasks-core';
 import { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 import { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
 import { GetJournalEntryBatchSummaryEntryType } from './JournalEntryTypes.js';
@@ -139,10 +140,32 @@ export interface JournalEntryBatchApprovalGate {
    */
   onBatchBuilt?(batchId: string, contextUser: UserInfo): Promise<string | null>;
   assertApproved(batchId: string, contextUser: UserInfo): Promise<void>;
+  /**
+   * Record an approve/reject decision against the batch's approval Task. REQUIRED, not optional:
+   * `assertApproved` is the question and this is the only sanctioned answer, so a gate that can
+   * refuse a send must also be able to record the decision that unblocks it. Optional would push
+   * the check to runtime at exactly the call site that must not be able to skip it —
+   * `JournalEntryBatchEntityServer.Approve`, which records the decision and flips the batch's own
+   * Status in ONE transaction.
+   *
+   * Runs INSIDE the caller's transaction: its writes commit or roll back with the batch's status.
+   */
+  recordDecision(
+    batchId: string,
+    outcome: TaskDecisionOutcomeCode,
+    decidedByPersonId: string | undefined,
+    notes: string | undefined,
+    contextUser: UserInfo,
+  ): Promise<void>;
 }
 
 /** Test/seed gate — always approved. Real deployments use the bizapps-tasks-backed gate. */
-export const AutoApproveGate: JournalEntryBatchApprovalGate = { async assertApproved() { /* always approved */ } };
+export const AutoApproveGate: JournalEntryBatchApprovalGate = {
+  async assertApproved() { /* always approved */ },
+  // Nothing to record: this gate raises no approval Task, so there is no decision row to write and
+  // no half-approved state to reach. A no-op keeps it a complete gate rather than a special case.
+  async recordDecision() { /* no task, no decision */ },
+};
 
 /**
  * Thrown when a build finds nothing to batch (no candidate JEs, or every group netted to zero so
@@ -706,7 +729,19 @@ export async function regenerateJournalEntryBatch(
 
 // ─── approveJournalEntryBatch ────────────────────────────────────────────────────────────
 
-/** The human sign-off: Pending → Approved (+audit). Content freezes here (trg_JournalEntryBatch_Immutability). */
+/**
+ * The human sign-off: Pending → Approved (+audit). Content freezes here (trg_JournalEntryBatch_Immutability).
+ *
+ * @deprecated for any flow behind a REAL gate — use `JournalEntryBatchEntityServer.Approve(...)`.
+ * This function flips the batch's Status and nothing else, so pairing it with
+ * `gate.recordDecision` was left to each caller — and neither half implied the other. Both
+ * half-approved states were reachable and were both hit: Approved-with-no-decision (send passes the
+ * status check, then `gate.assertApproved` throws) and decision-recorded-while-Pending (the gate is
+ * satisfied, then send throws on the status). `Approve()` does both in ONE transaction.
+ *
+ * Retained for the AutoApproveGate seed/maintenance harnesses, where the gate raises no approval
+ * Task at all — there is no decision to record, so there is no split to reintroduce.
+ */
 export async function approveJournalEntryBatch(
   batchId: string, approvedByUserId: string, contextUser: UserInfo, provider: IMetadataProvider,
 ): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {

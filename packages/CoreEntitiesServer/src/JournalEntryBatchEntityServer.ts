@@ -12,6 +12,8 @@
  *     totals must foot against the summary JE's lines and TotalEntries must equal the member
  *     count — the approver signs those numbers, so they must be true at the moment they become
  *     load-bearing. (Trigger 50023 covers the summary POINTER; this covers the TOTALS.)
+ *   - `Approve()`: the CFO sign-off — record the decision on the approval Task AND flip this batch
+ *     Pending→Approved — in ONE provider transaction, so the two halves can never come apart.
  *   - `Cancel()`: reverse a PRELIMINARY (Pending) batch — delete the summary JE, return the
  *     member JEs to the candidate pool, mark Cancelled — in ONE provider transaction. The member
  *     unlock is the batch releasing ITS OWN locks (the reversible Batched→Pending transition the
@@ -31,7 +33,12 @@ import {
   mjBizAppsAccountingJournalEntryLineEntity,
 } from '@mj-biz-apps/accounting-entities';
 
+import { IsApprovalOutcome, type TaskDecisionOutcomeCode } from '@mj-biz-apps/tasks-core';
+
 import { getNextJournalEntryBatchNumber } from './SequenceService.js';
+// Type-only: the gate is a SEAM the caller supplies, never a concrete gate this entity constructs.
+// (Type-only also keeps the engine→entity value import from becoming a runtime cycle.)
+import type { JournalEntryBatchApprovalGate } from './JournalEntryBatchEngine.js';
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
@@ -196,6 +203,80 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     const je = await md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser ?? this.ContextCurrentUser);
     this._summary = (await je.Load(this.SummaryJournalEntryID)) ? je : null;
     return this._summary;
+  }
+
+  // ─── Approve — the two halves of a sign-off, atomically ───────────────────
+
+  /**
+   * The CFO sign-off, in ONE provider transaction: record the terminal decision against the batch's
+   * approval Task (through the gate) AND flip this batch Pending→Approved. Returns true on success.
+   *
+   * WHY IT LIVES HERE: approving is two writes that were never coupled — `gate.recordDecision(...)`
+   * (what `assertApproved` reads) and the batch's own Status (what `sendJournalEntryBatch` reads).
+   * Nothing implied the other, so BOTH half-approved states were reachable and both were hit in
+   * practice: Approved-with-no-decision (send clears its status check, then the gate throws) and
+   * decision-recorded-while-Pending (the gate is satisfied, then send throws on the status). Both
+   * refusals are correct; the batch simply sat half-approved until someone ran the missing half by
+   * hand. One transaction removes the state rather than teaching every caller to do both.
+   *
+   * The gate is a PARAMETER, not a field: `sendJournalEntryBatch` already treats it as a seam
+   * (`options.gate`), and constructing a concrete gate in here would couple this accounting entity
+   * to the Tasks app. The gate's own writes ride this transaction — its reads see the uncommitted
+   * Task on the same provider — so a failure in EITHER half rolls back BOTH.
+   *
+   * NOT in scope (deliberately, and separately analysed): concurrency. Two approvers racing will
+   * still both succeed — the read-then-write underneath has no atomic guard. This closes the
+   * half-approved hole, not the double-approve one.
+   */
+  public async Approve(
+    outcome: TaskDecisionOutcomeCode,
+    decidedByPersonId: string | undefined,
+    notes: string | undefined,
+    gate: JournalEntryBatchApprovalGate,
+    contextUser?: UserInfo,
+  ): Promise<boolean> {
+    this.assertApprovable(outcome);
+    const user = contextUser ?? this.ContextCurrentUser;
+    // Required, not optional: the gate reads the Task on this user's behalf and the approval is
+    // audited to them. Undefined here would surface much later as an unattributed gate query.
+    if (!user) throw new Error('JournalEntryBatchEntityServer.Approve: a context user is required.');
+    const dbProvider = this.ProviderToUse as unknown as DatabaseProviderBase;
+    await dbProvider.BeginTransaction();
+    try {
+      // Decision first: it is the half that can legitimately refuse (no approval Task on the batch),
+      // and refusing before the status write keeps the failure cheap.
+      await gate.recordDecision(this.ID, outcome, decidedByPersonId, notes, user);
+      this.Status = 'Approved';
+      // Save() stamps ApprovedAt and (from ContextCurrentUser) ApprovedByUserID; fill the approver
+      // from the user this call was given, so an entity without a context user still audits.
+      if (!this.ApprovedByUserID) this.ApprovedByUserID = user.ID;
+      if (!(await this.Save())) throw new Error(`Approve: Pending→Approved failed: ${this.LatestResult?.CompleteMessage ?? 'unknown'}`);
+      await dbProvider.CommitTransaction();
+      return true;
+    } catch (e) {
+      try { await dbProvider.RollbackTransaction(); } catch { /* rollback best-effort */ }
+      throw e;
+    }
+  }
+
+  /**
+   * Pre-transaction guards for `Approve`. The outcome check is the load-bearing one: the parameter
+   * is the WHOLE TaskDecisionOutcomeCode union (ApprovedWithConditions approves too), so a
+   * rejection code would otherwise record a rejection and flip the batch to Approved. `IsApprovalOutcome`
+   * asks tasks-core what the code MEANS instead of re-deciding it here from literals.
+   *
+   * The Pending check is the precondition `approveJournalEntryBatch` already enforced — kept so this
+   * is a like-for-like replacement, not a widening. It is NOT a concurrency guard (two racing
+   * approvers both read Pending and both pass); that hole is deferred and analysed separately.
+   */
+  private assertApprovable(outcome: TaskDecisionOutcomeCode): void {
+    if (!this.IsSaved) throw new Error('JournalEntryBatchEntityServer.Approve: the batch must be saved.');
+    if (!IsApprovalOutcome(outcome)) {
+      throw new Error(`JournalEntryBatchEntityServer.Approve: '${outcome}' is not an approval outcome — Approve() only records a decision that approves. Reject through the decision/cancel path.`);
+    }
+    if (this.Status !== 'Pending') {
+      throw new Error(`JournalEntryBatchEntityServer.Approve: batch ${this.JournalEntryBatchNumber} is ${this.Status}; only a Pending batch can be approved.`);
+    }
   }
 
   // ─── Cancel — the entity-owned reverse of a preliminary lock ───────────────
