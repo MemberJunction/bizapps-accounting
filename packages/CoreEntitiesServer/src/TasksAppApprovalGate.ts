@@ -1,7 +1,8 @@
 /**
  * TasksAppApprovalGate — the REAL CFO approval gate for JE-batch dispatch (Block 2 completion).
  *
- * Replaces the placeholder AutoApproveGate in production. It backs the JournalEntryBatchApprovalGate seam
+ * The ONLY gate this package ships (the always-approves AutoApproveGate stub is gone — a build or
+ * dispatch caller must pass a real gate). It backs the JournalEntryBatchApprovalGate seam
  * (JournalEntryBatchEngine.ts) with the bizapps-tasks app so a JE batch can only be sent once a CFO has
  * recorded a terminal Approved / ApprovedWithConditions decision against the linked approval Task.
  *

@@ -65,7 +65,6 @@ export {
   netLines,
   resolveExternalAccount,
   mockErpPoster,
-  AutoApproveGate,
 } from './JournalEntryBatchEngine.js';
 export type {
   JournalEntryBatchTargetSystem,
@@ -84,8 +83,9 @@ export type {
   SendJournalEntryBatchOptions,
 } from './JournalEntryBatchEngine.js';
 
-// S1 — the REAL CFO-approval gate, backed by the bizapps-tasks app (replaces AutoApproveGate in
-// production). See TasksAppApprovalGate.ts.
+// S1 — the CFO-approval gate, backed by the bizapps-tasks app. The ONLY gate this package ships:
+// a build/dispatch caller must pass a real one (there is no always-approves default any more).
+// See TasksAppApprovalGate.ts.
 export { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
 
 // (ScheduledJournalEntryService retired 2026-07-23 — the schedule tables were dropped in the

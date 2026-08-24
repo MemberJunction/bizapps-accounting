@@ -29,7 +29,7 @@
  *     emit them); no netting/provisioning is called.
  *
  * All JEs self-balance (triggers 50001 + per-company 50019 enforce it) and are posted to GLPosted
- * (via buildJournalEntryBatch + approveJournalEntryBatch + sendJournalEntryBatch with the AutoApproveGate) so the views — which filter Batched/GLPosted
+ * (via buildJournalEntryBatch + JournalEntryBatchEntityServer.Approve + sendJournalEntryBatch, behind the REAL TasksAppApprovalGate) so the views — which filter Batched/GLPosted
  * — show data. This is DEMO data: it PERSISTS by design (unlike the test harnesses, there is no
  * teardown). Idempotency comes entirely from the static IDs.
  *
@@ -59,12 +59,13 @@ import type { mjBizAppsCommonOrganizationEntity } from '@mj-biz-apps/common-enti
 import { AccountingCompanyProfileEntityServer } from '@mj-biz-apps/accounting-core-entities-server';
 
 import {
-  buildJournalEntryBatch, approveJournalEntryBatch, sendJournalEntryBatch, AutoApproveGate,
+  buildJournalEntryBatch, sendJournalEntryBatch, TasksAppApprovalGate, JournalEntryBatchEntityServer,
   GetJournalEntryBatchSummaryEntryType, LookupJournalEntryTypeByCode, JournalEntryEntityServer,
 } from '@mj-biz-apps/accounting-core-entities-server';
 
 // ─── Entity name constants ───────────────────────────────────────────────────
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
+const JE_BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
@@ -505,14 +506,34 @@ async function postPending(contextUser: UserInfo, report: DemoSeedReport, provid
   );
   const companyIds = [...new Set((res.Results ?? []).map(r => r.CompanyID))];
   if (companyIds.length === 0) throw new Error('postPending: no pending JEs to batch.');
+  // The REAL gate, not a bypass. ensureCompanyCFO() has already given every demo company an
+  // ApprovalCFOUserID (above), so the approval Task can actually be raised and assigned — which is
+  // the whole reason a seeding SCRIPT can do what declarative metadata cannot: it knows who the
+  // approver is. Demo batches therefore carry a real ApprovalTaskID and a real terminal decision,
+  // so what the demo views show is a batch that could genuinely have been dispatched.
+  const gate = new TasksAppApprovalGate(provider);
   for (const companyId of companyIds) {
-    const built = await buildJournalEntryBatch(companyId, TARGET_SYSTEM, contextUser.ID, contextUser, provider, AutoApproveGate);
+    const built = await buildJournalEntryBatch(companyId, TARGET_SYSTEM, contextUser.ID, contextUser, provider, gate);
     if (built === null) throw new Error(`postPending: buildJournalEntryBatch returned null for company ${companyId} (no pending JEs or all netted to zero).`);
-    await approveJournalEntryBatch(built.batchId, contextUser.ID, contextUser, provider);
-    const batch = await sendJournalEntryBatch(built.batchId, contextUser, { gate: AutoApproveGate, provider });
+    await approveBuiltBatch(built.batchId, gate, contextUser, provider);
+    const batch = await sendJournalEntryBatch(built.batchId, contextUser, { gate, provider });
     if (batch.Status !== 'Posted') throw new Error(`postPending: batch should be Posted, got ${batch.Status}`);
     report.BatchesPosted += 1;
   }
+}
+
+/**
+ * Record the CFO decision and flip the batch Approved in ONE transaction — the entity's Approve(),
+ * not the deprecated standalone approveJournalEntryBatch(), so the demo cannot leave a half-approved
+ * batch behind. DecidedByPersonID is left undefined: the CFO here is an __mj.User and TaskDecision's
+ * decider is a hard FK to a bizapps-common Person (see MJ-UPSTREAM — the polymorphic-decider item).
+ */
+async function approveBuiltBatch(
+  batchId: string, gate: TasksAppApprovalGate, contextUser: UserInfo, provider: IMetadataProvider,
+): Promise<void> {
+  const batch = await provider.GetEntityObject<JournalEntryBatchEntityServer>(JE_BATCH_ENTITY, contextUser);
+  if (!(await batch.Load(batchId))) throw new Error(`approveBuiltBatch: batch ${batchId} not found.`);
+  await batch.Approve('Approved', undefined, 'Approved by the association demo seeder.', gate, contextUser);
 }
 
 // ─── AR activity (→ vw_AROpenByCustomer, vw_ARAging) ──────────────────────────
