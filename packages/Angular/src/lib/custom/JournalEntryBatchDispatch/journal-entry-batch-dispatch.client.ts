@@ -75,6 +75,53 @@ export interface JournalEntryBatchApprovalState {
 /** The CFO decision outcomes the in-app control can record. */
 export type JournalEntryBatchDecision = 'Approved' | 'ApprovedWithConditions' | 'Rejected';
 
+export interface BuildJournalEntryBatchOptionsInput {
+  TargetSystem: string;
+  Cutoff?: string | null;
+  StartDate?: string | null;
+  CompanyIDs?: string[] | null;
+  EntryTypeCodes?: string[] | null;
+  ExcludeEntryTypeCodes?: string[] | null;
+  Source?: 'Standard' | 'View' | 'Explicit';
+  CompanyID?: string | null;
+  ViewID?: string | null;
+  JournalEntryIDs?: string[] | null;
+}
+
+export interface PreviewJournalEntryBatchOptionsInput {
+  Cutoff?: string | null;
+  StartDate?: string | null;
+  CompanyIDs?: string[] | null;
+  EntryTypeCodes?: string[] | null;
+  ExcludeEntryTypeCodes?: string[] | null;
+  IncludedJournalEntryIDs?: string[] | null;
+}
+
+export interface PreviewEntryWire {
+  ID: string;
+  EntryNumber: string;
+  EffectiveDate: string;
+  EntryTypeCode: string;
+  CompanyID: string;
+  Description: string | null;
+  Amount: number;
+}
+
+export interface PreviewJournalEntryBatchOutputWire {
+  Candidates: PreviewEntryWire[];
+  TotalDebits: number;
+  TotalCredits: number;
+  OutOfOrderSkipCount: number;
+}
+
+export interface PreviewJournalEntryBatchResult {
+  Success: boolean;
+  Candidates: PreviewEntryWire[];
+  TotalDebits: number;
+  TotalCredits: number;
+  ErrorMessage?: string;
+}
+
 export class JournalEntryBatchDispatchClient {
   private dataProvider: GraphQLDataProvider;
 
@@ -86,17 +133,41 @@ export class JournalEntryBatchDispatchClient {
    * Build Pending single-company batches from ALL pending JEs (one batch per company with
    * candidates; each build raises + stamps its CFO approval task in the same transaction).
    */
-  public async BuildJournalEntryBatch(targetSystem: string): Promise<BuildJournalEntryBatchResult> {
+  public async BuildJournalEntryBatch(targetSystemOrOptions: string | BuildJournalEntryBatchOptionsInput): Promise<BuildJournalEntryBatchResult> {
     const empty = { Success: false, SummaryLineCount: 0, TotalDebits: 0, TotalCredits: 0, JECount: 0, CompanyCount: 0, NothingToBatch: false };
+    const input: BuildJournalEntryBatchOptionsInput = typeof targetSystemOrOptions === 'string'
+      ? { TargetSystem: targetSystemOrOptions }
+      : targetSystemOrOptions;
     try {
-      const res = await this.dataProvider.RouteOperation<{ TargetSystem: string }, BuildJournalEntryBatchOutputWire>(
-        'Accounting.BuildJournalEntryBatch', { TargetSystem: targetSystem });
+      const res = await this.dataProvider.RouteOperation<BuildJournalEntryBatchOptionsInput, BuildJournalEntryBatchOutputWire>(
+        'Accounting.BuildJournalEntryBatch', input);
       if (!res.Success || !res.Output) return { ...empty, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
       return this.toBuildResult(res.Output.Batches, res.Output.NothingToBatch);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       LogError(`JournalEntryBatchDispatchClient.BuildJournalEntryBatch failed: ${msg}`);
       return { ...empty, ErrorMessage: msg };
+    }
+  }
+
+  /**
+   * Preview candidate journal entries that matching options would batch.
+   */
+  public async PreviewJournalEntryBatch(options?: PreviewJournalEntryBatchOptionsInput): Promise<PreviewJournalEntryBatchResult> {
+    try {
+      const res = await this.dataProvider.RouteOperation<PreviewJournalEntryBatchOptionsInput, PreviewJournalEntryBatchOutputWire>(
+        'Accounting.PreviewJournalEntryBatch', options ?? {});
+      if (!res.Success || !res.Output) return { Success: false, Candidates: [], TotalDebits: 0, TotalCredits: 0, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
+      return {
+        Success: true,
+        Candidates: res.Output.Candidates ?? [],
+        TotalDebits: res.Output.TotalDebits ?? 0,
+        TotalCredits: res.Output.TotalCredits ?? 0,
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      LogError(`JournalEntryBatchDispatchClient.PreviewJournalEntryBatch failed: ${msg}`);
+      return { Success: false, Candidates: [], TotalDebits: 0, TotalCredits: 0, ErrorMessage: msg };
     }
   }
 

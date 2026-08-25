@@ -1,0 +1,134 @@
+[
+  {
+    "fields": {
+      "Name": "Build Journal Entry Batches",
+      "CategoryID": "@lookup:MJ: Action Categories.Name=Accounting",
+      "Description": "Builds single-company GL posting batches from pending candidate journal entries, netting lines per account/dimension combination. Supports filtering by target ERP system, cutoff date, and including/excluding specific JournalEntryType codes (such as excluding RevenueRecognition for daily batch runs).",
+      "Type": "Custom",
+      "DriverClass": "Accounting.BuildJournalEntryBatches",
+      "IconClass": "fa-solid fa-layer-group",
+      "UserPrompt": "Build GL posting batches for pending journal entries.",
+      "CodeApprovalStatus": "Approved",
+      "Status": "Active"
+    },
+    "primaryKey": {
+      "ID": "E839FB12-5813-4B85-8022-DF8943729BA1"
+    },
+    "relatedEntities": {
+      "MJ: Action Params": [
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
+            "Name": "TargetSystem",
+            "Type": "Input",
+            "ValueType": "Scalar",
+            "IsArray": false,
+            "IsRequired": false,
+            "Description": "The ERP target system to stamp on built batches (e.g. 'BusinessCentral', 'QuickBooks', 'NetSuite', 'Sage', 'Xero', 'Other'). Defaults to 'BusinessCentral'."
+          },
+          "primaryKey": {
+            "ID": "8A52D539-7431-4F29-873D-88229F5CDA01"
+          }
+        },
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
+            "Name": "Cutoff",
+            "Type": "Input",
+            "ValueType": "Scalar",
+            "IsArray": false,
+            "IsRequired": false,
+            "Description": "ISO date cutoff (e.g. '2026-08-25'). Entries on or before this date will be gathered."
+          },
+          "primaryKey": {
+            "ID": "9B2735DE-AC19-49BC-8496-DA35B80C1402"
+          }
+        },
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
+            "Name": "StartDate",
+            "Type": "Input",
+            "ValueType": "Scalar",
+            "IsArray": false,
+            "IsRequired": false,
+            "Description": "Optional ISO start date lower bound for candidate entries."
+          },
+          "primaryKey": {
+            "ID": "2C4F1B3E-7284-482F-B059-7CD839AE9803"
+          }
+        },
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
+            "Name": "ExcludeEntryTypeCodes",
+            "Type": "Input",
+            "ValueType": "Scalar",
+            "IsArray": true,
+            "IsRequired": false,
+            "Description": "JournalEntryType codes to EXCLUDE from the candidate pool (e.g. ['RevenueRecognition'] for daily operational batches)."
+          },
+          "primaryKey": {
+            "ID": "7E94BC01-B341-45DF-9824-34FD8A110904"
+          }
+        },
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
+            "Name": "EntryTypeCodes",
+            "Type": "Input",
+            "ValueType": "Scalar",
+            "IsArray": true,
+            "IsRequired": false,
+            "Description": "Optional whitelist of JournalEntryType codes to include."
+          },
+          "primaryKey": {
+            "ID": "5F89AA32-1594-47CA-8AC4-66E875CD2105"
+          }
+        },
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
+            "Name": "CompanyIDs",
+            "Type": "Input",
+            "ValueType": "Scalar",
+            "IsArray": true,
+            "IsRequired": false,
+            "Description": "Optional list of Company IDs to restrict batch building to."
+          },
+          "primaryKey": {
+            "ID": "3CD124AB-9A52-4752-94C0-4822B1489006"
+          }
+        },
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
+            "Name": "BatchCount",
+            "Type": "Output",
+            "ValueType": "Scalar",
+            "IsArray": false,
+            "IsRequired": false,
+            "Description": "The number of batches created."
+          },
+          "primaryKey": {
+            "ID": "1738AB44-013D-47C5-8592-AE91B248CD07"
+          }
+        },
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
+            "Name": "Batches",
+            "Type": "Output",
+            "ValueType": "Scalar",
+            "IsArray": false,
+            "IsRequired": false,
+            "Description": "JSON array of created batch details."
+          },
+          "primaryKey": {
+            "ID": "2837AC55-124E-48D6-96A3-BF02C359DE08"
+          }
+        }
+      ]
+    }
+  }
+]

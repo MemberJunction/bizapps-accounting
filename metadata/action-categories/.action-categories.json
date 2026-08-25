@@ -1,0 +1,12 @@
+[
+  {
+    "fields": {
+      "Name": "Accounting",
+      "Description": "Actions for BizApps Accounting subledger, journal entries, posting batches, and chart of accounts.",
+      "Status": "Active"
+    },
+    "primaryKey": {
+      "ID": "074DF299-8D1F-438B-B855-8DFF17AE565E"
+    }
+  }
+]
