@@ -131,6 +131,21 @@ const GL_REVENUE = '40100';
 const GL_DEFERRED = '21301';
 
 const TARGET_SYSTEM = 'BusinessCentral' as const;
+const MOCK_SYSTEM = 'Mock' as const;
+
+/**
+ * GL Code -> VERIFIED Business Central account. NOT applied by this seed (demo data is all-Mock,
+ * see ensureGLMapping); kept as the checked-in record of which BC accounts have actually been
+ * confirmed against the live tenant, for the deliberate mapping step to use.
+ * `id` is BC's own GUID, which is what
+ * `journalLines.accountId` wants (the account NUMBER is a different field and a different value).
+ * Confirmed 2026-08-24 against the live tenant: both are accountType='Posting', not blocked, and
+ * directPosting=true, so BC will accept a journal line against them.
+ */
+const BC_VERIFIED_ACCOUNTS: Record<string, { id: string; bcNumber: string; bcName: string }> = {
+  '11201': { id: 'b7abc1de-6cb7-eb11-9b52-000d3aec3ef4', bcNumber: '11203', bcName: 'Accounts Receivable' },
+  '40100': { id: '5c725174-57c9-eb11-9f0a-000d3aec3ef4', bcNumber: '41300', bcName: 'Membership Revenue' },
+};
 
 /**
  * Demo-seeded JournalEntryType rows (issue #24): the demo simulates ORDERS activity, and the
@@ -386,8 +401,20 @@ async function ensureOrganization(contextUser: UserInfo, orgId: string, name: st
 }
 
 // ─── GL ERP mapping (inline, idempotent) ──────────────────────────────────────
-// buildJournalEntryBatch hard-fails on an unmapped GL account. W1 leaves ExternalAccountID null, so set it to the
-// GL Code here. Idempotent: only saves when not already mapped.
+// buildJournalEntryBatch hard-fails on an unmapped GL account, so every account gets a mapping.
+//
+// WHY THIS IS NOT `ExternalAccountID = row.Code` ANY MORE (2026-08-24): it used to be, as a
+// placeholder purely to satisfy that hard-fail — but the placeholder CLAIMED ExternalSystem
+// 'BusinessCentral', and routing is account-driven, so those accounts routed real dispatches to
+// Business Central using our own chart's numbers as if they were BC's. Checked against a live
+// tenant, only 2 of 10 such numbers existed there, and one resolved to a completely different
+// account ("Deferred Revenue" here vs "Guaranteed Loan from Subs" in BC). Posting on that would
+// have put real entries in wrong accounts, silently.
+//
+// So: an account is mapped to BusinessCentral ONLY when we have a VERIFIED BC account id for it.
+// Everything else maps to Mock — still satisfying the hard-fail, but structurally unable to reach
+// a real ERP. Add to BC_VERIFIED_ACCOUNTS only after confirming the id against the live tenant
+// (accountType='Posting', blocked=false, directPosting=true).
 
 async function ensureGLMapping(contextUser: UserInfo, ctx: CompanyContext): Promise<void> {
   const md = new Metadata();
@@ -400,8 +427,17 @@ async function ensureGLMapping(contextUser: UserInfo, ctx: CompanyContext): Prom
     if (row.ExternalAccountID) continue; // already mapped
     const gl = await md.GetEntityObject<mjBizAppsAccountingGLAccountEntity>(GL_ENTITY, contextUser);
     if (!(await gl.Load(row.ID))) continue;
-    gl.ExternalSystem = TARGET_SYSTEM;
-    gl.ExternalAccountID = row.Code;
+    // ALL demo accounts map to Mock — deliberately, and never to BusinessCentral.
+    //
+    // Two reasons. (1) Safety: routing is account-driven, so any account claiming
+    // 'BusinessCentral' can send a real dispatch to a live ERP. Demo fixtures must never be able
+    // to do that; arming a real target is a deliberate act (see _maint-bc-map-proof-company.ts,
+    // which maps ONE company's verified pair and asserts nothing legacy is armed).
+    // (2) Correctness: a batch cannot straddle systems (D13 / accounting#68). Seeded JEs span AR,
+    // revenue AND cash, so mapping only the two BC-verified accounts made every demo batch
+    // straddle Mock and BusinessCentral and fail to dispatch at all.
+    gl.ExternalSystem = MOCK_SYSTEM;
+    gl.ExternalAccountID = `MOCK-${row.Code}`;
     if (!(await gl.Save())) {
       throw new Error(`ensureGLMapping: GL ${row.Code} mapping save failed: ${gl.LatestResult?.CompleteMessage ?? 'unknown'}`);
     }

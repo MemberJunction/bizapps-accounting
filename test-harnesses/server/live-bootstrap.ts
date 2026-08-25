@@ -19,7 +19,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { randomUUID } from 'crypto';
 import { Metadata, RunView, UserInfo } from '@memberjunction/core';
-import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
+import { setupSQLServerClient, SQLServerProviderConfigData } from '@memberjunction/sqlserver-dataprovider';
+import { UserCache } from '@memberjunction/generic-database-provider';
 // Side-effect imports: fire every @RegisterClass so GetEntityObject returns the server subclasses.
 import '@memberjunction/server-bootstrap-lite';
 import '@mj-biz-apps/common-entities';

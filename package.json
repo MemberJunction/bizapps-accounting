@@ -43,7 +43,8 @@
     "simple-git": "^3.31.1",
     "tsc-alias": "^1.8.16",
     "turbo": "^2.7.3",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "@memberjunction/generic-database-provider": "^6.1.0-edge.3"
   },
   "pnpm": {
     "overrides": {

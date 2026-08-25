@@ -4,7 +4,8 @@
  *  attribute to a real Person when one exists, else record the decision unattributed.
  */
 import sql from 'mssql'; import dotenv from 'dotenv'; import path from 'path';
-import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
+import { setupSQLServerClient, SQLServerProviderConfigData } from '@memberjunction/sqlserver-dataprovider';
+import { UserCache } from '@memberjunction/generic-database-provider';
 import '@memberjunction/server-bootstrap-lite';
 import '@memberjunction/connector-business-central';
 import '@mj-biz-apps/common-entities';

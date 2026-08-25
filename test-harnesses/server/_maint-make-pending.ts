@@ -2,7 +2,8 @@
  *  live reject/regenerate demo. Prints the JE ids. Run from instance worktree root. */
 import sql from 'mssql'; import dotenv from 'dotenv'; import path from 'path';
 import { Metadata, RunView } from '@memberjunction/core';
-import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
+import { setupSQLServerClient, SQLServerProviderConfigData } from '@memberjunction/sqlserver-dataprovider';
+import { UserCache } from '@memberjunction/generic-database-provider';
 import { finishAndExit } from './harness-exit.js';
 import '@memberjunction/server-bootstrap-lite'; import '@mj-biz-apps/common-entities'; import '@mj-biz-apps/accounting-entities'; import '@mj-biz-apps/accounting-core-entities-server';
 import type { mjBizAppsAccountingJournalEntryEntity, mjBizAppsAccountingJournalEntryLineEntity } from '@mj-biz-apps/accounting-entities';

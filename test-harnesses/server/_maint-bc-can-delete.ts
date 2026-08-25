@@ -2,7 +2,8 @@
  *  Decides whether adapter rollback / anti-accumulation cleanup is possible at all in this tenant. */
 import sql from 'mssql'; import dotenv from 'dotenv'; import path from 'path';
 import { Metadata } from '@memberjunction/core';
-import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
+import { setupSQLServerClient, SQLServerProviderConfigData } from '@memberjunction/sqlserver-dataprovider';
+import { UserCache } from '@memberjunction/generic-database-provider';
 import '@memberjunction/server-bootstrap-lite';
 import '@memberjunction/connector-business-central';
 import { ConnectorFactory } from '@memberjunction/integration-engine';

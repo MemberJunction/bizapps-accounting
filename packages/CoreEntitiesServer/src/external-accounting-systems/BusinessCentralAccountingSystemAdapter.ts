@@ -372,11 +372,21 @@ export class BusinessCentralAccountingSystemAdapter extends BaseExternalAccounti
    *
    * IRREVERSIBLE: a posted journal is corrected with a reversing entry, never un-posted.
    *
-   * EXTERNAL REFERENCE: `post` returns 204 with no body, so BC hands back nothing. We return
-   * the JOURNAL CODE as ExternalJournalEntryBatchRef — the batch-level handle that maps our
-   * batch to the BC journal and can be re-derived from the batch GUID at any time. The per-line
-   * `documentNumber` is the complementary handle: it is stamped on every posted G/L entry, so it
-   * is what a human filters General Ledger Entries by to see what we sent.
+   * EXTERNAL REFERENCE: `post` returns 204 with no body, so BC hands back nothing and we must
+   * choose the handle ourselves. We return the DOCUMENT NUMBER (`AIDP-<batch number>`).
+   *
+   * This used to return the journal CODE. That was correct only while journals were per-batch.
+   * Under per-channel journals a code like `AIDP_MAN` is a SHARED container reused by every
+   * manual batch, so storing it makes ExternalJournalEntryBatchRef ambiguous — every manual
+   * batch would carry an identical ref, identifying the channel rather than the post. Worse,
+   * `VerifyPosted` looks G/L entries up BY DOCUMENT NUMBER: given the journal code it searches
+   * for `AIDP_MAN`, matches nothing, and reports a genuinely-posted batch as unposted. That
+   * failure was reproduced end-to-end on 2026-08-25 (batch BATCH-000003 posted G/L entries
+   * 6242-6244, while a lookup on the stored ref returned zero rows).
+   *
+   * The document number has the properties the ref needs: unique per batch, stamped on every
+   * posted G/L entry, and the value a human filters General Ledger Entries by. Nothing is lost
+   * by dropping the code — `JournalCodeFor` re-derives it from the batch's channel at any time.
    */
   private async PostStagedJournal(
     context: PostJournalEntryBatchContext,
@@ -391,6 +401,6 @@ export class BusinessCentralAccountingSystemAdapter extends BaseExternalAccounti
         + `(HTTP ${posted.StatusCode}): ${posted.ErrorMessage ?? 'no message'}. Lines remain STAGED — nothing reached the general ledger.`,
       );
     }
-    return journal.Code;
+    return this.DocumentNumberFor(context);
   }
 }

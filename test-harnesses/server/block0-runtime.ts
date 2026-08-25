@@ -39,7 +39,8 @@ import sql from 'mssql';
 import dotenv from 'dotenv';
 import path from 'path';
 import { Metadata, RunView, UserInfo } from '@memberjunction/core';
-import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
+import { setupSQLServerClient, SQLServerProviderConfigData } from '@memberjunction/sqlserver-dataprovider';
+import { UserCache } from '@memberjunction/generic-database-provider';
 import { assertInvariantTriggers } from './trigger-preflight.js';
 import { finishAndExit } from './harness-exit.js';
 // Register core + bizapps entity subclasses AND the accounting server hooks (W1/W2/W3) on
