@@ -71,9 +71,11 @@
  */
 import { createHash } from 'node:crypto';
 import { RegisterClass } from '@memberjunction/global';
+import { LogError } from '@memberjunction/core';
 import type { MJCompanyIntegrationEntity } from '@memberjunction/core-entities';
 import { ConnectorFactory } from '@memberjunction/integration-engine';
 import { BusinessCentralConnector } from '@memberjunction/connector-business-central';
+import { AccountingBusinessCentralConnector } from './AccountingBusinessCentralConnector.js';
 import type { CreateRecordContext, CRUDResult, ExternalRecord } from '@memberjunction/integration-engine';
 import type { mjBizAppsAccountingJournalEntryLineEntity } from '@mj-biz-apps/accounting-entities';
 import { resolveExternalAccount } from '../JournalEntryBatchEngine.js';
@@ -176,13 +178,62 @@ export class BusinessCentralAccountingSystemAdapter extends BaseExternalAccounti
   }
 
   /**
-   * Sent-limbo recovery probe (D12). Real implementation reads BC's `generalLedgerEntries`
-   * filtered on our documentNumber; the connector's read surface for an ad-hoc filtered probe
-   * is exercised in the S4 capture harness. Until then: `unknown` — an honest "cannot tell",
-   * which the recovery flow treats as manual-review, never as posted.
+   * Sent-limbo recovery probe (D12): after a lost `Microsoft.NAV.post` response, did the post land?
+   *
+   * Reads Business Central's `generalLedgerEntries` filtered on the document number we stamped on
+   * every line. This is only answerable because `PostStagedJournal` returns the DOCUMENT NUMBER as
+   * ExternalJournalEntryBatchRef — while it returned the shared journal code, a lookup on the stored
+   * ref matched nothing and this probe would have reported a posted batch as absent.
+   *
+   * THE THREE ANSWERS ARE NOT INTERCHANGEABLE:
+   *   'posted'  — BC holds entries for this document number. Never re-post.
+   *   'absent'  — BC genuinely holds none. Safe to re-post.
+   *   'unknown' — we could not find out (transport failure, auth, unexpected shape). Treated as
+   *               manual-review, NEVER as absent. Collapsing 'unknown' into 'absent' is what turns a
+   *               network blip into a double post into a real general ledger.
+   *
+   * The bounded filtered read lives on AccountingBusinessCentralConnector, a temporary subclass —
+   * see Integrations#265. When a filtered-read surface ships upstream, move this to it and delete
+   * the subclass.
    */
-  public override async VerifyPosted(_documentNumber: string, _context: PostJournalEntryBatchContext): Promise<VerifyPostedResult> {
-    return 'unknown';
+  public override async VerifyPosted(documentNumber: string, context: PostJournalEntryBatchContext): Promise<VerifyPostedResult> {
+    // Resolution and wiring failures THROW. They are not uncertainty about Business Central — we
+    // never reached it — they are a broken deployment. Returning 'unknown' here would make a
+    // permanently-dead probe indistinguishable from a dropped packet: every batch would route to
+    // manual review forever while the real cause sat in a log. A throw is exactly as safe as
+    // 'unknown' (neither can cause a double post) and is the only one that gets fixed.
+    const integration = await this.ResolveIntegration(context.System, context.ContextUser, context.Provider);
+    const companyIntegration = await this.ResolveCompanyIntegration(integration, context.ContextUser, context.Provider);
+    const resolved = ConnectorFactory.Resolve(integration);
+    if (!(resolved instanceof AccountingBusinessCentralConnector)) {
+      throw new Error(
+        `VerifyPosted cannot run: ConnectorFactory resolved '${resolved.constructor.name}', not `
+        + `AccountingBusinessCentralConnector. The bounded general-ledger probe lives on that subclass, so its `
+        + `@RegisterClass registration for key 'BusinessCentralConnector' is not winning resolution — most `
+        + `likely the accounting server package was not imported at boot. This is a deployment defect, not an `
+        + `uncertain post: fix the registration rather than treating the batch as unverifiable.`,
+      );
+    }
+
+    // ONLY the network probe is guarded. A transport or HTTP failure is genuine uncertainty about
+    // BC's state, which is precisely what 'unknown' means.
+    //
+    // THE THREE ANSWERS ARE NOT INTERCHANGEABLE:
+    //   'posted'  — BC holds entries for this document number. Never re-post.
+    //   'absent'  — BC genuinely holds none. Safe to re-post.
+    //   'unknown' — we asked and could not tell. Manual review, NEVER treated as absent. Collapsing
+    //               'unknown' into 'absent' is what turns a network blip into a double post into a
+    //               real general ledger.
+    try {
+      const entries = await resolved.GetPostedEntriesByDocumentNumber(companyIntegration, documentNumber, context.ContextUser);
+      return entries.length > 0 ? { Status: 'posted', EntryCount: entries.length } : { Status: 'absent' };
+    } catch (e) {
+      // Log AND return the reason. Logging alone strands the caller — and the human resolving the
+      // limbo — with 'unknown' and no way to tell an expired credential from a transient 503.
+      const reason = e instanceof Error ? e.message : String(e);
+      LogError(`VerifyPosted: general-ledger probe failed for document ${documentNumber}: ${reason}`);
+      return { Status: 'unknown', Reason: reason };
+    }
   }
 
   // ── staging ──────────────────────────────────────────────────────────────────

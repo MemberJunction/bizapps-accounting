@@ -28,6 +28,6 @@ export class MockAccountingSystemAdapter extends BaseExternalAccountingSystemAda
 
   /** The mock destination "posted" anything we ever sent it — by construction. */
   public override async VerifyPosted(_documentNumber: string, _context: PostJournalEntryBatchContext): Promise<VerifyPostedResult> {
-    return 'posted';
+    return { Status: 'posted', EntryCount: 0 };
   }
 }

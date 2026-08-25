@@ -56,8 +56,31 @@ export interface PostJournalEntryBatchResult {
   Error?: string;
 }
 
-/** Verdict of the Sent-limbo recovery probe (crash between the ERP post and the local Posted flip — D12). */
-export type VerifyPostedResult = 'posted' | 'absent' | 'unknown';
+/**
+ * Verdict of the Sent-limbo recovery probe (crash between the ERP post and the local Posted flip — D12).
+ *
+ * A discriminated union rather than a bare token, because the three verdicts carry different
+ * information and demand different handling:
+ *   'posted'  — the destination holds entries for this document. NEVER re-post. EntryCount lets the
+ *               caller sanity-check the shape of what landed.
+ *   'absent'  — the destination genuinely holds none. Safe to re-post.
+ *   'unknown' — we asked and could not tell. Manual review, NEVER treated as absent: collapsing the
+ *               two is what turns a network blip into a double post into a real general ledger.
+ *               Reason carries WHY, because "expired credential", "503, retry later" and "the API
+ *               shape changed" call for completely different responses and a bare token strands the
+ *               operator with none of that.
+ *
+ * For the SAFETY decision every failure is the same — all of them mean "we cannot tell", and all
+ * imply the same action: never re-post, escalate. So one 'unknown' verdict is sufficient and correct.
+ * The failure TYPE only matters to recovery POLICY (auto-retry a transient 503 vs. page someone about
+ * an expired credential). When that policy is built, it needs no new machinery: BusinessCentralConnector
+ * exposes `ClassifyODataError(response): SyncErrorCode` (429 -> RATE_LIMIT_EXCEEDED, 503/504 ->
+ * NETWORK_TIMEOUT, 401 -> CONFIGURATION_ERROR) and the integration engine ships `IsRetryableError(code)`.
+ */
+export type VerifyPostedResult =
+  | { Status: 'posted'; EntryCount: number }
+  | { Status: 'absent' }
+  | { Status: 'unknown'; Reason: string };
 
 export abstract class BaseExternalAccountingSystemAdapter {
   /**
