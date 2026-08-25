@@ -93,22 +93,14 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="ExternalJournalEntryBatchRef"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
 
     </mj-collapsible-panel>
 
-    <!-- Lifecycle and Status Section -->
+    <!-- Batch Lifecycle Section -->
     <mj-collapsible-panel
-        SectionKey="lifecycleAndStatus"
-        SectionName="Lifecycle and Status"
-        Icon="fa fa-tasks"
+        SectionKey="batchLifecycle"
+        SectionName="Batch Lifecycle"
+        Icon="fa fa-flag"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -136,6 +128,40 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- ERP Integration Section -->
+    <mj-collapsible-panel
+        SectionKey="eRPIntegration"
+        SectionName="ERP Integration"
+        Icon="fa fa-sync"
+        [Form]="this"
+        [FormContext]="formContext">
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="ExternalJournalEntryBatchRef"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="SentAt"
+            Type="datepicker"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="PostedAt"
+            Type="datepicker"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -147,10 +173,10 @@
 
     </mj-collapsible-panel>
 
-    <!-- Approval and Dispatch Section -->
+    <!-- Approval and Processing Section -->
     <mj-collapsible-panel
-        SectionKey="approvalAndDispatch"
-        SectionName="Approval and Dispatch"
+        SectionKey="approvalAndProcessing"
+        SectionName="Approval and Processing"
         Icon="fa fa-check-double"
         [Form]="this"
         [FormContext]="formContext">
@@ -170,22 +196,6 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
             LinkType="Record"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="SentAt"
-            Type="datepicker"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="PostedAt"
-            Type="datepicker"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
         ></mj-form-field>
         <mj-form-field 
             [Record]="record"
@@ -253,9 +263,9 @@
         <div>
             <mj-explorer-entity-data-grid
                 [Params]="BuildRelationshipViewParamsByEntityName('MJ_BizApps_Accounting: Journal Entries','JournalEntryBatchID')"
-                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entries')"
+                [NewRecordValues]="NewRecordValues('MJ_BizApps_Accounting: Journal Entries','JournalEntryBatchID')"
                 [AllowLoad]="IsSectionExpanded('mJBizAppsAccountingJournalEntries')"
-                [ShowToolbar]="false"
+                [ShowToolbar]="true"
                 (Navigate)="OnFormNavigate($event)"
                 (AfterDataLoad)="SetSectionRowCount('mJBizAppsAccountingJournalEntries', $event.totalRowCount)"
                 >

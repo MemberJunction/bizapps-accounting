@@ -1,0 +1,33 @@
+<mj-collapsible-panel
+    SectionKey="reversal"
+    SectionName="Reversal"
+    Icon="fa-solid fa-rotate-left"
+    [Form]="FormComponent"
+    [FormContext]="FormContext"
+    [DefaultExpanded]="false">
+    <div class="mja-je-fields">
+        <mj-form-field
+            [Record]="Record"
+            [ShowLabel]="true"
+            FieldName="ReversesJournalEntryID"
+            Type="textbox"
+            [EditMode]="false"
+            [FormContext]="FormContext"
+            LinkType="Record"
+            (Navigate)="FormComponent.OnFormNavigate($event)">
+        </mj-form-field>
+        <mj-form-field
+            [Record]="Record"
+            [ShowLabel]="true"
+            FieldName="ReversedByJournalEntryID"
+            Type="textbox"
+            [EditMode]="false"
+            [FormContext]="FormContext"
+            LinkType="Record"
+            (Navigate)="FormComponent.OnFormNavigate($event)">
+        </mj-form-field>
+    </div>
+    <p class="mja-je-ov-note">
+        Hierarchy columns (depth, path, leaf) are not shown here.
+    </p>
+</mj-collapsible-panel>

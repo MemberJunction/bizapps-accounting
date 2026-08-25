@@ -198,7 +198,7 @@ export class JournalEntryBatchesDashboardPageComponent extends AccountingDashboa
       { Id: 'failed', Label: 'Dispatch failures', Value: c.failed, Icon: 'fa-solid fa-triangle-exclamation',
         GoTo: 'dispatch', Warn: c.failed > 0,
         Tooltip: 'Journal entry batches whose ERP dispatch failed — retry them from Dispatch status.' },
-      { Id: 'unbatched', Label: 'Unbatched entries', Value: c.unbatched, Icon: 'fa-solid fa-inbox', GoTo: 'workspace',
+      { Id: 'unbatched', Label: 'Unbatched entries', Value: c.unbatched, Icon: 'fa-solid fa-inbox', GoTo: 'approvals',
         Tooltip: 'Pending journal entries waiting to be batched (in your company scope).' },
       { Id: 'unstamped', Label: 'JE batches with no approval task', Value: c.unstamped, Icon: 'fa-solid fa-link-slash',
         GoTo: 'approvals', Warn: c.unstamped > 0,

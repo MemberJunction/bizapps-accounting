@@ -57,11 +57,3 @@
     }
   </div>
 </mj-page-body-interior>
-
-<!-- Review = the existing JE detail slide-in (lines, dimensions, lineage, reversal chain). Reused
-     rather than rebuilt as a second review surface. -->
-<mj-journal-entry-detail-panel
-  [JournalEntryID]="SelectedID"
-  (Closed)="OnDetailClosed()"
-  (Changed)="OnDetailChanged()">
-</mj-journal-entry-detail-panel>

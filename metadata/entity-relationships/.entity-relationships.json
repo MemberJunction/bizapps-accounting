@@ -55,7 +55,7 @@
       "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: Journal Entry Lines&RelatedEntity=MJ_BizApps_Accounting: Journal Entry Line Dimensions"
     },
     "sync": {
-      "lastModified": "2026-08-11T19:01:28.487Z",
+      "lastModified": "2026-08-15T02:45:44.134Z",
       "checksum": "d83befacf1bf38198fe9e6c9d3f387c6ea5537ae5a3bf86acedcf56758bdbaad"
     }
   },
@@ -80,7 +80,7 @@
       "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Accounting: Journal Entry Batches&RelatedEntity=MJ_BizApps_Accounting: Journal Entries"
     },
     "sync": {
-      "lastModified": "2026-08-11T19:01:28.464Z",
+      "lastModified": "2026-08-15T02:45:44.154Z",
       "checksum": "fa5637f6837939c3340f838d101c0ef25b8e5a10fc01cbc7b86fd76d4acdce65"
     }
   }

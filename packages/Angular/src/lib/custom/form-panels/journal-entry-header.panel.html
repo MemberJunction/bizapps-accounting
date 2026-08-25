@@ -1,0 +1,112 @@
+<div class="mja-je-hero" [class.mja-je-hero--collapsed]="Collapsed">
+    <div class="mja-je-hero__top">
+        <div class="mja-je-hero__identity">
+            <div class="mja-je-hero__avatar" [class.mja-je-hero__avatar--reverse]="IsReversal">
+                <i class="fa-solid" [class.fa-book]="!IsReversal" [class.fa-rotate-left]="IsReversal" aria-hidden="true"></i>
+            </div>
+            <div class="mja-je-hero__copy">
+                <div class="mja-je-hero__title-row">
+                    <h1 class="mja-je-hero__title">{{ Title }}</h1>
+                    <span [class]="StatusClass">{{ Record.Status || 'Pending' }}</span>
+                    @if (Record.EntryType) {
+                        <span class="mja-je-chip">{{ Record.EntryType }}</span>
+                    }
+                </div>
+                <div class="mja-je-hero__meta">
+                    @if (Record.Company) {
+                        <span>{{ Record.Company }}</span>
+                    }
+                    <span>{{ EffectiveDateLabel }}</span>
+                    @if (Record.Description && !Collapsed) {
+                        <span>{{ Record.Description }}</span>
+                    }
+                </div>
+            </div>
+        </div>
+        <div class="mja-je-hero__actions">
+            <button
+                type="button"
+                class="mja-je-hero__toggle"
+                (click)="ToggleCollapsed()"
+                [attr.aria-expanded]="!Collapsed"
+                [attr.aria-label]="Collapsed ? 'Expand header' : 'Collapse header'"
+                [title]="Collapsed ? 'Expand header' : 'Collapse header'">
+                <i class="fa-solid" [class.fa-chevron-down]="Collapsed" [class.fa-chevron-up]="!Collapsed" aria-hidden="true"></i>
+            </button>
+        </div>
+    </div>
+
+    @if (!Collapsed) {
+        <div class="mja-je-hero__stats">
+            <div class="mja-je-stat">
+                <span class="mja-je-stat__label">Debits</span>
+                <span class="mja-je-stat__value">{{ DebitsLabel }}</span>
+            </div>
+            <div class="mja-je-stat">
+                <span class="mja-je-stat__label">Credits</span>
+                <span class="mja-je-stat__value">{{ CreditsLabel }}</span>
+            </div>
+            <div class="mja-je-stat">
+                <span class="mja-je-stat__label">Difference</span>
+                <span class="mja-je-stat__value" [class.mja-je-stat__value--ok]="Balanced" [class.mja-je-stat__value--bad]="!Balanced">
+                    {{ Balanced ? 'Balanced' : DifferenceLabel }}
+                </span>
+            </div>
+            <div class="mja-je-stat">
+                <span class="mja-je-stat__label">Company</span>
+                <span class="mja-je-stat__value">{{ Record.Company || '—' }}</span>
+            </div>
+        </div>
+
+        @if (EditMode) {
+            <div class="mja-je-hero__edit">
+                <div class="mja-je-hero__field">
+                    <mj-form-field
+                        [Record]="Record"
+                        [ShowLabel]="true"
+                        FieldName="CompanyID"
+                        Type="textbox"
+                        [EditMode]="EditMode"
+                        [FormContext]="FormContext"
+                        LinkType="Record"
+                        (Navigate)="FormComponent.OnFormNavigate($event)">
+                    </mj-form-field>
+                </div>
+                <div class="mja-je-hero__field">
+                    <mj-form-field
+                        [Record]="Record"
+                        [ShowLabel]="true"
+                        FieldName="EffectiveDate"
+                        Type="datepicker"
+                        [EditMode]="EditMode"
+                        [FormContext]="FormContext"
+                        (Navigate)="FormComponent.OnFormNavigate($event)">
+                    </mj-form-field>
+                </div>
+                <div class="mja-je-hero__field">
+                    <mj-form-field
+                        [Record]="Record"
+                        [ShowLabel]="true"
+                        FieldName="EntryTypeID"
+                        Type="textbox"
+                        [EditMode]="EditMode"
+                        [FormContext]="FormContext"
+                        LinkType="Record"
+                        (Navigate)="FormComponent.OnFormNavigate($event)">
+                    </mj-form-field>
+                </div>
+                <div class="mja-je-hero__field mja-je-hero__field--span">
+                    <mj-form-field
+                        [Record]="Record"
+                        [ShowLabel]="true"
+                        FieldName="Description"
+                        Type="textarea"
+                        [EditMode]="EditMode"
+                        [FormContext]="FormContext"
+                        (Navigate)="FormComponent.OnFormNavigate($event)">
+                    </mj-form-field>
+                </div>
+            </div>
+        }
+    }
+</div>
