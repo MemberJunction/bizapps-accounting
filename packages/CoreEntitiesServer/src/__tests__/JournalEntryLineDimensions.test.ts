@@ -33,6 +33,7 @@ describe('JournalEntryLineEntityServer — Dimensions collection', () => {
       AutoIncrement: false,
       ReadOnly: false,
       AllowsNull: true,
+      ValueIsPermittedByValueList: () => true,
     })) as any[];
     Object.defineProperty(info, 'Fields', { get: () => fields, configurable: true });
     Object.defineProperty(info, 'PrimaryKeys', { get: () => fields.filter((f: any) => f.IsPrimaryKey), configurable: true });

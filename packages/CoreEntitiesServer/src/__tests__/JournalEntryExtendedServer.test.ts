@@ -45,6 +45,7 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
         AutoIncrement: false,
         ReadOnly: false,
         AllowsNull: true,
+        ValueIsPermittedByValueList: () => true,
       })) as any[];
 
       Object.defineProperty(info, 'Fields', {
