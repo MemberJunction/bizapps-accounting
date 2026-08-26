@@ -126,6 +126,18 @@ module.exports = {
   // Unnamed schemas — core, siblings, never-seen client schemas — are excluded.
   includeSchemas: ['__mj_BizAppsAccounting'],
   excludeSchemas: [],
+  /**
+   * Schema → npm for peer entity classes this emit does NOT generate
+   * (embeds + related-record collections). Distinct from:
+   *   includeSchemas     — what this run generates
+   *   entityPackageName  — the npm package this run writes (string form)
+   * Core (__mj) always comes from @memberjunction/core-entities; do not list it.
+   * Do not map a foreign schema to this emit's own package.
+   */
+  entityImportPackages: {
+    '__mj_BizAppsCommon': '@mj-biz-apps/common-entities',
+    '__mj_BizAppsTasks': '@mj-biz-apps/tasks-entities',
+  },
   // excludeTables: [
   //   { schema: '%', table: 'sys%' },
   //   { schema: '%', table: 'flyway_schema_history' }
