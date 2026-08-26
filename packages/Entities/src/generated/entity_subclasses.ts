@@ -86,13 +86,13 @@ export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
         * * Description: Short code used in JE numbering ('JE-{CompanyCode}-{FY}-{seq}'). Uppercase alphanumeric + dash/underscore. UNIQUE per deployment (BA-D15).`),
     FunctionalCurrencyCode: z.string().describe(`
         * * Field Name: FunctionalCurrencyCode
-        * * Display Name: Functional Currency
+        * * Display Name: Functional Currency Code
         * * SQL Data Type: char(3)
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Currencies (vwCurrencies.Code)
         * * Description: ISO 4217 currency code (CHAR(3)) for the functional currency. All JEs post in this currency; original-currency triple on JE lines records the source-transaction currency when different (BA-D10).`),
     ReportingCurrencyCode: z.string().nullable().describe(`
         * * Field Name: ReportingCurrencyCode
-        * * Display Name: Reporting Currency
+        * * Display Name: Reporting Currency Code
         * * SQL Data Type: char(3)
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Currencies (vwCurrencies.Code)
         * * Description: Reporting currency for consolidation. NULL = same as functional currency.`),
@@ -116,7 +116,7 @@ export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
         * * Description: If set, this profile uses the books (COA, periods, JEs) of the referenced profile (consolidated reporting). Chains are forbidden: the referenced profile must NOT itself have a parent (BA-D9; trigger trg_ACP_NoChains).`),
     ApprovalCFOUserID: z.string().nullable().describe(`
         * * Field Name: ApprovalCFOUserID
-        * * Display Name: Approval CFO User
+        * * Display Name: Approval CFO User ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
         * * Description: The CFO (an __mj.User — a security identity) who must approve a Journal Entry Batch for this company before it dispatches to the ERP. Resolved by the bizapps-tasks approval gate. Nullable: companies without a configured CFO fall back to the role-based resolver.`),
@@ -166,7 +166,7 @@ export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
         * * SQL Data Type: nvarchar(80)`),
     ApprovalCFOUser: z.string().nullable().describe(`
         * * Field Name: ApprovalCFOUser
-        * * Display Name: Approval CFO User Name
+        * * Display Name: Approval CFO User
         * * SQL Data Type: nvarchar(100)`),
     __mj_Latitude: z.number().nullable().describe(`
         * * Field Name: __mj_Latitude
@@ -182,19 +182,19 @@ export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
         * * SQL Data Type: uniqueidentifier`),
     ParentAccountingCompanyIDDepth: z.number().nullable().describe(`
         * * Field Name: ParentAccountingCompanyIDDepth
-        * * Display Name: Parent Depth
+        * * Display Name: Parent Company Depth
         * * SQL Data Type: int`),
     ParentAccountingCompanyIDPath: z.string().nullable().describe(`
         * * Field Name: ParentAccountingCompanyIDPath
-        * * Display Name: Parent Path
+        * * Display Name: Parent Company Path
         * * SQL Data Type: nvarchar(MAX)`),
     ParentAccountingCompanyIDIsLeaf: z.boolean().nullable().describe(`
         * * Field Name: ParentAccountingCompanyIDIsLeaf
-        * * Display Name: Is Leaf
+        * * Display Name: Is Leaf Node
         * * SQL Data Type: bit`),
     ParentAccountingCompanyIDChildCount: z.number().nullable().describe(`
         * * Field Name: ParentAccountingCompanyIDChildCount
-        * * Display Name: Child Count
+        * * Display Name: Child Company Count
         * * SQL Data Type: int`),
 });
 
@@ -406,7 +406,7 @@ export const mjBizAppsAccountingDimensionValueSchema = z.object({
         * * Description: Unique identifier.`),
     DimensionID: z.string().describe(`
         * * Field Name: DimensionID
-        * * Display Name: Dimension ID
+        * * Display Name: Dimension
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Dimensions (vwDimensions.ID)
         * * Description: Dimension this value belongs to.`),
@@ -422,7 +422,7 @@ export const mjBizAppsAccountingDimensionValueSchema = z.object({
         * * Description: Display name for this value.`),
     ParentDimensionValueID: z.string().nullable().describe(`
         * * Field Name: ParentDimensionValueID
-        * * Display Name: Parent Value ID
+        * * Display Name: Parent Value
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Dimension Values (vwDimensionValues.ID)
         * * Description: Parent value for hierarchical dimensions (e.g. Country contains States).`),
@@ -454,15 +454,15 @@ export const mjBizAppsAccountingDimensionValueSchema = z.object({
         * * Default Value: getutcdate()`),
     Dimension: z.string().describe(`
         * * Field Name: Dimension
-        * * Display Name: Dimension
+        * * Display Name: Dimension Name
         * * SQL Data Type: nvarchar(100)`),
     ParentDimensionValue: z.string().nullable().describe(`
         * * Field Name: ParentDimensionValue
-        * * Display Name: Parent Value
+        * * Display Name: Parent Value Name
         * * SQL Data Type: nvarchar(200)`),
     RootParentDimensionValueID: z.string().nullable().describe(`
         * * Field Name: RootParentDimensionValueID
-        * * Display Name: Root Parent Value ID
+        * * Display Name: Root Parent Value
         * * SQL Data Type: uniqueidentifier`),
     ParentDimensionValueIDDepth: z.number().nullable().describe(`
         * * Field Name: ParentDimensionValueIDDepth
@@ -803,7 +803,7 @@ export const mjBizAppsAccountingGLAccountSchema = z.object({
         * * Description: High-level type: Asset | Liability | Equity | Revenue | Expense (AM-3 five-value enum; contra/statistical variants may return later as a sub-classification).`),
     ParentGLAccountID: z.string().nullable().describe(`
         * * Field Name: ParentGLAccountID
-        * * Display Name: Parent Account
+        * * Display Name: Parent Account ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Accounts (vwGLAccounts.ID)
         * * Description: Parent account for hierarchical rollup (NULL = top of chart).`),
@@ -856,15 +856,15 @@ export const mjBizAppsAccountingGLAccountSchema = z.object({
         * * SQL Data Type: nvarchar(50)`),
     ParentGLAccount: z.string().nullable().describe(`
         * * Field Name: ParentGLAccount
-        * * Display Name: Parent Account Name
+        * * Display Name: Parent Account
         * * SQL Data Type: nvarchar(200)`),
     CurrencyCode_Virtual: z.string().nullable().describe(`
         * * Field Name: CurrencyCode_Virtual
-        * * Display Name: Virtual Currency
+        * * Display Name: Virtual Currency Code
         * * SQL Data Type: nvarchar(80)`),
     RootParentGLAccountID: z.string().nullable().describe(`
         * * Field Name: RootParentGLAccountID
-        * * Display Name: Root Parent Account
+        * * Display Name: Root Parent Account ID
         * * SQL Data Type: uniqueidentifier`),
     ParentGLAccountIDDepth: z.number().nullable().describe(`
         * * Field Name: ParentGLAccountIDDepth
@@ -1709,7 +1709,7 @@ export const mjBizAppsAccountingTaxJurisdictionSchema = z.object({
         * * Description: City name scoping (if the jurisdiction is city-specific).`),
     ParentTaxJurisdictionID: z.string().nullable().describe(`
         * * Field Name: ParentTaxJurisdictionID
-        * * Display Name: Parent Jurisdiction
+        * * Display Name: Parent Tax Jurisdiction ID
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Tax Jurisdictions (vwTaxJurisdictions.ID)
         * * Description: Parent jurisdiction for nested scopes (e.g. county inside state).`),
@@ -1735,7 +1735,7 @@ export const mjBizAppsAccountingTaxJurisdictionSchema = z.object({
         * * SQL Data Type: nvarchar(200)`),
     ParentTaxJurisdiction: z.string().nullable().describe(`
         * * Field Name: ParentTaxJurisdiction
-        * * Display Name: Parent Jurisdiction Name
+        * * Display Name: Parent Tax Jurisdiction
         * * SQL Data Type: nvarchar(200)`),
     __mj_Latitude: z.number().nullable().describe(`
         * * Field Name: __mj_Latitude
@@ -1747,7 +1747,7 @@ export const mjBizAppsAccountingTaxJurisdictionSchema = z.object({
         * * SQL Data Type: decimal(10, 6)`),
     RootParentTaxJurisdictionID: z.string().nullable().describe(`
         * * Field Name: RootParentTaxJurisdictionID
-        * * Display Name: Root Parent Jurisdiction
+        * * Display Name: Root Parent Tax Jurisdiction ID
         * * SQL Data Type: uniqueidentifier`),
     ParentTaxJurisdictionIDDepth: z.number().nullable().describe(`
         * * Field Name: ParentTaxJurisdictionIDDepth
@@ -1759,11 +1759,11 @@ export const mjBizAppsAccountingTaxJurisdictionSchema = z.object({
         * * SQL Data Type: nvarchar(MAX)`),
     ParentTaxJurisdictionIDIsLeaf: z.boolean().nullable().describe(`
         * * Field Name: ParentTaxJurisdictionIDIsLeaf
-        * * Display Name: Is Leaf Jurisdiction
+        * * Display Name: Is Leaf Node
         * * SQL Data Type: bit`),
     ParentTaxJurisdictionIDChildCount: z.number().nullable().describe(`
         * * Field Name: ParentTaxJurisdictionIDChildCount
-        * * Display Name: Child Jurisdiction Count
+        * * Display Name: Child Count
         * * SQL Data Type: int`),
 });
 
@@ -1967,8 +1967,8 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
     * Validate() method override for MJ_BizApps_Accounting: Accounting Company Profiles entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
     * * CompanyCode: The company code must be uppercase, contain only alphanumeric characters, underscores, or hyphens, and be between 2 and 20 characters in length.
     * * FiscalYearStartDay: The fiscal year start day must be a valid day of the month, between 1 and 31.
-    * * FiscalYearStartMonth: The fiscal year start month must be a valid calendar month represented by a number between 1 (January) and 12 (December).
-    * * Table-Level: A company cannot be its own parent accounting company to prevent circular relationships in the accounting hierarchy.
+    * * FiscalYearStartMonth: The fiscal year start month must be a valid calendar month between 1 (January) and 12 (December).
+    * * Table-Level: A company cannot be configured as its own parent accounting company to prevent self-referencing loops.
     * @public
     * @method
     * @override
@@ -1978,7 +1978,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
         this.ValidateCompanyCodeFormatAndLength(result);
         this.ValidateFiscalYearStartDayRange(result);
         this.ValidateFiscalYearStartMonthRange(result);
-        this.ValidateParentAccountingCompanyIDNotSelf(result);
+        this.ValidateParentAccountingCompanyIDNotSelfReferencing(result);
         result.Success = result.Success && (result.Errors.length === 0);
 
         return result;
@@ -2026,7 +2026,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
     }
 
     /**
-    * The fiscal year start month must be a valid calendar month represented by a number between 1 (January) and 12 (December).
+    * The fiscal year start month must be a valid calendar month between 1 (January) and 12 (December).
     * @param result - the ValidationResult object to add any errors or warnings to
     * @public
     * @method
@@ -2035,7 +2035,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
     	if (this.FiscalYearStartMonth != null && (this.FiscalYearStartMonth < 1 || this.FiscalYearStartMonth > 12)) {
     		result.Errors.push(new ValidationErrorInfo(
     			"FiscalYearStartMonth",
-    			"Fiscal Year Start Month must be between 1 and 12.",
+    			"Fiscal Year Start Month must be a valid calendar month between 1 and 12.",
     			this.FiscalYearStartMonth,
     			ValidationErrorType.Failure
     		));
@@ -2043,16 +2043,16 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
     }
 
     /**
-    * A company cannot be its own parent accounting company to prevent circular relationships in the accounting hierarchy.
+    * A company cannot be configured as its own parent accounting company to prevent self-referencing loops.
     * @param result - the ValidationResult object to add any errors or warnings to
     * @public
     * @method
     */
-    public ValidateParentAccountingCompanyIDNotSelf(result: ValidationResult) {
+    public ValidateParentAccountingCompanyIDNotSelfReferencing(result: ValidationResult) {
     	if (this.ParentAccountingCompanyID != null && this.ParentAccountingCompanyID === this.ID) {
     		result.Errors.push(new ValidationErrorInfo(
     			"ParentAccountingCompanyID",
-    			"A company cannot be assigned as its own parent accounting company.",
+    			"A company cannot be its own parent accounting company.",
     			this.ParentAccountingCompanyID,
     			ValidationErrorType.Failure
     		));
@@ -2205,7 +2205,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
 
     /**
     * * Field Name: FunctionalCurrencyCode
-    * * Display Name: Functional Currency
+    * * Display Name: Functional Currency Code
     * * SQL Data Type: char(3)
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Currencies (vwCurrencies.Code)
     * * Description: ISO 4217 currency code (CHAR(3)) for the functional currency. All JEs post in this currency; original-currency triple on JE lines records the source-transaction currency when different (BA-D10).
@@ -2219,7 +2219,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
 
     /**
     * * Field Name: ReportingCurrencyCode
-    * * Display Name: Reporting Currency
+    * * Display Name: Reporting Currency Code
     * * SQL Data Type: char(3)
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Currencies (vwCurrencies.Code)
     * * Description: Reporting currency for consolidation. NULL = same as functional currency.
@@ -2275,7 +2275,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
 
     /**
     * * Field Name: ApprovalCFOUserID
-    * * Display Name: Approval CFO User
+    * * Display Name: Approval CFO User ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
     * * Description: The CFO (an __mj.User — a security identity) who must approve a Journal Entry Batch for this company before it dispatches to the ERP. Resolved by the bizapps-tasks approval gate. Nullable: companies without a configured CFO fall back to the role-based resolver.
@@ -2406,7 +2406,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
 
     /**
     * * Field Name: ApprovalCFOUser
-    * * Display Name: Approval CFO User Name
+    * * Display Name: Approval CFO User
     * * SQL Data Type: nvarchar(100)
     */
     get ApprovalCFOUser(): string | null {
@@ -2442,7 +2442,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
 
     /**
     * * Field Name: ParentAccountingCompanyIDDepth
-    * * Display Name: Parent Depth
+    * * Display Name: Parent Company Depth
     * * SQL Data Type: int
     */
     get ParentAccountingCompanyIDDepth(): number | null {
@@ -2451,7 +2451,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
 
     /**
     * * Field Name: ParentAccountingCompanyIDPath
-    * * Display Name: Parent Path
+    * * Display Name: Parent Company Path
     * * SQL Data Type: nvarchar(MAX)
     */
     get ParentAccountingCompanyIDPath(): string | null {
@@ -2460,7 +2460,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
 
     /**
     * * Field Name: ParentAccountingCompanyIDIsLeaf
-    * * Display Name: Is Leaf
+    * * Display Name: Is Leaf Node
     * * SQL Data Type: bit
     */
     get ParentAccountingCompanyIDIsLeaf(): boolean | null {
@@ -2469,7 +2469,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
 
     /**
     * * Field Name: ParentAccountingCompanyIDChildCount
-    * * Display Name: Child Count
+    * * Display Name: Child Company Count
     * * SQL Data Type: int
     */
     get ParentAccountingCompanyIDChildCount(): number | null {
@@ -3177,7 +3177,7 @@ export class mjBizAppsAccountingDimensionValueEntity extends BaseEntity<mjBizApp
 
     /**
     * * Field Name: DimensionID
-    * * Display Name: Dimension ID
+    * * Display Name: Dimension
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Dimensions (vwDimensions.ID)
     * * Description: Dimension this value belongs to.
@@ -3217,7 +3217,7 @@ export class mjBizAppsAccountingDimensionValueEntity extends BaseEntity<mjBizApp
 
     /**
     * * Field Name: ParentDimensionValueID
-    * * Display Name: Parent Value ID
+    * * Display Name: Parent Value
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Dimension Values (vwDimensionValues.ID)
     * * Description: Parent value for hierarchical dimensions (e.g. Country contains States).
@@ -3291,7 +3291,7 @@ export class mjBizAppsAccountingDimensionValueEntity extends BaseEntity<mjBizApp
 
     /**
     * * Field Name: Dimension
-    * * Display Name: Dimension
+    * * Display Name: Dimension Name
     * * SQL Data Type: nvarchar(100)
     */
     get Dimension(): string {
@@ -3300,7 +3300,7 @@ export class mjBizAppsAccountingDimensionValueEntity extends BaseEntity<mjBizApp
 
     /**
     * * Field Name: ParentDimensionValue
-    * * Display Name: Parent Value
+    * * Display Name: Parent Value Name
     * * SQL Data Type: nvarchar(200)
     */
     get ParentDimensionValue(): string | null {
@@ -3309,7 +3309,7 @@ export class mjBizAppsAccountingDimensionValueEntity extends BaseEntity<mjBizApp
 
     /**
     * * Field Name: RootParentDimensionValueID
-    * * Display Name: Root Parent Value ID
+    * * Display Name: Root Parent Value
     * * SQL Data Type: uniqueidentifier
     */
     get RootParentDimensionValueID(): string | null {
@@ -4245,7 +4245,7 @@ export class mjBizAppsAccountingGLAccountEntity extends BaseEntity<mjBizAppsAcco
 
     /**
     * * Field Name: ParentGLAccountID
-    * * Display Name: Parent Account
+    * * Display Name: Parent Account ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: GL Accounts (vwGLAccounts.ID)
     * * Description: Parent account for hierarchical rollup (NULL = top of chart).
@@ -4369,7 +4369,7 @@ export class mjBizAppsAccountingGLAccountEntity extends BaseEntity<mjBizAppsAcco
 
     /**
     * * Field Name: ParentGLAccount
-    * * Display Name: Parent Account Name
+    * * Display Name: Parent Account
     * * SQL Data Type: nvarchar(200)
     */
     get ParentGLAccount(): string | null {
@@ -4378,7 +4378,7 @@ export class mjBizAppsAccountingGLAccountEntity extends BaseEntity<mjBizAppsAcco
 
     /**
     * * Field Name: CurrencyCode_Virtual
-    * * Display Name: Virtual Currency
+    * * Display Name: Virtual Currency Code
     * * SQL Data Type: nvarchar(80)
     */
     get CurrencyCode_Virtual(): string | null {
@@ -4387,7 +4387,7 @@ export class mjBizAppsAccountingGLAccountEntity extends BaseEntity<mjBizAppsAcco
 
     /**
     * * Field Name: RootParentGLAccountID
-    * * Display Name: Root Parent Account
+    * * Display Name: Root Parent Account ID
     * * SQL Data Type: uniqueidentifier
     */
     get RootParentGLAccountID(): string | null {
@@ -5364,7 +5364,7 @@ export class mjBizAppsAccountingJournalEntryBatchSequenceEntity extends BaseEnti
 
     /**
     * Validate() method override for MJ_BizApps_Accounting: Journal Entry Batch Sequences entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
-    * * ID: Enforces that the record ID must be exactly 1, restricting the table to a single configuration or system settings record.
+    * * ID: The ID of the record must be exactly 1. This ensures that only a single, primary configuration or system record exists in this table.
     * * NextSequenceNumber: The next sequence number must be a positive integer greater than zero to ensure valid sequencing.
     * @public
     * @method
@@ -5372,7 +5372,7 @@ export class mjBizAppsAccountingJournalEntryBatchSequenceEntity extends BaseEnti
     */
     public override Validate(): ValidationResult {
         const result = super.Validate();
-        this.ValidateIDEqualsOne(result);
+        this.ValidateIdEqualsOne(result);
         this.ValidateNextSequenceNumberGreaterThanZero(result);
         result.Success = result.Success && (result.Errors.length === 0);
 
@@ -5380,16 +5380,16 @@ export class mjBizAppsAccountingJournalEntryBatchSequenceEntity extends BaseEnti
     }
 
     /**
-    * Enforces that the record ID must be exactly 1, restricting the table to a single configuration or system settings record.
+    * The ID of the record must be exactly 1. This ensures that only a single, primary configuration or system record exists in this table.
     * @param result - the ValidationResult object to add any errors or warnings to
     * @public
     * @method
     */
-    public ValidateIDEqualsOne(result: ValidationResult) {
-    	if (this.ID != null && this.ID !== 1) {
+    public ValidateIdEqualsOne(result: ValidationResult) {
+    	if (this.ID !== 1) {
     		result.Errors.push(new ValidationErrorInfo(
     			"ID",
-    			"The ID must be exactly 1. Only a single configuration record is allowed.",
+    			"The ID must be exactly 1 to ensure only a single system configuration record exists.",
     			this.ID,
     			ValidationErrorType.Failure
     		));
@@ -7028,7 +7028,7 @@ export class mjBizAppsAccountingTaxJurisdictionEntity extends BaseEntity<mjBizAp
 
     /**
     * * Field Name: ParentTaxJurisdictionID
-    * * Display Name: Parent Jurisdiction
+    * * Display Name: Parent Tax Jurisdiction ID
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Tax Jurisdictions (vwTaxJurisdictions.ID)
     * * Description: Parent jurisdiction for nested scopes (e.g. county inside state).
@@ -7085,7 +7085,7 @@ export class mjBizAppsAccountingTaxJurisdictionEntity extends BaseEntity<mjBizAp
 
     /**
     * * Field Name: ParentTaxJurisdiction
-    * * Display Name: Parent Jurisdiction Name
+    * * Display Name: Parent Tax Jurisdiction
     * * SQL Data Type: nvarchar(200)
     */
     get ParentTaxJurisdiction(): string | null {
@@ -7112,7 +7112,7 @@ export class mjBizAppsAccountingTaxJurisdictionEntity extends BaseEntity<mjBizAp
 
     /**
     * * Field Name: RootParentTaxJurisdictionID
-    * * Display Name: Root Parent Jurisdiction
+    * * Display Name: Root Parent Tax Jurisdiction ID
     * * SQL Data Type: uniqueidentifier
     */
     get RootParentTaxJurisdictionID(): string | null {
@@ -7139,7 +7139,7 @@ export class mjBizAppsAccountingTaxJurisdictionEntity extends BaseEntity<mjBizAp
 
     /**
     * * Field Name: ParentTaxJurisdictionIDIsLeaf
-    * * Display Name: Is Leaf Jurisdiction
+    * * Display Name: Is Leaf Node
     * * SQL Data Type: bit
     */
     get ParentTaxJurisdictionIDIsLeaf(): boolean | null {
@@ -7148,7 +7148,7 @@ export class mjBizAppsAccountingTaxJurisdictionEntity extends BaseEntity<mjBizAp
 
     /**
     * * Field Name: ParentTaxJurisdictionIDChildCount
-    * * Display Name: Child Jurisdiction Count
+    * * Display Name: Child Count
     * * SQL Data Type: int
     */
     get ParentTaxJurisdictionIDChildCount(): number | null {
@@ -7445,7 +7445,7 @@ export class mjBizAppsAccountingTaxRateEntity extends BaseEntity<mjBizAppsAccoun
 
     /**
     * Validate() method override for MJ_BizApps_Accounting: Tax Rates entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
-    * * Rate: The tax rate must be a value between 0 and 1 (inclusive), representing a percentage from 0% to 100%. This ensures that tax rates are mathematically valid and prevents negative values or values exceeding 100% from being entered.
+    * * Rate: The tax rate must be a value between 0 and 1 (inclusive), representing a percentage from 0% to 100%.
     * * Table-Level: The effective end date must be on or after the effective start date, ensuring that the validity period of the tax rate is logical and valid.
     * @public
     * @method
@@ -7461,7 +7461,7 @@ export class mjBizAppsAccountingTaxRateEntity extends BaseEntity<mjBizAppsAccoun
     }
 
     /**
-    * The tax rate must be a value between 0 and 1 (inclusive), representing a percentage from 0% to 100%. This ensures that tax rates are mathematically valid and prevents negative values or values exceeding 100% from being entered.
+    * The tax rate must be a value between 0 and 1 (inclusive), representing a percentage from 0% to 100%.
     * @param result - the ValidationResult object to add any errors or warnings to
     * @public
     * @method

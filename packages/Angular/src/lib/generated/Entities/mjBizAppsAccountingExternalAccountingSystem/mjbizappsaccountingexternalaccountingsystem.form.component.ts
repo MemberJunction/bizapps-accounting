@@ -15,8 +15,8 @@ export class mjBizAppsAccountingExternalAccountingSystemFormComponent extends Ba
     override async ngOnInit() {
         await super.ngOnInit();
         this.initSections([
-            { sectionKey: 'systemConfiguration', sectionName: 'System Configuration', isExpanded: true },
-            { sectionKey: 'integrationDetails', sectionName: 'Integration Details', isExpanded: true },
+            { sectionKey: 'accountingSystemDetails', sectionName: 'Accounting System Details', isExpanded: true },
+            { sectionKey: 'configuration', sectionName: 'Configuration', isExpanded: true },
             { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false }
         ]);
     }

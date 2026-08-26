@@ -18,8 +18,8 @@ export class mjBizAppsAccountingCurrencyFormComponent extends BaseFormComponent 
         this.initSections([
             { sectionKey: 'currencyDetails', sectionName: 'Currency Details', isExpanded: true },
             { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingAccountingCompanyProfilesReportingCurrencyCode', sectionName: 'Accounting Company Profiles (Reporting Currency)', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingAccountingCompanyProfilesFunctionalCurrencyCode', sectionName: 'Accounting Company Profiles (Functional Currency)', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingAccountingCompanyProfilesReportingCurrencyCode', sectionName: 'Accounting Company Profiles (Reporting Currency Code)', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingAccountingCompanyProfilesFunctionalCurrencyCode', sectionName: 'Accounting Company Profiles (Functional Currency Code)', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingCurrencySpotRatesToCurrencyCode', sectionName: 'Currency Spot Rates (To Currency Code)', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingCurrencySpotRatesFromCurrencyCode', sectionName: 'Currency Spot Rates (From Currency Code)', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingJournalEntryLines', sectionName: 'Journal Entry Lines', isExpanded: false },
