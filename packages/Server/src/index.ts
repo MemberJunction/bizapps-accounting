@@ -22,6 +22,7 @@ import { LoadBizAppsAccountingBCFanOutSyncDriver } from './custom/BizAppsAccount
 // App-owned Business Central connector that drops non-postable structural account rows at fetch, so
 // they aren't imported or counted as failures. Overrides the BC driver-class resolution (high priority).
 import { LoadBizAppsAccountingBusinessCentralConnector } from './custom/BizAppsAccountingBusinessCentralConnector.js';
+import { LoadRunBusinessCentralSyncOperation } from './custom/RunBusinessCentralSyncOperation.js';
 
 // Import generated GraphQL resolvers
 import './generated/generated.js';
@@ -66,4 +67,5 @@ export function LoadBizAppsAccountingServer(): void {
     LoadGenerateReversalOperation(); // tree-shaking anchor for 'Accounting.GenerateJournalEntryReversal'
     LoadBizAppsAccountingBCFanOutSyncDriver(); // tree-shaking anchor for the BC fan-out scheduled-job driver
     LoadBizAppsAccountingBusinessCentralConnector(); // tree-shaking anchor for the BC account-filtering connector
+    LoadRunBusinessCentralSyncOperation(); // tree-shaking anchor for 'Accounting.RunBusinessCentralSync'
 }
