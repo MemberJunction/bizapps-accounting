@@ -18,6 +18,8 @@
         placeholder="Code, name or ID…"
         aria-label="Search dimensions by code, name or ID" />
     </label>
+    <button type="button" mjButton variant="primary" size="sm"
+      [disabled]="ActionBusy" (click)="RunSync()">Sync dimensions</button>
   </div>
 </mj-page-header-interior>
 
@@ -28,6 +30,10 @@
 <mj-page-body-interior>
 @if (LoadError) {
   <mj-alert Variant="error" [Message]="LoadError"></mj-alert>
+}
+
+@if (ActionMessage) {
+  <mj-alert Variant="info" [Message]="ActionMessage"></mj-alert>
 }
 
 <div class="dim-cols">
