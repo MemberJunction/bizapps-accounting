@@ -9,6 +9,9 @@
  *    - EVERY other company's accounts -> 'Mock', so no other company can reach the live ERP.
  *  Routing is account-driven (D13), so this is what decides which batches can dispatch to BC.
  *  Reversible; all writes go through BaseEntity so validation + audit apply.
+ *
+ *  The BC account ids below are from OUR sandbox and will not exist on another tenant —
+ *  read the target tenant's own chart of accounts and substitute before running.
  *    npx tsx ../bizapps-accounting/test-harnesses/server/_maint-bc-proof-mapping.ts [--apply]
  */
 import sql from 'mssql'; import dotenv from 'dotenv'; import path from 'path';
