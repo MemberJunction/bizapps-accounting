@@ -728,8 +728,25 @@ export async function approveJournalEntryBatch(
 
 // ─── sendJournalEntryBatch ─────────────────────────────────────────────────────────────
 
+/**
+ * The channel a dispatch belongs to when the caller does not say. 'MAN' = manual/interactive, the
+ * only dispatcher that existed before scheduled exports.
+ */
+export const DEFAULT_DISPATCH_CHANNEL = 'MAN';
+
 export interface SendJournalEntryBatchOptions {
   gate: JournalEntryBatchApprovalGate;
+  /**
+   * Which logical channel is dispatching. The adapter mints one journal per channel
+   * (`AIDP_<CHANNEL>`), so this is what keeps an unattended scheduled export from sharing a journal
+   * with a human's manual dispatch.
+   *
+   * That sharing is not a tidiness concern: Business Central's `Microsoft.NAV.post` commits an
+   * ENTIRE journal, not the lines you staged. Two dispatchers in one journal means whoever posts
+   * first commits the other's half-staged lines. Defaults to 'MAN' so existing callers — and the UI
+   * — keep the manual channel they already use.
+   */
+  channel?: string;
   /** The provider for this call — injected by the caller (required; no global fallback). */
   provider: IMetadataProvider;
   /**
@@ -782,6 +799,7 @@ export async function sendJournalEntryBatch(batchId: string, contextUser: UserIn
 
   const result = await adapter.PostJournalEntryBatch({
     Batch: batch, SummaryLines: summaryLines, System: system as mjBizAppsAccountingExternalAccountingSystemEntity, ContextUser: contextUser, Provider: options.provider,
+    Channel: options.channel ?? DEFAULT_DISPATCH_CHANNEL,
   });
   const postResult: ErpPostResult = { success: result.Success, externalJournalEntryBatchRef: result.ExternalRef, error: result.Error };
   if (!postResult.success) return failBatch(batch, postResult.error ?? 'ERP post failed');

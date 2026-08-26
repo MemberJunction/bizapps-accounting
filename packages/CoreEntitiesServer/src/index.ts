@@ -60,6 +60,7 @@ export {
   JournalEntryBatchFromViewError,
   approveJournalEntryBatch,
   sendJournalEntryBatch,
+  DEFAULT_DISPATCH_CHANNEL,
   cancelJournalEntryBatch,
   regenerateJournalEntryBatch,
   netLines,
@@ -140,3 +141,4 @@ export {
 } from './external-accounting-systems/BaseExternalAccountingSystemAdapter.js';
 export { MockAccountingSystemAdapter } from './external-accounting-systems/MockAccountingSystemAdapter.js';
 export { BusinessCentralAccountingSystemAdapter } from './external-accounting-systems/BusinessCentralAccountingSystemAdapter.js';
+export * from './ScheduledExportEngine.js';

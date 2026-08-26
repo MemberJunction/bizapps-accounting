@@ -196,7 +196,15 @@ export class RegenerateJournalEntryBatchOperation extends BaseRemotableOperation
 
 // ─── Accounting.DispatchJournalEntryBatch ────────────────────────────────────────────────
 
-export interface DispatchJournalEntryBatchInput { JournalEntryBatchID: string }
+export interface DispatchJournalEntryBatchInput {
+  JournalEntryBatchID: string;
+  /**
+   * Which logical channel is dispatching — the adapter mints one journal per channel, so a
+   * scheduled export must NOT inherit the manual channel. Omitted means manual: the UI and every
+   * existing caller keep the behaviour they have today without changing their call.
+   */
+  Channel?: string;
+}
 export interface DispatchJournalEntryBatchOutput { Status: string; ExternalJournalEntryBatchRef: string | null }
 
 /**
@@ -211,7 +219,9 @@ export class DispatchJournalEntryBatchOperation extends BaseRemotableOperation<D
 
   protected async InternalExecute(input: DispatchJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<DispatchJournalEntryBatchOutput> {
     if (!input?.JournalEntryBatchID) throw new Error('DispatchJournalEntryBatch: JournalEntryBatchID is required.');
-    const batch = await sendJournalEntryBatch(input.JournalEntryBatchID, user, { gate: new TasksAppApprovalGate(provider), provider });
+    const batch = await sendJournalEntryBatch(input.JournalEntryBatchID, user, {
+      gate: new TasksAppApprovalGate(provider), provider, channel: input.Channel,
+    });
     return { Status: batch.Status, ExternalJournalEntryBatchRef: batch.ExternalJournalEntryBatchRef ?? null };
   }
 }
