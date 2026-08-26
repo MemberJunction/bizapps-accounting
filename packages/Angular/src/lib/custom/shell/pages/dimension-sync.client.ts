@@ -24,6 +24,8 @@ export interface DimensionSyncOutcome {
 
 /** The operation's aggregate — counts only; the caller decides how to say it. */
 export interface DimensionSyncSummary {
+  /** Server-composed one-line description of the run — display this. */
+  Message: string;
   CompanyIntegrationCount: number;
   Succeeded: number;
   Failed: number;

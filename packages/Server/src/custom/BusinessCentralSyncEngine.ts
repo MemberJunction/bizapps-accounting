@@ -57,6 +57,16 @@ export interface BusinessCentralSyncSummary {
     RecordsErrored: number;
     /** Set when nothing could be attempted (no integration, no credentialed company, no maps). */
     SkipReason?: string;
+    /**
+     * One-line human description of this run, composed HERE on purpose.
+     *
+     * The server already has to describe a run with no client present — the nightly driver's
+     * FormatNotification builds the failure-alert Subject/Body — and what counts as success, which
+     * company failed, and why nothing ran are all server knowledge. Composing it once here keeps the
+     * scheduled job and every UI saying the same thing about the same run. Callers that want to
+     * render differently still have the structured counts below.
+     */
+    Message: string;
     Outcomes: BusinessCentralSyncOutcome[];
 }
 
@@ -89,7 +99,7 @@ export class BusinessCentralSyncEngine extends BaseSingleton<BusinessCentralSync
         const empty = (SkipReason: string): BusinessCentralSyncSummary => ({
             CompanyIntegrationCount: 0, Succeeded: 0, Failed: 0,
             RecordsProcessed: 0, RecordsCreated: 0, RecordsUpdated: 0, RecordsErrored: 0,
-            SkipReason, Outcomes: [],
+            SkipReason, Message: SkipReason, Outcomes: [],
         });
 
         const integration = await rv.RunView<IntegrationRow>({
@@ -166,7 +176,18 @@ export class BusinessCentralSyncEngine extends BaseSingleton<BusinessCentralSync
         const synced = outcomes.filter((o): o is Extract<BusinessCentralSyncOutcome, { Status: 'synced' }> => o.Status === 'synced');
         const sum = (pick: (o: Extract<BusinessCentralSyncOutcome, { Status: 'synced' }>) => number): number =>
             synced.reduce((total, o) => total + pick(o), 0);
+        const failedNames = outcomes
+            .filter((o): o is Extract<BusinessCentralSyncOutcome, { Status: 'error' }> => o.Status === 'error')
+            .map((o) => `${o.CompanyIntegrationName}: ${o.ErrorMessage}`);
+        const counts =
+            `${sum((o) => o.RecordsProcessed)} processed, ${sum((o) => o.RecordsCreated)} created, ` +
+            `${sum((o) => o.RecordsUpdated)} updated`;
+        const message = failedNames.length === 0
+            ? `Sync ran for ${outcomes.length} company integration(s) — ${counts}.`
+            : `Sync: ${synced.length}/${outcomes.length} succeeded (${counts}). Failed — ${failedNames.join('; ')}`;
+
         return {
+            Message: message,
             CompanyIntegrationCount: outcomes.length,
             Succeeded: synced.length,
             Failed: outcomes.length - synced.length,

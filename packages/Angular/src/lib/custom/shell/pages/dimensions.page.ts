@@ -7,7 +7,7 @@ import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
 import { CompositeKey } from '@memberjunction/core';
 import { openBizDetail, openBizCreate } from '../../shared/biz-detail-form';
 import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
-import { DimensionSyncClient, DimensionSyncResult } from './dimension-sync.client';
+import { DimensionSyncClient } from './dimension-sync.client';
 
 const DIM_ENTITY = 'MJ_BizApps_Accounting: Dimensions';
 const DIMVAL_ENTITY = 'MJ_BizApps_Accounting: Dimension Values';
@@ -187,8 +187,9 @@ export class DimensionsPageComponent extends BaseAngularComponent implements OnI
    *
    * Everything real happens server-side in the 'Accounting.RunBusinessCentralSync' Remote Operation
    * (→ BusinessCentralSyncEngine): resolving the integration, fanning out across every active,
-   * credentialed company integration, narrowing to this page's objects, and the fetch/mapping/upsert
-   * itself. This method awaits that one call, says what happened, and refreshes the view.
+   * credentialed company integration, narrowing to this page's objects, the fetch/mapping/upsert,
+   * and the one-line summary itself — the engine composes that so the nightly job's failure alert
+   * and this button describe the same run identically. Here we await, show it, and refresh.
    */
   public async RunSync(): Promise<void> {
     if (this.ActionBusy) return;
@@ -197,30 +198,11 @@ export class DimensionsPageComponent extends BaseAngularComponent implements OnI
     this.cdr.markForCheck();
     try {
       const result = await new DimensionSyncClient(GraphQLDataProvider.Instance).SyncDimensions();
-      this.ActionMessage = this.describeSync(result);
+      this.ActionMessage = result.Summary?.Message ?? `Sync error: ${result.ErrorMessage ?? 'unknown error'}`;
       if ((result.Summary?.Succeeded ?? 0) > 0) this.Refresh();
     } finally {
       this.ActionBusy = false;
       this.cdr.markForCheck();
     }
-  }
-
-  /** Turns the operation's counts into the toolbar message. Presentation belongs here, not in the client. */
-  private describeSync(result: DimensionSyncResult): string {
-    if (!result.Success || !result.Summary) {
-      return `Sync error: ${result.ErrorMessage ?? 'unknown error'}`;
-    }
-    const s = result.Summary;
-    if (s.SkipReason) return s.SkipReason;
-
-    const counts = `${s.RecordsProcessed} processed, ${s.RecordsCreated} created, ${s.RecordsUpdated} updated`;
-    if (s.Failed === 0) {
-      return `Dimension sync ran for ${s.CompanyIntegrationCount} company integration(s) — ${counts}.`;
-    }
-    const failures = (s.Outcomes ?? [])
-      .filter((o) => o.Status === 'error')
-      .map((o) => `${o.CompanyIntegrationName}: ${o.ErrorMessage ?? 'unknown error'}`)
-      .join('; ');
-    return `Dimension sync: ${s.Succeeded}/${s.CompanyIntegrationCount} succeeded (${counts}). Failed — ${failures}`;
   }
 }

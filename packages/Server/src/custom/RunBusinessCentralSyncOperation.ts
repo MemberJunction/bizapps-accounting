@@ -33,6 +33,8 @@ export interface RunBusinessCentralSyncInput {
 }
 
 export interface RunBusinessCentralSyncOutput {
+    /** One-line human description of the run, composed by the engine (see its Message doc). */
+    Message: string;
     CompanyIntegrationCount: number;
     Succeeded: number;
     Failed: number;
@@ -66,6 +68,7 @@ export class RunBusinessCentralSyncOperation
         }, user, provider);
 
         return {
+            Message: summary.Message,
             CompanyIntegrationCount: summary.CompanyIntegrationCount,
             Succeeded: summary.Succeeded,
             Failed: summary.Failed,
