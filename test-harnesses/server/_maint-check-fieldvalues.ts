@@ -4,7 +4,7 @@ import sql from 'mssql'; import dotenv from 'dotenv'; import path from 'path';
 import { Metadata } from '@memberjunction/core';
 import { setupSQLServerClient, SQLServerProviderConfigData } from '@memberjunction/sqlserver-dataprovider';
 import { UserCache } from '@memberjunction/generic-database-provider';
-import '@memberjunction/server-bootstrap-lite'; import '@mj-biz-apps/common-entities'; import '@mj-biz-apps/accounting-entities'; import '@mj-biz-apps/orders-entities';
+import '@memberjunction/server-bootstrap-lite'; import '@mj-biz-apps/common-entities'; import '@mj-biz-apps/accounting-entities';
 
 async function main() {
   dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
@@ -16,7 +16,6 @@ async function main() {
     ['MJ_BizApps_Accounting: Journal Entry Batches', 'Status'],
     ['MJ_BizApps_Accounting: Journal Entry Batches', 'TargetSystem'],
     ['MJ_BizApps_Accounting: GL Accounts', 'AccountType'],
-    ['MJ_BizApps_Orders: Orders', 'Status'],
   ];
   for (const [ent, fld] of checks) {
     const e = md.EntityByName(ent);
