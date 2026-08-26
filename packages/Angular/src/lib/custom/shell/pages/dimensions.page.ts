@@ -7,7 +7,7 @@ import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
 import { CompositeKey } from '@memberjunction/core';
 import { openBizDetail, openBizCreate } from '../../shared/biz-detail-form';
 import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
-import { DimensionSyncClient } from './dimension-sync.client';
+import { DimensionSyncClient, DimensionSyncResult } from './dimension-sync.client';
 
 const DIM_ENTITY = 'MJ_BizApps_Accounting: Dimensions';
 const DIMVAL_ENTITY = 'MJ_BizApps_Accounting: Dimension Values';
@@ -188,7 +188,7 @@ export class DimensionsPageComponent extends BaseAngularComponent implements OnI
    * Everything real happens server-side in the 'Accounting.RunBusinessCentralSync' Remote Operation
    * (→ BusinessCentralSyncEngine): resolving the integration, fanning out across every active,
    * credentialed company integration, narrowing to this page's objects, and the fetch/mapping/upsert
-   * itself. This method awaits that one call and refreshes the view — no orchestration in the UI.
+   * itself. This method awaits that one call, says what happened, and refreshes the view.
    */
   public async RunSync(): Promise<void> {
     if (this.ActionBusy) return;
@@ -196,12 +196,31 @@ export class DimensionsPageComponent extends BaseAngularComponent implements OnI
     this.ActionMessage = null;
     this.cdr.markForCheck();
     try {
-      const result = await new DimensionSyncClient(GraphQLDataProvider.Instance).RunSync();
-      this.ActionMessage = result.Message;
-      if (result.AnySynced) this.Refresh();
+      const result = await new DimensionSyncClient(GraphQLDataProvider.Instance).SyncDimensions();
+      this.ActionMessage = this.describeSync(result);
+      if ((result.Summary?.Succeeded ?? 0) > 0) this.Refresh();
     } finally {
       this.ActionBusy = false;
       this.cdr.markForCheck();
     }
+  }
+
+  /** Turns the operation's counts into the toolbar message. Presentation belongs here, not in the client. */
+  private describeSync(result: DimensionSyncResult): string {
+    if (!result.Success || !result.Summary) {
+      return `Sync error: ${result.ErrorMessage ?? 'unknown error'}`;
+    }
+    const s = result.Summary;
+    if (s.SkipReason) return s.SkipReason;
+
+    const counts = `${s.RecordsProcessed} processed, ${s.RecordsCreated} created, ${s.RecordsUpdated} updated`;
+    if (s.Failed === 0) {
+      return `Dimension sync ran for ${s.CompanyIntegrationCount} company integration(s) — ${counts}.`;
+    }
+    const failures = (s.Outcomes ?? [])
+      .filter((o) => o.Status === 'error')
+      .map((o) => `${o.CompanyIntegrationName}: ${o.ErrorMessage ?? 'unknown error'}`)
+      .join('; ');
+    return `Dimension sync: ${s.Succeeded}/${s.CompanyIntegrationCount} succeeded (${counts}). Failed — ${failures}`;
   }
 }
