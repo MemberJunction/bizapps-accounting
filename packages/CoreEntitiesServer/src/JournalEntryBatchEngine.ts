@@ -280,6 +280,8 @@ export interface BuildJournalEntryBatchOptions {
   /** Restrict to these JournalEntryType CODES (e.g. 'Manual','OrderBooking'). Omit/empty = all
    *  non-summary types. Codes, not IDs — the UI filter speaks codes (issue #24 lookup). */
   entryTypeCodes?: string[] | null;
+  /** Exclude these JournalEntryType CODES (e.g. 'RevenueRecognition'). Omit/empty = no exclusions. */
+  excludeEntryTypeCodes?: string[] | null;
 }
 
 /** Build the Pending + non-summary + date-window + scope ExtraFilter (inclusive date-only cutoff). */
@@ -302,6 +304,10 @@ export async function pendingCandidateFilter(options: BuildJournalEntryBatchOpti
   if (options.entryTypeCodes?.length) {
     const typeIds = await resolveEntryTypeIds(options.entryTypeCodes, contextUser, p);
     clauses.push(`EntryTypeID IN (${typeIds.map(sqlGuid).join(',')})`);
+  }
+  if (options.excludeEntryTypeCodes?.length) {
+    const excludeTypeIds = await resolveEntryTypeIds(options.excludeEntryTypeCodes, contextUser, p);
+    clauses.push(`EntryTypeID NOT IN (${excludeTypeIds.map(sqlGuid).join(',')})`);
   }
   return clauses.join(' AND ');
 }

@@ -69,6 +69,8 @@ export interface JournalEntryBatchCriteriaInput {
   CompanyIDs?: string[] | null;
   /** JournalEntryType CODES (issue #24 vocabulary). Omit/empty = all non-summary types. */
   EntryTypeCodes?: string[] | null;
+  /** JournalEntryType CODES to EXCLUDE (e.g. ['RevenueRecognition']). Omit/empty = no exclusions. */
+  ExcludeEntryTypeCodes?: string[] | null;
 }
 
 function toOptions(input: JournalEntryBatchCriteriaInput | undefined): BuildJournalEntryBatchOptions {
@@ -77,6 +79,7 @@ function toOptions(input: JournalEntryBatchCriteriaInput | undefined): BuildJour
     startDate: input?.StartDate ? new Date(input.StartDate) : null,
     companyIds: input?.CompanyIDs?.length ? input.CompanyIDs : null,
     entryTypeCodes: input?.EntryTypeCodes?.length ? input.EntryTypeCodes : null,
+    excludeEntryTypeCodes: input?.ExcludeEntryTypeCodes?.length ? input.ExcludeEntryTypeCodes : null,
   };
 }
 

@@ -9,6 +9,8 @@
     "journal-entry-types",
     "gl-account-roles",
     "applications",
+    "action-categories",
+    "actions",
     "entity-actions"
   ],
   "sqlLogging": {

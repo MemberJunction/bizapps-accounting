@@ -1,9 +1,15 @@
 import { Component, OnInit, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { CompositeKey, RunView } from '@memberjunction/core';
+import { CompositeKey, Metadata, RunView } from '@memberjunction/core';
+import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
 import { NavigationService } from '@memberjunction/ng-shared';
-import { MJButtonDirective } from '@memberjunction/ng-ui-components';
+import { MJButtonDirective, MJDialogComponent, MJDialogActionsComponent, MJDropdownComponent } from '@memberjunction/ng-ui-components';
+import {
+    JournalEntryBatchDispatchClient,
+    PreviewEntryWire,
+    BuildJournalEntryBatchOptionsInput,
+} from '../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
 
 export interface BatchItem {
     ID: string;
@@ -38,10 +44,21 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 @Component({
     selector: 'mj-accounting-batches-page',
     standalone: true,
-    imports: [CommonModule, FormsModule, MJButtonDirective],
+    imports: [CommonModule, FormsModule, MJButtonDirective, MJDialogComponent, MJDialogActionsComponent, MJDropdownComponent],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div class="mja-batches-layout">
+            <!-- Notification Banner -->
+            @if (ActionMessage) {
+                <div class="mja-banner" [class.mja-banner--error]="ActionMessageIsError" [class.mja-banner--success]="!ActionMessageIsError" role="status">
+                    <i class="fa-solid" [class.fa-circle-check]="!ActionMessageIsError" [class.fa-triangle-exclamation]="ActionMessageIsError"></i>
+                    <span>{{ ActionMessage }}</span>
+                    <button type="button" class="mja-banner-close" (click)="ActionMessage = null" aria-label="Dismiss">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+            }
+
             <!-- Header Toolbar -->
             <header class="mja-head-card">
                 <div class="mja-head-top">
@@ -197,6 +214,128 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                     </div>
                 }
             </main>
+
+            <!-- Build Batch Modal Dialog -->
+            <mj-dialog [Visible]="BuildModalVisible" Title="Build Journal Entry Batch" [Width]="700" (Close)="CloseBuildBatchModal()">
+                <div class="mja-modal-content">
+                    @if (ModalErrorMessage) {
+                        <div class="mja-banner mja-banner--error" role="alert">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                            <span>{{ ModalErrorMessage }}</span>
+                        </div>
+                    }
+
+                    <div class="mja-modal-controls">
+                        <div class="mja-modal-field">
+                            <label class="mja-modal-label">Target ERP</label>
+                            <mj-dropdown
+                                [Data]="TargetOptions"
+                                [ValuePrimitive]="true"
+                                [(ngModel)]="BuildTarget"
+                                (ngModelChange)="OnBuildPreviewFilterChange()"
+                                aria-label="Target ERP">
+                            </mj-dropdown>
+                        </div>
+
+                        <div class="mja-modal-field">
+                            <label class="mja-modal-label">Effective Date Cutoff</label>
+                            <input
+                                type="date"
+                                class="mj-input mja-modal-date-input"
+                                [(ngModel)]="BuildCutoffDate"
+                                (ngModelChange)="OnBuildPreviewFilterChange()"
+                                aria-label="Effective Date Cutoff" />
+                        </div>
+                    </div>
+
+                    <div class="mja-modal-options">
+                        <label class="mja-modal-checkbox-label">
+                            <input type="checkbox" [(ngModel)]="ExcludeRevRec" (ngModelChange)="OnBuildPreviewFilterChange()" />
+                            <span><strong>Exclude subscription revenue recognition</strong> (defer Rev Rec until month-end)</span>
+                        </label>
+                    </div>
+
+                    <!-- Preview Statistics -->
+                    <div class="mja-modal-facts">
+                        <div class="mja-fact-item">
+                            <span class="mja-fact-lbl">Candidates</span>
+                            <strong class="mja-fact-val">{{ PreviewCandidateCount }} JEs</strong>
+                        </div>
+                        <div class="mja-fact-item">
+                            <span class="mja-fact-lbl">Total Debits</span>
+                            <strong class="mja-fact-val">{{ PreviewTotalDebits | currency }}</strong>
+                        </div>
+                        <div class="mja-fact-item">
+                            <span class="mja-fact-lbl">Total Credits</span>
+                            <strong class="mja-fact-val">{{ PreviewTotalCredits | currency }}</strong>
+                        </div>
+                        <div class="mja-fact-item">
+                            <span class="mja-fact-lbl">Date Range</span>
+                            <strong class="mja-fact-val">
+                                {{ PreviewCoveredStartDate ? (PreviewCoveredStartDate | date:'mediumDate') : '—' }} &rarr;
+                                {{ PreviewCoveredEndDate ? (PreviewCoveredEndDate | date:'mediumDate') : '—' }}
+                            </strong>
+                        </div>
+                    </div>
+
+                    <!-- Candidate List -->
+                    @if (IsPreviewLoading) {
+                        <div class="mja-modal-loading">
+                            <i class="fa-solid fa-spinner fa-spin"></i>
+                            <span>Gathering candidate journal entries…</span>
+                        </div>
+                    } @else if (PreviewCandidateCount === 0) {
+                        <div class="mja-modal-empty">
+                            <i class="fa-solid fa-inbox"></i>
+                            <p>No unbatched pending journal entries match the selected filters.</p>
+                        </div>
+                    } @else {
+                        <div class="mja-modal-table-wrap">
+                            <table class="mja-table mja-modal-table">
+                                <thead>
+                                    <tr>
+                                        <th>Entry №</th>
+                                        <th>Date</th>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                        <th class="mja-th-right">Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @for (e of PreviewEntries; track e.ID) {
+                                        <tr>
+                                            <td><strong>{{ e.EntryNumber }}</strong></td>
+                                            <td>{{ e.EffectiveDate | date:'mediumDate' }}</td>
+                                            <td><span class="mja-type-tag">{{ e.EntryTypeCode }}</span></td>
+                                            <td class="mja-desc-cell">{{ e.Description || '—' }}</td>
+                                            <td class="mja-td-right">{{ e.Amount | currency }}</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+
+                <mj-dialog-actions>
+                    <button
+                        mjButton
+                        variant="primary"
+                        size="sm"
+                        type="button"
+                        [disabled]="IsBuildingBatch || IsPreviewLoading || PreviewCandidateCount === 0"
+                        (click)="ExecuteBuildBatch()">
+                        @if (IsBuildingBatch) {
+                            <i class="fa-solid fa-spinner fa-spin"></i> Building Batch…
+                        } @else {
+                            <i class="fa-solid fa-layer-group"></i> Build Batch ({{ PreviewCandidateCount }})
+                        }
+                    </button>
+                    <button mjButton variant="flat" size="sm" type="button" [disabled]="IsBuildingBatch" (click)="CloseBuildBatchModal()">
+                        Cancel
+                    </button>
+                </mj-dialog-actions>
+            </mj-dialog>
         </div>
     `,
     styles: [`
@@ -211,6 +350,36 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
             background: var(--mj-bg-surface-sunken, #f8fafc);
             box-sizing: border-box;
         }
+
+        /* Banner */
+        .mja-banner {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        .mja-banner--success {
+            background: #f0fdf4;
+            color: #166534;
+            border: 1px solid #bbf7d0;
+        }
+        .mja-banner--error {
+            background: #fef2f2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+        .mja-banner-close {
+            margin-left: auto;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            color: inherit;
+            opacity: 0.7;
+        }
+        .mja-banner-close:hover { opacity: 1; }
 
         /* 1. Header Card */
         .mja-head-card {
@@ -232,80 +401,105 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
             flex-wrap: wrap;
         }
 
-        .mja-identity { display: flex; align-items: center; gap: 14px; }
+        .mja-identity {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
         .mja-avatar {
-            width: 48px;
-            height: 48px;
+            width: 44px;
+            height: 44px;
             border-radius: var(--mj-radius-md, 8px);
-            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
             color: #ffffff;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 20px;
-            box-shadow: 0 4px 10px rgba(2, 132, 199, 0.25);
-            flex-shrink: 0;
+            box-shadow: 0 2px 4px rgba(59, 130, 246, 0.25);
         }
 
-        .mja-titles { display: flex; flex-direction: column; gap: 2px; }
-        .mja-title { margin: 0; font-size: 18px; font-weight: 700; color: var(--mj-text-primary, #0f172a); }
-        .mja-sub { margin: 0; font-size: 12px; color: var(--mj-text-muted, #64748b); }
+        .mja-titles {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
 
-        .mja-actions { display: flex; align-items: center; gap: 10px; }
+        .mja-title {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--mj-text-primary, #0f172a);
+        }
 
-        /* Stage Tabs */
+        .mja-sub {
+            margin: 0;
+            font-size: 13px;
+            color: var(--mj-text-muted, #64748b);
+        }
+
+        /* Phase / Stage Tabs */
         .mja-stage-tabs {
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 8px;
+            flex-wrap: wrap;
+            border-top: 1px solid var(--mj-border-subtle, #f1f5f9);
             padding-top: 12px;
-            border-top: 1px solid var(--mj-border-default, #e2e8f0);
-            overflow-x: auto;
         }
 
         .mja-stage-tab {
             display: inline-flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             padding: 6px 12px;
-            border-radius: var(--mj-radius-md, 6px);
-            border: 1px solid transparent;
-            background: transparent;
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--mj-text-muted, #64748b);
+            border-radius: 9999px;
+            border: 1px solid var(--mj-border-default, #e2e8f0);
+            background: var(--mj-bg-surface, #ffffff);
+            color: var(--mj-text-secondary, #475569);
+            font-size: 12px;
+            font-weight: 500;
             cursor: pointer;
             transition: all 0.15s ease;
-            white-space: nowrap;
         }
 
         .mja-stage-tab:hover {
-            background: var(--mj-bg-surface-hover, #f1f5f9);
-            color: var(--mj-text-primary, #0f172a);
+            border-color: var(--mj-border-hover, #cbd5e1);
+            background: var(--mj-bg-surface-hover, #f8fafc);
         }
 
         .mja-stage-tab--active {
-            background: #e0f2fe;
-            color: #0369a1;
-            border-color: #bae6fd;
+            background: var(--mj-brand-primary, #0f172a);
+            color: #ffffff;
+            border-color: var(--mj-brand-primary, #0f172a);
+        }
+
+        .mja-stage-tab--active i {
+            color: #ffffff !important;
         }
 
         .mja-tab-count {
-            padding: 1px 6px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 18px;
+            height: 18px;
+            padding: 0 4px;
             border-radius: 9999px;
+            background: rgba(0, 0, 0, 0.06);
             font-size: 11px;
-            font-family: var(--mj-font-mono, monospace);
-            background: #f1f5f9;
-            color: #475569;
+            font-weight: 600;
         }
 
         .mja-stage-tab--active .mja-tab-count {
-            background: #0284c7;
+            background: rgba(255, 255, 255, 0.2);
             color: #ffffff;
         }
 
         .mja-count--highlight {
-            font-weight: 700;
+            background: #fef3c7;
+            color: #b45309;
         }
 
         /* Filter Controls */
@@ -313,63 +507,73 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 12px;
+            gap: 16px;
             flex-wrap: wrap;
-            padding-top: 4px;
         }
 
         .mja-search-box {
             position: relative;
-            display: flex;
-            align-items: center;
-            min-width: 260px;
             flex: 1;
-            max-width: 400px;
+            max-width: 380px;
+            min-width: 240px;
         }
 
         .mja-search-box i {
             position: absolute;
-            left: 10px;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
             color: var(--mj-text-muted, #94a3b8);
-            font-size: 12px;
+            font-size: 13px;
         }
 
         .mja-search-input {
             width: 100%;
-            height: 32px;
-            padding: 0 10px 0 30px;
-            border: 1px solid var(--mj-border-default, #cbd5e1);
+            height: 34px;
+            padding: 0 12px 0 34px;
+            border: 1px solid var(--mj-border-default);
             border-radius: var(--mj-radius-sm, 6px);
             font-size: 13px;
-            background: #ffffff;
             outline: none;
+            background: var(--mj-bg-surface);
+            color: var(--mj-text-primary);
             box-sizing: border-box;
+            color-scheme: light dark;
         }
 
         .mja-search-input:focus {
-            border-color: var(--mj-brand-primary, #0284c7);
-            box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.15);
+            border-color: var(--mj-brand-primary);
         }
 
-        .mja-filter-group { display: flex; align-items: center; gap: 10px; }
-        .mja-filter-label {
+        .mja-filter-group {
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 12px;
+        }
+
+        .mja-filter-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
             font-size: 12px;
-            font-weight: 600;
-            color: var(--mj-text-muted, #64748b);
+            color: var(--mj-text-secondary);
+            font-weight: 500;
         }
 
         .mja-select {
-            height: 32px;
-            padding: 0 8px;
-            border: 1px solid var(--mj-border-default, #cbd5e1);
+            height: 34px;
+            padding: 0 10px;
+            border: 1px solid var(--mj-border-default);
             border-radius: var(--mj-radius-sm, 6px);
-            font-size: 12px;
-            background: #ffffff;
-            color: var(--mj-text-primary, #0f172a);
+            font-size: 13px;
+            background: var(--mj-bg-surface);
+            color: var(--mj-text-primary);
             outline: none;
+            color-scheme: light dark;
+        }
+
+        .mja-select:focus {
+            border-color: var(--mj-brand-primary);
         }
 
         /* 2. Body Card */
@@ -377,18 +581,57 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
             background: var(--mj-bg-surface-card, #ffffff);
             border: 1px solid var(--mj-border-default, #e2e8f0);
             border-radius: var(--mj-radius-lg, 12px);
-            padding: 20px;
+            padding: 0;
+            overflow: hidden;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
             flex: 1;
             display: flex;
             flex-direction: column;
         }
 
+        /* Empty State */
+        .mja-empty-hero {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 24px;
+            text-align: center;
+            max-width: 480px;
+            margin: 0 auto;
+        }
+
+        .mja-empty-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: #f1f5f9;
+            color: #64748b;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin-bottom: 16px;
+        }
+
+        .mja-empty-title {
+            margin: 0 0 8px 0;
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--mj-text-primary, #0f172a);
+        }
+
+        .mja-empty-desc {
+            margin: 0 0 20px 0;
+            font-size: 13px;
+            color: var(--mj-text-muted, #64748b);
+            line-height: 1.5;
+        }
+
         /* Table */
         .mja-table-wrap {
             overflow-x: auto;
-            border-radius: 8px;
-            border: 1px solid var(--mj-border-default, #e2e8f0);
+            width: 100%;
         }
 
         .mja-table {
@@ -398,54 +641,46 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
             text-align: left;
         }
 
-        .mja-table th {
-            padding: 10px 14px;
-            font-size: 11.5px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-            color: var(--mj-text-muted, #64748b);
+        .mja-table thead th {
             background: var(--mj-bg-surface-sunken, #f8fafc);
+            padding: 10px 16px;
+            font-weight: 600;
+            color: var(--mj-text-secondary, #475569);
             border-bottom: 1px solid var(--mj-border-default, #e2e8f0);
+            white-space: nowrap;
         }
 
-        .mja-table td {
-            padding: 12px 14px;
+        .mja-table tbody tr {
             border-bottom: 1px solid var(--mj-border-subtle, #f1f5f9);
-            color: var(--mj-text-primary, #0f172a);
-        }
-
-        .mja-table tr {
             cursor: pointer;
             transition: background 0.1s ease;
         }
 
-        .mja-table tr:hover {
+        .mja-table tbody tr:hover {
             background: var(--mj-bg-surface-hover, #f8fafc);
         }
 
+        .mja-table tbody td {
+            padding: 12px 16px;
+            color: var(--mj-text-primary, #0f172a);
+            vertical-align: middle;
+        }
+
         .mja-batch-num {
-            color: var(--mj-brand-primary, #0284c7);
-            font-family: var(--mj-font-mono, monospace);
+            color: #0284c7;
+            font-variant-numeric: tabular-nums;
         }
 
         .mja-target-badge {
             display: inline-flex;
             align-items: center;
-            gap: 5px;
-            padding: 2px 8px;
+            gap: 6px;
+            padding: 3px 8px;
             border-radius: 4px;
             background: #f1f5f9;
             color: #334155;
             font-size: 11.5px;
-            font-weight: 600;
-        }
-
-        .mja-th-right, .mja-td-right { text-align: right; }
-        .mja-td-action {
-            text-align: right;
-            color: var(--mj-text-muted, #94a3b8);
-            font-size: 12px;
+            font-weight: 500;
         }
 
         .mja-status-pill {
@@ -455,59 +690,24 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
             font-size: 11px;
             font-weight: 600;
             text-transform: capitalize;
-            background: #f1f5f9;
-            color: #475569;
         }
 
-        .mja-status-pill[data-status="Posted"] { background: #dcfce7; color: #166534; }
+        .mja-status-pill[data-status="Pending"] { background: #fef3c7; color: #b45309; }
         .mja-status-pill[data-status="Approved"] { background: #e0f2fe; color: #0369a1; }
-        .mja-status-pill[data-status="Sent"] { background: #ede9fe; color: #5b21b6; }
-        .mja-status-pill[data-status="Pending"] { background: #fef3c7; color: #92400e; }
-        .mja-status-pill[data-status="Failed"] { background: #fee2e2; color: #991b1b; }
+        .mja-status-pill[data-status="Sent"] { background: #ede9fe; color: #6d28d9; }
+        .mja-status-pill[data-status="Posted"] { background: #dcfce7; color: #15803d; }
+        .mja-status-pill[data-status="Failed"] { background: #fee2e2; color: #b91c1c; }
         .mja-status-pill[data-status="Cancelled"] { background: #f1f5f9; color: #64748b; }
 
-        /* Empty State Hero */
-        .mja-empty-hero {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
+        .mja-th-right, .mja-td-right {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .mja-td-action {
+            width: 32px;
             text-align: center;
-            padding: 60px 20px;
-            gap: 12px;
-            margin: auto;
-        }
-
-        .mja-empty-icon {
-            width: 64px;
-            height: 64px;
-            border-radius: 50%;
-            background: #f0f9ff;
-            color: #0284c7;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 26px;
-            margin-bottom: 4px;
-        }
-
-        .mja-empty-title {
-            margin: 0;
-            font-size: 17px;
-            font-weight: 700;
-            color: var(--mj-text-primary, #0f172a);
-        }
-
-        .mja-empty-desc {
-            margin: 0;
-            font-size: 13px;
-            color: var(--mj-text-muted, #64748b);
-            max-width: 440px;
-            line-height: 1.5;
-        }
-
-        .mja-empty-actions {
-            margin-top: 8px;
+            color: var(--mj-text-muted, #94a3b8);
         }
 
         .mja-loading {
@@ -517,6 +717,145 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
             gap: 10px;
             padding: 60px;
             color: var(--mj-text-muted, #64748b);
+            font-size: 13px;
+        }
+
+        /* Modal content */
+        .mja-modal-content {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            padding: 4px 0;
+            color: var(--mj-text-primary);
+        }
+        .mja-modal-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            align-items: start;
+        }
+        .mja-modal-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 0;
+        }
+        .mja-modal-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--mj-text-muted);
+        }
+        .mj-input, .mja-modal-date-input {
+            height: 34px;
+            padding: 0 10px;
+            border: 1px solid var(--mj-border-default);
+            border-radius: var(--mj-radius-sm, 6px);
+            font-size: 13px;
+            background: var(--mj-bg-surface);
+            color: var(--mj-text-primary);
+            outline: none;
+            box-sizing: border-box;
+            color-scheme: light dark;
+            width: 100%;
+        }
+        .mj-input:focus, .mja-modal-date-input:focus {
+            border-color: var(--mj-brand-primary);
+        }
+        .mja-modal-options {
+            padding: 10px 14px;
+            background: var(--mj-bg-surface-sunken);
+            border: 1px solid var(--mj-border-default);
+            border-radius: var(--mj-radius-sm, 6px);
+        }
+        .mja-modal-checkbox-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            color: var(--mj-text-primary);
+            cursor: pointer;
+            user-select: none;
+        }
+        .mja-modal-checkbox-label input[type="checkbox"] {
+            accent-color: var(--mj-brand-primary);
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+        .mja-modal-facts {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            padding: 12px 16px;
+            background: var(--mj-bg-surface-sunken);
+            border: 1px solid var(--mj-border-default);
+            border-radius: var(--mj-radius-md, 8px);
+        }
+        .mja-fact-item {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        .mja-fact-lbl {
+            font-size: 10.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--mj-text-muted);
+        }
+        .mja-fact-val {
+            font-size: 13.5px;
+            font-weight: 700;
+            color: var(--mj-text-primary);
+        }
+        .mja-modal-table-wrap {
+            max-height: 240px;
+            overflow-y: auto;
+            border: 1px solid var(--mj-border-default);
+            border-radius: var(--mj-radius-md, 8px);
+            background: var(--mj-bg-surface);
+        }
+        .mja-modal-table thead th {
+            background: var(--mj-bg-surface-sunken);
+            color: var(--mj-text-secondary);
+            border-bottom: 1px solid var(--mj-border-default);
+        }
+        .mja-modal-table tbody tr {
+            border-bottom: 1px solid var(--mj-border-subtle);
+        }
+        .mja-modal-table tbody tr:hover {
+            background: var(--mj-bg-surface-hover);
+        }
+        .mja-modal-table tbody td {
+            color: var(--mj-text-primary);
+        }
+        .mja-type-tag {
+            display: inline-block;
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            background: var(--mj-bg-surface-sunken);
+            color: var(--mj-text-secondary);
+            border: 1px solid var(--mj-border-subtle);
+        }
+        .mja-desc-cell {
+            max-width: 220px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: var(--mj-text-muted);
+        }
+        .mja-modal-loading, .mja-modal-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 32px 20px;
+            gap: 10px;
+            color: var(--mj-text-muted);
             font-size: 13px;
         }
     `]
@@ -534,6 +873,8 @@ export class AccountingBatchesPageComponent implements OnInit {
     public SelectedTarget = '';
     public PendingJECount = 0;
 
+    public TargetOptions: string[] = ['BusinessCentral', 'QuickBooks', 'NetSuite', 'Sage', 'Xero', 'Other'];
+
     public Stages: StageCount[] = [
         { Status: 'Pending', Count: 0, Color: '#d97706', Icon: 'fa-solid fa-clock' },
         { Status: 'Approved', Count: 0, Color: '#0284c7', Icon: 'fa-solid fa-user-check' },
@@ -542,6 +883,29 @@ export class AccountingBatchesPageComponent implements OnInit {
         { Status: 'Failed', Count: 0, Color: '#dc2626', Icon: 'fa-solid fa-triangle-exclamation' },
         { Status: 'Cancelled', Count: 0, Color: '#64748b', Icon: 'fa-solid fa-ban' },
     ];
+
+    // Build Batch Modal & Preview State
+    public BuildModalVisible = false;
+    public IsPreviewLoading = false;
+    public IsBuildingBatch = false;
+    public BuildTarget = 'BusinessCentral';
+    public BuildCutoffDate = '';
+    public ExcludeRevRec = true;
+    public ModalErrorMessage: string | null = null;
+
+    public ActionMessage: string | null = null;
+    public ActionMessageIsError = false;
+
+    public PreviewEntries: PreviewEntryWire[] = [];
+    public PreviewTotalDebits = 0;
+    public PreviewTotalCredits = 0;
+    public PreviewCandidateCount = 0;
+    public PreviewCoveredStartDate: string | null = null;
+    public PreviewCoveredEndDate: string | null = null;
+
+    private get dispatchClient(): JournalEntryBatchDispatchClient {
+        return new JournalEntryBatchDispatchClient(Metadata.Provider as GraphQLDataProvider);
+    }
 
     ngOnInit(): void {
         this.LoadBatches();
@@ -575,7 +939,7 @@ export class AccountingBatchesPageComponent implements OnInit {
             }
 
             if (jeRes.Success) {
-                this.PendingJECount = jeRes.TotalRowCount ?? 1192;
+                this.PendingJECount = jeRes.TotalRowCount ?? 0;
             }
         } catch {
             // ignore
@@ -637,8 +1001,101 @@ export class AccountingBatchesPageComponent implements OnInit {
         this.navService.OpenEntityRecord(BATCH_ENTITY, CompositeKey.FromID(id));
     }
 
-    public OpenBuildBatchModal(): void {
-        if (!this.navService) return;
-        this.navService.OpenNewEntityRecord(BATCH_ENTITY);
+    public async OpenBuildBatchModal(): Promise<void> {
+        this.BuildModalVisible = true;
+        this.ModalErrorMessage = null;
+        if (!this.BuildCutoffDate) {
+            this.BuildCutoffDate = new Date().toISOString().slice(0, 10);
+        }
+        await this.LoadBuildPreview();
+    }
+
+    public CloseBuildBatchModal(): void {
+        this.BuildModalVisible = false;
+        this.ModalErrorMessage = null;
+    }
+
+    public async OnBuildPreviewFilterChange(): Promise<void> {
+        await this.LoadBuildPreview();
+    }
+
+    public async LoadBuildPreview(): Promise<void> {
+        this.IsPreviewLoading = true;
+        this.ModalErrorMessage = null;
+        this.cdr.markForCheck();
+
+        try {
+            const previewRes = await this.dispatchClient.PreviewJournalEntryBatch({
+                Cutoff: this.BuildCutoffDate || null,
+                ExcludeEntryTypeCodes: this.ExcludeRevRec ? ['RevenueRecognition'] : null,
+            });
+
+            if (previewRes.Success) {
+                this.PreviewEntries = previewRes.Candidates ?? [];
+                this.PreviewCandidateCount = this.PreviewEntries.length;
+                this.PreviewTotalDebits = previewRes.TotalDebits;
+                this.PreviewTotalCredits = previewRes.TotalCredits;
+
+                if (this.PreviewEntries.length > 0) {
+                    const dates = this.PreviewEntries.map(e => new Date(e.EffectiveDate).getTime()).filter(t => !isNaN(t));
+                    if (dates.length > 0) {
+                        this.PreviewCoveredStartDate = new Date(Math.min(...dates)).toISOString();
+                        this.PreviewCoveredEndDate = new Date(Math.max(...dates)).toISOString();
+                    } else {
+                        this.PreviewCoveredStartDate = null;
+                        this.PreviewCoveredEndDate = null;
+                    }
+                } else {
+                    this.PreviewCoveredStartDate = null;
+                    this.PreviewCoveredEndDate = null;
+                }
+            } else {
+                this.ModalErrorMessage = previewRes.ErrorMessage ?? 'Failed to load candidate preview.';
+                this.PreviewEntries = [];
+                this.PreviewCandidateCount = 0;
+                this.PreviewTotalDebits = 0;
+                this.PreviewTotalCredits = 0;
+            }
+        } catch (e) {
+            this.ModalErrorMessage = e instanceof Error ? e.message : String(e);
+        } finally {
+            this.IsPreviewLoading = false;
+            this.cdr.markForCheck();
+        }
+    }
+
+    public async ExecuteBuildBatch(): Promise<void> {
+        if (this.IsBuildingBatch || this.PreviewCandidateCount === 0) return;
+        this.IsBuildingBatch = true;
+        this.ModalErrorMessage = null;
+        this.cdr.markForCheck();
+
+        try {
+            const buildRes = await this.dispatchClient.BuildJournalEntryBatch({
+                TargetSystem: this.BuildTarget,
+                Cutoff: this.BuildCutoffDate || null,
+                ExcludeEntryTypeCodes: this.ExcludeRevRec ? ['RevenueRecognition'] : null,
+            });
+
+            if (buildRes.Success) {
+                if (buildRes.NothingToBatch) {
+                    this.ActionMessage = 'No candidate journal entries found to batch.';
+                    this.ActionMessageIsError = false;
+                } else {
+                    this.ActionMessage = `Successfully built ${buildRes.CompanyCount} batch(es) for ${buildRes.JECount} journal entr${buildRes.JECount === 1 ? 'y' : 'ies'} (${buildRes.SummaryLineCount} consolidated GL lines, Dr ${buildRes.TotalDebits.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}).`;
+                    this.ActionMessageIsError = false;
+                }
+                this.BuildModalVisible = false;
+                this.SelectedStage = 'All';
+                await this.LoadBatches();
+            } else {
+                this.ModalErrorMessage = buildRes.ErrorMessage ?? 'Failed to build batch.';
+            }
+        } catch (e) {
+            this.ModalErrorMessage = e instanceof Error ? e.message : String(e);
+        } finally {
+            this.IsBuildingBatch = false;
+            this.cdr.markForCheck();
+        }
     }
 }

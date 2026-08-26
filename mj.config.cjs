@@ -32,7 +32,7 @@ module.exports = {
   // for pure OpenApp consumers. This repo is the app under DEVELOPMENT and
   // hand-wires its dependency (bizapps-common) in apps/MJAPI/src/index.ts, so
   // we must generate accounting locally and pull common from its installed
-  // npm packages instead. Common is kept out of CodeGen via excludeSchemas below.
+  // npm packages instead. Common stays out of CodeGen via includeSchemas below.
   entityPackageName: '@mj-biz-apps/accounting-entities',
 
   testing: {
@@ -122,18 +122,22 @@ module.exports = {
     ]
   },
 
-  // ---------------------------------------------------------------------------
-  // Schema/Table Exclusions
-  // ---------------------------------------------------------------------------
-  // Default: excludeSchemas: ['sys', 'staging', '__mj']
-  // Default: excludeTables: [{ schema: '%', table: 'sys%' }, { schema: '%', table: 'flyway_schema_history' }]
-  //
-  // Using defaults - Core entities (__mj schema) should not be modified by distributions.
-  // Uncomment only if you need different exclusions than the defaults.
-  // Exclude core (__mj) AND the bizapps-common dependency schema: common's
-  // entities + resolvers ship in its installed @mj-biz-apps/common-* packages,
-  // so this app's CodeGen must not regenerate them locally.
-  excludeSchemas: ['sys', 'staging', 'dbo', '__mj', '__mj_BizAppsCommon', '__mj_BizAppsTasks', '__mj_BizAppsOrders', '__mj_BizAppsIssues', '__mj_BizAppsMarketing', '__mj_BizAppsATS', '__mj_BizAppsCommittees', '__mj_BizAppsCaliber', '__mj_BizAppsForms'],
+  // Allow-list: CodeGen this app's schema only (MJ >= 5.50 includeSchemas).
+  // Unnamed schemas — core, siblings, never-seen client schemas — are excluded.
+  includeSchemas: ['__mj_BizAppsAccounting'],
+  excludeSchemas: [],
+  /**
+   * Schema → npm for peer entity classes this emit does NOT generate
+   * (embeds + related-record collections). Distinct from:
+   *   includeSchemas     — what this run generates
+   *   entityPackageName  — the npm package this run writes (string form)
+   * Core (__mj) always comes from @memberjunction/core-entities; do not list it.
+   * Do not map a foreign schema to this emit's own package.
+   */
+  entityImportPackages: {
+    '__mj_BizAppsCommon': '@mj-biz-apps/common-entities',
+    '__mj_BizAppsTasks': '@mj-biz-apps/tasks-entities',
+  },
   // excludeTables: [
   //   { schema: '%', table: 'sys%' },
   //   { schema: '%', table: 'flyway_schema_history' }
