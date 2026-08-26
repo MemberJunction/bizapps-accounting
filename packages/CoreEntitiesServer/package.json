@@ -2,7 +2,7 @@
   "name": "@mj-biz-apps/accounting-core-entities-server",
   "type": "module",
   "version": "0.2.0",
-  "description": "Server-side entity subclasses for BizApps Accounting — lifecycle hooks for AccountingCompanyProfile, JournalEntry, AccountingPeriod, etc.",
+  "description": "Server-side entity subclasses for BizApps Accounting \u2014 lifecycle hooks for AccountingCompanyProfile, JournalEntry, AccountingPeriod, etc.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "publishConfig": {
@@ -19,9 +19,10 @@
   "author": "MemberJunction.com",
   "license": "BUSL-1.1",
   "devDependencies": {
+    "@types/node": "^22.10.2",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.18",
-    "vite": "^7.1.5"
+    "vite": "^7.1.5",
+    "vitest": "^4.0.18"
   },
   "dependencies": {
     "@mj-biz-apps/accounting-entities": "0.2.0",
