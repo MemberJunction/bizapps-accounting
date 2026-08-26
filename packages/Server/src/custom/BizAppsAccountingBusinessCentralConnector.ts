@@ -31,6 +31,7 @@
 import { RegisterClass } from '@memberjunction/global';
 import { BusinessCentralConnector } from '@memberjunction/connector-business-central';
 import { BaseIntegrationConnector, type FetchContext, type FetchBatchResult, type ExternalRecord } from '@memberjunction/integration-engine';
+import { Metadata, RunView } from '@memberjunction/core';
 
 /** The BC `accounts` collection object name (the only object this connector filters). */
 const BC_ACCOUNTS_OBJECT = 'accounts';
@@ -50,6 +51,25 @@ const COMPANY_ID_FIELD = 'MJCompanyID';
  * `'total'` if only Total rows should be dropped (Heading/Begin-Total/End-Total would then fail as
  * before, since they map to a null AccountType).
  */
+/** The BC `dimensionValues` collection object name (needs parent-dimension resolution). */
+const BC_DIMENSION_VALUES_OBJECT = 'dimensionvalues';
+
+/** Accounting entity the BC `dimensions` collection maps onto — the parent of a dimension value. */
+const DIMENSION_ENTITY = 'MJ_BizApps_Accounting: Dimensions';
+
+/** MJ's external->internal bookkeeping, written by the engine as each entity map syncs. */
+const RECORD_MAP_ENTITY = 'MJ: Company Integration Record Maps';
+
+/**
+ * Synthetic field stamped onto every fetched `dimensionValues` record: the ACCOUNTING
+ * `Dimension.ID` for the BC dimension the value belongs to. BC sends its own `dimensionId` GUID,
+ * which means nothing locally, and accounting's Dimension has no external-id column to match it
+ * against. A field-map `lookup` transform cannot help — `LookupConfig` is a static value map, not a
+ * database lookup — so the external->internal resolution belongs here, exactly like the
+ * MJCompanyID stamp above.
+ */
+const DIMENSION_ID_FIELD = 'MJDimensionID';
+
 const NON_POSTABLE_ACCOUNT_TYPES: ReadonlySet<string> = new Set(['heading', 'total', 'begin-total', 'end-total']);
 
 @RegisterClass(BaseIntegrationConnector, 'BusinessCentralConnector', 100)
@@ -63,7 +83,15 @@ export class BizAppsAccountingBusinessCentralConnector extends BusinessCentralCo
     // company/credential. Done for all objects since it's generic company context.
     this.stampCompanyContext(result.Records, ctx);
 
-    if ((ctx.ObjectName ?? '').toLowerCase() !== BC_ACCOUNTS_OBJECT) {
+    const objectName = (ctx.ObjectName ?? '').toLowerCase();
+
+    // dimensionValues: resolve the BC parent-dimension GUID to the local Dimension.ID.
+    if (objectName === BC_DIMENSION_VALUES_OBJECT) {
+      await this.stampDimensionIds(result.Records, ctx);
+      return result;
+    }
+
+    if (objectName !== BC_ACCOUNTS_OBJECT) {
       return result;
     }
     const kept = result.Records.filter((record) => !this.isNonPostableAccount(record));
@@ -76,6 +104,53 @@ export class BizAppsAccountingBusinessCentralConnector extends BusinessCentralCo
     const companyID = ctx.CompanyIntegration.CompanyID;
     for (const record of records) {
       record.Fields[COMPANY_ID_FIELD] = companyID;
+    }
+  }
+
+  /**
+   * Stamps {@link DIMENSION_ID_FIELD} onto each `dimensionValues` record by translating BC's
+   * `dimensionId` through the engine's own Record Map for the Dimensions entity map.
+   *
+   * This works because the dimensions entity map runs FIRST (Priority 10 vs 20), so by the time
+   * dimension values are fetched the engine has already written an external->internal row per
+   * dimension. Using the Record Map rather than re-fetching `/dimensions` keeps this to one local
+   * query and no extra Business Central API call.
+   *
+   * A value whose parent dimension has no map entry is left UNSTAMPED on purpose: DimensionID is a
+   * required field map, so the engine records it as a per-record failure in the run's ErrorLog
+   * instead of silently inventing a parent.
+   */
+  private async stampDimensionIds(records: ExternalRecord[], ctx: FetchContext): Promise<void> {
+    if (records.length === 0) {
+      return;
+    }
+    const dimensionEntity = new Metadata().EntityByName(DIMENSION_ENTITY);
+    if (!dimensionEntity) {
+      return; // Dimensions entity not present in this environment — nothing to resolve against.
+    }
+    const rv = new RunView();
+    const maps = await rv.RunView<{ ExternalSystemRecordID: string; EntityRecordID: string }>({
+      EntityName: RECORD_MAP_ENTITY,
+      ExtraFilter: `CompanyIntegrationID='${ctx.CompanyIntegration.ID}' AND EntityID='${dimensionEntity.ID}'`,
+      Fields: ['ExternalSystemRecordID', 'EntityRecordID'],
+      ResultType: 'simple',
+      BypassCache: true,
+    }, ctx.ContextUser);
+    if (!maps.Success) {
+      return; // leave unstamped -> per-record failures, never a wrong parent
+    }
+    const localIDByExternal = new Map<string, string>(
+      (maps.Results ?? []).map((m) => [m.ExternalSystemRecordID.trim().toLowerCase(), m.EntityRecordID]),
+    );
+    for (const record of records) {
+      const externalDimensionID = record.Fields['dimensionId'];
+      if (typeof externalDimensionID !== 'string') {
+        continue;
+      }
+      const localID = localIDByExternal.get(externalDimensionID.trim().toLowerCase());
+      if (localID) {
+        record.Fields[DIMENSION_ID_FIELD] = localID;
+      }
     }
   }
 

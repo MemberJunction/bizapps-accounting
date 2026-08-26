@@ -1,0 +1,154 @@
+[
+  {
+    "_comment": "Business Central -> Dimension pull-sync map. Rides the SAME Company Integration as the GL account sync, so the existing nightly fan-out job picks it up with no new scheduled job (entity maps run in Priority ASC order: accounts=0, dimensions=10, dimensionValues=20). Dedup is the IsKeyField Code map + the engine's Record Map -- accounting's Dimension has no external-id column (unlike GLAccount.ExternalAccountID) and needs none, because UQ_Dimension_Code makes Code the natural key. Dimension has no CompanyID, so a code synced from two BC companies resolves to ONE shared row (ruling 2026-08-25).",
+    "fields": {
+      "CompanyIntegrationID": "@lookup:MJ: Company Integrations.Name=BizApps Accounting - Business Central GL Account Sync",
+      "ExternalObjectName": "dimensions",
+      "ExternalObjectLabel": "Dimensions",
+      "EntityID": "@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Dimensions",
+      "SyncDirection": "Pull",
+      "SyncEnabled": true,
+      "ConflictResolution": "SourceWins",
+      "DeleteBehavior": "DoNothing",
+      "Priority": 10,
+      "Status": "Active"
+    },
+    "primaryKey": {
+      "ID": "F9AA269B-7675-4C54-910E-45DB83AB2888"
+    },
+    "relatedEntities": {
+      "MJ: Company Integration Field Maps": [
+        {
+          "_comment": "BC dimension code -> Code. KEY FIELD: matches on UQ_Dimension_Code so a re-sync UPSERTs the existing row.",
+          "fields": {
+            "EntityMapID": "@parent:ID",
+            "SourceFieldName": "code",
+            "DestinationFieldName": "Code",
+            "Direction": "SourceToDest",
+            "IsKeyField": true,
+            "IsRequired": true,
+            "Priority": 10,
+            "Status": "Active"
+          },
+          "primaryKey": {
+            "ID": "9236EFCC-0283-4EF3-9BFE-AE8D06D5E2B6"
+          },
+          "sync": {
+            "lastModified": "2026-08-26T01:19:14.745Z",
+            "checksum": "be92822a362dfe13e97192f59ea1e2c8668c67e32ad0ac26c48fc2e811790a6c"
+          }
+        },
+        {
+          "_comment": "BC dimension displayName -> Name. Not a key; SourceWins means BC is authoritative for the label.",
+          "fields": {
+            "EntityMapID": "@parent:ID",
+            "SourceFieldName": "displayName",
+            "DestinationFieldName": "Name",
+            "Direction": "SourceToDest",
+            "IsKeyField": false,
+            "IsRequired": true,
+            "Priority": 20,
+            "Status": "Active"
+          },
+          "primaryKey": {
+            "ID": "0719F949-9F80-4A4C-A72F-AA695B936B83"
+          },
+          "sync": {
+            "lastModified": "2026-08-26T01:19:14.759Z",
+            "checksum": "c47eaf10d8c58f36839edbfc884952f9fecff9ff24c34e05be2160d911b4d8f2"
+          }
+        }
+      ]
+    },
+    "sync": {
+      "lastModified": "2026-08-26T01:19:14.698Z",
+      "checksum": "31b135fb02dd4d7e08f42c0aaf0a91973eb1023c27164324eeca02400379152b"
+    }
+  },
+  {
+    "_comment": "Business Central -> DimensionValue pull-sync map. Priority 20 so it runs AFTER the dimensions map above -- the parent Dimension rows must exist first. NOTE the DimensionID source is the SYNTHETIC field MJDimensionID stamped by BizAppsAccountingBusinessCentralConnector: BC sends its OWN dimensionId GUID, which is meaningless locally, and a field-map 'lookup' transform is only a static value map (LookupConfig.Map), not a database lookup -- so the external->internal resolution has to happen at the connector, exactly as the MJCompanyID stamp does for accounts.",
+    "fields": {
+      "CompanyIntegrationID": "@lookup:MJ: Company Integrations.Name=BizApps Accounting - Business Central GL Account Sync",
+      "ExternalObjectName": "dimensionValues",
+      "ExternalObjectLabel": "Dimension Values",
+      "EntityID": "@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Dimension Values",
+      "SyncDirection": "Pull",
+      "SyncEnabled": true,
+      "ConflictResolution": "SourceWins",
+      "DeleteBehavior": "DoNothing",
+      "Priority": 20,
+      "Status": "Active"
+    },
+    "primaryKey": {
+      "ID": "EF788542-3375-4DE2-A401-07DBB77D6A4D"
+    },
+    "relatedEntities": {
+      "MJ: Company Integration Field Maps": [
+        {
+          "_comment": "Connector-stamped accounting Dimension.ID -> DimensionID. KEY FIELD with Code: together they are UQ_DimensionValue_DimensionID_Code, so a re-sync UPSERTs rather than colliding.",
+          "fields": {
+            "EntityMapID": "@parent:ID",
+            "SourceFieldName": "MJDimensionID",
+            "DestinationFieldName": "DimensionID",
+            "Direction": "SourceToDest",
+            "IsKeyField": true,
+            "IsRequired": true,
+            "Priority": 10,
+            "Status": "Active"
+          },
+          "primaryKey": {
+            "ID": "B5500C3E-8A20-452E-9F12-36FF924F0AF8"
+          },
+          "sync": {
+            "lastModified": "2026-08-26T01:19:14.773Z",
+            "checksum": "e596ab370d5b599464c1bec977fa761c30f741fd5707d60061fa2c1064259f75"
+          }
+        },
+        {
+          "_comment": "BC dimension-value code -> Code. KEY FIELD with DimensionID (see above).",
+          "fields": {
+            "EntityMapID": "@parent:ID",
+            "SourceFieldName": "code",
+            "DestinationFieldName": "Code",
+            "Direction": "SourceToDest",
+            "IsKeyField": true,
+            "IsRequired": true,
+            "Priority": 20,
+            "Status": "Active"
+          },
+          "primaryKey": {
+            "ID": "931598A3-4183-4E5A-B2F6-8A883EB0A4E0"
+          },
+          "sync": {
+            "lastModified": "2026-08-26T01:19:14.790Z",
+            "checksum": "5b692d0e4dc256dfe92dce46bcffba72580adc032e7aa41d3815b366d2da7694"
+          }
+        },
+        {
+          "_comment": "BC dimension-value displayName -> Name.",
+          "fields": {
+            "EntityMapID": "@parent:ID",
+            "SourceFieldName": "displayName",
+            "DestinationFieldName": "Name",
+            "Direction": "SourceToDest",
+            "IsKeyField": false,
+            "IsRequired": true,
+            "Priority": 30,
+            "Status": "Active"
+          },
+          "primaryKey": {
+            "ID": "6CF62B45-3F33-4088-9178-3283721717F3"
+          },
+          "sync": {
+            "lastModified": "2026-08-26T01:19:14.807Z",
+            "checksum": "6f9a528e078bf2c784697b91a39c6cd4f69ae270b9fc9bab4d7dea5b938c87d4"
+          }
+        }
+      ]
+    },
+    "sync": {
+      "lastModified": "2026-08-26T01:19:14.712Z",
+      "checksum": "c541a79b244d6a7ab225e0b78c5cb53dbd1c0e6887815bfcf6141e4806dd3304"
+    }
+  }
+]
