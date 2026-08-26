@@ -12,7 +12,7 @@
 -- =============================================================================
 
 /* SQL text to update existing entities from schema */
-EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='${mjSchema}_BizAppsCommon,${mjSchema}_BizAppsIssues,${mjSchema}_BizAppsOrders,${mjSchema}_BizAppsTasks,${mjSchema},sys';
+EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='sys,staging', @IncludedSchemaNames='${flyway:defaultSchema}';
 
 /* SQL text to insert 16 new entity field(s) — hierarchy virtuals for ACP/GL/Tax/Dimension Values.
    CodeGen emitted these during a sibling-schema --skipfiles run; folded here because they belong to Accounting. */
@@ -1026,13 +1026,13 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='${
       END;
 
 /* SQL text to update existing entity fields from schema */
-EXEC [${mjSchema}].[spUpdateExistingEntityFieldsFromSchema] @ExcludedSchemaNames='${mjSchema}_BizAppsCommon,${mjSchema}_BizAppsIssues,${mjSchema}_BizAppsOrders,${mjSchema}_BizAppsTasks,${mjSchema},sys';
+EXEC [${mjSchema}].[spUpdateExistingEntityFieldsFromSchema] @ExcludedSchemaNames='sys,staging', @IncludedSchemaNames='${flyway:defaultSchema}';
 
 /* SQL text to set default column width where needed */
-EXEC [${mjSchema}].[spSetDefaultColumnWidthWhereNeeded] @ExcludedSchemaNames='${mjSchema}_BizAppsCommon,${mjSchema}_BizAppsIssues,${mjSchema}_BizAppsOrders,${mjSchema}_BizAppsTasks,${mjSchema},sys';
+EXEC [${mjSchema}].[spSetDefaultColumnWidthWhereNeeded] @ExcludedSchemaNames='sys,staging', @IncludedSchemaNames='${flyway:defaultSchema}';
 
 /* SQL text to sync schema info from database schemas */
-EXEC [${mjSchema}].[spUpdateSchemaInfoFromDatabase] @ExcludedSchemaNames='${mjSchema}_BizAppsCommon,${mjSchema}_BizAppsIssues,${mjSchema}_BizAppsOrders,${mjSchema}_BizAppsTasks,${mjSchema},sys';
+EXEC [${mjSchema}].[spUpdateSchemaInfoFromDatabase] @ExcludedSchemaNames='sys,staging', @IncludedSchemaNames='${flyway:defaultSchema}';
 
 /* Hierarchy Metadata Function SQL for MJ_BizApps_Accounting: Accounting Company Profiles.ParentAccountingCompanyID */
 -----------------------------------------------------------------

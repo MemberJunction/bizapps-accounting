@@ -11,9 +11,6 @@ UNION ALL SELECT 'TaxJurisdiction', COUNT(*) FROM __mj_BizAppsAccounting.TaxJuri
 UNION ALL SELECT 'TaxRate', COUNT(*) FROM __mj_BizAppsAccounting.TaxRate
 UNION ALL SELECT 'CurrencySpotRate', COUNT(*) FROM __mj_BizAppsAccounting.CurrencySpotRate
 UNION ALL SELECT 'AccountingCompanyProfile', COUNT(*) FROM __mj_BizAppsAccounting.AccountingCompanyProfile
-UNION ALL SELECT 'Product', COUNT(*) FROM __mj_BizAppsOrders.Product
-UNION ALL SELECT 'ProductCategory', COUNT(*) FROM __mj_BizAppsOrders.ProductCategory
-UNION ALL SELECT 'ProductType', COUNT(*) FROM __mj_BizAppsOrders.ProductType
 ORDER BY n DESC;`;
 
 async function main() {
