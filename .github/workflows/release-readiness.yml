@@ -1,35 +1,31 @@
 # The gate on anything that moves a version.
 #
-# Runs on two kinds of PR, with the same two assertions, from the same script:
+# One workflow, several INDEPENDENT contexts (`rr: changesets`, `rr: minor bump`, ...), each
+# asserting one thing and each requireable on its own. See the comment above `changesets`
+# for why they are not one combined check. `gate` states the scope rule once for all of them.
 #
-#   * the Version Packages PR into `next` (head `changeset-release/next`) — the earliest
-#     point the resolved version exists, so a wrong bump level is one edit away from fixed:
-#     raise a changeset to minor and the PR regenerates itself.
-#   * any PR into `main` — the release itself, and the check that actually protects it.
-#
-# Deliberately a PR check rather than a step inside version.yml. A failure inside that job
+# Deliberately PR checks rather than steps inside version.yml. A failure inside that job
 # lands on the push-to-next run, NOT on the Version Packages PR: the PR's checks reflect its
-# own head SHA, and with the default GITHUB_TOKEN it has no checks at all. A reviewer looking
-# at the PR would see nothing wrong, merge it, and hit the gate at `main` — the exact
-# backtrack this is meant to prevent. A PR check is visible where the decision is made, and
-# can be made blocking via required status checks.
+# own head SHA. A reviewer looking at the PR would see nothing wrong, merge it, and hit the
+# gate at `main` — the exact backtrack this is meant to prevent. A PR check is visible where
+# the decision is made, and can be made blocking via required status checks.
 #
-# Both halves of this now hold: PRs are opened by a GitHub App (see version.yml), and
-# App-created PRs trigger workflows, so the `next` half fires on the Version Packages PR
-# like any other check. Before the App token, runs on `changeset-release/next` were created
-# in `action_required` and did not start until a maintainer clicked "Approve and run". That
-# is friction, not a wall -- approving starts the run and the check reports normally -- but
-# it recurs on every push to the PR, and until someone clicks, a required check has nothing
-# to report (accounting #97 read mergeStateStatus=BLOCKED with "no checks reported").
+# The `next` half depends on the Version Packages PR being opened by a GitHub App (see
+# version.yml), because App-created PRs trigger workflows. Before the App token, runs on
+# `changeset-release/next` were created in `action_required` and did not start until a
+# maintainer clicked "Approve and run". That is friction, not a wall -- approving starts the
+# run and the check reports normally -- but it recurs on every push to the PR, and until
+# someone clicks, a required check has nothing to report (accounting #97 read
+# mergeStateStatus=BLOCKED with "no checks reported").
 #
-# Bypass: label the PR `bump-level-exempt`.
+# Bypass for `rr: minor bump` only: label the PR `bump-level-exempt`.
 name: Release readiness
 
 on:
   pull_request:
     # `ready_for_review` is NOT in the default type set (opened/synchronize/reopened),
-    # and the job below skips while the PR is a draft — without it, marking a PR ready
-    # would not re-trigger anything and the check would never report.
+    # and the jobs below skip while the PR is a draft — without it, marking a PR ready
+    # would not re-trigger anything and the checks would never report.
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [next, main]
 
@@ -37,22 +33,65 @@ permissions:
   contents: read
 
 jobs:
-  release-readiness:
-    # On `next`, only the bot's version PR is in scope — ordinary feature PRs have changesets
-    # pending by design and must not be judged on bump level, since one minor anywhere in the
-    # release window covers the release.
-    # Drafts DO fire opened/synchronize, so a draft otherwise burns a full run on every
-    # push. Skip while draft; the `ready_for_review` trigger above brings it back. A job
-    # skipped by `if:` still reports a conclusion, so this is safe as a required check.
-    # The event_name arm keeps the job running on `push`, where pull_request is null.
-    if: (github.event_name != 'pull_request' || github.event.pull_request.draft == false) && (github.base_ref == 'main' || github.head_ref == 'changeset-release/next')
+  # One job whose only output is "does release readiness apply to this PR at all".
+  #
+  # The scope rule is identical for every assertion below, so it is stated ONCE here rather
+  # than copy-pasted into each `if:` — three copies of a condition is three chances for them
+  # to drift apart, and a check that silently stops applying is the worst failure mode this
+  # workflow has.
+  #
+  # Every real job then carries `needs: gate` + `if: needs.gate.outputs.in_scope == 'true'`.
+  # `gate` always SUCCEEDS; only its output varies, so the dependent jobs resolve to `skipped`
+  # rather than to a dependency failure. A job skipped by `if:` still reports a conclusion,
+  # which satisfies a required status check — unlike a workflow filtered out at the `on:`
+  # level, which creates no check run at all and leaves a required context pending forever.
+  gate:
+    name: 'rr: gate'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      in_scope: ${{ steps.scope.outputs.in_scope }}
+    steps:
+      - id: scope
+        # In scope on two kinds of PR, and only these two:
+        #   * any PR into `main` — the release itself, and the check that actually protects it.
+        #   * the Version Packages PR into `next` (head `changeset-release/next`) — the earliest
+        #     point the resolved version exists, so a wrong bump level is one edit away from
+        #     fixed: raise a changeset to minor and the PR regenerates itself.
+        # Ordinary feature PRs into `next` are NOT in scope: they have changesets pending by
+        # design, and one minor anywhere in the release window covers the release.
+        #
+        # Drafts DO fire opened/synchronize, so without the draft arm a draft burns a run on
+        # every push; the `ready_for_review` trigger above brings the checks back.
+        run: |
+          if [ "${{ github.event.pull_request.draft }}" = "true" ]; then
+            echo "Draft PR — release readiness does not apply yet"
+            echo "in_scope=false" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.base_ref }}" = "main" ] || [ "${{ github.head_ref }}" = "changeset-release/next" ]; then
+            echo "In scope (base=${{ github.base_ref }}, head=${{ github.head_ref }})"
+            echo "in_scope=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Ordinary PR into ${{ github.base_ref }} — release readiness does not apply"
+            echo "in_scope=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Named `rr: <thing>` rather than folded into one `release-readiness` check on purpose. A
+  # check name is the error message most people actually read: "release readiness failed" says
+  # nothing when three unrelated assertions live inside it, while "rr: minor bump" sends the
+  # developer straight to the fix. Separate contexts can also be required independently.
+  #
+  # The `rr:` prefix (not the full words) is enough because the workflow name is displayed
+  # alongside the context; it exists to keep the names unique across the repo, since required
+  # status checks are matched by context name alone and a bare `build` here would collide with
+  # the `build` job in build.yml.
+  changesets:
+    name: 'rr: changesets'
+    needs: gate
+    if: needs.gate.outputs.in_scope == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true # both assertions compare against the last v* tag
 
       - name: No changesets may be pending
         run: |
@@ -63,11 +102,21 @@ jobs:
             exit 1
           fi
           echo "No pending changesets — releasing $(jq -r .version packages/Entities/package.json)"
+          echo "Releasing **$(jq -r .version packages/Entities/package.json)**" >> "$GITHUB_STEP_SUMMARY"
+
+  minor-bump:
+    name: 'rr: minor bump'
+    needs: gate
+    if: needs.gate.outputs.in_scope == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true # resolves the previous release via `git tag --list 'v*'`
 
       - name: A release carrying migrations must be at least a minor
         env:
           BUMP_LEVEL_EXEMPT: ${{ contains(github.event.pull_request.labels.*.name, 'bump-level-exempt') }}
         run: ./ci/check-bump-level.sh
-
-      - name: Summary
-        run: echo "Releasing **$(jq -r .version packages/Entities/package.json)**" >> "$GITHUB_STEP_SUMMARY"

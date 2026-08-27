@@ -27,7 +27,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-only:
+  build:
     # Drafts DO fire opened/synchronize, so a draft otherwise burns a full run on every
     # push. Skip while draft; the `ready_for_review` trigger above brings it back. A job
     # skipped by `if:` still reports a conclusion, so this is safe as a required check.
