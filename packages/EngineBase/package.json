@@ -27,8 +27,8 @@
     "@mj-biz-apps/accounting-entities": "0.2.0"
   },
   "peerDependencies": {
-    "@memberjunction/core": "^6.1.0-edge.3",
-    "@memberjunction/global": "^6.1.0-edge.3"
+    "@memberjunction/core": "^6.1.0-edge.4",
+    "@memberjunction/global": "^6.1.0-edge.4"
   },
   "repository": {
     "type": "git",
