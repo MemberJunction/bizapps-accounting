@@ -33,7 +33,8 @@ DECLARE @RelID UNIQUEIDENTIFIER = (
 
 IF @RelID IS NOT NULL
     UPDATE [${mjSchema}].[EntityRelationship]
-    SET [Configuration] = N'{
+    SET [DisplayName] = N'Journal Entry Batches', -- heal-created rows have NULL DisplayName; the form falls back to the raw codename
+        [Configuration] = N'{
   "UI": {
     "inclusion": "More"
   }

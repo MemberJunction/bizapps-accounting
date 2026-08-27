@@ -365,9 +365,11 @@
     "_comments": [
       "Task form: JE batches this task approved sit in More. Lives HERE, not in",
       "bizapps-tasks: Tasks metadata must not name Accounting (consumer blindness),",
-      "and this relationship only exists where Accounting is installed."
+      "and this relationship only exists where Accounting is installed.",
+      "DisplayName pinned too: the heal that creates this relationship row on fresh installs leaves DisplayName NULL, and the form falls back to the raw codename."
     ],
     "fields": {
+      "DisplayName": "Journal Entry Batches",
       "Configuration": {
         "UI": {
           "inclusion": "More"
@@ -378,8 +380,8 @@
       "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Tasks: Tasks&RelatedEntity=MJ_BizApps_Accounting: Journal Entry Batches&RelatedEntityJoinField=ApprovalTaskID"
     },
     "sync": {
-      "lastModified": "2026-08-27T14:27:27.426Z",
-      "checksum": "58975efd1d9187857b888d0129194c7b3c6f8248bca208c86585ea58e2517426"
+      "lastModified": "2026-08-27T15:48:02.244Z",
+      "checksum": "42e4dcda2244ecf2fe22e8f858fe377ef2b9fb63ed6a77d67e15c195ed27a75b"
     }
   }
 ]
