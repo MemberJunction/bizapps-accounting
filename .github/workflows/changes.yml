@@ -16,7 +16,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  changes_and_migrations:
+  migration-naming:
+    # The context name is what a developer reads first, so it names the assertion rather
+    # than the file. Timestamp ordering belongs under "naming" too -- the timestamp IS
+    # part of the filename, and it is the half that decides whether Flyway ever runs it.
+    name: 'migration naming'
     # Drafts DO fire opened/synchronize, so a draft otherwise burns a full run on every
     # push. Skip while draft; the `ready_for_review` trigger above brings it back. A job
     # skipped by `if:` still reports a conclusion, so this is safe as a required check.
