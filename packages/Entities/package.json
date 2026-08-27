@@ -1,7 +1,7 @@
 {
   "name": "@mj-biz-apps/accounting-entities",
   "type": "module",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "MJ BizApps Accounting Entity Subclasses",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
