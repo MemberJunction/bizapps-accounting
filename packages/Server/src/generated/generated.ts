@@ -1794,6 +1794,10 @@ export class mjBizAppsAccountingGLAccountRole_ {
     @Field() 
     _mj__UpdatedAt: Date;
         
+    @Field({description: `How many Active GLAccountLinks this role may resolve to for one record and company. One (default, every pre-existing role including Cash): the BA-D32 tie guard applies and ResolveLinkedAccount returns a single account, latest StartedAt winning among overlapping links. Many: the tie guard does not apply and ResolveLinkedAccount REFUSES the role rather than returning an arbitrary account — callers use ResolveLinkedAccounts and get every Active link whose window covers AsOf. Separating the two is what lets a company hold N bank accounts for a cash position without disturbing where payments post.`}) 
+    @MaxLength(10)
+    Cardinality: string;
+        
 }
 
 //****************************************************************************
@@ -1815,6 +1819,9 @@ export class CreatemjBizAppsAccountingGLAccountRoleInput {
 
     @Field(() => Int, { nullable: true })
     Sequence?: number;
+
+    @Field({ nullable: true })
+    Cardinality?: string;
 
     @Field(() => RestoreContextInput, { nullable: true })
     RestoreContext___?: RestoreContextInput;
@@ -1840,6 +1847,9 @@ export class UpdatemjBizAppsAccountingGLAccountRoleInput {
 
     @Field(() => Int, { nullable: true })
     Sequence?: number;
+
+    @Field({ nullable: true })
+    Cardinality?: string;
 
     @Field(() => [KeyValuePairInput], { nullable: true })
     OldValues___?: KeyValuePairInput[];
@@ -2712,33 +2722,9 @@ export class mjBizAppsAccountingJournalEntry_ {
     @MaxLength(36)
     RootReversesJournalEntryID?: string;
         
-    @Field(() => Int, {nullable: true}) 
-    ReversesJournalEntryIDDepth?: number;
-        
-    @Field({nullable: true}) 
-    ReversesJournalEntryIDPath?: string;
-        
-    @Field(() => Boolean, {nullable: true}) 
-    ReversesJournalEntryIDIsLeaf?: boolean;
-        
-    @Field(() => Int, {nullable: true}) 
-    ReversesJournalEntryIDChildCount?: number;
-        
     @Field({nullable: true}) 
     @MaxLength(36)
     RootReversedByJournalEntryID?: string;
-        
-    @Field(() => Int, {nullable: true}) 
-    ReversedByJournalEntryIDDepth?: number;
-        
-    @Field({nullable: true}) 
-    ReversedByJournalEntryIDPath?: string;
-        
-    @Field(() => Boolean, {nullable: true}) 
-    ReversedByJournalEntryIDIsLeaf?: boolean;
-        
-    @Field(() => Int, {nullable: true}) 
-    ReversedByJournalEntryIDChildCount?: number;
         
 }
 
