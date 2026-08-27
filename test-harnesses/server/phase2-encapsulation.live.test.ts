@@ -314,6 +314,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
 
     const failingGate: JournalEntryBatchApprovalGate = {
       async assertApproved() { /* n/a */ },
+      async recordDecision() { /* n/a — this gate exists to fail the RAISE */ },
       async onBatchBuilt(): Promise<string | null> { throw new Error('L11 injected task-raise failure'); },
     };
     await expect(
