@@ -1,5 +1,5 @@
 ---
-"@mj-biz-apps/accounting-entities": patch
+"@mj-biz-apps/accounting-entities": minor
 ---
 
 Dependency floors to the actual latest releases: bizapps-common >=5.36.0,
