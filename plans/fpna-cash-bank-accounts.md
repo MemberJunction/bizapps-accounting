@@ -93,6 +93,47 @@ Phase 1 FPNA stores the **rollup** on `CashBalance`. Drill-by-account is a later
 
 ---
 
+## What FP&A actually consumes from accounting
+
+Confirmed against the locked FPNA schema (`bizapps-fpna` PR #3, spec Rev 4).
+Three items; only the first asks anything new of this repo.
+
+| # | Item | Asks anything of accounting? |
+|---|---|---|
+| **A-1** | **`GLAccountRole` = `BankAccount`, cardinality Many** — this PR. FPNA sums Active `BankAccount` links on the company as of `AsOf` to populate `CashBalance.Amount`. | **Yes — this PR.** Not an MVP blocker (see below), but production `CashBalance` is wrong without it |
+| **A-2** | **`AccountingCompanyProfile.FunctionalCurrencyCode`** as the single source of a company's currency. FPNA resolves every line's `CurrencyCode` from it and refuses a line that disagrees. | **No** — already `CHAR(3) NOT NULL`, FK to `Currency(Code)` |
+| **A-3** | **`Currency(Code)` as a seeded, stable lookup.** All ten FPNA tables carrying money now hard-FK to it, joining the six accounting columns that already do. | **No** — recorded so accounting knows FPNA is now a consumer |
+
+**Explicitly NOT requested, now or in Phase 1:** spot-rate tracking over time,
+hedging, mark-to-market, revaluation, reporting-currency translation. FPNA
+carries no `FunctionalAmount` and no `FXRate`; a mixed-currency line set is
+refused rather than converted, because accounting **D16** defers all FX
+computation upstream to Orders/Payments and orders **MOD-4** defers its
+currency columns entirely — so nothing upstream can supply a rate today.
+`CurrencySpotRate` exists here, has no FPNA reader, and should not grow one
+on FP&A's account. Per-entity functional currency (A-2) is the whole of the
+currency surface Phase 1 wants.
+
+### Answering this PR's test plan
+
+- **"Confirm we are not allowing N `Cash` links."** Confirmed, and FPNA
+  depends on it staying that way. FPNA never reads role `Cash`; it sums
+  `BankAccount`. Orders' payment routing needs `Cash` singular, and the
+  BA-D32 tie guard is what keeps it so.
+- **"Confirm FPNA can seed `CashBalance` totals in world-000 without this
+  PR having landed."** Confirmed. `CashBalance` carries `Source`
+  (`ERP | Manual | World | SubledgerRollup`); world-000 seeds `Source='World'`
+  with the total directly, and `CashBalanceLine` (the per-GL-account drill)
+  stays empty in the MVP. So the FPNA suite does not block on this PR, and
+  this PR does not block the FPNA baseline. Production is the case that
+  needs A-1 — `Source='SubledgerRollup'` has no correct answer without it.
+
+**The FPNA schema is now locked** (Rev 4), which clears the "once the FPNA
+schema is locked" precondition this PR's summary set for its own
+implementation phase.
+
+---
+
 ## Provenance
 
 Amith 2026-08-27, from FP&A cash-schema review: opening cash is N bank accounts rolled up; payment Cash role must stay singular (BA-D32 tie guard). Companion: `bizapps-fpna` `plans/schema-cash.md` §6.
