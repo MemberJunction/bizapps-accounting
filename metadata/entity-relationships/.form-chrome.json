@@ -154,7 +154,7 @@
   },
   {
     "_comments": [
-      "GL Account form: Due-To inverse is owned by the Due-From section \u2014 not a candidate."
+      "GL Account form: Due-To inverse is owned by the Due-From section — not a candidate."
     ],
     "fields": {
       "Configuration": {
@@ -358,6 +358,27 @@
     },
     "sync": {
       "lastModified": "2026-08-15T02:45:44.596Z",
+      "checksum": "58975efd1d9187857b888d0129194c7b3c6f8248bca208c86585ea58e2517426"
+    }
+  },
+  {
+    "_comments": [
+      "Task form: JE batches this task approved sit in More. Lives HERE, not in",
+      "bizapps-tasks: Tasks metadata must not name Accounting (consumer blindness),",
+      "and this relationship only exists where Accounting is installed."
+    ],
+    "fields": {
+      "Configuration": {
+        "UI": {
+          "inclusion": "More"
+        }
+      }
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Relationships.Entity=MJ_BizApps_Tasks: Tasks&RelatedEntity=MJ_BizApps_Accounting: Journal Entry Batches&RelatedEntityJoinField=ApprovalTaskID"
+    },
+    "sync": {
+      "lastModified": "2026-08-27T14:27:27.426Z",
       "checksum": "58975efd1d9187857b888d0129194c7b3c6f8248bca208c86585ea58e2517426"
     }
   }
