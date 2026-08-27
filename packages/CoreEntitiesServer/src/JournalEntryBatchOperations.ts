@@ -41,7 +41,6 @@ import {
   approveJournalEntryBatch,
   cancelJournalEntryBatch,
   pendingCompanies,
-  mockErpPoster,
   EmptyJournalEntryBatchError,
   type JournalEntryBatchTargetSystem,
   type BuildJournalEntryBatchResult,
@@ -203,14 +202,19 @@ export class RegenerateJournalEntryBatchOperation extends BaseRemotableOperation
 export interface DispatchJournalEntryBatchInput { JournalEntryBatchID: string }
 export interface DispatchJournalEntryBatchOutput { Status: string; ExternalJournalEntryBatchRef: string | null }
 
-/** Dispatch an Approved batch to the ERP (mock poster, v1). The gate + Status='Approved' block otherwise. */
+/**
+ * Dispatch an Approved batch to its external accounting system. THIN by design (the four-surface
+ * doctrine): marshal the input and call the engine — routing (account-first, D13), catalog/adapter
+ * resolution, the three-phase state machine, and the one-transaction Posted flip ALL live in
+ * `sendJournalEntryBatch`. See the engine for the failure doctrine (D6 loud-fail; no Mock fallback).
+ */
 @RegisterClass(BaseRemotableOperation, 'Accounting.DispatchJournalEntryBatch')
 export class DispatchJournalEntryBatchOperation extends BaseRemotableOperation<DispatchJournalEntryBatchInput, DispatchJournalEntryBatchOutput> {
   public readonly OperationKey = 'Accounting.DispatchJournalEntryBatch';
 
   protected async InternalExecute(input: DispatchJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<DispatchJournalEntryBatchOutput> {
     if (!input?.JournalEntryBatchID) throw new Error('DispatchJournalEntryBatch: JournalEntryBatchID is required.');
-    const batch = await sendJournalEntryBatch(input.JournalEntryBatchID, user, { gate: new TasksAppApprovalGate(provider), poster: mockErpPoster, provider });
+    const batch = await sendJournalEntryBatch(input.JournalEntryBatchID, user, { gate: new TasksAppApprovalGate(provider), provider });
     return { Status: batch.Status, ExternalJournalEntryBatchRef: batch.ExternalJournalEntryBatchRef ?? null };
   }
 }

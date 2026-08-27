@@ -698,13 +698,23 @@ erDiagram
     JournalEntryBatch |o--o| JournalEntry : "SummaryJournalEntryID - coherence trigger 50023"
     User ||--o{ JournalEntryBatch : "BatchedBy / ApprovedBy"
 
+
+    ExternalAccountingSystem {
+        uuid ID PK
+        string Name UK "BusinessCentral | Mock (seeded); add rows for new ERPs"
+        string DisplayName
+        string DriverClass "adapter class name (ClassFactory key), e.g. BusinessCentralAccountingSystemAdapter"
+        string IntegrationName "nullable - __mj.Integration.Name (business-central); NULL for Mock"
+        bit IsActive
+    }
+
     JournalEntryBatch {
         uuid ID PK
         string JournalEntryBatchNumber UK "global sequence"
         uuid CompanyID FK
         date PostingDate "singular, accountant-set - must match the GL (D8)"
         uuid SummaryJournalEntryID FK "type IsJournalEntryBatchSummary, EffectiveDate=PostingDate, same JournalEntryBatchID"
-        string TargetSystem "BusinessCentral | QuickBooks | NetSuite | Sage | Xero | Other"
+        string TargetSystem "BusinessCentral | QuickBooks | NetSuite | Sage | Xero | Other - resolved against ExternalAccountingSystem.Name at dispatch"
         string Status "Pending | Approved | Sent | Posted | Failed | Cancelled"
         datetimeoffset BatchedAt
         uuid BatchedByUserID FK

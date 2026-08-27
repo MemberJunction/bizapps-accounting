@@ -34,7 +34,7 @@ import {
   sendJournalEntryBatch,
   AutoApproveGate,
   TasksAppApprovalGate,
-  mockErpPoster,
+  MockAccountingSystemAdapter,
   type JournalEntryBatchApprovalGate,
 } from '@mj-biz-apps/accounting-core-entities-server';
 import type { mjBizAppsAccountingAccountingCompanyProfileEntity } from '@mj-biz-apps/accounting-entities';
@@ -188,7 +188,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
 
     // Approve → dispatch (mock poster) → Posted; members + summary GLPosted.
     await approveJournalEntryBatch(result!.batchId, ctx.user.ID, ctx.user, provider);
-    const batch = await sendJournalEntryBatch(result!.batchId, ctx.user, { gate: AutoApproveGate, poster: mockErpPoster, provider });
+    const batch = await sendJournalEntryBatch(result!.batchId, ctx.user, { gate: AutoApproveGate, adapterOverride: new MockAccountingSystemAdapter(), provider });
     expect(batch.Status).toBe('Posted');
     const notPosted = Number(await scalar(ctx.pool, `SELECT COUNT(*) FROM ${SCHEMA}.JournalEntry WHERE JournalEntryBatchID='${result!.batchId}' AND Status<>'GLPosted'`));
     expect(notPosted).toBe(0);

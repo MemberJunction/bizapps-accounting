@@ -17,7 +17,7 @@ import { MaxLength } from 'class-validator';
 import * as mj_core_schema_server_object_types from '@memberjunction/server'
 
 
-import { mjBizAppsAccountingAccountingCompanyProfileEntity, mjBizAppsAccountingCompanyTaxNexusEntity, mjBizAppsAccountingCurrencyEntity, mjBizAppsAccountingCurrencySpotRateEntity, mjBizAppsAccountingDimensionValueEntity, mjBizAppsAccountingDimensionEntity, mjBizAppsAccountingGLAccountLinkDimensionEntity, mjBizAppsAccountingGLAccountLinkEntity, mjBizAppsAccountingGLAccountRoleEntity, mjBizAppsAccountingGLAccountEntity, mjBizAppsAccountingIntercompanyAccountMatchDimensionEntity, mjBizAppsAccountingIntercompanyAccountMatchEntity, mjBizAppsAccountingJournalEntryEntity, mjBizAppsAccountingJournalEntryBatchSequenceEntity, mjBizAppsAccountingJournalEntryBatchEntity, mjBizAppsAccountingJournalEntryLineDimensionEntity, mjBizAppsAccountingJournalEntryLineEntity, mjBizAppsAccountingJournalEntrySequenceEntity, mjBizAppsAccountingJournalEntryTypeEntity, mjBizAppsAccountingTaxAuthorityEntity, mjBizAppsAccountingTaxJurisdictionEntity, mjBizAppsAccountingTaxLiabilityEntity, mjBizAppsAccountingTaxRateEntity } from '@mj-biz-apps/accounting-entities';
+import { mjBizAppsAccountingAccountingCompanyProfileEntity, mjBizAppsAccountingCompanyTaxNexusEntity, mjBizAppsAccountingCurrencyEntity, mjBizAppsAccountingCurrencySpotRateEntity, mjBizAppsAccountingDimensionValueEntity, mjBizAppsAccountingDimensionEntity, mjBizAppsAccountingExternalAccountingSystemEntity, mjBizAppsAccountingGLAccountLinkDimensionEntity, mjBizAppsAccountingGLAccountLinkEntity, mjBizAppsAccountingGLAccountRoleEntity, mjBizAppsAccountingGLAccountEntity, mjBizAppsAccountingIntercompanyAccountMatchDimensionEntity, mjBizAppsAccountingIntercompanyAccountMatchEntity, mjBizAppsAccountingJournalEntryEntity, mjBizAppsAccountingJournalEntryBatchSequenceEntity, mjBizAppsAccountingJournalEntryBatchEntity, mjBizAppsAccountingJournalEntryLineDimensionEntity, mjBizAppsAccountingJournalEntryLineEntity, mjBizAppsAccountingJournalEntrySequenceEntity, mjBizAppsAccountingJournalEntryTypeEntity, mjBizAppsAccountingTaxAuthorityEntity, mjBizAppsAccountingTaxJurisdictionEntity, mjBizAppsAccountingTaxLiabilityEntity, mjBizAppsAccountingTaxRateEntity } from '@mj-biz-apps/accounting-entities';
     
 
 //****************************************************************************
@@ -1382,6 +1382,195 @@ export class mjBizAppsAccountingDimensionResolver extends ResolverBase {
 }
 
 //****************************************************************************
+// ENTITY CLASS for MJ_BizApps_Accounting: External Accounting Systems
+//****************************************************************************
+@ObjectType({ description: `Catalog of external ERP/GL destinations journal entries dispatch to. Maps each system to its adapter DriverClass (resolved via ClassFactory) and, when connector-backed, to the __mj.Integration record by name. Seeded with BusinessCentral and Mock; add a row + a registered adapter class to support a new ERP — no engine changes.` })
+export class mjBizAppsAccountingExternalAccountingSystem_ {
+    @Field() 
+    @MaxLength(36)
+    ID: string;
+        
+    @Field() 
+    @MaxLength(50)
+    Name: string;
+        
+    @Field() 
+    @MaxLength(100)
+    DisplayName: string;
+        
+    @Field({nullable: true}) 
+    Description?: string;
+        
+    @Field({description: `Class name of the BaseExternalAccountingSystemAdapter subclass that handles this system (ClassFactory key — the class's own name, e.g. BusinessCentralAccountingSystemAdapter).`}) 
+    @MaxLength(255)
+    DriverClass: string;
+        
+    @Field({nullable: true, description: `Name of the __mj.Integration record backing this system (e.g. business-central), resolved at runtime — NULL for systems with no connector (Mock). By name, not ID: the Integration row is minted by the connector app's own migration.`}) 
+    @MaxLength(100)
+    IntegrationName?: string;
+        
+    @Field(() => Boolean) 
+    IsActive: boolean;
+        
+    @Field() 
+    _mj__CreatedAt: Date;
+        
+    @Field() 
+    _mj__UpdatedAt: Date;
+        
+}
+
+//****************************************************************************
+// INPUT TYPE for MJ_BizApps_Accounting: External Accounting Systems
+//****************************************************************************
+@InputType()
+export class CreatemjBizAppsAccountingExternalAccountingSystemInput {
+    @Field({ nullable: true })
+    ID?: string;
+
+    @Field({ nullable: true })
+    Name?: string;
+
+    @Field({ nullable: true })
+    DisplayName?: string;
+
+    @Field({ nullable: true })
+    Description: string | null;
+
+    @Field({ nullable: true })
+    DriverClass?: string;
+
+    @Field({ nullable: true })
+    IntegrationName: string | null;
+
+    @Field(() => Boolean, { nullable: true })
+    IsActive?: boolean;
+
+    @Field(() => RestoreContextInput, { nullable: true })
+    RestoreContext___?: RestoreContextInput;
+}
+    
+
+//****************************************************************************
+// INPUT TYPE for MJ_BizApps_Accounting: External Accounting Systems
+//****************************************************************************
+@InputType()
+export class UpdatemjBizAppsAccountingExternalAccountingSystemInput {
+    @Field()
+    ID: string;
+
+    @Field({ nullable: true })
+    Name?: string;
+
+    @Field({ nullable: true })
+    DisplayName?: string;
+
+    @Field({ nullable: true })
+    Description?: string | null;
+
+    @Field({ nullable: true })
+    DriverClass?: string;
+
+    @Field({ nullable: true })
+    IntegrationName?: string | null;
+
+    @Field(() => Boolean, { nullable: true })
+    IsActive?: boolean;
+
+    @Field(() => [KeyValuePairInput], { nullable: true })
+    OldValues___?: KeyValuePairInput[];
+
+    @Field(() => RestoreContextInput, { nullable: true })
+    RestoreContext___?: RestoreContextInput;
+}
+    
+//****************************************************************************
+// RESOLVER for MJ_BizApps_Accounting: External Accounting Systems
+//****************************************************************************
+@ObjectType()
+export class RunmjBizAppsAccountingExternalAccountingSystemViewResult {
+    @Field(() => [mjBizAppsAccountingExternalAccountingSystem_])
+    Results: mjBizAppsAccountingExternalAccountingSystem_[];
+
+    @Field(() => String, {nullable: true})
+    UserViewRunID?: string;
+
+    @Field(() => Int, {nullable: true})
+    RowCount: number;
+
+    @Field(() => Int, {nullable: true})
+    TotalRowCount: number;
+
+    @Field(() => Int, {nullable: true})
+    ExecutionTime: number;
+
+    @Field({nullable: true})
+    ErrorMessage?: string;
+
+    @Field(() => Boolean, {nullable: false})
+    Success: boolean;
+}
+
+@Resolver(mjBizAppsAccountingExternalAccountingSystem_)
+export class mjBizAppsAccountingExternalAccountingSystemResolver extends ResolverBase {
+    @Query(() => RunmjBizAppsAccountingExternalAccountingSystemViewResult)
+    async RunmjBizAppsAccountingExternalAccountingSystemViewByID(@Arg('input', () => RunViewByIDInput) input: RunViewByIDInput, @Ctx() { providers, userPayload }: AppContext, @PubSub() pubSub: PubSubEngine) {
+        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
+        return super.RunViewByIDGeneric(input, provider, userPayload, pubSub);
+    }
+
+    @Query(() => RunmjBizAppsAccountingExternalAccountingSystemViewResult)
+    async RunmjBizAppsAccountingExternalAccountingSystemViewByName(@Arg('input', () => RunViewByNameInput) input: RunViewByNameInput, @Ctx() { providers, userPayload }: AppContext, @PubSub() pubSub: PubSubEngine) {
+        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
+        return super.RunViewByNameGeneric(input, provider, userPayload, pubSub);
+    }
+
+    @Query(() => RunmjBizAppsAccountingExternalAccountingSystemViewResult)
+    async RunmjBizAppsAccountingExternalAccountingSystemDynamicView(@Arg('input', () => RunDynamicViewInput) input: RunDynamicViewInput, @Ctx() { providers, userPayload }: AppContext, @PubSub() pubSub: PubSubEngine) {
+        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
+        input.EntityName = 'MJ_BizApps_Accounting: External Accounting Systems';
+        return super.RunDynamicViewGeneric(input, provider, userPayload, pubSub);
+    }
+    @Query(() => mjBizAppsAccountingExternalAccountingSystem_, { nullable: true })
+    async mjBizAppsAccountingExternalAccountingSystem(@Arg('ID', () => String) ID: string, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine): Promise<mjBizAppsAccountingExternalAccountingSystem_ | null> {
+        this.CheckUserReadPermissions('MJ_BizApps_Accounting: External Accounting Systems', userPayload);
+        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
+        const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwExternalAccountingSystems')} WHERE ${provider.QuoteIdentifier('ID')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: External Accounting Systems', userPayload, EntityPermissionType.Read, 'AND');
+        const rows = await provider.ExecuteSQL(sSQL, [ID], undefined, this.GetUserFromPayload(userPayload));
+        const result = await this.MapFieldNamesToCodeNames('MJ_BizApps_Accounting: External Accounting Systems', rows && rows.length > 0 ? rows[0] : null, this.GetUserFromPayload(userPayload));
+        return result;
+    }
+    
+    @Mutation(() => mjBizAppsAccountingExternalAccountingSystem_)
+    async CreatemjBizAppsAccountingExternalAccountingSystem(
+        @Arg('input', () => CreatemjBizAppsAccountingExternalAccountingSystemInput) input: CreatemjBizAppsAccountingExternalAccountingSystemInput,
+        @Ctx() { providers, userPayload }: AppContext,
+        @PubSub() pubSub: PubSubEngine
+    ) {
+        const provider = GetReadWriteProvider(providers);
+        return this.CreateRecord('MJ_BizApps_Accounting: External Accounting Systems', input, provider, userPayload, pubSub)
+    }
+        
+    @Mutation(() => mjBizAppsAccountingExternalAccountingSystem_)
+    async UpdatemjBizAppsAccountingExternalAccountingSystem(
+        @Arg('input', () => UpdatemjBizAppsAccountingExternalAccountingSystemInput) input: UpdatemjBizAppsAccountingExternalAccountingSystemInput,
+        @Ctx() { providers, userPayload }: AppContext,
+        @PubSub() pubSub: PubSubEngine
+    ) {
+        const provider = GetReadWriteProvider(providers);
+        return this.UpdateRecord('MJ_BizApps_Accounting: External Accounting Systems', input, provider, userPayload, pubSub);
+    }
+    
+    @Mutation(() => mjBizAppsAccountingExternalAccountingSystem_)
+    async DeletemjBizAppsAccountingExternalAccountingSystem(@Arg('ID', () => String) ID: string, @Arg('options___', () => DeleteOptionsInput) options: DeleteOptionsInput, @Ctx() { providers, userPayload }: AppContext, @PubSub() pubSub: PubSubEngine) {
+        const provider = GetReadWriteProvider(providers);
+        const key = new CompositeKey([{FieldName: 'ID', Value: ID}]);
+        return this.DeleteRecord('MJ_BizApps_Accounting: External Accounting Systems', key, options, provider, userPayload, pubSub);
+    }
+    
+}
+
+//****************************************************************************
 // ENTITY CLASS for MJ_BizApps_Accounting: GL Account Link Dimensions
 //****************************************************************************
 @ObjectType({ description: `Which analytical Dimensions apply to journal-entry lines resolved through a GLAccountLink, in display order. Carries the Dimension only — VALUES are supplied from the calling context at entry-build time (OQ-I).` })
@@ -2707,38 +2896,6 @@ export class mjBizAppsAccountingJournalEntry_ {
     @Field({nullable: true}) 
     @MaxLength(500)
     File?: string;
-        
-    @Field({nullable: true}) 
-    @MaxLength(36)
-    RootReversesJournalEntryID?: string;
-        
-    @Field(() => Int, {nullable: true}) 
-    ReversesJournalEntryIDDepth?: number;
-        
-    @Field({nullable: true}) 
-    ReversesJournalEntryIDPath?: string;
-        
-    @Field(() => Boolean, {nullable: true}) 
-    ReversesJournalEntryIDIsLeaf?: boolean;
-        
-    @Field(() => Int, {nullable: true}) 
-    ReversesJournalEntryIDChildCount?: number;
-        
-    @Field({nullable: true}) 
-    @MaxLength(36)
-    RootReversedByJournalEntryID?: string;
-        
-    @Field(() => Int, {nullable: true}) 
-    ReversedByJournalEntryIDDepth?: number;
-        
-    @Field({nullable: true}) 
-    ReversedByJournalEntryIDPath?: string;
-        
-    @Field(() => Boolean, {nullable: true}) 
-    ReversedByJournalEntryIDIsLeaf?: boolean;
-        
-    @Field(() => Int, {nullable: true}) 
-    ReversedByJournalEntryIDChildCount?: number;
         
 }
 

@@ -2,7 +2,8 @@
  *  drive from metadata instead of hardcoding. Run from the instance worktree root. */
 import sql from 'mssql'; import dotenv from 'dotenv'; import path from 'path';
 import { Metadata } from '@memberjunction/core';
-import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
+import { setupSQLServerClient, SQLServerProviderConfigData } from '@memberjunction/sqlserver-dataprovider';
+import { UserCache } from '@memberjunction/generic-database-provider';
 import '@memberjunction/server-bootstrap-lite'; import '@mj-biz-apps/common-entities'; import '@mj-biz-apps/accounting-entities';
 
 async function main() {

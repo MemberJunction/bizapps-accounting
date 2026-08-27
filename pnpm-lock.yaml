@@ -31,6 +31,9 @@ importers:
       '@memberjunction/cli':
         specifier: 6.1.0-edge.3
         version: 6.1.0-edge.3(@aws-sdk/credential-provider-node@3.972.81)(@aws-sdk/credential-providers@3.1116.0)(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))(@smithy/signature-v4@5.7.3)(@types/node@25.9.5)(chokidar@3.6.0)(encoding@0.1.13)(socks@2.8.9)(typescript@5.9.3)(ws@8.21.3)
+      '@memberjunction/generic-database-provider':
+        specifier: ^6.1.0-edge.3
+        version: 6.1.0-edge.3(@aws-sdk/credential-provider-node@3.972.81)(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))(@smithy/signature-v4@5.7.3)(chokidar@3.6.0)(debug@4.4.3)(encoding@0.1.13)(typescript@5.9.3)(ws@8.21.3)(zod@3.25.76)
       beasties:
         specifier: 0.3.5
         version: 0.3.5
@@ -82,6 +85,9 @@ importers:
       '@memberjunction/global':
         specifier: 6.1.0-edge.3
         version: 6.1.0-edge.3
+      '@mj-biz-apps/accounting-core-entities-server':
+        specifier: 0.2.0
+        version: link:../CoreEntitiesServer
       zod:
         specifier: ^3.25.28
         version: 3.25.76
@@ -92,6 +98,9 @@ importers:
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
+      vitest:
+        specifier: ^4.0.18
+        version: 4.1.11(@types/node@25.9.5)(jsdom@26.1.0)(vite@7.3.6(@types/node@25.9.5))
 
   packages/Angular:
     dependencies:
@@ -183,6 +192,9 @@ importers:
 
   packages/CoreEntitiesServer:
     dependencies:
+      '@memberjunction/connector-business-central':
+        specifier: ^2.0.0
+        version: 2.1.0(@memberjunction/core-entities@6.1.0-edge.3)(@memberjunction/core@6.1.0-edge.3)(@memberjunction/global@6.1.0-edge.3)(@memberjunction/integration-engine-base@6.1.0-edge.3)(@memberjunction/integration-engine@6.1.0-edge.3)
       '@memberjunction/core':
         specifier: 6.1.0-edge.3
         version: 6.1.0-edge.3
@@ -191,6 +203,9 @@ importers:
         version: 6.1.0-edge.3
       '@memberjunction/global':
         specifier: 6.1.0-edge.3
+        version: 6.1.0-edge.3
+      '@memberjunction/integration-engine':
+        specifier: ^6.1.0-edge.0
         version: 6.1.0-edge.3
       '@memberjunction/sqlserver-dataprovider':
         specifier: ^6.1.0-edge.3
@@ -208,15 +223,18 @@ importers:
         specifier: ^1.2.3
         version: 1.2.3(@memberjunction/core@6.1.0-edge.3)(@memberjunction/global@6.1.0-edge.3)
     devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.1
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
       vite:
         specifier: ^7.1.5
-        version: 7.3.6(@types/node@25.9.5)
+        version: 7.3.6(@types/node@22.20.1)
       vitest:
         specifier: ^4.0.18
-        version: 4.1.11(@types/node@25.9.5)(jsdom@26.1.0)(vite@7.3.6(@types/node@25.9.5))
+        version: 4.1.11(@types/node@22.20.1)(jsdom@26.1.0)(vite@7.3.6(@types/node@22.20.1))
 
   packages/EngineBase:
     dependencies:
@@ -1867,6 +1885,20 @@ packages:
 
   '@memberjunction/config@6.1.0-edge.3':
     resolution: {integrity: sha512-yGq1LwHAGH2j22v2rV62qJ/R8e6G3+cek6/kA5tiaiQudX/Gk77BsbocpP1tXWSmS+8V3DqMzlMPFTThu+SQBw==}
+
+  '@memberjunction/connector-business-central@2.1.0':
+    resolution: {integrity: sha512-/oj+ODPi5la5vtjMUFuuAaYvqf8v1rhFbgsY1buC0HiL/lYJLeH0O+t2MdAPtnSrLno0a2v6r+Cc/7o9gLrKUQ==}
+    peerDependencies:
+      '@memberjunction/core': 6.1.0-edge.3
+      '@memberjunction/core-entities': '>=5.43.0 <7.0.0'
+      '@memberjunction/global': 6.1.0-edge.3
+      '@memberjunction/integration-engine': '>=5.43.0 <7.0.0'
+      '@memberjunction/integration-engine-base': '>=5.43.0 <7.0.0'
+
+  '@memberjunction/connector-schema-merge@1.1.0':
+    resolution: {integrity: sha512-GzUcPXetvKnzEacHTe/94uTFtQU8Evk1eCvXGSRl+CP/M4/o2cROR2KvfIQMD1Zez6J1WDYq763CBMqF2tkbSA==}
+    peerDependencies:
+      '@memberjunction/integration-engine': '>=5.42.0 <7.0.0'
 
   '@memberjunction/content-autotagging@6.1.0-edge.3':
     resolution: {integrity: sha512-MJ9tyb/mTb29BmU+/zs4FqY4QG77LirQJQI5zZLMU/McXVBg8TpWdkQGKC5d7fQ9m2B2sdIKdD65+aVrPWvfow==}
@@ -11683,6 +11715,19 @@ snapshots:
     transitivePeerDependencies:
       - typescript
 
+  '@memberjunction/connector-business-central@2.1.0(@memberjunction/core-entities@6.1.0-edge.3)(@memberjunction/core@6.1.0-edge.3)(@memberjunction/global@6.1.0-edge.3)(@memberjunction/integration-engine-base@6.1.0-edge.3)(@memberjunction/integration-engine@6.1.0-edge.3)':
+    dependencies:
+      '@memberjunction/connector-schema-merge': 1.1.0(@memberjunction/integration-engine@6.1.0-edge.3)
+      '@memberjunction/core': 6.1.0-edge.3
+      '@memberjunction/core-entities': 6.1.0-edge.3
+      '@memberjunction/global': 6.1.0-edge.3
+      '@memberjunction/integration-engine': 6.1.0-edge.3
+      '@memberjunction/integration-engine-base': 6.1.0-edge.3
+
+  '@memberjunction/connector-schema-merge@1.1.0(@memberjunction/integration-engine@6.1.0-edge.3)':
+    dependencies:
+      '@memberjunction/integration-engine': 6.1.0-edge.3
+
   '@memberjunction/content-autotagging@6.1.0-edge.3(@aws-sdk/credential-provider-node@3.972.81)(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))(@smithy/signature-v4@5.7.3)(chokidar@3.6.0)(debug@4.4.3)(encoding@0.1.13)(typescript@5.9.3)(ws@8.21.3)(zod@3.25.76)':
     dependencies:
       '@azure/storage-blob': 12.33.0
@@ -16607,7 +16652,7 @@ snapshots:
 
   '@types/uuid@11.0.0':
     dependencies:
-      uuid: 13.0.2
+      uuid: 14.0.2
 
   '@types/validator@13.15.10': {}
 

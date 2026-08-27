@@ -154,7 +154,7 @@
   },
   {
     "_comments": [
-      "GL Account form: Due-To inverse is owned by the Due-From section \u2014 not a candidate."
+      "GL Account form: Due-To inverse is owned by the Due-From section — not a candidate."
     ],
     "fields": {
       "Configuration": {

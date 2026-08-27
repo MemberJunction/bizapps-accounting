@@ -16,8 +16,8 @@ export class mjBizAppsAccountingDimensionValueFormComponent extends BaseFormComp
     override async ngOnInit() {
         await super.ngOnInit();
         this.initSections([
-            { sectionKey: 'dimensionDefinition', sectionName: 'Dimension Definition', isExpanded: true },
-            { sectionKey: 'valueDetails', sectionName: 'Value Details', isExpanded: true },
+            { sectionKey: 'dimensionConfiguration', sectionName: 'Dimension Configuration', isExpanded: true },
+            { sectionKey: 'valueDefinition', sectionName: 'Value Definition', isExpanded: true },
             { sectionKey: 'hierarchy', sectionName: 'Hierarchy', isExpanded: true },
             { sectionKey: 'validityPeriod', sectionName: 'Validity Period', isExpanded: true },
             { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false },

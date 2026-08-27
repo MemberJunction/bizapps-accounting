@@ -129,3 +129,14 @@ export {
   type GetJournalEntryBatchApprovalStateInput,
   type GetJournalEntryBatchApprovalStateOutput,
 } from './JournalEntryBatchOperations.js';
+
+// ── External accounting system dispatch (metadata-driven ERP adapters) ────────
+export {
+  BaseExternalAccountingSystemAdapter,
+  ResolveExternalAccountingSystemAdapter,
+  type PostJournalEntryBatchContext,
+  type PostJournalEntryBatchResult,
+  type VerifyPostedResult,
+} from './external-accounting-systems/BaseExternalAccountingSystemAdapter.js';
+export { MockAccountingSystemAdapter } from './external-accounting-systems/MockAccountingSystemAdapter.js';
+export { BusinessCentralAccountingSystemAdapter } from './external-accounting-systems/BusinessCentralAccountingSystemAdapter.js';

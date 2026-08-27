@@ -17,7 +17,7 @@ export class mjBizAppsAccountingCompanyTaxNexusFormComponent extends BaseFormCom
         this.initSections([
             { sectionKey: 'nexusConfiguration', sectionName: 'Nexus Configuration', isExpanded: true },
             { sectionKey: 'registrationDetails', sectionName: 'Registration Details', isExpanded: true },
-            { sectionKey: 'timelineAndValidity', sectionName: 'Timeline and Validity', isExpanded: true },
+            { sectionKey: 'documentation', sectionName: 'Documentation', isExpanded: true },
             { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false }
         ]);
     }

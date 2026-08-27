@@ -10,10 +10,10 @@
     <!-- ========================================
          FIELD PANELS
          ======================================== -->
-    <!-- Dimension Definition Section -->
+    <!-- Dimension Configuration Section -->
     <mj-collapsible-panel
-        SectionKey="dimensionDefinition"
-        SectionName="Dimension Definition"
+        SectionKey="dimensionConfiguration"
+        SectionName="Dimension Configuration"
         Icon="fa fa-tags"
         [Form]="this"
         [FormContext]="formContext">
@@ -29,11 +29,11 @@
 
     </mj-collapsible-panel>
 
-    <!-- Value Details Section -->
+    <!-- Value Definition Section -->
     <mj-collapsible-panel
-        SectionKey="valueDetails"
-        SectionName="Value Details"
-        Icon="fa fa-info-circle"
+        SectionKey="valueDefinition"
+        SectionName="Value Definition"
+        Icon="fa fa-font"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -49,14 +49,6 @@
             [ShowLabel]="true"
             FieldName="Name"
             Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="IsActive"
-            Type="checkbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
@@ -142,6 +134,14 @@
             [ShowLabel]="true"
             FieldName="EffectiveTo"
             Type="datepicker"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="IsActive"
+            Type="checkbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
