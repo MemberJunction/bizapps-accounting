@@ -4,6 +4,7 @@
       "Name": "Cash",
       "Description": "Cash / bank account the money lands in (payment-time entries).",
       "Status": "Active",
+      "Cardinality": "One",
       "Sequence": 10
     },
     "primaryKey": {
@@ -19,6 +20,7 @@
       "Name": "Accounts Receivable",
       "Description": "The AR control account debited when a sale is booked before payment.",
       "Status": "Active",
+      "Cardinality": "One",
       "Sequence": 20
     },
     "primaryKey": {
@@ -34,6 +36,7 @@
       "Name": "Inventory",
       "Description": "Inventory asset account (deferred domain - seeded per AM-2 for completeness).",
       "Status": "Active",
+      "Cardinality": "One",
       "Sequence": 30
     },
     "primaryKey": {
@@ -49,6 +52,7 @@
       "Name": "Cost of Goods Sold",
       "Description": "COGS expense account (deferred domain - seeded per AM-2 for completeness).",
       "Status": "Active",
+      "Cardinality": "One",
       "Sequence": 40
     },
     "primaryKey": {
@@ -64,6 +68,7 @@
       "Name": "Sales",
       "Description": "Revenue account credited when a sale is recognized.",
       "Status": "Active",
+      "Cardinality": "One",
       "Sequence": 50
     },
     "primaryKey": {
@@ -79,6 +84,7 @@
       "Name": "Sales Discounts",
       "Description": "Contra-revenue account for discounts granted on sales.",
       "Status": "Active",
+      "Cardinality": "One",
       "Sequence": 60
     },
     "primaryKey": {
@@ -94,6 +100,7 @@
       "Name": "Sales Returns and Allowances",
       "Description": "Contra-revenue account for returned goods / allowances.",
       "Status": "Active",
+      "Cardinality": "One",
       "Sequence": 70
     },
     "primaryKey": {
@@ -109,6 +116,7 @@
       "Name": "Deferred Revenue",
       "Description": "Liability account credited for revenue not yet earned (subscriptions). ASSUMED addition (OQ-H): absent from the 07-03 seed list but required by the meeting's own subscription example - confirm with Amith.",
       "Status": "Active",
+      "Cardinality": "One",
       "Sequence": 80
     },
     "primaryKey": {
@@ -124,6 +132,7 @@
       "Name": "Processing Fee",
       "Description": "Payment processor fees expensed at capture (orders D18). The gateway keeps its cut, so cash lands NET while the customer's receivable is relieved GROSS; this role names the expense account carrying the difference. Without it the fee is not booked and cash reads gross by that amount.",
       "Status": "Active",
+      "Cardinality": "One",
       "Sequence": 90
     },
     "primaryKey": {
@@ -132,6 +141,18 @@
     "sync": {
       "lastModified": "2026-08-11T19:01:28.108Z",
       "checksum": "5184c360c085a709613bb839e141d2aff8fa2733ca45f44a25ca73ead092c10b"
+    }
+  },
+  {
+    "fields": {
+      "Name": "BankAccount",
+      "Description": "Cash / bank GL account that counts toward the company's cash position. Many per company, date-effective. NOT used for payment posting — that is role Cash, which stays singular. Read by FP&A to build CashBalance as the sum of a company's Active BankAccount links at a point in time.",
+      "Status": "Active",
+      "Cardinality": "Many",
+      "Sequence": 15
+    },
+    "primaryKey": {
+      "ID": "069B34E1-90C5-4275-A79A-F9EF71BE472F"
     }
   }
 ]
