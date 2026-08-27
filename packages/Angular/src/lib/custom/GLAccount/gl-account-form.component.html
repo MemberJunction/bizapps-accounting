@@ -9,12 +9,40 @@
   <!-- ── Details (key fields) ──────────────────────────────────────────────── -->
   <mj-collapsible-panel SectionKey="details" SectionName="Details" Icon="fa fa-align-left"
       [Form]="this" [FormContext]="formContext">
+    <!--
+      COMPANY IS REQUIRED AND MUST BE EDITABLE HERE (bizapps-orders#112).
+
+      GLAccount.CompanyID is NOT NULL with no default. This custom form overrides the generated
+      one via @RegisterClass, and the generated form's CompanyID field went with it — so the only
+      way to set a company was never rendered. QA reported "there is no place to specify Company",
+      then hit a NOT NULL failure on save. Both symptoms are this one omission.
+
+      It is listed first because it scopes everything below it: an account code is only unique
+      within a company, and the parent-account picker should be read against the same company.
+
+      ── WHY [EditMode] IS GATED ON !record.IsSaved ──
+
+      GLAccountEntityServer.LOCKED_IDENTITY_FIELDS = ['CompanyID','Code','AccountType','CurrencyCode'],
+      and ValidateAsync() refuses any change to them once IsSaved is true (Amith 2026-07-29:
+      "immutable from the moment the record is created — immediate + unconditional"). A plainly
+      editable control on a saved record therefore offers an edit the server ALWAYS rejects. So these
+      fields are editable while creating and read-only afterwards, which is what the server enforces.
+
+      Code and AccountType carry the same gate for the same reason — they were editable on saved
+      records before this change, which was the same defect this issue is about, one field over.
+
+      [AllowFKCreate]="false" because the picker otherwise offers 'Create "<text>"' — creating a
+      COMPANY as a side effect of adding a GL account is not something this form should permit.
+    -->
+    <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="CompanyID" Type="textbox"
+        [EditMode]="EditMode && !record.IsSaved" [FormContext]="formContext" LinkType="Record"
+        [AllowFKCreate]="false"></mj-form-field>
     <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="Code" Type="textbox"
-        [EditMode]="EditMode" [FormContext]="formContext"></mj-form-field>
+        [EditMode]="EditMode && !record.IsSaved" [FormContext]="formContext"></mj-form-field>
     <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="Name" Type="textbox"
         [EditMode]="EditMode" [FormContext]="formContext"></mj-form-field>
     <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="AccountType" Type="textbox"
-        [EditMode]="EditMode" [FormContext]="formContext"></mj-form-field>
+        [EditMode]="EditMode && !record.IsSaved" [FormContext]="formContext"></mj-form-field>
     <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="ParentGLAccountID" Type="textbox"
         [EditMode]="EditMode" [FormContext]="formContext" LinkType="Record"></mj-form-field>
     <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="IsActive" Type="checkbox"
@@ -29,10 +57,16 @@
 
     <div class="gl-toolbar">
       <label class="gl-field">
-        <span class="gl-field__label">Company</span>
+        <!--
+          "Filter by Company", not "Company". This dropdown drives loadTree() and never writes
+          record.CompanyID — see OnCompanyChange(). Sharing the bare label "Company" with the
+          editable field above is what let a tester set this one and believe the record was
+          scoped; it changed a tree view and nothing else.
+        -->
+        <span class="gl-field__label">Filter by Company</span>
         <mj-dropdown [Data]="Companies" TextField="Name" ValueField="ID" [ValuePrimitive]="true"
           [ngModel]="SelectedCompanyID" (ngModelChange)="OnCompanyChange($event ?? '')"
-          aria-label="Company" />
+          aria-label="Filter chart of accounts by company" />
       </label>
 
       <label class="gl-field">
