@@ -1,7 +1,7 @@
 {
   "name": "@mj-biz-apps/accounting-server",
   "type": "module",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "BizApps Accounting server bootstrap - GraphQL resolvers and class registrations for the AR subledger and JE primitives Open App",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -21,16 +21,16 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@mj-biz-apps/accounting-core-entities-server": "0.2.0",
-    "@mj-biz-apps/accounting-entities": "0.2.0",
-    "@mj-biz-apps/accounting-actions": "0.2.0",
+    "@mj-biz-apps/accounting-core-entities-server": "0.3.0",
+    "@mj-biz-apps/accounting-entities": "0.3.0",
+    "@mj-biz-apps/accounting-actions": "0.3.0",
     "class-validator": "^0.14.3"
   },
   "peerDependencies": {
-    "@memberjunction/core": "^6.1.0-edge.3",
-    "@memberjunction/global": "^6.1.0-edge.3",
-    "@memberjunction/server": "^6.1.0-edge.3",
-    "@memberjunction/sqlserver-dataprovider": "^6.1.0-edge.3",
+    "@memberjunction/core": "^6.1.0-edge.4",
+    "@memberjunction/global": "^6.1.0-edge.4",
+    "@memberjunction/server": "^6.1.0-edge.4",
+    "@memberjunction/sqlserver-dataprovider": "^6.1.0-edge.4",
     "@mj-biz-apps/common-server": "^5.34.0",
     "@mj-biz-apps/common-entities": "^5.34.0"
   },
