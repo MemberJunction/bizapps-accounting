@@ -4,7 +4,7 @@
   "name": "mj-bizapps-accounting",
   "displayName": "BizApps Accounting",
   "description": "AR subsidiary ledger of record and journal entry primitives (GL accounts, accounting periods, balanced JEs with multi-currency, dimensions, tax) for MemberJunction. Not a general ledger — batches to ERP/QBO/NetSuite/BC.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "license": "BUSL-1.1",
   "icon": "fa-solid fa-file-invoice-dollar",
   "publisher": {
@@ -15,11 +15,11 @@
   "mjVersionRange": ">=6.1.0-edge.4 <7.0.0",
   "dependencies": {
     "mj-bizapps-common": {
-      "version": ">=5.35.1 <6.0.0",
+      "version": ">=5.36.0 <6.0.0",
       "repository": "https://github.com/MemberJunction/bizapps-common"
     },
     "mj-bizapps-tasks": {
-      "version": ">=1.3.0 <2.0.0",
+      "version": ">=1.4.0 <2.0.0",
       "repository": "https://github.com/MemberJunction/bizapps-tasks"
     }
   },

@@ -1,7 +1,7 @@
 {
   "name": "@mj-biz-apps/accounting-engine-base",
   "type": "module",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Browser-safe accounting engine base for BizApps Accounting — metadata caches (GL accounts, roles, links, dimensions, company profiles), the ResolveLinkedAccount primitive, the pure CreateJournalEntry draft-validation pipeline + typed contract, and NetLines (pure JE rollup) shared with the server engine and all callers (Orders, browsers, scripts).",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -24,7 +24,7 @@
     "vite": "^7.1.5"
   },
   "dependencies": {
-    "@mj-biz-apps/accounting-entities": "0.3.0"
+    "@mj-biz-apps/accounting-entities": "0.4.0"
   },
   "peerDependencies": {
     "@memberjunction/core": "^6.1.0-edge.4",
