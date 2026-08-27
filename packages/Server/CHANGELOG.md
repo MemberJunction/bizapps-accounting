@@ -1,5 +1,22 @@
 # @mj-biz-apps/accounting-server
 
+## 0.3.0
+
+### Patch Changes
+
+- 6a247d6: Raise the platform floor to MJ 6.1.0-edge.4 and the app dependency floors to the
+  versions actually exercised together: bizapps-common >=5.35.1, bizapps-tasks
+  > =1.3.0. All @memberjunction/\* dependencies now pin ^6.1.0-edge.4 (caret, never
+  > exact — an exact edge pin in a published package forces two MJ copies into a
+  > consumer's tree and splits the ClassFactory registry).
+- Updated dependencies [cb7aae2]
+- Updated dependencies [6a247d6]
+- Updated dependencies [804f67e]
+- Updated dependencies [e2e867c]
+  - @mj-biz-apps/accounting-entities@0.3.0
+  - @mj-biz-apps/accounting-core-entities-server@0.3.0
+  - @mj-biz-apps/accounting-actions@0.3.0
+
 ## 0.2.0
 
 ### Minor Changes

@@ -1,5 +1,37 @@
 # @mj-biz-apps/accounting-entities
 
+## 0.3.0
+
+### Minor Changes
+
+- cb7aae2: Raise this release to a minor: it carries schema migrations.
+
+  Two migrations have landed on `next` since `v0.2.0` and both arrived with no changeset of
+  their own, so the release was resolving to a patch:
+
+  - `V202608241445__v0.1.x__ApprovalTask_FK.sql` — adds the foreign key
+    `FK_JournalEntryBatch_ApprovalTask` on
+    `__mj_BizAppsAccounting.JournalEntryBatch.ApprovalTaskID` → `__mj_BizAppsTasks.Task.ID`.
+    A new referential constraint: an existing row whose `ApprovalTaskID` does not resolve to a
+    Task now fails to insert or update where it used to succeed.
+  - `V202608252220__v0.1.x__CodeGen_Scoped_SQL_Objects.sql` — folds the scoped CodeGen emit for
+    the accounting schema (hierarchy views/SPs, 16 hierarchy `EntityField` rows).
+
+  A consumer upgrading on a patch would not expect a schema change to run, which is exactly what
+  `ci/check-bump-level.sh` asserts on the release. Both packages move together under the
+  `fixed` group, so this takes the whole release `0.2.0 -> 0.3.0`.
+
+- 804f67e: Scope CodeGen heal EXECs with authored excludeSchemas plus `@IncludedSchemaNames` for the Accounting schema, instead of photographing sibling Open Apps. Drop maint-script queries that imported Orders.
+- e2e867c: Own the Task form's "Journal Entry Batches this task approved" chrome (counterpart to bizapps-tasks#54, which removes it there — Tasks metadata must not name Accounting). The form-chrome record pins `inclusion: More` and `DisplayName: Journal Entry Batches`; `mj sync push` resolves it by natural key on every install.
+
+### Patch Changes
+
+- 6a247d6: Raise the platform floor to MJ 6.1.0-edge.4 and the app dependency floors to the
+  versions actually exercised together: bizapps-common >=5.35.1, bizapps-tasks
+  > =1.3.0. All @memberjunction/\* dependencies now pin ^6.1.0-edge.4 (caret, never
+  > exact — an exact edge pin in a published package forces two MJ copies into a
+  > consumer's tree and splits the ClassFactory registry).
+
 ## 0.2.0
 
 ### Minor Changes

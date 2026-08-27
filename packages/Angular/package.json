@@ -1,7 +1,7 @@
 {
   "name": "@mj-biz-apps/accounting-ng",
   "type": "module",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "BizApps Accounting Angular bootstrap - form components and module for the AR subledger and JE primitives Open App",
   "main": "dist/public-api.js",
   "types": "dist/public-api.d.ts",
@@ -19,8 +19,8 @@
   "license": "BUSL-1.1",
   "dependencies": {
     "@memberjunction/ng-hierarchy-tree": "^6.1.0-edge.4",
-    "@mj-biz-apps/accounting-engine-base": "0.2.0",
-    "@mj-biz-apps/accounting-entities": "0.2.0",
+    "@mj-biz-apps/accounting-engine-base": "0.3.0",
+    "@mj-biz-apps/accounting-entities": "0.3.0",
     "ag-grid-angular": "^35.0.1",
     "ag-grid-community": "^35.0.1"
   },
