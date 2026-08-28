@@ -49,6 +49,14 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="Cardinality"
+            Type="select"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
 
     </mj-collapsible-panel>
 
@@ -88,7 +96,7 @@
     <mj-collapsible-panel
         SectionKey="mJBizAppsAccountingGLAccountLinks"
         SectionName="GL Account Links"
-        Icon="fa fa-book-open"
+        Icon="fa fa-book"
         Variant="related-entity"
         [Form]="this"
         [FormContext]="formContext"

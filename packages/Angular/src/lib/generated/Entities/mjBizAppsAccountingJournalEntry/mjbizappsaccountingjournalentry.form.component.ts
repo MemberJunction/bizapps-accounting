@@ -17,15 +17,16 @@ export class mjBizAppsAccountingJournalEntryFormComponent extends BaseFormCompon
         await super.ngOnInit();
         this.initSections([
             { sectionKey: 'entryDetails', sectionName: 'Entry Details', isExpanded: true },
-            { sectionKey: 'lifecycleAndPosting', sectionName: 'Lifecycle and Posting', isExpanded: true },
-            { sectionKey: 'sourceRelationships', sectionName: 'Source Relationships', isExpanded: true },
-            { sectionKey: 'reversalInformation', sectionName: 'Reversal Information', isExpanded: true },
-            { sectionKey: 'supportingDocuments', sectionName: 'Supporting Documents', isExpanded: true },
+            { sectionKey: 'classification', sectionName: 'Classification', isExpanded: true },
+            { sectionKey: 'sourceIntegration', sectionName: 'Source Integration', isExpanded: true },
+            { sectionKey: 'reversalTracking', sectionName: 'Reversal Tracking', isExpanded: true },
+            { sectionKey: 'gLIntegration', sectionName: 'GL Integration', isExpanded: true },
+            { sectionKey: 'attachments', sectionName: 'Attachments', isExpanded: true },
             { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingJournalEntriesReversedByJournalEntryID', sectionName: 'Journal Entries (Reversed By Entry)', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingJournalEntriesReversesJournalEntryID', sectionName: 'Journal Entries (Reverses Entry)', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingJournalEntryLines', sectionName: 'Journal Entry Lines', isExpanded: false },
-            { sectionKey: 'mJBizAppsAccountingJournalEntryBatches', sectionName: 'Journal Entry Batches', isExpanded: false }
+            { sectionKey: 'mJBizAppsAccountingJournalEntryBatches', sectionName: 'Journal Entry Batches', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingJournalEntriesReversesJournalEntryID', sectionName: 'Journal Entries (Reverses Journal Entry)', isExpanded: false },
+            { sectionKey: 'mJBizAppsAccountingJournalEntriesReversedByJournalEntryID', sectionName: 'Journal Entries (Reversed By Journal Entry)', isExpanded: false }
         ]);
     }
 }
