@@ -1,15 +1,15 @@
 /**
  * Unit tests for the pure link picker behind ResolveLinkedAccount (plan §2.1):
  * Active-status gating, StartedAt/EndedAt window coverage (null bounds open),
- * and latest-StartedAt-wins tie-breaking. Isolated, no DB.
+ * latest-StartedAt-wins (One), and the covering set (Many). Isolated, no DB.
  *
  * CONNECTS TO:
- *   TESTS: ../AccountingEngineBase.ts (pickActiveLinkIndex)
- *   LIVE:  cache-backed ResolveLinkedAccount is exercised by
+ *   TESTS: ../AccountingEngineBase.ts (pickActiveLinkIndex, coveringActiveLinkIndexes)
+ *   LIVE:  cache-backed ResolveLinkedAccount / ResolveLinkedAccounts is exercised by
  *          test-harnesses/server/engine-runtime.ts against real GLAccountLink rows
  */
 import { describe, it, expect } from 'vitest';
-import { pickActiveLinkIndex, type LinkCandidate } from '../AccountingEngineBase.js';
+import { coveringActiveLinkIndexes, pickActiveLinkIndex, type LinkCandidate } from '../AccountingEngineBase.js';
 
 const d = (iso: string): Date => new Date(iso);
 const link = (over: Partial<LinkCandidate> = {}): LinkCandidate => ({
@@ -72,5 +72,23 @@ describe('pickActiveLinkIndex (window + status + tie-break)', () => {
 
   it('returns -1 for an empty candidate list', () => {
     expect(pickActiveLinkIndex([], d('2026-07-06'))).toBe(-1);
+  });
+});
+
+describe('coveringActiveLinkIndexes (Many-role set, no winner)', () => {
+  it('returns every covering Active link in input order, including overlapping windows', () => {
+    expect(coveringActiveLinkIndexes([
+      link({ StartedAt: d('2026-01-01') }),
+      link({ Status: 'Pending' }),
+      link({ StartedAt: d('2026-06-01') }),
+      link({ EndedAt: d('2026-06-30') }),
+    ], d('2026-07-06'))).toEqual([0, 2]);
+  });
+
+  it('returns empty when nothing covers', () => {
+    expect(coveringActiveLinkIndexes([
+      link({ StartedAt: d('2026-08-01') }),
+      link({ Status: 'Disabled' }),
+    ], d('2026-07-06'))).toEqual([]);
   });
 });
