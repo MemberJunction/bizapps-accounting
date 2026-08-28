@@ -16,6 +16,10 @@
  *   E4  ResolveLinkedAccount — real GLAccountLink windows (expired vs current vs pending),
  *       role by NAME and by ID, ordered GLAccountLinkDimension list, unknown record → null.
  *       (This is the live coverage for the GLAccountRole/Link/LinkDimension trio — testing.md ledger.)
+ *   E5  BA-D34 — company with two BankAccount links + one Cash link: Cash resolves to the
+ *       settlement account; BankAccount via ResolveLinkedAccount throws ROLE_NOT_SINGULAR;
+ *       ResolveLinkedAccounts returns both banks; a second BankAccount Save is allowed
+ *       (tie guard skipped); posting still uses the Cash-resolved account.
  *
  * PRECONDITION: zero stray Pending JEs (the engine writes Pending JEs; other harnesses' strays
  * would confuse the raw-SQL cross-checks). Run from the INSTANCE WORKTREE ROOT:
@@ -37,11 +41,14 @@ import '@mj-biz-apps/accounting-core-entities-server';
 import { CreateJournalEntryOperation } from '@mj-biz-apps/accounting-core-entities-server';
 import {
   AccountingEngineBase,
+  AccountingResolutionError,
+  isAccountingResolutionError,
   type CreateJournalEntryOutput,
   type JournalEntryDraft,
 } from '@mj-biz-apps/accounting-engine-base';
 import type {
   mjBizAppsAccountingAccountingCompanyProfileEntity,
+  mjBizAppsAccountingGLAccountEntity,
   mjBizAppsAccountingGLAccountLinkEntity,
 } from '@mj-biz-apps/accounting-entities';
 
@@ -343,6 +350,83 @@ async function main(): Promise<void> {
   await test('E4 ResolveLinkedAccount — unknown record / unknown role → null (caller walks its fallback chain)', async () => {
     assert(AccountingEngineBase.Instance.ResolveLinkedAccount(targetEntityId, randomUUID(), 'Sales', new Date()) === null, 'unknown record should be null');
     assert(AccountingEngineBase.Instance.ResolveLinkedAccount(targetEntityId, targetRecordId, 'No Such Role', new Date()) === null, 'unknown role should be null');
+  });
+
+  // ─── E5 — BA-D34 Cash (One) vs BankAccount (Many) ──────────────────────────
+  await test('E5 BA-D34 — two BankAccount + one Cash: Cash singular, BankAccount set, posting uses Cash', async () => {
+    // E2 deactivated Operating Cash to prove ACCOUNT_INACTIVE; restore it for settlement posting.
+    await pool.request().query(`UPDATE ${SCHEMA}.GLAccount SET IsActive=1 WHERE ID='${companyA.cashGL}'`);
+
+    const md = new Metadata();
+    const currencyCode = String(await scalar(pool, `SELECT CurrencyCode FROM ${SCHEMA}.GLAccount WHERE ID='${companyA.cashGL}'`));
+    const payroll = await md.GetEntityObject<mjBizAppsAccountingGLAccountEntity>(GL_ENTITY, user);
+    payroll.NewRecord();
+    payroll.CompanyID = companyA.id;
+    payroll.Code = '11102';
+    payroll.Name = `${RUN_TAG} Payroll Cash`;
+    payroll.AccountType = 'Asset';
+    payroll.CurrencyCode = currencyCode;
+    payroll.IsActive = true;
+    assert(await payroll.Save(), `payroll cash save failed: ${payroll.LatestResult?.CompleteMessage}`);
+
+    const companyEntityId = String(await scalar(pool, `SELECT ID FROM __mj.Entity WHERE Name='MJ: Companies'`));
+    assert(!!companyEntityId && companyEntityId !== 'undefined', 'MJ: Companies entity id missing');
+    const cashRole = AccountingEngineBase.Instance.GLAccountRoleByName('Cash');
+    const bankRole = AccountingEngineBase.Instance.GLAccountRoleByName('BankAccount');
+    assert(!!cashRole && cashRole.Cardinality === 'One', `Cash role missing or not One: ${JSON.stringify(cashRole && { Name: cashRole.Name, Cardinality: cashRole.Cardinality })}`);
+    assert(!!bankRole && bankRole.Cardinality === 'Many', `BankAccount role missing or not Many — apply V202608271852. got ${JSON.stringify(bankRole && { Name: bankRole.Name, Cardinality: bankRole.Cardinality })}`);
+
+    const mkLink = async (glId: string, roleId: string): Promise<string> => {
+      const link = await md.GetEntityObject<mjBizAppsAccountingGLAccountLinkEntity>(LINK_ENTITY, user);
+      link.NewRecord();
+      link.GLAccountID = glId;
+      link.GLAccountRoleID = roleId;
+      link.EntityID = companyEntityId;
+      link.RecordID = companyA.id;
+      link.Status = 'Active';
+      assert(await link.Save(), `link save failed (${glId} / ${roleId}): ${link.LatestResult?.CompleteMessage}`);
+      createdLinkIds.push(link.ID);
+      return link.ID;
+    };
+
+    await mkLink(companyA.cashGL, cashRole!.ID);
+    await mkLink(companyA.cashGL, bankRole!.ID);
+    // Same StartedAt (null) on a second BankAccount link — the One-role tie guard would refuse this.
+    await mkLink(payroll.ID, bankRole!.ID);
+
+    await AccountingEngineBase.Instance.Config(true, user);
+    const eng = AccountingEngineBase.Instance;
+    const asOf = new Date();
+
+    const cashHit = eng.ResolveLinkedAccount(companyEntityId, companyA.id, 'Cash', asOf, companyA.id);
+    assert(!!cashHit, 'Cash should resolve to the settlement account');
+    assert(cashHit!.Link.GLAccountID.toLowerCase() === companyA.cashGL.toLowerCase(), `Cash resolved ${cashHit!.Link.GLAccountID}, expected ${companyA.cashGL}`);
+
+    let bankThrew = false;
+    try {
+      eng.ResolveLinkedAccount(companyEntityId, companyA.id, 'BankAccount', asOf, companyA.id);
+    } catch (e) {
+      bankThrew = isAccountingResolutionError(e) && (e as AccountingResolutionError).Code === 'ROLE_NOT_SINGULAR';
+      assert(bankThrew, `BankAccount singular resolve threw ${e instanceof Error ? e.message : String(e)}, expected ROLE_NOT_SINGULAR`);
+    }
+    assert(bankThrew, 'BankAccount via ResolveLinkedAccount must throw ROLE_NOT_SINGULAR, not pick a bank');
+
+    const banks = eng.ResolveLinkedAccounts(companyEntityId, companyA.id, 'BankAccount', asOf, companyA.id);
+    const bankIds = new Set(banks.map((b) => b.Link.GLAccountID.toLowerCase()));
+    assert(banks.length === 2, `expected 2 BankAccount links, got ${banks.length}`);
+    assert(bankIds.has(companyA.cashGL.toLowerCase()) && bankIds.has(payroll.ID.toLowerCase()), `BankAccount set ${[...bankIds].join(',')} missing operating or payroll cash`);
+
+    // Posting still uses Cash — a receipt-shaped JE against the Cash-resolved account, not the set.
+    const posted = await runOp(ctx, {
+      EffectiveDate: '2026-08-28',
+      EntryType: 'Manual',
+      Description: `${RUN_TAG} E5 cash post`,
+      Lines: [
+        { GLAccountID: cashHit!.Link.GLAccountID, DebitAmount: 25 },
+        { GLAccountID: companyA.revGL, CreditAmount: 25 },
+      ],
+    });
+    assert(posted.Success === true, `Cash-resolved posting failed: ${JSON.stringify(posted.Errors)}`);
   });
 
   // ─── Teardown (db_owner pool) ──────────────────────────────────────────────

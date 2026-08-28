@@ -321,7 +321,7 @@ flows with exact-value asserts, mirroring the orders headless-E2E pattern).
 | 2 | `test-harnesses/server/phase2-encapsulation.live.test.ts` (vitest, live DB) | L1–L16: encapsulated JE save/load/reversal (+guards L14, counterparty L15), engine set-op atomicity, ONE-transaction batch build + task stamp (L11–L13), GLAccount immediate lock (L8), link tie guard + forCompanyID (L16) | **16/16** |
 | 2 | `test-harnesses/server/block0-runtime.ts` (tsx) | W1 seeding, per-company JE numbering (BA-D31), batch numbering (DR-5 noted) | **10/10** |
 | 2 | `test-harnesses/server/block1-runtime.ts` (tsx) | REWRITTEN 2026-07-29: raw-SQL bypass proofs of the JE floor (50001/50003/50004/50006/50019/50022/50012), reversal via entity, entity double-entry validation | **11/11** |
-| 2 | `test-harnesses/server/engine-runtime.ts` (tsx) | engine typed error codes live (incl. MULTI_COMPANY_DRAFT), atomic rollback, ResolveLinkedAccount windows | **12/12** |
+| 2 | `test-harnesses/server/engine-runtime.ts` (tsx) | engine typed error codes live (incl. MULTI_COMPANY_DRAFT), atomic rollback, ResolveLinkedAccount windows, BA-D34 Cash vs BankAccount (E5) | **13/13** |
 | 2 | `test-harnesses/server/intercompany-runtime.ts` (tsx) | BA-D26/27 IAM resolution + triggers | **17/17** |
 | 3 | `test-harnesses/api/engine-op-api.ts` (tsx) | 'Accounting.CreateJournalEntry' over ExecuteRemoteOperation (per-company EntryNumber asserted) | **8/8** |
 | 3 | `test-harnesses/api/batch-ops-api.ts` (tsx, NEW) | the 5 batch remote ops end-to-end over the wire: build (netted 600-not-800 + stamped task), approval-state flip, dispatch→Posted, reject→Cancelled+pool-return, loud EmptyBatch | **23/23** |

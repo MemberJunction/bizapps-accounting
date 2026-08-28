@@ -60,7 +60,8 @@ the ERP **by account number, split per company** (AM-4). Periods/close live in t
   polymorphic date-windowed `GLAccountLink` rows (+ ordered `GLAccountLinkDimension`) let any
   record (product, category, company default) carry account links; the engine's
   `ResolveLinkedAccount` is the per-record lookup — the WALK order (product → category →
-  default) is the caller's.
+  default) is the caller's. Cardinality=Many roles (`BankAccount`) refuse singular resolve
+  (`ROLE_NOT_SINGULAR`) and use `ResolveLinkedAccounts` instead (BA-D34).
 - **Pluggable providers:** currency (AD-7) and tax (AD-19) via `@RegisterClass`.
 - _(More as blocks land.)_
 

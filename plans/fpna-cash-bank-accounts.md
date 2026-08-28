@@ -1,8 +1,8 @@
 # Cash position accounts (N bank GL accounts per company)
 
-**Status:** Plan — companion to [bizapps-fpna cash schema](https://github.com/MemberJunction/bizapps-fpna/pull/3)  
-**Proposed decision:** BA-D34  
-**Does not change:** payment posting, `ResolveLinkedAccount`, or the meaning of role **Cash**
+**Status:** Schema landed in [bizapps-accounting#115](https://github.com/MemberJunction/bizapps-accounting/pull/115). Engine follow-up (tie-guard skip, `ROLE_NOT_SINGULAR`, `ResolveLinkedAccounts`) is this PR.  
+**Decision:** BA-D34  
+**Does not change:** payment posting or the meaning of role **Cash**. `ResolveLinkedAccount` now *refuses* Many roles rather than picking a bank.
 
 FP&A opening cash is a **rollup of every bank / cash GL account the company holds**, not the single account Orders posts a receipt into. Accounting already almost has this (`GLAccountRole` + company-level `GLAccountLink`). The missing piece is **cardinality**.
 
@@ -82,10 +82,10 @@ Phase 1 FPNA stores the **rollup** on `CashBalance`. Drill-by-account is a later
 
 ---
 
-## Implementation notes (when we build)
+## Implementation notes
 
-1. Migration: `Cardinality` column + CHECK + default `'One'`.
-2. Metadata: existing roles unchanged except the new column; add `BankAccount` row.
+1. ~~Migration: `Cardinality` column + CHECK + default `'One'`.~~ #115
+2. ~~Metadata: existing roles unchanged except the new column; add `BankAccount` row.~~ #115
 3. `GLAccountLinkEntityServer.checkNoAmbiguousTie`: return early when the role’s `Cardinality = 'Many'`.
 4. `AccountingEngineBase.ResolveLinkedAccount`: if role is Many, typed error (`ROLE_NOT_SINGULAR`), never an arbitrary row.
 5. New `ResolveLinkedAccounts` on the engine cache (same cache citizens as links today).

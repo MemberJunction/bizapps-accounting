@@ -9,6 +9,9 @@
  * tie-break is a strict `>`, so resolution silently returns whichever row the cache lists first —
  * an arbitrary choice between two different GL accounts that both produce balanced entries.
  *
+ * Cardinality=Many roles (BankAccount, BA-D34) skip this guard: N Active same-window links
+ * are the point. ResolveLinkedAccount refuses those roles; ResolveLinkedAccounts returns the set.
+ *
  * COMPANY IS DERIVED, NOT STORED (Amith 2026-07-29): the link's company is its GLAccount's
  * CompanyID, read through the FK. Safe because GLAccount identity fields are immutable from
  * creation (GLAccountEntityServer), so the derivation can never drift. Links to DIFFERENT
@@ -30,6 +33,7 @@ import { mjBizAppsAccountingGLAccountLinkEntity } from '@mj-biz-apps/accounting-
 
 const LINK_ENTITY = 'MJ_BizApps_Accounting: GL Account Links';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
+const ROLE_ENTITY = 'MJ_BizApps_Accounting: GL Account Roles';
 
 @RegisterClass(BaseEntity, LINK_ENTITY)
 export class GLAccountLinkEntityServer extends mjBizAppsAccountingGLAccountLinkEntity {
@@ -56,6 +60,7 @@ export class GLAccountLinkEntityServer extends mjBizAppsAccountingGLAccountLinkE
   private async checkNoAmbiguousTie(fail: (message: string) => void): Promise<void> {
     if (this.Status !== 'Active') return;
     if (!this.EntityID || !this.RecordID || !this.GLAccountRoleID || !this.GLAccountID) return;
+    if (await this.roleIsMany(this.GLAccountRoleID)) return;
 
     const myCompanyId = await this.companyOfAccount(this.GLAccountID);
     if (!myCompanyId) return; // a missing account is the FK's job to reject
@@ -92,6 +97,32 @@ export class GLAccountLinkEntityServer extends mjBizAppsAccountingGLAccountLinkE
         return;
       }
     }
+  }
+
+  /**
+   * Many-cardinality roles (BankAccount) are allowed N Active same-window links.
+   * Fail closed: a role-read error throws rather than skipping the One-role guard.
+   * Missing Cardinality (should not happen after BA-D34) is treated as One.
+   */
+  private async roleIsMany(roleId: string): Promise<boolean> {
+    const provider = this.ProviderToUse as unknown as IRunViewProvider;
+    const res = await provider.RunView<{ Cardinality: string }>(
+      {
+        EntityName: ROLE_ENTITY,
+        ExtraFilter: `ID='${roleId}'`,
+        Fields: ['Cardinality'],
+        MaxRows: 1,
+        ResultType: 'simple',
+        BypassCache: true,
+      },
+      this.ContextCurrentUser,
+    );
+    if (!res.Success) {
+      throw new Error(
+        `GLAccountLinkEntityServer: failed to read role cardinality for ${roleId}: ${res.ErrorMessage ?? 'unknown error'}`,
+      );
+    }
+    return (res.Results?.[0]?.Cardinality ?? 'One') === 'Many';
   }
 
   /** The company a GL account belongs to — the link's derived company (no denormalized column). */
