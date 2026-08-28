@@ -21,6 +21,22 @@
  *   · every field the form renders that the server does NOT lock stays plainly editable
  *   · `CompanyID` is rendered at all — the original defect
  *
+ * ── CONFIRMED IN THE BROWSER, 2026-08-28 ──
+ *
+ * Explorer at localhost:4341, a SAVED GL Account (4000 / Sales), read straight off the rendered form.
+ * In view mode all seven fields are read-only, as expected. In EDIT mode:
+ *
+ *   Company        editable=false     <- locked
+ *   Account Code   editable=false     <- locked
+ *   Account Type   editable=false     <- locked
+ *   Account Name   editable=true
+ *   Parent Account editable=true
+ *   Is Active      editable=true
+ *   Description    editable=true
+ *
+ * Which is LOCKED_IDENTITY_FIELDS exactly, and Company is rendered at all — the omission the issue was
+ * filed for. The checks below are what keep that true; the browser run is what proved it once.
+ *
  * That way the test fails if someone adds a locked field to the form without gating it, if the server's
  * locked list grows and the form is not updated, or if a cosmetic field is gated by mistake and made
  * uneditable for no reason. A snapshot would catch none of those; it would just need re-blessing.
