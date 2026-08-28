@@ -49,6 +49,35 @@
         [EditMode]="EditMode" [FormContext]="formContext"></mj-form-field>
     <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="Description" Type="textarea"
         [EditMode]="EditMode" [FormContext]="formContext"></mj-form-field>
+    <!--
+      CURRENCY, AND WHY ITS GATE IS NOT THE SAME AS THE THREE ABOVE.
+
+      CurrencyCode is in GLAccountEntityServer.LOCKED_IDENTITY_FIELDS, so the instinct is to copy
+      `!record.IsSaved` from CompanyID. That would be WRONG here, and the server says so: ValidateAsync
+      skips a locked field whose OLD value was null —
+
+          if (oldValue === null || oldValue === undefined) return false;
+
+      CompanyID, Code and AccountType are NOT NULL, so for them "saved" and "has a value" are the same
+      thing and the simple gate is exact. CurrencyCode is NULLABLE with no default, and every account on
+      this host has it null (18 of 18) — precisely because the form never rendered it. Freezing it on
+      save would make that permanent: a value the server would happily accept, with no way to enter it.
+
+      So the gate is "while creating, OR while still unset", which is what the server actually enforces.
+    -->
+    <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="CurrencyCode" Type="textbox"
+        [EditMode]="EditMode && (!record.IsSaved || !record.CurrencyCode)" [FormContext]="formContext"></mj-form-field>
+
+    <!--
+      THE REMAP PAIR. GLAccountEntityServer refuses an identity change with the words "Remap via
+      ExternalSystem/ExternalAccountID" — advice that was impossible to follow, because neither field
+      was rendered. They are cosmetic to the server (explicitly listed as staying editable) and are the
+      documented escape hatch for an account whose identity is frozen, so they stay plainly editable.
+    -->
+    <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="ExternalSystem" Type="textbox"
+        [EditMode]="EditMode" [FormContext]="formContext"></mj-form-field>
+    <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="ExternalAccountID" Type="textbox"
+        [EditMode]="EditMode" [FormContext]="formContext"></mj-form-field>
   </mj-collapsible-panel>
 
   <!-- ── Chart-of-accounts tree ────────────────────────────────────────────── -->
