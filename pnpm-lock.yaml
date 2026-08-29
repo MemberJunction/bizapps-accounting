@@ -189,6 +189,9 @@ importers:
 
   packages/CoreEntitiesServer:
     dependencies:
+      '@memberjunction/actions':
+        specifier: ^6.1.0-edge.4
+        version: 6.1.0-edge.4
       '@memberjunction/core':
         specifier: ^6.1.0-edge.4
         version: 6.1.0-edge.4
@@ -196,6 +199,9 @@ importers:
         specifier: ^6.1.0-edge.4
         version: 6.1.0-edge.4
       '@memberjunction/global':
+        specifier: ^6.1.0-edge.4
+        version: 6.1.0-edge.4
+      '@memberjunction/integration-engine':
         specifier: ^6.1.0-edge.4
         version: 6.1.0-edge.4
       '@memberjunction/sqlserver-dataprovider':
