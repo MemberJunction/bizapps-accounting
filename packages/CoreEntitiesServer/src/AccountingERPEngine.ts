@@ -457,19 +457,24 @@ function extensionParticipates(
 ): boolean {
   switch (hook) {
     case 'beforeSync':
-    case 'afterSync':
       return ext.ParticipatesInSyncMasterData && objectsAllowed(ext, ctx.Objects);
+    case 'afterSync':
+      return ext.ParticipatesInSyncMasterData && ext.RunAfterSyncMasterData && objectsAllowed(ext, ctx.Objects);
     case 'afterAccounts':
-      return ext.ParticipatesInSyncMasterData && ctx.Objects.includes('accounts') && objectConfigured(ext, 'accounts');
+      return ext.ParticipatesInSyncMasterData && ext.RunAfterSyncMasterData
+        && ctx.Objects.includes('accounts') && objectConfigured(ext, 'accounts');
     case 'afterDimensions':
-      return ext.ParticipatesInSyncMasterData && ctx.Objects.includes('dimensions') && objectConfigured(ext, 'dimensions');
+      return ext.ParticipatesInSyncMasterData && ext.RunAfterSyncMasterData
+        && ctx.Objects.includes('dimensions') && objectConfigured(ext, 'dimensions');
     case 'afterDimensionValues':
-      return ext.ParticipatesInSyncMasterData && ctx.Objects.includes('dimensionValues') && objectConfigured(ext, 'dimensionValues');
+      return ext.ParticipatesInSyncMasterData && ext.RunAfterSyncMasterData
+        && ctx.Objects.includes('dimensionValues') && objectConfigured(ext, 'dimensionValues');
     case 'beforePost':
-    case 'afterPost':
       return ext.ParticipatesInPostJournalBatch;
+    case 'afterPost':
+      return ext.ParticipatesInPostJournalBatch && ext.RunAfterPostJournalBatch;
     case 'afterPostFailure':
-      return ext.ParticipatesInPostJournalBatchFailure;
+      return ext.ParticipatesInPostJournalBatchFailure && ext.RunAfterPostJournalBatchFailure;
   }
 }
 

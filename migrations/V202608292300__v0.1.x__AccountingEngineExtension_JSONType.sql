@@ -19,5 +19,9 @@ SET
     Objects?: Array<''accounts'' | ''dimensions'' | ''dimensionValues''> | null;
     ContinueOnError?: boolean | null;
 }'
-WHERE ID = 'E823D31F-B6BA-4858-8527-E42297B73645';
+WHERE ID = 'E823D31F-B6BA-4858-8527-E42297B73645'
+   OR (EntityID = '17B0DC00-2FBB-475E-8DA7-388570DADF0E' AND Name = 'Configuration');
+
+IF @@ROWCOUNT = 0
+    THROW 50001, 'AccountingEngineExtension.Configuration EntityField row not found — JSONType not applied.', 1;
 GO

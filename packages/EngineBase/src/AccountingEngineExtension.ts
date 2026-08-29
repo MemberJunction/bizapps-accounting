@@ -31,6 +31,11 @@ export interface AccountingEngineExtensionContext {
 export abstract class BaseAccountingEngineExtension {
   abstract get Code(): string;
 
+  /**
+   * Compatibility default that feeds {@link ParticipatesInSyncMasterData}.
+   * After-hooks also require this to be true; Before-hooks do not.
+   * Override {@link ParticipatesInSyncMasterData} for a Before-only extension.
+   */
   get RunAfterSyncMasterData(): boolean {
     return false;
   }
@@ -42,8 +47,9 @@ export abstract class BaseAccountingEngineExtension {
   }
 
   /**
-   * Participation in SyncMasterData (Before *and* After). Defaults to
-   * {@link RunAfterSyncMasterData} so existing subclasses keep working.
+   * Whether this extension is invoked for SyncMasterData at all.
+   * Gates Before-hooks. After-hooks additionally require {@link RunAfterSyncMasterData}.
+   * Defaults to {@link RunAfterSyncMasterData} so existing subclasses keep working.
    */
   get ParticipatesInSyncMasterData(): boolean {
     return this.RunAfterSyncMasterData;

@@ -39,6 +39,15 @@ class TestCashImport extends BaseAccountingEngineExtension {
   async AfterSyncDimensions(): Promise<void> { extensionCalls.push('afterDimensions'); }
 }
 
+@RegisterClass(BaseAccountingEngineExtension, 'BeforeOnlyExt')
+class BeforeOnlyExt extends BaseAccountingEngineExtension {
+  get Code(): string { return 'BeforeOnly'; }
+  get ParticipatesInSyncMasterData(): boolean { return true; }
+  get RunAfterSyncMasterData(): boolean { return false; }
+  async BeforeSyncMasterData(): Promise<void> { extensionCalls.push('beforeOnly'); }
+  async AfterSyncMasterData(): Promise<void> { extensionCalls.push('afterShouldNotFire'); }
+}
+
 @RegisterClass(BaseAccountingEngineExtension, 'ThrowingExt')
 class ThrowingExt extends BaseAccountingEngineExtension {
   get Code(): string { return 'Throwing'; }
@@ -151,6 +160,31 @@ describe('AccountingERPEngine.SyncMasterData', () => {
     });
     await AccountingERPEngine.Instance.SyncMasterData({ Objects: ['accounts', 'dimensions'] }, user, p);
     expect(extensionCalls).toEqual(['beforeSync', 'afterDimensions', 'afterSync:1']);
+  });
+
+  it('runs Before but not After when Participates is true and RunAfter is false', async () => {
+    extensionCalls.length = 0;
+    AccountingERPEngine.Instance.UseSeams({ runSync: async () => ({ Success: true }) });
+    const p = providerWith({
+      'MJ: Company Integrations': [
+        { ID: CI, CompanyID: COMPANY, IntegrationID: 'int-1', Integration: 'QuickBooks Online', IsActive: true },
+      ],
+      'MJ: Company Integration Entity Maps': [
+        { ID: 'map-1', CompanyIntegrationID: CI, Entity: 'MJ_BizApps_Accounting: GL Accounts', IsActive: true },
+      ],
+      'MJ_BizApps_Accounting: Accounting Engine Extensions': [
+        {
+          Code: 'BeforeOnly',
+          DriverClass: 'BeforeOnlyExt',
+          Status: 'Active',
+          Sequence: 0,
+          CompanyID: null,
+          ConfigurationObject: null,
+        },
+      ],
+    });
+    await AccountingERPEngine.Instance.SyncMasterData({ Objects: ['accounts'] }, user, p);
+    expect(extensionCalls).toEqual(['beforeOnly']);
   });
 
   it('skips Disabled rows and missing DriverClass', async () => {
