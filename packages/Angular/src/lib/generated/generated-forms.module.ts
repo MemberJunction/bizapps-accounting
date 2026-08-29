@@ -16,6 +16,7 @@ import { LinkDirectivesModule } from '@memberjunction/ng-link-directives';
 
 // Import Generated Components
 import { mjBizAppsAccountingAccountingCompanyProfileFormComponent } from "./Entities/mjBizAppsAccountingAccountingCompanyProfile/mjbizappsaccountingaccountingcompanyprofile.form.component";
+import { mjBizAppsAccountingAccountingEngineExtensionFormComponent } from "./Entities/mjBizAppsAccountingAccountingEngineExtension/mjbizappsaccountingaccountingengineextension.form.component";
 import { mjBizAppsAccountingCompanyTaxNexusFormComponent } from "./Entities/mjBizAppsAccountingCompanyTaxNexus/mjbizappsaccountingcompanytaxnexus.form.component";
 import { mjBizAppsAccountingCurrencyFormComponent } from "./Entities/mjBizAppsAccountingCurrency/mjbizappsaccountingcurrency.form.component";
 import { mjBizAppsAccountingCurrencySpotRateFormComponent } from "./Entities/mjBizAppsAccountingCurrencySpotRate/mjbizappsaccountingcurrencyspotrate.form.component";
@@ -43,6 +44,7 @@ import { mjBizAppsAccountingTaxRateFormComponent } from "./Entities/mjBizAppsAcc
 @NgModule({
 declarations: [
     mjBizAppsAccountingAccountingCompanyProfileFormComponent,
+    mjBizAppsAccountingAccountingEngineExtensionFormComponent,
     mjBizAppsAccountingCompanyTaxNexusFormComponent,
     mjBizAppsAccountingCurrencyFormComponent,
     mjBizAppsAccountingCurrencySpotRateFormComponent,
@@ -60,8 +62,7 @@ declarations: [
     mjBizAppsAccountingJournalEntryLineDimensionFormComponent,
     mjBizAppsAccountingJournalEntryLineFormComponent,
     mjBizAppsAccountingJournalEntrySequenceFormComponent,
-    mjBizAppsAccountingJournalEntryTypeFormComponent,
-    mjBizAppsAccountingTaxAuthorityFormComponent],
+    mjBizAppsAccountingJournalEntryTypeFormComponent],
 imports: [
     CommonModule,
     FormsModule,
@@ -78,6 +79,7 @@ export class GeneratedForms_SubModule_0 { }
 
 @NgModule({
 declarations: [
+    mjBizAppsAccountingTaxAuthorityFormComponent,
     mjBizAppsAccountingTaxJurisdictionFormComponent,
     mjBizAppsAccountingTaxLiabilityFormComponent,
     mjBizAppsAccountingTaxRateFormComponent],
