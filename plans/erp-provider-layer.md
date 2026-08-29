@@ -114,14 +114,15 @@ Three layers. Accounting owns the middle one. MJ Integrations owns the bottom. P
 │  GetAccountBalances(company, asOf, glAccountIDs?)            │
 │                                                              │
 │  Knows: GLAccount, Dimension, DimensionValue,                │
-│         JournalEntryBatch lifecycle, AM-4 account numbers    │
+│         JournalEntryBatch lifecycle, AM-4 account numbers  (what is an AM-4?)  │
 └──────────────────────────────┬──────────────────────────────┘
                                │
               ┌────────────────┼────────────────┐
               ▼                                 ▼
 ┌─────────────────────────┐      ┌──────────────────────────────┐
-│  MJ Integration Engine  │      │  IAccountingErpProvider      │
-│  CompanyIntegration     │      │  (plugin)                    │
+│  MJ Integration Engine  │      │  BaseAccountingErpProvider      │
+│  CompanyIntegration     │      │  (base class and sub-classed by each provider plugin so 
+                                     base class can do as much of generic logic as possible)                    │
 │  EntityMap / FieldMap   │      │                              │
 │  Watermark / RecordMap  │      │  CreateJournalEntry(...)     │
 │  RunSync (PULL)         │      │  GetChartOfAccounts(...)     │
@@ -147,10 +148,12 @@ Responsibilities:
   - success → `Sent → Posted`, stamp external id on the batch / summary JE, flip member JEs to `GLPosted`;
   - failure → do not invent Posted; keep Sent (or fail the send) with the error. **Never** mark Posted without an external id.
 - **Get balances:** plugin verb; optional write into FP&A `CashBalance` / `CashBalanceLine` (`Source='ERP'`) for the BankAccount set. Accounting itself does **not** grow an AccountBalance table.
+  I don't want this in the accounting engine. Instead we should support the idea of the accounting engine having plugins that run each time it runs and then the FP&A app can register those dynamically and any other app can use this seam to add their registered plug-ins, for this we define an interface and metadata to register such verbs. They can use all the higher oder accouning brain stuff
+- We also update all the standard MJ BizApps/Accounting actions so that they are using a standard base class and sub-classes implement whatever the standard verbs are. These just pull and push data and have some very simple logic. They are usable in ANY biz app, not just ours. bizapps-accounting then simply consumes these actions in its layer, the MJ layer has ZERO knowledge about bizapps-accounting.
 
 This replaces `ErpPoster` / `mockErpPoster` as the production seam. Tests keep a mock **plugin**.
 
-### 3.2 Plugin (`IAccountingErpProvider`)
+### 3.2 Plugin (via abstract base calss not an inteface so base can do some stuff) (BaseIAccountingERPProvider`)
 
 One implementation per ERP. Registered with `@RegisterClass` keyed by Integration name / ClassName.
 
@@ -167,11 +170,13 @@ BC’s `CreateJournalEntry` is the missing twin of QBO’s existing action. **Po
 
 Generic Integration Actions stay for “list BC customers.” They are not how we post a batch.
 
+Implement one of tehse for each system we support in MJ incluing all the actions we hvae in bizapps/accounting.
+
 ### 3.3 How pull vs plugin verbs split
 
 | Need | Path |
 |---|---|
-| Nightly / incremental **upsert** of COA and dimensions into **our tables** | Integration Engine entity maps + `RunSync`. Meta-layer only fans out and names objects. |
+| Nightly / incremental **upsert** of COA and dimensions/dimension values into **our tables** | Integration Engine entity maps + `RunSync`. Meta-layer only fans out and names objects. |
 | **One** balanced journal to the GL, then **our** batch state machine | Plugin `CreateJournalEntry` called from `PostJournalBatch`. |
 | Balances for cash position | Plugin `GetAccountBalances` (or a pull map onto `CashBalanceLine` if we want watermarks). Prefer the verb first — balances are a point-in-time snapshot, not a slowly changing dimension. |
 
@@ -183,6 +188,7 @@ Same `CompanyIntegration` (same BC credential). FP&A does **not** subclass the B
 - Later budget/opex: more maps or verbs, same plugin.
 - Shared fan-out can live in **common** once a second app needs it; until then it lives in this engine and FP&A calls `Accounting.RunErpSync({ ObjectNames: ['…'] })` or a dedicated `ImportCashBalances` op that uses the plugin.
 
+YES but see note above
 ---
 
 ## 4. What we will not do
@@ -208,26 +214,40 @@ Same `CompanyIntegration` (same BC credential). FP&A does **not** subclass the B
 
 MJ repo PRs only if the platform connector must stamp company id or expose a write that plugins cannot reach without a fork. Prefer keeping that out of MJ until a plugin is blocked.
 
+See above comments, we will have paralle PR in 3 repos, MJ, bizapps-accounting and bizapps-fpna to implement this full vision and do them all together in one wave. MJ first, then accounting then FPNA but all in one wave. We need really solid integration and unit testing in all 3 repos as aprt of this wave and extraodinrary docs, in the MJ layer a readme in the accounting sub-branch of bizapps actoins that explains what these guys do, then similar docs in accounting app that extend and point to the MJ lower level stateless actions, then in FP&A for the layer consuming the engine and reigstering an extension. The extension mechanism itself accounting engine does is suported by the accounting docs of course. All world class docs, all have mermaid where makes sense and all reference either others public GitHub URLs (assume next branch for URLs)
+
 ---
 
 ## 6. Open questions (edit in line)
 
 1. **Where does `IAccountingErpProvider` live?** This repo (Open App owns domain verbs) vs MJ `Actions/BizApps/Accounting` (already has QBO/BC HTTP). Proposal: **interface + engine in this repo**; plugins may **call** the existing Actions package so we do not duplicate OAuth/OData. Alternative: lift the interface into `actions-bizapps-accounting` and have this app depend on it.
 
+This base class (not interface) is in bizapps-accounting. The lower level verb-only actions are in MJ - more on this above
+
 2. **Pull maps vs GetChartOfAccounts verb for COA.** Maps give watermarks and RecordMap for free. Verbs are simpler for a first BC bring-up. Proposal: **maps for COA/dimensions** (nightly), **verbs for JE post and balances**.
+
+Yes and we should make the scheduled job part of the default metadata in /metadata/scheduled-jobs within bizapps-accounting repo to do daily syncs
 
 3. **Balances as a pull map onto `CashBalanceLine`?** Point-in-time; a watermark is awkward (every AsOf is a new photo). Proposal: verb `GetAccountBalances(asOf)` writing a new `CashBalance` row, not an incremental sync.
 
+- This will be done by the FP&A extension/olug-in and accounting will not know aout this other than it it dutifully executing a registered plugin, see above.
+
 4. **One Integration named `business-central` shared by Accounting and FP&A**, or two Company Integrations sharing a credential? Proposal: **one**, many entity maps, object-name narrowing.
+
+- Yes, jsut keep in mind biz central is what we use now, could easily change and others who use this long term pick whatever their ERP is. ERP should always be ERP not Erp as it is an acronym and we caps on acronums by convention in our work.
 
 5. **Scheduled job:** keep app-owned job type, or only `Run Integration Sync` per company plus a tiny fan-out job that calls the meta-layer? Proposal: **one scheduled job → `AccountingErpEngine.SyncMasterData`**, not N jobs.
 
+Agreed, see above 
+
 ---
 
-## 7. Kind close of the prototypes (later, not now)
+## 7. Close of the prototypes (later, not now)
 
 When a code PR exists, comment on #74 and #112 roughly:
 
 > Thank you — the maps, company stamp, object-name narrowing, and “same Company Integration, additive maps” are the design we’re keeping. We’re folding that into the MJ Integration Engine plus an accounting-owned provider-agnostic layer (plan: `plans/erp-provider-layer.md`, PR …) instead of an app-owned BC connector and page-level fan-out. Closing this PR as a prototype; ideas land there.
+
+The aboe comment should be a touch more descriptive given the updated architecture I've added in this version of the file
 
 Do **not** close them from this plan PR.
