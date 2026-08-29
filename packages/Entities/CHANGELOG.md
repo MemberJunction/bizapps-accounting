@@ -1,5 +1,26 @@
 # @mj-biz-apps/accounting-entities
 
+## 0.5.0
+
+### Minor Changes
+
+- 9966206: Accounting engine extension registry (`AccountingEngineExtension`) — host-visible
+  enable/disable, run order, optional company scope, and a JSON `Configuration` bag
+  typed as `IAccountingEngineExtensionConfiguration`.
+
+  Hook participation is not columns: `BaseAccountingEngineExtension` getters and
+  Before/After overrides (later in this PR). Empty seed — consumers such as FP&A
+  insert their own row. Schema change, so `minor`.
+
+- 51012f5: AccountingERPEngine: Integration Engine pull for COA/dimensions, MJ CreateJournalEntry for batch post, BaseAccountingEngineExtension seam, Accounting.RunERPSync, daily job metadata, and Configuration > ERP sync UI (reusable widgets + Explorer page).
+- fa6ae13: BA-D34: `GLAccountRole.Cardinality` (`One` | `Many`) and the `BankAccount` role.
+
+  Separates "where does a receipt post?" (role `Cash`, One, unchanged) from "what
+  is cash, for a position?" (role `BankAccount`, Many). Existing roles are
+  backfilled to `One`, so payment routing and the BA-D32 tie guard are unaffected.
+  Enables FP&A to build `CashBalance` as the sum of a company's Active
+  `BankAccount` links. Schema change, so `minor`.
+
 ## 0.4.0
 
 ### Minor Changes
