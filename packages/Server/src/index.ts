@@ -13,7 +13,7 @@ import '@mj-biz-apps/accounting-actions';
 // Server-side entity subclasses — must come after accounting-entities so
 // @RegisterClass auto-increment gives these higher priority
 import '@mj-biz-apps/accounting-core-entities-server';
-import { LoadJournalEntryBatchOperations, LoadCreateJournalEntriesOperation, LoadCreateJournalEntryOperation, LoadGenerateReversalOperation } from '@mj-biz-apps/accounting-core-entities-server';
+import { LoadJournalEntryBatchOperations, LoadCreateJournalEntriesOperation, LoadCreateJournalEntryOperation, LoadGenerateReversalOperation, LoadRunERPSyncOperation, LoadAccountingERPEngine, LoadAccountingERPProviders } from '@mj-biz-apps/accounting-core-entities-server';
 
 // Import generated GraphQL resolvers
 import './generated/generated.js';
@@ -56,4 +56,7 @@ export function LoadBizAppsAccountingServer(): void {
     LoadCreateJournalEntriesOperation(); // tree-shaking anchor for 'Accounting.CreateJournalEntries' (the SET op)
     LoadJournalEntryBatchOperations(); // tree-shaking anchor for the Accounting.BuildJournalEntryBatch/RegenerateJournalEntryBatch/DispatchJournalEntryBatch/RecordBatchDecision/GetBatchApprovalState ops
     LoadGenerateReversalOperation(); // tree-shaking anchor for 'Accounting.GenerateJournalEntryReversal'
+    LoadRunERPSyncOperation();
+    LoadAccountingERPEngine();
+    LoadAccountingERPProviders();
 }
