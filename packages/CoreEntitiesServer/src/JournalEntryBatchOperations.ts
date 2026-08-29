@@ -49,6 +49,7 @@ import {
   type JournalEntryBatchPreviewResult,
 } from './JournalEntryBatchEngine.js';
 import { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
+import { RequireUUID, RequireOptionalUUID, RequireUUIDs } from './sql-guards.js';
 import {
   IsApprovalOutcome,
   IsTaskDecisionOutcomeCode,
@@ -78,7 +79,9 @@ function toOptions(input: JournalEntryBatchCriteriaInput | undefined): BuildJour
   return {
     cutoff: input?.Cutoff ? new Date(input.Cutoff) : null,
     startDate: input?.StartDate ? new Date(input.StartDate) : null,
-    companyIds: input?.CompanyIDs?.length ? input.CompanyIDs : null,
+    // CompanyIDs is caller-supplied and reaches SQL text via the engine's candidate
+    // filter — validate every element is a UUID before it can be interpolated.
+    companyIds: input?.CompanyIDs?.length ? RequireUUIDs(input.CompanyIDs, 'CompanyIDs') : null,
     entryTypeCodes: input?.EntryTypeCodes?.length ? input.EntryTypeCodes : null,
     excludeEntryTypeCodes: input?.ExcludeEntryTypeCodes?.length ? input.ExcludeEntryTypeCodes : null,
   };
@@ -102,7 +105,9 @@ export class PreviewJournalEntryBatchOperation extends BaseRemotableOperation<Pr
   public readonly OperationKey = 'Accounting.PreviewJournalEntryBatch';
 
   protected async InternalExecute(input: PreviewJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<JournalEntryBatchPreviewResult> {
-    const included = input?.IncludedJournalEntryIDs?.length ? new Set(input.IncludedJournalEntryIDs) : undefined;
+    const included = input?.IncludedJournalEntryIDs?.length
+      ? new Set(RequireUUIDs(input.IncludedJournalEntryIDs, 'IncludedJournalEntryIDs'))
+      : undefined;
     return previewBatch(toOptions(input), user, provider, included);
   }
 }
@@ -140,6 +145,10 @@ export class BuildJournalEntryBatchOperation extends BaseRemotableOperation<Buil
 
   protected async InternalExecute(input: BuildJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<BuildJournalEntryBatchOutput> {
     if (!input?.TargetSystem) throw new Error('BuildJournalEntryBatch: TargetSystem is required.');
+    // Validate every caller-supplied id at the boundary — these reach SQL text in the
+    // engine's candidate/loader filters. RequireUUID rejects (not escapes) a non-UUID so a
+    // crafted `' OR 1=1 --` can never widen the candidate set across companies.
+    RequireOptionalUUID(input.CompanyID, 'CompanyID');
     const gate = new TasksAppApprovalGate(provider);
     const options = toOptions(input);
     const source = input.Source ?? 'Standard';
@@ -147,11 +156,13 @@ export class BuildJournalEntryBatchOperation extends BaseRemotableOperation<Buil
     switch (source) {
       case 'View': {
         if (!input.ViewID) throw new Error('BuildJournalEntryBatch: Source=View requires a ViewID.');
+        RequireUUID(input.ViewID, 'ViewID');
         const batches = await buildJournalEntryBatchFromView(input.ViewID, input.TargetSystem, user.ID, user, provider, gate, options);
         return { Batches: batches, NothingToBatch: false };
       }
       case 'Explicit': {
         if (!input.JournalEntryIDs?.length) throw new Error('BuildJournalEntryBatch: Source=Explicit requires JournalEntryIDs.');
+        RequireUUIDs(input.JournalEntryIDs, 'JournalEntryIDs');
         const batches = await buildJournalEntryBatchFromExplicitIds(input.JournalEntryIDs, input.TargetSystem, user.ID, user, provider, gate);
         return { Batches: batches, NothingToBatch: false };
       }
@@ -191,6 +202,7 @@ export class RegenerateJournalEntryBatchOperation extends BaseRemotableOperation
 
   protected async InternalExecute(input: RegenerateJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<BuildJournalEntryBatchResult> {
     if (!input?.JournalEntryBatchID) throw new Error('RegenerateJournalEntryBatch: JournalEntryBatchID is required.');
+    RequireUUID(input.JournalEntryBatchID, 'JournalEntryBatchID');
     if (!input?.TargetSystem) throw new Error('RegenerateJournalEntryBatch: TargetSystem is required.');
     // A re-gather to NOTHING cancels the batch and throws EmptyJournalEntryBatchError (surfaced to the caller
     // as a failed operation with that message) — never a silent empty batch.
@@ -210,6 +222,7 @@ export class DispatchJournalEntryBatchOperation extends BaseRemotableOperation<D
 
   protected async InternalExecute(input: DispatchJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<DispatchJournalEntryBatchOutput> {
     if (!input?.JournalEntryBatchID) throw new Error('DispatchJournalEntryBatch: JournalEntryBatchID is required.');
+    RequireUUID(input.JournalEntryBatchID, 'JournalEntryBatchID');
     const batch = await sendJournalEntryBatch(input.JournalEntryBatchID, user, { gate: new TasksAppApprovalGate(provider), poster: mockErpPoster, provider });
     return { Status: batch.Status, ExternalJournalEntryBatchRef: batch.ExternalJournalEntryBatchRef ?? null };
   }
@@ -241,6 +254,7 @@ export class RecordJournalEntryBatchDecisionOperation extends BaseRemotableOpera
 
   protected async InternalExecute(input: RecordJournalEntryBatchDecisionInput, provider: IMetadataProvider, user: UserInfo): Promise<RecordJournalEntryBatchDecisionOutput> {
     if (!input?.JournalEntryBatchID) throw new Error('RecordBatchDecision: JournalEntryBatchID is required.');
+    RequireUUID(input.JournalEntryBatchID, 'JournalEntryBatchID');
     if (!IsTaskDecisionOutcomeCode(input?.Decision)) {
       throw new Error(`RecordBatchDecision: invalid decision '${input?.Decision}'. Expected ${TaskDecisionOutcomeCodes.join(' | ')}.`);
     }
@@ -284,6 +298,7 @@ export class GetJournalEntryBatchApprovalStateOperation extends BaseRemotableOpe
 
   protected async InternalExecute(input: GetJournalEntryBatchApprovalStateInput, provider: IMetadataProvider, user: UserInfo): Promise<GetJournalEntryBatchApprovalStateOutput> {
     if (!input?.JournalEntryBatchID) throw new Error('GetBatchApprovalState: JournalEntryBatchID is required.');
+    RequireUUID(input.JournalEntryBatchID, 'JournalEntryBatchID');
     // assertApproved throws when not approved — turn that into a boolean for the UI.
     try {
       await new TasksAppApprovalGate(provider).assertApproved(input.JournalEntryBatchID, user);
