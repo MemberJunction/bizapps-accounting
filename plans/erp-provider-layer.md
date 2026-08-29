@@ -1,253 +1,222 @@
 # Accounting ERP provider layer
 
-**Status:** Draft for inline edit — Amith 2026-08-29  
+**Status:** Rev 2 — incorporates Amith 2026-08-29 inline comments  
 **This PR:** plan only. No code.  
-**Related (leave open):** [accounting#74](https://github.com/MemberJunction/bizapps-accounting/pull/74) (BC → GL Accounts pull), [accounting#112](https://github.com/MemberJunction/bizapps-accounting/pull/112) (BC → Dimensions / DimensionValues). Exploratory prototypes. We will close them later with a kind note and links here once this work has a code PR.  
-**Companion (FP&A):** cash position import lands on `CashBalance` / `CashBalanceLine`; live rollup stays `FPNA.GetCashPosition` (never persisted).
+**Wave:** three PRs together, in order **MJ → bizapps-accounting → bizapps-fpna**.  
+**Related (leave open):** [accounting#74](https://github.com/MemberJunction/bizapps-accounting/pull/74), [accounting#112](https://github.com/MemberJunction/bizapps-accounting/pull/112). Exploratory prototypes. Close later with a kind note once the three code PRs exist.
+
+**Docs convention:** mermaid where it helps; cross-repo links use `https://github.com/MemberJunction/<repo>/blob/next/…`.
 
 ---
 
-## 1. What we are solving
+## 1. Jobs
 
-Accounting is a **subledger**, not the GL. Three jobs talk to an external accounting system (Business Central today, QuickBooks / NetSuite later):
+Accounting is a **subledger**, not the GL. Three jobs talk to an external accounting system (Business Central now; any ERP later):
 
-| Job | Direction | Unit of work | Writes |
+| Job | Direction | Unit of work | Who owns the write |
 |---|---|---|---|
-| Master data | **Pull** | Chart of accounts, dimensions, dimension values | `GLAccount`, `Dimension`, `DimensionValue` |
-| Journal dispatch | **Push** | One approved **Journal Entry Batch** (summary JE), all-or-nothing | Stamp `JournalEntryBatch` + member JEs `GLPosted` + external id |
-| Downstream facts | **Pull** | Account balances, later budget / opex | FP&A `CashBalance` (+ lines), later `BudgetLine` |
+| Master data | **Pull** | Chart of accounts, dimensions, dimension values | **This app** → `GLAccount`, `Dimension`, `DimensionValue` |
+| Journal dispatch | **Push** | One approved **Journal Entry Batch** (summary JE), all-or-nothing | **This app** → stamp batch + member JEs `GLPosted` + external id |
+| Downstream facts | **Pull / verb** | Account balances, later budget / opex | **Other apps** via registered extensions (FP&A → `CashBalance` / `CashBalanceLine`) |
 
-Those jobs share **credentials, company, scheduling, run audit**. They do **not** share a record-sync loop. Posting a batch is not “sync the Journal Entry table.”
+Shared: credentials, company, scheduling, run audit. **Not** shared: a record-sync loop for posting. A batch is not “sync the Journal Entry table.”
 
----
-
-## 2. What already exists (do not reinvent)
-
-### 2.1 MJ Integration Engine — data sync
-
-`packages/Integration` in the MJ repo.
-
-- `Integration` → `CompanyIntegration` (per company + credential) → `EntityMap` / `FieldMap` / `Watermark` / `RecordMap` / `Run`.
-- `IntegrationEngine.RunSync(companyIntegrationID, …)` with object-name / entity-map narrowing.
-- Scheduled via MJ Action **`Run Integration Sync`**.
-- Connectors implement `FetchChanges` (pull) and CRUD (`CreateRecord`, …) for generic object I/O.
-- Generated **Integration Actions** (`IntegrationActionExecutor`) are CRUD+Search+List **per external object**, not domain verbs. CRM already moved generic HubSpot CRUD there and kept only custom actions (merge contacts, associate, log activity).
-
-**Use this for:** scheduling, credentials, Company Integration, pull of master-data tables, run logs, record maps (external id ↔ our id).
-
-**Do not use this for:** “dump every Journal Entry to BC” as an outbound entity map. The batch is the unit of work.
-
-### 2.2 Actions/BizApps/Accounting — higher-order verbs (already built)
-
-`@memberjunction/actions-bizapps-accounting` in the MJ repo (`packages/Actions/BizApps/Accounting`).
-
-Three-tier: `BaseAccountingAction` → provider base (QBO / BC) → per-verb actions.
-
-Already there:
-
-| Verb-ish | QBO | BC |
-|---|---|---|
-| Get chart of accounts | `GetQuickBooksGLCodesAction` | `GetBusinessCentralGLAccountsAction` |
-| Get account balances | `GetQuickBooksAccountBalancesAction` | (via GL entries) |
-| Get GL entries | — | `GetBusinessCentralGeneralLedgerEntriesAction` |
-| **Create journal entry** | `CreateQuickBooksJournalEntryAction` | **missing** |
-| Customers / invoices | — | Get customers, get sales invoices |
-
-It already:
-
-- Resolves `CompanyIntegration` by company + integration name.
-- Validates a JE **balances** (`validateJournalEntryBalance`) — provider-agnostic.
-- Maps account types to Asset / Liability / Equity / Revenue / Expense.
-
-What it is **not**:
-
-- It does **not** write into this app’s entities (`GLAccount`, `JournalEntryBatch`).
-- Verbs are **per-provider class names** (`CreateQuickBooksJournalEntryAction`) instead of one generic `CreateJournalEntry` with a plugin.
-- BC has no create-journal action yet (QBO does).
-- It does not participate in **batch atomicity** (`Approved → Sent → Posted`, stamp external id, flip member JEs).
-- README says this family is “progressively migrating” to generic Integration Actions. **Do not migrate these verbs away.** Generic CRUD is the wrong grain. This package is the seed of the meta-layer.
-
-### 2.3 This app today
-
-- `ErpPoster` on `sendJournalEntryBatch` — the production hook. Still `mockErpPoster`.
-- `GLAccount.ExternalSystem` + `ExternalAccountID` — ERP identity on the account (D13). No mapping table.
-- Dispatch posts **by account number**, split per company (AM-4).
-
-### 2.4 Exploratory prototypes (#74 / #112)
-
-Keep the **ideas**; treat the code as a prototype.
-
-Worth stealing later:
-
-- Entity/field maps for BC `accounts` → `GL Accounts` (number → Code, category → AccountType, blocked → IsActive, id → ExternalAccountID).
-- Same Company Integration, extra maps for `dimensions` / `dimensionValues`, Priority order.
-- Stamping `MJCompanyID` / `MJDimensionID` in fetch because field-map `lookup` is a static map, not a DB lookup.
-- Fan-out: every active credentialed Company Integration, per-company failure isolation.
-- Manual trigger as a **remote op** over a server engine, not a page (`BusinessCentralSyncEngine` + `Accounting.RunBusinessCentralSync` in #112).
-
-Leave behind:
-
-- Subclassing the platform `BusinessCentralConnector` at high ClassFactory priority (wins **every** BC integration on the host; #74 and #82 already collide).
-- Fan-out inside `gl-accounts.page.ts`.
-- A second copy of that fan-out in `BizAppsAccountingBCFanOutSyncDriver`.
-- A parallel “Accounting Integrations” engine next to MJ’s.
+**AM-4** (locked in this app’s master plan): when we post to the ERP we send **account numbers**, and we **split by company**. The ERP is the GL; we never invent a single blended company on their side.
 
 ---
 
-## 3. Proposed shape
+## 2. Three layers
 
-Three layers. Accounting owns the middle one. MJ Integrations owns the bottom. Plugins are thin.
+```mermaid
+flowchart TB
+  subgraph callers["Callers"]
+    Batch["sendJournalEntryBatch"]
+    UI["Explorer · nightly job"]
+    Ext["FP&A and other registered extensions"]
+  end
 
+  subgraph accounting["bizapps-accounting — domain brain"]
+    Engine["AccountingERPEngine"]
+    BaseProv["BaseAccountingERPProvider"]
+    BCProv["BusinessCentralERPProvider"]
+    QBOProv["QuickBooksERPProvider"]
+    ExtReg["Run-extension registry"]
+    Engine --> BaseProv
+    BaseProv --> BCProv
+    BaseProv --> QBOProv
+    Engine --> ExtReg
+  end
+
+  subgraph mjActions["MJ — Actions/BizApps/Accounting"]
+    VerbBase["BaseAccountingAction"]
+    Verbs["Provider-agnostic verbs<br/>GetChartOfAccounts · CreateJournalEntry<br/>GetDimensions · GetAccountBalances · …"]
+    VerbBase --> Verbs
+  end
+
+  subgraph mjInt["MJ — Integration Engine"]
+    CI["CompanyIntegration + maps + watermarks"]
+    RunSync["RunSync / Run Integration Sync"]
+  end
+
+  Batch --> Engine
+  UI --> Engine
+  Ext --> ExtReg
+  Engine -->|"pull master data"| RunSync
+  Engine -->|"PostJournalBatch / Get*"| BaseProv
+  BaseProv -->|"stateless HTTP verbs"| Verbs
+  RunSync --> CI
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  Callers                                                     │
-│  sendJournalEntryBatch · Explorer buttons · nightly job      │
-│  FPNA.GetCashPosition (reads imported CashBalance)           │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-┌──────────────────────────────▼──────────────────────────────┐
-│  Accounting ERP meta-layer  (THIS APP, provider-agnostic)    │
-│  AccountingErpEngine                                         │
-│                                                              │
-│  SyncMasterData({ objects: accounts|dimensions|values })     │
-│  PostJournalBatch(batch)     — atomic, stamps external id    │
-│  GetAccountBalances(company, asOf, glAccountIDs?)            │
-│                                                              │
-│  Knows: GLAccount, Dimension, DimensionValue,                │
-│         JournalEntryBatch lifecycle, AM-4 account numbers  (what is an AM-4?)  │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-              ┌────────────────┼────────────────┐
-              ▼                                 ▼
-┌─────────────────────────┐      ┌──────────────────────────────┐
-│  MJ Integration Engine  │      │  BaseAccountingErpProvider      │
-│  CompanyIntegration     │      │  (base class and sub-classed by each provider plugin so 
-                                     base class can do as much of generic logic as possible)                    │
-│  EntityMap / FieldMap   │      │                              │
-│  Watermark / RecordMap  │      │  CreateJournalEntry(...)     │
-│  RunSync (PULL)         │      │  GetChartOfAccounts(...)     │
-│  Run Integration Sync   │      │  GetDimensions(...)          │
-│                         │      │  GetAccountBalances(...)     │
-└─────────────────────────┘      └──────────────┬───────────────┘
-                                                │
-                                     ┌──────────┴──────────┐
-                                     ▼                     ▼
-                              Business Central         QuickBooks
-                              (OData, journals)        (QBO JE API)
-```
 
-### 3.1 Meta-layer (`AccountingErpEngine`)
-
-Lives in this repo (`EngineBase` types + `CoreEntitiesServer` implementation). **No BC imports.**
-
-Responsibilities:
-
-- Resolve the company’s `CompanyIntegration` (reuse the same record Integration Engine uses).
-- **Pull master data:** call `IntegrationEngine.RunSync` narrowed by **object name** (`accounts`, `dimensions`, `dimensionValues`). Fan-out across companies is here (one engine, two triggers: remote op + scheduled job). UI is a thin RouteOperation.
-- **Post a batch:** load the summary JE lines, resolve each line to an ERP account number (`ExternalAccountID` / `Code`), ask the **plugin** for `CreateJournalEntry`, then:
-  - success → `Sent → Posted`, stamp external id on the batch / summary JE, flip member JEs to `GLPosted`;
-  - failure → do not invent Posted; keep Sent (or fail the send) with the error. **Never** mark Posted without an external id.
-- **Get balances:** plugin verb; optional write into FP&A `CashBalance` / `CashBalanceLine` (`Source='ERP'`) for the BankAccount set. Accounting itself does **not** grow an AccountBalance table.
-  I don't want this in the accounting engine. Instead we should support the idea of the accounting engine having plugins that run each time it runs and then the FP&A app can register those dynamically and any other app can use this seam to add their registered plug-ins, for this we define an interface and metadata to register such verbs. They can use all the higher oder accouning brain stuff
-- We also update all the standard MJ BizApps/Accounting actions so that they are using a standard base class and sub-classes implement whatever the standard verbs are. These just pull and push data and have some very simple logic. They are usable in ANY biz app, not just ours. bizapps-accounting then simply consumes these actions in its layer, the MJ layer has ZERO knowledge about bizapps-accounting.
-
-This replaces `ErpPoster` / `mockErpPoster` as the production seam. Tests keep a mock **plugin**.
-
-### 3.2 Plugin (via abstract base calss not an inteface so base can do some stuff) (BaseIAccountingERPProvider`)
-
-One implementation per ERP. Registered with `@RegisterClass` keyed by Integration name / ClassName.
-
-Higher-order verbs (names open for edit):
-
-| Verb | In | Out |
+| Layer | Repo | Knows about |
 |---|---|---|
-| `CreateJournalEntry` | date, description, balanced lines `{ accountNumber, debit?, credit?, dimensions? }` | `{ externalId, documentNumber? }` |
-| `GetChartOfAccounts` | optional filters | accounts `{ number, name, type, blocked, externalId }` |
-| `GetDimensions` / `GetDimensionValues` | — | codes + values |
-| `GetAccountBalances` | asOf, optional account numbers | `{ accountNumber, amount }` |
+| **Stateless ERP verbs** | MJ `packages/Actions/BizApps/Accounting` | HTTP to BC/QBO/… Chart, dimensions, create a balanced journal, balances. **Zero knowledge of bizapps-accounting.** Usable by any BizApp. |
+| **Domain brain** | **This repo** | `GLAccount`, `Dimension`, `DimensionValue`, JE Batch lifecycle, AM-4, fan-out, daily job, **extension seam**. Consumes the MJ verbs. |
+| **Extensions** | Other Open Apps (FP&A first) | Register at accounting-engine Config. Run after/alongside a sync or a named verb. Accounting executes them; it does not know `CashBalance`. |
 
-BC’s `CreateJournalEntry` is the missing twin of QBO’s existing action. **Port** QBO’s action and add BC here, behind the interface, instead of leaving `CreateQuickBooksJournalEntryAction` as a one-off.
+ERP is always **ERP** (acronym, caps).
 
-Generic Integration Actions stay for “list BC customers.” They are not how we post a batch.
+---
 
-Implement one of tehse for each system we support in MJ incluing all the actions we hvae in bizapps/accounting.
+## 3. MJ layer — verbs any app can call
 
-### 3.3 How pull vs plugin verbs split
+**Today:** `@memberjunction/actions-bizapps-accounting` already has this, but **per-provider class names** (`CreateQuickBooksJournalEntryAction`, `GetBusinessCentralGLAccountsAction`). QBO can create a journal; BC cannot yet. README says these may “migrate” to generic Integration CRUD — **do not**. CRUD-per-object is the wrong grain.
+
+**Redo:**
+
+- Keep `BaseAccountingAction` (credentials via `CompanyIntegration`, env-first OAuth, JE **balance** check — that check is provider-agnostic).
+- One **standard verb set**. Each verb is a **base class**; **subclasses** are the ERP plugins (`…BusinessCentral`, `…QuickBooks`). Callers and agents use the **verb name**, not the vendor name. The executor resolves the company’s Integration and dispatches to the subclass.
+- Implement **one subclass per ERP we support in MJ**, covering every action already in this package (GL accounts, GL entries, account balances, create journal, plus BC customers/invoices if they stay as verbs).
+- **CreateJournalEntry** on BC is the missing twin of QBO’s existing action.
+- These actions **only pull and push data** plus trivial validation (balanced lines, required fields). They do **not** upsert `GLAccount` rows, do **not** flip batch status, do **not** write `CashBalance`.
+
+World-class README in that package: what the verbs are, how a new ERP subclasses, mermaid of verb → provider, links to [this plan on `next`](https://github.com/MemberJunction/bizapps-accounting/blob/next/plans/erp-provider-layer.md) once merged.
+
+Generic **Integration Actions** (`IntegrationActionExecutor`) stay for “list BC customers” style object CRUD. They are not how we post a batch.
+
+---
+
+## 4. This app — `AccountingERPEngine`
+
+Lives here (`EngineBase` types + `CoreEntitiesServer`). **No BC/QBO SDK imports.** Talks only to MJ verbs + Integration Engine + extensions.
+
+### 4.1 Provider plugin — **abstract base class**, not an interface
+
+`BaseAccountingERPProvider`. One subclass per ERP, `@RegisterClass` keyed by Integration name.
+
+The **base** does everything that is the same for every ERP:
+
+- Resolve `CompanyIntegration` for this company.
+- Call the matching MJ verb (CreateJournalEntry, GetChartOfAccounts, …).
+- Map account numbers (AM-4) from `GLAccount.ExternalAccountID` / `Code` before post.
+- Translate MJ verb results into this app’s types.
+
+Subclasses only override what is actually different (rare: extra BC company-id header, QBO realm). Prefer “base did it” over copy-paste in BC vs QBO.
+
+### 4.2 Engine verbs
+
+**SyncMasterData({ objects })**  
+`objects`: `accounts` | `dimensions` | `dimensionValues`. Calls `IntegrationEngine.RunSync` narrowed by **object name** for every active credentialed Company Integration. Per-company failure isolation. Same engine for nightly job and Explorer button (`Accounting.RunERPSync` remote op). UI does not fan out.
+
+**PostJournalBatch(batch)**  
+Replaces `ErpPoster` / `mockErpPoster`.
+
+1. Load summary JE lines.
+2. Resolve each line to an ERP account **number**.
+3. `BaseAccountingERPProvider.CreateJournalEntry` (→ MJ verb).
+4. Success → `Sent → Posted`, stamp **external id** on the batch / summary JE, flip member JEs to `GLPosted`.
+5. Failure → **never** mark Posted; keep Sent (or fail the send) with the error. No external id, no Posted.
+
+Tests keep a mock **provider subclass**.
+
+**Not a verb on this engine:** writing FP&A cash. See extensions.
+
+### 4.3 Run-extension seam (other apps)
+
+Accounting does **not** import `@mj-biz-apps/fpna-*`.
+
+After `SyncMasterData` (and optionally after other engine runs), the engine invokes every **registered extension**.
+
+- **Interface** in this repo (small: `onAfterSyncMasterData(ctx)`, maybe `onAfterPostJournalBatch(ctx)`). Context includes company id, as-of, which objects ran, `CompanyIntegrationID`, provider, user.
+- **Registration:** `@RegisterClass` plus a metadata row so a host can enable/disable without a rebuild (proposal: MJ Action or a JSON list on the Integration / Company Integration — **no new table unless we must**). FP&A registers `ImportBankAccountBalances` in its server bootstrap.
+- Each extension uses the **higher-order accounting brain** (BankAccount links, functional currency, AM-4 numbers) and the **MJ verbs** (`GetAccountBalances`). It writes **its own** tables.
+
+FP&A’s extension: `GetAccountBalances(asOf)` for Active `BankAccount` GLs → `CashBalance` + `CashBalanceLine`, `Source='ERP'`. `FPNA.GetCashPosition` stays a **compute** over that. Point-in-time photo, not an incremental watermark.
+
+Any later app (payroll, expense) registers the same way.
+
+### 4.4 Daily job metadata
+
+Default scheduled job in **this** repo: `metadata/scheduled-jobs/` → `AccountingERPEngine.SyncMasterData` once per day, all objects, all credentialed companies. One job, not N. Hosts can disable.
+
+---
+
+## 5. Integration Engine — pull only for slowly changing master data
 
 | Need | Path |
 |---|---|
-| Nightly / incremental **upsert** of COA and dimensions/dimension values into **our tables** | Integration Engine entity maps + `RunSync`. Meta-layer only fans out and names objects. |
-| **One** balanced journal to the GL, then **our** batch state machine | Plugin `CreateJournalEntry` called from `PostJournalBatch`. |
-| Balances for cash position | Plugin `GetAccountBalances` (or a pull map onto `CashBalanceLine` if we want watermarks). Prefer the verb first — balances are a point-in-time snapshot, not a slowly changing dimension. |
+| Nightly upsert of **COA, dimensions, dimension values** into **our** tables | Entity maps + `RunSync`. Engine only fans out and names objects. |
+| One balanced journal, then **our** batch state machine | MJ verb `CreateJournalEntry` via `PostJournalBatch`. |
+| Balances for cash | **FP&A extension**, MJ verb `GetAccountBalances`. Not a map onto `CashBalanceLine` (every AsOf is a new photo). |
 
-### 3.4 Downstream apps (FP&A)
+One **Company Integration** per company per ERP (name is the vendor, e.g. Business Central). Many entity maps. Accounting and FP&A **share** it. Hosts pick their ERP; we are not married to BC.
 
-Same `CompanyIntegration` (same BC credential). FP&A does **not** subclass the BC connector.
+Steal from #74/#112 (as notes, not by merging those PRs): field maps (`number → Code`, category → AccountType, …), Priority order, stamp local company/dimension ids because field-map lookup is static, object-name narrowing.
 
-- Cash import: `AccountingErpEngine.GetAccountBalances` filtered to Active `BankAccount` links, write `CashBalance` + lines. `GetCashPosition` stays a compute over that.
-- Later budget/opex: more maps or verbs, same plugin.
-- Shared fan-out can live in **common** once a second app needs it; until then it lives in this engine and FP&A calls `Accounting.RunErpSync({ ObjectNames: ['…'] })` or a dedicated `ImportCashBalances` op that uses the plugin.
+Do **not** steal: app-owned `BusinessCentralConnector` ClassFactory hijack, fan-out in a page, a second job driver that duplicates the engine.
 
-YES but see note above
 ---
 
-## 4. What we will not do
+## 6. Downstream (FP&A) — third PR in the wave
+
+- Register the cash-import extension on accounting-engine Config.
+- Docs in FP&A: how the extension is registered, what `GetCashPosition` expects after a successful import, mermaid back to [this plan](https://github.com/MemberJunction/bizapps-accounting/blob/next/plans/erp-provider-layer.md) and the [MJ actions README](https://github.com/MemberJunction/MJ/blob/next/packages/Actions/BizApps/Accounting/README.md) (paths as of `next`).
+- No BC subclass in FP&A.
+
+---
+
+## 7. What we will not do
 
 - A parallel Accounting Integrations engine.
-- An app-owned `BusinessCentralConnector` that wins ClassFactory for the whole host.
-- Fan-out or `RunSync` loops in Angular pages.
+- An app-owned BC connector that wins ClassFactory for the whole host.
+- Fan-out or `RunSync` loops in Angular.
 - Outbound entity-map of every Journal Entry.
 - Persist `GetCashPosition`.
-- Pull “all GL balances” into accounting — accounting is not the GL.
+- Accounting engine writing `CashBalance`.
+- MJ Actions package importing bizapps-accounting.
 
 ---
 
-## 5. Suggested build order
+## 8. Build wave (three PRs, one wave)
 
-1. **This plan** (this PR) — edit in line, comments in git.
-2. **Interface + mock plugin** in this repo; wire `sendJournalEntryBatch` to `AccountingErpEngine.PostJournalBatch` (mock still, tests green).
-3. **QBO plugin** wrapping existing `CreateQuickBooksJournalEntryAction` / GL / balances — proves the interface on a verb that already works.
-4. **BC plugin** — `CreateJournalEntry` (new) + get COA / dimensions / balances. Reuse OData helpers from Actions/BizApps/Accounting and mapping notes from #74/#112. **Do not** fork the MJ BC connector.
-5. **Pull maps** as metadata on the Company Integration (`accounts`, `dimensions`, `dimensionValues`) + `Accounting.RunErpSync` remote op (collapse #74 UI onto it).
-6. **FP&A cash import** on the same integration.
-7. Then close #74 / #112 with links to the code PRs and thanks for the prototype (maps, stamp pattern, object-name fan-out).
+1. **MJ** — standardize `Actions/BizApps/Accounting`: verb base + subclasses per ERP; BC `CreateJournalEntry`; README + mermaid; unit tests per verb (balance, mapping, error codes).
+2. **bizapps-accounting** — `BaseAccountingERPProvider` + `AccountingERPEngine` + `Accounting.RunERPSync` + wire `PostJournalBatch` (mock + one real plugin) + extension registry + `metadata/scheduled-jobs` daily sync + docs that **point at** the MJ README + integration + unit tests (batch stamp / fail-closed Posted, fan-out isolation, extension invoked).
+3. **bizapps-fpna** — cash-import extension + tests that a fake provider + BankAccount links produce `CashBalance` lines; `GetCashPosition` still fails loud with no import; docs.
 
-MJ repo PRs only if the platform connector must stamp company id or expose a write that plugins cannot reach without a fork. Prefer keeping that out of MJ until a plugin is blocked.
-
-See above comments, we will have paralle PR in 3 repos, MJ, bizapps-accounting and bizapps-fpna to implement this full vision and do them all together in one wave. MJ first, then accounting then FPNA but all in one wave. We need really solid integration and unit testing in all 3 repos as aprt of this wave and extraodinrary docs, in the MJ layer a readme in the accounting sub-branch of bizapps actoins that explains what these guys do, then similar docs in accounting app that extend and point to the MJ lower level stateless actions, then in FP&A for the layer consuming the engine and reigstering an extension. The extension mechanism itself accounting engine does is suported by the accounting docs of course. All world class docs, all have mermaid where makes sense and all reference either others public GitHub URLs (assume next branch for URLs)
+Then close #74 / #112.
 
 ---
 
-## 6. Open questions (edit in line)
+## 9. Close of the prototypes (later, not now)
 
-1. **Where does `IAccountingErpProvider` live?** This repo (Open App owns domain verbs) vs MJ `Actions/BizApps/Accounting` (already has QBO/BC HTTP). Proposal: **interface + engine in this repo**; plugins may **call** the existing Actions package so we do not duplicate OAuth/OData. Alternative: lift the interface into `actions-bizapps-accounting` and have this app depend on it.
+When the three code PRs exist, comment on #74 and #112:
 
-This base class (not interface) is in bizapps-accounting. The lower level verb-only actions are in MJ - more on this above
-
-2. **Pull maps vs GetChartOfAccounts verb for COA.** Maps give watermarks and RecordMap for free. Verbs are simpler for a first BC bring-up. Proposal: **maps for COA/dimensions** (nightly), **verbs for JE post and balances**.
-
-Yes and we should make the scheduled job part of the default metadata in /metadata/scheduled-jobs within bizapps-accounting repo to do daily syncs
-
-3. **Balances as a pull map onto `CashBalanceLine`?** Point-in-time; a watermark is awkward (every AsOf is a new photo). Proposal: verb `GetAccountBalances(asOf)` writing a new `CashBalance` row, not an incremental sync.
-
-- This will be done by the FP&A extension/olug-in and accounting will not know aout this other than it it dutifully executing a registered plugin, see above.
-
-4. **One Integration named `business-central` shared by Accounting and FP&A**, or two Company Integrations sharing a credential? Proposal: **one**, many entity maps, object-name narrowing.
-
-- Yes, jsut keep in mind biz central is what we use now, could easily change and others who use this long term pick whatever their ERP is. ERP should always be ERP not Erp as it is an acronym and we caps on acronums by convention in our work.
-
-5. **Scheduled job:** keep app-owned job type, or only `Run Integration Sync` per company plus a tiny fan-out job that calls the meta-layer? Proposal: **one scheduled job → `AccountingErpEngine.SyncMasterData`**, not N jobs.
-
-Agreed, see above 
-
----
-
-## 7. Close of the prototypes (later, not now)
-
-When a code PR exists, comment on #74 and #112 roughly:
-
-> Thank you — the maps, company stamp, object-name narrowing, and “same Company Integration, additive maps” are the design we’re keeping. We’re folding that into the MJ Integration Engine plus an accounting-owned provider-agnostic layer (plan: `plans/erp-provider-layer.md`, PR …) instead of an app-owned BC connector and page-level fan-out. Closing this PR as a prototype; ideas land there.
-
-The aboe comment should be a touch more descriptive given the updated architecture I've added in this version of the file
+> Thank you — the field maps, stamping local company/dimension ids, object-name narrowing, and “one Company Integration, additive maps” are the design we are keeping. We are not merging this PR. Instead we are putting **stateless ERP verbs** in MJ `Actions/BizApps/Accounting` (any app can call them; they do not know about this Open App), an **`AccountingERPEngine` + `BaseAccountingERPProvider`** in this repo for GL/dimension upserts, JE-batch atomicity, and a **run-extension seam** other apps register (FP&A cash import is the first). Pull of COA/dimensions uses the MJ Integration Engine; posting a batch uses `CreateJournalEntry`, not an outbound table sync. Plan: [`plans/erp-provider-layer.md`](https://github.com/MemberJunction/bizapps-accounting/blob/next/plans/erp-provider-layer.md). Code: MJ PR …, accounting PR …, FP&A PR …. Grateful for the prototype — it unblocked the maps and the fan-out shape.
 
 Do **not** close them from this plan PR.
+
+---
+
+## 10. Decisions locked from Rev 1 comments
+
+| # | Decision |
+|---|---|
+| Provider shape | **Abstract base class** (`BaseAccountingERPProvider`), not a bare interface |
+| MJ Actions | Verb base + ERP subclasses; **no** knowledge of this app |
+| COA / dimensions | Integration **maps** + daily job in `metadata/scheduled-jobs` |
+| JE post | MJ `CreateJournalEntry` + this app’s batch state machine |
+| Balances / cash | **FP&A extension**, not accounting engine code |
+| Company Integration | **One** per company per ERP, shared by apps |
+| Jobs | **One** scheduled job → `SyncMasterData` |
+| Caps | **ERP**, not Erp |
+
+**Still a product choice, not a blocker:** enable/disable extensions via ClassFactory-only vs a metadata flag on the Integration. Start ClassFactory; add a flag if hosts need to turn FP&A import off without a rebuild.
