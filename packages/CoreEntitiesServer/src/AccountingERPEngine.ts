@@ -5,8 +5,9 @@
  * entity-map destination). Posting a batch uses MJ verb CreateJournalEntry, never
  * an outbound table sync. Other apps hook in via BaseAccountingEngineExtension.
  */
+import { IntegrationEngine } from '@memberjunction/integration-engine';
 import { IMetadataProvider, IRunViewProvider, LogError, LogStatus, UserInfo } from '@memberjunction/core';
-import { BaseSingleton, MJGlobal } from '@memberjunction/global';
+import { BaseSingleton, EscapeSQLString, MJGlobal } from '@memberjunction/global';
 import {
   ACCOUNTING_ENGINE_EXTENSION_ENTITY,
   ALL_ERP_SYNC_OBJECTS,
@@ -76,11 +77,18 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     await this.Config(false, user, provider);
     const objects = normalizeObjects(input.Objects);
     const integrations = await this.loadCredentialedIntegrations(user, provider, input.CompanyIDs);
+    if (integrations.length === 0) {
+      return {
+        Success: false,
+        Results: [],
+      };
+    }
     const results: RunERPSyncCompanyResult[] = [];
 
     for (const ci of integrations) {
       const ctx = await this.extensionContext(ci, objects, user, provider);
-      await this.invokeExtensions(ctx, 'beforeSync');
+      const extensions = await this.loadExtensions(provider, user, ci.CompanyID);
+      await this.invokeExtensions(extensions, ctx, 'beforeSync');
       try {
         const mapIds = await this.entityMapIDsForObjects(ci.CompanyIntegrationID, objects, user, provider);
         if (mapIds.length === 0) {
@@ -106,9 +114,9 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
         results.push(row);
         if (sync.Success) {
           for (const obj of objects) {
-            await this.invokeExtensions(ctx, afterHookFor(obj));
+            await this.invokeExtensions(extensions, ctx, afterHookFor(obj));
           }
-          await this.invokeExtensions(ctx, 'afterSync');
+          await this.invokeExtensions(extensions, ctx, 'afterSync');
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -136,24 +144,35 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     await this.Config(false, user, provider);
     const companyId = batch.CompanyID;
     const target = batch.TargetSystem as JournalEntryBatchTargetSystem;
-    const ci = (await this.loadCredentialedIntegrations(user, provider, [companyId]))
-      .find((row) => namesMatch(row.IntegrationName, target))
-      ?? (await this.loadCredentialedIntegrations(user, provider, [companyId]))[0];
+    const integrations = await this.loadCredentialedIntegrations(user, provider, [companyId]);
+    const ci = integrations.find((row) => namesMatch(row.IntegrationName, target));
+    const extensions = await this.loadExtensions(provider, user, companyId);
 
-    const plugin = this.providerFor(ci?.IntegrationName);
-    const ctx = await this.extensionContext(
-      ci ?? { CompanyID: companyId, CompanyIntegrationID: '', IntegrationID: '', IntegrationName: target ?? null as unknown as string },
-      [],
-      user,
-      provider,
-    );
+    if (!ci) {
+      const error = target
+        ? `No active '${target}' integration for company ${companyId}.`
+        : `No active accounting ERP integration for company ${companyId}.`;
+      const ctx = await this.extensionContext(
+        { CompanyID: companyId, CompanyIntegrationID: '', IntegrationID: '', IntegrationName: target ?? '' },
+        [],
+        user,
+        provider,
+      );
+      ctx.JournalEntryBatchID = batch.ID;
+      ctx.ErrorMessage = error;
+      await this.invokeExtensions(extensions, ctx, 'afterPostFailure');
+      return { success: false, error };
+    }
+
+    const plugin = this.providerFor(ci.IntegrationName);
+    const ctx = await this.extensionContext(ci, [], user, provider);
     ctx.JournalEntryBatchID = batch.ID;
 
-    await this.invokeExtensions(ctx, 'beforePost');
+    await this.invokeExtensions(extensions, ctx, 'beforePost');
     if (!plugin) {
-      const error = `No ERP provider registered for ${ci?.IntegrationName ?? target ?? 'unknown'}.`;
+      const error = `No ERP provider registered for ${ci.IntegrationName}.`;
       ctx.ErrorMessage = error;
-      await this.invokeExtensions(ctx, 'afterPostFailure');
+      await this.invokeExtensions(extensions, ctx, 'afterPostFailure');
       return { success: false, error };
     }
 
@@ -177,16 +196,16 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
       }, user);
       if (posted.success) {
         ctx.ExternalJournalEntryBatchRef = posted.externalJournalEntryBatchRef ?? null;
-        await this.invokeExtensions(ctx, 'afterPost');
+        await this.invokeExtensions(extensions, ctx, 'afterPost');
       } else {
         ctx.ErrorMessage = posted.error ?? 'ERP post failed';
-        await this.invokeExtensions(ctx, 'afterPostFailure');
+        await this.invokeExtensions(extensions, ctx, 'afterPostFailure');
       }
       return posted;
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
       ctx.ErrorMessage = error;
-      await this.invokeExtensions(ctx, 'afterPostFailure');
+      await this.invokeExtensions(extensions, ctx, 'afterPostFailure');
       return { success: false, error };
     }
   }
@@ -215,9 +234,7 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
       return this.seams.runSync(companyIntegrationID, user, entityMapIDs, provider);
     }
     try {
-      const mod = await (Function('m', 'return import(m)') as (m: string) => Promise<{ IntegrationEngine: { Instance: { RunSync: Function } } }>)('@memberjunction/integration-engine');
-      const engine = mod.IntegrationEngine.Instance;
-      const result = await engine.RunSync(
+      const result = await IntegrationEngine.Instance.RunSync(
         companyIntegrationID,
         user,
         'Manual',
@@ -226,7 +243,7 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
         { EntityMapIDs: entityMapIDs, SyncDirection: 'Pull' },
         provider,
       );
-      return { Success: !!result?.Success, Message: result?.ErrorMessage ?? result?.Message };
+      return { Success: !!result?.Success, Message: result?.ErrorMessage };
     } catch (e) {
       return { Success: false, Message: e instanceof Error ? e.message : String(e) };
     }
@@ -240,7 +257,7 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     const rv = provider as unknown as IRunViewProvider;
     const filter = [`IsActive = 1`];
     if (companyIds && companyIds.length > 0) {
-      filter.push(`CompanyID IN (${companyIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(',')})`);
+      filter.push(`CompanyID IN (${companyIds.map((id) => `'${EscapeSQLString(id)}'`).join(',')})`);
     }
     const res = await rv.RunView<Record<string, unknown>>({
       EntityName: CI_ENTITY,
@@ -249,9 +266,13 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     }, user);
     if (!res.Success) throw new Error(res.ErrorMessage ?? 'Company Integrations load failed.');
     const rows = res.Results ?? [];
+    const namesById = await this.integrationNamesById(rows, user, provider);
     const out: CredentialedIntegration[] = [];
     for (const row of rows) {
-      const integrationName = await this.integrationName(String(row.IntegrationID ?? ''), user, provider, row);
+      const denorm = row.Integration;
+      const integrationName = (typeof denorm === 'string' && denorm.trim())
+        ? denorm.trim()
+        : namesById.get(String(row.IntegrationID ?? '')) ?? null;
       if (!integrationName) continue;
       out.push({
         CompanyIntegrationID: String(row.ID),
@@ -263,22 +284,29 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     return out;
   }
 
-  private async integrationName(
-    integrationId: string,
+  private async integrationNamesById(
+    rows: Record<string, unknown>[],
     user: UserInfo,
     provider: IMetadataProvider,
-    ciRow: Record<string, unknown>,
-  ): Promise<string | null> {
-    const denorm = ciRow.Integration;
-    if (typeof denorm === 'string' && denorm.trim()) return denorm.trim();
-    if (!integrationId) return null;
+  ): Promise<Map<string, string>> {
+    const missing = [...new Set(
+      rows
+        .filter((row) => !(typeof row.Integration === 'string' && row.Integration.trim()))
+        .map((row) => String(row.IntegrationID ?? ''))
+        .filter(Boolean),
+    )];
+    const names = new Map<string, string>();
+    if (missing.length === 0) return names;
     const rv = provider as unknown as IRunViewProvider;
-    const res = await rv.RunView<{ Name: string }>({
+    const res = await rv.RunView<{ ID: string; Name: string }>({
       EntityName: INTEGRATION_ENTITY,
-      ExtraFilter: `ID = '${integrationId.replace(/'/g, "''")}'`,
+      ExtraFilter: `ID IN (${missing.map((id) => `'${EscapeSQLString(id)}'`).join(',')})`,
       ResultType: 'simple',
     }, user);
-    return res.Results?.[0]?.Name ?? null;
+    for (const row of res.Results ?? []) {
+      if (row.Name) names.set(String(row.ID), row.Name);
+    }
+    return names;
   }
 
   private async entityMapIDsForObjects(
@@ -290,7 +318,7 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     const rv = provider as unknown as IRunViewProvider;
     const res = await rv.RunView<Record<string, unknown>>({
       EntityName: CI_MAP_ENTITY,
-      ExtraFilter: `CompanyIntegrationID = '${companyIntegrationID.replace(/'/g, "''")}' AND IsActive = 1`,
+      ExtraFilter: `CompanyIntegrationID = '${EscapeSQLString(companyIntegrationID)}' AND IsActive = 1`,
       ResultType: 'simple',
     }, user);
     if (!res.Success) return [];
@@ -320,23 +348,27 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     };
   }
 
+  private async loadExtensions(
+    provider: IMetadataProvider,
+    user: UserInfo,
+    companyId: string,
+  ): Promise<BaseAccountingEngineExtension[]> {
+    const rows = await this.loadExtensionRows(provider, user, companyId);
+    const out: BaseAccountingEngineExtension[] = [];
+    for (const row of rows) {
+      const ext = this.instantiateExtension(row);
+      if (ext) out.push(ext);
+    }
+    return out;
+  }
+
   private async invokeExtensions(
+    extensions: BaseAccountingEngineExtension[],
     ctx: AccountingEngineExtensionContext,
     hook: 'beforeSync' | 'afterSync' | 'afterAccounts' | 'afterDimensions' | 'afterDimensionValues' | 'beforePost' | 'afterPost' | 'afterPostFailure',
   ): Promise<void> {
-    const rows = await this.loadExtensionRows(ctx.Provider, ctx.User, ctx.CompanyID);
-    for (const row of rows) {
-      const ext = this.instantiateExtension(row);
-      if (!ext) continue;
-      const syncHook = hook === 'beforeSync' || hook === 'afterSync'
-        || hook === 'afterAccounts' || hook === 'afterDimensions' || hook === 'afterDimensionValues';
-      const participates = syncHook
-        ? ext.RunAfterSyncMasterData
-        : hook === 'afterPostFailure'
-          ? ext.RunAfterPostJournalBatchFailure
-          : ext.RunAfterPostJournalBatch;
-      if (!participates) continue;
-      if (syncHook && !objectsAllowed(ext, ctx.Objects)) continue;
+    for (const ext of extensions) {
+      if (!extensionParticipates(ext, ctx, hook)) continue;
       const continueOnError = ext.Configuration?.ContinueOnError === true;
       try {
         switch (hook) {
@@ -365,7 +397,7 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     const rv = provider as unknown as IRunViewProvider;
     const res = await rv.RunView<mjBizAppsAccountingAccountingEngineExtensionEntity>({
       EntityName: ACCOUNTING_ENGINE_EXTENSION_ENTITY,
-      ExtraFilter: `Status = 'Active' AND (CompanyID IS NULL OR CompanyID = '${companyId.replace(/'/g, "''")}')`,
+      ExtraFilter: `Status = 'Active' AND (CompanyID IS NULL OR CompanyID = '${EscapeSQLString(companyId)}')`,
       OrderBy: 'Sequence, Code',
       ResultType: 'entity_object',
     }, user);
@@ -406,6 +438,39 @@ function objectsAllowed(ext: BaseAccountingEngineExtension, ran: AccountingERPSy
   const wanted = ext.Configuration?.Objects;
   if (!wanted || wanted.length === 0) return true;
   return wanted.some((o) => ran.includes(o));
+}
+
+function objectConfigured(ext: BaseAccountingEngineExtension, obj: AccountingERPSyncObject): boolean {
+  const wanted = ext.Configuration?.Objects;
+  if (!wanted || wanted.length === 0) return true;
+  return wanted.includes(obj);
+}
+
+type ExtensionHook =
+  | 'beforeSync' | 'afterSync' | 'afterAccounts' | 'afterDimensions' | 'afterDimensionValues'
+  | 'beforePost' | 'afterPost' | 'afterPostFailure';
+
+function extensionParticipates(
+  ext: BaseAccountingEngineExtension,
+  ctx: AccountingEngineExtensionContext,
+  hook: ExtensionHook,
+): boolean {
+  switch (hook) {
+    case 'beforeSync':
+    case 'afterSync':
+      return ext.ParticipatesInSyncMasterData && objectsAllowed(ext, ctx.Objects);
+    case 'afterAccounts':
+      return ext.ParticipatesInSyncMasterData && ctx.Objects.includes('accounts') && objectConfigured(ext, 'accounts');
+    case 'afterDimensions':
+      return ext.ParticipatesInSyncMasterData && ctx.Objects.includes('dimensions') && objectConfigured(ext, 'dimensions');
+    case 'afterDimensionValues':
+      return ext.ParticipatesInSyncMasterData && ctx.Objects.includes('dimensionValues') && objectConfigured(ext, 'dimensionValues');
+    case 'beforePost':
+    case 'afterPost':
+      return ext.ParticipatesInPostJournalBatch;
+    case 'afterPostFailure':
+      return ext.ParticipatesInPostJournalBatchFailure;
+  }
 }
 
 function namesMatch(integrationName: string, targetSystem: string | null | undefined): boolean {

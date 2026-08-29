@@ -2,6 +2,7 @@
  * Seam between AccountingERPEngine and MJ Actions/BizApps/Accounting verbs.
  * Production uses ActionEngine; tests inject a fake.
  */
+import { ActionEngineServer } from '@memberjunction/actions';
 import { LogError, UserInfo } from '@memberjunction/core';
 
 export interface AccountingVerbResult {
@@ -20,15 +21,29 @@ export interface AccountingVerbCall {
 
 export type AccountingVerbRunner = (call: AccountingVerbCall) => Promise<AccountingVerbResult>;
 
+function resultCodeOf(result: { Success?: boolean; Result?: { ResultCode?: string } | null }): string {
+  return result.Result?.ResultCode ?? (result.Success ? 'SUCCESS' : 'ERROR');
+}
+
 export async function defaultAccountingVerbRunner(call: AccountingVerbCall): Promise<AccountingVerbResult> {
   try {
-    const actions = await (Function('m', 'return import(m)') as (m: string) => Promise<Record<string, { Instance?: { RunAction: Function } }>>)('@memberjunction/actions');
-    const engine = actions.ActionEngineServer?.Instance ?? actions.ActionEngine?.Instance;
+    const engine = ActionEngineServer.Instance;
     if (!engine?.RunAction) {
       return {
         Success: false,
         ResultCode: 'ENGINE_UNAVAILABLE',
         Message: 'ActionEngine is not loaded in this host — cannot dispatch ERP verbs.',
+      };
+    }
+    if (!engine.Loaded) {
+      await engine.Config(false, call.User);
+    }
+    const action = engine.GetActionByName(call.Verb);
+    if (!action) {
+      return {
+        Success: false,
+        ResultCode: 'ACTION_NOT_FOUND',
+        Message: `No Action named ${call.Verb}.`,
       };
     }
     const params = Object.entries({ CompanyID: call.CompanyID, ...call.Params }).map(([Name, Value]) => ({
@@ -37,13 +52,14 @@ export async function defaultAccountingVerbRunner(call: AccountingVerbCall): Pro
       Type: 'Input' as const,
     }));
     const result = await engine.RunAction({
-      ActionName: call.Verb,
+      Action: action,
       Params: params,
       ContextUser: call.User,
+      Filters: [],
     });
     return {
       Success: !!result.Success,
-      ResultCode: result.ResultCode ?? (result.Success ? 'SUCCESS' : 'ERROR'),
+      ResultCode: resultCodeOf(result),
       Message: result.Message,
       Params: result.Params,
     };

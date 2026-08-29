@@ -1,4 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@memberjunction/integration-engine', () => ({
+  IntegrationEngine: { Instance: { RunSync: vi.fn() } },
+}));
+vi.mock('@memberjunction/actions', () => ({
+  ActionEngineServer: {
+    Instance: {
+      Loaded: true,
+      GetActionByName: vi.fn(),
+      RunAction: vi.fn(),
+      Config: vi.fn(),
+    },
+  },
+}));
+
 import { RegisterClass, MJGlobal } from '@memberjunction/global';
 import type { UserInfo } from '@memberjunction/core';
 import { BaseAccountingEngineExtension } from '@mj-biz-apps/accounting-engine-base';
@@ -17,8 +32,11 @@ const extensionCalls: string[] = [];
 class TestCashImport extends BaseAccountingEngineExtension {
   get Code(): string { return 'ImportBankAccountBalances'; }
   get RunAfterSyncMasterData(): boolean { return true; }
-  async AfterSyncMasterData(): Promise<void> { extensionCalls.push('afterSync'); }
+  stash = 0;
+  async BeforeSyncMasterData(): Promise<void> { this.stash = 1; extensionCalls.push('beforeSync'); }
+  async AfterSyncMasterData(): Promise<void> { extensionCalls.push(`afterSync:${this.stash}`); }
   async AfterSyncAccounts(): Promise<void> { extensionCalls.push('afterAccounts'); }
+  async AfterSyncDimensions(): Promise<void> { extensionCalls.push('afterDimensions'); }
 }
 
 @RegisterClass(BaseAccountingEngineExtension, 'ThrowingExt')
@@ -94,7 +112,45 @@ describe('AccountingERPEngine.SyncMasterData', () => {
       ],
     });
     await AccountingERPEngine.Instance.SyncMasterData({ Objects: ['accounts'] }, user, p);
-    expect(extensionCalls).toEqual(['afterAccounts', 'afterSync']);
+    expect(extensionCalls).toEqual(['beforeSync', 'afterAccounts', 'afterSync:1']);
+  });
+
+  it('returns Success false when nothing is configured', async () => {
+    AccountingERPEngine.Instance.UseSeams({ runSync: async () => ({ Success: true }) });
+    const p = providerWith({
+      'MJ: Company Integrations': [],
+      'MJ: Company Integration Entity Maps': [],
+      'MJ_BizApps_Accounting: Accounting Engine Extensions': [],
+    });
+    const out = await AccountingERPEngine.Instance.SyncMasterData({ Objects: ['accounts'] }, user, p);
+    expect(out.Success).toBe(false);
+    expect(out.Results).toEqual([]);
+  });
+
+  it('does not fire AfterSyncAccounts when the extension is configured for dimensions only', async () => {
+    extensionCalls.length = 0;
+    AccountingERPEngine.Instance.UseSeams({ runSync: async () => ({ Success: true }) });
+    const p = providerWith({
+      'MJ: Company Integrations': [
+        { ID: CI, CompanyID: COMPANY, IntegrationID: 'int-1', Integration: 'QuickBooks Online', IsActive: true },
+      ],
+      'MJ: Company Integration Entity Maps': [
+        { ID: 'map-1', CompanyIntegrationID: CI, Entity: 'MJ_BizApps_Accounting: GL Accounts', IsActive: true },
+        { ID: 'map-2', CompanyIntegrationID: CI, Entity: 'MJ_BizApps_Accounting: Dimensions', IsActive: true },
+      ],
+      'MJ_BizApps_Accounting: Accounting Engine Extensions': [
+        {
+          Code: 'ImportBankAccountBalances',
+          DriverClass: 'TestCashImport',
+          Status: 'Active',
+          Sequence: 0,
+          CompanyID: null,
+          ConfigurationObject: { Objects: ['dimensions'] },
+        },
+      ],
+    });
+    await AccountingERPEngine.Instance.SyncMasterData({ Objects: ['accounts', 'dimensions'] }, user, p);
+    expect(extensionCalls).toEqual(['beforeSync', 'afterDimensions', 'afterSync:1']);
   });
 
   it('skips Disabled rows and missing DriverClass', async () => {
@@ -144,6 +200,29 @@ describe('AccountingERPEngine.PostJournalBatch', () => {
     const result: ErpPostResult = await AccountingERPEngine.Instance.PostJournalBatch(batch, lines, user, p);
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/ERP 500|No ERP provider/);
+  });
+
+  it('does not fall back to another ERP when TargetSystem does not match', async () => {
+    const runVerb = vi.fn(async () => ({ Success: true, ResultCode: 'SUCCESS' }));
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+    const p = providerWith({
+      'MJ: Company Integrations': [
+        { ID: CI, CompanyID: COMPANY, IntegrationID: 'int-1', Integration: 'Microsoft Dynamics 365 Business Central', IsActive: true },
+      ],
+      'MJ: Company Integration Entity Maps': [],
+      'MJ_BizApps_Accounting: Accounting Engine Extensions': [],
+    });
+    const batch = {
+      ID: 'batch-1',
+      CompanyID: COMPANY,
+      TargetSystem: 'QuickBooks Online',
+      JournalEntryBatchNumber: 'BATCH-1',
+      PostingDate: new Date('2026-08-01'),
+    } as never;
+    const result: ErpPostResult = await AccountingERPEngine.Instance.PostJournalBatch(batch, [], user, p);
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/QuickBooks Online/);
+    expect(runVerb).not.toHaveBeenCalled();
   });
 });
 

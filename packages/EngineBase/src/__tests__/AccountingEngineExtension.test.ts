@@ -16,12 +16,17 @@ describe('BaseAccountingEngineExtension', () => {
     expect(ext.RunAfterSyncMasterData).toBe(false);
     expect(ext.RunAfterPostJournalBatch).toBe(false);
     expect(ext.RunAfterPostJournalBatchFailure).toBe(false);
+    expect(ext.ParticipatesInSyncMasterData).toBe(false);
+    expect(ext.ParticipatesInPostJournalBatch).toBe(false);
+    expect(ext.ParticipatesInPostJournalBatchFailure).toBe(false);
   });
 
   it('lets a subclass opt into SyncMasterData only', () => {
     const ext = new CashExt();
     expect(ext.Code).toBe('ImportBankAccountBalances');
     expect(ext.RunAfterSyncMasterData).toBe(true);
+    expect(ext.ParticipatesInSyncMasterData).toBe(true);
     expect(ext.RunAfterPostJournalBatch).toBe(false);
+    expect(ext.ParticipatesInPostJournalBatch).toBe(false);
   });
 });

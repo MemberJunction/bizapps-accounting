@@ -41,6 +41,20 @@ export abstract class BaseAccountingEngineExtension {
     return false;
   }
 
+  /**
+   * Participation in SyncMasterData (Before *and* After). Defaults to
+   * {@link RunAfterSyncMasterData} so existing subclasses keep working.
+   */
+  get ParticipatesInSyncMasterData(): boolean {
+    return this.RunAfterSyncMasterData;
+  }
+  get ParticipatesInPostJournalBatch(): boolean {
+    return this.RunAfterPostJournalBatch;
+  }
+  get ParticipatesInPostJournalBatchFailure(): boolean {
+    return this.RunAfterPostJournalBatchFailure;
+  }
+
   Configuration: mjBizAppsAccountingAccountingEngineExtensionEntity_IAccountingEngineExtensionConfiguration | null = null;
 
   async BeforeSyncMasterData(_ctx: AccountingEngineExtensionContext): Promise<void> {}
