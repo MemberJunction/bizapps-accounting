@@ -125,6 +125,12 @@ module.exports = {
   // Allow-list: CodeGen this app's schema only (MJ >= 5.50 includeSchemas).
   // Unnamed schemas — core, siblings, never-seen client schemas — are excluded.
   includeSchemas: ['__mj_BizAppsAccounting'],
+  // Keep the historical monolith (entity_subclasses.ts / generated.ts). CodeGen's
+  // default since schema-scale is one file per schema under generated/entities/
+  // and graphql-schemas/; this app is not that size and matches bizapps-fpna.
+  fileEmit: {
+    perSchema: false,
+  },
   excludeSchemas: [],
   /**
    * Schema → npm for peer entity classes this emit does NOT generate

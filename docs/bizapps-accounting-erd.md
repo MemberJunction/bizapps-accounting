@@ -7,9 +7,13 @@
 > (≤5 entity boxes) so it renders full-size on a 13" laptop — open in VS Code
 > Markdown preview, or paste a block into https://mermaid.live to zoom.
 >
-> **Current as of 2026-08-06** — verified against the live `__mj_BizAppsAccounting` schema, not just
-> read forward from the migrations (24 tables, every column diffed; see
+> **Current as of 2026-08-29** — verified against the live `__mj_BizAppsAccounting` schema, not just
+> read forward from the migrations (25 tables, every column diffed; see
 > `test-harnesses/server/_maint-erd-drift.ts`, which reproduces the check).
+>
+> - **NEW `AccountingEngineExtension`** (ERP provider layer Rev 2) — host registry for Open App
+>   run-extensions the accounting engine invokes around its verbs. Empty in this app; consumers
+>   (FP&A first) insert their own row. Hook participation is on the class, not columns.
 >
 > - **JournalEntryBatch rename** (Amith ruling, 2026-08-04/05) — every bare `Batch` identifier naming
 >   the entity now carries the full name: `JournalEntry.JournalEntryBatchID`,
@@ -98,6 +102,9 @@ flowchart TD
             TaxLiability[TaxLiability]
             CTN[CompanyTaxNexus]
         end
+        subgraph EngineExt["Engine extensions"]
+            AEE[AccountingEngineExtension]
+        end
         subgraph Perms["Permissions (planned)"]
             UCR[UserCompanyRole]
         end
@@ -133,6 +140,7 @@ flowchart TD
     Batch -.->|SummaryJournalEntryID| JournalEntry
     User -->|batched / approved by| Batch
     Company --> JESeq
+    Company -->|optional scope| AEE
     TaxAuthority --> TaxJurisdiction
     TaxJurisdiction --> TaxRate
     Company --> TaxLiability
@@ -179,6 +187,19 @@ erDiagram
     DimensionValue |o--o{ DimensionValue : "parent"
     DimensionValue ||--o{ JournalEntryLineDimension : ""
     Entity ||--o{ JournalEntry : "LinkedEntityID (D25 origin pair)"
+    %% ---- engine extensions ----
+    Company ||--o{ AccountingEngineExtension : "optional company scope (NULL = all)"
+    AccountingEngineExtension {
+        uuid ID PK
+        string Code UK "engine key e.g. ImportBankAccountBalances"
+        string Name
+        string Description "nullable"
+        string DriverClass "ClassFactory key"
+        string Status "Active | Disabled"
+        int Sequence "run order, default 0"
+        uuid CompanyID FK "nullable - NULL = every company in the run"
+        string Configuration "JSON IAccountingEngineExtensionConfiguration, ISJSON"
+    }
     %% ---- intercompany lookup (BA-D26..D28) ----
     Company ||--o{ IntercompanyAccountMatch : "Source / Target (ordered pair)"
     GLAccount ||--o{ IntercompanyAccountMatch : "DueTo (Source's liability) / DueFrom (Target's asset)"
@@ -859,3 +880,31 @@ erDiagram
 
 RLS on all four operations rides one Accounting MJ role, scoped per company by this grant
 table; the batch approver enforced at approval is the company's Accounting Approver.
+
+---
+
+## 9. Accounting engine extensions (ERP provider layer Rev 2)
+
+Host-visible registry for Open App run-extensions the accounting engine invokes around its
+verbs (`SyncMasterData`, `PostJournalBatch`, later others). Accounting does **not** seed rows;
+FP&A (and later payroll, expense) insert their own. Hook participation is on
+`BaseAccountingEngineExtension` getters / Before-After overrides, not columns. ERP provider
+plugins are **not** rows here — they stay ClassFactory on `BaseAccountingERPProvider`.
+
+```mermaid
+erDiagram
+    Company ||--o{ AccountingEngineExtension : "CompanyID nullable — NULL = all companies"
+
+    AccountingEngineExtension {
+        uuid ID PK
+        string Code UK "stable engine key; unique"
+        string Name "Explorer / dashboard display"
+        string Description "nullable — owning app and what it writes"
+        string DriverClass "ClassFactory key for the subclass"
+        string Status "Active | Disabled (default Active)"
+        int Sequence "run order; ties break on Code"
+        uuid CompanyID FK "nullable"
+        string Configuration "JSON bag; NULL = class/engine defaults"
+    }
+```
+

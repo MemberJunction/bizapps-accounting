@@ -201,6 +201,82 @@ export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
 export type mjBizAppsAccountingAccountingCompanyProfileEntityType = z.infer<typeof mjBizAppsAccountingAccountingCompanyProfileSchema>;
 
 /**
+ * zod schema definition for the entity MJ_BizApps_Accounting: Accounting Engine Extensions
+ */
+export const mjBizAppsAccountingAccountingEngineExtensionSchema = z.object({
+    ID: z.string().describe(`
+        * * Field Name: ID
+        * * Display Name: ID
+        * * SQL Data Type: uniqueidentifier
+        * * Default Value: newsequentialid()
+        * * Description: Unique identifier.`),
+    Code: z.string().describe(`
+        * * Field Name: Code
+        * * Display Name: Code
+        * * SQL Data Type: nvarchar(80)
+        * * Description: Stable engine key, unique. Must match the subclass Code getter. Example: ImportBankAccountBalances.`),
+    Name: z.string().describe(`
+        * * Field Name: Name
+        * * Display Name: Name
+        * * SQL Data Type: nvarchar(200)
+        * * Description: Display name in Explorer and the accounting dashboard.`),
+    Description: z.string().nullable().describe(`
+        * * Field Name: Description
+        * * Display Name: Description
+        * * SQL Data Type: nvarchar(MAX)
+        * * Description: What this extension does, which app owns it, and what it writes (its own tables, never accounting's).`),
+    DriverClass: z.string().describe(`
+        * * Field Name: DriverClass
+        * * Display Name: Driver Class
+        * * SQL Data Type: nvarchar(255)
+        * * Description: ClassFactory key for the @RegisterClass subclass of BaseAccountingEngineExtension. Must be loaded in the host (MJAPI) or the engine logs and skips.`),
+    Status: z.union([z.literal('Active'), z.literal('Disabled')]).describe(`
+        * * Field Name: Status
+        * * Display Name: Status
+        * * SQL Data Type: nvarchar(20)
+        * * Default Value: Active
+    * * Value List Type: List
+    * * Possible Values 
+    *   * Active
+    *   * Disabled
+        * * Description: Active = engine instantiates this extension and honors its class getters. Disabled = skip without a rebuild.`),
+    Sequence: z.number().describe(`
+        * * Field Name: Sequence
+        * * Display Name: Sequence
+        * * SQL Data Type: int
+        * * Default Value: 0
+        * * Description: Run order among Active extensions at the same verb. Lower first. Ties break on Code.`),
+    CompanyID: z.string().nullable().describe(`
+        * * Field Name: CompanyID
+        * * Display Name: Company ID
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
+        * * Description: NULL = run for every company in the engine call. Set = run only for that Company. One row per Code; subset-of-companies is a later child table if a host needs it.`),
+    Configuration: z.any().nullable().describe(`
+        * * Field Name: Configuration
+        * * Display Name: Configuration
+        * * SQL Data Type: nvarchar(MAX)
+        * * JSON Type: mjBizAppsAccountingAccountingEngineExtensionEntity_IAccountingEngineExtensionConfiguration
+        * * Description: Host-tunable JSON bag (IAccountingEngineExtensionConfiguration): AsOf, Objects, ContinueOnError, plus extension-specific keys. NOT hook flags — those are class getters. NULL = class/engine defaults. ISJSON-enforced.`),
+    __mj_CreatedAt: z.date().describe(`
+        * * Field Name: __mj_CreatedAt
+        * * Display Name: Created At
+        * * SQL Data Type: datetimeoffset
+        * * Default Value: getutcdate()`),
+    __mj_UpdatedAt: z.date().describe(`
+        * * Field Name: __mj_UpdatedAt
+        * * Display Name: Updated At
+        * * SQL Data Type: datetimeoffset
+        * * Default Value: getutcdate()`),
+    Company: z.string().nullable().describe(`
+        * * Field Name: Company
+        * * Display Name: Company
+        * * SQL Data Type: nvarchar(50)`),
+});
+
+export type mjBizAppsAccountingAccountingEngineExtensionEntityType = z.infer<typeof mjBizAppsAccountingAccountingEngineExtensionSchema>;
+
+/**
  * zod schema definition for the entity MJ_BizApps_Accounting: Company Tax Nexus
  */
 export const mjBizAppsAccountingCompanyTaxNexusSchema = z.object({
@@ -2442,6 +2518,285 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
     */
     get ParentAccountingCompanyIDChildCount(): number | null {
         return this.Get('ParentAccountingCompanyIDChildCount');
+    }
+}
+
+
+/**
+ * Host-tunable bag on AccountingEngineExtension.Configuration.
+ *
+ * Stored as JSON on `__mj_BizAppsAccounting.AccountingEngineExtension`.
+ * CodeGen emits a typed `ConfigurationObject` accessor on the entity
+ * returning `mjBizAppsAccountingAccountingEngineExtensionEntity_IAccountingEngineExtensionConfiguration | null`.
+ *
+ * Hook participation is NOT here — that lives on
+ * `BaseAccountingEngineExtension` getters (`RunAfterSyncMasterData`, …)
+ * and Before/After method overrides. This bag is host knobs only.
+ *
+ * Extension-specific keys may be present in the stored JSON; the owning
+ * class documents them. They are not declared on this common interface.
+ */
+export interface mjBizAppsAccountingAccountingEngineExtensionEntity_IAccountingEngineExtensionConfiguration {
+    /**
+     * ISO date (YYYY-MM-DD) the extension should use when the engine did
+     * not pass an as-of. NULL/omit = engine context (typically today UTC).
+     */
+    AsOf?: string | null;
+
+    /**
+     * When the triggering engine verb names objects (SyncMasterData), skip
+     * this extension unless the intersection is non-empty. NULL/omit = always
+     * run for a participating verb.
+     */
+    Objects?: Array<'accounts' | 'dimensions' | 'dimensionValues'> | null;
+
+    /**
+     * If true, a thrown extension does not fail the engine verb. Default
+     * false — fail closed, matching the rest of the accounting engine.
+     */
+    ContinueOnError?: boolean | null;
+}
+
+/**
+ * MJ_BizApps_Accounting: Accounting Engine Extensions - strongly typed entity sub-class
+ * * Schema: __mj_BizAppsAccounting
+ * * Base Table: AccountingEngineExtension
+ * * Base View: vwAccountingEngineExtensions
+ * * @description Registry of extensions the Accounting engine invokes around its verbs (sync, post, later others). Other Open Apps insert a row and @RegisterClass a BaseAccountingEngineExtension. Status lets a host disable without a rebuild. Configuration is a JSON bag (IAccountingEngineExtensionConfiguration) for host-tunable parameters. Hook participation is on the class (getters + Before/After overrides), not columns. Empty in this app — consumers seed their own rows. Not the ERP provider plugin list.
+ * * Primary Key: ID
+ * @extends {BaseEntity}
+ * @class
+ * @public
+ */
+@RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Accounting Engine Extensions')
+export class mjBizAppsAccountingAccountingEngineExtensionEntity extends BaseEntity<mjBizAppsAccountingAccountingEngineExtensionEntityType> {
+    /**
+    * Loads the MJ_BizApps_Accounting: Accounting Engine Extensions record from the database
+    * @param ID: string - primary key value to load the MJ_BizApps_Accounting: Accounting Engine Extensions record.
+    * @param EntityRelationshipsToLoad - (optional) the relationships to load
+    * @returns {Promise<boolean>} - true if successful, false otherwise
+    * @public
+    * @async
+    * @memberof mjBizAppsAccountingAccountingEngineExtensionEntity
+    * @method
+    * @override
+    */
+    public async Load(ID: string, EntityRelationshipsToLoad?: string[]) : Promise<boolean> {
+        const compositeKey: CompositeKey = new CompositeKey();
+        compositeKey.KeyValuePairs.push({ FieldName: 'ID', Value: ID });
+        return await super.InnerLoad(compositeKey, EntityRelationshipsToLoad);
+    }
+
+    /**
+    * Validate() method override for MJ_BizApps_Accounting: Accounting Engine Extensions entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
+    * * Configuration: The configuration settings, if provided, must be in a valid JSON format to ensure they can be correctly parsed and processed by the system.
+    * @public
+    * @method
+    * @override
+    */
+    public override Validate(): ValidationResult {
+        const result = super.Validate();
+        this.ValidateConfigurationIsJson(result);
+        result.Success = result.Success && (result.Errors.length === 0);
+
+        return result;
+    }
+
+    /**
+    * The configuration settings, if provided, must be in a valid JSON format to ensure they can be correctly parsed and processed by the system.
+    * @param result - the ValidationResult object to add any errors or warnings to
+    * @public
+    * @method
+    */
+    public ValidateConfigurationIsJson(result: ValidationResult) {
+        if (this.Configuration != null && this.Configuration.trim() !== "") {
+            try {
+                JSON.parse(this.Configuration);
+            } catch (e) {
+                result.Errors.push(new ValidationErrorInfo(
+                    "Configuration",
+                    "The Configuration field must be a valid JSON string.",
+                    this.Configuration,
+                    ValidationErrorType.Failure
+                ));
+            }
+        }
+    }
+
+    /**
+    * * Field Name: ID
+    * * Display Name: ID
+    * * SQL Data Type: uniqueidentifier
+    * * Default Value: newsequentialid()
+    * * Description: Unique identifier.
+    */
+    get ID(): string {
+        return this.Get('ID');
+    }
+    set ID(value: string) {
+        this.Set('ID', value);
+    }
+
+    /**
+    * * Field Name: Code
+    * * Display Name: Code
+    * * SQL Data Type: nvarchar(80)
+    * * Description: Stable engine key, unique. Must match the subclass Code getter. Example: ImportBankAccountBalances.
+    */
+    get Code(): string {
+        return this.Get('Code');
+    }
+    set Code(value: string) {
+        this.Set('Code', value);
+    }
+
+    /**
+    * * Field Name: Name
+    * * Display Name: Name
+    * * SQL Data Type: nvarchar(200)
+    * * Description: Display name in Explorer and the accounting dashboard.
+    */
+    get Name(): string {
+        return this.Get('Name');
+    }
+    set Name(value: string) {
+        this.Set('Name', value);
+    }
+
+    /**
+    * * Field Name: Description
+    * * Display Name: Description
+    * * SQL Data Type: nvarchar(MAX)
+    * * Description: What this extension does, which app owns it, and what it writes (its own tables, never accounting's).
+    */
+    get Description(): string | null {
+        return this.Get('Description');
+    }
+    set Description(value: string | null) {
+        this.Set('Description', value);
+    }
+
+    /**
+    * * Field Name: DriverClass
+    * * Display Name: Driver Class
+    * * SQL Data Type: nvarchar(255)
+    * * Description: ClassFactory key for the @RegisterClass subclass of BaseAccountingEngineExtension. Must be loaded in the host (MJAPI) or the engine logs and skips.
+    */
+    get DriverClass(): string {
+        return this.Get('DriverClass');
+    }
+    set DriverClass(value: string) {
+        this.Set('DriverClass', value);
+    }
+
+    /**
+    * * Field Name: Status
+    * * Display Name: Status
+    * * SQL Data Type: nvarchar(20)
+    * * Default Value: Active
+    * * Value List Type: List
+    * * Possible Values 
+    *   * Active
+    *   * Disabled
+    * * Description: Active = engine instantiates this extension and honors its class getters. Disabled = skip without a rebuild.
+    */
+    get Status(): 'Active' | 'Disabled' {
+        return this.Get('Status');
+    }
+    set Status(value: 'Active' | 'Disabled') {
+        this.Set('Status', value);
+    }
+
+    /**
+    * * Field Name: Sequence
+    * * Display Name: Sequence
+    * * SQL Data Type: int
+    * * Default Value: 0
+    * * Description: Run order among Active extensions at the same verb. Lower first. Ties break on Code.
+    */
+    get Sequence(): number {
+        return this.Get('Sequence');
+    }
+    set Sequence(value: number) {
+        this.Set('Sequence', value);
+    }
+
+    /**
+    * * Field Name: CompanyID
+    * * Display Name: Company ID
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
+    * * Description: NULL = run for every company in the engine call. Set = run only for that Company. One row per Code; subset-of-companies is a later child table if a host needs it.
+    */
+    get CompanyID(): string | null {
+        return this.Get('CompanyID');
+    }
+    set CompanyID(value: string | null) {
+        this.Set('CompanyID', value);
+    }
+
+    /**
+    * * Field Name: Configuration
+    * * Display Name: Configuration
+    * * SQL Data Type: nvarchar(MAX)
+    * * JSON Type: mjBizAppsAccountingAccountingEngineExtensionEntity_IAccountingEngineExtensionConfiguration
+    * * Description: Host-tunable JSON bag (IAccountingEngineExtensionConfiguration): AsOf, Objects, ContinueOnError, plus extension-specific keys. NOT hook flags — those are class getters. NULL = class/engine defaults. ISJSON-enforced.
+    */
+    get Configuration(): string | null {
+        return this.Get('Configuration');
+    }
+    set Configuration(value: string | null) {
+        this.Set('Configuration', value);
+    }
+
+    private _ConfigurationObject_cached: mjBizAppsAccountingAccountingEngineExtensionEntity_IAccountingEngineExtensionConfiguration | null | undefined = undefined;
+    private _ConfigurationObject_lastRaw: string | null = null;
+    /**
+    * Typed accessor for Configuration — returns parsed JSON as mjBizAppsAccountingAccountingEngineExtensionEntity_IAccountingEngineExtensionConfiguration.
+    * Uses lazy parsing with cache invalidation when the underlying raw value changes.
+    */
+    get ConfigurationObject(): mjBizAppsAccountingAccountingEngineExtensionEntity_IAccountingEngineExtensionConfiguration | null {
+        const raw = this.Configuration;
+        if (raw !== this._ConfigurationObject_lastRaw) {
+            this._ConfigurationObject_cached = raw ? JSON.parse(raw) : null;
+            this._ConfigurationObject_lastRaw = raw;
+        }
+        return this._ConfigurationObject_cached!;
+    }
+    set ConfigurationObject(value: mjBizAppsAccountingAccountingEngineExtensionEntity_IAccountingEngineExtensionConfiguration | null) {
+        const raw = value ? JSON.stringify(value) : null;
+        this.Configuration = raw;
+        this._ConfigurationObject_cached = value;
+        this._ConfigurationObject_lastRaw = raw;
+    }
+
+    /**
+    * * Field Name: __mj_CreatedAt
+    * * Display Name: Created At
+    * * SQL Data Type: datetimeoffset
+    * * Default Value: getutcdate()
+    */
+    get __mj_CreatedAt(): Date {
+        return this.Get('__mj_CreatedAt');
+    }
+
+    /**
+    * * Field Name: __mj_UpdatedAt
+    * * Display Name: Updated At
+    * * SQL Data Type: datetimeoffset
+    * * Default Value: getutcdate()
+    */
+    get __mj_UpdatedAt(): Date {
+        return this.Get('__mj_UpdatedAt');
+    }
+
+    /**
+    * * Field Name: Company
+    * * Display Name: Company
+    * * SQL Data Type: nvarchar(50)
+    */
+    get Company(): string | null {
+        return this.Get('Company');
     }
 }
 

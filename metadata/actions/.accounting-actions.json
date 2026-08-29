@@ -130,5 +130,61 @@
         }
       ]
     }
+  },
+  {
+    "fields": {
+      "Name": "Run ERP Sync",
+      "CategoryID": "@lookup:MJ: Action Categories.Name=Accounting",
+      "Description": "Pulls chart of accounts, dimensions, and dimension values from every credentialed Company Integration via AccountingERPEngine.SyncMasterData. One job, all companies. Hosts disable the scheduled job rather than deleting this action.",
+      "Type": "Custom",
+      "DriverClass": "Accounting.RunERPSync",
+      "IconClass": "fa-solid fa-cloud-arrow-down",
+      "UserPrompt": "Sync ERP master data for accounting.",
+      "CodeApprovalStatus": "Approved",
+      "Status": "Active"
+    },
+    "primaryKey": {
+      "ID": "A839FB12-5813-4B85-8022-DF8943729BA2"
+    },
+    "relatedEntities": {
+      "MJ: Action Params": [
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
+            "Name": "Objects",
+            "Type": "Input",
+            "ValueType": "Scalar",
+            "IsArray": true,
+            "IsRequired": false,
+            "Description": "Subset of accounts | dimensions | dimensionValues. Omit for all three."
+          },
+          "primaryKey": { "ID": "A839FB12-5813-4B85-8022-DF8943729BB1" }
+        },
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
+            "Name": "CompanyIDs",
+            "Type": "Input",
+            "ValueType": "Scalar",
+            "IsArray": true,
+            "IsRequired": false,
+            "Description": "Optional company filter. Omit for every credentialed company."
+          },
+          "primaryKey": { "ID": "A839FB12-5813-4B85-8022-DF8943729BB2" }
+        },
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
+            "Name": "Results",
+            "Type": "Output",
+            "ValueType": "Scalar",
+            "IsArray": false,
+            "IsRequired": false,
+            "Description": "Per-company sync results."
+          },
+          "primaryKey": { "ID": "A839FB12-5813-4B85-8022-DF8943729BB3" }
+        }
+      ]
+    }
   }
 ]

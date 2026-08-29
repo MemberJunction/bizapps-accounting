@@ -53,6 +53,8 @@ import { JournalEntryBatchesDashboardPageComponent } from './pages/journal-entry
 import { DimensionsPageComponent } from './pages/dimensions.page';
 import { AccountLinksPageComponent } from './pages/account-links.page';
 import { GLAccountsPageComponent } from './pages/gl-accounts.page';
+import { ERPSyncPageComponent } from './pages/erp-sync.page';
+import { ERPSyncWidgetsModule } from '../../widgets/erp-sync/erp-sync.widgets.module';
 import { JournalEntryDetailPanelComponent } from './pages/journal-entry-detail-panel.component';
 import { ShellRailComponent } from './shell-rail.component';
 import { ShellPagePendingComponent } from './pages/shell-page-pending.component';
@@ -94,6 +96,7 @@ import { DimensionsResourceComponent } from '../resources/dimensions-resource.co
     DimensionsPageComponent,
     AccountLinksPageComponent,
     GLAccountsPageComponent,
+    ERPSyncPageComponent,
     JournalEntryDetailPanelComponent,
     JournalEntriesResourceComponent,
     ApprovalsResourceComponent,
@@ -116,6 +119,7 @@ import { DimensionsResourceComponent } from '../resources/dimensions-resource.co
     ReadModelsModule, // <mj-batch-status-dashboard> + the read-model report dashboards
     ChartOfAccountsModule, // <mj-coa-dashboard> — Accounts
     CompanySetupModule, // <mj-company-setup-dashboard> — Configuration
+    ERPSyncWidgetsModule,
     MJButtonDirective,
     MJPageLayoutComponent,
     MJPageHeaderComponent,

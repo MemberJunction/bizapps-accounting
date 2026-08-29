@@ -54,6 +54,9 @@
         @case ('companies') {
           <mj-company-setup-dashboard [CreateSignal]="CreateSignalCompanies"></mj-company-setup-dashboard>
         }
+        @case ('erp') {
+          <mj-erp-sync-page></mj-erp-sync-page>
+        }
         @default {
           <mj-shell-page-pending [PageName]="PendingPageName(ActivePageId)"></mj-shell-page-pending>
         }

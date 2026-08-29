@@ -15,7 +15,7 @@
  *   Accounting.BuildJournalEntryBatch            → buildJournalEntryBatch(...)      one single-company batch (D7), or the
  *                                                            all-pending sweep when CompanyID is omitted
  *   Accounting.RegenerateJournalEntryBatch       → regenerateJournalEntryBatch(...) rebuild a Pending batch in place; empty → cancel + throw
- *   Accounting.DispatchJournalEntryBatch         → sendJournalEntryBatch(...)       Approved→Sent→Posted via the mock ERP poster (v1)
+ *   Accounting.DispatchJournalEntryBatch         → sendJournalEntryBatch(...)       Approved→Sent→Posted via AccountingERPEngine (AM-4 account numbers)
  *   Accounting.RecordJournalEntryBatchDecision   → gate.recordDecision + approveJournalEntryBatch | cancelJournalEntryBatch (in-app CFO approve/reject)
  *   Accounting.GetJournalEntryBatchApprovalState → gate.assertApproved probe (read-only: is this batch dispatchable?)
  *
@@ -41,13 +41,13 @@ import {
   approveJournalEntryBatch,
   cancelJournalEntryBatch,
   pendingCompanies,
-  mockErpPoster,
   EmptyJournalEntryBatchError,
   type JournalEntryBatchTargetSystem,
   type BuildJournalEntryBatchResult,
   type BuildJournalEntryBatchOptions,
   type JournalEntryBatchPreviewResult,
 } from './JournalEntryBatchEngine.js';
+import { createAccountingERPPoster } from './AccountingERPEngine.js';
 import { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
 import {
   IsApprovalOutcome,
@@ -210,7 +210,11 @@ export class DispatchJournalEntryBatchOperation extends BaseRemotableOperation<D
 
   protected async InternalExecute(input: DispatchJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<DispatchJournalEntryBatchOutput> {
     if (!input?.JournalEntryBatchID) throw new Error('DispatchJournalEntryBatch: JournalEntryBatchID is required.');
-    const batch = await sendJournalEntryBatch(input.JournalEntryBatchID, user, { gate: new TasksAppApprovalGate(provider), poster: mockErpPoster, provider });
+    const batch = await sendJournalEntryBatch(input.JournalEntryBatchID, user, {
+      gate: new TasksAppApprovalGate(provider),
+      poster: createAccountingERPPoster(provider),
+      provider,
+    });
     return { Status: batch.Status, ExternalJournalEntryBatchRef: batch.ExternalJournalEntryBatchRef ?? null };
   }
 }
