@@ -64,9 +64,11 @@ import {
   type NetGroup,
   type NettableLine,
 } from '@mj-biz-apps/accounting-engine-base';
+import { UUIDsEqual } from '@memberjunction/global';
 import { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 import { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
 import { GetJournalEntryBatchSummaryEntryType } from './JournalEntryTypes.js';
+import { sqlGuidLiteral } from './sqlLiteral.js';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
@@ -327,8 +329,7 @@ async function resolveEntryTypeIds(codes: string[], contextUser: UserInfo, p: Pr
  * outright — there is no legitimate value that needs escaping here, so refusing beats quoting.
  */
 function sqlGuid(id: string): string {
-  if (!/^[0-9a-fA-F-]{36}$/.test(id)) throw new Error(`buildJournalEntryBatch: invalid id in criteria: ${id}`);
-  return `'${id}'`;
+  return sqlGuidLiteral(id, 'buildJournalEntryBatch: invalid id in criteria');
 }
 
 /** A quoted T-SQL string literal (single quotes doubled) for code values. */
@@ -480,7 +481,9 @@ async function loadPendingJEIds(companyId: string, contextUser: UserInfo, p: Pro
   const res = await p.rv.RunView<{ ID: string }>(
     {
       EntityName: JE_ENTITY,
-      ExtraFilter: `CompanyID='${companyId}' AND ${await pendingCandidateFilter(options, contextUser, p)}`,
+      // companyId reaches the Standard build path from client input (input.CompanyID) — validate it as
+      // a UUID before concatenation so it cannot inject predicates into the candidate query.
+      ExtraFilter: `CompanyID=${sqlGuid(companyId)} AND ${await pendingCandidateFilter(options, contextUser, p)}`,
       OrderBy: 'EffectiveDate ASC, EntryNumber ASC', // oldest-first — the order a build takes them in
       Fields: ['ID'],
       ResultType: 'simple',
@@ -720,6 +723,12 @@ export async function approveJournalEntryBatch(
   const batch = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
   if (!(await batch.Load(batchId))) throw new Error(`approveJournalEntryBatch: batch ${batchId} not found`);
   if (batch.Status !== 'Pending') throw new Error(`approveJournalEntryBatch: batch ${batchId} is ${batch.Status}, only a Pending batch can be approved`);
+  // Separation of duties: the user who built the batch (BatchedByUserID) may never also approve it —
+  // even if they are the configured CFO. The CFO-identity check lives in the gate; this is the
+  // independent SoD backstop enforced on every approval path into the engine.
+  if (batch.BatchedByUserID && UUIDsEqual(approvedByUserId, batch.BatchedByUserID)) {
+    throw new Error(`approveJournalEntryBatch: separation-of-duties violation — the batch creator cannot approve their own batch ${batchId}.`);
+  }
   batch.Status = 'Approved';
   batch.ApprovedAt = new Date();
   batch.ApprovedByUserID = approvedByUserId;
