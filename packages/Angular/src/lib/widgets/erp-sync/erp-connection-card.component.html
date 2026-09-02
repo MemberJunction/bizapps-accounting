@@ -1,0 +1,32 @@
+@if (Connection) {
+  <article class="erp-card">
+    <div class="erp-card__icon dash-tone--brand">
+      <i class="fa-solid fa-cloud-arrow-down" aria-hidden="true"></i>
+    </div>
+    <div class="erp-card__body">
+      <div class="erp-card__kicker">{{ Connection.IntegrationName }}</div>
+      <button type="button" class="erp-card__title" (click)="OpenCompany.emit(Connection)">
+        {{ Connection.CompanyName }}
+      </button>
+      <div class="erp-card__meta">
+        <span class="erp-pill erp-pill--{{ StatusTone }}">
+          {{ Connection.LastRunStatus || (Connection.IsActive ? 'Ready' : 'Inactive') }}
+        </span>
+        @if (Connection.LastRunAt) {
+          <span class="erp-card__when">{{ Connection.LastRunAt | date:'medium' }}</span>
+        }
+      </div>
+      @if (Connection.LastError) {
+        <p class="erp-card__error" role="alert">{{ Connection.LastError }}</p>
+      }
+    </div>
+    <div class="erp-card__actions">
+      <button mjButton variant="outline" size="sm" type="button" (click)="OpenIntegration.emit(Connection)">
+        Open
+      </button>
+      <button mjButton variant="primary" size="sm" type="button" (click)="RunNow.emit(Connection)" [disabled]="!Connection.IsActive">
+        Sync
+      </button>
+    </div>
+  </article>
+}

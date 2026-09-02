@@ -1,0 +1,30 @@
+[
+  {
+    "_comments": [
+      "One daily job → AccountingERPEngine.SyncMasterData for every credentialed company.",
+      "JobTypeID is the seeded Action type (ActionScheduledJobDriver). Cron is six fields, seconds first:",
+      "`0 0 2 * * *` = 02:00:00 UTC every day. Concurrency Skip so overlapping runs do not double-pull.",
+      "Hosts disable this row rather than deleting it."
+    ],
+    "fields": {
+      "Name": "Accounting — ERP master data (daily)",
+      "Description": "Pulls chart of accounts, dimensions, and dimension values from every active Company Integration. Posts of journal batches are a separate engine verb, not this job.",
+      "JobTypeID": "3B94DD43-E961-4D85-B7F4-B6783D748766",
+      "CronExpression": "0 0 2 * * *",
+      "Timezone": "UTC",
+      "Status": "Active",
+      "ConcurrencyMode": "Skip",
+      "MissedRunPolicy": "RunOnce",
+      "RunImmediatelyIfNeverRun": false,
+      "MaxRuntimeMinutes": 60,
+      "NotifyOnSuccess": false,
+      "NotifyOnFailure": true,
+      "NotifyViaEmail": false,
+      "NotifyViaInApp": true,
+      "Configuration": "{\"ActionID\":\"A839FB12-5813-4B85-8022-DF8943729BA2\"}"
+    },
+    "primaryKey": {
+      "ID": "C839FB12-5813-4B85-8022-DF8943729BA3"
+    }
+  }
+]

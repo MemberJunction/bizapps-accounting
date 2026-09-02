@@ -1,0 +1,4 @@
+.erp-page { display: flex; flex-direction: column; gap: var(--mj-dash-gap, 14px); padding: var(--mj-space-4, 16px); }
+.erp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--mj-dash-gap, 14px); }
+.dash-stat__label { font-size: var(--mj-text-xs); color: var(--mj-text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.dash-stat__value { font-size: 1.6rem; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--mj-text-primary); }

@@ -1,0 +1,45 @@
+[
+  {
+    "_comments": [
+      "Sets JSONType metadata on AccountingEngineExtension.Configuration so CodeGen emits",
+      "a typed ConfigurationObject accessor returning IAccountingEngineExtensionConfiguration.",
+      "",
+      "This is the MJ metadata/entities JSONType path — not a __mj.EntityField UPDATE in a V.",
+      "The TypeScript interface is the source; it reaches EntityField.JSONTypeDefinition only",
+      "via mj sync push. CodeGen then emits ConfigurationObject from the database, not from",
+      "this file.",
+      "",
+      "ORDERING: the EntityField row for Configuration is created by CodeGen's database pass",
+      "over the new column, so this @lookup cannot resolve until that has run. The sequence is",
+      "mj migrate -> mj codegen --skipfiles -> mj sync push -> mj codegen --skipdb.",
+      "Pushing before the first CodeGen fails with 'No record found in MJ: Entity Fields'."
+    ],
+    "fields": {
+      "Name": "MJ_BizApps_Accounting: Accounting Engine Extensions"
+    },
+    "relatedEntities": {
+      "MJ: Entity Fields": [
+        {
+          "fields": {
+            "JSONType": "IAccountingEngineExtensionConfiguration",
+            "JSONTypeIsArray": false,
+            "JSONTypeDefinition": "@file:JSONType-interfaces/IAccountingEngineExtensionConfiguration.ts"
+          },
+          "_comments": [
+            "Host-tunable bag. Hook participation is class getters, not this JSON."
+          ],
+          "primaryKey": {
+            "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Accounting Engine Extensions&Name=Configuration"
+          },
+          "sync": {
+            "lastModified": "2026-08-29T15:57:46.006Z",
+            "checksum": "3f523c200892ff15a3ae2bfc3e59b0c8c1f09f748e050800b3d53a39189a178f"
+          }
+        }
+      ]
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Accounting Engine Extensions"
+    }
+  }
+]

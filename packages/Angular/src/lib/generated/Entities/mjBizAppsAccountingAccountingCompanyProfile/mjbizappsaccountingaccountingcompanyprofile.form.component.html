@@ -92,11 +92,11 @@
 
     </mj-collapsible-panel>
 
-    <!-- Accounting Settings Section -->
+    <!-- Financial Settings Section -->
     <mj-collapsible-panel
-        SectionKey="accountingSettings"
-        SectionName="Accounting Settings"
-        Icon="fa fa-sliders-h"
+        SectionKey="financialSettings"
+        SectionName="Financial Settings"
+        Icon="fa fa-dollar-sign"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -144,11 +144,11 @@
 
     </mj-collapsible-panel>
 
-    <!-- Governance and Hierarchy Section -->
+    <!-- Administrative Settings Section -->
     <mj-collapsible-panel
-        SectionKey="governanceAndHierarchy"
-        SectionName="Governance and Hierarchy"
-        Icon="fa fa-info-circle"
+        SectionKey="administrativeSettings"
+        SectionName="Administrative Settings"
+        Icon="fa fa-sliders-h"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 
@@ -185,6 +185,16 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- Details Section -->
+    <mj-collapsible-panel
+        SectionKey="details"
+        SectionName="Details"
+        Icon="fa fa-align-left"
+        [Form]="this"
+        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -224,7 +234,9 @@
     <mj-collapsible-panel
         SectionKey="companyDetails"
         SectionName="Company Details"
-        Icon="fa fa-info-circle"
+        Icon="fa fa-building"
+        Variant="inherited"
+        InheritedFromEntity="MJ: Companies"
         [Form]="this"
         [FormContext]="formContext">
         <mj-form-field 

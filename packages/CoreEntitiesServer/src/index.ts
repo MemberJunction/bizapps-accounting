@@ -100,6 +100,18 @@ export { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
 // Accounting.CreateJournalEntry remotable op (code-only — registered via LoadCreateJournalEntryOperation).
 // The contract + pure pipeline types live in @mj-biz-apps/accounting-engine-base — import them from there.
 export { AccountingEngine } from './AccountingEngine.js';
+export {
+  AccountingERPEngine,
+  createAccountingERPPoster,
+  LoadAccountingERPEngine,
+} from './AccountingERPEngine.js';
+export {
+  BaseAccountingERPProvider,
+  BusinessCentralERPProvider,
+  QuickBooksERPProvider,
+  LoadAccountingERPProviders,
+} from './BaseAccountingERPProvider.js';
+export { RunERPSyncOperation, LoadRunERPSyncOperation } from './RunERPSyncOperation.js';
 export { CreateJournalEntryOperation, LoadCreateJournalEntryOperation } from './CreateJournalEntryOperation.js';
 export { CreateJournalEntriesOperation, LoadCreateJournalEntriesOperation } from './CreateJournalEntriesOperation.js';
 export {

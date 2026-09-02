@@ -1,0 +1,30 @@
+<section class="erp-sync">
+  <header class="erp-sync__head">
+    <h3>Master data pull</h3>
+    <p>Chart of accounts, dimensions, and dimension values. Posting a journal batch is a separate verb.</p>
+  </header>
+  <div class="erp-sync__objects">
+    <label><input type="checkbox" [(ngModel)]="WantAccounts" /> Accounts</label>
+    <label><input type="checkbox" [(ngModel)]="WantDimensions" /> Dimensions</label>
+    <label><input type="checkbox" [(ngModel)]="WantDimensionValues" /> Dimension values</label>
+  </div>
+  <div class="erp-sync__actions">
+    <button mjButton variant="primary" type="button" [disabled]="Running" (click)="OnRun()">
+      @if (Running) { Syncing… } @else { Run ERP sync }
+    </button>
+  </div>
+  @if (Running) {
+    <mj-loading text="Syncing credentialed companies…"></mj-loading>
+  }
+  @if (Results.length > 0) {
+    <ul class="erp-sync__results">
+      @for (r of Results; track r.CompanyID + (r.CompanyIntegrationID ?? '')) {
+        <li [class.erp-sync__ok]="r.Success" [class.erp-sync__bad]="!r.Success">
+          <i class="fa-solid" [class.fa-circle-check]="r.Success" [class.fa-circle-xmark]="!r.Success"></i>
+          <strong>{{ r.ProviderName || 'ERP' }}</strong>
+          <span>{{ r.Message }}</span>
+        </li>
+      }
+    </ul>
+  }
+</section>

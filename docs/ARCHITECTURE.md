@@ -21,8 +21,9 @@ possible, so accountants and auditors find it approachable and auditable. Correc
 
 ## 2. Layered architecture (updated 2026-07-06 — engine-meeting rulings)
 ```
-UI (MJExplorer, Angular)             GL tree · JE list/detail · batch review/dispatch · COA mapping
-Integration edge (Actions)           BC COA-sync (reuse) · BC batch-post (new) · QBO (reuse)
+UI (MJExplorer, Angular)             GL tree · JE list/detail · batch review/dispatch · COA mapping · ERP sync
+Integration edge (MJ verbs)          GetChartOfAccounts · CreateJournalEntry · GetAccountBalances · GetDimensions
+Integration Engine                   Pull-only maps for COA / dimensions / dimension values (RunSync)
 THE ENGINE (EngineBase + CoreEntitiesServer)
    AccountingEngineBase              browser-safe caches (GL/roles/links/dims/profiles) + ResolveLinkedAccount
                                      + the PURE draft pipeline + the typed contract
@@ -34,6 +35,8 @@ Batching (CoreEntitiesServer)        GLOBAL multi-company buildJournalEntryBatch
 DB invariants (migrations)           12 triggers (incl. AM-4 per-company balance 50019/50023/50022)
                                      + 2 GLOBAL numbering sprocs  ◄── the un-bypassable floor
 ```
+ERP master data travels: Explorer / nightly job → **`Accounting.RunERPSync`** → `AccountingERPEngine.SyncMasterData` → `IntegrationEngine.RunSync` (entity maps, per-company isolation) → registered `BaseAccountingEngineExtension` subclasses (FP&A cash import first). Journal dispatch: approved batch → `PostJournalBatch` → MJ verb `CreateJournalEntry` (account **numbers**, AM-4). Accounting never writes `CashBalance`.
+
 How a write travels: caller (Orders, browser, script) → **`Accounting.CreateJournalEntry`** →
 engine pipeline → `BaseEntity.Save()` in one TransactionGroup (hooks number; triggers enforce;
 `__mj.RecordChange` audits) → later swept into a multi-company batch → CFO-approved → posted to
@@ -60,7 +63,8 @@ the ERP **by account number, split per company** (AM-4). Periods/close live in t
   polymorphic date-windowed `GLAccountLink` rows (+ ordered `GLAccountLinkDimension`) let any
   record (product, category, company default) carry account links; the engine's
   `ResolveLinkedAccount` is the per-record lookup — the WALK order (product → category →
-  default) is the caller's.
+  default) is the caller's. Cardinality=Many roles (`BankAccount`) refuse singular resolve
+  (`ROLE_NOT_SINGULAR`) and use `ResolveLinkedAccounts` instead (BA-D34).
 - **Pluggable providers:** currency (AD-7) and tax (AD-19) via `@RegisterClass`.
 - _(More as blocks land.)_
 

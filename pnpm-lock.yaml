@@ -83,7 +83,7 @@ importers:
         specifier: ^6.1.0-edge.4
         version: 6.1.0-edge.4
       '@mj-biz-apps/accounting-core-entities-server':
-        specifier: 0.4.0
+        specifier: 0.5.0
         version: link:../CoreEntitiesServer
       zod:
         specifier: ^3.25.28
@@ -141,10 +141,10 @@ importers:
         specifier: ^6.1.0-edge.4
         version: 6.1.0-edge.4(@angular/common@21.1.3(@angular/core@21.1.3(@angular/compiler@21.1.3)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@21.1.3(@angular/compiler@21.1.3)(rxjs@7.8.2))(@angular/platform-browser@21.1.3(@angular/animations@21.1.3(@angular/core@21.1.3(@angular/compiler@21.1.3)(rxjs@7.8.2)))(@angular/common@21.1.3(@angular/core@21.1.3(@angular/compiler@21.1.3)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@21.1.3(@angular/compiler@21.1.3)(rxjs@7.8.2)))(rxjs@7.8.2)
       '@mj-biz-apps/accounting-engine-base':
-        specifier: 0.4.0
+        specifier: 0.5.0
         version: link:../EngineBase
       '@mj-biz-apps/accounting-entities':
-        specifier: 0.4.0
+        specifier: 0.5.0
         version: link:../Entities
       '@mj-biz-apps/common-entities':
         specifier: ^5.34.0
@@ -189,6 +189,9 @@ importers:
 
   packages/CoreEntitiesServer:
     dependencies:
+      '@memberjunction/actions':
+        specifier: ^6.1.0-edge.4
+        version: 6.1.0-edge.4
       '@memberjunction/core':
         specifier: ^6.1.0-edge.4
         version: 6.1.0-edge.4
@@ -198,14 +201,17 @@ importers:
       '@memberjunction/global':
         specifier: ^6.1.0-edge.4
         version: 6.1.0-edge.4
+      '@memberjunction/integration-engine':
+        specifier: ^6.1.0-edge.4
+        version: 6.1.0-edge.4
       '@memberjunction/sqlserver-dataprovider':
         specifier: ^6.1.0-edge.4
         version: 6.1.0-edge.4(@aws-sdk/credential-provider-node@3.972.81)(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))(@smithy/signature-v4@5.7.3)(axios@1.19.0)(chokidar@3.6.0)(encoding@0.1.13)(typescript@5.9.3)(ws@8.21.3)(zod@3.25.76)
       '@mj-biz-apps/accounting-engine-base':
-        specifier: 0.4.0
+        specifier: 0.5.0
         version: link:../EngineBase
       '@mj-biz-apps/accounting-entities':
-        specifier: 0.4.0
+        specifier: 0.5.0
         version: link:../Entities
       '@mj-biz-apps/tasks-core':
         specifier: ^1.2.3
@@ -233,7 +239,7 @@ importers:
         specifier: ^6.1.0-edge.4
         version: 6.1.0-edge.4
       '@mj-biz-apps/accounting-entities':
-        specifier: 0.4.0
+        specifier: 0.5.0
         version: link:../Entities
     devDependencies:
       typescript:
@@ -280,7 +286,7 @@ importers:
         specifier: ^6.1.0-edge.4
         version: 6.1.0-edge.4(@aws-sdk/credential-provider-node@3.972.81)(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))(@smithy/signature-v4@5.7.3)(axios@1.19.0)(chokidar@3.6.0)(encoding@0.1.13)(typescript@5.9.3)(ws@8.21.3)(zod@3.25.76)
       '@mj-biz-apps/accounting-entities':
-        specifier: '>=0.4.0'
+        specifier: '>=0.5.0'
         version: link:../Entities
     devDependencies:
       '@types/node':
@@ -311,13 +317,13 @@ importers:
         specifier: ^6.1.0-edge.4
         version: 6.1.0-edge.4(@aws-sdk/credential-provider-node@3.972.81)(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))(@smithy/signature-v4@5.7.3)(axios@1.19.0)(chokidar@3.6.0)(encoding@0.1.13)(typescript@5.9.3)(ws@8.21.3)(zod@3.25.76)
       '@mj-biz-apps/accounting-actions':
-        specifier: 0.4.0
+        specifier: 0.5.0
         version: link:../Actions
       '@mj-biz-apps/accounting-core-entities-server':
-        specifier: 0.4.0
+        specifier: 0.5.0
         version: link:../CoreEntitiesServer
       '@mj-biz-apps/accounting-entities':
-        specifier: 0.4.0
+        specifier: 0.5.0
         version: link:../Entities
       '@mj-biz-apps/common-entities':
         specifier: ^5.34.0

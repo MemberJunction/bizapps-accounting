@@ -86,6 +86,9 @@ Pure parts (`checkBalance`, `checkPerCompanyBalance`) are exported + unit-tested
 auto-refresh, and exposes:
 - **`ResolveLinkedAccount(entityId, recordId, role, asOfDate)`** — the per-record `GLAccountLink` primitive
   (Active links, StartedAt/EndedAt windows, latest-start wins, ordered `GLAccountLinkDimension` list).
+  Cardinality=Many roles throw `ROLE_NOT_SINGULAR` (BA-D34).
+- **`ResolveLinkedAccounts(...)`** — every covering Active link for a Many role (`BankAccount`).
+  One roles return the same 0-or-1 winner as `ResolveLinkedAccount`.
 - the **pure draft pipeline** (`runDraftPipeline`) + the typed contract (`JournalEntryDraft`,
   `CreateJournalEntryResult`, the 7 error codes) — importable by Orders' client code with zero server deps.
 

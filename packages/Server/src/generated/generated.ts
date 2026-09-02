@@ -17,7 +17,7 @@ import { MaxLength } from 'class-validator';
 import * as mj_core_schema_server_object_types from '@memberjunction/server'
 
 
-import { mjBizAppsAccountingAccountingCompanyProfileEntity, mjBizAppsAccountingCompanyTaxNexusEntity, mjBizAppsAccountingCurrencyEntity, mjBizAppsAccountingCurrencySpotRateEntity, mjBizAppsAccountingDimensionValueEntity, mjBizAppsAccountingDimensionEntity, mjBizAppsAccountingGLAccountLinkDimensionEntity, mjBizAppsAccountingGLAccountLinkEntity, mjBizAppsAccountingGLAccountRoleEntity, mjBizAppsAccountingGLAccountEntity, mjBizAppsAccountingIntercompanyAccountMatchDimensionEntity, mjBizAppsAccountingIntercompanyAccountMatchEntity, mjBizAppsAccountingJournalEntryEntity, mjBizAppsAccountingJournalEntryBatchSequenceEntity, mjBizAppsAccountingJournalEntryBatchEntity, mjBizAppsAccountingJournalEntryLineDimensionEntity, mjBizAppsAccountingJournalEntryLineEntity, mjBizAppsAccountingJournalEntrySequenceEntity, mjBizAppsAccountingJournalEntryTypeEntity, mjBizAppsAccountingTaxAuthorityEntity, mjBizAppsAccountingTaxJurisdictionEntity, mjBizAppsAccountingTaxLiabilityEntity, mjBizAppsAccountingTaxRateEntity } from '@mj-biz-apps/accounting-entities';
+import { mjBizAppsAccountingAccountingCompanyProfileEntity, mjBizAppsAccountingAccountingEngineExtensionEntity, mjBizAppsAccountingCompanyTaxNexusEntity, mjBizAppsAccountingCurrencyEntity, mjBizAppsAccountingCurrencySpotRateEntity, mjBizAppsAccountingDimensionValueEntity, mjBizAppsAccountingDimensionEntity, mjBizAppsAccountingGLAccountLinkDimensionEntity, mjBizAppsAccountingGLAccountLinkEntity, mjBizAppsAccountingGLAccountRoleEntity, mjBizAppsAccountingGLAccountEntity, mjBizAppsAccountingIntercompanyAccountMatchDimensionEntity, mjBizAppsAccountingIntercompanyAccountMatchEntity, mjBizAppsAccountingJournalEntryEntity, mjBizAppsAccountingJournalEntryBatchSequenceEntity, mjBizAppsAccountingJournalEntryBatchEntity, mjBizAppsAccountingJournalEntryLineDimensionEntity, mjBizAppsAccountingJournalEntryLineEntity, mjBizAppsAccountingJournalEntrySequenceEntity, mjBizAppsAccountingJournalEntryTypeEntity, mjBizAppsAccountingTaxAuthorityEntity, mjBizAppsAccountingTaxJurisdictionEntity, mjBizAppsAccountingTaxLiabilityEntity, mjBizAppsAccountingTaxRateEntity } from '@mj-biz-apps/accounting-entities';
     
 
 //****************************************************************************
@@ -377,6 +377,218 @@ export class mjBizAppsAccountingAccountingCompanyProfileResolver extends Resolve
         const provider = GetReadWriteProvider(providers);
         const key = new CompositeKey([{FieldName: 'ID', Value: ID}]);
         return this.DeleteRecord('MJ_BizApps_Accounting: Accounting Company Profiles', key, options, provider, userPayload, pubSub);
+    }
+    
+}
+
+//****************************************************************************
+// ENTITY CLASS for MJ_BizApps_Accounting: Accounting Engine Extensions
+//****************************************************************************
+@ObjectType({ description: `Registry of extensions the Accounting engine invokes around its verbs (sync, post, later others). Other Open Apps insert a row and @RegisterClass a BaseAccountingEngineExtension. Status lets a host disable without a rebuild. Configuration is a JSON bag (IAccountingEngineExtensionConfiguration) for host-tunable parameters. Hook participation is on the class (getters + Before/After overrides), not columns. Empty in this app — consumers seed their own rows. Not the ERP provider plugin list.` })
+export class mjBizAppsAccountingAccountingEngineExtension_ {
+    @Field({description: `Unique identifier.`}) 
+    @MaxLength(36)
+    ID: string;
+        
+    @Field({description: `Stable engine key, unique. Must match the subclass Code getter. Example: ImportBankAccountBalances.`}) 
+    @MaxLength(80)
+    Code: string;
+        
+    @Field({description: `Display name in Explorer and the accounting dashboard.`}) 
+    @MaxLength(200)
+    Name: string;
+        
+    @Field({nullable: true, description: `What this extension does, which app owns it, and what it writes (its own tables, never accounting's).`}) 
+    Description?: string;
+        
+    @Field({description: `ClassFactory key for the @RegisterClass subclass of BaseAccountingEngineExtension. Must be loaded in the host (MJAPI) or the engine logs and skips.`}) 
+    @MaxLength(255)
+    DriverClass: string;
+        
+    @Field({description: `Active = engine instantiates this extension and honors its class getters. Disabled = skip without a rebuild.`}) 
+    @MaxLength(20)
+    Status: string;
+        
+    @Field(() => Int, {description: `Run order among Active extensions at the same verb. Lower first. Ties break on Code.`}) 
+    Sequence: number;
+        
+    @Field({nullable: true, description: `NULL = run for every company in the engine call. Set = run only for that Company. One row per Code; subset-of-companies is a later child table if a host needs it.`}) 
+    @MaxLength(36)
+    CompanyID?: string;
+        
+    @Field({nullable: true, description: `Host-tunable JSON bag (IAccountingEngineExtensionConfiguration): AsOf, Objects, ContinueOnError, plus extension-specific keys. NOT hook flags — those are class getters. NULL = class/engine defaults. ISJSON-enforced.`}) 
+    Configuration?: string;
+        
+    @Field() 
+    _mj__CreatedAt: Date;
+        
+    @Field() 
+    _mj__UpdatedAt: Date;
+        
+    @Field({nullable: true}) 
+    @MaxLength(50)
+    Company?: string;
+        
+}
+
+//****************************************************************************
+// INPUT TYPE for MJ_BizApps_Accounting: Accounting Engine Extensions
+//****************************************************************************
+@InputType()
+export class CreatemjBizAppsAccountingAccountingEngineExtensionInput {
+    @Field({ nullable: true })
+    ID?: string;
+
+    @Field({ nullable: true })
+    Code?: string;
+
+    @Field({ nullable: true })
+    Name?: string;
+
+    @Field({ nullable: true })
+    Description: string | null;
+
+    @Field({ nullable: true })
+    DriverClass?: string;
+
+    @Field({ nullable: true })
+    Status?: string;
+
+    @Field(() => Int, { nullable: true })
+    Sequence?: number;
+
+    @Field({ nullable: true })
+    CompanyID: string | null;
+
+    @Field({ nullable: true })
+    Configuration: string | null;
+
+    @Field(() => RestoreContextInput, { nullable: true })
+    RestoreContext___?: RestoreContextInput;
+}
+    
+
+//****************************************************************************
+// INPUT TYPE for MJ_BizApps_Accounting: Accounting Engine Extensions
+//****************************************************************************
+@InputType()
+export class UpdatemjBizAppsAccountingAccountingEngineExtensionInput {
+    @Field()
+    ID: string;
+
+    @Field({ nullable: true })
+    Code?: string;
+
+    @Field({ nullable: true })
+    Name?: string;
+
+    @Field({ nullable: true })
+    Description?: string | null;
+
+    @Field({ nullable: true })
+    DriverClass?: string;
+
+    @Field({ nullable: true })
+    Status?: string;
+
+    @Field(() => Int, { nullable: true })
+    Sequence?: number;
+
+    @Field({ nullable: true })
+    CompanyID?: string | null;
+
+    @Field({ nullable: true })
+    Configuration?: string | null;
+
+    @Field(() => [KeyValuePairInput], { nullable: true })
+    OldValues___?: KeyValuePairInput[];
+
+    @Field(() => RestoreContextInput, { nullable: true })
+    RestoreContext___?: RestoreContextInput;
+}
+    
+//****************************************************************************
+// RESOLVER for MJ_BizApps_Accounting: Accounting Engine Extensions
+//****************************************************************************
+@ObjectType()
+export class RunmjBizAppsAccountingAccountingEngineExtensionViewResult {
+    @Field(() => [mjBizAppsAccountingAccountingEngineExtension_])
+    Results: mjBizAppsAccountingAccountingEngineExtension_[];
+
+    @Field(() => String, {nullable: true})
+    UserViewRunID?: string;
+
+    @Field(() => Int, {nullable: true})
+    RowCount: number;
+
+    @Field(() => Int, {nullable: true})
+    TotalRowCount: number;
+
+    @Field(() => Int, {nullable: true})
+    ExecutionTime: number;
+
+    @Field({nullable: true})
+    ErrorMessage?: string;
+
+    @Field(() => Boolean, {nullable: false})
+    Success: boolean;
+}
+
+@Resolver(mjBizAppsAccountingAccountingEngineExtension_)
+export class mjBizAppsAccountingAccountingEngineExtensionResolver extends ResolverBase {
+    @Query(() => RunmjBizAppsAccountingAccountingEngineExtensionViewResult)
+    async RunmjBizAppsAccountingAccountingEngineExtensionViewByID(@Arg('input', () => RunViewByIDInput) input: RunViewByIDInput, @Ctx() { providers, userPayload }: AppContext, @PubSub() pubSub: PubSubEngine) {
+        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
+        return super.RunViewByIDGeneric(input, provider, userPayload, pubSub);
+    }
+
+    @Query(() => RunmjBizAppsAccountingAccountingEngineExtensionViewResult)
+    async RunmjBizAppsAccountingAccountingEngineExtensionViewByName(@Arg('input', () => RunViewByNameInput) input: RunViewByNameInput, @Ctx() { providers, userPayload }: AppContext, @PubSub() pubSub: PubSubEngine) {
+        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
+        return super.RunViewByNameGeneric(input, provider, userPayload, pubSub);
+    }
+
+    @Query(() => RunmjBizAppsAccountingAccountingEngineExtensionViewResult)
+    async RunmjBizAppsAccountingAccountingEngineExtensionDynamicView(@Arg('input', () => RunDynamicViewInput) input: RunDynamicViewInput, @Ctx() { providers, userPayload }: AppContext, @PubSub() pubSub: PubSubEngine) {
+        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
+        input.EntityName = 'MJ_BizApps_Accounting: Accounting Engine Extensions';
+        return super.RunDynamicViewGeneric(input, provider, userPayload, pubSub);
+    }
+    @Query(() => mjBizAppsAccountingAccountingEngineExtension_, { nullable: true })
+    async mjBizAppsAccountingAccountingEngineExtension(@Arg('ID', () => String) ID: string, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine): Promise<mjBizAppsAccountingAccountingEngineExtension_ | null> {
+        this.CheckUserReadPermissions('MJ_BizApps_Accounting: Accounting Engine Extensions', userPayload);
+        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
+        const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwAccountingEngineExtensions')} WHERE ${provider.QuoteIdentifier('ID')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: Accounting Engine Extensions', userPayload, EntityPermissionType.Read, 'AND');
+        const rows = await provider.ExecuteSQL(sSQL, [ID], undefined, this.GetUserFromPayload(userPayload));
+        const result = await this.MapFieldNamesToCodeNames('MJ_BizApps_Accounting: Accounting Engine Extensions', rows && rows.length > 0 ? rows[0] : null, this.GetUserFromPayload(userPayload));
+        return result;
+    }
+    
+    @Mutation(() => mjBizAppsAccountingAccountingEngineExtension_)
+    async CreatemjBizAppsAccountingAccountingEngineExtension(
+        @Arg('input', () => CreatemjBizAppsAccountingAccountingEngineExtensionInput) input: CreatemjBizAppsAccountingAccountingEngineExtensionInput,
+        @Ctx() { providers, userPayload }: AppContext,
+        @PubSub() pubSub: PubSubEngine
+    ) {
+        const provider = GetReadWriteProvider(providers);
+        return this.CreateRecord('MJ_BizApps_Accounting: Accounting Engine Extensions', input, provider, userPayload, pubSub)
+    }
+        
+    @Mutation(() => mjBizAppsAccountingAccountingEngineExtension_)
+    async UpdatemjBizAppsAccountingAccountingEngineExtension(
+        @Arg('input', () => UpdatemjBizAppsAccountingAccountingEngineExtensionInput) input: UpdatemjBizAppsAccountingAccountingEngineExtensionInput,
+        @Ctx() { providers, userPayload }: AppContext,
+        @PubSub() pubSub: PubSubEngine
+    ) {
+        const provider = GetReadWriteProvider(providers);
+        return this.UpdateRecord('MJ_BizApps_Accounting: Accounting Engine Extensions', input, provider, userPayload, pubSub);
+    }
+    
+    @Mutation(() => mjBizAppsAccountingAccountingEngineExtension_)
+    async DeletemjBizAppsAccountingAccountingEngineExtension(@Arg('ID', () => String) ID: string, @Arg('options___', () => DeleteOptionsInput) options: DeleteOptionsInput, @Ctx() { providers, userPayload }: AppContext, @PubSub() pubSub: PubSubEngine) {
+        const provider = GetReadWriteProvider(providers);
+        const key = new CompositeKey([{FieldName: 'ID', Value: ID}]);
+        return this.DeleteRecord('MJ_BizApps_Accounting: Accounting Engine Extensions', key, options, provider, userPayload, pubSub);
     }
     
 }
@@ -1794,6 +2006,10 @@ export class mjBizAppsAccountingGLAccountRole_ {
     @Field() 
     _mj__UpdatedAt: Date;
         
+    @Field({description: `How many Active GLAccountLinks this role may resolve to for one record and company. One (default, every pre-existing role including Cash): the BA-D32 tie guard applies and ResolveLinkedAccount returns a single account, latest StartedAt winning among overlapping links. Many: the tie guard does not apply and ResolveLinkedAccount REFUSES the role rather than returning an arbitrary account — callers use ResolveLinkedAccounts and get every Active link whose window covers AsOf. Separating the two is what lets a company hold N bank accounts for a cash position without disturbing where payments post.`}) 
+    @MaxLength(10)
+    Cardinality: string;
+        
 }
 
 //****************************************************************************
@@ -1815,6 +2031,9 @@ export class CreatemjBizAppsAccountingGLAccountRoleInput {
 
     @Field(() => Int, { nullable: true })
     Sequence?: number;
+
+    @Field({ nullable: true })
+    Cardinality?: string;
 
     @Field(() => RestoreContextInput, { nullable: true })
     RestoreContext___?: RestoreContextInput;
@@ -1840,6 +2059,9 @@ export class UpdatemjBizAppsAccountingGLAccountRoleInput {
 
     @Field(() => Int, { nullable: true })
     Sequence?: number;
+
+    @Field({ nullable: true })
+    Cardinality?: string;
 
     @Field(() => [KeyValuePairInput], { nullable: true })
     OldValues___?: KeyValuePairInput[];
@@ -2712,33 +2934,9 @@ export class mjBizAppsAccountingJournalEntry_ {
     @MaxLength(36)
     RootReversesJournalEntryID?: string;
         
-    @Field(() => Int, {nullable: true}) 
-    ReversesJournalEntryIDDepth?: number;
-        
-    @Field({nullable: true}) 
-    ReversesJournalEntryIDPath?: string;
-        
-    @Field(() => Boolean, {nullable: true}) 
-    ReversesJournalEntryIDIsLeaf?: boolean;
-        
-    @Field(() => Int, {nullable: true}) 
-    ReversesJournalEntryIDChildCount?: number;
-        
     @Field({nullable: true}) 
     @MaxLength(36)
     RootReversedByJournalEntryID?: string;
-        
-    @Field(() => Int, {nullable: true}) 
-    ReversedByJournalEntryIDDepth?: number;
-        
-    @Field({nullable: true}) 
-    ReversedByJournalEntryIDPath?: string;
-        
-    @Field(() => Boolean, {nullable: true}) 
-    ReversedByJournalEntryIDIsLeaf?: boolean;
-        
-    @Field(() => Int, {nullable: true}) 
-    ReversedByJournalEntryIDChildCount?: number;
         
 }
 

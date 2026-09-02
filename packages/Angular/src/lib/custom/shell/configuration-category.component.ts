@@ -45,6 +45,7 @@ export class ConfigurationCategoryComponent extends CategoryShellBase {
         // No section header — a single flat group (mj-left-nav renders unlabelled sections as-is).
         items: [
           { id: 'companies', label: 'Companies', icon: 'fa-solid fa-building' },
+          { id: 'erp', label: 'ERP', icon: 'fa-solid fa-cloud-arrow-down' },
           { id: 'users', label: 'Users & roles', icon: 'fa-solid fa-user-shield' },
           { id: 'approvals', label: 'Approvals', icon: 'fa-solid fa-user-check' },
         ],
