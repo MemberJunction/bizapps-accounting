@@ -1,7 +1,7 @@
 {
   "name": "@mj-biz-apps/accounting-actions",
   "type": "module",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Generated action subclasses maintained by the CodeGen utility.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -24,18 +24,18 @@
     "vitest": "^4.0.18"
   },
   "dependencies": {
-    "@mj-biz-apps/accounting-core-entities-server": "0.5.0",
+    "@mj-biz-apps/accounting-core-entities-server": "0.6.0",
     "zod": "^3.25.28"
   },
   "peerDependencies": {
-    "@memberjunction/actions-base": "^6.1.0-edge.4",
-    "@memberjunction/actions": "^6.1.0-edge.4",
-    "@memberjunction/global": "^6.1.0-edge.4",
-    "@memberjunction/core": "^6.1.0-edge.4",
-    "@memberjunction/core-entities": "^6.1.0-edge.4",
-    "@memberjunction/core-entities-server": "^6.1.0-edge.4",
-    "@memberjunction/ai": "^6.1.0-edge.4",
-    "@memberjunction/aiengine": "^6.1.0-edge.4"
+    "@memberjunction/actions-base": "^6.1.0-edge.5",
+    "@memberjunction/actions": "^6.1.0-edge.5",
+    "@memberjunction/global": "^6.1.0-edge.5",
+    "@memberjunction/core": "^6.1.0-edge.5",
+    "@memberjunction/core-entities": "^6.1.0-edge.5",
+    "@memberjunction/core-entities-server": "^6.1.0-edge.5",
+    "@memberjunction/ai": "^6.1.0-edge.5",
+    "@memberjunction/aiengine": "^6.1.0-edge.5"
   },
   "repository": {
     "type": "git",

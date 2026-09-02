@@ -1,7 +1,7 @@
 {
   "name": "@mj-biz-apps/accounting-entities",
   "type": "module",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "MJ BizApps Accounting Entity Subclasses",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -26,9 +26,9 @@
     "zod": "^3.25.28"
   },
   "peerDependencies": {
-    "@memberjunction/core": "^6.1.0-edge.4",
-    "@memberjunction/global": "^6.1.0-edge.4",
-    "@mj-biz-apps/common-entities": "^5.34.0"
+    "@memberjunction/core": "^6.1.0-edge.5",
+    "@memberjunction/global": "^6.1.0-edge.5",
+    "@mj-biz-apps/common-entities": ">=5.37.0"
   },
   "repository": {
     "type": "git",
