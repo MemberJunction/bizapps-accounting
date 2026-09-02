@@ -1,5 +1,41 @@
 # @mj-biz-apps/accounting-entities
 
+## 0.6.0
+
+### Minor Changes
+
+- 71fc375: `Metadata_Sync` for the ERP release, and the `.mj-sync.json` files that made it possible.
+
+  Release seed coverage flagged 15 metadata primaryKeys in no migration: the `Accounting` action
+  category, 2 Actions with their 11 Action Params (`Build Journal Entry Batches`, `Run ERP Sync`), and
+  the ERP daily-sync Scheduled Job. So `0.5.0` shipped `AccountingERPEngine` and
+  `Accounting.RunERPSync` without the Action rows that expose them.
+
+  They were unshippable for a specific reason: `metadata/action-categories/` and `metadata/actions/` had
+  **no `.mj-sync.json`**. MetadataSync only walks directories that declare their entity, so it skipped
+  both silently — the push reported success across 8 of 10 directories and never mentioned the other
+  two. bizapps-orders and bizapps-common have one in every directory; this repo was missing exactly the
+  two holding its Actions.
+
+  Adds both configs, names all ten directories in `directoryOrder` with categories ahead of what
+  references them, and adds `V202609020600__v0.1.x__Metadata_Sync.sql` (122 records — 15 created,
+  2 updated, 0 errors) generated against a database built from migrations only.
+
+  Minor, not patch: this release carries a migration.
+
+### Patch Changes
+
+- 434df96: Move to MJ `6.1.0-edge.5` and raise the cross-repo floors.
+
+  44 `@memberjunction/*` pins move `^6.1.0-edge.4` → `^6.1.0-edge.5`.
+
+  Floors now match what is published — `@mj-biz-apps/common-*` `^5.34.0` → `>=5.37.0`, and
+  `@mj-biz-apps/tasks-*` `^1.2.3` → `>=1.4.1`. Stale floors are not harmless here: bizapps-orders
+  declared `accounting-* >=0.1.0` and pnpm resolved the _lowest_ satisfying version as a peer, pulling
+  `accounting-server@0.1.0` and 48 MJ packages at edge.2/3/4 into an otherwise-edge.5 tree.
+
+  Verified after a clean install: a single `@memberjunction/core` at edge.5 and build passing.
+
 ## 0.5.0
 
 ### Minor Changes
