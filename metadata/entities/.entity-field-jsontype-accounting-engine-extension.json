@@ -32,7 +32,7 @@
             "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Accounting Engine Extensions&Name=Configuration"
           },
           "sync": {
-            "lastModified": "2026-08-29T15:57:46.006Z",
+            "lastModified": "2026-09-02T04:41:41.204Z",
             "checksum": "3f523c200892ff15a3ae2bfc3e59b0c8c1f09f748e050800b3d53a39189a178f"
           }
         }
