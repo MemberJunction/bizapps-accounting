@@ -1,7 +1,7 @@
 {
   "name": "@mj-biz-apps/accounting-actions",
   "type": "module",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Generated action subclasses maintained by the CodeGen utility.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -24,7 +24,7 @@
     "vitest": "^4.0.18"
   },
   "dependencies": {
-    "@mj-biz-apps/accounting-core-entities-server": "0.5.0",
+    "@mj-biz-apps/accounting-core-entities-server": "0.6.0",
     "zod": "^3.25.28"
   },
   "peerDependencies": {

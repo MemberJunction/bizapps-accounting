@@ -1,5 +1,14 @@
 # @mj-biz-apps/accounting-ng
 
+## 0.6.0
+
+### Patch Changes
+
+- Updated dependencies [434df96]
+- Updated dependencies [71fc375]
+  - @mj-biz-apps/accounting-entities@0.6.0
+  - @mj-biz-apps/accounting-engine-base@0.6.0
+
 ## 0.5.0
 
 ### Minor Changes
