@@ -121,14 +121,22 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
       }
 
       // All drafts valid — write them all inside ONE outer transaction (entity Saves nest).
-      const dbProvider = provider as unknown as DatabaseProviderBase;
-      await dbProvider.BeginTransaction();
+      // If the caller (order confirm) already opened a transaction on this provider, JOIN it.
+      // Opening a second wrapper issued SAVE TRANSACTION while mssql's Transaction object
+      // was sometimes not begun, which booked nothing and returned INTERNAL_ERROR.
+      const dbProvider = provider as unknown as DatabaseProviderBase & { transactionDepth?: number };
+      const alreadyInTransaction = (dbProvider.transactionDepth ?? 0) > 0;
+      if (!alreadyInTransaction) {
+        await dbProvider.BeginTransaction();
+      }
       try {
         const results: CreateJournalEntryResult[] = [];
         for (let i = 0; i < drafts.length; i++) {
           const result = await this.writeJournalEntry(drafts[i], outcomes[i].normalized, contextUser, provider);
           if (!result.Success) {
-            await dbProvider.RollbackTransaction();
+            if (!alreadyInTransaction) {
+              await dbProvider.RollbackTransaction();
+            }
             return {
               Success: false,
               Errors: (result.Errors ?? [{ Code: 'INTERNAL_ERROR', Message: 'draft write failed' }]).map(e => ({ ...e, DraftIndex: i })),
@@ -136,10 +144,14 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
           }
           results.push(result);
         }
-        await dbProvider.CommitTransaction();
+        if (!alreadyInTransaction) {
+          await dbProvider.CommitTransaction();
+        }
         return { Success: true, Results: results };
       } catch (e) {
-        try { await dbProvider.RollbackTransaction(); } catch { /* rollback best-effort */ }
+        if (!alreadyInTransaction) {
+          try { await dbProvider.RollbackTransaction(); } catch { /* rollback best-effort */ }
+        }
         throw e;
       }
     } catch (e) {
