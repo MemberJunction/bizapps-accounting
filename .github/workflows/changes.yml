@@ -2,24 +2,37 @@ name: Validate Changes
 
 on:
   pull_request:
-    branches: [next, main]
+    # `ready_for_review` is NOT in the default type set (opened/synchronize/reopened),
+    # and the job below skips while the PR is a draft — without it, marking a PR ready
+    # would not re-trigger anything and the check would never report.
+    types: [opened, synchronize, reopened, ready_for_review]
+    # `next` only. These are properties of the migration files being ADDED, so they are
+    # checked once, where they land. Re-checking them on the release PR into `main` would
+    # re-validate files that already passed on the way in.
+    branches: [next]
 
 concurrency:
   group: changes-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  changes_and_migrations:
+  migration-naming:
+    # The context name is what a developer reads first, so it names the assertion rather
+    # than the file. Timestamp ordering belongs under "naming" too -- the timestamp IS
+    # part of the filename, and it is the half that decides whether Flyway ever runs it.
+    name: 'migration naming'
+    # Drafts DO fire opened/synchronize, so a draft otherwise burns a full run on every
+    # push. Skip while draft; the `ready_for_review` trigger above brings it back. A job
+    # skipped by `if:` still reports a conclusion, so this is safe as a required check.
+    # The event_name arm is defensive: this workflow is PR-only today, but the same guard
+    # is copied into workflows that also run on `push`, where pull_request is null.
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
 
       - name: Check for migration file changes
         id: migration_check
@@ -56,29 +69,3 @@ jobs:
             fi
           done
           echo "All new migration timestamps are valid"
-
-      - name: Check for changeset (PRs to next with migrations)
-        if: |
-          steps.migration_check.outputs.has_migrations == 'true' &&
-          github.base_ref == 'next'
-        run: |
-          CHANGESET_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep -E '^\.changeset/.*\.md$' | grep -v 'README.md' || true)
-          if [ -z "$CHANGESET_FILES" ]; then
-            echo "::error::Migrations were added but no changeset found. Run 'pnpm exec changeset' to create one with at least a 'minor' bump."
-            exit 1
-          fi
-
-          # Check that at least one changeset has 'minor' or 'major' bump
-          HAS_SUFFICIENT_BUMP=false
-          for f in $CHANGESET_FILES; do
-            if grep -qE "minor|major" "$f"; then
-              HAS_SUFFICIENT_BUMP=true
-              break
-            fi
-          done
-
-          if [ "$HAS_SUFFICIENT_BUMP" = false ]; then
-            echo "::error::Migrations require at least a 'minor' version bump in the changeset."
-            exit 1
-          fi
-          echo "Valid changeset with minor or major bump found"

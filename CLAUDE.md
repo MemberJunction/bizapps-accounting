@@ -123,8 +123,9 @@ protected branch. The version bump arrives as a PR on `next`; publishing reads i
 1. `version.yml` fires on every push to `next` and maintains a **"Version Packages" PR**
    into `next` — every package bumped, CHANGELOGs generated, `mj-app.json`'s `version` and
    `mjVersionRange` synced, and **`pnpm-lock.yaml` refreshed**. Review and merge it when you
-   are ready to cut a release. Its checks do not start on their own under the default
-   `GITHUB_TOKEN` — click **Approve and run** on the PR.
+   are ready to cut a release. Its checks run automatically — a GitHub App opens the PR,
+   and App-created PRs trigger workflows, so `build.yml` verifies `--frozen-lockfile`
+   before you merge rather than after.
 2. Open a single PR from `next` → `main` ("Release vX.Y.Z"). `release-readiness.yml` asserts
    no changesets are still pending, and that a release carrying migrations is at least a
    minor.
