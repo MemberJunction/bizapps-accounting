@@ -351,6 +351,24 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
       expect(result.Errors.some(e => getErrorText(e).includes('belongs to company CO_999, but parent Journal Entry belongs to company CO_100'))).toBe(true);
     });
 
+    it('a NEW journal entry must start Pending — creating one directly as GLPosted fails (status-graph hardening)', () => {
+      // Without this rule a direct client save could INSERT a GLPosted JE with forged
+      // GLPostedAt/GLReferenceID — the DB immutability trigger only polices UPDATE/DELETE.
+      // (The saved-record transition graph — e.g. Batched→GLPosted needing a dispatched batch —
+      // requires OldValue state and lives with the live tier-2 harness, like the batch's graph.)
+      je.Status = 'GLPosted';
+      const result = je.Validate();
+      expect(result.Success).toBe(false);
+      expect(result.Errors.some(e => getErrorText(e).includes("must start at Status='Pending'"))).toBe(true);
+    });
+
+    it('a NEW journal entry created directly as Batched also fails', () => {
+      je.Status = 'Batched';
+      const result = je.Validate();
+      expect(result.Success).toBe(false);
+      expect(result.Errors.some(e => getErrorText(e).includes("must start at Status='Pending'"))).toBe(true);
+    });
+
     it('passes validation for a valid, balanced 2-line Journal Entry with matching company GL accounts', () => {
       const line1 = new JournalEntryLineEntityServer(jelEntityInfo as any);
       line1.NewRecord();

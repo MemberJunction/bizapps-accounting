@@ -40,12 +40,30 @@ import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
 import { LookupJournalEntryTypeByID, RequireJournalEntryTypeID } from './JournalEntryTypes.js';
 import { getNextJournalEntryNumber } from './SequenceService.js';
+import { isSqlGuid, sqlGuidLiteral } from './SqlGuards.js';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
 const JELD_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Line Dimensions';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
+const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const FILE_ENTITY = 'Files'; // __mj.File
+
+/**
+ * The legal JE status graph (plan §7 + the DB triggers' sanctioned carve-outs):
+ *   Pending → Batched (the batch build's lock) · Batched → GLPosted (the batch DISPATCH — see the
+ *   owning-batch check in ValidateAsync) · Batched → Pending (the reversible preliminary unlock the
+ *   immutability trigger sanctions: JournalEntryBatchID cleared while the owning batch is still
+ *   Pending — the batch-side condition stays DB-enforced, 50004/50005) · GLPosted is terminal.
+ * The DB triggers freeze a LOCKED row but do not police a Pending row's transitions at all — without
+ * this graph a direct client save could jump Pending→GLPosted with forged GLPostedAt/GLReferenceID
+ * and the entry would look ERP-posted without ever being batched, approved, or dispatched.
+ */
+const JE_LEGAL_TRANSITIONS: Record<string, ReadonlyArray<string>> = {
+  Pending: ['Pending', 'Batched'],
+  Batched: ['Batched', 'GLPosted', 'Pending'],
+  GLPosted: ['GLPosted'],
+};
 
 @RegisterClass(BaseEntity, JE_ENTITY)
 export class JournalEntryEntityServer extends JournalEntryEntity {
@@ -197,6 +215,29 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
    */
   public override Validate(): ValidationResult {
     const result = super.Validate();
+    const fail = (message: string) => {
+      result.Success = false;
+      result.Errors.push(new ValidationErrorInfo('JournalEntryEntityServer.Validate', message, null));
+    };
+
+    // Status-graph enforcement (2026-09-05 security sweep). See JE_LEGAL_TRANSITIONS for why the
+    // DB triggers alone do not cover this (they never police a Pending row).
+    if (!this.IsSaved) {
+      // A JE is born Pending — every sanctioned creation path (manual entry, the engine,
+      // reversals, the batch summary) starts there; lifecycle moves happen through the batch process.
+      if (this.Status && this.Status !== 'Pending') {
+        fail(`A new journal entry must start at Status='Pending' (got '${this.Status}') — Batched/GLPosted are reached only through the batch process.`);
+      }
+    } else {
+      const oldStatus = this.GetFieldByName('Status')?.OldValue as string | undefined;
+      if (oldStatus && this.Status !== oldStatus) {
+        if (!(JE_LEGAL_TRANSITIONS[oldStatus] ?? []).includes(this.Status)) {
+          fail(`Illegal journal entry status transition '${oldStatus}' → '${this.Status}'. Legal from '${oldStatus}': ${(JE_LEGAL_TRANSITIONS[oldStatus] ?? []).filter(s => s !== oldStatus).join(', ') || '(terminal)'}.`);
+        } else if (oldStatus === 'Batched' && this.Status === 'Pending' && this.JournalEntryBatchID) {
+          fail(`Batched→Pending is only the reversible unlock of an unapproved batch — JournalEntryBatchID must be cleared in the same save.`);
+        }
+      }
+    }
 
     const blank = (this.Lines.Items as JournalEntryLineEntityServer[])
       .map((line, i) => ({ line, number: i + 1 }))
@@ -264,10 +305,38 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
       );
     }
 
+    // Rule 7: status-graph, data-driven half (2026-09-05 security sweep) — Batched→GLPosted is the
+    // batch DISPATCH transition and is only legal while the owning batch has itself been dispatched.
+    try {
+      const transitionError = await this.validateGLPostedTransition();
+      if (transitionError) {
+        result.Success = false;
+        result.Errors.push(new ValidationErrorInfo('JournalEntryEntityServer.ValidateAsync', transitionError, null));
+      }
+    } catch (e: any) {
+      result.Success = false;
+      result.Errors.push(
+        new ValidationErrorInfo('JournalEntryEntityServer.ValidateAsync', e.message || String(e), null),
+      );
+    }
+
     // Rule 6: Single-Company Isolation (Line GLAccounts must match header CompanyID) & Active GL Accounts
     const lines = this.Lines.Items as JournalEntryLineEntityServer[];
     if (lines.length > 0 && this.CompanyID) {
-      const glIds = [...new Set(lines.map(l => l.GLAccountID).filter(Boolean))];
+      const allGlIds = [...new Set(lines.map(l => l.GLAccountID).filter(Boolean))];
+      // GLAccountID values are client-set and interpolated into the filter below — validate each as
+      // a plain UUID (a malformed one can never be a valid FK, so refusing loses nothing).
+      const glIds = allGlIds.filter(id => isSqlGuid(id));
+      for (const bad of allGlIds.filter(id => !isSqlGuid(id))) {
+        result.Success = false;
+        result.Errors.push(
+          new ValidationErrorInfo(
+            'JournalEntryEntityServer.ValidateAsync',
+            `Line GL Account id '${bad}' is not a valid UUID.`,
+            null,
+          ),
+        );
+      }
       if (glIds.length > 0) {
         const provider = this.ProviderToUse as unknown as IRunViewProvider;
         const inList = glIds.map(id => `'${id}'`).join(',');
@@ -429,14 +498,61 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
     return beforeFYStart ? d.getUTCFullYear() - 1 : d.getUTCFullYear();
   }
 
+  // ─── Status-graph hardening (data-driven half) ────────────────────────────
+
+  /**
+   * Batched→GLPosted is the engine's dispatch transition (markJournalEntriesGLPosted): it runs after
+   * the owning batch has flipped Approved→Sent→Posted, so at the moment a member JE legitimately
+   * becomes GLPosted its batch is Sent or Posted. An ad-hoc caller flipping a Batched JE to
+   * GLPosted while its batch is still Pending/Approved (i.e. never dispatched) is forging a posting
+   * — refuse it. Returns the problem, or null when the save is not that transition / is legitimate.
+   */
+  private async validateGLPostedTransition(): Promise<string | null> {
+    if (!this.IsSaved) return null;
+    const oldStatus = this.GetFieldByName('Status')?.OldValue as string | undefined;
+    if (this.Status !== 'GLPosted' || oldStatus === 'GLPosted' || !oldStatus) return null;
+
+    const batchId = this.JournalEntryBatchID;
+    if (!batchId) {
+      return 'A journal entry can only transition to GLPosted as a member of a dispatched batch, but JournalEntryBatchID is not set.';
+    }
+    const provider = this.ProviderToUse as unknown as IRunViewProvider;
+    const res = await provider.RunView<{ Status: string }>(
+      {
+        EntityName: BATCH_ENTITY,
+        ExtraFilter: `ID=${sqlGuidLiteral(batchId, 'JournalEntryEntityServer.validateGLPostedTransition')}`,
+        Fields: ['Status'],
+        MaxRows: 1,
+        ResultType: 'simple',
+        BypassCache: true,
+      },
+      this.ContextCurrentUser,
+    );
+    // Loud on failure: silently skipping would reopen the forged-posting hole this check closes.
+    if (!res.Success) {
+      throw new Error(`JournalEntryEntityServer.validateGLPostedTransition: could not read owning batch ${batchId}: ${res.ErrorMessage ?? 'unknown error'}`);
+    }
+    const batchStatus = res.Results?.[0]?.Status;
+    if (!batchStatus) {
+      return `Cannot transition to GLPosted: owning batch ${batchId} was not found.`;
+    }
+    if (batchStatus !== 'Sent' && batchStatus !== 'Posted') {
+      return `Cannot transition to GLPosted: owning batch ${batchId} is '${batchStatus}' — only the batch dispatch flow (batch Sent/Posted) may mark a journal entry GL-posted.`;
+    }
+    return null;
+  }
+
   // ─── W9: attachment validation ────────────────────────────────────────────
 
   private async ValidateAttachment(): Promise<void> {
     const fileId = this.FileID;
     if (!fileId) return;
+    // fileId is client-set and interpolated into the filter — a plain UUID or the save fails (W9's
+    // "must reference an existing file" already implies a well-formed id).
+    const fileIdLiteral = sqlGuidLiteral(fileId, 'JournalEntry.FileID (W9)');
     const provider = this.ProviderToUse as unknown as IRunViewProvider;
     const res = await provider.RunView<{ ID: string }>(
-      { EntityName: FILE_ENTITY, ExtraFilter: `ID='${fileId}'`, Fields: ['ID'], ResultType: 'simple' },
+      { EntityName: FILE_ENTITY, ExtraFilter: `ID=${fileIdLiteral}`, Fields: ['ID'], ResultType: 'simple' },
       this.ContextCurrentUser,
     );
     if (res.Success && res.Results.length === 0) {

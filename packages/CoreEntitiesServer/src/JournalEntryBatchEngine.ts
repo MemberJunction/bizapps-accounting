@@ -52,7 +52,7 @@
  *   ENTITY:       'MJ_BizApps_Accounting: Journal Entry Batches'
  *   DOC:          plans/bizapps-accounting-master.md §7 (lifecycle + batching)
  */
-import { DatabaseProviderBase, IMetadataProvider, IRunViewProvider, UserInfo } from '@memberjunction/core';
+import { DatabaseProviderBase, IMetadataProvider, IRunViewProvider, LogError, UserInfo } from '@memberjunction/core';
 import type {
   mjBizAppsAccountingJournalEntryBatchEntity,
   mjBizAppsAccountingJournalEntryEntity,
@@ -67,6 +67,7 @@ import {
 import { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 import { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
 import { GetJournalEntryBatchSummaryEntryType } from './JournalEntryTypes.js';
+import { sqlGuidLiteral } from './SqlGuards.js';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
@@ -325,10 +326,10 @@ async function resolveEntryTypeIds(codes: string[], contextUser: UserInfo, p: Pr
  * A GUID literal, validated rather than escaped: these ids reach us from a UI filter, and this
  * string is concatenated into a SQL predicate. Anything that is not a plain UUID is rejected
  * outright — there is no legitimate value that needs escaping here, so refusing beats quoting.
+ * (The validator itself is the shared SqlGuards helper — one implementation package-wide.)
  */
 function sqlGuid(id: string): string {
-  if (!/^[0-9a-fA-F-]{36}$/.test(id)) throw new Error(`buildJournalEntryBatch: invalid id in criteria: ${id}`);
-  return `'${id}'`;
+  return sqlGuidLiteral(id, 'buildJournalEntryBatch: invalid id in criteria');
 }
 
 /** A quoted T-SQL string literal (single quotes doubled) for code values. */
@@ -480,7 +481,7 @@ async function loadPendingJEIds(companyId: string, contextUser: UserInfo, p: Pro
   const res = await p.rv.RunView<{ ID: string }>(
     {
       EntityName: JE_ENTITY,
-      ExtraFilter: `CompanyID='${companyId}' AND ${await pendingCandidateFilter(options, contextUser, p)}`,
+      ExtraFilter: `CompanyID=${sqlGuid(companyId)} AND ${await pendingCandidateFilter(options, contextUser, p)}`,
       OrderBy: 'EffectiveDate ASC, EntryNumber ASC', // oldest-first — the order a build takes them in
       Fields: ['ID'],
       ResultType: 'simple',
@@ -738,17 +739,29 @@ export interface SendJournalEntryBatchOptions {
 
 /**
  * Send an APPROVED batch to the ERP. Requires the approval gate + Status='Approved'; then
- * Approved→Sent, posts the summary JE's lines to the ERP (all-or-nothing), and on confirmation
- * flips Sent→Posted + the member JEs AND the summary JE Batched→GLPosted.
+ * re-verifies the batch's content still matches what was approved (member set + control-total
+ * footing — the same coherence check the Pending→Approved transition runs, so approval cannot be
+ * a stale signature over content that has since drifted), then Approved→Sent, posts the summary
+ * JE's lines to the ERP (all-or-nothing), and on confirmation flips Sent→Posted + the member JEs
+ * AND the summary JE Batched→GLPosted.
  */
 export async function sendJournalEntryBatch(batchId: string, contextUser: UserInfo, options: SendJournalEntryBatchOptions): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
   const p = resolveProviders(options.provider);
   const poster = options.poster ?? mockErpPoster;
-  const batch = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
+  const batch = await p.md.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, contextUser);
   if (!(await batch.Load(batchId))) throw new Error(`sendJournalEntryBatch: batch ${batchId} not found`);
   if (batch.Status !== 'Approved') throw new Error(`sendJournalEntryBatch: batch ${batchId} is ${batch.Status}, only an Approved batch can be sent`);
 
   await options.gate.assertApproved(batchId, contextUser); // throws if not CFO-approved
+
+  // Seal check: what dispatches must be EXACTLY what was approved. Re-run the approval-time
+  // member-set + footing verification against the database, right before the flip to Sent.
+  const drift = await batch.CheckControlTotalCoherence(contextUser);
+  if (drift.length > 0) {
+    throw new Error(
+      `sendJournalEntryBatch: batch ${batch.JournalEntryBatchNumber ?? batchId} no longer matches its approved content — refusing to dispatch. ${drift.join(' ')}`,
+    );
+  }
 
   batch.Status = 'Sent';
   batch.SentAt = new Date();
@@ -803,7 +816,12 @@ async function markJournalEntriesGLPosted(batchId: string, externalJournalEntryB
 async function failBatch(batch: mjBizAppsAccountingJournalEntryBatchEntity, error: string): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
   batch.Status = 'Failed';
   batch.ErrorMessage = error;
-  await batch.Save();
+  if (!(await batch.Save())) {
+    // The failure record ITSELF failed to persist — the batch is stuck at 'Sent' in the database
+    // with no ErrorMessage. Log loudly (the original ERP error is in `error`) so retry triage can
+    // find it; the returned in-memory entity still carries the Failed state for the caller.
+    LogError(`sendJournalEntryBatch: could not mark batch ${batch.JournalEntryBatchNumber ?? batch.ID} as Failed (ERP error was: ${error}): ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
+  }
   return batch;
 }
 

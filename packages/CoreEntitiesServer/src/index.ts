@@ -32,6 +32,9 @@ export {
 } from './SeedData.js';
 export type { SeededGLAccount } from './SeedData.js';
 export { getNextJournalEntryNumber, getNextJournalEntryBatchNumber } from './SequenceService.js';
+// Validate-don't-escape UUID guards for SQL predicate interpolation (2026-09-05 security sweep) —
+// use these anywhere a client-supplied id reaches an ExtraFilter string.
+export { isSqlGuid, requireSqlGuid, sqlGuidLiteral } from './SqlGuards.js';
 export {
   LookupJournalEntryTypeByCode,
   LookupJournalEntryTypeByID,
