@@ -143,36 +143,48 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     const approving = this.IsSaved && this.Status === 'Approved' && oldStatus === 'Pending';
     if (!approving) return result;
 
-    const fail = (message: string) => {
+    for (const message of await this.CheckControlTotalCoherence()) {
       result.Success = false;
       result.Errors.push(new ValidationErrorInfo('JournalEntryBatchEntityServer.ValidateAsync', message, null));
-    };
+    }
 
-    const summary = await this.LoadSummaryJournalEntry();
+    return result;
+  }
+
+  /**
+   * The control-total coherence check, shared by the Pending→Approved validation above AND the
+   * engine's dispatch (`sendJournalEntryBatch` re-runs it before Approved→Sent, so a member-set or
+   * footing drift AFTER approval — however it got past the DB immutability trigger — can never be
+   * dispatched as if the CFO had signed it). Returns human-readable problems; empty = coherent.
+   * Reads force-refresh so a stale in-memory member/summary cache cannot vouch for the batch.
+   */
+  public async CheckControlTotalCoherence(contextUser?: UserInfo): Promise<string[]> {
+    const problems: string[] = [];
+    const summary = await this.LoadSummaryJournalEntry(true, contextUser);
     if (!summary) {
-      fail('Cannot approve a batch with no summary journal entry — regenerate or cancel it.');
-      return result;
+      problems.push('The batch has no summary journal entry — regenerate or cancel it.');
+      return problems;
     }
     const rv = this.ProviderToUse as unknown as IRunViewProvider;
     const lineRes = await rv.RunView<{ DebitAmount: number | null; CreditAmount: number | null }>(
       { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID='${summary.ID}'`, Fields: ['DebitAmount', 'CreditAmount'], ResultType: 'simple', BypassCache: true },
-      this.ContextCurrentUser,
+      contextUser ?? this.ContextCurrentUser,
     );
     if (!lineRes.Success) throw new Error(`JournalEntryBatchEntityServer: could not load summary lines for coherence check: ${lineRes.ErrorMessage ?? 'unknown'}`);
     let dr = 0, cr = 0;
     for (const l of lineRes.Results ?? []) { dr += l.DebitAmount ?? 0; cr += l.CreditAmount ?? 0; }
     if (Math.abs(dr - (this.TotalDebits ?? 0)) > FOOT_TOLERANCE || Math.abs(cr - (this.TotalCredits ?? 0)) > FOOT_TOLERANCE) {
-      fail(`Control totals do not foot against the summary journal entry (batch says ${this.TotalDebits}/${this.TotalCredits}, summary lines sum ${dr.toFixed(2)}/${cr.toFixed(2)}). Regenerate the batch.`);
+      problems.push(`Control totals do not foot against the summary journal entry (batch says ${this.TotalDebits}/${this.TotalCredits}, summary lines sum ${dr.toFixed(2)}/${cr.toFixed(2)}). Regenerate the batch.`);
     }
 
-    const members = await this.LoadMembers();
+    const members = await this.LoadMembers(true, contextUser);
     // The summary JE also carries this JournalEntryBatchID (it rides the member lock machinery) — exclude it.
     const memberCount = members.filter(m => m.ID.toLowerCase() !== summary.ID.toLowerCase()).length;
     if (memberCount !== (this.TotalEntries ?? 0)) {
-      fail(`TotalEntries (${this.TotalEntries}) does not match the locked member count (${memberCount}). Regenerate the batch.`);
+      problems.push(`TotalEntries (${this.TotalEntries}) does not match the locked member count (${memberCount}). Regenerate the batch.`);
     }
 
-    return result;
+    return problems;
   }
 
   // ─── owned collections (read-only hydration — JE.Lines-style) ─────────────

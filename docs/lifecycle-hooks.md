@@ -104,6 +104,29 @@ heals cross-process reference writes.
 code-only. Orders-server calls `op.Execute(input, {provider, user})` in-process; browsers/scripts invoke the
 identical op over GraphQL `ExecuteRemoteOperation`.
 
+## 2b. Status-graph + approval hardening (2026-09-05 security sweep)
+
+Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVERY save of the entity):
+
+- **`JournalEntryEntityServer.Validate/ValidateAsync` — JE status graph.** A JE is **born Pending**;
+  the only legal saved-record transitions are `Pending→Batched`, `Batched→GLPosted`, and the
+  reversible `Batched→Pending` unlock (with `JournalEntryBatchID` cleared — the owning-batch-still-
+  Pending half stays DB-enforced, 50004/50005). A transition **to GLPosted** additionally requires
+  the owning batch to be `Sent`/`Posted` (ValidateAsync, DB read) — so a direct client save can no
+  longer jump `Pending→GLPosted` with forged `GLPostedAt`/`GLReferenceID`, and only the batch
+  dispatch flow (`markJournalEntriesGLPosted`, which runs after the batch is Posted) can GL-post.
+- **`JournalEntryBatchEntityServer.CheckControlTotalCoherence()`** — the Pending→Approved footing +
+  member-count check is now a public method shared with the engine: `sendJournalEntryBatch` re-runs
+  it **before** `Approved→Sent`, so a batch whose member set / totals drifted after approval is
+  refused at dispatch instead of shipping under a stale signature.
+- **`TasksAppApprovalGate.recordDecision`** — now requires `contextUser` to BE the batch company's
+  `AccountingCompanyProfile.ApprovalCFOUserID` (no CFO configured ⇒ hard-fail). Previously any
+  authenticated user could approve any batch, including their own.
+- **SQL-predicate id validation (`SqlGuards.ts`)** — `isSqlGuid`/`requireSqlGuid`/`sqlGuidLiteral`
+  (extracted from the engine's private `sqlGuid`) now guard every client-supplied id that is
+  interpolated into an `ExtraFilter`: the batch remote ops, the gate's Task-Link lookups, W9's
+  `FileID`, JE line `GLAccountID`s, `GLAccountLink` / `IntercompanyAccountMatch` FK checks.
+
 ## 3. Related (not `Save()` hooks)
 
 - **S1 batch dispatch — ✅** (`JournalEntryBatchEngine.ts`): `buildJournalEntryBatch(targetSystem, …)` is **GLOBAL** — nets ALL
