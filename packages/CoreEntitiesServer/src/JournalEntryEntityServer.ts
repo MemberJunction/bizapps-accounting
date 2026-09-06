@@ -336,8 +336,9 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
       try {
         await this.assignEntryNumber();
       } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
         LogError(`JournalEntryEntityServer.Save: EntryNumber assignment failed: ${err}`);
-        return false;
+        throw new Error(`Cannot number journal entry: ${msg}`);
       }
     }
 
