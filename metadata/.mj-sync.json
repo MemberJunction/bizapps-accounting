@@ -11,7 +11,9 @@
     "applications",
     "action-categories",
     "actions",
-    "entity-actions"
+    "entity-actions",
+    "entity-relationships",
+    "scheduled-jobs"
   ],
   "sqlLogging": {
     "enabled": true,

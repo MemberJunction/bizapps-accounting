@@ -1,5 +1,73 @@
 # @mj-biz-apps/accounting-entities
 
+## 0.6.1
+
+### Patch Changes
+
+- 553ee29: License declarations now agree on BUSL-1.1 everywhere.
+
+  The README badge was the last thing in the repo still advertising ISC — `LICENSE`,
+  `package.json`, `mj-app.json` and every workspace package already declare BUSL-1.1.
+  A green ISC badge at the top of the README is the first thing a reader sees, so it
+  outranked all of them in practice. The badge now reads BUSL-1.1 and links to `LICENSE`.
+
+## 0.6.0
+
+### Minor Changes
+
+- 71fc375: `Metadata_Sync` for the ERP release, and the `.mj-sync.json` files that made it possible.
+
+  Release seed coverage flagged 15 metadata primaryKeys in no migration: the `Accounting` action
+  category, 2 Actions with their 11 Action Params (`Build Journal Entry Batches`, `Run ERP Sync`), and
+  the ERP daily-sync Scheduled Job. So `0.5.0` shipped `AccountingERPEngine` and
+  `Accounting.RunERPSync` without the Action rows that expose them.
+
+  They were unshippable for a specific reason: `metadata/action-categories/` and `metadata/actions/` had
+  **no `.mj-sync.json`**. MetadataSync only walks directories that declare their entity, so it skipped
+  both silently — the push reported success across 8 of 10 directories and never mentioned the other
+  two. bizapps-orders and bizapps-common have one in every directory; this repo was missing exactly the
+  two holding its Actions.
+
+  Adds both configs, names all ten directories in `directoryOrder` with categories ahead of what
+  references them, and adds `V202609020600__v0.1.x__Metadata_Sync.sql` (122 records — 15 created,
+  2 updated, 0 errors) generated against a database built from migrations only.
+
+  Minor, not patch: this release carries a migration.
+
+### Patch Changes
+
+- 434df96: Move to MJ `6.1.0-edge.5` and raise the cross-repo floors.
+
+  44 `@memberjunction/*` pins move `^6.1.0-edge.4` → `^6.1.0-edge.5`.
+
+  Floors now match what is published — `@mj-biz-apps/common-*` `^5.34.0` → `>=5.37.0`, and
+  `@mj-biz-apps/tasks-*` `^1.2.3` → `>=1.4.1`. Stale floors are not harmless here: bizapps-orders
+  declared `accounting-* >=0.1.0` and pnpm resolved the _lowest_ satisfying version as a peer, pulling
+  `accounting-server@0.1.0` and 48 MJ packages at edge.2/3/4 into an otherwise-edge.5 tree.
+
+  Verified after a clean install: a single `@memberjunction/core` at edge.5 and build passing.
+
+## 0.5.0
+
+### Minor Changes
+
+- 9966206: Accounting engine extension registry (`AccountingEngineExtension`) — host-visible
+  enable/disable, run order, optional company scope, and a JSON `Configuration` bag
+  typed as `IAccountingEngineExtensionConfiguration`.
+
+  Hook participation is not columns: `BaseAccountingEngineExtension` getters and
+  Before/After overrides (later in this PR). Empty seed — consumers such as FP&A
+  insert their own row. Schema change, so `minor`.
+
+- 51012f5: AccountingERPEngine: Integration Engine pull for COA/dimensions, MJ CreateJournalEntry for batch post, BaseAccountingEngineExtension seam, Accounting.RunERPSync, daily job metadata, and Configuration > ERP sync UI (reusable widgets + Explorer page).
+- fa6ae13: BA-D34: `GLAccountRole.Cardinality` (`One` | `Many`) and the `BankAccount` role.
+
+  Separates "where does a receipt post?" (role `Cash`, One, unchanged) from "what
+  is cash, for a position?" (role `BankAccount`, Many). Existing roles are
+  backfilled to `One`, so payment routing and the BA-D32 tie guard are unaffected.
+  Enables FP&A to build `CashBalance` as the sum of a company's Active
+  `BankAccount` links. Schema change, so `minor`.
+
 ## 0.4.0
 
 ### Minor Changes
