@@ -2195,6 +2195,7 @@ GO
 
 
 -- MANUAL UPDATE OF SCHEMA INFO from metadata file to ensure we have things set for the codegeneration
+IF NOT EXISTS (SELECT 1 FROM __mj.SchemaInfo WHERE SchemaName = '__mj_BizAppsAccounting')
 INSERT INTO __mj.SchemaInfo 
 (
   ID,
