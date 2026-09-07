@@ -60,6 +60,7 @@ export {
   JournalEntryBatchFromViewError,
   approveJournalEntryBatch,
   sendJournalEntryBatch,
+  failJournalEntryBatch,
   cancelJournalEntryBatch,
   regenerateJournalEntryBatch,
   netLines,

@@ -55,6 +55,20 @@
         {
           "fields": {
             "ActionID": "@parent:ID",
+            "Name": "CutoffMode",
+            "Type": "Input",
+            "ValueType": "Scalar",
+            "IsArray": false,
+            "IsRequired": false,
+            "Description": "Relative cutoff, resolved in TypeScript at run time because scheduled-job params are Static or SQL-Statement only. 'PriorDay' = everything dated before today (the nightly Order/Payment run); 'PriorMonth' = everything dated before the 1st of the current month (the monthly RevenueRecognition run). Ignored when an explicit Cutoff is supplied."
+          },
+          "primaryKey": {
+            "ID": "DB88A2C5-D62D-4B38-AE64-E87AE03ABD1D"
+          }
+        },
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
             "Name": "StartDate",
             "Type": "Input",
             "ValueType": "Scalar",
@@ -122,6 +136,20 @@
           "sync": {
             "lastModified": "2026-09-02T04:41:42.010Z",
             "checksum": "e62132e3ea8de44c9b9287a8fd419c4ecabfebd7540b72f6b4df5e7440d55627"
+          }
+        },
+        {
+          "fields": {
+            "ActionID": "@parent:ID",
+            "Name": "AutoPost",
+            "Type": "Input",
+            "ValueType": "Scalar",
+            "IsArray": false,
+            "IsRequired": false,
+            "Description": "When true the run is UNATTENDED (scheduled posting, A-US5/A-US6): the CFO approval Task is waived, ApprovedByUserID is stamped with the context user (the MJ System user under the scheduler), and each batch is approved and dispatched to the ERP in the same run rather than parked in Pending. Requires an explicit EntryTypeCodes include-list and rejects ExcludeEntryTypeCodes — auto-post policy is an include-list, never a blacklist. Defaults to false: the attended path (A-US7) builds only, behind the bizapps-tasks approval gate."
+          },
+          "primaryKey": {
+            "ID": "BA072B0D-046B-43AE-9DF5-8B470B4F735B"
           }
         },
         {

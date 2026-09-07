@@ -799,6 +799,28 @@ async function markJournalEntriesGLPosted(batchId: string, externalJournalEntryB
   }
 }
 
+/**
+ * Record a dispatch failure on a batch that `sendJournalEntryBatch` could not itself convert into a
+ * status — it turns a poster that RETURNS `{success:false}` into `Failed` itself, but a poster (or a
+ * status save) that THROWS leaves the batch sitting in Approved/Sent. Unattended dispatch needs that
+ * batch to end up `Failed` with the cause, so the run can move on to the next company and a human can
+ * triage from `ErrorMessage`. Trigger 50009 permits Status/ErrorMessage to evolve on a locked batch.
+ */
+export async function failJournalEntryBatch(
+  batchId: string, error: string, contextUser: UserInfo, provider: IMetadataProvider,
+): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
+  const p = resolveProviders(provider);
+  const batch = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
+  if (!(await batch.Load(batchId))) throw new Error(`failJournalEntryBatch: batch ${batchId} not found`);
+  const failed = await failBatch(batch, error);
+  // failBatch is best-effort for the send path; here the status IS the record of the failure, so a
+  // save that quietly did not take must be loud rather than reported as a batch that was marked.
+  if (failed.Status !== 'Failed') {
+    throw new Error(`failJournalEntryBatch: batch ${batchId} is still ${failed.Status}: ${failed.LatestResult?.CompleteMessage ?? 'save did not take'}`);
+  }
+  return failed;
+}
+
 /** Sent → Failed (allowed by 50009). JEs stay Batched; ErrorMessage records the cause for retry triage. */
 async function failBatch(batch: mjBizAppsAccountingJournalEntryBatchEntity, error: string): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
   batch.Status = 'Failed';
