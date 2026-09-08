@@ -173,16 +173,85 @@ describe('BuildJournalEntryBatchesAction', () => {
             if (batchId === 'BATCH-CO-1') throw new Error('ERP tenant unreachable');
             return { Status: 'Posted', ErrorMessage: null } as never;
         });
-        const failSpy = vi.spyOn(serverEngine, 'failJournalEntryBatch').mockResolvedValue({} as never);
+        const failSpy = vi.spyOn(serverEngine, 'recordDispatchFailure')
+            .mockResolvedValue({ status: 'Failed', marked: true });
 
         const result = await new BuildJournalEntryBatchesAction().Run(runParams(AUTO_POST_INPUTS));
 
         expect(sendSpy).toHaveBeenCalledTimes(2); // CO-2 still ran
         expect(failSpy).toHaveBeenCalledWith('BATCH-CO-1', 'ERP tenant unreachable', expect.anything(), expect.anything());
         expect(result.Success).toBe(false);
-        expect(result.ResultCode).toBe('DISPATCH_FAILED');
-        expect(result.Message).toContain('1 of 2 batch(es) failed to dispatch');
+        expect(result.ResultCode).toBe('POST_INCOMPLETE');
+        expect(result.Message).toContain('1 of 2 company(ies) did not post');
         expect(result.Message).toContain('ERP tenant unreachable');
+    });
+
+    // A throw can leave the batch in a state that cannot legally become Failed. Reporting the real
+    // state matters most when the ERP already took the journal.
+    it('reports a batch the ERP already accepted as Posted with a do-not-re-post warning', async () => {
+        vi.spyOn(serverEngine, 'pendingCompanies').mockResolvedValue(['CO-1']);
+        vi.spyOn(serverEngine, 'buildJournalEntryBatch').mockImplementation(async (companyId) => buildResult(companyId));
+        vi.spyOn(serverEngine, 'approveJournalEntryBatch').mockResolvedValue({} as never);
+        vi.spyOn(serverEngine, 'createAccountingERPPoster').mockReturnValue(vi.fn() as never);
+        vi.spyOn(serverEngine, 'sendJournalEntryBatch').mockRejectedValue(new Error('JE Batched->GLPosted failed'));
+        vi.spyOn(serverEngine, 'recordDispatchFailure').mockResolvedValue({ status: 'Posted', marked: false });
+
+        const result = await new BuildJournalEntryBatchesAction().Run(runParams(AUTO_POST_INPUTS));
+
+        expect(result.Success).toBe(false);
+        expect(result.Message).toContain('DO NOT RE-POST');
+        expect(result.Message).toContain('(Posted:');
+        expect(result.Message).not.toContain('(Failed:');
+    });
+
+    it('reports a batch stuck in Approved as Approved rather than claiming it was marked Failed', async () => {
+        vi.spyOn(serverEngine, 'pendingCompanies').mockResolvedValue(['CO-1']);
+        vi.spyOn(serverEngine, 'buildJournalEntryBatch').mockImplementation(async (companyId) => buildResult(companyId));
+        vi.spyOn(serverEngine, 'approveJournalEntryBatch').mockResolvedValue({} as never);
+        vi.spyOn(serverEngine, 'createAccountingERPPoster').mockReturnValue(vi.fn() as never);
+        vi.spyOn(serverEngine, 'sendJournalEntryBatch').mockRejectedValue(new Error('Approved->Sent save failed'));
+        vi.spyOn(serverEngine, 'recordDispatchFailure').mockResolvedValue({ status: 'Approved', marked: false });
+
+        const result = await new BuildJournalEntryBatchesAction().Run(runParams(AUTO_POST_INPUTS));
+
+        expect(result.Success).toBe(false);
+        expect(result.Message).toContain('(Approved:');
+        expect(result.Message).toContain('NOT marked Failed');
+    });
+
+    // ─── A build failure must not strand the companies already dispatched ────────────────
+
+    it('AutoPost dispatches each company as it builds, so a later build failure strands nothing', async () => {
+        vi.spyOn(serverEngine, 'pendingCompanies').mockResolvedValue(['CO-1', 'CO-2', 'CO-3']);
+        vi.spyOn(serverEngine, 'buildJournalEntryBatch').mockImplementation(async (companyId) => {
+            if (companyId === 'CO-2') throw new Error('summary JE did not balance');
+            return buildResult(companyId);
+        });
+        vi.spyOn(serverEngine, 'approveJournalEntryBatch').mockResolvedValue({} as never);
+        vi.spyOn(serverEngine, 'createAccountingERPPoster').mockReturnValue(vi.fn() as never);
+        const sendSpy = vi.spyOn(serverEngine, 'sendJournalEntryBatch')
+            .mockResolvedValue({ Status: 'Posted', ErrorMessage: null } as never);
+
+        const result = await new BuildJournalEntryBatchesAction().Run(runParams(AUTO_POST_INPUTS));
+
+        // CO-1 posted BEFORE CO-2 threw, and CO-3 still ran after it.
+        expect(sendSpy.mock.calls.map(c => c[0])).toEqual(['BATCH-CO-1', 'BATCH-CO-3']);
+        // The build failure is counted, so NotifyOnFailure fires rather than the run reporting clean.
+        expect(result.Success).toBe(false);
+        expect(result.ResultCode).toBe('POST_INCOMPLETE');
+        expect(result.Message).toContain('1 of 3 company(ies) did not post');
+        expect(result.Message).toContain('company CO-2 (BuildFailed: summary JE did not balance)');
+    });
+
+    it('the attended path still aborts on a build failure, since those batches carry approval Tasks', async () => {
+        vi.spyOn(serverEngine, 'pendingCompanies').mockResolvedValue(['CO-1', 'CO-2']);
+        vi.spyOn(serverEngine, 'buildJournalEntryBatch').mockImplementation(async (companyId) => {
+            if (companyId === 'CO-2') throw new Error('summary JE did not balance');
+            return buildResult(companyId);
+        });
+
+        await expect(new BuildJournalEntryBatchesAction().Run(runParams([])))
+            .rejects.toThrow(/summary JE did not balance/);
     });
 
     it('reports a poster that returns Failed without throwing', async () => {
@@ -195,7 +264,7 @@ describe('BuildJournalEntryBatchesAction', () => {
 
         const result = await new BuildJournalEntryBatchesAction().Run(runParams(AUTO_POST_INPUTS));
 
-        expect(result.ResultCode).toBe('DISPATCH_FAILED');
+        expect(result.ResultCode).toBe('POST_INCOMPLETE');
         expect(result.Message).toContain('No active integration');
     });
 

@@ -799,26 +799,45 @@ async function markJournalEntriesGLPosted(batchId: string, externalJournalEntryB
   }
 }
 
+/** What a batch actually is after a dispatch throw, and whether this call moved it to Failed. */
+export interface DispatchFailureRecord { status: string; marked: boolean }
+
 /**
- * Record a dispatch failure on a batch that `sendJournalEntryBatch` could not itself convert into a
- * status — it turns a poster that RETURNS `{success:false}` into `Failed` itself, but a poster (or a
- * status save) that THROWS leaves the batch sitting in Approved/Sent. Unattended dispatch needs that
- * batch to end up `Failed` with the cause, so the run can move on to the next company and a human can
- * triage from `ErrorMessage`. Trigger 50009 permits Status/ErrorMessage to evolve on a locked batch.
+ * Triage a batch whose dispatch THREW, and report what is actually true of it.
+ *
+ * `sendJournalEntryBatch` converts a poster that RETURNS `{success:false}` into `Failed` itself. A
+ * poster — or any save inside the send path — that THROWS instead leaves the batch wherever it got
+ * to, and `Failed` is reachable from exactly ONE of those states: `JournalEntryBatchEntityServer`'s
+ * LEGAL_TRANSITIONS allows `Sent → Failed` and neither `Pending → Failed`, `Approved → Failed` nor
+ * `Posted → Failed`. Asserting `Failed` from the others is not merely rejected, it is dangerous:
+ *
+ *   · `Sent`   → mark `Failed` with the cause. Members stay `Batched` for retry triage. The only
+ *                state this function writes.
+ *   · `Posted` → LEAVE IT. The ERP has already accepted this journal and only the member
+ *                `Batched → GLPosted` flip is incomplete. Reporting it as `Failed` would invite a
+ *                re-post and a DUPLICATE ERP journal — the worst outcome available here.
+ *   · `Pending` / `Approved` → nothing to mark. `Pending` is still cancellable; `Approved` is not
+ *                (LEGAL_TRANSITIONS offers only `Sent`), so it needs a human either way. Say which
+ *                it is instead of recording a failure that never happened.
+ *
+ * Deliberately does NOT route through `failBatch`, so the send path's own semantics are untouched.
  */
-export async function failJournalEntryBatch(
+export async function recordDispatchFailure(
   batchId: string, error: string, contextUser: UserInfo, provider: IMetadataProvider,
-): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
+): Promise<DispatchFailureRecord> {
   const p = resolveProviders(provider);
   const batch = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
-  if (!(await batch.Load(batchId))) throw new Error(`failJournalEntryBatch: batch ${batchId} not found`);
-  const failed = await failBatch(batch, error);
-  // failBatch is best-effort for the send path; here the status IS the record of the failure, so a
-  // save that quietly did not take must be loud rather than reported as a batch that was marked.
-  if (failed.Status !== 'Failed') {
-    throw new Error(`failJournalEntryBatch: batch ${batchId} is still ${failed.Status}: ${failed.LatestResult?.CompleteMessage ?? 'save did not take'}`);
+  if (!(await batch.Load(batchId))) throw new Error(`recordDispatchFailure: batch ${batchId} not found`);
+  if (batch.Status !== 'Sent') return { status: batch.Status, marked: false };
+
+  batch.Status = 'Failed';
+  batch.ErrorMessage = error;
+  // Check the save. A rejected Save leaves the in-memory field set, so reading `batch.Status` back
+  // would report a `Failed` that never reached the database.
+  if (!(await batch.Save())) {
+    throw new Error(`recordDispatchFailure: marking batch ${batchId} Failed did not save: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
   }
-  return failed;
+  return { status: 'Failed', marked: true };
 }
 
 /** Sent → Failed (allowed by 50009). JEs stay Batched; ErrorMessage records the cause for retry triage. */

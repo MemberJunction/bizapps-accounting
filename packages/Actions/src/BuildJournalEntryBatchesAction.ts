@@ -6,8 +6,8 @@ import {
   approveJournalEntryBatch,
   buildJournalEntryBatch,
   createAccountingERPPoster,
-  failJournalEntryBatch,
   pendingCompanies,
+  recordDispatchFailure,
   sendJournalEntryBatch,
   AutoApproveGate,
   EmptyJournalEntryBatchError,
@@ -27,7 +27,7 @@ import {
  * Two modes:
  *   - DEFAULT (attended, A-US7): build only, behind the bizapps-tasks CFO approval gate. Batches
  *     land `Pending` and wait for a human decision. Nothing about this path changed.
- *   - AutoPost (unattended, A-US5/A-US6): build → approve → dispatch to the ERP in one run, behind
+ *   - AutoPost (unattended, A-US5/A-US6): build → approve → dispatch to the ERP per company, behind
  *     `AutoApproveGate` per the scheduled-posting approval waiver. Requires an explicit
  *     `EntryTypeCodes` include-list — see {@link assertAutoPostPolicy}.
  *
@@ -50,10 +50,9 @@ export class BuildJournalEntryBatchesAction extends BaseAction {
     if (autoPost) assertAutoPostPolicy(options);
 
     const gate: JournalEntryBatchApprovalGate = autoPost ? AutoApproveGate : new TasksAppApprovalGate(provider);
-    const built = await buildAll(user, provider, gate, targetSystem, options);
-    const dispatched = autoPost ? await dispatchAll(built, user, provider) : new Map<string, DispatchOutcome>();
+    const outcomes = await sweep({ user, provider, gate, targetSystem, options, autoPost });
 
-    return summarize(params, built, dispatched, autoPost);
+    return summarize(params, outcomes, autoPost);
   }
 }
 
@@ -114,90 +113,131 @@ function assertAutoPostPolicy(options: BuildJournalEntryBatchOptions): void {
   }
 }
 
-// ─── Build ───────────────────────────────────────────────────────────────────────────────
+// ─── The sweep ───────────────────────────────────────────────────────────────────────────
 
-async function buildAll(
-  user: UserInfo,
-  provider: IMetadataProvider,
-  gate: JournalEntryBatchApprovalGate,
-  targetSystem: JournalEntryBatchTargetSystem,
-  options: BuildJournalEntryBatchOptions,
-): Promise<BuildJournalEntryBatchResult[]> {
-  const companies = await pendingCompanies(user, provider, options);
-  const built: BuildJournalEntryBatchResult[] = [];
-  for (const companyId of companies) {
-    try {
-      built.push(await buildJournalEntryBatch(companyId, targetSystem, user.ID, user, provider, gate, options));
-    } catch (e) {
-      if (e instanceof EmptyJournalEntryBatchError) continue; // a company whose candidates all netted to zero
-      throw e;
-    }
-  }
-  return built;
+/** One company's result. `status` is the batch's real end state, or BUILD_FAILED if none exists. */
+interface CompanyOutcome {
+  companyId: string;
+  batch: BuildJournalEntryBatchResult | null;
+  status: string;
+  error: string | null;
+  /**
+   * Whether a human has to look at this. NOT derivable from `status`: a batch that reached `Posted`
+   * and then threw on the member `Batched → GLPosted` flip reads as Posted but has journal entries
+   * stranded in `Batched`, and a run that reported itself clean would bury them.
+   */
+  needsAttention: boolean;
 }
 
-// ─── Dispatch (AutoPost only) ────────────────────────────────────────────────────────────
+const BUILD_FAILED = 'BuildFailed';
 
-interface DispatchOutcome { status: string; error: string | null }
+interface SweepContext {
+  user: UserInfo;
+  provider: IMetadataProvider;
+  gate: JournalEntryBatchApprovalGate;
+  targetSystem: JournalEntryBatchTargetSystem;
+  options: BuildJournalEntryBatchOptions;
+  autoPost: boolean;
+}
 
-/** One batch per company, each independent: a failure marks that batch and the sweep carries on. */
-async function dispatchAll(
-  built: BuildJournalEntryBatchResult[], user: UserInfo, provider: IMetadataProvider,
-): Promise<Map<string, DispatchOutcome>> {
-  const outcomes = new Map<string, DispatchOutcome>();
-  for (const batch of built) {
-    outcomes.set(batch.batchId, await dispatchOne(batch.batchId, user, provider));
+/**
+ * One batch per company (D7), each company independent under AutoPost.
+ *
+ * A build failure aborts the ATTENDED run, as it always has — those batches carry approval Tasks, so
+ * they are visible and a human can act on them. It must NOT abort an UNATTENDED run: `AutoApproveGate`
+ * raises no Task, so every batch already built in this sweep would be stranded `Pending` with no Task,
+ * where nothing can approve it, dispatch it (the manual op needs a Task), or re-sweep it (its entries
+ * are `Batched`, so the next night skips them). Dispatching each company as it is built keeps that
+ * window to the single company that failed.
+ */
+async function sweep(ctx: SweepContext): Promise<CompanyOutcome[]> {
+  const companies = await pendingCompanies(ctx.user, ctx.provider, ctx.options);
+  const outcomes: CompanyOutcome[] = [];
+
+  for (const companyId of companies) {
+    try {
+      const batch = await buildJournalEntryBatch(
+        companyId, ctx.targetSystem, ctx.user.ID, ctx.user, ctx.provider, ctx.gate, ctx.options,
+      );
+      // dispatchOne resolves its own failures into an outcome, so nothing below throws from here.
+      outcomes.push(ctx.autoPost
+        ? await dispatchOne(companyId, batch, ctx.user, ctx.provider)
+        : { companyId, batch, status: 'Pending', error: null, needsAttention: false });
+    } catch (e) {
+      if (e instanceof EmptyJournalEntryBatchError) continue; // this company's candidates netted to zero
+      if (!ctx.autoPost) throw e;
+      const message = e instanceof Error ? e.message : String(e);
+      LogError(`Accounting.BuildJournalEntryBatches: build for company ${companyId} failed: ${message}`);
+      outcomes.push({ companyId, batch: null, status: BUILD_FAILED, error: message, needsAttention: true });
+    }
   }
   return outcomes;
 }
+
+// ─── Dispatch (AutoPost only) ────────────────────────────────────────────────────────────
 
 /**
  * Build → Approved → Sent → Posted for one batch. `ApprovedByUserID` is stamped with the context
  * user, which in a scheduled run IS the MJ System user the scheduler resolves — the waiver removes
  * the approval STEP, not the audit trail, so this is never null (Craig, AIDP-1).
  */
-async function dispatchOne(batchId: string, user: UserInfo, provider: IMetadataProvider): Promise<DispatchOutcome> {
+async function dispatchOne(
+  companyId: string, batch: BuildJournalEntryBatchResult, user: UserInfo, provider: IMetadataProvider,
+): Promise<CompanyOutcome> {
   try {
-    await approveJournalEntryBatch(batchId, user.ID, user, provider);
-    const batch = await sendJournalEntryBatch(batchId, user, {
+    await approveJournalEntryBatch(batch.batchId, user.ID, user, provider);
+    const sent = await sendJournalEntryBatch(batch.batchId, user, {
       gate: AutoApproveGate,
       poster: createAccountingERPPoster(provider),
       provider,
     });
-    return { status: batch.Status, error: batch.ErrorMessage ?? null };
+    return { companyId, batch, status: sent.Status, error: sent.ErrorMessage ?? null, needsAttention: sent.Status !== 'Posted' };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    LogError(`Accounting.BuildJournalEntryBatches: dispatch of batch ${batchId} failed: ${message}`);
-    await markFailed(batchId, message, user, provider);
-    return { status: 'Failed', error: message };
+    LogError(`Accounting.BuildJournalEntryBatches: dispatch of batch ${batch.batchId} failed: ${message}`);
+    // Every route through triage began with a throw, so every one of them needs a human — including
+    // the `Posted` one, where the ERP has the journal but the member JE flip did not finish.
+    return { companyId, batch, needsAttention: true, ...(await triage(batch.batchId, message, user, provider)) };
   }
 }
 
-/** Best-effort, and loud when it cannot: the run must continue to the next company either way. */
-async function markFailed(batchId: string, error: string, user: UserInfo, provider: IMetadataProvider): Promise<void> {
+/**
+ * Report the batch's REAL state after a dispatch throw, never the one we hoped for. `Failed` is
+ * reachable only from `Sent`, so a throw that landed the batch elsewhere must be described, not
+ * overwritten — see `recordDispatchFailure`.
+ */
+async function triage(
+  batchId: string, message: string, user: UserInfo, provider: IMetadataProvider,
+): Promise<{ status: string; error: string }> {
   try {
-    await failJournalEntryBatch(batchId, error, user, provider);
+    const { status, marked } = await recordDispatchFailure(batchId, message, user, provider);
+    if (marked) return { status, error: message };
+    if (status === 'Posted') {
+      // The ERP took this journal. Only the member Batched→GLPosted flip is incomplete, and the
+      // repair is to finish that flip — NOT to post again.
+      const warning = `ALREADY POSTED TO THE ERP — DO NOT RE-POST. The batch reached the ERP and only the member Batched→GLPosted flip is incomplete: ${message}`;
+      LogError(`Accounting.BuildJournalEntryBatches: batch ${batchId} ${warning}`);
+      return { status, error: warning };
+    }
+    return { status, error: `Batch left ${status} and NOT marked Failed (only a Sent batch may be): ${message}` };
   } catch (e) {
-    LogError(`Accounting.BuildJournalEntryBatches: could not mark batch ${batchId} Failed: ${e instanceof Error ? e.message : String(e)}`);
+    const failure = e instanceof Error ? e.message : String(e);
+    LogError(`Accounting.BuildJournalEntryBatches: could not record the dispatch failure for batch ${batchId}: ${failure}`);
+    return { status: 'Unknown', error: `${message} (and recording that failure also failed: ${failure})` };
   }
 }
 
 // ─── Result ──────────────────────────────────────────────────────────────────────────────
 
-function summarize(
-  params: RunActionParams,
-  built: BuildJournalEntryBatchResult[],
-  dispatched: Map<string, DispatchOutcome>,
-  autoPost: boolean,
-): ActionResultSimple {
+function summarize(params: RunActionParams, outcomes: CompanyOutcome[], autoPost: boolean): ActionResultSimple {
+  const built = outcomes.filter(o => o.batch !== null);
   const batchesParam = params.Params.find(p => p.Name === 'Batches');
-  if (batchesParam) {
-    batchesParam.Value = JSON.stringify(built.map(b => ({ ...b, dispatch: dispatched.get(b.batchId) ?? null })));
-  }
+  if (batchesParam) batchesParam.Value = JSON.stringify(outcomes);
   const countParam = params.Params.find(p => p.Name === 'BatchCount');
   if (countParam) countParam.Value = built.length;
 
-  if (built.length === 0) {
+  // Nothing to do is a clean run. Nothing BUILT is not, if a company failed trying.
+  if (outcomes.length === 0) {
     return { Success: true, Message: 'No candidate journal entries found to batch.', ResultCode: 'NO_BATCHES' };
   }
 
@@ -205,17 +245,19 @@ function summarize(
   const summary = `Built ${built.length} batch(es) containing ${sum(built, b => b.jeCount)} journal entries (${totals}).`;
   if (!autoPost) return { Success: true, Message: `${summary} Awaiting approval.`, ResultCode: 'SUCCESS' };
 
-  const failures = [...dispatched.entries()].filter(([, o]) => o.status !== 'Posted');
-  if (failures.length === 0) {
+  const problems = outcomes.filter(o => o.needsAttention);
+  if (problems.length === 0) {
     return { Success: true, Message: `${summary} All dispatched to the ERP.`, ResultCode: 'SUCCESS' };
   }
-  const detail = failures.map(([batchId, o]) => `${batchId} (${o.status}: ${o.error ?? 'no detail'})`).join('; ');
+  const detail = problems
+    .map(o => `${o.batch?.batchId ?? `company ${o.companyId}`} (${o.status}: ${o.error ?? 'no detail'})`)
+    .join('; ');
   return {
     Success: false,
-    Message: `${summary} ${failures.length} of ${built.length} batch(es) failed to dispatch: ${detail}`,
-    ResultCode: 'DISPATCH_FAILED',
+    Message: `${summary} ${problems.length} of ${outcomes.length} company(ies) did not post: ${detail}`,
+    ResultCode: 'POST_INCOMPLETE',
   };
 }
 
-const sum = (batches: BuildJournalEntryBatchResult[], pick: (b: BuildJournalEntryBatchResult) => number): number =>
-  batches.reduce((total, b) => total + pick(b), 0);
+const sum = (outcomes: CompanyOutcome[], pick: (b: BuildJournalEntryBatchResult) => number): number =>
+  outcomes.reduce((total, o) => total + (o.batch ? pick(o.batch) : 0), 0);
