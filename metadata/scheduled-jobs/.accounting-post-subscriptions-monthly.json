@@ -1,0 +1,73 @@
+[
+  {
+    "_comments": [
+      "A-US6(i) / golive #162 — THE MONTHLY SUBSCRIPTION POST. Same action, same mechanism and same",
+      "waiver as the nightly job (.accounting-post-orders-payments-nightly.json); only the cadence,",
+      "the cutoff mode and the include-list differ. Read that file's comments first.",
+      "",
+      "  · CronExpression `0 0 3 1 * *` — 03:00:00 UTC on the 1st of each month, after midnight per",
+      "    the story and behind both the nightly post (01:00) and the ERP master-data sync (02:00).",
+      "",
+      "  · CutoffMode PriorMonth resolves to the LAST DAY of the prior month at midnight UTC, which",
+      "    pendingCandidateFilter turns into `EffectiveDate < the 1st of this month` — the just-closed",
+      "    month is included, the current month waits for next month's run.",
+      "",
+      "  · RevenueRecognition entries are written at BOOKING, one per future period, forward-dated to",
+      "    their RecognitionDate. Nothing generates them monthly; this job only sweeps the ones whose",
+      "    date has arrived. A back-dated term therefore drops several past-dated periods in at once",
+      "    and they catch up in a single batch, with no special handling — selection is purely date +",
+      "    status. There is no order-status gate, by design (#162).",
+      "",
+      "  · MaxRuntimeMinutes 240, four times the nightly job. A single long-running action CANNOT",
+      "    heartbeat mid-call (ActionScheduledJobDriver's own documented caveat), so the acquire-time",
+      "    lease has to cover the whole run — and month-end catch-up, with multi-period back-dated",
+      "    terms across every company, is the largest batch of the year. Overshooting costs nothing:",
+      "    the ceiling only bounds a hung run, and ConcurrencyMode Skip means the next month's run",
+      "    would be skipped rather than doubled if one ever came close."
+    ],
+    "fields": {
+      "Name": "Accounting — Post Subscription revenue recognition (monthly)",
+      "Description": "Builds and dispatches a single-company batch of the Pending RevenueRecognition journal entries dated before the 1st of the current month, for every company with candidates. Includes back-dated catch-up periods. Unattended: no CFO approval Task, per the scheduled-posting waiver.",
+      "JobTypeID": "3B94DD43-E961-4D85-B7F4-B6783D748766",
+      "CronExpression": "0 0 3 1 * *",
+      "Timezone": "UTC",
+      "Status": "Active",
+      "ConcurrencyMode": "Skip",
+      "MissedRunPolicy": "RunOnce",
+      "RunImmediatelyIfNeverRun": false,
+      "MaxRuntimeMinutes": 240,
+      "NotifyOnSuccess": false,
+      "NotifyOnFailure": true,
+      "NotifyViaEmail": false,
+      "NotifyViaInApp": true,
+      "Configuration": {
+        "ActionID": "E839FB12-5813-4B85-8022-DF8943729BA1",
+        "Params": [
+          {
+            "ActionParamID": "8A52D539-7431-4F29-873D-88229F5CDA01",
+            "ValueType": "Static",
+            "Value": "BusinessCentral"
+          },
+          {
+            "ActionParamID": "DB88A2C5-D62D-4B38-AE64-E87AE03ABD1D",
+            "ValueType": "Static",
+            "Value": "PriorMonth"
+          },
+          {
+            "ActionParamID": "5F89AA32-1594-47CA-8AC4-66E875CD2105",
+            "ValueType": "Static",
+            "Value": "[\"RevenueRecognition\"]"
+          },
+          {
+            "ActionParamID": "BA072B0D-046B-43AE-9DF5-8B470B4F735B",
+            "ValueType": "Static",
+            "Value": "true"
+          }
+        ]
+      }
+    },
+    "primaryKey": {
+      "ID": "C839FB12-5813-4B85-8022-DF8943729BA5"
+    }
+  }
+]

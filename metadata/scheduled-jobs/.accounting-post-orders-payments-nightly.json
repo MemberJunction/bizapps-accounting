@@ -1,0 +1,85 @@
+[
+  {
+    "_comments": [
+      "A-US5(i) / golive #161 — THE NIGHTLY ORDER + PAYMENT POST. One job → Accounting.BuildJournalEntryBatches",
+      "with AutoPost, so it builds AND dispatches in one run rather than parking a batch in Pending.",
+      "",
+      "  · CronExpression `0 0 1 * * *` — SIX fields, seconds first: 01:00:00 UTC every day. After",
+      "    midnight (the story's requirement) and an hour ahead of the 02:00 ERP master-data sync, so",
+      "    the chart of accounts a post resolves against is the one the previous day's sync left.",
+      "",
+      "  · CutoffMode PriorDay — resolved in TypeScript at run time, NOT in SQL. Scheduled-job params",
+      "    are Static or SQL-Statement only, and the driver's SQL path returns a row set and swallows",
+      "    errors as null; a null cutoff means NO date clause, which would post the current day's",
+      "    entries and fail the acceptance criteria outright. PriorDay resolves to yesterday midnight",
+      "    UTC, which pendingCandidateFilter turns into `EffectiveDate < today` — the prior day is",
+      "    included, the run date is excluded, exactly as the story asks.",
+      "",
+      "  · EntryTypeCodes is the AUTO-POST POLICY and it is an INCLUDE-LIST, deliberately. A blacklist",
+      "    would silently auto-post any JournalEntryType added later; a financial control defaults the",
+      "    other way, so a new type waits for CFO approval until an admin names it here. Refund is in",
+      "    the list because PaymentJournalEntryFactory writes it as the mirror of a PaymentReceipt —",
+      "    it is a Payment JE. Everything else (Manual, Adjustment, Reversal, FXRevaluation, …) stays",
+      "    on the attended path (A-US7). This row is the whole policy surface: admins edit it here.",
+      "",
+      "  · ConcurrencyMode Skip — an overlapping run would race the first one for the same Pending",
+      "    entries. MissedRunPolicy RunOnce, not RunAll: the selection is a relative date window, so",
+      "    catching up ten missed nights ten times over would just re-run the same widened sweep.",
+      "",
+      "  · No CFO approval Task is raised (the scheduled-posting waiver in #161). ApprovedByUserID is",
+      "    still stamped — with the scheduler's context user, the seeded MJ System user. The waiver",
+      "    removes the approval step, not the audit trail.",
+      "",
+      "  · NotifyOnFailure: a batch whose ERP dispatch fails lands Failed with the cause in",
+      "    ErrorMessage and the run reports DISPATCH_FAILED, so this notification is the trigger for",
+      "    human triage. OwnerUserID / NotifyUserID stay NULL — naming a person here would seed one",
+      "    deployment's staff into another's database.",
+      "",
+      "  · Hosts disable this row rather than deleting it."
+    ],
+    "fields": {
+      "Name": "Accounting — Post Order & Payment journal entries (nightly)",
+      "Description": "Builds and dispatches a single-company batch of the Pending Order and Payment journal entries dated before the run date, for every company with candidates. Unattended: no CFO approval Task, per the scheduled-posting waiver. Which entry types may post unattended is the EntryTypeCodes include-list on this job.",
+      "JobTypeID": "3B94DD43-E961-4D85-B7F4-B6783D748766",
+      "CronExpression": "0 0 1 * * *",
+      "Timezone": "UTC",
+      "Status": "Active",
+      "ConcurrencyMode": "Skip",
+      "MissedRunPolicy": "RunOnce",
+      "RunImmediatelyIfNeverRun": false,
+      "MaxRuntimeMinutes": 60,
+      "NotifyOnSuccess": false,
+      "NotifyOnFailure": true,
+      "NotifyViaEmail": false,
+      "NotifyViaInApp": true,
+      "Configuration": {
+        "ActionID": "E839FB12-5813-4B85-8022-DF8943729BA1",
+        "Params": [
+          {
+            "ActionParamID": "8A52D539-7431-4F29-873D-88229F5CDA01",
+            "ValueType": "Static",
+            "Value": "BusinessCentral"
+          },
+          {
+            "ActionParamID": "DB88A2C5-D62D-4B38-AE64-E87AE03ABD1D",
+            "ValueType": "Static",
+            "Value": "PriorDay"
+          },
+          {
+            "ActionParamID": "5F89AA32-1594-47CA-8AC4-66E875CD2105",
+            "ValueType": "Static",
+            "Value": "[\"OrderBooking\",\"PaymentReceipt\",\"Refund\"]"
+          },
+          {
+            "ActionParamID": "BA072B0D-046B-43AE-9DF5-8B470B4F735B",
+            "ValueType": "Static",
+            "Value": "true"
+          }
+        ]
+      }
+    },
+    "primaryKey": {
+      "ID": "C839FB12-5813-4B85-8022-DF8943729BA4"
+    }
+  }
+]

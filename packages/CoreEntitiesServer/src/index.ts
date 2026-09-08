@@ -63,6 +63,7 @@ export {
   JournalEntryBatchFromViewError,
   approveJournalEntryBatch,
   sendJournalEntryBatch,
+  recordDispatchFailure,
   cancelJournalEntryBatch,
   regenerateJournalEntryBatch,
   netLines,
@@ -85,6 +86,7 @@ export type {
   ErpPoster,
   JournalEntryBatchApprovalGate,
   SendJournalEntryBatchOptions,
+  DispatchFailureRecord,
 } from './JournalEntryBatchEngine.js';
 
 // S1 — the REAL CFO-approval gate, backed by the bizapps-tasks app (replaces AutoApproveGate in
