@@ -30,6 +30,7 @@
 import { BaseEntity, IRunViewProvider, ValidationResult, ValidationErrorInfo } from '@memberjunction/core';
 import { RegisterClass } from '@memberjunction/global';
 import { mjBizAppsAccountingGLAccountLinkEntity } from '@mj-biz-apps/accounting-entities';
+import { isSqlGuid, sqlGuidLiteral } from './SqlGuards.js';
 
 const LINK_ENTITY = 'MJ_BizApps_Accounting: GL Account Links';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
@@ -60,6 +61,14 @@ export class GLAccountLinkEntityServer extends mjBizAppsAccountingGLAccountLinkE
   private async checkNoAmbiguousTie(fail: (message: string) => void): Promise<void> {
     if (this.Status !== 'Active') return;
     if (!this.EntityID || !this.RecordID || !this.GLAccountRoleID || !this.GLAccountID) return;
+    // These client-set FK values are interpolated into the sibling-scan filter below — a malformed
+    // one can never be a valid FK, so refuse it with a readable message before it reaches SQL.
+    for (const [name, value] of [['EntityID', this.EntityID], ['GLAccountRoleID', this.GLAccountRoleID], ['GLAccountID', this.GLAccountID]] as const) {
+      if (!isSqlGuid(value)) {
+        fail(`${name} '${value}' is not a valid UUID.`);
+        return;
+      }
+    }
     if (await this.roleIsMany(this.GLAccountRoleID)) return;
 
     const myCompanyId = await this.companyOfAccount(this.GLAccountID);
@@ -109,7 +118,7 @@ export class GLAccountLinkEntityServer extends mjBizAppsAccountingGLAccountLinkE
     const res = await provider.RunView<{ Cardinality: string }>(
       {
         EntityName: ROLE_ENTITY,
-        ExtraFilter: `ID='${roleId}'`,
+        ExtraFilter: `ID=${sqlGuidLiteral(roleId, 'GLAccountLinkEntityServer.roleIsMany')}`,
         Fields: ['Cardinality'],
         MaxRows: 1,
         ResultType: 'simple',
@@ -129,7 +138,7 @@ export class GLAccountLinkEntityServer extends mjBizAppsAccountingGLAccountLinkE
   private async companyOfAccount(glAccountId: string): Promise<string | null> {
     const provider = this.ProviderToUse as unknown as IRunViewProvider;
     const res = await provider.RunView<{ CompanyID: string }>(
-      { EntityName: GL_ENTITY, ExtraFilter: `ID='${glAccountId}'`, Fields: ['CompanyID'], MaxRows: 1, ResultType: 'simple', BypassCache: true },
+      { EntityName: GL_ENTITY, ExtraFilter: `ID=${sqlGuidLiteral(glAccountId, 'GLAccountLinkEntityServer.companyOfAccount')}`, Fields: ['CompanyID'], MaxRows: 1, ResultType: 'simple', BypassCache: true },
       this.ContextCurrentUser,
     );
     if (!res.Success) {
