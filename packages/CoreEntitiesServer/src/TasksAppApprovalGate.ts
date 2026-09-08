@@ -147,6 +147,11 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate {
    * whoever built the batch) could approve their own batch. The gate is the shared entry point for
    * every decision path, so the check lives here rather than in each caller. A company with no
    * configured CFO rejects loudly (resolveCFOUserIdForCompany hard-fails) — never "anyone may approve".
+   *
+   * SEPARATION OF DUTIES: being the configured CFO is necessary but not sufficient — the caller must
+   * also not be the person who built the batch (`JournalEntryBatch.BatchedByUserID`, NOT NULL, stamped
+   * by JournalEntryBatchEngine at build time). A CFO who batches entries themselves would otherwise
+   * satisfy the identity gate above and self-approve a dispatch of real journal lines to the ERP.
    */
   async recordDecision(
     batchId: string, outcome: TaskDecisionOutcomeCode, decidedByPersonId: string | undefined, notes: string | undefined, contextUser: UserInfo,
@@ -157,6 +162,12 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate {
       throw new Error(
         `Batch ${batch.JournalEntryBatchNumber ?? batchId}: only the configured approver for company ${batch.CompanyID} ` +
         `(AccountingCompanyProfile.ApprovalCFOUserID) may record an approval decision — the current user is not that approver.`,
+      );
+    }
+    if (UUIDsEqual(contextUser.ID, batch.BatchedByUserID)) {
+      throw new Error(
+        `Batch ${batch.JournalEntryBatchNumber ?? batchId}: the user who built a batch may not approve it — ` +
+        `separation of duties requires an approver other than JournalEntryBatch.BatchedByUserID.`,
       );
     }
     const task = await this.resolveBatchTask(batchId, contextUser);
