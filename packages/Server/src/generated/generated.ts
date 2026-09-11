@@ -3312,7 +3312,7 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @MaxLength(36)
     BatchedByUserID: string;
         
-    @Field({description: `Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed triggers retry + escalation; Cancelled is terminal from Pending or unsent Approved (trg_JournalEntryBatch_Immutability).`}) 
+    @Field({description: `Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled | Archived. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed triggers retry + escalation; Cancelled is terminal from Pending and RELEASES the member entries back to the candidate pool; Archived is terminal from Pending, Approved or Failed, makes no ERP call and KEEPS the member entries locked (trg_JournalEntryBatch_Immutability).`}) 
     @MaxLength(20)
     Status: string;
         
@@ -3358,6 +3358,17 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @Field() 
     _mj__UpdatedAt: Date;
         
+    @Field({nullable: true, description: `Why this batch was archived instead of posted. Required when Status = Archived (CK_JournalEntryBatch_ArchiveAudit).`}) 
+    @MaxLength(500)
+    ArchiveReason?: string;
+        
+    @Field({nullable: true, description: `When the batch was archived. Required when Status = Archived.`}) 
+    ArchivedAt?: Date;
+        
+    @Field({nullable: true, description: `User who archived the batch. Required when Status = Archived.`}) 
+    @MaxLength(36)
+    ArchivedByUserID?: string;
+        
     @Field() 
     @MaxLength(50)
     Company: string;
@@ -3377,6 +3388,10 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @Field({nullable: true}) 
     @MaxLength(255)
     ApprovalTask?: string;
+        
+    @Field({nullable: true}) 
+    @MaxLength(100)
+    ArchivedByUser?: string;
         
 }
 
@@ -3444,6 +3459,15 @@ export class CreatemjBizAppsAccountingJournalEntryBatchInput {
 
     @Field({ nullable: true })
     ApprovalTaskRaisedAt: Date | null;
+
+    @Field({ nullable: true })
+    ArchiveReason: string | null;
+
+    @Field({ nullable: true })
+    ArchivedAt: Date | null;
+
+    @Field({ nullable: true })
+    ArchivedByUserID: string | null;
 
     @Field(() => RestoreContextInput, { nullable: true })
     RestoreContext___?: RestoreContextInput;
@@ -3514,6 +3538,15 @@ export class UpdatemjBizAppsAccountingJournalEntryBatchInput {
 
     @Field({ nullable: true })
     ApprovalTaskRaisedAt?: Date | null;
+
+    @Field({ nullable: true })
+    ArchiveReason?: string | null;
+
+    @Field({ nullable: true })
+    ArchivedAt?: Date | null;
+
+    @Field({ nullable: true })
+    ArchivedByUserID?: string | null;
 
     @Field(() => [KeyValuePairInput], { nullable: true })
     OldValues___?: KeyValuePairInput[];

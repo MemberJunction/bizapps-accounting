@@ -1303,7 +1303,7 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
         * * Description: User (or system identity for scheduled runs) that performed the batch.`),
-    Status: z.union([z.literal('Approved'), z.literal('Cancelled'), z.literal('Failed'), z.literal('Pending'), z.literal('Posted'), z.literal('Sent')]).describe(`
+    Status: z.union([z.literal('Approved'), z.literal('Archived'), z.literal('Cancelled'), z.literal('Failed'), z.literal('Pending'), z.literal('Posted'), z.literal('Sent')]).describe(`
         * * Field Name: Status
         * * Display Name: Status
         * * SQL Data Type: nvarchar(20)
@@ -1311,12 +1311,13 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
     * * Value List Type: List
     * * Possible Values 
     *   * Approved
+    *   * Archived
     *   * Cancelled
     *   * Failed
     *   * Pending
     *   * Posted
     *   * Sent
-        * * Description: Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed triggers retry + escalation; Cancelled is terminal from Pending or unsent Approved (trg_JournalEntryBatch_Immutability).`),
+        * * Description: Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled | Archived. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed triggers retry + escalation; Cancelled is terminal from Pending and RELEASES the member entries back to the candidate pool; Archived is terminal from Pending, Approved or Failed, makes no ERP call and KEEPS the member entries locked (trg_JournalEntryBatch_Immutability).`),
     TotalEntries: z.number().describe(`
         * * Field Name: TotalEntries
         * * Display Name: Total Entries
@@ -1387,6 +1388,22 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * Display Name: Updated At
         * * SQL Data Type: datetimeoffset
         * * Default Value: getutcdate()`),
+    ArchiveReason: z.string().nullable().describe(`
+        * * Field Name: ArchiveReason
+        * * Display Name: Archive Reason
+        * * SQL Data Type: nvarchar(500)
+        * * Description: Why this batch was archived instead of posted. Required when Status = Archived (CK_JournalEntryBatch_ArchiveAudit).`),
+    ArchivedAt: z.date().nullable().describe(`
+        * * Field Name: ArchivedAt
+        * * Display Name: Archived At
+        * * SQL Data Type: datetimeoffset
+        * * Description: When the batch was archived. Required when Status = Archived.`),
+    ArchivedByUserID: z.string().nullable().describe(`
+        * * Field Name: ArchivedByUserID
+        * * Display Name: Archived By User ID
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+        * * Description: User who archived the batch. Required when Status = Archived.`),
     Company: z.string().describe(`
         * * Field Name: Company
         * * Display Name: Company
@@ -1407,6 +1424,10 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * Field Name: ApprovalTask
         * * Display Name: Approval Task
         * * SQL Data Type: nvarchar(255)`),
+    ArchivedByUser: z.string().nullable().describe(`
+        * * Field Name: ArchivedByUser
+        * * Display Name: Archived By User
+        * * SQL Data Type: nvarchar(100)`),
 });
 
 export type mjBizAppsAccountingJournalEntryBatchEntityType = z.infer<typeof mjBizAppsAccountingJournalEntryBatchSchema>;
@@ -5926,17 +5947,18 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     * * Value List Type: List
     * * Possible Values 
     *   * Approved
+    *   * Archived
     *   * Cancelled
     *   * Failed
     *   * Pending
     *   * Posted
     *   * Sent
-    * * Description: Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed triggers retry + escalation; Cancelled is terminal from Pending or unsent Approved (trg_JournalEntryBatch_Immutability).
+    * * Description: Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled | Archived. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed triggers retry + escalation; Cancelled is terminal from Pending and RELEASES the member entries back to the candidate pool; Archived is terminal from Pending, Approved or Failed, makes no ERP call and KEEPS the member entries locked (trg_JournalEntryBatch_Immutability).
     */
-    get Status(): 'Approved' | 'Cancelled' | 'Failed' | 'Pending' | 'Posted' | 'Sent' {
+    get Status(): 'Approved' | 'Archived' | 'Cancelled' | 'Failed' | 'Pending' | 'Posted' | 'Sent' {
         return this.Get('Status');
     }
-    set Status(value: 'Approved' | 'Cancelled' | 'Failed' | 'Pending' | 'Posted' | 'Sent') {
+    set Status(value: 'Approved' | 'Archived' | 'Cancelled' | 'Failed' | 'Pending' | 'Posted' | 'Sent') {
         this.Set('Status', value);
     }
 
@@ -6109,6 +6131,46 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     }
 
     /**
+    * * Field Name: ArchiveReason
+    * * Display Name: Archive Reason
+    * * SQL Data Type: nvarchar(500)
+    * * Description: Why this batch was archived instead of posted. Required when Status = Archived (CK_JournalEntryBatch_ArchiveAudit).
+    */
+    get ArchiveReason(): string | null {
+        return this.Get('ArchiveReason');
+    }
+    set ArchiveReason(value: string | null) {
+        this.Set('ArchiveReason', value);
+    }
+
+    /**
+    * * Field Name: ArchivedAt
+    * * Display Name: Archived At
+    * * SQL Data Type: datetimeoffset
+    * * Description: When the batch was archived. Required when Status = Archived.
+    */
+    get ArchivedAt(): Date | null {
+        return this.Get('ArchivedAt');
+    }
+    set ArchivedAt(value: Date | null) {
+        this.Set('ArchivedAt', value);
+    }
+
+    /**
+    * * Field Name: ArchivedByUserID
+    * * Display Name: Archived By User ID
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+    * * Description: User who archived the batch. Required when Status = Archived.
+    */
+    get ArchivedByUserID(): string | null {
+        return this.Get('ArchivedByUserID');
+    }
+    set ArchivedByUserID(value: string | null) {
+        this.Set('ArchivedByUserID', value);
+    }
+
+    /**
     * * Field Name: Company
     * * Display Name: Company
     * * SQL Data Type: nvarchar(50)
@@ -6151,6 +6213,15 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     */
     get ApprovalTask(): string | null {
         return this.Get('ApprovalTask');
+    }
+
+    /**
+    * * Field Name: ArchivedByUser
+    * * Display Name: Archived By User
+    * * SQL Data Type: nvarchar(100)
+    */
+    get ArchivedByUser(): string | null {
+        return this.Get('ArchivedByUser');
     }
 }
 
