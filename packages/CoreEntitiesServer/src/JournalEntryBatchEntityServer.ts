@@ -42,19 +42,30 @@ const FOOT_TOLERANCE = 0.005;
 
 /**
  * The legal batch status graph (plan §7): Pending → Approved | Cancelled · Approved → Sent ·
- * Sent → Posted | Failed · Failed → Sent (retry) · Posted / Cancelled are terminal.
- * The DB immutability trigger freezes Approved/Sent/Posted content but does not police the
+ * Sent → Posted | Failed · Failed → Sent (retry) · Posted / Cancelled / Archived are terminal.
+ * The DB immutability trigger freezes Approved/Sent/Posted/Archived content but does not police the
  * transition GRAPH itself — that is this entity's always-applies invariant, so a direct
  * client save can never jump Pending→Sent (skip approval) or resurrect a terminal batch.
+ *
+ * `Archived` (golive #214) is the terminal state for a batch that must NEVER reach the ERP:
+ * reachable from Pending, Approved and Failed, it makes no ERP call and — unlike Cancelled —
+ * leaves the member entries locked at `Batched`. NOT reachable from `Sent`: a sent batch may
+ * still be posting in the ERP, so its outcome is Posted or Failed, never an operator's choice.
  */
 const LEGAL_TRANSITIONS: Record<string, ReadonlyArray<string>> = {
-  Pending: ['Pending', 'Approved', 'Cancelled'],
-  Approved: ['Approved', 'Sent'],
+  Pending: ['Pending', 'Approved', 'Cancelled', 'Archived'],
+  Approved: ['Approved', 'Sent', 'Archived'],
   Sent: ['Sent', 'Posted', 'Failed'],
-  Failed: ['Failed', 'Sent'],
+  Failed: ['Failed', 'Sent', 'Archived'],
   Posted: ['Posted'],
   Cancelled: ['Cancelled'],
+  Archived: ['Archived'],
 };
+
+/** The statuses an operator may archive from — the `→ Archived` edges of LEGAL_TRANSITIONS. */
+const ARCHIVABLE_FROM = Object.entries(LEGAL_TRANSITIONS)
+  .filter(([from, to]) => from !== 'Archived' && to.includes('Archived'))
+  .map(([from]) => from);
 
 @RegisterClass(BaseEntity, BATCH_ENTITY)
 export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEntryBatchEntity {
@@ -81,6 +92,11 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     if (this.IsSaved && this.Status === 'Approved' && oldStatus !== 'Approved') {
       if (!this.ApprovedAt) this.ApprovedAt = new Date();
       if (!this.ApprovedByUserID && this.ContextCurrentUser) this.ApprovedByUserID = this.ContextCurrentUser.ID;
+    }
+    // Same rule for the archive audit triple: WHO and WHEN belong to the transition, not the caller.
+    if (this.IsSaved && this.Status === 'Archived' && oldStatus !== 'Archived') {
+      if (!this.ArchivedAt) this.ArchivedAt = new Date();
+      if (!this.ArchivedByUserID && this.ContextCurrentUser) this.ArchivedByUserID = this.ContextCurrentUser.ID;
     }
     return super.Save(options);
   }
@@ -122,6 +138,19 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
         new ValidationErrorInfo(
           'JournalEntryBatchEntityServer.Validate',
           `An Approved batch must carry both ApprovedAt and ApprovedByUserID.`,
+          null,
+        ),
+      );
+    }
+
+    // Archive audit triple: an Archived batch says WHY it will never post, plus who and when.
+    // Enforced at the DB too (CK_JournalEntryBatch_ArchiveAudit) — the reason is required by #214.
+    if (this.Status === 'Archived' && (!this.ArchiveReason?.trim() || !this.ArchivedAt || !this.ArchivedByUserID)) {
+      result.Success = false;
+      result.Errors.push(
+        new ValidationErrorInfo(
+          'JournalEntryBatchEntityServer.Validate',
+          `An Archived batch must carry a non-blank ArchiveReason plus ArchivedAt and ArchivedByUserID.`,
           null,
         ),
       );
@@ -236,6 +265,34 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
       try { await dbProvider.RollbackTransaction(); } catch { /* rollback best-effort */ }
       throw e;
     }
+  }
+
+  /**
+   * Close a batch that must NEVER reach the ERP (golive #214): mark it Archived with a required
+   * reason, and leave everything else exactly where it is. Legal from Pending, Approved and Failed.
+   *
+   * The contrast with `Cancel()` is the whole point and is load-bearing: Cancel RELEASES the member
+   * entries back to the candidate pool via `TearDownSummaryAndUnlock`, so the nightly/monthly runs
+   * pick them up again. Archive must NOT — the entries stay at `Batched` with their
+   * JournalEntryBatchID, which keeps them out of every candidate pool (those filter `Status='Pending'`)
+   * and, once this save lands, out of reach of trg_JournalEntry_Immutability's unlock (it sanctions
+   * Batched→Pending only while the owning batch is Pending). No teardown means no transaction:
+   * this is a single-row update.
+   */
+  public async Archive(reason: string, contextUser?: UserInfo): Promise<boolean> {
+    if (!this.IsSaved) throw new Error('JournalEntryBatchEntityServer.Archive: the batch must be saved.');
+    if (!ARCHIVABLE_FROM.includes(this.Status)) {
+      throw new Error(`JournalEntryBatchEntityServer.Archive: batch ${this.JournalEntryBatchNumber} is ${this.Status}; only a ${ARCHIVABLE_FROM.join(' / ')} batch can be archived.`);
+    }
+    if (!reason?.trim()) {
+      throw new Error(`JournalEntryBatchEntityServer.Archive: an archive reason is required — it is the only record of why batch ${this.JournalEntryBatchNumber} will never post.`);
+    }
+    this.ArchiveReason = reason.trim();
+    this.ArchivedAt = new Date();
+    this.ArchivedByUserID = (contextUser ?? this.ContextCurrentUser)?.ID ?? null;
+    this.Status = 'Archived';
+    if (!(await this.Save())) throw new Error(`Archive: →Archived failed: ${this.LatestResult?.CompleteMessage ?? 'unknown'}`);
+    return true;
   }
 
   /**

@@ -1,7 +1,8 @@
 /**
  * JournalEntryBatchDispatchClient — a thin, strongly-typed wrapper over the batch Remote Operations
  * (`Accounting.BuildJournalEntryBatch` / `Accounting.RegenerateJournalEntryBatch` / `Accounting.DispatchJournalEntryBatch` /
- * `Accounting.RecordJournalEntryBatchDecision` / `Accounting.GetJournalEntryBatchApprovalState`).
+ * `Accounting.RecordJournalEntryBatchDecision` / `Accounting.GetJournalEntryBatchApprovalState` /
+ * `Accounting.ArchiveJournalEntryBatch`).
  *
  * Deliberately NOT a hand-written GraphQL client (the old shape, which talked to the deleted
  * BatchDispatchResolver): batch actions run the batching engine server-side, so they travel MJ's
@@ -39,6 +40,7 @@ interface BuildJournalEntryBatchOutputWire {
 interface DispatchJournalEntryBatchOutputWire { Status: string; ExternalJournalEntryBatchRef: string | null }
 interface GetJournalEntryBatchApprovalStateOutputWire { Approved: boolean; Reason?: string }
 interface RecordJournalEntryBatchDecisionOutputWire { Recorded: true }
+interface ArchiveJournalEntryBatchOutputWire { Status: string; ArchivedAt: string | null }
 
 // ─── The legacy result shapes the dashboard components bind to (unchanged public API) ────────────
 
@@ -63,6 +65,12 @@ export interface DispatchJournalEntryBatchResult {
 
 export interface RecordJournalEntryBatchDecisionResult {
   Success: boolean;
+  ErrorMessage?: string;
+}
+
+export interface ArchiveJournalEntryBatchResult {
+  Success: boolean;
+  Status?: string;
   ErrorMessage?: string;
 }
 
@@ -214,6 +222,23 @@ export class JournalEntryBatchDispatchClient {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       LogError(`JournalEntryBatchDispatchClient.RecordDecision failed: ${msg}`);
+      return { Success: false, ErrorMessage: msg };
+    }
+  }
+
+  /**
+   * Archive a batch that must never post to the ERP (#214). Terminal, makes NO ERP call, and leaves
+   * the batch's journal entries locked — unlike a Reject, which returns them to the candidate pool.
+   */
+  public async ArchiveBatch(batchID: string, reason: string): Promise<ArchiveJournalEntryBatchResult> {
+    try {
+      const res = await this.dataProvider.RouteOperation<{ JournalEntryBatchID: string; Reason: string }, ArchiveJournalEntryBatchOutputWire>(
+        'Accounting.ArchiveJournalEntryBatch', { JournalEntryBatchID: batchID, Reason: reason });
+      if (!res.Success || !res.Output) return { Success: false, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
+      return { Success: true, Status: res.Output.Status };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      LogError(`JournalEntryBatchDispatchClient.ArchiveBatch failed: ${msg}`);
       return { Success: false, ErrorMessage: msg };
     }
   }

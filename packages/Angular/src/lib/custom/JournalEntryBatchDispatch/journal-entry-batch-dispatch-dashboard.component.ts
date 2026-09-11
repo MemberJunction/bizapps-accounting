@@ -28,6 +28,8 @@ interface BatchRow {
   TotalCredits: number;
   ExternalJournalEntryBatchRef: string | null;
   ErrorMessage: string | null;
+  /** Why this batch was archived — set only on an Archived batch (#214). */
+  ArchiveReason: string | null;
   /** undefined = not yet checked; null = unknown/error; true/false = gate result. */
   Approved?: boolean | null;
   ApprovalReason?: string;
@@ -186,6 +188,38 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
     }
   }
 
+  /**
+   * Archive a batch that must never post to the ERP (#214): terminal, no ERP call, and the batch's
+   * journal entries STAY locked — the opposite of Reject, which returns them to the candidate pool.
+   * A cancelled or blank prompt aborts silently; the reason is required and is the only record of why.
+   */
+  public async OnArchive(row: BatchRow): Promise<void> {
+    if (row.Busy) return;
+    const reason = this.PromptForReason(row);
+    if (!reason?.trim()) return;
+
+    row.Busy = true;
+    this.clearActionMessage();
+    this.cdr.markForCheck();
+    try {
+      const res = await this.client().ArchiveBatch(row.ID, reason.trim());
+      if (res.Success) {
+        this.setActionMessage(`Archived batch ${row.JournalEntryBatchNumber} — no ERP call; its journal entries stay locked to it.`, false);
+        await this.loadBatches();
+      } else {
+        this.setActionMessage(res.ErrorMessage ?? 'Archive failed.', true);
+      }
+    } finally {
+      row.Busy = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  /** The archive-reason prompt, as a seam a test can stub. Native prompt — this package has no dialog helper. */
+  protected PromptForReason(row: BatchRow): string | null {
+    return window.prompt(`Archive batch ${row.JournalEntryBatchNumber}? It will never post to the ERP and its journal entries stay locked to it.\n\nReason (required):`);
+  }
+
   // ─── view helpers (template-facing) ──────────────────────────────────────
 
   /** An Approved batch (status flip happens with the CFO decision) can dispatch. */
@@ -201,6 +235,11 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
   /** Regenerate is offered on an OPEN (Pending) batch — it re-gathers candidates in place. */
   public canRegenerate(row: BatchRow): boolean {
     return row.Status === 'Pending' && !row.Busy;
+  }
+
+  /** Archive is offered wherever LEGAL_TRANSITIONS allows `→ Archived` (server-side: Pending / Approved / Failed). */
+  public canArchive(row: BatchRow): boolean {
+    return ['Pending', 'Approved', 'Failed'].includes(row.Status) && !row.Busy;
   }
 
   /** Map a batch status to a stat-badge variant for the status pill. */
@@ -251,6 +290,7 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
       TotalCredits: b.TotalCredits,
       ExternalJournalEntryBatchRef: b.ExternalJournalEntryBatchRef,
       ErrorMessage: b.ErrorMessage,
+      ArchiveReason: b.ArchiveReason,
     };
   }
 
