@@ -11,9 +11,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@memberjunction/core": "^6.1.0-edge.5",
-    "@memberjunction/global": "^6.1.0-edge.5",
-    "@memberjunction/testing-integration": "^6.1.0-edge.5",
+    "@memberjunction/core": "^6.1.0-edge.6",
+    "@memberjunction/global": "^6.1.0-edge.6",
+    "@memberjunction/testing-integration": "^6.1.0-edge.6",
     "@mj-biz-apps/accounting-entities": ">=0.6.1"
   },
   "devDependencies": {
