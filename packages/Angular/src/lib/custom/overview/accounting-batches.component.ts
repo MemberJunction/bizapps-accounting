@@ -728,10 +728,16 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
         }
 
         .mja-td-action {
-            width: 32px;
-            text-align: center;
+            /* Shrink-to-fit, not 32px: this cell held a lone open-record icon until the Archive
+               action joined it, and a fixed 32px wrapped the icon under the button. */
+            width: 1%;
+            white-space: nowrap;
+            text-align: right;
             color: var(--mj-text-muted, #94a3b8);
         }
+
+        .mja-td-action > * { vertical-align: middle; }
+        .mja-td-action > button + i { margin-left: 10px; }
 
         .mja-loading {
             display: flex;
