@@ -14,7 +14,7 @@ import {
 export interface BatchItem {
     ID: string;
     JournalEntryBatchNumber: string;
-    Status: 'Pending' | 'Approved' | 'Sent' | 'Posted' | 'Failed' | 'Cancelled';
+    Status: 'Pending' | 'Approved' | 'Sent' | 'Posted' | 'Failed' | 'Cancelled' | 'Archived';
     TargetSystem: string;
     PostingDate: string;
     BatchedAt: string;
@@ -23,6 +23,8 @@ export interface BatchItem {
     TotalCredits: number;
     Company: string | null;
     ExternalJournalEntryBatchRef: string | null;
+    /** Why this batch was archived — set only on an Archived batch (golive #214). */
+    ArchiveReason: string | null;
 }
 
 interface StageCount {
@@ -199,12 +201,23 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                             <span class="mja-status-pill" [attr.data-status]="batch.Status">
                                                 {{ batch.Status }}
                                             </span>
+                                            @if (batch.Status === 'Archived' && batch.ArchiveReason) {
+                                                <span class="mja-archive-reason" [title]="batch.ArchiveReason">{{ batch.ArchiveReason }}</span>
+                                            }
                                         </td>
                                         <td class="mja-td-right">{{ batch.TotalEntries }}</td>
                                         <td class="mja-td-right">
                                             <strong>{{ batch.TotalDebits | currency }}</strong>
                                         </td>
                                         <td class="mja-td-action">
+                                            @if (CanArchive(batch)) {
+                                                <button mjButton variant="secondary" size="sm" type="button"
+                                                        [disabled]="ArchivingBatchID === batch.ID"
+                                                        title="Close this batch permanently without sending it to the ERP. Its journal entries stay locked to it."
+                                                        (click)="OnArchive(batch, $event)">
+                                                    <i class="fa-solid fa-box-archive"></i> Archive
+                                                </button>
+                                            }
                                             <i class="fa-solid fa-arrow-up-right-from-square"></i>
                                         </td>
                                     </tr>
@@ -698,6 +711,16 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
         .mja-status-pill[data-status="Posted"] { background: #dcfce7; color: #15803d; }
         .mja-status-pill[data-status="Failed"] { background: #fee2e2; color: #b91c1c; }
         .mja-status-pill[data-status="Cancelled"] { background: #f1f5f9; color: #64748b; }
+        .mja-status-pill[data-status="Archived"] { background: #e2e8f0; color: #475569; }
+
+        .mja-archive-reason {
+            display: block;
+            margin-top: 4px;
+            max-width: 260px;
+            font-size: 11px;
+            line-height: 1.35;
+            color: var(--mj-text-muted, #94a3b8);
+        }
 
         .mja-th-right, .mja-td-right {
             text-align: right;
@@ -882,6 +905,7 @@ export class AccountingBatchesPageComponent implements OnInit {
         { Status: 'Posted', Count: 0, Color: '#16a34a', Icon: 'fa-solid fa-circle-check' },
         { Status: 'Failed', Count: 0, Color: '#dc2626', Icon: 'fa-solid fa-triangle-exclamation' },
         { Status: 'Cancelled', Count: 0, Color: '#64748b', Icon: 'fa-solid fa-ban' },
+        { Status: 'Archived', Count: 0, Color: '#475569', Icon: 'fa-solid fa-box-archive' },
     ];
 
     // Build Batch Modal & Preview State
@@ -902,6 +926,48 @@ export class AccountingBatchesPageComponent implements OnInit {
     public PreviewCandidateCount = 0;
     public PreviewCoveredStartDate: string | null = null;
     public PreviewCoveredEndDate: string | null = null;
+
+    /** Per-row in-flight id so the acting row's button disables, not every row's. */
+    public ArchivingBatchID: string | null = null;
+    /** Archive is offered wherever the server's LEGAL_TRANSITIONS allows it (Pending / Approved / Failed). */
+    public CanArchive(batch: BatchItem): boolean {
+        return ['Pending', 'Approved', 'Failed'].includes(batch.Status) && this.ArchivingBatchID !== batch.ID;
+    }
+
+    /**
+     * Archive a batch that must never post to the ERP (golive #214): terminal, no ERP call, and the
+     * batch's journal entries STAY locked to it — the opposite of a reject/cancel, which returns them
+     * to the candidate pool. A cancelled or blank prompt aborts silently; the reason is required and
+     * is the only record of why this batch will never post.
+     */
+    public async OnArchive(batch: BatchItem, event: Event): Promise<void> {
+        // The row itself opens the record — an action button inside it must not also navigate.
+        event.stopPropagation();
+        if (this.ArchivingBatchID) return;
+
+        const reason = this.PromptForReason(batch);
+        if (!reason?.trim()) return;
+
+        this.ArchivingBatchID = batch.ID;
+        this.ActionMessage = null;
+        this.cdr.markForCheck();
+        try {
+            const res = await this.dispatchClient.ArchiveBatch(batch.ID, reason.trim());
+            this.ActionMessageIsError = !res.Success;
+            this.ActionMessage = res.Success
+                ? `Archived batch ${batch.JournalEntryBatchNumber} — no ERP call; its journal entries stay locked to it.`
+                : (res.ErrorMessage ?? 'Archive failed.');
+            if (res.Success) await this.LoadBatches();
+        } finally {
+            this.ArchivingBatchID = null;
+            this.cdr.markForCheck();
+        }
+    }
+
+    /** The archive-reason prompt, as a seam a test can stub. Native prompt — this package has no dialog helper. */
+    protected PromptForReason(batch: BatchItem): string | null {
+        return window.prompt(`Archive batch ${batch.JournalEntryBatchNumber}? It will never post to the ERP and its journal entries stay locked to it.\n\nReason (required):`);
+    }
 
     private get dispatchClient(): JournalEntryBatchDispatchClient {
         return new JournalEntryBatchDispatchClient(Metadata.Provider as GraphQLDataProvider);
