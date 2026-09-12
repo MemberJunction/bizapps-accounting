@@ -349,6 +349,43 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                     </button>
                 </mj-dialog-actions>
             </mj-dialog>
+
+            <mj-dialog [Visible]="ArchiveModalVisible" Title="Archive Journal Entry Batch" [Width]="560" (Close)="CloseArchiveModal()">
+                <div class="mja-modal-content">
+                    <p class="mja-archive-blurb">
+                        Batch <strong>{{ ArchiveTarget?.JournalEntryBatchNumber }}</strong> will be closed permanently and
+                        <strong>will never be sent to {{ ArchiveTarget?.TargetSystem }}</strong>. Its
+                        {{ ArchiveTarget?.TotalEntries }} journal entr{{ ArchiveTarget?.TotalEntries === 1 ? 'y' : 'ies' }}
+                        stay locked to it and will not return to the candidate pool — this is not a cancellation.
+                    </p>
+
+                    <div class="mja-modal-field">
+                        <label class="mja-modal-label" for="aidp-archive-reason">Reason (required)</label>
+                        <textarea
+                            id="aidp-archive-reason"
+                            class="mj-input mja-archive-reason-input"
+                            rows="3"
+                            maxlength="500"
+                            placeholder="e.g. Conversion cutover — already booked in the legacy system"
+                            [(ngModel)]="ArchiveReasonDraft"></textarea>
+                    </div>
+                </div>
+
+                <mj-dialog-actions>
+                    <button mjButton variant="primary" size="sm" type="button"
+                            [disabled]="!!ArchivingBatchID || !ArchiveReasonDraft.trim()"
+                            (click)="ConfirmArchive()">
+                        @if (ArchivingBatchID) {
+                            <i class="fa-solid fa-spinner fa-spin"></i> Archiving…
+                        } @else {
+                            <i class="fa-solid fa-box-archive"></i> Archive Batch
+                        }
+                    </button>
+                    <button mjButton variant="flat" size="sm" type="button" [disabled]="!!ArchivingBatchID" (click)="CloseArchiveModal()">
+                        Cancel
+                    </button>
+                </mj-dialog-actions>
+            </mj-dialog>
         </div>
     `,
     styles: [`
@@ -713,6 +750,18 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
         .mja-status-pill[data-status="Cancelled"] { background: #f1f5f9; color: #64748b; }
         .mja-status-pill[data-status="Archived"] { background: #e2e8f0; color: #475569; }
 
+        .mja-archive-blurb {
+            margin: 0 0 16px;
+            line-height: 1.5;
+            color: var(--mj-text-secondary, #cbd5e1);
+        }
+
+        .mja-archive-reason-input {
+            width: 100%;
+            resize: vertical;
+            font-family: inherit;
+        }
+
         .mja-archive-reason {
             display: block;
             margin-top: 4px;
@@ -935,6 +984,9 @@ export class AccountingBatchesPageComponent implements OnInit {
 
     /** Per-row in-flight id so the acting row's button disables, not every row's. */
     public ArchivingBatchID: string | null = null;
+    public ArchiveModalVisible = false;
+    public ArchiveTarget: BatchItem | null = null;
+    public ArchiveReasonDraft = '';
     /** Archive is offered wherever the server's LEGAL_TRANSITIONS allows it (Pending / Approved / Failed). */
     public CanArchive(batch: BatchItem): boolean {
         return ['Pending', 'Approved', 'Failed'].includes(batch.Status) && this.ArchivingBatchID !== batch.ID;
@@ -946,33 +998,49 @@ export class AccountingBatchesPageComponent implements OnInit {
      * to the candidate pool. A cancelled or blank prompt aborts silently; the reason is required and
      * is the only record of why this batch will never post.
      */
-    public async OnArchive(batch: BatchItem, event: Event): Promise<void> {
+    public OnArchive(batch: BatchItem, event: Event): void {
         // The row itself opens the record — an action button inside it must not also navigate.
         event.stopPropagation();
         if (this.ArchivingBatchID) return;
+        this.ArchiveTarget = batch;
+        this.ArchiveReasonDraft = '';
+        this.ArchiveModalVisible = true;
+        this.cdr.markForCheck();
+    }
 
-        const reason = this.PromptForReason(batch);
-        if (!reason?.trim()) return;
+    public CloseArchiveModal(): void {
+        if (this.ArchivingBatchID) return;
+        this.ArchiveModalVisible = false;
+        this.ArchiveTarget = null;
+        this.ArchiveReasonDraft = '';
+        this.cdr.markForCheck();
+    }
+
+    /** Run the archive with the reason captured in the dialog. The button is disabled until it is non-blank. */
+    public async ConfirmArchive(): Promise<void> {
+        const batch = this.ArchiveTarget;
+        const reason = this.ArchiveReasonDraft.trim();
+        if (!batch || !reason || this.ArchivingBatchID) return;
 
         this.ArchivingBatchID = batch.ID;
         this.ActionMessage = null;
         this.cdr.markForCheck();
         try {
-            const res = await this.dispatchClient.ArchiveBatch(batch.ID, reason.trim());
+            const res = await this.dispatchClient.ArchiveBatch(batch.ID, reason);
             this.ActionMessageIsError = !res.Success;
             this.ActionMessage = res.Success
                 ? `Archived batch ${batch.JournalEntryBatchNumber} — no ERP call; its journal entries stay locked to it.`
                 : (res.ErrorMessage ?? 'Archive failed.');
-            if (res.Success) await this.LoadBatches();
+            if (res.Success) {
+                this.ArchiveModalVisible = false;
+                this.ArchiveTarget = null;
+                this.ArchiveReasonDraft = '';
+                await this.LoadBatches();
+            }
         } finally {
             this.ArchivingBatchID = null;
             this.cdr.markForCheck();
         }
-    }
-
-    /** The archive-reason prompt, as a seam a test can stub. Native prompt — this package has no dialog helper. */
-    protected PromptForReason(batch: BatchItem): string | null {
-        return window.prompt(`Archive batch ${batch.JournalEntryBatchNumber}? It will never post to the ERP and its journal entries stay locked to it.\n\nReason (required):`);
     }
 
     private get dispatchClient(): JournalEntryBatchDispatchClient {
