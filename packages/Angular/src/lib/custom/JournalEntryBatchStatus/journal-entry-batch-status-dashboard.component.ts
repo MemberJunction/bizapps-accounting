@@ -32,15 +32,18 @@ export interface BatchDetail { Lines: ConsolidatedLine[]; TotalDebits: number; T
 export interface PreviewEntry { ID: string; EntryNumber: string; EffectiveDate: Date | null; EntryType: string; Description: string | null; Amount: number }
 
 /** One batch row in the table, with its inferred date range + lazily-loaded JE detail. */
-export interface BatchRow {
-  ID: string;
-  JournalEntryBatchNumber: string;
-  Status: BatchStatus;
-  TargetSystem: TargetSystem;
-  TotalEntries: number;
-  TotalDebits: number;
-  TotalCredits: number;
-  ExternalJournalEntryBatchRef: string | null;
+/**
+ * The batch's own fields are PICKED from the generated entity class, never re-declared (Amith,
+ * PR #148 review). Everything below the intersection is derived or UI state, not a column:
+ * the inferred date range, the company list, and the expand/detail cache.
+ *
+ * `BatchedAt` is re-declared as nullable on purpose — the column is NOT NULL, but this page
+ * builds rows before the value is resolved.
+ */
+export type BatchRow = Pick<
+  mjBizAppsAccountingJournalEntryBatchEntity,
+  'ID' | 'JournalEntryBatchNumber' | 'Status' | 'TargetSystem' | 'TotalEntries' | 'TotalDebits' | 'TotalCredits' | 'ExternalJournalEntryBatchRef' | 'ArchiveReason'
+> & {
   BatchedAt: Date | null;
   /** Inferred from the batch's journal entries' EffectiveDates (min/max) — a temporary stand-in for a real cutoff. */
   StartDate: Date | null;
@@ -51,7 +54,7 @@ export interface BatchRow {
   DetailLoaded: boolean;
   DetailLoading: boolean;
   Detail: BatchDetail | null;
-}
+};
 
 type SortField = 'Status' | 'TargetSystem' | 'TotalEntries' | 'TotalDebits' | 'TotalCredits' | 'StartDate' | 'EndDate' | 'BatchedAt';
 
@@ -359,7 +362,7 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
   }
 
   private toRow(
-    b: { ID: string; JournalEntryBatchNumber: string; Status: BatchStatus; TargetSystem: TargetSystem; TotalEntries: number; TotalDebits: number; TotalCredits: number; ExternalJournalEntryBatchRef: string | null; BatchedAt: Date | null },
+    b: { ID: string; JournalEntryBatchNumber: string; Status: BatchStatus; TargetSystem: TargetSystem; TotalEntries: number; TotalDebits: number; TotalCredits: number; ExternalJournalEntryBatchRef: string | null; ArchiveReason: string | null; BatchedAt: Date | null },
     jes: JEHeader[], companyIDs: string[],
   ): BatchRow {
     const dates = jes.map(j => j.EffectiveDate).filter((d): d is Date => d instanceof Date);
@@ -367,7 +370,7 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
     return {
       ID: b.ID, JournalEntryBatchNumber: b.JournalEntryBatchNumber, Status: b.Status, TargetSystem: b.TargetSystem,
       TotalEntries: b.TotalEntries, TotalDebits: b.TotalDebits, TotalCredits: b.TotalCredits,
-      ExternalJournalEntryBatchRef: b.ExternalJournalEntryBatchRef, BatchedAt: b.BatchedAt,
+      ExternalJournalEntryBatchRef: b.ExternalJournalEntryBatchRef, ArchiveReason: b.ArchiveReason, BatchedAt: b.BatchedAt,
       StartDate: times.length ? new Date(Math.min(...times)) : null,
       EndDate: times.length ? new Date(Math.max(...times)) : null,
       CompanyIDs: companyIDs,
@@ -385,14 +388,15 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
       .sort((a, b) => a.Name.localeCompare(b.Name));
   }
 
-  private async loadBatches(): Promise<Array<{ ID: string; JournalEntryBatchNumber: string; Status: BatchStatus; TargetSystem: TargetSystem; CompanyID: string | null; TotalEntries: number; TotalDebits: number; TotalCredits: number; ExternalJournalEntryBatchRef: string | null; BatchedAt: Date | null }>> {
+  private async loadBatches(): Promise<Array<{ ID: string; JournalEntryBatchNumber: string; Status: BatchStatus; TargetSystem: TargetSystem; CompanyID: string | null; TotalEntries: number; TotalDebits: number; TotalCredits: number; ExternalJournalEntryBatchRef: string | null; ArchiveReason: string | null; BatchedAt: Date | null }>> {
     const res = await this.runView().RunView<mjBizAppsAccountingJournalEntryBatchEntity>(
       { EntityName: BATCH_ENTITY, OrderBy: 'BatchedAt DESC', ResultType: 'simple' }, this.contextUser());
     return (res.Results ?? []).map(b => ({
       ID: b.ID, JournalEntryBatchNumber: b.JournalEntryBatchNumber, Status: b.Status, TargetSystem: b.TargetSystem,
       CompanyID: b.CompanyID ?? null,
       TotalEntries: b.TotalEntries, TotalDebits: b.TotalDebits, TotalCredits: b.TotalCredits,
-      ExternalJournalEntryBatchRef: b.ExternalJournalEntryBatchRef, BatchedAt: b.BatchedAt ? new Date(b.BatchedAt) : null,
+      ExternalJournalEntryBatchRef: b.ExternalJournalEntryBatchRef, ArchiveReason: b.ArchiveReason,
+      BatchedAt: b.BatchedAt ? new Date(b.BatchedAt) : null,
     }));
   }
 

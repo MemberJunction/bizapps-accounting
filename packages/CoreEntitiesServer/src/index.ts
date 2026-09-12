@@ -132,6 +132,7 @@ export {
   DispatchJournalEntryBatchOperation,
   RecordJournalEntryBatchDecisionOperation,
   GetJournalEntryBatchApprovalStateOperation,
+  ArchiveJournalEntryBatchOperation,
   LoadJournalEntryBatchOperations,
   type JournalEntryBatchCriteriaInput,
   type PreviewJournalEntryBatchInput,
@@ -145,4 +146,6 @@ export {
   type RecordJournalEntryBatchDecisionOutput,
   type GetJournalEntryBatchApprovalStateInput,
   type GetJournalEntryBatchApprovalStateOutput,
+  type ArchiveJournalEntryBatchInput,
+  type ArchiveJournalEntryBatchOutput,
 } from './JournalEntryBatchOperations.js';
