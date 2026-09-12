@@ -4,26 +4,21 @@ import { FormsModule } from '@angular/forms';
 import { CompositeKey, RunView } from '@memberjunction/core';
 import { NavigationService } from '@memberjunction/ng-shared';
 import { MJButtonDirective } from '@memberjunction/ng-ui-components';
+import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
 
 interface BatchStageMetric {
-    Status: 'Pending' | 'Approved' | 'Sent' | 'Posted' | 'Failed' | 'Archived';
+    Status: mjBizAppsAccountingJournalEntryBatchEntity['Status'];
     Count: number;
     TotalAmount: number;
     Icon: string;
     Color: string;
 }
 
-interface RecentBatchRow {
-    ID: string;
-    JournalEntryBatchNumber: string;
-    Status: string;
-    TargetSystem: string;
-    PostingDate: string;
-    TotalEntries: number;
-    TotalDebits: number;
-    TotalCredits: number;
-    Company: string | null;
-}
+/** Picked from the generated schema type, not re-declared — see BatchItem in accounting-batches. */
+type RecentBatchRow = Pick<
+    mjBizAppsAccountingJournalEntryBatchEntity,
+    'ID' | 'JournalEntryBatchNumber' | 'Status' | 'TargetSystem' | 'PostingDate' | 'TotalEntries' | 'TotalDebits' | 'TotalCredits' | 'Company'
+>;
 
 interface MonthlyVolumeBar {
     Period: string; // e.g. '2025-03'

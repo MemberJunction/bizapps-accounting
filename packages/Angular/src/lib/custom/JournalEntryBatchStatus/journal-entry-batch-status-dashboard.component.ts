@@ -32,17 +32,18 @@ export interface BatchDetail { Lines: ConsolidatedLine[]; TotalDebits: number; T
 export interface PreviewEntry { ID: string; EntryNumber: string; EffectiveDate: Date | null; EntryType: string; Description: string | null; Amount: number }
 
 /** One batch row in the table, with its inferred date range + lazily-loaded JE detail. */
-export interface BatchRow {
-  ID: string;
-  JournalEntryBatchNumber: string;
-  Status: BatchStatus;
-  TargetSystem: TargetSystem;
-  TotalEntries: number;
-  TotalDebits: number;
-  TotalCredits: number;
-  ExternalJournalEntryBatchRef: string | null;
-  /** Why this batch was archived — set only on an Archived batch (#214). */
-  ArchiveReason: string | null;
+/**
+ * The batch's own fields are PICKED from the generated entity class, never re-declared (Amith,
+ * PR #148 review). Everything below the intersection is derived or UI state, not a column:
+ * the inferred date range, the company list, and the expand/detail cache.
+ *
+ * `BatchedAt` is re-declared as nullable on purpose — the column is NOT NULL, but this page
+ * builds rows before the value is resolved.
+ */
+export type BatchRow = Pick<
+  mjBizAppsAccountingJournalEntryBatchEntity,
+  'ID' | 'JournalEntryBatchNumber' | 'Status' | 'TargetSystem' | 'TotalEntries' | 'TotalDebits' | 'TotalCredits' | 'ExternalJournalEntryBatchRef' | 'ArchiveReason'
+> & {
   BatchedAt: Date | null;
   /** Inferred from the batch's journal entries' EffectiveDates (min/max) — a temporary stand-in for a real cutoff. */
   StartDate: Date | null;
@@ -53,7 +54,7 @@ export interface BatchRow {
   DetailLoaded: boolean;
   DetailLoading: boolean;
   Detail: BatchDetail | null;
-}
+};
 
 type SortField = 'Status' | 'TargetSystem' | 'TotalEntries' | 'TotalDebits' | 'TotalCredits' | 'StartDate' | 'EndDate' | 'BatchedAt';
 

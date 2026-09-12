@@ -18,24 +18,21 @@ type BatchStatus = mjBizAppsAccountingJournalEntryBatchEntity['Status'];
  * Approval state is NOT a column on the batch — it lives in bizapps-tasks (a Task linked to the
  * batch + a terminal Task Decision), so we resolve it via the gate-backed `JournalEntryBatchApprovalState` query.
  */
-interface BatchRow {
-  ID: string;
-  JournalEntryBatchNumber: string;
-  Status: BatchStatus;
-  TargetSystem: string;
-  TotalEntries: number;
-  TotalDebits: number;
-  TotalCredits: number;
-  ExternalJournalEntryBatchRef: string | null;
-  ErrorMessage: string | null;
-  /** Why this batch was archived — set only on an Archived batch (#214). */
-  ArchiveReason: string | null;
+/**
+ * The batch's own fields are PICKED from the generated entity class, never re-declared (Amith,
+ * PR #148 review). Only the genuinely non-entity parts — the gate result and the per-row
+ * in-flight flag, neither of which is a column — are declared here.
+ */
+type BatchRow = Pick<
+  mjBizAppsAccountingJournalEntryBatchEntity,
+  'ID' | 'JournalEntryBatchNumber' | 'Status' | 'TargetSystem' | 'TotalEntries' | 'TotalDebits' | 'TotalCredits' | 'ExternalJournalEntryBatchRef' | 'ErrorMessage' | 'ArchiveReason'
+> & {
   /** undefined = not yet checked; null = unknown/error; true/false = gate result. */
   Approved?: boolean | null;
   ApprovalReason?: string;
   /** Per-row in-flight flag so spinners/disables are scoped to the acting row. */
   Busy?: boolean;
-}
+};
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 

@@ -5,27 +5,40 @@ import { CompositeKey, Metadata, RunView } from '@memberjunction/core';
 import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
 import { NavigationService } from '@memberjunction/ng-shared';
 import { MJButtonDirective, MJDialogComponent, MJDialogActionsComponent, MJDropdownComponent } from '@memberjunction/ng-ui-components';
+import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
 import {
     JournalEntryBatchDispatchClient,
     PreviewEntryWire,
     BuildJournalEntryBatchOptionsInput,
 } from '../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
 
-export interface BatchItem {
-    ID: string;
-    JournalEntryBatchNumber: string;
-    Status: 'Pending' | 'Approved' | 'Sent' | 'Posted' | 'Failed' | 'Cancelled' | 'Archived';
-    TargetSystem: string;
-    PostingDate: string;
-    BatchedAt: string;
-    TotalEntries: number;
-    TotalDebits: number;
-    TotalCredits: number;
-    Company: string | null;
-    ExternalJournalEntryBatchRef: string | null;
-    /** Why this batch was archived — set only on an Archived batch (golive #214). */
-    ArchiveReason: string | null;
-}
+/**
+ * The batch fields this page reads, PICKED from the generated entity class rather than
+ * re-declared (Amith, PR #148 review: a hand-written interface mirroring an entity is an
+ * MJ anti-pattern). The compiler now checks every field name and type against the schema,
+ * so `Status` carries the real CHECK-constraint union — widening it is a CodeGen concern,
+ * never a hand edit here.
+ *
+ * Picked from the CLASS, not the Zod-inferred `...EntityType`: this package declares no zod
+ * dependency of its own and resolves a different zod than @mj-biz-apps/accounting-entities
+ * does, so `z.infer` degrades every field to `T | undefined` across the package boundary.
+ * The class's declared property types are immune to that skew.
+ */
+export type BatchItem = Pick<
+    mjBizAppsAccountingJournalEntryBatchEntity,
+    | 'ID'
+    | 'JournalEntryBatchNumber'
+    | 'Status'
+    | 'TargetSystem'
+    | 'PostingDate'
+    | 'BatchedAt'
+    | 'TotalEntries'
+    | 'TotalDebits'
+    | 'TotalCredits'
+    | 'Company'
+    | 'ExternalJournalEntryBatchRef'
+    | 'ArchiveReason'
+>;
 
 interface StageCount {
     Status: string;
