@@ -252,16 +252,10 @@ GO
 EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='', @IncludedSchemaNames='${flyway:defaultSchema}';
 
 /* SQL text to insert 4 new entity field(s) */
-UPDATE [${mjSchema}].[EntityField]
-         SET [Sequence] = [Sequence] + 100000
-       WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112'
-         AND [Sequence] < 100000
-         AND NOT EXISTS (
-             SELECT 1 FROM [${mjSchema}].[EntityField]
-              WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112'
-                AND [Sequence] >= 100000
-         );
-
+-- Park-shift removed: it freed low sequences for the inserts below, but
+-- spUpdateExistingEntityFieldsFromSchema (later in this same batch) re-derives every
+-- field from the physical schema and puts them back, colliding on the sequence this
+-- migration had just taken. New fields are appended above the existing ones instead.
       IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '88c4a711-fb72-43a4-9800-069f42d60a3e' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'ArchiveReason')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
@@ -297,7 +291,8 @@ UPDATE [${mjSchema}].[EntityField]
          (
             '88c4a711-fb72-43a4-9800-069f42d60a3e',
             '87AD37E9-62F9-4F0E-A15B-F64ADF009112', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
-            23,
+            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField]
+             WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112'),
             'ArchiveReason',
             'Archive Reason',
             'Why this batch was archived instead of posted. Required when Status = Archived (CK_JournalEntryBatch_ArchiveAudit).',
@@ -360,7 +355,8 @@ UPDATE [${mjSchema}].[EntityField]
          (
             '46b12172-b692-4e3e-9700-4838d439aa91',
             '87AD37E9-62F9-4F0E-A15B-F64ADF009112', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
-            24,
+            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField]
+             WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112'),
             'ArchivedAt',
             'Archived At',
             'When the batch was archived. Required when Status = Archived.',
@@ -423,7 +419,8 @@ UPDATE [${mjSchema}].[EntityField]
          (
             '0c7dd17f-a4ed-460e-91bf-07f8f643e56c',
             '87AD37E9-62F9-4F0E-A15B-F64ADF009112', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
-            25,
+            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField]
+             WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112'),
             'ArchivedByUserID',
             'Archived By User ID',
             'User who archived the batch. Required when Status = Archived.',
@@ -985,16 +982,10 @@ GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntryBatch] TO [cdp_D
 EXEC [${mjSchema}].[spDeleteUnneededEntityFields] @ExcludedSchemaNames='', @EntityIDs='87AD37E9-62F9-4F0E-A15B-F64ADF009112', @IncludedSchemaNames='${flyway:defaultSchema}';
 
 /* SQL text to insert 2 new entity field(s) */
-UPDATE [${mjSchema}].[EntityField]
-         SET [Sequence] = [Sequence] + 100000
-       WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112'
-         AND [Sequence] < 100000
-         AND NOT EXISTS (
-             SELECT 1 FROM [${mjSchema}].[EntityField]
-              WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112'
-                AND [Sequence] >= 100000
-         );
-
+-- Park-shift removed: it freed low sequences for the inserts below, but
+-- spUpdateExistingEntityFieldsFromSchema (later in this same batch) re-derives every
+-- field from the physical schema and puts them back, colliding on the sequence this
+-- migration had just taken. New fields are appended above the existing ones instead.
       IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '7dbaec1e-3101-4314-b8bf-25f0f2ef6ec6' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'ArchivedByUser')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
@@ -1030,7 +1021,8 @@ UPDATE [${mjSchema}].[EntityField]
          (
             '7dbaec1e-3101-4314-b8bf-25f0f2ef6ec6',
             '87AD37E9-62F9-4F0E-A15B-F64ADF009112', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
-            31,
+            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField]
+             WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112'),
             'ArchivedByUser',
             'Archived By User',
             NULL,
