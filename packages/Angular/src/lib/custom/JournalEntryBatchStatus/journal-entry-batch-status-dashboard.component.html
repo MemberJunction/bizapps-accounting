@@ -103,7 +103,12 @@
             @for (row of FilteredBatches; track row.ID) {
               <tr class="bs-row" [class.bs-row--open]="row.Expanded" (click)="ToggleExpand(row)">
                 <td class="bs-td--chev"><i class="fa-solid" [class.fa-chevron-right]="!row.Expanded" [class.fa-chevron-down]="row.Expanded"></i></td>
-                <td><span class="bs-pill" [attr.data-status]="row.Status">{{ row.Status }}</span></td>
+                <td>
+                  <span class="bs-pill" [attr.data-status]="row.Status">{{ row.Status }}</span>
+                  @if (row.ArchiveReason) {
+                    <div class="bs-ref" [title]="row.ArchiveReason">{{ row.ArchiveReason }}</div>
+                  }
+                </td>
                 <td>{{ row.TargetSystem }}</td>
                 <td class="bs-num">{{ row.CompanyIDs.length }}</td>
                 <td class="bs-num">{{ row.TotalEntries }}</td>

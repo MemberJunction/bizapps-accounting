@@ -18,6 +18,7 @@
  *   Accounting.DispatchJournalEntryBatch         → sendJournalEntryBatch(...)       Approved→Sent→Posted via AccountingERPEngine (AM-4 account numbers)
  *   Accounting.RecordJournalEntryBatchDecision   → gate.recordDecision + approveJournalEntryBatch | cancelJournalEntryBatch (in-app CFO approve/reject)
  *   Accounting.GetJournalEntryBatchApprovalState → gate.assertApproved probe (read-only: is this batch dispatchable?)
+ *   Accounting.ArchiveJournalEntryBatch          → batch.Archive(reason)             terminal close with NO ERP call; members stay locked (#214)
  *
  * These are thin by design — every rule (netting, the one-transaction build incl. the approval
  * Task + ApprovalTaskID stamp (D10 rev. 2026-07-29), the CFO precondition, EmptyJournalEntryBatchError) lives
@@ -48,6 +49,7 @@ import {
   type JournalEntryBatchPreviewResult,
 } from './JournalEntryBatchEngine.js';
 import { createAccountingERPPoster } from './AccountingERPEngine.js';
+import { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
 import { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
 import { requireSqlGuid } from './SqlGuards.js';
 import {
@@ -58,6 +60,7 @@ import {
 } from '@mj-biz-apps/tasks-core';
 
 const PERSON_ENTITY = 'MJ_BizApps_Common: People';
+const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 
 // ─── Accounting.PreviewJournalEntryBatch + Accounting.BuildJournalEntryBatch ─────────────────────────
 
@@ -306,6 +309,33 @@ export class GetJournalEntryBatchApprovalStateOperation extends BaseRemotableOpe
     } catch (notApproved) {
       return { Approved: false, Reason: notApproved instanceof Error ? notApproved.message : String(notApproved) };
     }
+  }
+}
+
+// ─── Accounting.ArchiveJournalEntryBatch ─────────────────────────────────────────────────
+
+export interface ArchiveJournalEntryBatchInput { JournalEntryBatchID: string; Reason: string }
+export interface ArchiveJournalEntryBatchOutput { Status: string; ArchivedAt: string | null }
+
+/**
+ * Archive a batch that must never post to the ERP (golive #214). Terminal, makes NO ERP call, and
+ * leaves the member journal entries locked at `Batched` — the opposite of a reject/cancel, which
+ * returns them to the candidate pool. The legal-from statuses and the required reason are the
+ * entity's invariants (JournalEntryBatchEntityServer.Archive); this operation only marshals.
+ */
+@RegisterClass(BaseRemotableOperation, 'Accounting.ArchiveJournalEntryBatch')
+export class ArchiveJournalEntryBatchOperation extends BaseRemotableOperation<ArchiveJournalEntryBatchInput, ArchiveJournalEntryBatchOutput> {
+  public readonly OperationKey = 'Accounting.ArchiveJournalEntryBatch';
+
+  protected async InternalExecute(input: ArchiveJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<ArchiveJournalEntryBatchOutput> {
+    if (!input?.JournalEntryBatchID) throw new Error('ArchiveJournalEntryBatch: JournalEntryBatchID is required.');
+    requireSqlGuid(input.JournalEntryBatchID, 'ArchiveJournalEntryBatch');
+    if (!input?.Reason?.trim()) throw new Error('ArchiveJournalEntryBatch: Reason is required — it is the only record of why this batch will never post.');
+
+    const batch = await provider.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, user);
+    if (!(await batch.Load(input.JournalEntryBatchID))) throw new Error(`ArchiveJournalEntryBatch: batch ${input.JournalEntryBatchID} not found.`);
+    await batch.Archive(input.Reason, user);
+    return { Status: batch.Status, ArchivedAt: batch.ArchivedAt?.toISOString() ?? null };
   }
 }
 
