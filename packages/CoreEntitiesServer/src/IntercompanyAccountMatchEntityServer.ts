@@ -26,6 +26,7 @@
 import { BaseEntity, IRunViewProvider, ValidationResult, ValidationErrorInfo } from '@memberjunction/core';
 import { RegisterClass } from '@memberjunction/global';
 import { mjBizAppsAccountingIntercompanyAccountMatchEntity } from '@mj-biz-apps/accounting-entities';
+import { isSqlGuid, sqlGuidLiteral } from './SqlGuards.js';
 
 const IAM_ENTITY = 'MJ_BizApps_Accounting: Intercompany Account Matches';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
@@ -71,6 +72,15 @@ export class IntercompanyAccountMatchEntityServer extends mjBizAppsAccountingInt
   private async checkAccountOrientation(fail: (message: string) => void): Promise<void> {
     if (!this.DueToGLAccountID || !this.DueFromGLAccountID) return;
 
+    // Client-set FK values that get interpolated into a SQL filter — a malformed one can never be
+    // a valid FK, so refuse it with a readable message before it reaches SQL.
+    for (const [name, value] of [['DueToGLAccountID', this.DueToGLAccountID], ['DueFromGLAccountID', this.DueFromGLAccountID]] as const) {
+      if (!isSqlGuid(value)) {
+        fail(`${name} '${value}' is not a valid UUID.`);
+        return;
+      }
+    }
+
     const accounts = await this.loadAccounts([this.DueToGLAccountID, this.DueFromGLAccountID]);
     const dueTo = accounts.get(this.DueToGLAccountID.toLowerCase());
     const dueFrom = accounts.get(this.DueFromGLAccountID.toLowerCase());
@@ -113,6 +123,13 @@ export class IntercompanyAccountMatchEntityServer extends mjBizAppsAccountingInt
   private async checkNoAmbiguousTie(fail: (message: string) => void): Promise<void> {
     if (this.Status !== 'Active') return;
     if (!this.SourceCompanyID || !this.TargetCompanyID) return;
+    // Same interpolation hazard as checkAccountOrientation — these company ids build the filter below.
+    for (const [name, value] of [['SourceCompanyID', this.SourceCompanyID], ['TargetCompanyID', this.TargetCompanyID]] as const) {
+      if (!isSqlGuid(value)) {
+        fail(`${name} '${value}' is not a valid UUID.`);
+        return;
+      }
+    }
 
     const startedAt = this.StartedAt ? new Date(this.StartedAt).toISOString() : null;
     const sameStart = startedAt === null ? `StartedAt IS NULL` : `StartedAt = '${startedAt}'`;
@@ -144,7 +161,7 @@ export class IntercompanyAccountMatchEntityServer extends mjBizAppsAccountingInt
   }
 
   private async loadAccounts(ids: string[]): Promise<Map<string, AccountShape>> {
-    const quoted = ids.map((id) => `'${id}'`).join(',');
+    const quoted = ids.map((id) => sqlGuidLiteral(id, 'IntercompanyAccountMatchEntityServer.loadAccounts')).join(',');
     const provider = this.ProviderToUse as unknown as IRunViewProvider;
     const res = await provider.RunView<AccountShape>(
       {

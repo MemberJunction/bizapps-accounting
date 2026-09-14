@@ -124,8 +124,8 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
       // If the caller (order confirm) already opened a transaction on this provider, JOIN it.
       // Opening a second wrapper issued SAVE TRANSACTION while mssql's Transaction object
       // was sometimes not begun, which booked nothing and returned INTERNAL_ERROR.
-      const dbProvider = provider as unknown as DatabaseProviderBase & { transactionDepth?: number };
-      const alreadyInTransaction = (dbProvider.transactionDepth ?? 0) > 0;
+      const dbProvider = provider as unknown as DatabaseProviderBase;
+      const alreadyInTransaction = dbProvider.TransactionDepth > 0;
       if (!alreadyInTransaction) {
         await dbProvider.BeginTransaction();
       }

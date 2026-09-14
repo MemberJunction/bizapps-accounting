@@ -49,6 +49,7 @@ import type {
   mjBizAppsAccountingAccountingCompanyProfileEntity,
 } from '@mj-biz-apps/accounting-entities';
 import type { JournalEntryBatchApprovalGate } from './JournalEntryBatchEngine.js';
+import { requireSqlGuid } from './SqlGuards.js';
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
@@ -137,10 +138,27 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate {
     }
   }
 
-  /** Record an approve/reject decision on the batch's Task. Used by the in-app control AND the Tasks inbox. */
+  /**
+   * Record an approve/reject decision on the batch's Task. Used by the in-app control AND the Tasks inbox.
+   *
+   * AUTHORIZATION (2026-09-05 security sweep): a decision is only accepted from the company's
+   * configured approver — `contextUser` must BE the batch company's
+   * `AccountingCompanyProfile.ApprovalCFOUserID`. Without this, any authenticated user (including
+   * whoever built the batch) could approve their own batch. The gate is the shared entry point for
+   * every decision path, so the check lives here rather than in each caller. A company with no
+   * configured CFO rejects loudly (resolveCFOUserIdForCompany hard-fails) — never "anyone may approve".
+   */
   async recordDecision(
     batchId: string, outcome: TaskDecisionOutcomeCode, decidedByPersonId: string | undefined, notes: string | undefined, contextUser: UserInfo,
   ): Promise<void> {
+    const batch = await this.loadBatch(batchId, contextUser);
+    const cfoUserId = await this.resolveCFOUserIdForCompany(batch.CompanyID, contextUser);
+    if (!UUIDsEqual(cfoUserId, contextUser.ID)) {
+      throw new Error(
+        `Batch ${batch.JournalEntryBatchNumber ?? batchId}: only the configured approver for company ${batch.CompanyID} ` +
+        `(AccountingCompanyProfile.ApprovalCFOUserID) may record an approval decision — the current user is not that approver.`,
+      );
+    }
     const task = await this.resolveBatchTask(batchId, contextUser);
     if (!task) throw new Error(`Batch ${batchId} has no approval Task to record a decision against.`);
     await this.orchestration.RecordDecision({ TaskID: task.ID, OutcomeCode: outcome, DecidedByPersonID: decidedByPersonId, Notes: notes }, contextUser);
@@ -187,6 +205,9 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate {
 
   /** The (single) approval Task linked to this batch via a polymorphic Task Link. */
   private async resolveBatchTask(batchId: string, contextUser: UserInfo): Promise<mjBizAppsTasksTaskEntity | null> {
+    // batchId can arrive raw from a remote caller and is interpolated into the filter below —
+    // validate, don't escape (a batch id is always a UUID; anything else is refused).
+    requireSqlGuid(batchId, 'TasksAppApprovalGate.resolveBatchTask');
     const batchEntityId = this.batchEntityId();
     const linkRes = await this.viewProvider.RunView<mjBizAppsTasksTaskLinkEntity>(
       { EntityName: TASK_LINK_ENTITY, ExtraFilter: `EntityID='${batchEntityId}' AND RecordID='${batchId}'`, OrderBy: '__mj_CreatedAt DESC', ResultType: 'entity_object', BypassCache: true },
@@ -205,8 +226,14 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate {
     return entity.ID;
   }
 
-  /** True when the Task has at least one terminal decision whose outcome code is Approved/ApprovedWithConditions. */
+  /**
+   * True when the Task has at least one terminal decision whose outcome code is Approved/ApprovedWithConditions.
+   * WHO decided is enforced at the WRITE (recordDecision requires contextUser to be the company's
+   * ApprovalCFOUserID); this read deliberately stays "any terminal approval on the task" because
+   * decisions can legitimately carry no DecidedByPersonID (an approver User with no linked Person).
+   */
   private async hasApprovedDecision(taskId: string, contextUser: UserInfo): Promise<boolean> {
+    requireSqlGuid(taskId, 'TasksAppApprovalGate.hasApprovedDecision');
     const decRes = await this.viewProvider.RunView<mjBizAppsTasksTaskDecisionEntity>(
       { EntityName: TASK_DECISION_ENTITY, ExtraFilter: `TaskID='${taskId}'`, ResultType: 'entity_object', BypassCache: true },
       contextUser,

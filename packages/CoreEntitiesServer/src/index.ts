@@ -32,6 +32,9 @@ export {
 } from './SeedData.js';
 export type { SeededGLAccount } from './SeedData.js';
 export { getNextJournalEntryNumber, getNextJournalEntryBatchNumber } from './SequenceService.js';
+// Validate-don't-escape UUID guards for SQL predicate interpolation (2026-09-05 security sweep) —
+// use these anywhere a client-supplied id reaches an ExtraFilter string.
+export { isSqlGuid, requireSqlGuid, sqlGuidLiteral } from './SqlGuards.js';
 export {
   LookupJournalEntryTypeByCode,
   LookupJournalEntryTypeByID,
@@ -60,6 +63,7 @@ export {
   JournalEntryBatchFromViewError,
   approveJournalEntryBatch,
   sendJournalEntryBatch,
+  recordDispatchFailure,
   cancelJournalEntryBatch,
   regenerateJournalEntryBatch,
   netLines,
@@ -82,6 +86,7 @@ export type {
   ErpPoster,
   JournalEntryBatchApprovalGate,
   SendJournalEntryBatchOptions,
+  DispatchFailureRecord,
 } from './JournalEntryBatchEngine.js';
 
 // S1 — the REAL CFO-approval gate, backed by the bizapps-tasks app (replaces AutoApproveGate in

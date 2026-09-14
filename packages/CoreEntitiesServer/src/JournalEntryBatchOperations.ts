@@ -49,6 +49,7 @@ import {
 } from './JournalEntryBatchEngine.js';
 import { createAccountingERPPoster } from './AccountingERPEngine.js';
 import { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
+import { requireSqlGuid } from './SqlGuards.js';
 import {
   IsApprovalOutcome,
   IsTaskDecisionOutcomeCode,
@@ -158,7 +159,9 @@ export class BuildJournalEntryBatchOperation extends BaseRemotableOperation<Buil
       case 'Standard': {
         if (input.CompanyID) {
           // Explicit company: EmptyJournalEntryBatchError propagates — the caller asked for THIS build and
-          // must hear loudly that there was nothing to batch.
+          // must hear loudly that there was nothing to batch. (Boundary validation: the id reaches
+          // the engine's candidate SQL filter — a UUID or nothing.)
+          requireSqlGuid(input.CompanyID, 'BuildJournalEntryBatch: CompanyID');
           const result = await buildJournalEntryBatch(input.CompanyID, input.TargetSystem, user.ID, user, provider, gate, options);
           return { Batches: [result], NothingToBatch: false };
         }
@@ -191,6 +194,7 @@ export class RegenerateJournalEntryBatchOperation extends BaseRemotableOperation
 
   protected async InternalExecute(input: RegenerateJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<BuildJournalEntryBatchResult> {
     if (!input?.JournalEntryBatchID) throw new Error('RegenerateJournalEntryBatch: JournalEntryBatchID is required.');
+    requireSqlGuid(input.JournalEntryBatchID, 'RegenerateJournalEntryBatch');
     if (!input?.TargetSystem) throw new Error('RegenerateJournalEntryBatch: TargetSystem is required.');
     // A re-gather to NOTHING cancels the batch and throws EmptyJournalEntryBatchError (surfaced to the caller
     // as a failed operation with that message) — never a silent empty batch.
@@ -210,6 +214,7 @@ export class DispatchJournalEntryBatchOperation extends BaseRemotableOperation<D
 
   protected async InternalExecute(input: DispatchJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<DispatchJournalEntryBatchOutput> {
     if (!input?.JournalEntryBatchID) throw new Error('DispatchJournalEntryBatch: JournalEntryBatchID is required.');
+    requireSqlGuid(input.JournalEntryBatchID, 'DispatchJournalEntryBatch');
     const batch = await sendJournalEntryBatch(input.JournalEntryBatchID, user, {
       gate: new TasksAppApprovalGate(provider),
       poster: createAccountingERPPoster(provider),
@@ -245,6 +250,8 @@ export class RecordJournalEntryBatchDecisionOperation extends BaseRemotableOpera
 
   protected async InternalExecute(input: RecordJournalEntryBatchDecisionInput, provider: IMetadataProvider, user: UserInfo): Promise<RecordJournalEntryBatchDecisionOutput> {
     if (!input?.JournalEntryBatchID) throw new Error('RecordBatchDecision: JournalEntryBatchID is required.');
+    // Boundary validation: this id reaches SQL predicates (Task Link resolution) — a UUID or nothing.
+    requireSqlGuid(input.JournalEntryBatchID, 'RecordBatchDecision');
     if (!IsTaskDecisionOutcomeCode(input?.Decision)) {
       throw new Error(`RecordBatchDecision: invalid decision '${input?.Decision}'. Expected ${TaskDecisionOutcomeCodes.join(' | ')}.`);
     }
@@ -288,6 +295,10 @@ export class GetJournalEntryBatchApprovalStateOperation extends BaseRemotableOpe
 
   protected async InternalExecute(input: GetJournalEntryBatchApprovalStateInput, provider: IMetadataProvider, user: UserInfo): Promise<GetJournalEntryBatchApprovalStateOutput> {
     if (!input?.JournalEntryBatchID) throw new Error('GetBatchApprovalState: JournalEntryBatchID is required.');
+    // Boundary validation: this id reaches SQL predicates (Task Link resolution) — a UUID or nothing.
+    // Validated HERE (not just in the gate) so a malformed id fails the operation loudly instead of
+    // being folded into the try/catch below as "not approved".
+    requireSqlGuid(input.JournalEntryBatchID, 'GetBatchApprovalState');
     // assertApproved throws when not approved — turn that into a boolean for the UI.
     try {
       await new TasksAppApprovalGate(provider).assertApproved(input.JournalEntryBatchID, user);

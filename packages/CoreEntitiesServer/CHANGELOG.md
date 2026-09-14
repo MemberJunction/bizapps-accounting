@@ -1,5 +1,32 @@
 # @mj-biz-apps/accounting-core-entities-server
 
+## 0.7.0
+
+### Minor Changes
+
+- ea01c8e: Scheduled posting of journal entry batches. `Accounting.BuildJournalEntryBatches` gains a relative `CutoffMode` (`PriorDay` / `PriorMonth`, resolved in TypeScript because scheduled-job params have no relative-date type) and an `AutoPost` mode that waives the CFO approval Task, stamps the context user as approver, and dispatches each built batch to the ERP in the same run — include-list only, so an entry type never auto-posts unless named. Ships the nightly Order/Payment and monthly RevenueRecognition scheduled-job rows. `recordDispatchFailure` is exported to triage a dispatch that threw: `Failed` is reachable only from `Sent`, so a batch left `Pending`, `Approved` or `Posted` is reported as what it actually is rather than mislabelled — a `Posted` batch in particular is left alone, because calling it `Failed` would invite a re-post and a duplicate ERP journal.
+
+### Patch Changes
+
+- 28550c3: Join an already-open caller transaction when booking journal-entry drafts (TransactionDepth), and throw if EntryNumber assignment fails instead of returning a silent false.
+- db9c8bb: Move to MemberJunction 6.1.0-edge.7, which is what `AccountingEngine` already assumes.
+
+  `AccountingEngine.ts` reads `DatabaseProviderBase.TransactionDepth` — the PascalCase getter
+  introduced by MemberJunction/MJ#4225. That rename landed in **edge.6**, but every
+  `@memberjunction/*` dependency here was pinned `^6.1.0-edge.5` and the lockfile resolved
+  edge.5, so the build failed on every commit:
+
+      src/AccountingEngine.ts(128,47): error TS2339:
+      Property 'TransactionDepth' does not exist on type 'DatabaseProviderBase'
+
+  accounting has therefore been unreleasable since that code merged. Pins and `mj-app.json`'s
+  `mjVersionRange` now target edge.7 and the lockfile is regenerated; all 7 packages build.
+
+  Pinned to **edge.7 rather than edge.6** — edge.6 is the floor the `TransactionDepth` getter actually requires, but AIDP stage now runs edge.7, and building against one edge release while running on another is avoidable skew for no benefit. Verified: all 7 packages build at edge.7.
+
+  - @mj-biz-apps/accounting-engine-base@0.7.0
+  - @mj-biz-apps/accounting-entities@0.7.0
+
 ## 0.6.1
 
 ### Patch Changes
