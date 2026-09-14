@@ -1,5 +1,5 @@
 ---
-"@mj-biz-apps/accounting-entities": patch
+"@mj-biz-apps/accounting-entities": minor
 ---
 
 `ArchivedJournalEntryBatchStatus` could not apply on a host whose Journal Entry Batches
