@@ -26,8 +26,8 @@
     "zod": "^3.25.28"
   },
   "peerDependencies": {
-    "@memberjunction/core": "^6.1.0-edge.6",
-    "@memberjunction/global": "^6.1.0-edge.6",
+    "@memberjunction/core": "^6.1.0-edge.7",
+    "@memberjunction/global": "^6.1.0-edge.7",
     "@mj-biz-apps/common-entities": ">=5.37.0"
   },
   "repository": {
