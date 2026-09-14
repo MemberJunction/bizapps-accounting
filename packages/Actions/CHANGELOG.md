@@ -1,5 +1,11 @@
 # @mj-biz-apps/accounting-actions
 
+## 0.9.0
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-core-entities-server@0.9.0
+
 ## 0.8.0
 
 ### Patch Changes
