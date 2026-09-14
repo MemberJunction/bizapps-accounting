@@ -4,26 +4,21 @@ import { FormsModule } from '@angular/forms';
 import { CompositeKey, RunView } from '@memberjunction/core';
 import { NavigationService } from '@memberjunction/ng-shared';
 import { MJButtonDirective } from '@memberjunction/ng-ui-components';
+import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
 
 interface BatchStageMetric {
-    Status: 'Pending' | 'Approved' | 'Sent' | 'Posted' | 'Failed';
+    Status: mjBizAppsAccountingJournalEntryBatchEntity['Status'];
     Count: number;
     TotalAmount: number;
     Icon: string;
     Color: string;
 }
 
-interface RecentBatchRow {
-    ID: string;
-    JournalEntryBatchNumber: string;
-    Status: string;
-    TargetSystem: string;
-    PostingDate: string;
-    TotalEntries: number;
-    TotalDebits: number;
-    TotalCredits: number;
-    Company: string | null;
-}
+/** Picked from the generated schema type, not re-declared — see BatchItem in accounting-batches. */
+type RecentBatchRow = Pick<
+    mjBizAppsAccountingJournalEntryBatchEntity,
+    'ID' | 'JournalEntryBatchNumber' | 'Status' | 'TargetSystem' | 'PostingDate' | 'TotalEntries' | 'TotalDebits' | 'TotalCredits' | 'Company'
+>;
 
 interface MonthlyVolumeBar {
     Period: string; // e.g. '2025-03'
@@ -72,6 +67,9 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                     </div>
 
                     <div class="mja-actions">
+                        <button mjButton variant="flat" size="sm" type="button" [disabled]="IsLoading" (click)="LoadDashboardData()" title="Re-read batches and journal entries">
+                            <i class="fa-solid fa-rotate" [class.fa-spin]="IsLoading"></i> Refresh
+                        </button>
                         <button mjButton variant="secondary" size="sm" type="button" (click)="CreateNewJournalEntry()">
                             <i class="fa-solid fa-plus"></i> New Journal Entry
                         </button>
@@ -674,13 +672,24 @@ export class AccountingOverviewPageComponent implements OnInit {
         TotalVolume: 0,
     };
 
-    public Stages: BatchStageMetric[] = [
-        { Status: 'Pending', Count: 0, TotalAmount: 0, Icon: 'fa-solid fa-clock', Color: '#d97706' },
-        { Status: 'Approved', Count: 0, TotalAmount: 0, Icon: 'fa-solid fa-user-check', Color: '#0284c7' },
-        { Status: 'Sent', Count: 0, TotalAmount: 0, Icon: 'fa-solid fa-paper-plane', Color: '#7c3aed' },
-        { Status: 'Posted', Count: 0, TotalAmount: 0, Icon: 'fa-solid fa-circle-check', Color: '#16a34a' },
-        { Status: 'Failed', Count: 0, TotalAmount: 0, Icon: 'fa-solid fa-triangle-exclamation', Color: '#dc2626' },
+    /**
+     * The stage row, and the ONLY place a batch status is enumerated on this page. The tally in
+     * computeBatchMetrics walks this list, so adding a status (Archived, golive #214) is a single
+     * line here — it used to take a local counter, a local amount, a switch case and a literal in
+     * the rebuilt array, which is exactly how Archived came to be missing from this card.
+     */
+    private static readonly STAGE_DEFS: ReadonlyArray<Omit<BatchStageMetric, 'Count' | 'TotalAmount'>> = [
+        { Status: 'Pending', Icon: 'fa-solid fa-clock', Color: '#d97706' },
+        { Status: 'Approved', Icon: 'fa-solid fa-user-check', Color: '#0284c7' },
+        { Status: 'Sent', Icon: 'fa-solid fa-paper-plane', Color: '#7c3aed' },
+        { Status: 'Posted', Icon: 'fa-solid fa-circle-check', Color: '#16a34a' },
+        { Status: 'Failed', Icon: 'fa-solid fa-triangle-exclamation', Color: '#dc2626' },
+        { Status: 'Archived', Icon: 'fa-solid fa-box-archive', Color: '#475569' },
     ];
+
+    public Stages: BatchStageMetric[] = AccountingOverviewPageComponent.STAGE_DEFS.map(
+        d => ({ ...d, Count: 0, TotalAmount: 0 }),
+    );
 
     ngOnInit(): void {
         this.LoadDashboardData();
@@ -793,63 +802,38 @@ export class AccountingOverviewPageComponent implements OnInit {
     }
 
     private computeBatchMetrics(batches: RecentBatchRow[]): void {
-        let pending = 0;
-        let approved = 0;
-        let sent = 0;
-        let posted = 0;
-        let failed = 0;
-
-        let pendingAmt = 0;
-        let approvedAmt = 0;
-        let sentAmt = 0;
-        let postedAmt = 0;
-        let failedAmt = 0;
-
+        // Tally straight into the stage definitions — no per-status locals, so a status added to
+        // STAGE_DEFS is counted here automatically instead of being silently dropped.
+        const tally = new Map<string, { Count: number; TotalAmount: number }>(
+            AccountingOverviewPageComponent.STAGE_DEFS.map(d => [d.Status, { Count: 0, TotalAmount: 0 }]),
+        );
         let totalVol = 0;
 
         for (const b of batches) {
             const amt = Number(b.TotalDebits) || 0;
             totalVol += amt;
-            switch (b.Status) {
-                case 'Pending':
-                    pending++;
-                    pendingAmt += amt;
-                    break;
-                case 'Approved':
-                    approved++;
-                    approvedAmt += amt;
-                    break;
-                case 'Sent':
-                    sent++;
-                    sentAmt += amt;
-                    break;
-                case 'Posted':
-                    posted++;
-                    postedAmt += amt;
-                    break;
-                case 'Failed':
-                    failed++;
-                    failedAmt += amt;
-                    break;
-            }
+            const bucket = tally.get(b.Status);
+            if (!bucket) continue;   // a status the UI does not show yet — counted in TotalBatches only
+            bucket.Count++;
+            bucket.TotalAmount += amt;
         }
+
+        const countOf = (status: string) => tally.get(status)?.Count ?? 0;
 
         this.KPIs = {
             TotalBatches: batches.length,
-            PendingBatches: pending,
-            PostedBatches: posted,
-            FailedBatches: failed,
+            PendingBatches: countOf('Pending'),
+            PostedBatches: countOf('Posted'),
+            FailedBatches: countOf('Failed'),
             PendingJournalEntries: this.KPIs.PendingJournalEntries,
             TotalVolume: totalVol,
         };
 
-        this.Stages = [
-            { Status: 'Pending', Count: pending, TotalAmount: pendingAmt, Icon: 'fa-solid fa-clock', Color: '#d97706' },
-            { Status: 'Approved', Count: approved, TotalAmount: approvedAmt, Icon: 'fa-solid fa-user-check', Color: '#0284c7' },
-            { Status: 'Sent', Count: sent, TotalAmount: sentAmt, Icon: 'fa-solid fa-paper-plane', Color: '#7c3aed' },
-            { Status: 'Posted', Count: posted, TotalAmount: postedAmt, Icon: 'fa-solid fa-circle-check', Color: '#16a34a' },
-            { Status: 'Failed', Count: failed, TotalAmount: failedAmt, Icon: 'fa-solid fa-triangle-exclamation', Color: '#dc2626' },
-        ];
+        this.Stages = AccountingOverviewPageComponent.STAGE_DEFS.map(d => ({
+            ...d,
+            Count: tally.get(d.Status)?.Count ?? 0,
+            TotalAmount: tally.get(d.Status)?.TotalAmount ?? 0,
+        }));
     }
 
     public OpenBatch(id: string): void {
@@ -862,8 +846,18 @@ export class AccountingOverviewPageComponent implements OnInit {
         this.navService.OpenNewEntityRecord(JE_ENTITY);
     }
 
-    public CreateNewBatch(): void {
+    /**
+     * Open the Batches workspace, where the real build flow lives (candidate preview, cutoff,
+     * target ERP, then Accounting.BuildJournalEntryBatch).
+     *
+     * This used to call OpenNewEntityRecord(BATCH_ENTITY), which opened an EMPTY batch record
+     * form: the button said "Build Batch" and did "New Batch". Nothing was ever swept and no
+     * journal entry was ever locked — it just left stray empty Pending batches behind. Measured
+     * 2026-09-12 with 4 pending entries in the subledger: two clicks, two batches, TotalEntries 0,
+     * every entry still unbatched.
+     */
+    public async CreateNewBatch(): Promise<void> {
         if (!this.navService) return;
-        this.navService.OpenNewEntityRecord(BATCH_ENTITY);
+        await this.navService.OpenNavItemByName('Batches');
     }
 }

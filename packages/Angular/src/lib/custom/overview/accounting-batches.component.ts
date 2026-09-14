@@ -5,25 +5,40 @@ import { CompositeKey, Metadata, RunView } from '@memberjunction/core';
 import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
 import { NavigationService } from '@memberjunction/ng-shared';
 import { MJButtonDirective, MJDialogComponent, MJDialogActionsComponent, MJDropdownComponent } from '@memberjunction/ng-ui-components';
+import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
 import {
     JournalEntryBatchDispatchClient,
     PreviewEntryWire,
     BuildJournalEntryBatchOptionsInput,
 } from '../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
 
-export interface BatchItem {
-    ID: string;
-    JournalEntryBatchNumber: string;
-    Status: 'Pending' | 'Approved' | 'Sent' | 'Posted' | 'Failed' | 'Cancelled';
-    TargetSystem: string;
-    PostingDate: string;
-    BatchedAt: string;
-    TotalEntries: number;
-    TotalDebits: number;
-    TotalCredits: number;
-    Company: string | null;
-    ExternalJournalEntryBatchRef: string | null;
-}
+/**
+ * The batch fields this page reads, PICKED from the generated entity class rather than
+ * re-declared (Amith, PR #148 review: a hand-written interface mirroring an entity is an
+ * MJ anti-pattern). The compiler now checks every field name and type against the schema,
+ * so `Status` carries the real CHECK-constraint union — widening it is a CodeGen concern,
+ * never a hand edit here.
+ *
+ * Picked from the CLASS, not the Zod-inferred `...EntityType`: this package declares no zod
+ * dependency of its own and resolves a different zod than @mj-biz-apps/accounting-entities
+ * does, so `z.infer` degrades every field to `T | undefined` across the package boundary.
+ * The class's declared property types are immune to that skew.
+ */
+export type BatchItem = Pick<
+    mjBizAppsAccountingJournalEntryBatchEntity,
+    | 'ID'
+    | 'JournalEntryBatchNumber'
+    | 'Status'
+    | 'TargetSystem'
+    | 'PostingDate'
+    | 'BatchedAt'
+    | 'TotalEntries'
+    | 'TotalDebits'
+    | 'TotalCredits'
+    | 'Company'
+    | 'ExternalJournalEntryBatchRef'
+    | 'ArchiveReason'
+>;
 
 interface StageCount {
     Status: string;
@@ -199,12 +214,23 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                             <span class="mja-status-pill" [attr.data-status]="batch.Status">
                                                 {{ batch.Status }}
                                             </span>
+                                            @if (batch.Status === 'Archived' && batch.ArchiveReason) {
+                                                <span class="mja-archive-reason" [title]="batch.ArchiveReason">{{ batch.ArchiveReason }}</span>
+                                            }
                                         </td>
                                         <td class="mja-td-right">{{ batch.TotalEntries }}</td>
                                         <td class="mja-td-right">
                                             <strong>{{ batch.TotalDebits | currency }}</strong>
                                         </td>
                                         <td class="mja-td-action">
+                                            @if (CanArchive(batch)) {
+                                                <button mjButton variant="secondary" size="sm" type="button"
+                                                        [disabled]="ArchivingBatchID === batch.ID"
+                                                        title="Close this batch permanently without sending it to the ERP. Its journal entries stay locked to it."
+                                                        (click)="OnArchive(batch, $event)">
+                                                    <i class="fa-solid fa-box-archive"></i> Archive
+                                                </button>
+                                            }
                                             <i class="fa-solid fa-arrow-up-right-from-square"></i>
                                         </td>
                                     </tr>
@@ -332,6 +358,43 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                         }
                     </button>
                     <button mjButton variant="flat" size="sm" type="button" [disabled]="IsBuildingBatch" (click)="CloseBuildBatchModal()">
+                        Cancel
+                    </button>
+                </mj-dialog-actions>
+            </mj-dialog>
+
+            <mj-dialog [Visible]="ArchiveModalVisible" Title="Archive Journal Entry Batch" [Width]="560" (Close)="CloseArchiveModal()">
+                <div class="mja-modal-content">
+                    <p class="mja-archive-blurb">
+                        Batch <strong>{{ ArchiveTarget?.JournalEntryBatchNumber }}</strong> will be closed permanently and
+                        <strong>will never be sent to {{ ArchiveTarget?.TargetSystem }}</strong>. Its
+                        {{ ArchiveTarget?.TotalEntries }} journal entr{{ ArchiveTarget?.TotalEntries === 1 ? 'y' : 'ies' }}
+                        stay locked to it and will not return to the candidate pool — this is not a cancellation.
+                    </p>
+
+                    <div class="mja-modal-field">
+                        <label class="mja-modal-label" for="aidp-archive-reason">Reason (required)</label>
+                        <textarea
+                            id="aidp-archive-reason"
+                            class="mj-input mja-archive-reason-input"
+                            rows="3"
+                            maxlength="500"
+                            placeholder="e.g. Conversion cutover — already booked in the legacy system"
+                            [(ngModel)]="ArchiveReasonDraft"></textarea>
+                    </div>
+                </div>
+
+                <mj-dialog-actions>
+                    <button mjButton variant="primary" size="sm" type="button"
+                            [disabled]="!!ArchivingBatchID || !ArchiveReasonDraft.trim()"
+                            (click)="ConfirmArchive()">
+                        @if (ArchivingBatchID) {
+                            <i class="fa-solid fa-spinner fa-spin"></i> Archiving…
+                        } @else {
+                            <i class="fa-solid fa-box-archive"></i> Archive Batch
+                        }
+                    </button>
+                    <button mjButton variant="flat" size="sm" type="button" [disabled]="!!ArchivingBatchID" (click)="CloseArchiveModal()">
                         Cancel
                     </button>
                 </mj-dialog-actions>
@@ -698,6 +761,28 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
         .mja-status-pill[data-status="Posted"] { background: #dcfce7; color: #15803d; }
         .mja-status-pill[data-status="Failed"] { background: #fee2e2; color: #b91c1c; }
         .mja-status-pill[data-status="Cancelled"] { background: #f1f5f9; color: #64748b; }
+        .mja-status-pill[data-status="Archived"] { background: #e2e8f0; color: #475569; }
+
+        .mja-archive-blurb {
+            margin: 0 0 16px;
+            line-height: 1.5;
+            color: var(--mj-text-secondary, #cbd5e1);
+        }
+
+        .mja-archive-reason-input {
+            width: 100%;
+            resize: vertical;
+            font-family: inherit;
+        }
+
+        .mja-archive-reason {
+            display: block;
+            margin-top: 4px;
+            max-width: 260px;
+            font-size: 11px;
+            line-height: 1.35;
+            color: var(--mj-text-muted, #94a3b8);
+        }
 
         .mja-th-right, .mja-td-right {
             text-align: right;
@@ -705,10 +790,16 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
         }
 
         .mja-td-action {
-            width: 32px;
-            text-align: center;
+            /* Shrink-to-fit, not 32px: this cell held a lone open-record icon until the Archive
+               action joined it, and a fixed 32px wrapped the icon under the button. */
+            width: 1%;
+            white-space: nowrap;
+            text-align: right;
             color: var(--mj-text-muted, #94a3b8);
         }
+
+        .mja-td-action > * { vertical-align: middle; }
+        .mja-td-action > button + i { margin-left: 10px; }
 
         .mja-loading {
             display: flex;
@@ -882,6 +973,7 @@ export class AccountingBatchesPageComponent implements OnInit {
         { Status: 'Posted', Count: 0, Color: '#16a34a', Icon: 'fa-solid fa-circle-check' },
         { Status: 'Failed', Count: 0, Color: '#dc2626', Icon: 'fa-solid fa-triangle-exclamation' },
         { Status: 'Cancelled', Count: 0, Color: '#64748b', Icon: 'fa-solid fa-ban' },
+        { Status: 'Archived', Count: 0, Color: '#475569', Icon: 'fa-solid fa-box-archive' },
     ];
 
     // Build Batch Modal & Preview State
@@ -902,6 +994,67 @@ export class AccountingBatchesPageComponent implements OnInit {
     public PreviewCandidateCount = 0;
     public PreviewCoveredStartDate: string | null = null;
     public PreviewCoveredEndDate: string | null = null;
+
+    /** Per-row in-flight id so the acting row's button disables, not every row's. */
+    public ArchivingBatchID: string | null = null;
+    public ArchiveModalVisible = false;
+    public ArchiveTarget: BatchItem | null = null;
+    public ArchiveReasonDraft = '';
+    /** Archive is offered wherever the server's LEGAL_TRANSITIONS allows it (Pending / Approved / Failed). */
+    public CanArchive(batch: BatchItem): boolean {
+        return ['Pending', 'Approved', 'Failed'].includes(batch.Status) && this.ArchivingBatchID !== batch.ID;
+    }
+
+    /**
+     * Archive a batch that must never post to the ERP (golive #214): terminal, no ERP call, and the
+     * batch's journal entries STAY locked to it — the opposite of a reject/cancel, which returns them
+     * to the candidate pool. A cancelled or blank prompt aborts silently; the reason is required and
+     * is the only record of why this batch will never post.
+     */
+    public OnArchive(batch: BatchItem, event: Event): void {
+        // The row itself opens the record — an action button inside it must not also navigate.
+        event.stopPropagation();
+        if (this.ArchivingBatchID) return;
+        this.ArchiveTarget = batch;
+        this.ArchiveReasonDraft = '';
+        this.ArchiveModalVisible = true;
+        this.cdr.markForCheck();
+    }
+
+    public CloseArchiveModal(): void {
+        if (this.ArchivingBatchID) return;
+        this.ArchiveModalVisible = false;
+        this.ArchiveTarget = null;
+        this.ArchiveReasonDraft = '';
+        this.cdr.markForCheck();
+    }
+
+    /** Run the archive with the reason captured in the dialog. The button is disabled until it is non-blank. */
+    public async ConfirmArchive(): Promise<void> {
+        const batch = this.ArchiveTarget;
+        const reason = this.ArchiveReasonDraft.trim();
+        if (!batch || !reason || this.ArchivingBatchID) return;
+
+        this.ArchivingBatchID = batch.ID;
+        this.ActionMessage = null;
+        this.cdr.markForCheck();
+        try {
+            const res = await this.dispatchClient.ArchiveBatch(batch.ID, reason);
+            this.ActionMessageIsError = !res.Success;
+            this.ActionMessage = res.Success
+                ? `Archived batch ${batch.JournalEntryBatchNumber} — no ERP call; its journal entries stay locked to it.`
+                : (res.ErrorMessage ?? 'Archive failed.');
+            if (res.Success) {
+                this.ArchiveModalVisible = false;
+                this.ArchiveTarget = null;
+                this.ArchiveReasonDraft = '';
+                await this.LoadBatches();
+            }
+        } finally {
+            this.ArchivingBatchID = null;
+            this.cdr.markForCheck();
+        }
+    }
 
     private get dispatchClient(): JournalEntryBatchDispatchClient {
         return new JournalEntryBatchDispatchClient(Metadata.Provider as GraphQLDataProvider);
