@@ -1,9 +1,20 @@
 /**
- * bc-aidp-next-golive#168 acceptance: a manual journal entry created at 9 PM Eastern on 31 August
- * has a posting date of 31 August after the workspace renders its default. The browser sits in New
- * York with its clock at 21:00 on the 31st; the business zone on the instance is Central (20:00 on
- * the 31st); UTC is already 1 September. Only a default computed in the business zone lands on the
- * 31st — modelled on `je-create-newnav.spec.ts`'s fixture setup/teardown and nav helpers.
+ * bc-aidp-next-golive#168 acceptance: a manual journal entry created just after midnight Eastern
+ * on 1 September has a posting date of 31 August after the workspace renders its default, because
+ * the BUSINESS zone (Central) has not yet crossed into September.
+ *
+ * The instant is chosen so the browser zone and the business zone genuinely DISAGREE on the day,
+ * which is the only way this spec can tell "reads the business zone" from "reads the browser's
+ * zone." An earlier version of this spec pinned 2026-09-01T01:00:00.000Z, at which New York (21:00
+ * on the 31st) and Chicago (20:00 on the 31st) both still read 31 August — so a browser-local
+ * default (the pre-#168 behavior) would ALSO have landed on the 31st and the spec would have
+ * passed for the wrong reason. This instant is 2026-09-01T04:30:00.000Z: 00:30 EDT on 1 September
+ * in the browser's zone (America/New_York, `test.use({ timezoneId })` below) but still 23:30 CDT
+ * on 31 August in the business zone (America/Chicago) — UTC is already the 1st in both. Only a
+ * default computed in the business zone lands on the 31st; a browser-local (or UTC) default would
+ * show 1 September.
+ *
+ * Modelled on `je-create-newnav.spec.ts`'s fixture setup/teardown and nav helpers.
  *
  * NOT RUN. Written and never executed: no seeded database and no running app instance were
  * reachable from this environment. See task-C4-report.md for what "PASS" would require and how to
@@ -42,11 +53,14 @@ async function railItem(page: Page, category: string, item: string): Promise<voi
   await page.waitForTimeout(3500);
 }
 
-test('a JE workspace opened at 9 PM Eastern on 31 August defaults its posting date to 31 August', async ({ page }) => {
-  // 2026-09-01T01:00:00.000Z = 21:00 EDT on 31 August in the browser's zone (America/New_York)
-  // and 20:00 CDT on 31 August in the instance's business zone (America/Chicago) — both agree on
-  // the 31st. UTC is already the 1st. Only a business-zone default lands on the 31st.
-  await page.clock.setFixedTime(new Date('2026-09-01T01:00:00.000Z'));
+test('a JE workspace opened just after midnight Eastern on 1 September defaults its posting date to 31 August', async ({ page }) => {
+  // 2026-09-01T04:30:00.000Z = 00:30 EDT on 1 September in the browser's zone (America/New_York)
+  // but 23:30 CDT on 31 August in the instance's business zone (America/Chicago) — the browser and
+  // the business zone DISAGREE on the day here (New York has already crossed midnight, Chicago has
+  // not), which is what makes this instant discriminate the fix. UTC is already the 1st in both.
+  // Only a default computed in the business zone lands on the 31st; a browser-local default would
+  // show 1 September.
+  await page.clock.setFixedTime(new Date('2026-09-01T04:30:00.000Z'));
   const sink = captureConsoleErrors(page);
   await loginViaMagicLink(page);
   await openAccountingApp(page);

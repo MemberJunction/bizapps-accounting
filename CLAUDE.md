@@ -361,11 +361,17 @@ This repo uses MemberJunction's CodeGen system to generate entity and action sub
   midnight into yesterday.
 - **"Today", "prior day", "prior month", cutoffs:** `BusinessTimeZoneEngine.Instance.Today()` /
   `.Zone` (bizapps-common). The zone is the instance's `BizApps.BusinessTimeZone` setting (AIDP
-  Next: Central). `AccountingCompanyProfile.OperatingTimeZone` is superseded by it and is not read;
-  it migrates into MJ Companies at 6.2.
+  Next: Central). `AccountingCompanyProfile.OperatingTimeZone` is still read as a per-company
+  OVERRIDE where a profile has set it (`company-accounting-header.panel.ts`:
+  `p['OperatingTimeZone'] || BusinessTimeZoneEngine.Instance.Zone`); the engine is the FALLBACK
+  when it is blank, replacing a hardcoded `'America/New_York'`. `OperatingTimeZone` itself migrates
+  into MJ Companies at 6.2, at which point this override/fallback split goes away.
 - **DB defaults are UTC:** the SQL Server container runs at `+00:00`; verify with
-  `SELECT DATENAME(TZOFFSET, SYSDATETIMEOFFSET())`. Views that need "today" cross join
-  `[__mj_BizAppsCommon].[fnBusinessToday]()` rather than casting `GETUTCDATE()`.
+  `SELECT DATENAME(TZOFFSET, SYSDATETIMEOFFSET())`. Views that need "today" are intended to cross
+  join `[__mj_BizAppsCommon].[fnBusinessToday]()` rather than cast `GETUTCDATE()` — but as of this
+  writing no migration in THIS repo creates that function; it ships from bizapps-common. Confirm it
+  exists (`SELECT OBJECT_ID('[__mj_BizAppsCommon].[fnBusinessToday]')`) before writing a view that
+  assumes it.
 
 ---
 

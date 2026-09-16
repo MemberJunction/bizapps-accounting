@@ -81,6 +81,16 @@ describe('formatJournalDate', () => {
       expect(formatJournalDate(new Date('2026-08-31T00:00:00.000Z'))).toBe('Aug 31, 2026');
     });
   });
+
+  it('honors a caller-supplied options object (the batch panels drop the year) while still forcing timeZone: UTC', () => {
+    // journal-entry-batch-header.panel.ts's PostingDateLabel and journal-entry-batch-overview.panel.ts's
+    // PostingDateLabel/FormatDate all call this helper with { month: 'short', day: 'numeric' } (no
+    // year). The point of this test is that a shorter format string does NOT reopen the local-parts
+    // bug: `timeZone: 'UTC'` must still win even though the caller's options object never mentions it.
+    AT('America/New_York', () => {
+      expect(formatJournalDate(new Date('2026-08-31T00:00:00.000Z'), { month: 'short', day: 'numeric' })).toBe('Aug 31');
+    });
+  });
 });
 
 describe('isBalanced with journalLineTotals', () => {

@@ -1,6 +1,6 @@
 ---
 "@mj-biz-apps/accounting-ng": minor
-"@mj-biz-apps/accounting-actions": patch
+"@mj-biz-apps/accounting-actions": minor
 "@mj-biz-apps/accounting-core-entities-server": patch
 ---
 
@@ -22,5 +22,11 @@ arguments rather than defaulting them. It had no callers inside this repo, but t
 source-breaking for anyone outside it: a silent `'UTC'` default would have let a caller believe it
 had the business-day fix when it did not, so the argument is now forced. `timeWindowRange` keeps its
 optional parameters and its existing behaviour.
+`resolveCutoff`, exported from `@mj-biz-apps/accounting-actions`'s public API (`export *` in
+`packages/Actions/src/index.ts`), gained a required 4th parameter, `zone: string` — callers now pass
+`resolveCutoff(explicitCutoff, mode, now, zone)` instead of the old 3-argument form. Same reasoning
+as `timeWindowFilter`: an optional/defaulted zone would have let a caller believe prior-day/prior-month
+cutoffs were business-zone-aware when they were not, so the argument is required rather than
+defaulted. This is source-breaking for anyone outside this repo calling `resolveCutoff` directly.
 
 Requires `@mj-biz-apps/common-entities` 5.43.0.
