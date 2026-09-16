@@ -1,5 +1,8 @@
+import { ToCalendarDay, FromCalendarDay } from '@mj-biz-apps/common-entities';
 import type { mjBizAppsAccountingJournalEntryEntity } from '@mj-biz-apps/accounting-entities';
 import type { JEStatus } from '../shared/je-rules';
+
+const DATE_DISPLAY_OPTIONS: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
@@ -56,7 +59,32 @@ export function journalStatusChipClass(status: JEStatus | null | undefined): str
     }
 }
 
+/**
+ * A `DATE` column's calendar day, formatted for display (`EffectiveDate`, not a timestamp).
+ *
+ * Reads the value's UTC parts via `ToCalendarDay` rather than local parts, then re-anchors to UTC
+ * midnight of that day before formatting. `timeZone: 'UTC'` is load-bearing: without it the
+ * formatter would re-interpret `FromCalendarDay`'s UTC midnight in the viewer's zone, sliding the
+ * day back by one anywhere west of Greenwich — the same bug this fixes, reintroduced one call later.
+ * See `formatJournalTimestamp` for a true `DATETIMEOFFSET` field, which this must NOT be used for.
+ */
 export function formatJournalDate(value: Date | string | null | undefined): string {
+    const day = ToCalendarDay(value);
+    if (day === null) {
+        return '—';
+    }
+    return FromCalendarDay(day).toLocaleDateString('en-US', { ...DATE_DISPLAY_OPTIONS, timeZone: 'UTC' });
+}
+
+/**
+ * A true timestamp (`DATETIMEOFFSET`), formatted in the VIEWER'S local time.
+ *
+ * Unlike a calendar day, a timestamp has no single "day" independent of a zone — the business zone
+ * governs "today" and cutoffs only, never display (spec §3), so this stays on local parts. Used for
+ * `GLPostedAt`; do not repoint a `DATE`-column field (like `EffectiveDate`) at this — use
+ * `formatJournalDate` instead.
+ */
+export function formatJournalTimestamp(value: Date | string | null | undefined): string {
     if (value == null || value === '') {
         return '—';
     }
@@ -64,7 +92,7 @@ export function formatJournalDate(value: Date | string | null | undefined): stri
     if (Number.isNaN(date.getTime())) {
         return '—';
     }
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return date.toLocaleDateString('en-US', DATE_DISPLAY_OPTIONS);
 }
 
 /**

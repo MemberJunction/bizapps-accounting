@@ -4,6 +4,7 @@ import { BaseAngularComponent } from '@memberjunction/ng-base-types';
 import { NormalizeUUID, UUIDsEqual } from '@memberjunction/global';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import type { JEValidationError } from '@mj-biz-apps/accounting-engine-base';
+import { BusinessTimeZoneEngine, FromCalendarDay } from '@mj-biz-apps/common-entities';
 import { CompanyScopeService } from '../../shared/company-scope.service';
 import { WorkspaceTabStore } from '../../../transfer-pending/workspace-tabs/workspace-tab-store';
 import { WorkspaceTab } from '../../../transfer-pending/workspace-tabs/workspace-tabs.types';
@@ -19,6 +20,7 @@ import {
   toCreateInput,
   LiveLines,
   TextIssue,
+  CalendarDayValue,
 } from './je-draft';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
@@ -244,7 +246,7 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
     // Seed from the app-wide scope when it names exactly one company — with several in scope we
     // cannot know which one the operator means, so we ask rather than guess wrong.
     if (this.Scope.SelectedIDs.length === 1) entry.CompanyID = this.Scope.SelectedIDs[0];
-    entry.EffectiveDate = new Date();
+    entry.EffectiveDate = BusinessTimeZoneEngine.Instance.TodayAsDate();
     entry.Status = 'Pending';
     // The workspace is the MANUAL-entry home (§8.1), so the type is fixed rather than offered — a
     // one-option select would be a control that cannot be operated. Stamped on the entity rather
@@ -273,28 +275,17 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
 
   // ─── posting date ──────────────────────────────────────────────────────────
 
-  /**
-   * The posting date as `<input type="date">` wants it, and back.
-   *
-   * Formatted from the LOCAL parts rather than `toISOString()`: an entry posted on the 1st in a
-   * timezone behind UTC serialises as the 31st of the previous month, which files it in the wrong
-   * accounting period — balanced, reconciling against itself, and wrong.
-   */
+  /** The posting date as `<input type="date">` wants it: the stored calendar day, read from UTC parts — matching what `SetEffectiveDate` writes. */
   public get EffectiveDateValue(): string {
-    const value = this.Draft?.Entry.EffectiveDate;
-    if (!value) return '';
-    const date = value instanceof Date ? value : new Date(value);
-    if (Number.isNaN(date.getTime())) return '';
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+    return CalendarDayValue(this.Draft?.Entry.EffectiveDate);
   }
 
   public SetEffectiveDate(text: string): void {
     const d = this.Draft;
     if (!d) return;
-    // Parsed as LOCAL midnight (the `T00:00:00` is load-bearing): `new Date('2026-03-15')` is UTC
-    // midnight, which reads as the 14th anywhere west of Greenwich.
-    d.Entry.EffectiveDate = text ? new Date(`${text}T00:00:00`) : (null as unknown as Date);
+    // UTC midnight of the picked day: the shape a DATE column round-trips as, so
+    // `CalendarDayValue` (UTC parts) reads back the day the user chose in every browser zone.
+    d.Entry.EffectiveDate = text ? FromCalendarDay(text) : (null as unknown as Date);
     this.touch();
   }
 
