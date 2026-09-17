@@ -1,1 +1,213 @@
-[]
+[
+  {
+    "fields": {
+      "AllowUserSearchAPI": true,
+      "AutoUpdateAllowUserSearchAPI": false
+    },
+    "relatedEntities": {
+      "MJ: Entity Fields": [
+        {
+          "fields": {
+            "IncludeInUserSearchAPI": true,
+            "UserSearchPredicateAPI": "BeginsWith",
+            "AutoUpdateIncludeInUserSearchAPI": false
+          },
+          "primaryKey": {
+            "ID": "@lookup:MJ: Entity Fields.Name=Code&EntityID=@parent:ID"
+          }
+        },
+        {
+          "fields": {
+            "IncludeInUserSearchAPI": true,
+            "UserSearchPredicateAPI": "BeginsWith",
+            "AutoUpdateIncludeInUserSearchAPI": false
+          },
+          "primaryKey": {
+            "ID": "@lookup:MJ: Entity Fields.Name=Name&EntityID=@parent:ID"
+          }
+        },
+        {
+          "fields": {
+            "IncludeInUserSearchAPI": false,
+            "AutoUpdateIncludeInUserSearchAPI": false
+          },
+          "primaryKey": {
+            "ID": "@lookup:MJ: Entity Fields.Name=ID&EntityID=@parent:ID"
+          }
+        }
+      ]
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: GL Accounts"
+    }
+  },
+  {
+    "fields": {
+      "AllowUserSearchAPI": true,
+      "AutoUpdateAllowUserSearchAPI": false
+    },
+    "relatedEntities": {
+      "MJ: Entity Fields": [
+        {
+          "fields": {
+            "IncludeInUserSearchAPI": true,
+            "UserSearchPredicateAPI": "Exact",
+            "AutoUpdateIncludeInUserSearchAPI": false
+          },
+          "primaryKey": {
+            "ID": "@lookup:MJ: Entity Fields.Name=EntryNumber&EntityID=@parent:ID"
+          }
+        },
+        {
+          "fields": {
+            "IncludeInUserSearchAPI": false,
+            "AutoUpdateIncludeInUserSearchAPI": false
+          },
+          "primaryKey": {
+            "ID": "@lookup:MJ: Entity Fields.Name=ID&EntityID=@parent:ID"
+          }
+        }
+      ]
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entries"
+    }
+  },
+  {
+    "fields": {
+      "AllowUserSearchAPI": true,
+      "AutoUpdateAllowUserSearchAPI": false
+    },
+    "relatedEntities": {
+      "MJ: Entity Fields": [
+        {
+          "fields": {
+            "IncludeInUserSearchAPI": true,
+            "UserSearchPredicateAPI": "Exact",
+            "AutoUpdateIncludeInUserSearchAPI": false
+          },
+          "primaryKey": {
+            "ID": "@lookup:MJ: Entity Fields.Name=JournalEntryBatchNumber&EntityID=@parent:ID"
+          }
+        },
+        {
+          "fields": {
+            "IncludeInUserSearchAPI": false,
+            "AutoUpdateIncludeInUserSearchAPI": false
+          },
+          "primaryKey": {
+            "ID": "@lookup:MJ: Entity Fields.Name=ID&EntityID=@parent:ID"
+          }
+        }
+      ]
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entry Batches"
+    }
+  },
+  {
+    "fields": {
+      "AllowUserSearchAPI": true,
+      "AutoUpdateAllowUserSearchAPI": false
+    },
+    "relatedEntities": {
+      "MJ: Entity Fields": [
+        {
+          "fields": {
+            "IncludeInUserSearchAPI": true,
+            "UserSearchPredicateAPI": "Exact",
+            "AutoUpdateIncludeInUserSearchAPI": false
+          },
+          "primaryKey": {
+            "ID": "@lookup:MJ: Entity Fields.Name=CompanyCode&EntityID=@parent:ID"
+          }
+        },
+        {
+          "fields": {
+            "IncludeInUserSearchAPI": true,
+            "UserSearchPredicateAPI": "BeginsWith",
+            "AutoUpdateIncludeInUserSearchAPI": false
+          },
+          "primaryKey": {
+            "ID": "@lookup:MJ: Entity Fields.Name=Name&EntityID=@parent:ID"
+          }
+        },
+        {
+          "fields": {
+            "IncludeInUserSearchAPI": false,
+            "AutoUpdateIncludeInUserSearchAPI": false
+          },
+          "primaryKey": {
+            "ID": "@lookup:MJ: Entity Fields.Name=ID&EntityID=@parent:ID"
+          }
+        }
+      ]
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Accounting Company Profiles"
+    }
+  },
+  {
+    "fields": {
+      "AllowUserSearchAPI": false,
+      "AutoUpdateAllowUserSearchAPI": false
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Company Tax Nexus"
+    }
+  },
+  {
+    "fields": {
+      "AllowUserSearchAPI": false,
+      "AutoUpdateAllowUserSearchAPI": false
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: GL Account Link Dimensions"
+    }
+  },
+  {
+    "fields": {
+      "AllowUserSearchAPI": false,
+      "AutoUpdateAllowUserSearchAPI": false
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: GL Account Links"
+    }
+  },
+  {
+    "fields": {
+      "AllowUserSearchAPI": false,
+      "AutoUpdateAllowUserSearchAPI": false
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Intercompany Account Match Dimensions"
+    }
+  },
+  {
+    "fields": {
+      "AllowUserSearchAPI": false,
+      "AutoUpdateAllowUserSearchAPI": false
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Intercompany Account Matches"
+    }
+  },
+  {
+    "fields": {
+      "AllowUserSearchAPI": false,
+      "AutoUpdateAllowUserSearchAPI": false
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entry Line Dimensions"
+    }
+  },
+  {
+    "fields": {
+      "AllowUserSearchAPI": false,
+      "AutoUpdateAllowUserSearchAPI": false
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entry Lines"
+    }
+  }
+]
