@@ -6,6 +6,7 @@ import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
 import { NavigationService } from '@memberjunction/ng-shared';
 import { MJButtonDirective, MJDialogComponent, MJDialogActionsComponent, MJDropdownComponent } from '@memberjunction/ng-ui-components';
 import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
+import { BusinessTimeZoneEngine } from '@mj-biz-apps/common-entities';
 import {
     JournalEntryBatchDispatchClient,
     PreviewEntryWire,
@@ -1158,7 +1159,7 @@ export class AccountingBatchesPageComponent implements OnInit {
         this.BuildModalVisible = true;
         this.ModalErrorMessage = null;
         if (!this.BuildCutoffDate) {
-            this.BuildCutoffDate = new Date().toISOString().slice(0, 10);
+            this.BuildCutoffDate = BusinessTimeZoneEngine.Instance.Today();
         }
         await this.LoadBuildPreview();
     }

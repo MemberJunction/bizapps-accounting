@@ -352,11 +352,26 @@ This repo uses MemberJunction's CodeGen system to generate entity and action sub
 - Period-close trigger blocks JE inserts into a closed `AccountingPeriod` unless `OriginalAccountingPeriodID` is set (adjusting entry pattern).
 - `AccountingCompanyProfile` is an IsA Disjoint child of `__mj.Company` — same UUID as the parent row, never INSERT a Profile without a matching Company.
 
-### Time is ALWAYS stored in UTC (convention)
-Every timestamp this app persists is **UTC** — no exceptions, no local-time storage.
-- **Code writes UTC instants:** use `new Date()` (a JS Date is a UTC instant; the mssql driver persists it to `DATETIMEOFFSET` as `+00:00`), `new Date().toISOString().slice(0,10)` for `DATE` values, and `getUTC*()` for any date-part math (e.g. fiscal year). **Never** use local-time getters (`getFullYear()`, `getMonth()`, `toLocaleString()`, `toDateString()`) for a value that gets stored or compared — they introduce the runner's local zone.
-- **DB defaults are UTC:** the SQL Server container runs at `+00:00`, so `SYSDATETIMEOFFSET()` / `GETUTCDATE()` defaults (and CodeGen's `__mj_CreatedAt`/`__mj_UpdatedAt`) are UTC. Verify with `SELECT DATENAME(TZOFFSET, SYSDATETIMEOFFSET())` → must be `+00:00`. If a deployment's server is NOT UTC, fix the server/container TZ — do not paper over it in code.
-- **Display/zone is a presentation concern:** `AccountingCompanyProfile.OperatingTimeZone` (defaults `'UTC'`, W1) is for *rendering* dates to a company's users; storage stays UTC regardless.
+### Instants are UTC; calendar days are calendar days; "today" is the business day (convention)
+- **Timestamps** (`DATETIMEOFFSET`): write `new Date()`; the driver persists `+00:00`. Never local getters.
+- **Calendar days** (`DATE` columns such as `EffectiveDate`, `PostingDate`): a day with no time and no
+  zone. Read it with `ToCalendarDay` (UTC parts) and write it with `FromCalendarDay` (UTC midnight),
+  both from `@mj-biz-apps/common-entities`. Never `toISOString().slice(0,10)` on a clock reading and
+  never local getters on a stored value; the first files the evening into tomorrow, the second files
+  midnight into yesterday.
+- **"Today", "prior day", "prior month", cutoffs:** `BusinessTimeZoneEngine.Instance.Today()` /
+  `.Zone` (bizapps-common). The zone is the instance's `BizApps.BusinessTimeZone` setting (AIDP
+  Next: Central). `AccountingCompanyProfile.OperatingTimeZone` is still read as a per-company
+  OVERRIDE where a profile has set it (`company-accounting-header.panel.ts`:
+  `p['OperatingTimeZone'] || BusinessTimeZoneEngine.Instance.Zone`); the engine is the FALLBACK
+  when it is blank, replacing a hardcoded `'America/New_York'`. `OperatingTimeZone` itself migrates
+  into MJ Companies at 6.2, at which point this override/fallback split goes away.
+- **DB defaults are UTC:** the SQL Server container runs at `+00:00`; verify with
+  `SELECT DATENAME(TZOFFSET, SYSDATETIMEOFFSET())`. Views that need "today" are intended to cross
+  join `[__mj_BizAppsCommon].[fnBusinessToday]()` rather than cast `GETUTCDATE()` — but as of this
+  writing no migration in THIS repo creates that function; it ships from bizapps-common. Confirm it
+  exists (`SELECT OBJECT_ID('[__mj_BizAppsCommon].[fnBusinessToday]')`) before writing a view that
+  assumes it.
 
 ---
 

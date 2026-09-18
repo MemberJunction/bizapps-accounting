@@ -5,7 +5,7 @@ import { BaseFormPanel } from '@memberjunction/ng-base-forms';
 import type { mjBizAppsAccountingJournalEntryEntity } from '@mj-biz-apps/accounting-entities';
 import { awaitsApproval } from '../shared/je-rules';
 import {
-    formatJournalDate,
+    formatJournalTimestamp,
     JOURNAL_ENTRY_BATCH_ENTITY,
     JOURNAL_ENTRY_ENTITY,
 } from './journal-entry-panel.helpers';
@@ -61,7 +61,9 @@ export class JournalEntryOverviewPanel extends BaseFormPanel<mjBizAppsAccounting
     }
 
     public get PostedAtLabel(): string {
-        return formatJournalDate(this.Record.GLPostedAt);
+        // GLPostedAt is a DATETIMEOFFSET (a true timestamp), not a DATE column, so it stays on
+        // local-parts formatting — see `formatJournalTimestamp`'s doc comment.
+        return formatJournalTimestamp(this.Record.GLPostedAt);
     }
 
     public OpenBatch(): void {

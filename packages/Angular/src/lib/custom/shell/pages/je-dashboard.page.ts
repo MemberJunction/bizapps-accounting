@@ -148,7 +148,7 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
    * not worth its price.
    */
   private async loadCounts(): Promise<JeCounts> {
-    const monthStart = this.monthStartUTC();
+    const monthStart = this.monthStartBusiness();
     const scoped = (own: string | null): string => this.Scope.ComposeFilter(own);
 
     // NO scheduled-entries count: the ScheduledJournalEntry system was retired (D15) — its count

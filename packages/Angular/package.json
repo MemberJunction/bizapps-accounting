@@ -42,7 +42,7 @@
     "@memberjunction/ng-shared-generic": "^6.1.0-edge.7",
     "@memberjunction/ng-ui-components": "^6.1.0-edge.7",
     "@mj-biz-apps/common-ng": ">=5.37.0",
-    "@mj-biz-apps/common-entities": ">=5.37.0",
+    "@mj-biz-apps/common-entities": ">=5.43.0",
     "rxjs": "^7.8.2",
     "@memberjunction/ng-base-types": "^6.1.0-edge.7",
     "@angular/cdk": "^21.1.3"

@@ -94,38 +94,57 @@ describe('BuildJournalEntryBatchesAction', () => {
         // pendingCandidateFilter turns a midnight-UTC cutoff into `EffectiveDate < cutoff + 1 day`,
         // so the cutoff DAY is inclusive. These are the dates that make "strictly before" true.
         it('PriorDay resolves to yesterday — so the filter becomes "before the run date"', () => {
-            const cutoff = resolveCutoff(undefined, 'PriorDay', new Date('2026-08-20T01:00:00Z'));
+            const cutoff = resolveCutoff(undefined, 'PriorDay', new Date('2026-08-20T01:00:00Z'), 'UTC');
             expect(cutoff?.toISOString()).toBe('2026-08-19T00:00:00.000Z');
         });
 
         it('PriorDay crosses a month boundary', () => {
-            const cutoff = resolveCutoff(undefined, 'PriorDay', new Date('2026-09-01T01:00:00Z'));
+            const cutoff = resolveCutoff(undefined, 'PriorDay', new Date('2026-09-01T01:00:00Z'), 'UTC');
             expect(cutoff?.toISOString()).toBe('2026-08-31T00:00:00.000Z');
         });
 
         it('PriorMonth resolves to the last day of the prior month — filter becomes "before the 1st"', () => {
-            const cutoff = resolveCutoff(undefined, 'PriorMonth', new Date('2026-04-01T03:00:00Z'));
+            const cutoff = resolveCutoff(undefined, 'PriorMonth', new Date('2026-04-01T03:00:00Z'), 'UTC');
             expect(cutoff?.toISOString()).toBe('2026-03-31T00:00:00.000Z');
         });
 
         it('PriorMonth handles a short prior month and a year boundary', () => {
-            expect(resolveCutoff(undefined, 'PriorMonth', new Date('2026-03-01T03:00:00Z'))?.toISOString())
+            expect(resolveCutoff(undefined, 'PriorMonth', new Date('2026-03-01T03:00:00Z'), 'UTC')?.toISOString())
                 .toBe('2026-02-28T00:00:00.000Z');
-            expect(resolveCutoff(undefined, 'PriorMonth', new Date('2026-01-01T03:00:00Z'))?.toISOString())
+            expect(resolveCutoff(undefined, 'PriorMonth', new Date('2026-01-01T03:00:00Z'), 'UTC')?.toISOString())
                 .toBe('2025-12-31T00:00:00.000Z');
         });
 
         it('an explicit Cutoff overrides the relative mode, so the manual path is unaffected', () => {
-            const cutoff = resolveCutoff('2026-08-25', 'PriorDay', new Date('2026-09-01T01:00:00Z'));
+            const cutoff = resolveCutoff('2026-08-25', 'PriorDay', new Date('2026-09-01T01:00:00Z'), 'UTC');
             expect(cutoff?.toISOString()).toBe('2026-08-25T00:00:00.000Z');
         });
 
         it('no cutoff and no mode means no date clause at all', () => {
-            expect(resolveCutoff(undefined, undefined, new Date())).toBeNull();
+            expect(resolveCutoff(undefined, undefined, new Date(), 'UTC')).toBeNull();
         });
 
         it('rejects an unknown mode rather than silently dropping the date clause', () => {
-            expect(() => resolveCutoff(undefined, 'LastWeek', new Date())).toThrow(/unknown CutoffMode/);
+            expect(() => resolveCutoff(undefined, 'LastWeek', new Date(), 'UTC')).toThrow(/unknown CutoffMode/);
+        });
+
+        it('PriorDay is judged in the BUSINESS zone: 9 PM Central on 31 August is still August', () => {
+            // bc-aidp-next-golive#168 acceptance: an entry created at 9 PM Eastern on 8/31 has an
+            // effective date of 8/31 and the September 1 prior-day run must include it.
+            const cutoff = resolveCutoff(undefined, 'PriorDay', new Date('2026-09-01T02:00:00Z'), 'America/Chicago');
+            expect(cutoff?.toISOString()).toBe('2026-08-30T00:00:00.000Z');
+            const nextRun = resolveCutoff(undefined, 'PriorDay', new Date('2026-09-02T02:00:00Z'), 'America/Chicago');
+            expect(nextRun?.toISOString()).toBe('2026-08-31T00:00:00.000Z');
+        });
+
+        it('PriorMonth is judged in the BUSINESS zone: the 1st at 1 AM UTC is still the prior month in Central', () => {
+            const cutoff = resolveCutoff(undefined, 'PriorMonth', new Date('2026-09-01T01:00:00Z'), 'America/Chicago');
+            expect(cutoff?.toISOString()).toBe('2026-07-31T00:00:00.000Z');
+            // Not a discriminator: by 12:00 UTC, Chicago (UTC-5) is already 1 September too, so the
+            // old UTC-parts code and the fix agree here. This covers the later-in-the-day case —
+            // the sibling assertion above is what actually catches a regression.
+            const later = resolveCutoff(undefined, 'PriorMonth', new Date('2026-09-01T12:00:00Z'), 'America/Chicago');
+            expect(later?.toISOString()).toBe('2026-08-31T00:00:00.000Z');
         });
     });
 

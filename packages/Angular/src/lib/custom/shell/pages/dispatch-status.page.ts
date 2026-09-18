@@ -5,6 +5,7 @@ import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
 import { GridColumnConfig, EntityDataGridComponent } from '@memberjunction/ng-entity-viewer';
 import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
+import { BusinessTimeZoneEngine } from '@mj-biz-apps/common-entities';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
 import { JournalEntryBatchDispatchClient } from '../../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
 import { TIME_WINDOWS, TimeWindowId, timeWindowRange, toSqlDate, andFilters } from '../../../transfer-pending/list-scaffold/time-window';
@@ -357,7 +358,7 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
   }
 
   private applyWindowRange(window: TimeWindowId): void {
-    const { From, To } = timeWindowRange(window);
+    const { From, To } = timeWindowRange(window, new Date(), BusinessTimeZoneEngine.Instance.Zone);
     this.FromDate = From ? toSqlDate(From) : null;
     // timeWindowRange's To is EXCLUSIVE (tomorrow 00:00 UTC); the calendar box states an INCLUSIVE
     // last day, so step back one — dateFilter() re-opens it to an exclusive bound for the compare.
