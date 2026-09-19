@@ -1,0 +1,30 @@
+[
+  {
+    "fields": {
+      "Name": "Score MJ_BizApps_Accounting: Journal Entries with model 5DF7D98A-6A3C-48D5-9935-0AE86AC79078 (Monthly)",
+      "EntityID": "C040A1FC-16CE-49CB-B0E2-4F233BD0D762",
+      "Status": "Active",
+      "WorkType": "ML Model",
+      "ScopeType": "Filter",
+      "ScopeFilter": "Status = 'Pending'",
+      "OnChangeEnabled": false,
+      "ScheduleEnabled": true,
+      "CronExpression": "0 0 1 * *",
+      "Timezone": "UTC",
+      "OnDemandEnabled": true,
+      "OutputMapping": "{\"fields\":{\"PredictedAnomalyProbability\":\"$.score\",\"PredictedAnomalyScoredAt\":\"$.scoredAt\"}}",
+      "SkipUnchanged": true,
+      "BatchSize": 100,
+      "MaxConcurrency": 1,
+      "Configuration": "{\"modelId\":\"5DF7D98A-6A3C-48D5-9935-0AE86AC79078\",\"primaryKeyField\":\"ID\"}",
+      "SkipEmbeddings": false
+    },
+    "primaryKey": {
+      "ID": "E44E2F34-AB6A-4DFA-B3BC-2ABB465A7B11"
+    },
+    "sync": {
+      "lastModified": "2026-09-19T18:45:51.105Z",
+      "checksum": "c347ad5ab7ec7aa5eb2ad7e2fad941000bc93d463e268f2b40beb4842105eb09"
+    }
+  }
+]
