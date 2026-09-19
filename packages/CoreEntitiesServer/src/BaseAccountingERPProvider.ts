@@ -5,7 +5,7 @@
 import { RegisterClass, RequiresSubclass } from '@memberjunction/global';
 import { UserInfo } from '@memberjunction/core';
 import type { AccountingVerbRunner } from './AccountingVerbRunner.js';
-import type { ErpPostResult } from './JournalEntryBatchEngine.js';
+import type { ErpPostResult, ExternalDimensionRef } from './JournalEntryBatchEngine.js';
 
 export interface CreateERPJournalInput {
   CompanyID: string;
@@ -17,6 +17,8 @@ export interface CreateERPJournalInput {
     debit?: number;
     credit?: number;
     description?: string;
+    /** Dimension tags in ERP wire codes. Providers that cannot carry them ignore the field. */
+    dimensions?: ExternalDimensionRef[];
   }>;
 }
 
