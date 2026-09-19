@@ -397,6 +397,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
   // ─── Save Override ──────────────────────────────────────────────────────────
 
   public override async Save(options?: EntitySaveOptions): Promise<boolean> {
+    this.syncPredictiveAnomalyFieldsPreSave();
     const dbProvider = this.ProviderToUse as unknown as DatabaseProviderBase;
 
     // W2 numbering (plan D19): assign the per-company, per-FY gap-free EntryNumber
@@ -629,4 +630,54 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
       LogError(`GenerateReversal: failed to set ReversedByJournalEntryID on ${this.EntryNumber}: ${this.LatestResult?.CompleteMessage ?? 'unknown'}`);
     }
   }
+
+  /**
+   * Synchronizes PredictedAnomalyRiskBand when PredictedAnomalyProbability changes or is set.
+   * Low (<0.10), Medium (0.10-0.25), High (0.25-0.50), or Critical (>=0.50).
+   */
+  public syncPredictiveAnomalyFieldsPreSave(): void {
+    try {
+      let probDirty = false;
+      try {
+        const probField = typeof this.GetFieldByName === 'function' ? this.GetFieldByName('PredictedAnomalyProbability') : null;
+        probDirty = probField?.Dirty ?? false;
+      } catch {
+        probDirty = false;
+      }
+      if (this.PredictedAnomalyProbability != null && (probDirty || !this.PredictedAnomalyRiskBand)) {
+        this.PredictedAnomalyRiskBand = ComputePredictiveAnomalyRiskBand(this.PredictedAnomalyProbability);
+      } else if (this.PredictedAnomalyProbability == null && probDirty) {
+        this.PredictedAnomalyRiskBand = null;
+      }
+    } catch {
+      // Tolerate test mocks where BaseEntity._fields is uninitialized
+    }
+  }
 }
+
+/**
+ * Maps an anomaly probability to an operational risk tier.
+ * - <0.10: Low
+ * - 0.10 to <0.25: Medium
+ * - 0.25 to <0.50: High
+ * - >=0.50: Critical
+ * - null/undefined/NaN: null
+ */
+export function ComputePredictiveAnomalyRiskBand(
+  probability: number | null | undefined
+): JournalEntryEntity['PredictedAnomalyRiskBand'] {
+  if (probability == null || Number.isNaN(probability)) {
+    return null;
+  }
+  if (probability < 0.10) {
+    return 'Low';
+  }
+  if (probability < 0.25) {
+    return 'Medium';
+  }
+  if (probability < 0.50) {
+    return 'High';
+  }
+  return 'Critical';
+}
+

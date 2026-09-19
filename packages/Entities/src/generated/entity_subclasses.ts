@@ -1178,6 +1178,27 @@ export const mjBizAppsAccountingJournalEntrySchema = z.object({
         * * Display Name: Updated At
         * * SQL Data Type: datetimeoffset
         * * Default Value: getutcdate()`),
+    PredictedAnomalyProbability: z.number().nullable().describe(`
+        * * Field Name: PredictedAnomalyProbability
+        * * Display Name: Anomaly Probability
+        * * SQL Data Type: decimal(5, 4)
+        * * Description: 0.0000 to 1.0000 probability that the journal entry is anomalous or represents irregular posting activity.`),
+    PredictedAnomalyRiskBand: z.union([z.literal('Critical'), z.literal('High'), z.literal('Low'), z.literal('Medium')]).nullable().describe(`
+        * * Field Name: PredictedAnomalyRiskBand
+        * * Display Name: Anomaly Risk Band
+        * * SQL Data Type: nvarchar(20)
+    * * Value List Type: List
+    * * Possible Values 
+    *   * Critical
+    *   * High
+    *   * Low
+    *   * Medium
+        * * Description: Categorical risk tier derived from anomaly probability: Low, Medium, High, Critical.`),
+    PredictedAnomalyScoredAt: z.date().nullable().describe(`
+        * * Field Name: PredictedAnomalyScoredAt
+        * * Display Name: Anomaly Scored At
+        * * SQL Data Type: datetimeoffset
+        * * Description: Timestamp when the journal entry was last scored by the predictive anomaly model.`),
     Company: z.string().describe(`
         * * Field Name: Company
         * * Display Name: Company Name
@@ -1206,14 +1227,6 @@ export const mjBizAppsAccountingJournalEntrySchema = z.object({
         * * Field Name: File
         * * Display Name: File Name
         * * SQL Data Type: nvarchar(500)`),
-    RootReversesJournalEntryID: z.string().nullable().describe(`
-        * * Field Name: RootReversesJournalEntryID
-        * * Display Name: Root Reverses Journal Entry
-        * * SQL Data Type: uniqueidentifier`),
-    RootReversedByJournalEntryID: z.string().nullable().describe(`
-        * * Field Name: RootReversedByJournalEntryID
-        * * Display Name: Root Reversed By Journal Entry
-        * * SQL Data Type: uniqueidentifier`),
 });
 
 export type mjBizAppsAccountingJournalEntryEntityType = z.infer<typeof mjBizAppsAccountingJournalEntrySchema>;
@@ -5490,6 +5503,51 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     }
 
     /**
+    * * Field Name: PredictedAnomalyProbability
+    * * Display Name: Anomaly Probability
+    * * SQL Data Type: decimal(5, 4)
+    * * Description: 0.0000 to 1.0000 probability that the journal entry is anomalous or represents irregular posting activity.
+    */
+    get PredictedAnomalyProbability(): number | null {
+        return this.Get('PredictedAnomalyProbability');
+    }
+    set PredictedAnomalyProbability(value: number | null) {
+        this.Set('PredictedAnomalyProbability', value);
+    }
+
+    /**
+    * * Field Name: PredictedAnomalyRiskBand
+    * * Display Name: Anomaly Risk Band
+    * * SQL Data Type: nvarchar(20)
+    * * Value List Type: List
+    * * Possible Values 
+    *   * Critical
+    *   * High
+    *   * Low
+    *   * Medium
+    * * Description: Categorical risk tier derived from anomaly probability: Low, Medium, High, Critical.
+    */
+    get PredictedAnomalyRiskBand(): 'Critical' | 'High' | 'Low' | 'Medium' | null {
+        return this.Get('PredictedAnomalyRiskBand');
+    }
+    set PredictedAnomalyRiskBand(value: 'Critical' | 'High' | 'Low' | 'Medium' | null) {
+        this.Set('PredictedAnomalyRiskBand', value);
+    }
+
+    /**
+    * * Field Name: PredictedAnomalyScoredAt
+    * * Display Name: Anomaly Scored At
+    * * SQL Data Type: datetimeoffset
+    * * Description: Timestamp when the journal entry was last scored by the predictive anomaly model.
+    */
+    get PredictedAnomalyScoredAt(): Date | null {
+        return this.Get('PredictedAnomalyScoredAt');
+    }
+    set PredictedAnomalyScoredAt(value: Date | null) {
+        this.Set('PredictedAnomalyScoredAt', value);
+    }
+
+    /**
     * * Field Name: Company
     * * Display Name: Company Name
     * * SQL Data Type: nvarchar(50)
@@ -5550,24 +5608,6 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     */
     get File(): string | null {
         return this.Get('File');
-    }
-
-    /**
-    * * Field Name: RootReversesJournalEntryID
-    * * Display Name: Root Reverses Journal Entry
-    * * SQL Data Type: uniqueidentifier
-    */
-    get RootReversesJournalEntryID(): string | null {
-        return this.Get('RootReversesJournalEntryID');
-    }
-
-    /**
-    * * Field Name: RootReversedByJournalEntryID
-    * * Display Name: Root Reversed By Journal Entry
-    * * SQL Data Type: uniqueidentifier
-    */
-    get RootReversedByJournalEntryID(): string | null {
-        return this.Get('RootReversedByJournalEntryID');
     }
 }
 
@@ -5755,6 +5795,7 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     /**
     * Validate() method override for MJ_BizApps_Accounting: Journal Entry Batches entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
     * * Table-Level: Both the approval task and the time it was raised must either be set together, or both must be empty.
+    * * Table-Level: If the status is set to 'Archived', then an archive reason, archival timestamp, and the archiving user's ID must all be provided.
     * * Table-Level: Total debits, total credits, and total entries must all be greater than or equal to zero to ensure valid financial accounting records.
     * @public
     * @method
@@ -5763,6 +5804,7 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     public override Validate(): ValidationResult {
         const result = super.Validate();
         this.ValidateApprovalTaskAndRaisedAtCoexistence(result);
+        this.ValidateArchivedFieldsWhenStatusIsArchived(result);
         this.ValidateTotalsAreNonNegative(result);
         result.Success = result.Success && (result.Errors.length === 0);
 
@@ -5786,6 +5828,29 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     			this.ApprovalTaskID,
     			ValidationErrorType.Failure
     		));
+    	}
+    }
+
+    /**
+    * If the status is set to 'Archived', then an archive reason, archival timestamp, and the archiving user's ID must all be provided.
+    * @param result - the ValidationResult object to add any errors or warnings to
+    * @public
+    * @method
+    */
+    public ValidateArchivedFieldsWhenStatusIsArchived(result: ValidationResult) {
+    	if (this.Status === "Archived") {
+    		const hasReason = this.ArchiveReason != null && this.ArchiveReason.trim().length > 0;
+    		const hasDate = this.ArchivedAt != null;
+    		const hasUser = this.ArchivedByUserID != null;
+    
+    		if (!hasReason || !hasDate || !hasUser) {
+    			result.Errors.push(new ValidationErrorInfo(
+    				"Status",
+    				"When Status is set to 'Archived', Archive Reason, Archived At, and Archived By User ID must all be provided.",
+    				this.Status,
+    				ValidationErrorType.Failure
+    			));
+    		}
     	}
     }
 
