@@ -630,4 +630,3 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
     }
   }
 }
-

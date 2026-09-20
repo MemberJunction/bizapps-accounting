@@ -4,7 +4,7 @@
       "MLModelID": "5DF7D98A-6A3C-48D5-9935-0AE86AC79078",
       "RecordProcessID": "E44E2F34-AB6A-4DFA-B3BC-2ABB465A7B11",
       "TargetEntityID": "C040A1FC-16CE-49CB-B0E2-4F233BD0D762",
-      "TargetColumn": null,
+      "TargetColumn": "PredictedAnomalyProbability",
       "Mode": "Scheduled",
       "SkipEmbeddings": false
     },
