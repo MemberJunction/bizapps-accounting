@@ -72,6 +72,8 @@ import { sqlGuidLiteral } from './SqlGuards.js';
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
 const JELD_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Line Dimensions';
+const DIM_ENTITY = 'MJ_BizApps_Accounting: Dimensions';
+const DIMVAL_ENTITY = 'MJ_BizApps_Accounting: Dimension Values';
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
 const JET_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Types';
@@ -627,6 +629,74 @@ export async function resolveExternalAccount(
   if (!gl) throw new Error(`resolveExternalAccount: GL account ${glAccountId} not found`);
   if (gl.ExternalAccountID && (!gl.ExternalSystem || gl.ExternalSystem === targetSystem)) return gl.ExternalAccountID;
   return gl.Code; // the account number IS the wire identity
+}
+
+/**
+ * A dimension tag in ERP wire format: the dimension's code and the chosen value's code
+ * ("the ERP knows nothing of our IDs" — the same rule `resolveExternalAccount` follows).
+ */
+export interface ExternalDimensionRef {
+  code: string;
+  valueCode: string;
+}
+
+/**
+ * Resolve the dimension tags on a set of journal entry lines into ERP wire codes, keyed by
+ * JournalEntryLineID. Lines with no tags are simply absent from the map.
+ *
+ * Unlike GLAccount — which carries ExternalSystem/ExternalAccountID and so can hold a per-ERP
+ * override — Dimension and DimensionValue have only Code. The pull sync writes the ERP's own code
+ * into that column, so Code IS the wire identity and there is nothing to override. A tag whose
+ * Dimension or DimensionValue has no code is an error rather than a silent omission: dropping it
+ * would post an untagged line, which is exactly the failure this resolution exists to prevent.
+ */
+export async function resolveExternalDimensions(
+  lineIds: string[], contextUser: UserInfo, provider: IMetadataProvider,
+): Promise<Map<string, ExternalDimensionRef[]>> {
+  const p = resolveProviders(provider);
+  const tagsByLine = await loadDimensionsByLine(lineIds, contextUser, p);
+  const tags = [...tagsByLine.values()].flat();
+  const [dimensionCodes, valueCodes] = await Promise.all([
+    loadCodesById(DIM_ENTITY, unique(tags.map(t => t.DimensionID)), contextUser, p),
+    loadCodesById(DIMVAL_ENTITY, unique(tags.map(t => t.DimensionValueID)), contextUser, p),
+  ]);
+
+  const byLine = new Map<string, ExternalDimensionRef[]>();
+  for (const [lineId, lineTags] of tagsByLine) {
+    byLine.set(lineId, lineTags.map(t => toExternalDimensionRef(t, dimensionCodes, valueCodes)));
+  }
+  return byLine;
+}
+
+function toExternalDimensionRef(
+  tag: DimRef, dimensionCodes: Map<string, string>, valueCodes: Map<string, string>,
+): ExternalDimensionRef {
+  const code = dimensionCodes.get(tag.DimensionID);
+  const valueCode = valueCodes.get(tag.DimensionValueID);
+  if (!code) throw new Error(`resolveExternalDimensions: dimension ${tag.DimensionID} has no code`);
+  if (!valueCode) throw new Error(`resolveExternalDimensions: dimension value ${tag.DimensionValueID} has no code`);
+  return { code, valueCode };
+}
+
+/** Code lookup for a Code-bearing master-data entity, by ID. */
+async function loadCodesById(
+  entityName: string, ids: string[], contextUser: UserInfo, p: Providers,
+): Promise<Map<string, string>> {
+  const byId = new Map<string, string>();
+  if (ids.length === 0) return byId;
+  const inList = ids.map(id => sqlGuidLiteral(id, `resolveExternalDimensions: invalid id for ${entityName}`)).join(',');
+  const res = await p.rv.RunView<{ ID: string; Code: string }>(
+    { EntityName: entityName, ExtraFilter: `ID IN (${inList})`, Fields: ['ID', 'Code'], ResultType: 'simple', BypassCache: true },
+    contextUser,
+  );
+  for (const row of res.Results ?? []) {
+    if (row.Code) byId.set(row.ID, row.Code);
+  }
+  return byId;
+}
+
+function unique(ids: string[]): string[] {
+  return [...new Set(ids)];
 }
 
 /** Lock the member JEs: Status → Batched with JournalEntryBatchID (CK_JournalEntry_BatchedHasJournalEntryBatch + the immutability triggers). */

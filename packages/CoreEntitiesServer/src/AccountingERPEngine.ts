@@ -32,6 +32,7 @@ import {
 import { BaseAccountingERPProvider } from './BaseAccountingERPProvider.js';
 import {
   resolveExternalAccount,
+  resolveExternalDimensions,
   type ErpPostResult,
   type JournalEntryBatchTargetSystem,
 } from './JournalEntryBatchEngine.js';
@@ -177,6 +178,9 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     }
 
     try {
+      // One batched resolution for the whole summary — the tags live in a separate entity, and
+      // re-querying per line would issue two RunViews per line for data that does not vary.
+      const dimensionsByLine = await resolveExternalDimensions(summaryLines.map((l) => l.ID), user, provider);
       const lines = [];
       for (const line of summaryLines) {
         const accountNumber = await resolveExternalAccount(line.GLAccountID, target, user, provider);
@@ -185,6 +189,7 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
           debit: line.DebitAmount ?? undefined,
           credit: line.CreditAmount ?? undefined,
           description: line.Description ?? undefined,
+          dimensions: dimensionsByLine.get(line.ID),
         });
       }
       const posted = await plugin.CreateJournalEntry({

@@ -64,6 +64,60 @@ function providerWith(views: Record<string, unknown[]>) {
   } as never;
 }
 
+// ── Dimension-tagged post fixtures ───────────────────────────────────────────────────────────
+// providerWith ignores ExtraFilter, so every row of an entity comes back for every query; the
+// engine buckets the tags by JournalEntryLineID itself, which is what these exercise.
+const LINE_1 = 'cccccccc-0000-0000-0000-000000000001';
+const LINE_2 = 'cccccccc-0000-0000-0000-000000000002';
+const DIM_VENTURE = 'dddddddd-0000-0000-0000-000000000001';
+const DIM_PRODUCT = 'dddddddd-0000-0000-0000-000000000002';
+const VAL_ACME = 'eeeeeeee-0000-0000-0000-000000000001';
+const VAL_WIDGET = 'eeeeeeee-0000-0000-0000-000000000002';
+
+/** The views a tagged Business Central post reads, minus the Dimensions view each case varies. */
+function dimensionTaggedViews(): Record<string, unknown[]> {
+  return {
+    'MJ: Company Integrations': [
+      { ID: CI, CompanyID: COMPANY, IntegrationID: 'int-1', Integration: 'Microsoft Dynamics 365 Business Central', IsActive: true },
+    ],
+    'MJ: Company Integration Entity Maps': [],
+    'MJ_BizApps_Accounting: Accounting Engine Extensions': [],
+    'MJ_BizApps_Accounting: GL Accounts': [{ Code: '1000', ExternalSystem: null, ExternalAccountID: null }],
+    'MJ_BizApps_Accounting: Journal Entry Line Dimensions': [
+      { JournalEntryLineID: LINE_1, DimensionID: DIM_VENTURE, DimensionValueID: VAL_ACME },
+      { JournalEntryLineID: LINE_1, DimensionID: DIM_PRODUCT, DimensionValueID: VAL_WIDGET },
+      { JournalEntryLineID: LINE_2, DimensionID: DIM_VENTURE, DimensionValueID: VAL_ACME },
+    ],
+    'MJ_BizApps_Accounting: Dimension Values': [
+      { ID: VAL_ACME, Code: 'ACME' },
+      { ID: VAL_WIDGET, Code: 'WIDGET' },
+    ],
+  };
+}
+
+function taggedBatch() {
+  return {
+    ID: 'batch-1',
+    CompanyID: COMPANY,
+    TargetSystem: 'BusinessCentral',
+    JournalEntryBatchNumber: 'BATCH-1',
+    PostingDate: new Date('2026-08-01'),
+  } as never;
+}
+
+function taggedLines() {
+  return [
+    { ID: LINE_1, GLAccountID: 'gl-1', DebitAmount: 100, CreditAmount: null, Description: 'Debit side' },
+    { ID: LINE_2, GLAccountID: 'gl-2', DebitAmount: null, CreditAmount: 100, Description: 'Credit side' },
+  ] as never;
+}
+
+/** The Lines payload the engine handed the ERP verb. */
+function postedLines(runVerb: { mock: { calls: unknown[][] } }): Array<{ dimensions?: unknown }> {
+  const call = runVerb.mock.calls[0][0] as { Params: { Lines: Array<{ dimensions?: unknown }> } };
+  return call.Params.Lines;
+}
+
 describe('AccountingERPEngine.SyncMasterData', () => {
   beforeEach(() => {
     AccountingERPEngine.Instance.UseSeams({});
@@ -256,6 +310,48 @@ describe('AccountingERPEngine.PostJournalBatch', () => {
     const result: ErpPostResult = await AccountingERPEngine.Instance.PostJournalBatch(batch, [], user, p);
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/QuickBooks Online/);
+    expect(runVerb).not.toHaveBeenCalled();
+  });
+
+  it('carries each summary line\'s dimension tags to the ERP in wire codes', async () => {
+    const runVerb = vi.fn(async () => ({ Success: true, ResultCode: 'SUCCESS' }));
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+    const p = providerWith({
+      ...dimensionTaggedViews(),
+      'MJ_BizApps_Accounting: Dimensions': [
+        { ID: DIM_VENTURE, Code: 'VENTURE' },
+        { ID: DIM_PRODUCT, Code: 'PRODUCT' },
+      ],
+    });
+
+    const result: ErpPostResult = await AccountingERPEngine.Instance.PostJournalBatch(
+      taggedBatch(), taggedLines(), user, p,
+    );
+
+    expect(result.success).toBe(true);
+    const lines = postedLines(runVerb);
+    expect(lines[0].dimensions).toEqual([
+      { code: 'VENTURE', valueCode: 'ACME' },
+      { code: 'PRODUCT', valueCode: 'WIDGET' },
+    ]);
+    expect(lines[1].dimensions).toEqual([{ code: 'VENTURE', valueCode: 'ACME' }]);
+  });
+
+  it('refuses to post rather than silently dropping a tag whose dimension has no code', async () => {
+    const runVerb = vi.fn(async () => ({ Success: true, ResultCode: 'SUCCESS' }));
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+    // PRODUCT is absent from the Dimensions view — the pull sync never landed a code for it.
+    const p = providerWith({
+      ...dimensionTaggedViews(),
+      'MJ_BizApps_Accounting: Dimensions': [{ ID: DIM_VENTURE, Code: 'VENTURE' }],
+    });
+
+    const result: ErpPostResult = await AccountingERPEngine.Instance.PostJournalBatch(
+      taggedBatch(), taggedLines(), user, p,
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/has no code/);
     expect(runVerb).not.toHaveBeenCalled();
   });
 });

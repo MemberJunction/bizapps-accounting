@@ -64,6 +64,9 @@ importers:
       '@memberjunction/actions-base':
         specifier: ^6.1.0-edge.7
         version: 6.1.0-edge.7
+      '@memberjunction/actions-bizapps-accounting':
+        specifier: ^6.1.0-edge.7
+        version: 6.1.0-edge.7
       '@memberjunction/ai':
         specifier: ^6.1.0-edge.7
         version: 6.1.0-edge.7
