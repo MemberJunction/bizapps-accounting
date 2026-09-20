@@ -1227,6 +1227,46 @@ export const mjBizAppsAccountingJournalEntrySchema = z.object({
         * * Field Name: File
         * * Display Name: File Name
         * * SQL Data Type: nvarchar(500)`),
+    AnomalyOutcome: z.string().describe(`
+        * * Field Name: AnomalyOutcome
+        * * Display Name: Anomaly Outcome
+        * * SQL Data Type: varchar(9)
+        * * Description: Calculated outcome indicating if journal entry is anomalous or normal.`),
+    TotalDebitAmount: z.number().describe(`
+        * * Field Name: TotalDebitAmount
+        * * Display Name: Total Debit Amount
+        * * SQL Data Type: decimal(38, 2)
+        * * Description: Sum of debit amounts across all lines for this journal entry.`),
+    LineCount: z.number().describe(`
+        * * Field Name: LineCount
+        * * Display Name: Line Count
+        * * SQL Data Type: int
+        * * Description: Total count of lines in this journal entry.`),
+    EffectiveMonth: z.number().nullable().describe(`
+        * * Field Name: EffectiveMonth
+        * * Display Name: Effective Month
+        * * SQL Data Type: int
+        * * Description: Calendar month of the journal entry effective date (1-12).`),
+    EffectiveDayOfWeek: z.number().nullable().describe(`
+        * * Field Name: EffectiveDayOfWeek
+        * * Display Name: Effective Day Of Week
+        * * SQL Data Type: int
+        * * Description: Day of week for the effective date (1=Sunday, 7=Saturday).`),
+    IsWeekend: z.number().describe(`
+        * * Field Name: IsWeekend
+        * * Display Name: Is Weekend
+        * * SQL Data Type: int
+        * * Description: Binary indicator if the effective date falls on a weekend (1) or weekday (0).`),
+    HasLinkedRecord: z.number().describe(`
+        * * Field Name: HasLinkedRecord
+        * * Display Name: Has Linked Record
+        * * SQL Data Type: int
+        * * Description: Binary indicator if the journal entry has a linked source record ID.`),
+    HasFile: z.number().describe(`
+        * * Field Name: HasFile
+        * * Display Name: Has File
+        * * SQL Data Type: int
+        * * Description: Binary indicator if the journal entry has an attached file.`),
 });
 
 export type mjBizAppsAccountingJournalEntryEntityType = z.infer<typeof mjBizAppsAccountingJournalEntrySchema>;
@@ -5609,6 +5649,86 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     get File(): string | null {
         return this.Get('File');
     }
+
+    /**
+    * * Field Name: AnomalyOutcome
+    * * Display Name: Anomaly Outcome
+    * * SQL Data Type: varchar(9)
+    * * Description: Calculated outcome indicating if journal entry is anomalous or normal.
+    */
+    get AnomalyOutcome(): string {
+        return this.Get('AnomalyOutcome');
+    }
+
+    /**
+    * * Field Name: TotalDebitAmount
+    * * Display Name: Total Debit Amount
+    * * SQL Data Type: decimal(38, 2)
+    * * Description: Sum of debit amounts across all lines for this journal entry.
+    */
+    get TotalDebitAmount(): number {
+        return this.Get('TotalDebitAmount');
+    }
+
+    /**
+    * * Field Name: LineCount
+    * * Display Name: Line Count
+    * * SQL Data Type: int
+    * * Description: Total count of lines in this journal entry.
+    */
+    get LineCount(): number {
+        return this.Get('LineCount');
+    }
+
+    /**
+    * * Field Name: EffectiveMonth
+    * * Display Name: Effective Month
+    * * SQL Data Type: int
+    * * Description: Calendar month of the journal entry effective date (1-12).
+    */
+    get EffectiveMonth(): number | null {
+        return this.Get('EffectiveMonth');
+    }
+
+    /**
+    * * Field Name: EffectiveDayOfWeek
+    * * Display Name: Effective Day Of Week
+    * * SQL Data Type: int
+    * * Description: Day of week for the effective date (1=Sunday, 7=Saturday).
+    */
+    get EffectiveDayOfWeek(): number | null {
+        return this.Get('EffectiveDayOfWeek');
+    }
+
+    /**
+    * * Field Name: IsWeekend
+    * * Display Name: Is Weekend
+    * * SQL Data Type: int
+    * * Description: Binary indicator if the effective date falls on a weekend (1) or weekday (0).
+    */
+    get IsWeekend(): number {
+        return this.Get('IsWeekend');
+    }
+
+    /**
+    * * Field Name: HasLinkedRecord
+    * * Display Name: Has Linked Record
+    * * SQL Data Type: int
+    * * Description: Binary indicator if the journal entry has a linked source record ID.
+    */
+    get HasLinkedRecord(): number {
+        return this.Get('HasLinkedRecord');
+    }
+
+    /**
+    * * Field Name: HasFile
+    * * Display Name: Has File
+    * * SQL Data Type: int
+    * * Description: Binary indicator if the journal entry has an attached file.
+    */
+    get HasFile(): number {
+        return this.Get('HasFile');
+    }
 }
 
 
@@ -5795,7 +5915,7 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     /**
     * Validate() method override for MJ_BizApps_Accounting: Journal Entry Batches entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
     * * Table-Level: Both the approval task and the time it was raised must either be set together, or both must be empty.
-    * * Table-Level: If the status is set to 'Archived', then an archive reason, archival timestamp, and the archiving user's ID must all be provided.
+    * * Table-Level: When a record's status is set to 'Archived', an archive reason, an archive date, and the archiving user's ID must all be provided.
     * * Table-Level: Total debits, total credits, and total entries must all be greater than or equal to zero to ensure valid financial accounting records.
     * @public
     * @method
@@ -5832,22 +5952,38 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     }
 
     /**
-    * If the status is set to 'Archived', then an archive reason, archival timestamp, and the archiving user's ID must all be provided.
+    * When a record's status is set to 'Archived', an archive reason, an archive date, and the archiving user's ID must all be provided.
     * @param result - the ValidationResult object to add any errors or warnings to
     * @public
     * @method
     */
     public ValidateArchivedFieldsWhenStatusIsArchived(result: ValidationResult) {
     	if (this.Status === "Archived") {
-    		const hasReason = this.ArchiveReason != null && this.ArchiveReason.trim().length > 0;
-    		const hasDate = this.ArchivedAt != null;
-    		const hasUser = this.ArchivedByUserID != null;
+    		const hasArchiveReason = this.ArchiveReason != null && this.ArchiveReason.trim().length > 0;
+    		const hasArchivedAt = this.ArchivedAt != null;
+    		const hasArchivedByUserID = this.ArchivedByUserID != null;
     
-    		if (!hasReason || !hasDate || !hasUser) {
+    		if (!hasArchiveReason) {
     			result.Errors.push(new ValidationErrorInfo(
-    				"Status",
-    				"When Status is set to 'Archived', Archive Reason, Archived At, and Archived By User ID must all be provided.",
-    				this.Status,
+    				"ArchiveReason",
+    				"An archive reason is required when the status is set to 'Archived'.",
+    				this.ArchiveReason,
+    				ValidationErrorType.Failure
+    			));
+    		}
+    		if (!hasArchivedAt) {
+    			result.Errors.push(new ValidationErrorInfo(
+    				"ArchivedAt",
+    				"The archive date and time are required when the status is set to 'Archived'.",
+    				this.ArchivedAt,
+    				ValidationErrorType.Failure
+    			));
+    		}
+    		if (!hasArchivedByUserID) {
+    			result.Errors.push(new ValidationErrorInfo(
+    				"ArchivedByUserID",
+    				"The user who archived the record is required when the status is set to 'Archived'.",
+    				this.ArchivedByUserID,
     				ValidationErrorType.Failure
     			));
     		}

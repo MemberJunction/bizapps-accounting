@@ -59,6 +59,8 @@
   },
   {
     "fields": {
+      "BaseViewGenerated": false,
+      "GeneratedBaseViewName": "vwJournalEntriesGenerated",
       "AllowUserSearchAPI": true,
       "AutoUpdateAllowUserSearchAPI": false
     },

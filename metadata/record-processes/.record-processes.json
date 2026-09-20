@@ -12,7 +12,7 @@
       "CronExpression": "0 0 1 * *",
       "Timezone": "UTC",
       "OnDemandEnabled": true,
-      "OutputMapping": "{\"fields\":{\"PredictedAnomalyProbability\":\"$.score\",\"PredictedAnomalyScoredAt\":\"$.scoredAt\"}}",
+      "OutputMapping": null,
       "SkipUnchanged": true,
       "BatchSize": 100,
       "MaxConcurrency": 1,
@@ -23,8 +23,8 @@
       "ID": "E44E2F34-AB6A-4DFA-B3BC-2ABB465A7B11"
     },
     "sync": {
-      "lastModified": "2026-09-19T18:45:51.105Z",
-      "checksum": "c347ad5ab7ec7aa5eb2ad7e2fad941000bc93d463e268f2b40beb4842105eb09"
+      "lastModified": "2026-09-20T23:03:44.942Z",
+      "checksum": "2e36080a8406582e983a032e2ddbe8698af323003f01a795fa91c598882b7883"
     }
   }
 ]

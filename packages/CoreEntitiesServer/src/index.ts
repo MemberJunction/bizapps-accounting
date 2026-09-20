@@ -14,7 +14,7 @@
  * decorators fire at startup.
  */
 export { AccountingCompanyProfileEntityServer } from './AccountingCompanyProfileEntityServer.js';
-export { JournalEntryEntityServer, ComputePredictiveAnomalyRiskBand } from './JournalEntryEntityServer.js';
+export { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 export { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
 export { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
 export { GLAccountEntityServer } from './GLAccountEntityServer.js';
