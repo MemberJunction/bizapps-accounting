@@ -29,9 +29,9 @@ export class mjBizAppsAccountingAccountingCompanyProfile_ {
     @MaxLength(36)
     ID: string;
         
-    @Field({description: `What kind of entity this is in the accounting structure: LegalEntity | Subsidiary | Division | Department | Branch | Partner | JointVenture | CostCenter | Other.`}) 
+    @Field({nullable: true, description: `What kind of entity this is in the accounting structure: LegalEntity | Subsidiary | Division | Department | Branch | Partner | JointVenture | CostCenter | Other.`}) 
     @MaxLength(30)
-    EntityType: string;
+    EntityType?: string;
         
     @Field({nullable: true, description: `Legal structure: LLC | C-Corp | S-Corp | Partnership | SoleProprietorship | NonProfit-501c3 | NonProfit-501c6 | International-Ltd | International-GmbH | International-Pty | International-Other | Other. Only meaningful when EntityType is a legal entity / subsidiary / partner.`}) 
     @MaxLength(30)
@@ -56,23 +56,23 @@ export class mjBizAppsAccountingAccountingCompanyProfile_ {
     @MaxLength(60)
     OperatingTimeZone?: string;
         
-    @Field({description: `Short code used in JE numbering ('JE-{CompanyCode}-{FY}-{seq}'). Uppercase alphanumeric + dash/underscore. UNIQUE per deployment (BA-D15).`}) 
+    @Field({nullable: true, description: `Short code used in JE numbering ('JE-{CompanyCode}-{FY}-{seq}'). Uppercase alphanumeric + dash/underscore. UNIQUE per deployment (BA-D15).`}) 
     @MaxLength(20)
-    CompanyCode: string;
+    CompanyCode?: string;
         
-    @Field({description: `ISO 4217 currency code (CHAR(3)) for the functional currency. All JEs post in this currency; original-currency triple on JE lines records the source-transaction currency when different (BA-D10).`}) 
+    @Field({nullable: true, description: `ISO 4217 currency code (CHAR(3)) for the functional currency. All JEs post in this currency; original-currency triple on JE lines records the source-transaction currency when different (BA-D10).`}) 
     @MaxLength(3)
-    FunctionalCurrencyCode: string;
+    FunctionalCurrencyCode?: string;
         
     @Field({nullable: true, description: `Reporting currency for consolidation. NULL = same as functional currency.`}) 
     @MaxLength(3)
     ReportingCurrencyCode?: string;
         
-    @Field(() => Int, {description: `Calendar month (1-12) when the fiscal year begins. Default 1 (Jan-start calendar).`}) 
-    FiscalYearStartMonth: number;
+    @Field(() => Int, {nullable: true, description: `Calendar month (1-12) when the fiscal year begins. Default 1 (Jan-start calendar).`}) 
+    FiscalYearStartMonth?: number;
         
-    @Field(() => Int, {description: `Calendar day-of-month (1-31) when the fiscal year begins. Default 1.`}) 
-    FiscalYearStartDay: number;
+    @Field(() => Int, {nullable: true, description: `Calendar day-of-month (1-31) when the fiscal year begins. Default 1.`}) 
+    FiscalYearStartDay?: number;
         
     @Field({nullable: true, description: `If set, this profile uses the books (COA, periods, JEs) of the referenced profile (consolidated reporting). Chains are forbidden: the referenced profile must NOT itself have a parent (BA-D9; trigger trg_ACP_NoChains).`}) 
     @MaxLength(36)
@@ -82,8 +82,8 @@ export class mjBizAppsAccountingAccountingCompanyProfile_ {
     @MaxLength(36)
     ApprovalCFOUserID?: string;
         
-    @Field(() => Boolean, {description: `Whether this profile is currently active. Inactive companies cannot have new JEs.`}) 
-    IsActive: boolean;
+    @Field(() => Boolean, {nullable: true, description: `Whether this profile is currently active. Inactive companies cannot have new JEs.`}) 
+    IsActive?: boolean;
         
     @Field() 
     _mj__CreatedAt: Date;
@@ -91,13 +91,13 @@ export class mjBizAppsAccountingAccountingCompanyProfile_ {
     @Field() 
     _mj__UpdatedAt: Date;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(50)
-    Name: string;
+    Name?: string;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(200)
-    Description: string;
+    Description?: string;
         
     @Field({nullable: true}) 
     @MaxLength(100)
@@ -111,9 +111,9 @@ export class mjBizAppsAccountingAccountingCompanyProfile_ {
     @MaxLength(255)
     Domain?: string;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(80)
-    FunctionalCurrencyCode_Virtual: string;
+    FunctionalCurrencyCode_Virtual?: string;
         
     @Field({nullable: true}) 
     @MaxLength(80)
@@ -123,11 +123,11 @@ export class mjBizAppsAccountingAccountingCompanyProfile_ {
     @MaxLength(100)
     ApprovalCFOUser?: string;
         
-    @Field(() => Float, {nullable: true}) 
-    _mj__Latitude?: number;
+    @Field(() => Float) 
+    _mj__Latitude: number;
         
-    @Field(() => Float, {nullable: true}) 
-    _mj__Longitude?: number;
+    @Field(() => Float) 
+    _mj__Longitude: number;
         
     @Field({nullable: true}) 
     @MaxLength(36)
@@ -144,6 +144,9 @@ export class mjBizAppsAccountingAccountingCompanyProfile_ {
         
     @Field(() => Int, {nullable: true}) 
     ParentAccountingCompanyIDChildCount?: number;
+        
+    @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
+    ReadableFields___?: string[];
         
 }
 
@@ -390,27 +393,27 @@ export class mjBizAppsAccountingAccountingEngineExtension_ {
     @MaxLength(36)
     ID: string;
         
-    @Field({description: `Stable engine key, unique. Must match the subclass Code getter. Example: ImportBankAccountBalances.`}) 
+    @Field({nullable: true, description: `Stable engine key, unique. Must match the subclass Code getter. Example: ImportBankAccountBalances.`}) 
     @MaxLength(80)
-    Code: string;
+    Code?: string;
         
-    @Field({description: `Display name in Explorer and the accounting dashboard.`}) 
+    @Field({nullable: true, description: `Display name in Explorer and the accounting dashboard.`}) 
     @MaxLength(200)
-    Name: string;
+    Name?: string;
         
     @Field({nullable: true, description: `What this extension does, which app owns it, and what it writes (its own tables, never accounting's).`}) 
     Description?: string;
         
-    @Field({description: `ClassFactory key for the @RegisterClass subclass of BaseAccountingEngineExtension. Must be loaded in the host (MJAPI) or the engine logs and skips.`}) 
+    @Field({nullable: true, description: `ClassFactory key for the @RegisterClass subclass of BaseAccountingEngineExtension. Must be loaded in the host (MJAPI) or the engine logs and skips.`}) 
     @MaxLength(255)
-    DriverClass: string;
+    DriverClass?: string;
         
-    @Field({description: `Active = engine instantiates this extension and honors its class getters. Disabled = skip without a rebuild.`}) 
+    @Field({nullable: true, description: `Active = engine instantiates this extension and honors its class getters. Disabled = skip without a rebuild.`}) 
     @MaxLength(20)
-    Status: string;
+    Status?: string;
         
-    @Field(() => Int, {description: `Run order among Active extensions at the same verb. Lower first. Ties break on Code.`}) 
-    Sequence: number;
+    @Field(() => Int, {nullable: true, description: `Run order among Active extensions at the same verb. Lower first. Ties break on Code.`}) 
+    Sequence?: number;
         
     @Field({nullable: true, description: `NULL = run for every company in the engine call. Set = run only for that Company. One row per Code; subset-of-companies is a later child table if a host needs it.`}) 
     @MaxLength(36)
@@ -428,6 +431,9 @@ export class mjBizAppsAccountingAccountingEngineExtension_ {
     @Field({nullable: true}) 
     @MaxLength(50)
     Company?: string;
+        
+    @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
+    ReadableFields___?: string[];
         
 }
 
@@ -602,24 +608,24 @@ export class mjBizAppsAccountingCompanyTaxNexus_ {
     @MaxLength(36)
     ID: string;
         
-    @Field({description: `The legal entity with the obligation.`}) 
+    @Field({nullable: true, description: `The legal entity with the obligation.`}) 
     @MaxLength(36)
-    CompanyID: string;
+    CompanyID?: string;
         
-    @Field({description: `The jurisdiction it must collect for.`}) 
+    @Field({nullable: true, description: `The jurisdiction it must collect for.`}) 
     @MaxLength(36)
-    TaxJurisdictionID: string;
+    TaxJurisdictionID?: string;
         
-    @Field({description: `WHY the obligation exists: Economic (crossed a revenue or transaction threshold), Physical (people, property or inventory in the state), Marketplace (a facilitator law attributes it) or Voluntary (registered without being required).`}) 
+    @Field({nullable: true, description: `WHY the obligation exists: Economic (crossed a revenue or transaction threshold), Physical (people, property or inventory in the state), Marketplace (a facilitator law attributes it) or Voluntary (registered without being required).`}) 
     @MaxLength(20)
-    NexusType: string;
+    NexusType?: string;
         
     @Field({nullable: true, description: `The permit or registration number issued by the jurisdiction.`}) 
     @MaxLength(100)
     RegistrationNumber?: string;
         
-    @Field({description: `When the registration took effect.`}) 
-    RegisteredFrom: Date;
+    @Field({nullable: true, description: `When the registration took effect.`}) 
+    RegisteredFrom?: Date;
         
     @Field({nullable: true, description: `When the REGISTRATION ended - not when the activity stopped. Registration is a one-way door: you must keep filing, including zero returns, until the account is formally closed, and a state will not close one with open periods.`}) 
     RegisteredTo?: Date;
@@ -627,9 +633,9 @@ export class mjBizAppsAccountingCompanyTaxNexus_ {
     @Field({nullable: true, description: `When the duty to COLLECT ends, which routinely outlasts the activity that created it. California holds a seller through the nexus year plus the whole following calendar year; Colorado, Washington, Wisconsin, Iowa and Michigan through the following calendar year; Texas until twelve consecutive months below the threshold. Separate from RegisteredTo because collapsing the two would end the obligation early.`}) 
     ObligationEndsAt?: Date;
         
-    @Field({description: `Active | Inactive. A closed registration is retained rather than deleted - it is the evidence of what was true during an audited period.`}) 
+    @Field({nullable: true, description: `Active | Inactive. A closed registration is retained rather than deleted - it is the evidence of what was true during an audited period.`}) 
     @MaxLength(10)
-    Status: string;
+    Status?: string;
         
     @Field({nullable: true, description: `Free-text note, typically the nexus study or ruling that established the obligation.`}) 
     Comments?: string;
@@ -640,13 +646,16 @@ export class mjBizAppsAccountingCompanyTaxNexus_ {
     @Field() 
     _mj__UpdatedAt: Date;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(50)
-    Company: string;
+    Company?: string;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(200)
-    TaxJurisdiction: string;
+    TaxJurisdiction?: string;
+        
+    @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
+    ReadableFields___?: string[];
         
 }
 
@@ -827,29 +836,32 @@ export class mjBizAppsAccountingCurrency_ {
     @MaxLength(36)
     ID: string;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(3)
-    Code: string;
+    Code?: string;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(80)
-    Name: string;
+    Name?: string;
         
     @Field({nullable: true}) 
     @MaxLength(10)
     Symbol?: string;
         
-    @Field(() => Int) 
-    DecimalPlaces: number;
+    @Field(() => Int, {nullable: true}) 
+    DecimalPlaces?: number;
         
-    @Field(() => Boolean) 
-    IsActive: boolean;
+    @Field(() => Boolean, {nullable: true}) 
+    IsActive?: boolean;
         
     @Field() 
     _mj__CreatedAt: Date;
         
     @Field() 
     _mj__UpdatedAt: Date;
+        
+    @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
+    ReadableFields___?: string[];
         
 }
 
@@ -1006,26 +1018,26 @@ export class mjBizAppsAccountingCurrencySpotRate_ {
     @MaxLength(36)
     ID: string;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(3)
-    FromCurrencyCode: string;
+    FromCurrencyCode?: string;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(3)
-    ToCurrencyCode: string;
+    ToCurrencyCode?: string;
         
-    @Field() 
-    RateDate: Date;
+    @Field({nullable: true}) 
+    RateDate?: Date;
         
-    @Field(() => Float) 
-    Rate: number;
+    @Field(() => Float, {nullable: true}) 
+    Rate?: number;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(50)
-    Source: string;
+    Source?: string;
         
-    @Field(() => Boolean) 
-    IsActive: boolean;
+    @Field(() => Boolean, {nullable: true}) 
+    IsActive?: boolean;
         
     @Field() 
     _mj__CreatedAt: Date;
@@ -1033,13 +1045,16 @@ export class mjBizAppsAccountingCurrencySpotRate_ {
     @Field() 
     _mj__UpdatedAt: Date;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(80)
-    FromCurrencyCode_Virtual: string;
+    FromCurrencyCode_Virtual?: string;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(80)
-    ToCurrencyCode_Virtual: string;
+    ToCurrencyCode_Virtual?: string;
+        
+    @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
+    ReadableFields___?: string[];
         
 }
 
@@ -1202,17 +1217,17 @@ export class mjBizAppsAccountingDimensionValue_ {
     @MaxLength(36)
     ID: string;
         
-    @Field({description: `Dimension this value belongs to.`}) 
+    @Field({nullable: true, description: `Dimension this value belongs to.`}) 
     @MaxLength(36)
-    DimensionID: string;
+    DimensionID?: string;
         
-    @Field({description: `Code for this value (unique within the dimension). E.g. 'Marketing', 'WestCoast', 'ProductLaunch2026'.`}) 
+    @Field({nullable: true, description: `Code for this value (unique within the dimension). E.g. 'Marketing', 'WestCoast', 'ProductLaunch2026'.`}) 
     @MaxLength(80)
-    Code: string;
+    Code?: string;
         
-    @Field({description: `Display name for this value.`}) 
+    @Field({nullable: true, description: `Display name for this value.`}) 
     @MaxLength(200)
-    Name: string;
+    Name?: string;
         
     @Field({nullable: true, description: `Parent value for hierarchical dimensions (e.g. Country contains States).`}) 
     @MaxLength(36)
@@ -1224,8 +1239,8 @@ export class mjBizAppsAccountingDimensionValue_ {
     @Field({nullable: true, description: `Last date this value is selectable (NULL = never expires).`}) 
     EffectiveTo?: Date;
         
-    @Field(() => Boolean, {description: `Whether this value is available for new tagging.`}) 
-    IsActive: boolean;
+    @Field(() => Boolean, {nullable: true, description: `Whether this value is available for new tagging.`}) 
+    IsActive?: boolean;
         
     @Field() 
     _mj__CreatedAt: Date;
@@ -1233,9 +1248,9 @@ export class mjBizAppsAccountingDimensionValue_ {
     @Field() 
     _mj__UpdatedAt: Date;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(100)
-    Dimension: string;
+    Dimension?: string;
         
     @Field({nullable: true}) 
     @MaxLength(200)
@@ -1256,6 +1271,9 @@ export class mjBizAppsAccountingDimensionValue_ {
         
     @Field(() => Int, {nullable: true}) 
     ParentDimensionValueIDChildCount?: number;
+        
+    @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
+    ReadableFields___?: string[];
         
 }
 
@@ -1424,28 +1442,31 @@ export class mjBizAppsAccountingDimension_ {
     @MaxLength(36)
     ID: string;
         
-    @Field({description: `Short code for the dimension, e.g. 'Department', 'CostCenter'.`}) 
+    @Field({nullable: true, description: `Short code for the dimension, e.g. 'Department', 'CostCenter'.`}) 
     @MaxLength(40)
-    Code: string;
+    Code?: string;
         
-    @Field({description: `Display name for the dimension.`}) 
+    @Field({nullable: true, description: `Display name for the dimension.`}) 
     @MaxLength(100)
-    Name: string;
+    Name?: string;
         
     @Field({nullable: true, description: `Detailed description of what the dimension tracks and how it is intended to be used in reports.`}) 
     Description?: string;
         
-    @Field(() => Int, {description: `Sort order in dropdowns and report filters. Lower values appear first.`}) 
-    DisplayOrder: number;
+    @Field(() => Int, {nullable: true, description: `Sort order in dropdowns and report filters. Lower values appear first.`}) 
+    DisplayOrder?: number;
         
-    @Field(() => Boolean, {description: `Whether this dimension is available for new JE-line tagging. Inactive dimensions stay in historical data but are hidden from selection.`}) 
-    IsActive: boolean;
+    @Field(() => Boolean, {nullable: true, description: `Whether this dimension is available for new JE-line tagging. Inactive dimensions stay in historical data but are hidden from selection.`}) 
+    IsActive?: boolean;
         
     @Field() 
     _mj__CreatedAt: Date;
         
     @Field() 
     _mj__UpdatedAt: Date;
+        
+    @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
+    ReadableFields___?: string[];
         
 }
 
@@ -1602,16 +1623,16 @@ export class mjBizAppsAccountingGLAccountLinkDimension_ {
     @MaxLength(36)
     ID: string;
         
-    @Field({description: `The link this dimension requirement belongs to.`}) 
+    @Field({nullable: true, description: `The link this dimension requirement belongs to.`}) 
     @MaxLength(36)
-    GLAccountLinkID: string;
+    GLAccountLinkID?: string;
         
-    @Field({description: `The Dimension that applies (validate-only vocabulary — never invented here).`}) 
+    @Field({nullable: true, description: `The Dimension that applies (validate-only vocabulary — never invented here).`}) 
     @MaxLength(36)
-    DimensionID: string;
+    DimensionID?: string;
         
-    @Field(() => Int, {description: `Ordering of the dimensions for this link (ascending).`}) 
-    Sequence: number;
+    @Field(() => Int, {nullable: true, description: `Ordering of the dimensions for this link (ascending).`}) 
+    Sequence?: number;
         
     @Field() 
     _mj__CreatedAt: Date;
@@ -1619,9 +1640,12 @@ export class mjBizAppsAccountingGLAccountLinkDimension_ {
     @Field() 
     _mj__UpdatedAt: Date;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(100)
-    Dimension: string;
+    Dimension?: string;
+        
+    @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
+    ReadableFields___?: string[];
         
 }
 
@@ -1766,25 +1790,25 @@ export class mjBizAppsAccountingGLAccountLink_ {
     @MaxLength(36)
     ID: string;
         
-    @Field({description: `The GL account this link maps its target record to.`}) 
+    @Field({nullable: true, description: `The GL account this link maps its target record to.`}) 
     @MaxLength(36)
-    GLAccountID: string;
+    GLAccountID?: string;
         
-    @Field({description: `The role the account plays for the target record (Sales, AR, ...). Assumed correction OQ-G: absent from the 07-03 field list but required to tell a record's Revenue link from its AR link.`}) 
+    @Field({nullable: true, description: `The role the account plays for the target record (Sales, AR, ...). Assumed correction OQ-G: absent from the 07-03 field list but required to tell a record's Revenue link from its AR link.`}) 
     @MaxLength(36)
-    GLAccountRoleID: string;
+    GLAccountRoleID?: string;
         
-    @Field({description: `Polymorphic reference part 1: the MJ Entity of the target record (references __mj.Entity). Same TaggedItem-style pattern as JournalEntry.LinkedEntityID/LinkedRecordID (plan D25).`}) 
+    @Field({nullable: true, description: `Polymorphic reference part 1: the MJ Entity of the target record (references __mj.Entity). Same TaggedItem-style pattern as JournalEntry.LinkedEntityID/LinkedRecordID (plan D25).`}) 
     @MaxLength(36)
-    EntityID: string;
+    EntityID?: string;
         
-    @Field({description: `Polymorphic reference part 2: the target record's primary key (NVARCHAR(400) supports stringified composite keys).`}) 
+    @Field({nullable: true, description: `Polymorphic reference part 2: the target record's primary key (NVARCHAR(400) supports stringified composite keys).`}) 
     @MaxLength(400)
-    RecordID: string;
+    RecordID?: string;
         
-    @Field({description: `Pending = entered but not yet in force; Active = used by resolution; Disabled = ignored.`}) 
+    @Field({nullable: true, description: `Pending = entered but not yet in force; Active = used by resolution; Disabled = ignored.`}) 
     @MaxLength(10)
-    Status: string;
+    Status?: string;
         
     @Field({nullable: true, description: `Start of the date-effective window (NULL = open start). Enables Amith's "new chart of accounts effective Aug 1" pre-entry: resolution flips automatically on the date; historical JEs are never touched.`}) 
     StartedAt?: Date;
@@ -1801,17 +1825,20 @@ export class mjBizAppsAccountingGLAccountLink_ {
     @Field() 
     _mj__UpdatedAt: Date;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(200)
-    GLAccount: string;
+    GLAccount?: string;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(100)
-    GLAccountRole: string;
+    GLAccountRole?: string;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(255)
-    Entity: string;
+    Entity?: string;
+        
+    @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
+    ReadableFields___?: string[];
         
 }
 
@@ -1986,19 +2013,19 @@ export class mjBizAppsAccountingGLAccountRole_ {
     @MaxLength(36)
     ID: string;
         
-    @Field({description: `Display name of the role; unique.`}) 
+    @Field({nullable: true, description: `Display name of the role; unique.`}) 
     @MaxLength(100)
-    Name: string;
+    Name?: string;
         
     @Field({nullable: true, description: `What entries this role is used for and any guidance for pickers.`}) 
     Description?: string;
         
-    @Field({description: `Active roles are offered in pickers; Inactive roles are retained for history but not selectable.`}) 
+    @Field({nullable: true, description: `Active roles are offered in pickers; Inactive roles are retained for history but not selectable.`}) 
     @MaxLength(10)
-    Status: string;
+    Status?: string;
         
-    @Field(() => Int, {description: `Intentional display order in pickers (ascending).`}) 
-    Sequence: number;
+    @Field(() => Int, {nullable: true, description: `Intentional display order in pickers (ascending).`}) 
+    Sequence?: number;
         
     @Field() 
     _mj__CreatedAt: Date;
@@ -2006,9 +2033,12 @@ export class mjBizAppsAccountingGLAccountRole_ {
     @Field() 
     _mj__UpdatedAt: Date;
         
-    @Field({description: `How many Active GLAccountLinks this role may resolve to for one record and company. One (default, every pre-existing role including Cash): the BA-D32 tie guard applies and ResolveLinkedAccount returns a single account, latest StartedAt winning among overlapping links. Many: the tie guard does not apply and ResolveLinkedAccount REFUSES the role rather than returning an arbitrary account — callers use ResolveLinkedAccounts and get every Active link whose window covers AsOf. Separating the two is what lets a company hold N bank accounts for a cash position without disturbing where payments post.`}) 
+    @Field({nullable: true, description: `How many Active GLAccountLinks this role may resolve to for one record and company. One (default, every pre-existing role including Cash): the BA-D32 tie guard applies and ResolveLinkedAccount returns a single account, latest StartedAt winning among overlapping links. Many: the tie guard does not apply and ResolveLinkedAccount REFUSES the role rather than returning an arbitrary account — callers use ResolveLinkedAccounts and get every Active link whose window covers AsOf. Separating the two is what lets a company hold N bank accounts for a cash position without disturbing where payments post.`}) 
     @MaxLength(10)
-    Cardinality: string;
+    Cardinality?: string;
+        
+    @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
+    ReadableFields___?: string[];
         
 }
 
@@ -2165,21 +2195,21 @@ export class mjBizAppsAccountingGLAccount_ {
     @MaxLength(36)
     ID: string;
         
-    @Field({description: `Company that owns this account. UNIQUE (CompanyID, Code) — each company has its own chart.`}) 
+    @Field({nullable: true, description: `Company that owns this account. UNIQUE (CompanyID, Code) — each company has its own chart.`}) 
     @MaxLength(36)
-    CompanyID: string;
+    CompanyID?: string;
         
-    @Field({description: `Account code matching the ERP COA, e.g. '11201' or '40100-SUB'.`}) 
+    @Field({nullable: true, description: `Account code matching the ERP COA, e.g. '11201' or '40100-SUB'.`}) 
     @MaxLength(40)
-    Code: string;
+    Code?: string;
         
-    @Field({description: `Display name for the account.`}) 
+    @Field({nullable: true, description: `Display name for the account.`}) 
     @MaxLength(200)
-    Name: string;
+    Name?: string;
         
-    @Field({description: `High-level type: Asset | Liability | Equity | Revenue | Expense (AM-3 five-value enum; contra/statistical variants may return later as a sub-classification).`}) 
+    @Field({nullable: true, description: `High-level type: Asset | Liability | Equity | Revenue | Expense (AM-3 five-value enum; contra/statistical variants may return later as a sub-classification).`}) 
     @MaxLength(15)
-    AccountType: string;
+    AccountType?: string;
         
     @Field({nullable: true, description: `Parent account for hierarchical rollup (NULL = top of chart).`}) 
     @MaxLength(36)
@@ -2197,11 +2227,11 @@ export class mjBizAppsAccountingGLAccount_ {
     @MaxLength(100)
     ExternalAccountID?: string;
         
-    @Field(() => Boolean, {description: `Whether the account is available for new JE lines. Inactive accounts retain historical data.`}) 
-    IsActive: boolean;
+    @Field(() => Boolean, {nullable: true, description: `Whether the account is available for new JE lines. Inactive accounts retain historical data.`}) 
+    IsActive?: boolean;
         
-    @Field(() => Boolean, {description: `TRUE if the account was created by spSeedDefaultChartOfAccounts. Lets reports distinguish platform-shipped accounts from deployment customizations.`}) 
-    IsSystemSeeded: boolean;
+    @Field(() => Boolean, {nullable: true, description: `TRUE if the account was created by spSeedDefaultChartOfAccounts. Lets reports distinguish platform-shipped accounts from deployment customizations.`}) 
+    IsSystemSeeded?: boolean;
         
     @Field({nullable: true, description: `Optional description for the account.`}) 
     Description?: string;
@@ -2212,9 +2242,9 @@ export class mjBizAppsAccountingGLAccount_ {
     @Field() 
     _mj__UpdatedAt: Date;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(50)
-    Company: string;
+    Company?: string;
         
     @Field({nullable: true}) 
     @MaxLength(200)
@@ -2239,6 +2269,9 @@ export class mjBizAppsAccountingGLAccount_ {
         
     @Field(() => Int, {nullable: true}) 
     ParentGLAccountIDChildCount?: number;
+        
+    @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
+    ReadableFields___?: string[];
         
 }
 
@@ -2431,24 +2464,24 @@ export class mjBizAppsAccountingIntercompanyAccountMatchDimension_ {
     @MaxLength(36)
     ID: string;
         
-    @Field({description: `The account pair this dimension requirement belongs to.`}) 
+    @Field({nullable: true, description: `The account pair this dimension requirement belongs to.`}) 
     @MaxLength(36)
-    IntercompanyAccountMatchID: string;
+    IntercompanyAccountMatchID?: string;
         
-    @Field({description: `Which leg the requirement applies to: DueTo (source company's liability) or DueFrom (target company's receivable). The two legs sit on different companies' books and routinely carry different values for the same Dimension.`}) 
+    @Field({nullable: true, description: `Which leg the requirement applies to: DueTo (source company's liability) or DueFrom (target company's receivable). The two legs sit on different companies' books and routinely carry different values for the same Dimension.`}) 
     @MaxLength(10)
-    Side: string;
+    Side?: string;
         
-    @Field({description: `The Dimension that applies (validate-only vocabulary — never invented here).`}) 
+    @Field({nullable: true, description: `The Dimension that applies (validate-only vocabulary — never invented here).`}) 
     @MaxLength(36)
-    DimensionID: string;
+    DimensionID?: string;
         
     @Field({nullable: true, description: `Optional fixed value to stamp. NULL keeps the GLAccountLink behaviour of taking the value from the calling context. Must belong to DimensionID (enforced by trigger).`}) 
     @MaxLength(36)
     DimensionValueID?: string;
         
-    @Field(() => Int, {description: `Ordering of the dimensions for this side (ascending).`}) 
-    Sequence: number;
+    @Field(() => Int, {nullable: true, description: `Ordering of the dimensions for this side (ascending).`}) 
+    Sequence?: number;
         
     @Field() 
     _mj__CreatedAt: Date;
@@ -2456,13 +2489,16 @@ export class mjBizAppsAccountingIntercompanyAccountMatchDimension_ {
     @Field() 
     _mj__UpdatedAt: Date;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(100)
-    Dimension: string;
+    Dimension?: string;
         
     @Field({nullable: true}) 
     @MaxLength(200)
     DimensionValue?: string;
+        
+    @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
+    ReadableFields___?: string[];
         
 }
 
@@ -2619,25 +2655,25 @@ export class mjBizAppsAccountingIntercompanyAccountMatch_ {
     @MaxLength(36)
     ID: string;
         
-    @Field({description: `The company that COLLECTED the cash and therefore owes — the Due To liability sits on its books.`}) 
+    @Field({nullable: true, description: `The company that COLLECTED the cash and therefore owes — the Due To liability sits on its books.`}) 
     @MaxLength(36)
-    SourceCompanyID: string;
+    SourceCompanyID?: string;
         
-    @Field({description: `The company that is OWED because it owns the line the cash settled — the Due From receivable sits on its books.`}) 
+    @Field({nullable: true, description: `The company that is OWED because it owns the line the cash settled — the Due From receivable sits on its books.`}) 
     @MaxLength(36)
-    TargetCompanyID: string;
+    TargetCompanyID?: string;
         
-    @Field({description: `The intercompany PAYABLE on the source company's books. Must be a Liability account belonging to SourceCompanyID (enforced by trigger, not merely by convention: a backwards pair still balances).`}) 
+    @Field({nullable: true, description: `The intercompany PAYABLE on the source company's books. Must be a Liability account belonging to SourceCompanyID (enforced by trigger, not merely by convention: a backwards pair still balances).`}) 
     @MaxLength(36)
-    DueToGLAccountID: string;
+    DueToGLAccountID?: string;
         
-    @Field({description: `The intercompany RECEIVABLE on the target company's books. Must be an Asset account belonging to TargetCompanyID.`}) 
+    @Field({nullable: true, description: `The intercompany RECEIVABLE on the target company's books. Must be an Asset account belonging to TargetCompanyID.`}) 
     @MaxLength(36)
-    DueFromGLAccountID: string;
+    DueFromGLAccountID?: string;
         
-    @Field({description: `Pending | Active | Disabled. Only Active rows resolve; a pair is never deleted once it has been used.`}) 
+    @Field({nullable: true, description: `Pending | Active | Disabled. Only Active rows resolve; a pair is never deleted once it has been used.`}) 
     @MaxLength(10)
-    Status: string;
+    Status?: string;
         
     @Field({nullable: true, description: `Start of the effective window (inclusive). NULL means open-ended in the past.`}) 
     StartedAt?: Date;
@@ -2654,21 +2690,24 @@ export class mjBizAppsAccountingIntercompanyAccountMatch_ {
     @Field() 
     _mj__UpdatedAt: Date;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(50)
-    SourceCompany: string;
+    SourceCompany?: string;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(50)
-    TargetCompany: string;
+    TargetCompany?: string;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(200)
-    DueToGLAccount: string;
+    DueToGLAccount?: string;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(200)
-    DueFromGLAccount: string;
+    DueFromGLAccount?: string;
+        
+    @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
+    ReadableFields___?: string[];
         
 }
 
@@ -2843,24 +2882,24 @@ export class mjBizAppsAccountingJournalEntry_ {
     @MaxLength(36)
     ID: string;
         
-    @Field({description: `Gap-free entry number 'JE-{CompanyCode}-{FY}-{seq:000000}' assigned by spAssignNextJournalEntryNumber (BA-D15).`}) 
+    @Field({nullable: true, description: `Gap-free entry number 'JE-{CompanyCode}-{FY}-{seq:000000}' assigned by spAssignNextJournalEntryNumber (BA-D15).`}) 
     @MaxLength(40)
-    EntryNumber: string;
+    EntryNumber?: string;
         
-    @Field({description: `The single company this journal entry belongs to (plan D3). Every line's GLAccount must belong to this company (trigger-enforced).`}) 
+    @Field({nullable: true, description: `The single company this journal entry belongs to (plan D3). Every line's GLAccount must belong to this company (trigger-enforced).`}) 
     @MaxLength(36)
-    CompanyID: string;
+    CompanyID?: string;
         
-    @Field({description: `Accounting date for the entry (the ERP assigns its own period at posting).`}) 
-    EffectiveDate: Date;
+    @Field({nullable: true, description: `Accounting date for the entry (the ERP assigns its own period at posting).`}) 
+    EffectiveDate?: Date;
         
-    @Field({description: `The JournalEntryType classifying this entry (issue #24, BA-D29). Accounting seeds its own ledger-mechanics types; consuming apps seed their domain types as rows.`}) 
+    @Field({nullable: true, description: `The JournalEntryType classifying this entry (issue #24, BA-D29). Accounting seeds its own ledger-mechanics types; consuming apps seed their domain types as rows.`}) 
     @MaxLength(36)
-    EntryTypeID: string;
+    EntryTypeID?: string;
         
-    @Field({description: `Lifecycle state: Pending | Batched | GLPosted (BA-D6). Locked after Batched; only GLPosted transition and GL-roundtrip fields may change.`}) 
+    @Field({nullable: true, description: `Lifecycle state: Pending | Batched | GLPosted (BA-D6). Locked after Batched; only GLPosted transition and GL-roundtrip fields may change.`}) 
     @MaxLength(20)
-    Status: string;
+    Status?: string;
         
     @Field({nullable: true, description: `Free-form human description of the entry.`}) 
     Description?: string;
@@ -2902,13 +2941,23 @@ export class mjBizAppsAccountingJournalEntry_ {
     @Field() 
     _mj__UpdatedAt: Date;
         
-    @Field() 
-    @MaxLength(50)
-    Company: string;
+    @Field(() => Float, {nullable: true, description: `0.0000 to 1.0000 probability that the journal entry is anomalous or represents irregular posting activity.`}) 
+    PredictedAnomalyProbability?: number;
         
-    @Field() 
+    @Field({nullable: true, description: `Categorical risk tier derived from anomaly probability: Low, Medium, High, Critical.`}) 
+    @MaxLength(20)
+    PredictedAnomalyRiskBand?: string;
+        
+    @Field({nullable: true, description: `Timestamp when the journal entry was last scored by the predictive anomaly model.`}) 
+    PredictedAnomalyScoredAt?: Date;
+        
+    @Field({nullable: true}) 
+    @MaxLength(50)
+    Company?: string;
+        
+    @Field({nullable: true}) 
     @MaxLength(100)
-    EntryType: string;
+    EntryType?: string;
         
     @Field({nullable: true}) 
     @MaxLength(255)
@@ -2930,13 +2979,33 @@ export class mjBizAppsAccountingJournalEntry_ {
     @MaxLength(500)
     File?: string;
         
-    @Field({nullable: true}) 
-    @MaxLength(36)
-    RootReversesJournalEntryID?: string;
+    @Field({nullable: true, description: `Calculated outcome indicating if journal entry is anomalous or normal.`}) 
+    @MaxLength(9)
+    AnomalyOutcome?: string;
         
-    @Field({nullable: true}) 
-    @MaxLength(36)
-    RootReversedByJournalEntryID?: string;
+    @Field(() => Float, {nullable: true, description: `Sum of debit amounts across all lines for this journal entry.`}) 
+    TotalDebitAmount?: number;
+        
+    @Field(() => Int, {nullable: true, description: `Total count of lines in this journal entry.`}) 
+    LineCount?: number;
+        
+    @Field(() => Int, {nullable: true, description: `Calendar month of the journal entry effective date (1-12).`}) 
+    EffectiveMonth?: number;
+        
+    @Field(() => Int, {nullable: true, description: `Day of week for the effective date (1=Sunday, 7=Saturday).`}) 
+    EffectiveDayOfWeek?: number;
+        
+    @Field(() => Int, {nullable: true, description: `Binary indicator if the effective date falls on a weekend (1) or weekday (0).`}) 
+    IsWeekend?: number;
+        
+    @Field(() => Int, {nullable: true, description: `Binary indicator if the journal entry has a linked source record ID.`}) 
+    HasLinkedRecord?: number;
+        
+    @Field(() => Int, {nullable: true, description: `Binary indicator if the journal entry has an attached file.`}) 
+    HasFile?: number;
+        
+    @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
+    ReadableFields___?: string[];
         
 }
 
@@ -2989,6 +3058,15 @@ export class CreatemjBizAppsAccountingJournalEntryInput {
 
     @Field({ nullable: true })
     FileID: string | null;
+
+    @Field(() => Float, { nullable: true })
+    PredictedAnomalyProbability: number | null;
+
+    @Field({ nullable: true })
+    PredictedAnomalyRiskBand: string | null;
+
+    @Field({ nullable: true })
+    PredictedAnomalyScoredAt: Date | null;
 
     @Field(() => RestoreContextInput, { nullable: true })
     RestoreContext___?: RestoreContextInput;
@@ -3044,6 +3122,15 @@ export class UpdatemjBizAppsAccountingJournalEntryInput {
 
     @Field({ nullable: true })
     FileID?: string | null;
+
+    @Field(() => Float, { nullable: true })
+    PredictedAnomalyProbability?: number | null;
+
+    @Field({ nullable: true })
+    PredictedAnomalyRiskBand?: string | null;
+
+    @Field({ nullable: true })
+    PredictedAnomalyScoredAt?: Date | null;
 
     @Field(() => [KeyValuePairInput], { nullable: true })
     OldValues___?: KeyValuePairInput[];
@@ -3146,14 +3233,17 @@ export class mjBizAppsAccountingJournalEntryBatchSequence_ {
     @Field(() => Int) 
     ID: number;
         
-    @Field(() => Int) 
-    NextSequenceNumber: number;
+    @Field(() => Int, {nullable: true}) 
+    NextSequenceNumber?: number;
         
     @Field() 
     _mj__CreatedAt: Date;
         
     @Field() 
     _mj__UpdatedAt: Date;
+        
+    @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
+    ReadableFields___?: string[];
         
 }
 
@@ -3286,44 +3376,44 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @MaxLength(36)
     ID: string;
         
-    @Field({description: `Gap-free batch number assigned by spAssignNextJournalEntryBatchNumber. Format 'BATCH-{CompanyCode}-{seq:000000}'.`}) 
+    @Field({nullable: true, description: `Gap-free batch number assigned by spAssignNextJournalEntryBatchNumber. Format 'BATCH-{CompanyCode}-{seq:000000}'.`}) 
     @MaxLength(40)
-    JournalEntryBatchNumber: string;
+    JournalEntryBatchNumber?: string;
         
-    @Field({description: `The single company this batch belongs to (plan D7). One batch per company per run; the batch gathers ONLY this company's Pending JEs.`}) 
+    @Field({nullable: true, description: `The single company this batch belongs to (plan D7). One batch per company per run; the batch gathers ONLY this company's Pending JEs.`}) 
     @MaxLength(36)
-    CompanyID: string;
+    CompanyID?: string;
         
-    @Field({description: `Singular, accountant-set posting date chosen at batch build (plan D8). Carried to the GL's posting date and must match between systems; drives the ERP period. Document dates stay informational.`}) 
-    PostingDate: Date;
+    @Field({nullable: true, description: `Singular, accountant-set posting date chosen at batch build (plan D8). Carried to the GL's posting date and must match between systems; drives the ERP period. Document dates stay informational.`}) 
+    PostingDate?: Date;
         
     @Field({nullable: true, description: `The aggregated summary JournalEntry (its JournalEntryType flagged IsJournalEntryBatchSummary, EffectiveDate=PostingDate) that posts to the GL for this batch (plan D9). Its lines net debits/credits per GLAccount x dimension-combo. The summary carries this batch's JournalEntryBatchID (same derived lock machinery as members) but is excluded from member/netting/sweep queries via its type's IsJournalEntryBatchSummary flag.`}) 
     @MaxLength(36)
     SummaryJournalEntryID?: string;
         
-    @Field({description: `Target ERP for this batch: BusinessCentral | QuickBooks | NetSuite | Sage | Xero | Other.`}) 
+    @Field({nullable: true, description: `Target ERP for this batch: BusinessCentral | QuickBooks | NetSuite | Sage | Xero | Other.`}) 
     @MaxLength(50)
-    TargetSystem: string;
+    TargetSystem?: string;
         
-    @Field({description: `When the batch was created (Pending JEs flipped to Batched).`}) 
-    BatchedAt: Date;
+    @Field({nullable: true, description: `When the batch was created (Pending JEs flipped to Batched).`}) 
+    BatchedAt?: Date;
         
-    @Field({description: `User (or system identity for scheduled runs) that performed the batch.`}) 
+    @Field({nullable: true, description: `User (or system identity for scheduled runs) that performed the batch.`}) 
     @MaxLength(36)
-    BatchedByUserID: string;
+    BatchedByUserID?: string;
         
-    @Field({description: `Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled | Archived. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed triggers retry + escalation; Cancelled is terminal from Pending and RELEASES the member entries back to the candidate pool; Archived is terminal from Pending, Approved or Failed, makes no ERP call and KEEPS the member entries locked (trg_JournalEntryBatch_Immutability).`}) 
+    @Field({nullable: true, description: `Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled | Archived. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed triggers retry + escalation; Cancelled is terminal from Pending and RELEASES the member entries back to the candidate pool; Archived is terminal from Pending, Approved or Failed, makes no ERP call and KEEPS the member entries locked (trg_JournalEntryBatch_Immutability).`}) 
     @MaxLength(20)
-    Status: string;
+    Status?: string;
         
-    @Field(() => Int, {description: `Count of JE rows in this batch (denormalized for fast batch dashboards).`}) 
-    TotalEntries: number;
+    @Field(() => Int, {nullable: true, description: `Count of JE rows in this batch (denormalized for fast batch dashboards).`}) 
+    TotalEntries?: number;
         
-    @Field(() => Float, {description: `Sum of debits across all JE lines in the batch (functional currency).`}) 
-    TotalDebits: number;
+    @Field(() => Float, {nullable: true, description: `Sum of debits across all JE lines in the batch (functional currency).`}) 
+    TotalDebits?: number;
         
-    @Field(() => Float, {description: `Sum of credits across all JE lines in the batch (functional currency).`}) 
-    TotalCredits: number;
+    @Field(() => Float, {nullable: true, description: `Sum of credits across all JE lines in the batch (functional currency).`}) 
+    TotalCredits?: number;
         
     @Field({nullable: true, description: `ERP's reference returned on send (used to correlate the consolidated JE posted in the ERP).`}) 
     @MaxLength(100)
@@ -3369,17 +3459,17 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @MaxLength(36)
     ArchivedByUserID?: string;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(50)
-    Company: string;
+    Company?: string;
         
     @Field({nullable: true}) 
     @MaxLength(40)
     SummaryJournalEntry?: string;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(100)
-    BatchedByUser: string;
+    BatchedByUser?: string;
         
     @Field({nullable: true}) 
     @MaxLength(100)
@@ -3392,6 +3482,9 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @Field({nullable: true}) 
     @MaxLength(100)
     ArchivedByUser?: string;
+        
+    @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
+    ReadableFields___?: string[];
         
 }
 
@@ -3650,17 +3743,17 @@ export class mjBizAppsAccountingJournalEntryLineDimension_ {
     @MaxLength(36)
     ID: string;
         
-    @Field({description: `JE line being tagged.`}) 
+    @Field({nullable: true, description: `JE line being tagged.`}) 
     @MaxLength(36)
-    JournalEntryLineID: string;
+    JournalEntryLineID?: string;
         
-    @Field({description: `Dimension being applied. UNIQUE per (Line, Dimension) so a line cannot have two values for the same dimension.`}) 
+    @Field({nullable: true, description: `Dimension being applied. UNIQUE per (Line, Dimension) so a line cannot have two values for the same dimension.`}) 
     @MaxLength(36)
-    DimensionID: string;
+    DimensionID?: string;
         
-    @Field({description: `Value chosen for the dimension on this line.`}) 
+    @Field({nullable: true, description: `Value chosen for the dimension on this line.`}) 
     @MaxLength(36)
-    DimensionValueID: string;
+    DimensionValueID?: string;
         
     @Field() 
     _mj__CreatedAt: Date;
@@ -3668,13 +3761,16 @@ export class mjBizAppsAccountingJournalEntryLineDimension_ {
     @Field() 
     _mj__UpdatedAt: Date;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(100)
-    Dimension: string;
+    Dimension?: string;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(200)
-    DimensionValue: string;
+    DimensionValue?: string;
+        
+    @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
+    ReadableFields___?: string[];
         
 }
 
@@ -3819,16 +3915,16 @@ export class mjBizAppsAccountingJournalEntryLine_ {
     @MaxLength(36)
     ID: string;
         
-    @Field({description: `Parent JournalEntry.`}) 
+    @Field({nullable: true, description: `Parent JournalEntry.`}) 
     @MaxLength(36)
-    JournalEntryID: string;
+    JournalEntryID?: string;
         
-    @Field(() => Int, {description: `1-based ordering of lines within the parent JE.`}) 
-    LineNumber: number;
+    @Field(() => Int, {nullable: true, description: `1-based ordering of lines within the parent JE.`}) 
+    LineNumber?: number;
         
-    @Field({description: `GLAccount this line posts to.`}) 
+    @Field({nullable: true, description: `GLAccount this line posts to.`}) 
     @MaxLength(36)
-    GLAccountID: string;
+    GLAccountID?: string;
         
     @Field(() => Float, {nullable: true, description: `Debit amount in the Company's FUNCTIONAL currency. Mutually exclusive with CreditAmount (CK_JEL_OneSide).`}) 
     DebitAmount?: number;
@@ -3858,17 +3954,20 @@ export class mjBizAppsAccountingJournalEntryLine_ {
     @Field() 
     _mj__UpdatedAt: Date;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(40)
-    JournalEntry: string;
+    JournalEntry?: string;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(200)
-    GLAccount: string;
+    GLAccount?: string;
         
     @Field({nullable: true}) 
     @MaxLength(80)
     OriginalCurrencyCode_Virtual?: string;
+        
+    @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
+    ReadableFields___?: string[];
         
 }
 
@@ -4058,8 +4157,8 @@ export class mjBizAppsAccountingJournalEntrySequence_ {
     @Field(() => Int) 
     FiscalYear: number;
         
-    @Field(() => Int) 
-    NextSequenceNumber: number;
+    @Field(() => Int, {nullable: true}) 
+    NextSequenceNumber?: number;
         
     @Field() 
     _mj__CreatedAt: Date;
@@ -4067,9 +4166,12 @@ export class mjBizAppsAccountingJournalEntrySequence_ {
     @Field() 
     _mj__UpdatedAt: Date;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(50)
-    Company: string;
+    Company?: string;
+        
+    @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
+    ReadableFields___?: string[];
         
 }
 
@@ -4208,31 +4310,34 @@ export class mjBizAppsAccountingJournalEntryType_ {
     @MaxLength(36)
     ID: string;
         
-    @Field({description: `Stable machine code for the type (e.g. Manual, Reversal, JournalEntryBatchSummary, OrderBooking). Unique. Referenced by code; display uses Name.`}) 
+    @Field({nullable: true, description: `Stable machine code for the type (e.g. Manual, Reversal, JournalEntryBatchSummary, OrderBooking). Unique. Referenced by code; display uses Name.`}) 
     @MaxLength(40)
-    Code: string;
+    Code?: string;
         
-    @Field({description: `Human-readable display name for the type.`}) 
+    @Field({nullable: true, description: `Human-readable display name for the type.`}) 
     @MaxLength(100)
-    Name: string;
+    Name?: string;
         
     @Field({nullable: true, description: `What this entry type classifies and which app owns it.`}) 
     Description?: string;
         
-    @Field(() => Boolean, {description: `1 = accounting's own ledger-mechanics type (Manual, Reversal, JournalEntryBatchSummary, ...). Consumers must not repurpose or delete IsSystem rows.`}) 
-    IsSystem: boolean;
+    @Field(() => Boolean, {nullable: true, description: `1 = accounting's own ledger-mechanics type (Manual, Reversal, JournalEntryBatchSummary, ...). Consumers must not repurpose or delete IsSystem rows.`}) 
+    IsSystem?: boolean;
         
-    @Field(() => Boolean, {description: `1 = this type marks a batch's aggregated summary JE. Batch member/netting/sweep queries exclude JEs of this type via a join on this flag (replaces the former 'JournalEntryBatchSummary' magic-string match). A filtered unique index allows exactly one flagged row.`}) 
-    IsJournalEntryBatchSummary: boolean;
+    @Field(() => Boolean, {nullable: true, description: `1 = this type marks a batch's aggregated summary JE. Batch member/netting/sweep queries exclude JEs of this type via a join on this flag (replaces the former 'JournalEntryBatchSummary' magic-string match). A filtered unique index allows exactly one flagged row.`}) 
+    IsJournalEntryBatchSummary?: boolean;
         
-    @Field(() => Boolean, {description: `Whether this type may be used on NEW journal entries. Inactive types remain for historical rows.`}) 
-    IsActive: boolean;
+    @Field(() => Boolean, {nullable: true, description: `Whether this type may be used on NEW journal entries. Inactive types remain for historical rows.`}) 
+    IsActive?: boolean;
         
     @Field() 
     _mj__CreatedAt: Date;
         
     @Field() 
     _mj__UpdatedAt: Date;
+        
+    @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
+    ReadableFields___?: string[];
         
 }
 
@@ -4395,20 +4500,20 @@ export class mjBizAppsAccountingTaxAuthority_ {
     @MaxLength(36)
     ID: string;
         
-    @Field({description: `Globally unique authority code, e.g. 'US-IRS', 'CA-BOE', 'EU-VAT-DE'.`}) 
+    @Field({nullable: true, description: `Globally unique authority code, e.g. 'US-IRS', 'CA-BOE', 'EU-VAT-DE'.`}) 
     @MaxLength(40)
-    Code: string;
+    Code?: string;
         
-    @Field({description: `Display name for the authority.`}) 
+    @Field({nullable: true, description: `Display name for the authority.`}) 
     @MaxLength(200)
-    Name: string;
+    Name?: string;
         
     @Field({nullable: true, description: `ISO 3166-1 alpha-2 country code for the authority's primary jurisdiction.`}) 
     @MaxLength(2)
     CountryCode?: string;
         
-    @Field(() => Boolean, {description: `Whether this authority is currently active.`}) 
-    IsActive: boolean;
+    @Field(() => Boolean, {nullable: true, description: `Whether this authority is currently active.`}) 
+    IsActive?: boolean;
         
     @Field() 
     _mj__CreatedAt: Date;
@@ -4416,11 +4521,14 @@ export class mjBizAppsAccountingTaxAuthority_ {
     @Field() 
     _mj__UpdatedAt: Date;
         
-    @Field(() => Float, {nullable: true}) 
-    _mj__Latitude?: number;
+    @Field(() => Float) 
+    _mj__Latitude: number;
         
-    @Field(() => Float, {nullable: true}) 
-    _mj__Longitude?: number;
+    @Field(() => Float) 
+    _mj__Longitude: number;
+        
+    @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
+    ReadableFields___?: string[];
         
 }
 
@@ -4571,17 +4679,17 @@ export class mjBizAppsAccountingTaxJurisdiction_ {
     @MaxLength(36)
     ID: string;
         
-    @Field({description: `TaxAuthority this jurisdiction belongs to.`}) 
+    @Field({nullable: true, description: `TaxAuthority this jurisdiction belongs to.`}) 
     @MaxLength(36)
-    TaxAuthorityID: string;
+    TaxAuthorityID?: string;
         
-    @Field({description: `Globally unique jurisdiction code.`}) 
+    @Field({nullable: true, description: `Globally unique jurisdiction code.`}) 
     @MaxLength(80)
-    Code: string;
+    Code?: string;
         
-    @Field({description: `Display name (e.g. 'California State', 'Los Angeles County').`}) 
+    @Field({nullable: true, description: `Display name (e.g. 'California State', 'Los Angeles County').`}) 
     @MaxLength(200)
-    Name: string;
+    Name?: string;
         
     @Field({nullable: true, description: `ISO 3166-1 alpha-2 country code.`}) 
     @MaxLength(2)
@@ -4611,8 +4719,8 @@ export class mjBizAppsAccountingTaxJurisdiction_ {
     @MaxLength(36)
     ParentTaxJurisdictionID?: string;
         
-    @Field(() => Boolean, {description: `Whether this jurisdiction is currently active.`}) 
-    IsActive: boolean;
+    @Field(() => Boolean, {nullable: true, description: `Whether this jurisdiction is currently active.`}) 
+    IsActive?: boolean;
         
     @Field() 
     _mj__CreatedAt: Date;
@@ -4620,19 +4728,19 @@ export class mjBizAppsAccountingTaxJurisdiction_ {
     @Field() 
     _mj__UpdatedAt: Date;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(200)
-    TaxAuthority: string;
+    TaxAuthority?: string;
         
     @Field({nullable: true}) 
     @MaxLength(200)
     ParentTaxJurisdiction?: string;
         
-    @Field(() => Float, {nullable: true}) 
-    _mj__Latitude?: number;
+    @Field(() => Float) 
+    _mj__Latitude: number;
         
-    @Field(() => Float, {nullable: true}) 
-    _mj__Longitude?: number;
+    @Field(() => Float) 
+    _mj__Longitude: number;
         
     @Field({nullable: true}) 
     @MaxLength(36)
@@ -4649,6 +4757,9 @@ export class mjBizAppsAccountingTaxJurisdiction_ {
         
     @Field(() => Int, {nullable: true}) 
     ParentTaxJurisdictionIDChildCount?: number;
+        
+    @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
+    ReadableFields___?: string[];
         
 }
 
@@ -4841,27 +4952,27 @@ export class mjBizAppsAccountingTaxLiability_ {
     @MaxLength(36)
     ID: string;
         
-    @Field({description: `Company this liability belongs to.`}) 
+    @Field({nullable: true, description: `Company this liability belongs to.`}) 
     @MaxLength(36)
-    CompanyID: string;
+    CompanyID?: string;
         
-    @Field({description: `TaxAuthority owed.`}) 
+    @Field({nullable: true, description: `TaxAuthority owed.`}) 
     @MaxLength(36)
-    TaxAuthorityID: string;
+    TaxAuthorityID?: string;
         
-    @Field({description: `TaxJurisdiction the liability is scoped to.`}) 
+    @Field({nullable: true, description: `TaxJurisdiction the liability is scoped to.`}) 
     @MaxLength(36)
-    TaxJurisdictionID: string;
+    TaxJurisdictionID?: string;
         
-    @Field(() => Float, {description: `Total tax accrued during the period (in functional currency).`}) 
-    AccruedAmount: number;
+    @Field(() => Float, {nullable: true, description: `Total tax accrued during the period (in functional currency).`}) 
+    AccruedAmount?: number;
         
-    @Field(() => Float, {description: `Total amount remitted against this liability so far.`}) 
-    RemittedAmount: number;
+    @Field(() => Float, {nullable: true, description: `Total amount remitted against this liability so far.`}) 
+    RemittedAmount?: number;
         
-    @Field({description: `Lifecycle: Open | Filed | Paid | PartiallyPaid.`}) 
+    @Field({nullable: true, description: `Lifecycle: Open | Filed | Paid | PartiallyPaid.`}) 
     @MaxLength(20)
-    Status: string;
+    Status?: string;
         
     @Field({nullable: true, description: `Statutory due date for filing/remittance.`}) 
     DueDate?: Date;
@@ -4876,17 +4987,20 @@ export class mjBizAppsAccountingTaxLiability_ {
     @Field() 
     _mj__UpdatedAt: Date;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(50)
-    Company: string;
+    Company?: string;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(200)
-    TaxAuthority: string;
+    TaxAuthority?: string;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(200)
-    TaxJurisdiction: string;
+    TaxJurisdiction?: string;
+        
+    @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
+    ReadableFields___?: string[];
         
 }
 
@@ -5061,26 +5175,26 @@ export class mjBizAppsAccountingTaxRate_ {
     @MaxLength(36)
     ID: string;
         
-    @Field({description: `Jurisdiction this rate applies to.`}) 
+    @Field({nullable: true, description: `Jurisdiction this rate applies to.`}) 
     @MaxLength(36)
-    TaxJurisdictionID: string;
+    TaxJurisdictionID?: string;
         
-    @Field({description: `Tax category: Standard | Reduced | Zero | Exempt | Custom.`}) 
+    @Field({nullable: true, description: `Tax category: Standard | Reduced | Zero | Exempt | Custom.`}) 
     @MaxLength(50)
-    TaxCategory: string;
+    TaxCategory?: string;
         
-    @Field(() => Float, {description: `Rate as a decimal fraction. 0.0825 = 8.25%.`}) 
-    Rate: number;
+    @Field(() => Float, {nullable: true, description: `Rate as a decimal fraction. 0.0825 = 8.25%.`}) 
+    Rate?: number;
         
-    @Field({description: `Earliest date this rate is effective.`}) 
-    EffectiveFrom: Date;
+    @Field({nullable: true, description: `Earliest date this rate is effective.`}) 
+    EffectiveFrom?: Date;
         
     @Field({nullable: true, description: `Last date this rate is effective (NULL = open-ended).`}) 
     EffectiveTo?: Date;
         
-    @Field({description: `Source of the rate: Avalara | TaxJar | Manual.`}) 
+    @Field({nullable: true, description: `Source of the rate: Avalara | TaxJar | Manual.`}) 
     @MaxLength(50)
-    Source: string;
+    Source?: string;
         
     @Field() 
     _mj__CreatedAt: Date;
@@ -5088,9 +5202,12 @@ export class mjBizAppsAccountingTaxRate_ {
     @Field() 
     _mj__UpdatedAt: Date;
         
-    @Field() 
+    @Field({nullable: true}) 
     @MaxLength(200)
-    TaxJurisdiction: string;
+    TaxJurisdiction?: string;
+        
+    @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
+    ReadableFields___?: string[];
         
 }
 

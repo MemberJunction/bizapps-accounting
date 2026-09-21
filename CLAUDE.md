@@ -343,7 +343,7 @@ This repo uses MemberJunction's CodeGen system to generate entity and action sub
 - Write all migrations as **T-SQL** in `migrations/` (`V<TS>__v<X.Y.x>__<description>.sql`).
 - The PostgreSQL counterparts in `migrations-pg/` are produced by the MJ converter (`@memberjunction/sql-converter`) via `pnpm exec mj sql-convert <file> --from tsql --to postgres --output migrations-pg/<file>.pg.sql --schema __mj_BizAppsAccounting`. PG-only patches use the `.pg-only.sql` extension.
 - **Never hand-edit `migrations-pg/*.pg.sql`** — fix the converter rule and re-convert. PG-only patches are the exception, and live next to the converted files.
-- CI runs `.github/workflows/pg-migrations.yml` on PRs that touch migrations or the converter to validate the PG output still applies cleanly to a fresh PG 17 database.
+- `.github/workflows/pg-migrations.yml` validates PG parity on `workflow_dispatch` (manual trigger) rather than gating PRs, per MJ cross-repo policy.
 - See `migrations-pg/README.md` for the conversion workflow and the MJ repo's `/pg-migrate` slash command for the deeper toolchain.
 
 ### Accounting-specific schema invariants (see `plans/bizapps-accounting-master.md` §6)
