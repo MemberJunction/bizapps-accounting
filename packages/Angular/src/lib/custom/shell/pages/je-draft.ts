@@ -1,3 +1,4 @@
+import { ToCalendarDay } from '@mj-biz-apps/common-entities';
 import type { CreateJournalEntryInput, JournalEntryLineDraft } from '@mj-biz-apps/accounting-engine-base';
 import type { JournalEntryEntity, JournalEntryLineEntity } from '@mj-biz-apps/accounting-entities';
 
@@ -80,18 +81,15 @@ export function TextIssue(text: JEAmountText | undefined): string | null {
 }
 
 /**
- * A posting date as `yyyy-mm-dd`, from the LOCAL parts.
+ * A calendar day as `yyyy-mm-dd`, read from the value's UTC parts.
  *
- * NOT `toISOString().slice(0, 10)`. A `Date` at local midnight serialises to the PREVIOUS day
- * anywhere west of Greenwich, so an entry posted on the 1st files into the previous month — and the
- * ledger balances either way, which is why nothing downstream would ever report it.
+ * `EffectiveDate` is a `DATE` column: a day with no time and no zone, which travels as UTC midnight
+ * of that day. Both directions of the form go through this — the picker's displayed value and the
+ * engine input — so read and edit cannot disagree by a browser offset the way they did when one
+ * side read local parts and the other wrote UTC.
  */
-function isoDate(value: Date | string | null | undefined): string {
-    if (!value) return '';
-    const date = value instanceof Date ? value : new Date(value);
-    if (Number.isNaN(date.getTime())) return '';
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+export function CalendarDayValue(value: Date | string | null | undefined): string {
+    return ToCalendarDay(value) ?? '';
 }
 
 /** The lines that carry something, in order. Untouched rows are dropped, never reported. */
@@ -145,7 +143,7 @@ export function toCreateInput(state: JEDraftState): CreateJournalEntryInput {
     });
 
     const input: CreateJournalEntryInput = {
-        EffectiveDate: isoDate(state.Entry.EffectiveDate),
+        EffectiveDate: CalendarDayValue(state.Entry.EffectiveDate),
         // The workspace is the MANUAL-entry home (§8.1). A single literal into the generated union is
         // fine; what rule 2c forbids is restating the union itself.
         EntryType: 'Manual',

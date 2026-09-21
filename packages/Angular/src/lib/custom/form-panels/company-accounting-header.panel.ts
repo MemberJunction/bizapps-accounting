@@ -3,6 +3,7 @@ import { RegisterClassEx } from '@memberjunction/global';
 import { BaseFormPanel } from '@memberjunction/ng-base-forms';
 import { UserInfoEngine, MJCompanyEntity } from '@memberjunction/core-entities';
 import { RunView } from '@memberjunction/core';
+import { BusinessTimeZoneEngine } from '@mj-biz-apps/common-entities';
 
 const COMPANY_ACCOUNTING_HERO_CSS = `
 .mja-comp-hero {
@@ -263,7 +264,7 @@ export class CompanyAccountingHeaderPanel extends BaseFormPanel<MJCompanyEntity>
     public LegalStructure = 'Legal Entity';
     public Jurisdiction = 'United States';
     public TaxID = '';
-    public TimeZone = 'America/New_York';
+    public TimeZone = BusinessTimeZoneEngine.Instance.Zone;
     public FiscalYearStart = 'Jan 1';
 
     private get StorageKey(): string {
@@ -302,7 +303,7 @@ export class CompanyAccountingHeaderPanel extends BaseFormPanel<MJCompanyEntity>
                 this.LegalStructure = String(p['LegalStructureType'] || p['EntityType'] || 'Corporation');
                 this.Jurisdiction = String(p['JurisdictionCountry'] || 'US');
                 this.TaxID = String(p['FederalTaxID'] || '');
-                this.TimeZone = String(p['OperatingTimeZone'] || 'America/New_York');
+                this.TimeZone = String(p['OperatingTimeZone'] || BusinessTimeZoneEngine.Instance.Zone);
                 const m = Number(p['FiscalYearStartMonth'] || 1);
                 const d = Number(p['FiscalYearStartDay'] || 1);
                 const date = new Date(2026, m - 1, d);

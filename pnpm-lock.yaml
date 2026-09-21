@@ -88,6 +88,9 @@ importers:
       '@mj-biz-apps/accounting-core-entities-server':
         specifier: 0.10.0
         version: link:../CoreEntitiesServer
+      '@mj-biz-apps/common-entities':
+        specifier: '>=5.43.0'
+        version: 5.43.0(@memberjunction/core@6.1.0-edge.7)(@memberjunction/global@6.1.0-edge.7)
       zod:
         specifier: ^3.25.28
         version: 3.25.76
@@ -150,8 +153,8 @@ importers:
         specifier: 0.10.0
         version: link:../Entities
       '@mj-biz-apps/common-entities':
-        specifier: '>=5.37.0'
-        version: 5.37.0(@memberjunction/core@6.1.0-edge.7)(@memberjunction/global@6.1.0-edge.7)
+        specifier: '>=5.43.0'
+        version: 5.43.0(@memberjunction/core@6.1.0-edge.7)(@memberjunction/global@6.1.0-edge.7)
       '@mj-biz-apps/common-ng':
         specifier: '>=5.37.0'
         version: 5.37.0(b4b9528e69f27e11fa8242a7a0c11968)
@@ -216,6 +219,9 @@ importers:
       '@mj-biz-apps/accounting-entities':
         specifier: 0.10.0
         version: link:../Entities
+      '@mj-biz-apps/common-entities':
+        specifier: '>=5.43.0'
+        version: 5.43.0(@memberjunction/core@6.1.0-edge.7)(@memberjunction/global@6.1.0-edge.7)
       '@mj-biz-apps/tasks-core':
         specifier: '>=1.4.1'
         version: 1.4.1(@memberjunction/core@6.1.0-edge.7)(@memberjunction/global@6.1.0-edge.7)
@@ -2731,6 +2737,12 @@ packages:
 
   '@mj-biz-apps/common-entities@5.37.0':
     resolution: {integrity: sha512-BlwCC1qhihLg/IiERe+4U2HfoD6bneaP6AkpYceSzMIPHTJpBdgVrQUfOQM73OoCZRGG6sRAvww4Tph/f4wNmA==}
+    peerDependencies:
+      '@memberjunction/core': ^6.1.0-edge.7
+      '@memberjunction/global': ^6.1.0-edge.7
+
+  '@mj-biz-apps/common-entities@5.43.0':
+    resolution: {integrity: sha512-T0BZF/XwJbsLi+JxXEKhxYIMAzSQ0OPmERYv24IqeIm67Pbp0FK1uvx+GapNu7lHq5rDdwsTnDMDWcN4aha6Hg==}
     peerDependencies:
       '@memberjunction/core': ^6.1.0-edge.7
       '@memberjunction/global': ^6.1.0-edge.7
@@ -16173,6 +16185,12 @@ snapshots:
       '@mj-biz-apps/common-entities': 5.37.0(@memberjunction/core@6.1.0-edge.7)(@memberjunction/global@6.1.0-edge.7)
 
   '@mj-biz-apps/common-entities@5.37.0(@memberjunction/core@6.1.0-edge.7)(@memberjunction/global@6.1.0-edge.7)':
+    dependencies:
+      '@memberjunction/core': 6.1.0-edge.7
+      '@memberjunction/global': 6.1.0-edge.7
+      zod: 3.25.76
+
+  '@mj-biz-apps/common-entities@5.43.0(@memberjunction/core@6.1.0-edge.7)(@memberjunction/global@6.1.0-edge.7)':
     dependencies:
       '@memberjunction/core': 6.1.0-edge.7
       '@memberjunction/global': 6.1.0-edge.7

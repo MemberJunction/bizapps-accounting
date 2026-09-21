@@ -100,28 +100,48 @@ describe('toSqlDate', () => {
 
 describe('timeWindowFilter', () => {
   it('is null for "all" (no date predicate at all)', () => {
-    expect(timeWindowFilter('all', 'EffectiveDate', NOW)).toBeNull();
+    expect(timeWindowFilter('all', 'EffectiveDate', NOW, 'UTC')).toBeNull();
   });
 
   it('emits a half-open [From, To) predicate on the given column', () => {
-    expect(timeWindowFilter('last7', 'EffectiveDate', NOW)).toBe(
+    expect(timeWindowFilter('last7', 'EffectiveDate', NOW, 'UTC')).toBe(
       "EffectiveDate >= '2026-07-10' AND EffectiveDate < '2026-07-17'",
     );
   });
 
   it('half-open bounds mean a row cannot fall into two adjacent windows', () => {
     // The `To` of a window is the `From` of the next day's window — exclusive on one side only.
-    const f = timeWindowFilter('last30', 'EffectiveDate', NOW)!;
+    const f = timeWindowFilter('last30', 'EffectiveDate', NOW, 'UTC')!;
     expect(f).toContain("< '2026-07-17'");
     expect(f).not.toContain("<= '2026-07-17'");
   });
 
   it('every offered window produces a filter (or null for all) — no unhandled ids', () => {
     for (const w of TIME_WINDOWS) {
-      const result = timeWindowFilter(w.Id as TimeWindowId, 'EffectiveDate', NOW);
+      const result = timeWindowFilter(w.Id as TimeWindowId, 'EffectiveDate', NOW, 'UTC');
       if (w.Id === 'all') expect(result).toBeNull();
       else expect(result).toBeTruthy();
     }
+  });
+
+  it('zone is required — passing it through changes the anchored day, same as timeWindowRange', () => {
+    // Discriminates the "zone required" change itself: at this instant the business (Chicago) day
+    // is one day behind the UTC day, so the emitted predicate's bounds must differ from the
+    // UTC-anchored ones above, not silently default to UTC.
+    const chicagoInstant = new Date('2026-09-01T01:00:00Z');
+    const f = timeWindowFilter('last7', 'EffectiveDate', chicagoInstant, 'America/Chicago')!;
+    expect(f).toBe("EffectiveDate >= '2026-08-25' AND EffectiveDate < '2026-09-01'");
+  });
+});
+
+describe('the window is anchored on the BUSINESS day', () => {
+  it('last7 at 1 AM UTC on the 1st still ends on the 1st in Central, not the 2nd', () => {
+    // 2026-09-01T01:00:00Z is already the 1st in UTC, but only 8 PM on the 31st in Chicago
+    // (CDT, UTC-5). Reading the UTC day (today's un-fixed behaviour) puts `today` a day AHEAD of
+    // the business day, so the exclusive upper bound lands on the 2nd instead of the 1st.
+    const { From, To } = timeWindowRange('last7', new Date('2026-09-01T01:00:00Z'), 'America/Chicago');
+    expect(toSqlDate(To!)).toBe('2026-09-01');
+    expect(toSqlDate(From!)).toBe('2026-08-25');
   });
 });
 

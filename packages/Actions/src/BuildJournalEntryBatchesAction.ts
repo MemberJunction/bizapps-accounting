@@ -17,6 +17,7 @@ import {
   type JournalEntryBatchTargetSystem,
   type BuildJournalEntryBatchOptions,
 } from '@mj-biz-apps/accounting-core-entities-server';
+import { AddDays, BusinessTimeZoneEngine, CalendarDayIn, FromCalendarDay, LastDayOfPriorMonth } from '@mj-biz-apps/common-entities';
 
 /**
  * Action: Accounting.BuildJournalEntryBatches
@@ -46,6 +47,7 @@ export class BuildJournalEntryBatchesAction extends BaseAction {
     const user = params.ContextUser;
     const targetSystem = readParam<JournalEntryBatchTargetSystem>(params, 'TargetSystem') ?? 'BusinessCentral';
     const autoPost = isTrue(readParam<boolean | string>(params, 'AutoPost'));
+    await BusinessTimeZoneEngine.Instance.Config(false, user, provider);
     const options = readBatchOptions(params);
     if (autoPost) assertAutoPostPolicy(options);
 
@@ -75,7 +77,7 @@ function readBatchOptions(params: RunActionParams): BuildJournalEntryBatchOption
   const companyIds = readParam<string[]>(params, 'CompanyIDs');
 
   return {
-    cutoff: resolveCutoff(readParam<string>(params, 'Cutoff'), readParam<string>(params, 'CutoffMode'), new Date()),
+    cutoff: resolveCutoff(readParam<string>(params, 'Cutoff'), readParam<string>(params, 'CutoffMode'), new Date(), BusinessTimeZoneEngine.Instance.Zone),
     startDate: startDate ? new Date(startDate) : null,
     companyIds: companyIds?.length ? companyIds : null,
     entryTypeCodes: entryTypeCodes?.length ? entryTypeCodes : null,
@@ -87,15 +89,15 @@ function readBatchOptions(params: RunActionParams): BuildJournalEntryBatchOption
  * The cutoff handed to `pendingCandidateFilter`, which turns a midnight-UTC cutoff into
  * `EffectiveDate < cutoff + 1 day` — the cutoff DAY is INCLUDED. So "strictly before the run date"
  * is YESTERDAY, and "strictly before the 1st of this month" is the LAST DAY OF THE PRIOR MONTH.
- * An explicit `Cutoff` always wins, so the manual/on-demand path is unaffected.
+ * "The run date" is the calendar day in the BUSINESS zone: a job that fires at 1 AM UTC on the 1st
+ * is still the last evening of the prior month in Chicago. An explicit `Cutoff` always wins.
  */
-export function resolveCutoff(explicitCutoff: string | undefined, mode: string | undefined, now: Date): Date | null {
+export function resolveCutoff(explicitCutoff: string | undefined, mode: string | undefined, now: Date, zone: string): Date | null {
   if (explicitCutoff) return new Date(explicitCutoff);
   if (!mode) return null;
-  const year = now.getUTCFullYear();
-  const month = now.getUTCMonth();
-  if (mode === 'PriorDay') return new Date(Date.UTC(year, month, now.getUTCDate() - 1));
-  if (mode === 'PriorMonth') return new Date(Date.UTC(year, month, 0)); // day 0 = last day of the prior month
+  const today = CalendarDayIn(now, zone);
+  if (mode === 'PriorDay') return FromCalendarDay(AddDays(today, -1));
+  if (mode === 'PriorMonth') return FromCalendarDay(LastDayOfPriorMonth(today));
   throw new Error(`Accounting.BuildJournalEntryBatches: unknown CutoffMode '${mode}' — expected 'PriorDay' or 'PriorMonth'.`);
 }
 

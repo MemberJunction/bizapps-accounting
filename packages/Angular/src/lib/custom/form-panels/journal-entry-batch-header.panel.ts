@@ -3,6 +3,7 @@ import { RegisterClassEx } from '@memberjunction/global';
 import { BaseFormPanel } from '@memberjunction/ng-base-forms';
 import { UserInfoEngine } from '@memberjunction/core-entities';
 import type { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
+import { formatJournalDate } from './journal-entry-panel.helpers';
 
 const BATCH_HERO_CSS = `
 .mj-batch-hero {
@@ -292,9 +293,14 @@ export class JournalEntryBatchHeaderPanel extends BaseFormPanel<mjBizAppsAccount
         return Number(this.Record?.TotalDebits || 0);
     }
 
+    /**
+     * `PostingDate` is a `DATE` column — a calendar day, not a timestamp — so it goes through
+     * `formatJournalDate` (UTC parts in, UTC-anchored formatting out) rather than the viewer's
+     * local parts, which would slide the day back by one anywhere west of Greenwich.
+     */
     public get PostingDateLabel(): string {
         if (!this.Record?.PostingDate) return 'Pending Date';
-        return new Date(this.Record.PostingDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        return formatJournalDate(this.Record.PostingDate);
     }
 
     public get StatusBadgeClass(): string {

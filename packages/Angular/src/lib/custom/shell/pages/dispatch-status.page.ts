@@ -5,6 +5,7 @@ import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
 import { GridColumnConfig, EntityDataGridComponent } from '@memberjunction/ng-entity-viewer';
 import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
+import { AddDays, BusinessTimeZoneEngine, DayStartUtc, IsCalendarDay } from '@mj-biz-apps/common-entities';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
 import { JournalEntryBatchDispatchClient } from '../../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
 import { TIME_WINDOWS, TimeWindowId, timeWindowRange, toSqlDate, andFilters } from '../../../transfer-pending/list-scaffold/time-window';
@@ -215,14 +216,25 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
    * widens the status toggles).
    *
    * BatchedAt is `datetimeoffset`, so the To box (which states an INCLUSIVE last day) becomes an
-   * EXCLUSIVE `< To+1day` bound — a `<= '2026-07-16'` would compare against midnight and drop that
-   * whole day's dispatches.
+   * EXCLUSIVE bound at the START OF THE NEXT BUSINESS DAY — resolved through `DayStartUtc`, not by
+   * pasting the calendar day into the SQL, which would compare an instant against midnight UTC.
    */
   private dateFilter(): string | null {
+    // BatchedAt is an INSTANT; the boxes hold CALENDAR DAYS. Comparing the two directly comes out
+    // an offset short: a bare 'YYYY-MM-DD' literal is midnight UTC, which is 19:00 the previous
+    // evening in Chicago. Between 00:00 and 05:00 UTC that made the upper bound land BEFORE the
+    // 01:00 UTC nightly run, hiding the very batches (and failures) this page exists to triage.
+    // DayStartUtc turns a business calendar day into the instant it actually begins, DST included.
+    const zone = BusinessTimeZoneEngine.Instance.Zone;
+    const startOf = (day: string): string | null =>
+      IsCalendarDay(day) ? DayStartUtc(day, zone).toISOString() : null;
+    const from = this.FromDate ? startOf(this.FromDate) : null;
+    // The To box states an INCLUSIVE last day, so the exclusive bound is the start of the day after.
+    const toExclusive = this.ToDate && IsCalendarDay(this.ToDate) ? startOf(AddDays(this.ToDate, 1)) : null;
     return (
       andFilters(
-        this.FromDate ? `BatchedAt >= '${sqlLiteral(this.FromDate)}'` : null,
-        this.ToDate ? `BatchedAt < '${sqlLiteral(nextDay(this.ToDate))}'` : null,
+        from ? `BatchedAt >= '${sqlLiteral(from)}'` : null,
+        toExclusive ? `BatchedAt < '${sqlLiteral(toExclusive)}'` : null,
       ) || null
     );
   }
@@ -357,7 +369,7 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
   }
 
   private applyWindowRange(window: TimeWindowId): void {
-    const { From, To } = timeWindowRange(window);
+    const { From, To } = timeWindowRange(window, new Date(), BusinessTimeZoneEngine.Instance.Zone);
     this.FromDate = From ? toSqlDate(From) : null;
     // timeWindowRange's To is EXCLUSIVE (tomorrow 00:00 UTC); the calendar box states an INCLUSIVE
     // last day, so step back one — dateFilter() re-opens it to an exclusive bound for the compare.
@@ -461,7 +473,3 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
   }
 }
 
-/** `YYYY-MM-DD` one day on, in UTC — the exclusive upper bound for an inclusive To box. */
-function nextDay(sqlDate: string): string {
-  return toSqlDate(new Date(Date.parse(`${sqlDate}T00:00:00.000Z`) + DAY_MS));
-}

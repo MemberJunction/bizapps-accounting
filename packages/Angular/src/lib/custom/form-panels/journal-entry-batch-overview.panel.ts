@@ -11,6 +11,7 @@ import { NavigationService } from '@memberjunction/ng-shared';
 import { BaseFormComponent, BaseFormPanel } from '@memberjunction/ng-base-forms';
 import { RegisterClassEx } from '@memberjunction/global';
 import type { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
+import { formatJournalDate } from './journal-entry-panel.helpers';
 
 interface MemberEntryRow {
     ID: string;
@@ -417,19 +418,25 @@ export class JournalEntryBatchOverviewComponent implements OnInit, OnChanges {
         return this.Record?.Status === 'Approved' || this.Record?.Status === 'Sent' || this.Record?.Status === 'Posted';
     }
 
+    /** `BatchedAt` is a `DATETIMEOFFSET` (a true instant) — stays on the viewer's local parts. */
     public get BatchedDateLabel(): string {
         if (!this.Record?.BatchedAt) return '—';
         return new Date(this.Record.BatchedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     }
 
+    /**
+     * `PostingDate` is a `DATE` column — a calendar day — so it goes through `formatJournalDate`
+     * (UTC parts in, UTC-anchored formatting out), not local parts. See `BatchedDateLabel` above
+     * for the true-timestamp counterpart, which deliberately stays local.
+     */
     public get PostingDateLabel(): string {
         if (!this.Record?.PostingDate) return '—';
-        return new Date(this.Record.PostingDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        return formatJournalDate(this.Record.PostingDate, { month: 'short', day: 'numeric' });
     }
 
+    /** `entry.EffectiveDate` is a `DATE` column too — same UTC-anchored formatting as `PostingDateLabel`. */
     public FormatDate(d: Date | null): string {
-        if (!d) return '—';
-        return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        return formatJournalDate(d, { month: 'short', day: 'numeric' });
     }
 
     public ngOnInit(): void {
