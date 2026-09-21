@@ -1,5 +1,17 @@
 # @mj-biz-apps/accounting-ng
 
+## 0.10.0
+
+### Minor Changes
+
+- 2919ad0: Add predictive journal entry anomaly outcome columns, layered base views (vwJournalEntriesGenerated and vwJournalEntries), and scoring binding write-back.
+
+### Patch Changes
+
+- Updated dependencies [2919ad0]
+  - @mj-biz-apps/accounting-entities@0.10.0
+  - @mj-biz-apps/accounting-engine-base@0.10.0
+
 ## 0.9.0
 
 ### Patch Changes
