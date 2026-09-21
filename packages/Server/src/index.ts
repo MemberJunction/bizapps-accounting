@@ -9,6 +9,7 @@
 // Import entity and action packages to trigger @RegisterClass decorators
 import '@mj-biz-apps/accounting-entities';
 import '@mj-biz-apps/accounting-actions';
+import { LoadCreateBusinessCentralJournalEntryWithDimensionsAction } from '@mj-biz-apps/accounting-actions';
 
 // Server-side entity subclasses — must come after accounting-entities so
 // @RegisterClass auto-increment gives these higher priority
@@ -59,4 +60,8 @@ export function LoadBizAppsAccountingServer(): void {
     LoadRunERPSyncOperation();
     LoadAccountingERPEngine();
     LoadAccountingERPProviders();
+    // tree-shaking anchor for the BC journal-post override that carries dimension tags.
+    // Its @RegisterClass must run AFTER the MJ platform's own registration for the same
+    // plugin key so the ClassFactory's priority auto-increment resolves to this subclass.
+    LoadCreateBusinessCentralJournalEntryWithDimensionsAction();
 }

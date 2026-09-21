@@ -1,5 +1,12 @@
 # @mj-biz-apps/accounting-engine-base
 
+## 0.10.0
+
+### Patch Changes
+
+- Updated dependencies [2919ad0]
+  - @mj-biz-apps/accounting-entities@0.10.0
+
 ## 0.9.0
 
 ### Patch Changes

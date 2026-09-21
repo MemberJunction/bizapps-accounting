@@ -1178,6 +1178,27 @@ export const mjBizAppsAccountingJournalEntrySchema = z.object({
         * * Display Name: Updated At
         * * SQL Data Type: datetimeoffset
         * * Default Value: getutcdate()`),
+    PredictedAnomalyProbability: z.number().nullable().describe(`
+        * * Field Name: PredictedAnomalyProbability
+        * * Display Name: Anomaly Probability
+        * * SQL Data Type: decimal(5, 4)
+        * * Description: 0.0000 to 1.0000 probability that the journal entry is anomalous or represents irregular posting activity.`),
+    PredictedAnomalyRiskBand: z.union([z.literal('Critical'), z.literal('High'), z.literal('Low'), z.literal('Medium')]).nullable().describe(`
+        * * Field Name: PredictedAnomalyRiskBand
+        * * Display Name: Anomaly Risk Band
+        * * SQL Data Type: nvarchar(20)
+    * * Value List Type: List
+    * * Possible Values 
+    *   * Critical
+    *   * High
+    *   * Low
+    *   * Medium
+        * * Description: Categorical risk tier derived from anomaly probability: Low, Medium, High, Critical.`),
+    PredictedAnomalyScoredAt: z.date().nullable().describe(`
+        * * Field Name: PredictedAnomalyScoredAt
+        * * Display Name: Anomaly Scored At
+        * * SQL Data Type: datetimeoffset
+        * * Description: Timestamp when the journal entry was last scored by the predictive anomaly model.`),
     Company: z.string().describe(`
         * * Field Name: Company
         * * Display Name: Company Name
@@ -1206,14 +1227,46 @@ export const mjBizAppsAccountingJournalEntrySchema = z.object({
         * * Field Name: File
         * * Display Name: File Name
         * * SQL Data Type: nvarchar(500)`),
-    RootReversesJournalEntryID: z.string().nullable().describe(`
-        * * Field Name: RootReversesJournalEntryID
-        * * Display Name: Root Reverses Journal Entry
-        * * SQL Data Type: uniqueidentifier`),
-    RootReversedByJournalEntryID: z.string().nullable().describe(`
-        * * Field Name: RootReversedByJournalEntryID
-        * * Display Name: Root Reversed By Journal Entry
-        * * SQL Data Type: uniqueidentifier`),
+    AnomalyOutcome: z.string().describe(`
+        * * Field Name: AnomalyOutcome
+        * * Display Name: Anomaly Outcome
+        * * SQL Data Type: varchar(9)
+        * * Description: Calculated outcome indicating if journal entry is anomalous or normal.`),
+    TotalDebitAmount: z.number().describe(`
+        * * Field Name: TotalDebitAmount
+        * * Display Name: Total Debit Amount
+        * * SQL Data Type: decimal(38, 2)
+        * * Description: Sum of debit amounts across all lines for this journal entry.`),
+    LineCount: z.number().describe(`
+        * * Field Name: LineCount
+        * * Display Name: Line Count
+        * * SQL Data Type: int
+        * * Description: Total count of lines in this journal entry.`),
+    EffectiveMonth: z.number().nullable().describe(`
+        * * Field Name: EffectiveMonth
+        * * Display Name: Effective Month
+        * * SQL Data Type: int
+        * * Description: Calendar month of the journal entry effective date (1-12).`),
+    EffectiveDayOfWeek: z.number().nullable().describe(`
+        * * Field Name: EffectiveDayOfWeek
+        * * Display Name: Effective Day Of Week
+        * * SQL Data Type: int
+        * * Description: Day of week for the effective date (1=Sunday, 7=Saturday).`),
+    IsWeekend: z.number().describe(`
+        * * Field Name: IsWeekend
+        * * Display Name: Is Weekend
+        * * SQL Data Type: int
+        * * Description: Binary indicator if the effective date falls on a weekend (1) or weekday (0).`),
+    HasLinkedRecord: z.number().describe(`
+        * * Field Name: HasLinkedRecord
+        * * Display Name: Has Linked Record
+        * * SQL Data Type: int
+        * * Description: Binary indicator if the journal entry has a linked source record ID.`),
+    HasFile: z.number().describe(`
+        * * Field Name: HasFile
+        * * Display Name: Has File
+        * * SQL Data Type: int
+        * * Description: Binary indicator if the journal entry has an attached file.`),
 });
 
 export type mjBizAppsAccountingJournalEntryEntityType = z.infer<typeof mjBizAppsAccountingJournalEntrySchema>;
@@ -5490,6 +5543,51 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     }
 
     /**
+    * * Field Name: PredictedAnomalyProbability
+    * * Display Name: Anomaly Probability
+    * * SQL Data Type: decimal(5, 4)
+    * * Description: 0.0000 to 1.0000 probability that the journal entry is anomalous or represents irregular posting activity.
+    */
+    get PredictedAnomalyProbability(): number | null {
+        return this.Get('PredictedAnomalyProbability');
+    }
+    set PredictedAnomalyProbability(value: number | null) {
+        this.Set('PredictedAnomalyProbability', value);
+    }
+
+    /**
+    * * Field Name: PredictedAnomalyRiskBand
+    * * Display Name: Anomaly Risk Band
+    * * SQL Data Type: nvarchar(20)
+    * * Value List Type: List
+    * * Possible Values 
+    *   * Critical
+    *   * High
+    *   * Low
+    *   * Medium
+    * * Description: Categorical risk tier derived from anomaly probability: Low, Medium, High, Critical.
+    */
+    get PredictedAnomalyRiskBand(): 'Critical' | 'High' | 'Low' | 'Medium' | null {
+        return this.Get('PredictedAnomalyRiskBand');
+    }
+    set PredictedAnomalyRiskBand(value: 'Critical' | 'High' | 'Low' | 'Medium' | null) {
+        this.Set('PredictedAnomalyRiskBand', value);
+    }
+
+    /**
+    * * Field Name: PredictedAnomalyScoredAt
+    * * Display Name: Anomaly Scored At
+    * * SQL Data Type: datetimeoffset
+    * * Description: Timestamp when the journal entry was last scored by the predictive anomaly model.
+    */
+    get PredictedAnomalyScoredAt(): Date | null {
+        return this.Get('PredictedAnomalyScoredAt');
+    }
+    set PredictedAnomalyScoredAt(value: Date | null) {
+        this.Set('PredictedAnomalyScoredAt', value);
+    }
+
+    /**
     * * Field Name: Company
     * * Display Name: Company Name
     * * SQL Data Type: nvarchar(50)
@@ -5553,21 +5651,83 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     }
 
     /**
-    * * Field Name: RootReversesJournalEntryID
-    * * Display Name: Root Reverses Journal Entry
-    * * SQL Data Type: uniqueidentifier
+    * * Field Name: AnomalyOutcome
+    * * Display Name: Anomaly Outcome
+    * * SQL Data Type: varchar(9)
+    * * Description: Calculated outcome indicating if journal entry is anomalous or normal.
     */
-    get RootReversesJournalEntryID(): string | null {
-        return this.Get('RootReversesJournalEntryID');
+    get AnomalyOutcome(): string {
+        return this.Get('AnomalyOutcome');
     }
 
     /**
-    * * Field Name: RootReversedByJournalEntryID
-    * * Display Name: Root Reversed By Journal Entry
-    * * SQL Data Type: uniqueidentifier
+    * * Field Name: TotalDebitAmount
+    * * Display Name: Total Debit Amount
+    * * SQL Data Type: decimal(38, 2)
+    * * Description: Sum of debit amounts across all lines for this journal entry.
     */
-    get RootReversedByJournalEntryID(): string | null {
-        return this.Get('RootReversedByJournalEntryID');
+    get TotalDebitAmount(): number {
+        return this.Get('TotalDebitAmount');
+    }
+
+    /**
+    * * Field Name: LineCount
+    * * Display Name: Line Count
+    * * SQL Data Type: int
+    * * Description: Total count of lines in this journal entry.
+    */
+    get LineCount(): number {
+        return this.Get('LineCount');
+    }
+
+    /**
+    * * Field Name: EffectiveMonth
+    * * Display Name: Effective Month
+    * * SQL Data Type: int
+    * * Description: Calendar month of the journal entry effective date (1-12).
+    */
+    get EffectiveMonth(): number | null {
+        return this.Get('EffectiveMonth');
+    }
+
+    /**
+    * * Field Name: EffectiveDayOfWeek
+    * * Display Name: Effective Day Of Week
+    * * SQL Data Type: int
+    * * Description: Day of week for the effective date (1=Sunday, 7=Saturday).
+    */
+    get EffectiveDayOfWeek(): number | null {
+        return this.Get('EffectiveDayOfWeek');
+    }
+
+    /**
+    * * Field Name: IsWeekend
+    * * Display Name: Is Weekend
+    * * SQL Data Type: int
+    * * Description: Binary indicator if the effective date falls on a weekend (1) or weekday (0).
+    */
+    get IsWeekend(): number {
+        return this.Get('IsWeekend');
+    }
+
+    /**
+    * * Field Name: HasLinkedRecord
+    * * Display Name: Has Linked Record
+    * * SQL Data Type: int
+    * * Description: Binary indicator if the journal entry has a linked source record ID.
+    */
+    get HasLinkedRecord(): number {
+        return this.Get('HasLinkedRecord');
+    }
+
+    /**
+    * * Field Name: HasFile
+    * * Display Name: Has File
+    * * SQL Data Type: int
+    * * Description: Binary indicator if the journal entry has an attached file.
+    */
+    get HasFile(): number {
+        return this.Get('HasFile');
     }
 }
 
@@ -5755,6 +5915,7 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     /**
     * Validate() method override for MJ_BizApps_Accounting: Journal Entry Batches entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
     * * Table-Level: Both the approval task and the time it was raised must either be set together, or both must be empty.
+    * * Table-Level: When a record's status is set to 'Archived', an archive reason, an archive date, and the archiving user's ID must all be provided.
     * * Table-Level: Total debits, total credits, and total entries must all be greater than or equal to zero to ensure valid financial accounting records.
     * @public
     * @method
@@ -5763,6 +5924,7 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     public override Validate(): ValidationResult {
         const result = super.Validate();
         this.ValidateApprovalTaskAndRaisedAtCoexistence(result);
+        this.ValidateArchivedFieldsWhenStatusIsArchived(result);
         this.ValidateTotalsAreNonNegative(result);
         result.Success = result.Success && (result.Errors.length === 0);
 
@@ -5786,6 +5948,45 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     			this.ApprovalTaskID,
     			ValidationErrorType.Failure
     		));
+    	}
+    }
+
+    /**
+    * When a record's status is set to 'Archived', an archive reason, an archive date, and the archiving user's ID must all be provided.
+    * @param result - the ValidationResult object to add any errors or warnings to
+    * @public
+    * @method
+    */
+    public ValidateArchivedFieldsWhenStatusIsArchived(result: ValidationResult) {
+    	if (this.Status === "Archived") {
+    		const hasArchiveReason = this.ArchiveReason != null && this.ArchiveReason.trim().length > 0;
+    		const hasArchivedAt = this.ArchivedAt != null;
+    		const hasArchivedByUserID = this.ArchivedByUserID != null;
+    
+    		if (!hasArchiveReason) {
+    			result.Errors.push(new ValidationErrorInfo(
+    				"ArchiveReason",
+    				"An archive reason is required when the status is set to 'Archived'.",
+    				this.ArchiveReason,
+    				ValidationErrorType.Failure
+    			));
+    		}
+    		if (!hasArchivedAt) {
+    			result.Errors.push(new ValidationErrorInfo(
+    				"ArchivedAt",
+    				"The archive date and time are required when the status is set to 'Archived'.",
+    				this.ArchivedAt,
+    				ValidationErrorType.Failure
+    			));
+    		}
+    		if (!hasArchivedByUserID) {
+    			result.Errors.push(new ValidationErrorInfo(
+    				"ArchivedByUserID",
+    				"The user who archived the record is required when the status is set to 'Archived'.",
+    				this.ArchivedByUserID,
+    				ValidationErrorType.Failure
+    			));
+    		}
     	}
     }
 

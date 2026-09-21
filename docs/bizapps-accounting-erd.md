@@ -359,6 +359,9 @@ erDiagram
         uuid FileID FK
         datetimeoffset GLPostedAt
         string GLReferenceID
+        decimal PredictedAnomalyProbability "Predictive Studio anomaly probability"
+        string PredictedAnomalyRiskBand "Predictive Studio anomaly risk band"
+        datetimeoffset PredictedAnomalyScoredAt "Predictive Studio score timestamp"
     }
     JournalEntryLine {
         uuid ID PK
@@ -637,6 +640,9 @@ erDiagram
         uuid FileID FK "nullable - source document"
         datetimeoffset GLPostedAt "GL roundtrip - mutable after lock"
         string GLReferenceID "GL roundtrip"
+        decimal PredictedAnomalyProbability "Predictive Studio anomaly probability"
+        string PredictedAnomalyRiskBand "Predictive Studio anomaly risk band"
+        datetimeoffset PredictedAnomalyScoredAt "Predictive Studio score timestamp"
     }
     JournalEntryLine {
         uuid ID PK

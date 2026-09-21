@@ -68,12 +68,14 @@ export {
   regenerateJournalEntryBatch,
   netLines,
   resolveExternalAccount,
+  resolveExternalDimensions,
   mockErpPoster,
   AutoApproveGate,
 } from './JournalEntryBatchEngine.js';
 export type {
   JournalEntryBatchTargetSystem,
   DimRef,
+  ExternalDimensionRef,
   NettableLine,
   NetGroup,
   BuildJournalEntryBatchResult,
