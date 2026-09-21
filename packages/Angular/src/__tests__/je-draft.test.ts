@@ -327,11 +327,15 @@ describe('toCreateInput', () => {
 
   it('formats the posting date from its UTC parts, not the local ones', async () => {
     // `toCreateInput` reads `EffectiveDate` through `CalendarDayValue`, which is UTC parts only —
-    // it no longer reads local parts at all. The zone-pinned describe below is what actually proves
-    // that discriminates (a fixture at LOCAL midnight, as this one is, agrees with UTC parts for any
-    // zone at or behind UTC, so it would pass either way); this test just pins the plain case.
+    // it no longer reads local parts at all. This test just pins the plain case; the zone-pinned
+    // describe below is what proves the UTC read discriminates from a local one.
+    //
+    // The fixture is an explicit UTC INSTANT (trailing Z), not a bare local one. A bare
+    // '2026-01-01T00:00:00' is LOCAL midnight, which reads back as 2026-01-01 only on a runner at
+    // or behind UTC — on any runner east of Greenwich it is 2025-12-31T22:00Z and this test failed
+    // for a reason that had nothing to do with the code under test.
     const state = await balanced();
-    state.Entry.EffectiveDate = new Date('2026-01-01T00:00:00');
+    state.Entry.EffectiveDate = new Date('2026-01-01T00:00:00.000Z');
     expect(toCreateInput(state).EffectiveDate).toBe('2026-01-01');
   });
 });

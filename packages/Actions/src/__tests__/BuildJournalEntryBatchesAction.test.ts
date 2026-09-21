@@ -128,21 +128,50 @@ describe('BuildJournalEntryBatchesAction', () => {
             expect(() => resolveCutoff(undefined, 'LastWeek', new Date(), 'UTC')).toThrow(/unknown CutoffMode/);
         });
 
-        it('PriorDay is judged in the BUSINESS zone: 9 PM Central on 31 August is still August', () => {
-            // bc-aidp-next-golive#168 acceptance: an entry created at 9 PM Eastern on 8/31 has an
-            // effective date of 8/31 and the September 1 prior-day run must include it.
-            const cutoff = resolveCutoff(undefined, 'PriorDay', new Date('2026-09-01T02:00:00Z'), 'America/Chicago');
-            expect(cutoff?.toISOString()).toBe('2026-08-30T00:00:00.000Z');
+        // ── The acceptance criteria, at the instants the jobs ACTUALLY fire ──────────────────
+        //
+        // Both jobs carry `Timezone: America/Chicago`, so their cron hours are Central, not UTC.
+        // These two tests use the real firing instants; they are what bc-aidp-next-golive#168 asks
+        // for, and they are the reason the Timezone on those job rows must equal the business zone.
+
+        it('the nightly run at 01:00 Central on 1 September includes the 9 PM Central entry of 31 August', () => {
+            // `0 0 1 * * *` in America/Chicago fires at 06:00Z (CDT). Business day = 1 September,
+            // so the cutoff is 31 August and pendingCandidateFilter asks for `EffectiveDate < 1 Sep`
+            // — the 31 August entry is in, which is the acceptance criterion.
+            const cutoff = resolveCutoff(undefined, 'PriorDay', new Date('2026-09-01T06:00:00Z'), 'America/Chicago');
+            expect(cutoff?.toISOString()).toBe('2026-08-31T00:00:00.000Z');
+        });
+
+        it('the monthly run at 03:00 Central on 1 September closes AUGUST, not July', () => {
+            // `0 0 3 1 * *` in America/Chicago fires at 08:00Z (CDT). Business day = 1 September,
+            // so the cutoff is 31 August → `EffectiveDate < 1 Sep` → the whole of August posts.
+            const cutoff = resolveCutoff(undefined, 'PriorMonth', new Date('2026-09-01T08:00:00Z'), 'America/Chicago');
+            expect(cutoff?.toISOString()).toBe('2026-08-31T00:00:00.000Z');
+        });
+
+        // ── Why the Timezone on those job rows is load-bearing ───────────────────────────────
+        //
+        // These two pin what happens if a host leaves the schedule on a clock that has not rolled
+        // over into the business day yet — the state this branch originally shipped in, with the
+        // cron on UTC and the cutoff on Central. `resolveCutoff` is not wrong in either case: it
+        // answers correctly for the instant it is handed. The schedule is what must agree with it.
+
+        it('fired before the business day rolls over, PriorDay lags a full day', () => {
+            // 02:00Z on 1 Sep is 21:00 Central on 31 Aug — still August in Chicago, so "the day
+            // before today" is 30 August and the 31st waits for the next run.
+            const early = resolveCutoff(undefined, 'PriorDay', new Date('2026-09-01T02:00:00Z'), 'America/Chicago');
+            expect(early?.toISOString()).toBe('2026-08-30T00:00:00.000Z');
             const nextRun = resolveCutoff(undefined, 'PriorDay', new Date('2026-09-02T02:00:00Z'), 'America/Chicago');
             expect(nextRun?.toISOString()).toBe('2026-08-31T00:00:00.000Z');
         });
 
-        it('PriorMonth is judged in the BUSINESS zone: the 1st at 1 AM UTC is still the prior month in Central', () => {
-            const cutoff = resolveCutoff(undefined, 'PriorMonth', new Date('2026-09-01T01:00:00Z'), 'America/Chicago');
-            expect(cutoff?.toISOString()).toBe('2026-07-31T00:00:00.000Z');
-            // Not a discriminator: by 12:00 UTC, Chicago (UTC-5) is already 1 September too, so the
-            // old UTC-parts code and the fix agree here. This covers the later-in-the-day case —
-            // the sibling assertion above is what actually catches a regression.
+        it('fired before the business day rolls over, PriorMonth skips the month being closed', () => {
+            // 01:00Z on 1 Sep is 20:00 Central on 31 Aug. The month has not ended in Chicago, so
+            // "the last day of the prior month" is 31 JULY — August would not post until October.
+            const early = resolveCutoff(undefined, 'PriorMonth', new Date('2026-09-01T01:00:00Z'), 'America/Chicago');
+            expect(early?.toISOString()).toBe('2026-07-31T00:00:00.000Z');
+            // Later the same UTC day, Chicago has caught up and the answer is right again — which
+            // is why a spot check at midday would have missed this entirely.
             const later = resolveCutoff(undefined, 'PriorMonth', new Date('2026-09-01T12:00:00Z'), 'America/Chicago');
             expect(later?.toISOString()).toBe('2026-08-31T00:00:00.000Z');
         });

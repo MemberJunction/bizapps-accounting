@@ -239,8 +239,13 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
   private inSpan(b: BatchRow): boolean {
     if (!this.FromDate && !this.ToDate) return true;
     if (!b.StartDate || !b.EndDate) return false; // a dateless batch can't satisfy a span
-    const fromT = this.FromDate ? new Date(this.FromDate).getTime() : -Infinity;
-    const toT = this.ToDate ? new Date(`${this.ToDate}T23:59:59`).getTime() : Infinity;
+    // BOTH ends are parsed as UTC midnight, the contract batch-status-window.ts states and the
+    // shape StartDate/EndDate already carry (they come from EffectiveDate, a DATE column). A bare
+    // 'YYYY-MM-DD' is UTC by spec, but 'YYYY-MM-DDTHH:mm:ss' with no offset is LOCAL — so the To
+    // end used to run to 23:59:59 in the BROWSER's zone, and a batch dated tomorrow showed up
+    // under the "Today" preset for every viewer west of UTC.
+    const fromT = this.FromDate ? new Date(`${this.FromDate}T00:00:00.000Z`).getTime() : -Infinity;
+    const toT = this.ToDate ? new Date(`${this.ToDate}T23:59:59.999Z`).getTime() : Infinity;
     return b.EndDate.getTime() >= fromT && b.StartDate.getTime() <= toT;
   }
 

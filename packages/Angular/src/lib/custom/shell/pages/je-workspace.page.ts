@@ -4,7 +4,7 @@ import { BaseAngularComponent } from '@memberjunction/ng-base-types';
 import { NormalizeUUID, UUIDsEqual } from '@memberjunction/global';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import type { JEValidationError } from '@mj-biz-apps/accounting-engine-base';
-import { BusinessTimeZoneEngine, FromCalendarDay } from '@mj-biz-apps/common-entities';
+import { BusinessTimeZoneEngine, FromCalendarDay, IsCalendarDay } from '@mj-biz-apps/common-entities';
 import { CompanyScopeService } from '../../shared/company-scope.service';
 import { WorkspaceTabStore } from '../../../transfer-pending/workspace-tabs/workspace-tab-store';
 import { WorkspaceTab } from '../../../transfer-pending/workspace-tabs/workspace-tabs.types';
@@ -285,7 +285,20 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
     if (!d) return;
     // UTC midnight of the picked day: the shape a DATE column round-trips as, so
     // `CalendarDayValue` (UTC parts) reads back the day the user chose in every browser zone.
-    d.Entry.EffectiveDate = text ? FromCalendarDay(text) : (null as unknown as Date);
+    //
+    // Guarded, because `FromCalendarDay` THROWS on anything that is not a calendar day and this is
+    // an ngModelChange handler: <input type="date"> accepts years beyond four digits, so typing
+    // '12345-06-07' would raise an uncaught RangeError mid-keystroke where the old `new Date(...)`
+    // merely produced an Invalid Date. A half-typed or out-of-range day leaves the draft's date
+    // ALONE rather than blanking it — blanking would silently discard a date the user had already
+    // chosen, on the way to typing a new one.
+    if (!text) {
+      d.Entry.EffectiveDate = null as unknown as Date;
+    } else if (IsCalendarDay(text)) {
+      d.Entry.EffectiveDate = FromCalendarDay(text);
+    } else {
+      return;
+    }
     this.touch();
   }
 

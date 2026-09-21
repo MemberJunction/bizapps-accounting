@@ -13,7 +13,7 @@
   ],
   "scripts": {
     "build": "ngc",
-    "test": "echo \"No tests configured yet\""
+    "test": "vitest run"
   },
   "author": "MemberJunction.com",
   "license": "BUSL-1.1",
