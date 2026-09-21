@@ -110,14 +110,14 @@ AS
 SELECT
     g.*,
     -- Engineered features for Predictive Studio anomaly detection modeling
-    -- AnomalyOutcome heuristic: Journal entries >= $500, created on weekends,
-    -- with > 2 lines, or lacking a linked business record are flagged anomalous
-    -- for training data baseline generation.
+    -- AnomalyOutcome heuristic: Reversals or unlinked ledger adjustments represent
+    -- high-risk audit flags. These signals are withheld from the training feature
+    -- set (TotalDebitAmount, LineCount, EffectiveMonth, EffectiveDayOfWeek, IsWeekend)
+    -- to prevent target leakage.
     CASE 
-        WHEN ISNULL(agg.TotalDebitAmount, 0) >= 500
-          OR DATEPART(weekday, g.EffectiveDate) IN (1, 7)
-          OR ISNULL(agg.LineCount, 0) > 2
-          OR g.LinkedRecordID IS NULL
+        WHEN g.ReversesJournalEntryID IS NOT NULL 
+          OR g.ReversedByJournalEntryID IS NOT NULL 
+          OR (g.LinkedRecordID IS NULL AND g.LinkedEntityID IS NULL)
         THEN 'Anomalous' 
         ELSE 'Normal' 
     END AS AnomalyOutcome,
@@ -969,32 +969,47 @@ EXEC [${mjSchema}].[spUpdateExistingEntityFieldsFromSchema] @ExcludedSchemaNames
 /* SQL text to set default column width where needed */
 EXEC [${mjSchema}].[spSetDefaultColumnWidthWhereNeeded] @ExcludedSchemaNames='', @IncludedSchemaNames='${flyway:defaultSchema}';
 
-/* SQL text to insert entity field value with ID 27bbcf7d-9f92-4308-a2f6-845bdf55bc0e */
-INSERT INTO [${mjSchema}].[EntityFieldValue]
-                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
-                                    VALUES
-                                       ('27bbcf7d-9f92-4308-a2f6-845bdf55bc0e', '13845D9D-67E5-427C-956F-EC0FB19B5859', 1, 'Critical', 'Critical', GETUTCDATE(), GETUTCDATE());
+/* SQL text to insert entity field values for PredictedAnomalyRiskBand */
+DECLARE @RiskBandFieldID UNIQUEIDENTIFIER = (
+   SELECT ID FROM [${mjSchema}].[EntityField]
+   WHERE [EntityID] = @JournalEntryEntityID AND [Name] = 'PredictedAnomalyRiskBand'
+);
+IF @RiskBandFieldID IS NOT NULL
+BEGIN
+   IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityFieldValue] WHERE [EntityFieldID] = @RiskBandFieldID AND [Value] = 'Critical')
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityFieldValue]
+         ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+      VALUES
+         ('27bbcf7d-9f92-4308-a2f6-845bdf55bc0e', @RiskBandFieldID, 1, 'Critical', 'Critical', GETUTCDATE(), GETUTCDATE());
+   END;
 
-/* SQL text to insert entity field value with ID 463cca8d-b9c3-4942-8140-a70fbfd74650 */
-INSERT INTO [${mjSchema}].[EntityFieldValue]
-                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
-                                    VALUES
-                                       ('463cca8d-b9c3-4942-8140-a70fbfd74650', '13845D9D-67E5-427C-956F-EC0FB19B5859', 2, 'High', 'High', GETUTCDATE(), GETUTCDATE());
+   IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityFieldValue] WHERE [EntityFieldID] = @RiskBandFieldID AND [Value] = 'High')
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityFieldValue]
+         ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+      VALUES
+         ('463cca8d-b9c3-4942-8140-a70fbfd74650', @RiskBandFieldID, 2, 'High', 'High', GETUTCDATE(), GETUTCDATE());
+   END;
 
-/* SQL text to insert entity field value with ID 96341ba7-97a0-483c-bb52-992f7af127b7 */
-INSERT INTO [${mjSchema}].[EntityFieldValue]
-                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
-                                    VALUES
-                                       ('96341ba7-97a0-483c-bb52-992f7af127b7', '13845D9D-67E5-427C-956F-EC0FB19B5859', 3, 'Low', 'Low', GETUTCDATE(), GETUTCDATE());
+   IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityFieldValue] WHERE [EntityFieldID] = @RiskBandFieldID AND [Value] = 'Low')
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityFieldValue]
+         ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+      VALUES
+         ('96341ba7-97a0-483c-bb52-992f7af127b7', @RiskBandFieldID, 3, 'Low', 'Low', GETUTCDATE(), GETUTCDATE());
+   END;
 
-/* SQL text to insert entity field value with ID edd4dc0e-8ac3-49ab-ba1e-5fbc8da58ebc */
-INSERT INTO [${mjSchema}].[EntityFieldValue]
-                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
-                                    VALUES
-                                       ('edd4dc0e-8ac3-49ab-ba1e-5fbc8da58ebc', '13845D9D-67E5-427C-956F-EC0FB19B5859', 4, 'Medium', 'Medium', GETUTCDATE(), GETUTCDATE());
+   IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityFieldValue] WHERE [EntityFieldID] = @RiskBandFieldID AND [Value] = 'Medium')
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityFieldValue]
+         ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+      VALUES
+         ('edd4dc0e-8ac3-49ab-ba1e-5fbc8da58ebc', @RiskBandFieldID, 4, 'Medium', 'Medium', GETUTCDATE(), GETUTCDATE());
+   END;
 
-/* SQL text to update ValueListType for entity field ID 13845D9D-67E5-427C-956F-EC0FB19B5859 */
-UPDATE [${mjSchema}].[EntityField] SET ValueListType='List' WHERE ID='13845D9D-67E5-427C-956F-EC0FB19B5859';
+   UPDATE [${mjSchema}].[EntityField] SET ValueListType='List' WHERE ID = @RiskBandFieldID;
+END;
 
 /* SQL text to sync schema info from database schemas */
 EXEC [${mjSchema}].[spUpdateSchemaInfoFromDatabase] @ExcludedSchemaNames='', @IncludedSchemaNames='${flyway:defaultSchema}';
@@ -1408,51 +1423,64 @@ EXEC [${mjSchema}].[spSetDefaultColumnWidthWhereNeeded] @ExcludedSchemaNames='',
 
 /* Set categories for 3 fields */
 
--- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entries.PredictedAnomalyProbability 
+-- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entries
 UPDATE [${mjSchema}].[EntityField]
 SET 
    Category = 'Anomaly Detection',
    GeneratedFormSection = 'Category',
    DisplayName = 'Anomaly Probability'
 WHERE 
-   ID = '65A6D82B-E0F2-441C-B528-D02FD788CBA5';
+   EntityID = @JournalEntryEntityID_Settings AND Name = 'PredictedAnomalyProbability';
 
--- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entries.PredictedAnomalyRiskBand 
 UPDATE [${mjSchema}].[EntityField]
 SET 
    Category = 'Anomaly Detection',
    GeneratedFormSection = 'Category',
    DisplayName = 'Anomaly Risk Band'
 WHERE 
-   ID = '13845D9D-67E5-427C-956F-EC0FB19B5859';
+   EntityID = @JournalEntryEntityID_Settings AND Name = 'PredictedAnomalyRiskBand';
 
--- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entries.PredictedAnomalyScoredAt 
 UPDATE [${mjSchema}].[EntityField]
 SET 
    Category = 'Anomaly Detection',
    GeneratedFormSection = 'Category',
    DisplayName = 'Anomaly Scored At'
 WHERE 
-   ID = '85FB2F62-1428-43DF-8053-90E3014500A0';
+   EntityID = @JournalEntryEntityID_Settings AND Name = 'PredictedAnomalyScoredAt';
 
-/* Update FieldCategoryInfo setting for entity */
+/* Update FieldCategoryInfo setting for entity - merge into existing categories */
+IF EXISTS (SELECT 1 FROM [${mjSchema}].[EntitySetting] WHERE [EntityID] = @JournalEntryEntityID_Settings AND [Name] = 'FieldCategoryInfo')
+BEGIN
+   UPDATE [${mjSchema}].[EntitySetting]
+   SET [Value] = JSON_MODIFY(
+      ISNULL([Value], '{}'),
+      '$."Anomaly Detection"',
+      JSON_QUERY('{"description": "Predictive analytics and risk assessment data for journal entry validation", "icon": "fa fa-exclamation-triangle"}')
+   ), [__mj_UpdatedAt] = GETUTCDATE()
+   WHERE [EntityID] = @JournalEntryEntityID_Settings AND [Name] = 'FieldCategoryInfo';
+END
+ELSE
+BEGIN
+   INSERT INTO [${mjSchema}].[EntitySetting] ([ID], [EntityID], [Name], [Value], [__mj_CreatedAt], [__mj_UpdatedAt])
+   VALUES (NEWID(), @JournalEntryEntityID_Settings, 'FieldCategoryInfo', '{"Anomaly Detection": {"description": "Predictive analytics and risk assessment data for journal entry validation", "icon": "fa fa-exclamation-triangle"}}', GETUTCDATE(), GETUTCDATE());
+END;
 
-                  UPDATE [${mjSchema}].[EntitySetting]
-                  SET [Value] = '{
-  "Anomaly Detection": {
-    "description": "Predictive analytics and risk assessment data for journal entry validation",
-    "icon": "fa fa-exclamation-triangle"
-  }
-}', [__mj_UpdatedAt] = GETUTCDATE()
-                  WHERE [EntityID] = @JournalEntryEntityID_Settings AND [Name] = 'FieldCategoryInfo';
-
-/* Update FieldCategoryIcons setting (legacy) */
-
-                  UPDATE [${mjSchema}].[EntitySetting]
-                  SET [Value] = '{
-  "Anomaly Detection": "fa fa-exclamation-triangle"
-}', [__mj_UpdatedAt] = GETUTCDATE()
-                  WHERE [EntityID] = @JournalEntryEntityID_Settings AND [Name] = 'FieldCategoryIcons';
+/* Update FieldCategoryIcons setting (legacy) - merge into existing icons */
+IF EXISTS (SELECT 1 FROM [${mjSchema}].[EntitySetting] WHERE [EntityID] = @JournalEntryEntityID_Settings AND [Name] = 'FieldCategoryIcons')
+BEGIN
+   UPDATE [${mjSchema}].[EntitySetting]
+   SET [Value] = JSON_MODIFY(
+      ISNULL([Value], '{}'),
+      '$."Anomaly Detection"',
+      'fa fa-exclamation-triangle'
+   ), [__mj_UpdatedAt] = GETUTCDATE()
+   WHERE [EntityID] = @JournalEntryEntityID_Settings AND [Name] = 'FieldCategoryIcons';
+END
+ELSE
+BEGIN
+   INSERT INTO [${mjSchema}].[EntitySetting] ([ID], [EntityID], [Name], [Value], [__mj_CreatedAt], [__mj_UpdatedAt])
+   VALUES (NEWID(), @JournalEntryEntityID_Settings, 'FieldCategoryIcons', '{"Anomaly Detection": "fa fa-exclamation-triangle"}', GETUTCDATE(), GETUTCDATE());
+END;
 
 
 /* Refresh custom base views for modified entities so schema changes are picked up */
