@@ -19,7 +19,10 @@
  *    meaning. The aggregate's `LEFT OUTER JOIN`, its `GROUP BY`, and the `ISNULL(..., 0)` wrappers
  *    are each a silent numeric defect when dropped — not an error, a different number.
  *
- * 3. A RE-CREATION MAY ADD COLUMNS BUT NEVER DROP ONE. Cheap and needs no curation.
+ * 3. A RE-CREATION MAY ADD COLUMNS BUT NEVER DROP ONE. Cheap and needs no curation. Both sides of the comparison are read
+ *    through `producedColumns`, so the columns inherited through `g.*` from the generated
+ *    inner view are protected too — an alias-only BEFORE left every one of them free to
+ *    disappear the moment a re-creation spelled the star out as an explicit list.
  *
  * There is no business-day assertion here: this view does not join `fnBusinessToday()`, and an
  * assertion about a predicate a view does not have would pass forever without reading anything.
@@ -32,10 +35,8 @@
 import { describe, expect, it } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import {
-    derivedColumns,
     newestViewDefiner,
     producedColumns,
-    readMigration,
     viewBody,
 } from './helpers/view-definer.js';
 
@@ -101,7 +102,12 @@ describe('layered views: the newest definer is resolvable and loses nothing', ()
                 const { chain } = newestViewDefiner(MIGRATIONS, view);
                 if (chain.length < 2) return;
                 const previous = chain[chain.length - 2];
-                const before = derivedColumns(viewBody(readMigration(MIGRATIONS, previous), view));
+                // BOTH SIDES ARE READ THE SAME WAY: own columns plus the ones inherited through
+                // `g.*`, each measured as of the migration it belongs to. Comparing an alias-only
+                // BEFORE against an inheritance-aware NOW left every inherited column unprotected —
+                // a re-creation that replaced `g.*` with an explicit list minus one column passed.
+                const before = producedColumns(MIGRATIONS, view, previous);
+                expect(before, `${previous} produced no readable columns — this check is vacuous`).not.toEqual([]);
                 const now = producedColumns(MIGRATIONS, view);
                 const lost = before.filter((column) => !now.includes(column));
                 expect(lost, `columns ${previous} produced and the newest definer does not`).toEqual([]);
