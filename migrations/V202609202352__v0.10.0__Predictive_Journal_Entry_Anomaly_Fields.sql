@@ -1462,7 +1462,7 @@ END
 ELSE
 BEGIN
    INSERT INTO [${mjSchema}].[EntitySetting] ([ID], [EntityID], [Name], [Value], [__mj_CreatedAt], [__mj_UpdatedAt])
-   VALUES (NEWID(), @JournalEntryEntityID_Settings, 'FieldCategoryInfo', '{"Anomaly Detection": {"description": "Predictive analytics and risk assessment data for journal entry validation", "icon": "fa fa-exclamation-triangle"}}', GETUTCDATE(), GETUTCDATE());
+   VALUES ('D3F65311-2B8A-4217-A0E1-9755F2A9C001', @JournalEntryEntityID_Settings, 'FieldCategoryInfo', '{"Anomaly Detection": {"description": "Predictive analytics and risk assessment data for journal entry validation", "icon": "fa fa-exclamation-triangle"}}', GETUTCDATE(), GETUTCDATE());
 END;
 
 /* Update FieldCategoryIcons setting (legacy) - merge into existing icons */
@@ -1479,7 +1479,7 @@ END
 ELSE
 BEGIN
    INSERT INTO [${mjSchema}].[EntitySetting] ([ID], [EntityID], [Name], [Value], [__mj_CreatedAt], [__mj_UpdatedAt])
-   VALUES (NEWID(), @JournalEntryEntityID_Settings, 'FieldCategoryIcons', '{"Anomaly Detection": "fa fa-exclamation-triangle"}', GETUTCDATE(), GETUTCDATE());
+   VALUES ('D3F65311-2B8A-4217-A0E1-9755F2A9C002', @JournalEntryEntityID_Settings, 'FieldCategoryIcons', '{"Anomaly Detection": "fa fa-exclamation-triangle"}', GETUTCDATE(), GETUTCDATE());
 END;
 
 
