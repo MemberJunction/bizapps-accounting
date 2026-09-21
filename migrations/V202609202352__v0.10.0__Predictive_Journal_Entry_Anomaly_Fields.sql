@@ -109,23 +109,35 @@ CREATE VIEW [${flyway:defaultSchema}].[vwJournalEntries]
 AS
 SELECT
     g.*,
+    -- Engineered features for Predictive Studio anomaly detection modeling
+    -- AnomalyOutcome heuristic: Journal entries >= $500, created on weekends,
+    -- with > 2 lines, or lacking a linked business record are flagged anomalous
+    -- for training data baseline generation.
     CASE 
-        WHEN ISNULL((SELECT SUM(jel.DebitAmount) FROM [${flyway:defaultSchema}].[JournalEntryLine] jel WHERE jel.JournalEntryID = g.ID), 0) >= 500
+        WHEN ISNULL(agg.TotalDebitAmount, 0) >= 500
           OR DATEPART(weekday, g.EffectiveDate) IN (1, 7)
-          OR ISNULL((SELECT COUNT(*) FROM [${flyway:defaultSchema}].[JournalEntryLine] jel WHERE jel.JournalEntryID = g.ID), 0) > 2
+          OR ISNULL(agg.LineCount, 0) > 2
           OR g.LinkedRecordID IS NULL
         THEN 'Anomalous' 
         ELSE 'Normal' 
     END AS AnomalyOutcome,
-    ISNULL((SELECT SUM(jel.DebitAmount) FROM [${flyway:defaultSchema}].[JournalEntryLine] jel WHERE jel.JournalEntryID = g.ID), 0) AS TotalDebitAmount,
-    ISNULL((SELECT COUNT(*) FROM [${flyway:defaultSchema}].[JournalEntryLine] jel WHERE jel.JournalEntryID = g.ID), 0) AS LineCount,
+    ISNULL(agg.TotalDebitAmount, 0) AS TotalDebitAmount,
+    ISNULL(agg.LineCount, 0) AS LineCount,
     MONTH(g.EffectiveDate) AS EffectiveMonth,
     DATEPART(weekday, g.EffectiveDate) AS EffectiveDayOfWeek,
     CASE WHEN DATEPART(weekday, g.EffectiveDate) IN (1, 7) THEN 1 ELSE 0 END AS IsWeekend,
     CASE WHEN g.LinkedRecordID IS NOT NULL THEN 1 ELSE 0 END AS HasLinkedRecord,
     CASE WHEN g.FileID IS NOT NULL THEN 1 ELSE 0 END AS HasFile
 FROM
-    [${flyway:defaultSchema}].[vwJournalEntriesGenerated] AS g;
+    [${flyway:defaultSchema}].[vwJournalEntriesGenerated] AS g
+LEFT OUTER JOIN (
+    SELECT 
+        jel.JournalEntryID,
+        SUM(jel.DebitAmount) AS TotalDebitAmount,
+        COUNT(*) AS LineCount
+    FROM [${flyway:defaultSchema}].[JournalEntryLine] jel
+    GROUP BY jel.JournalEntryID
+) AS agg ON agg.JournalEntryID = g.ID;
 GO
 
 IF DATABASE_PRINCIPAL_ID('cdp_UI') IS NOT NULL
@@ -252,9 +264,13 @@ GO
 /* SQL text to update existing entities from schema */
 EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='', @IncludedSchemaNames='${flyway:defaultSchema}';
 
+DECLARE @JournalEntryEntityID UNIQUEIDENTIFIER =
+    (SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries');
+IF @JournalEntryEntityID IS NULL RAISERROR('Journal Entries entity not registered', 16, 1);
+
 /* SQL text to insert 11 new entity field(s) */
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '65a6d82b-e0f2-441c-b528-d02fd788cba5' OR (EntityID = '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')' AND Name = 'PredictedAnomalyProbability')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '65a6d82b-e0f2-441c-b528-d02fd788cba5' OR (EntityID = @JournalEntryEntityID AND Name = 'PredictedAnomalyProbability')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -288,8 +304,8 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          VALUES
          (
             '65a6d82b-e0f2-441c-b528-d02fd788cba5',
-            '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')', -- Entity: MJ_BizApps_Accounting: Journal Entries
-            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')'),
+            @JournalEntryEntityID, -- Entity: MJ_BizApps_Accounting: Journal Entries
+            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = @JournalEntryEntityID),
             'PredictedAnomalyProbability',
             'Predicted Anomaly Probability',
             '0.0000 to 1.0000 probability that the journal entry is anomalous or represents irregular posting activity.',
@@ -317,7 +333,7 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
       END;
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '13845d9d-67e5-427c-956f-ec0fb19b5859' OR (EntityID = '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')' AND Name = 'PredictedAnomalyRiskBand')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '13845d9d-67e5-427c-956f-ec0fb19b5859' OR (EntityID = @JournalEntryEntityID AND Name = 'PredictedAnomalyRiskBand')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -351,8 +367,8 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          VALUES
          (
             '13845d9d-67e5-427c-956f-ec0fb19b5859',
-            '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')', -- Entity: MJ_BizApps_Accounting: Journal Entries
-            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')'),
+            @JournalEntryEntityID, -- Entity: MJ_BizApps_Accounting: Journal Entries
+            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = @JournalEntryEntityID),
             'PredictedAnomalyRiskBand',
             'Predicted Anomaly Risk Band',
             'Categorical risk tier derived from anomaly probability: Low, Medium, High, Critical.',
@@ -380,7 +396,7 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
       END;
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '85fb2f62-1428-43df-8053-90e3014500a0' OR (EntityID = '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')' AND Name = 'PredictedAnomalyScoredAt')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '85fb2f62-1428-43df-8053-90e3014500a0' OR (EntityID = @JournalEntryEntityID AND Name = 'PredictedAnomalyScoredAt')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -414,8 +430,8 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          VALUES
          (
             '85fb2f62-1428-43df-8053-90e3014500a0',
-            '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')', -- Entity: MJ_BizApps_Accounting: Journal Entries
-            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')'),
+            @JournalEntryEntityID, -- Entity: MJ_BizApps_Accounting: Journal Entries
+            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = @JournalEntryEntityID),
             'PredictedAnomalyScoredAt',
             'Predicted Anomaly Scored At',
             'Timestamp when the journal entry was last scored by the predictive anomaly model.',
@@ -443,7 +459,7 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
       END;
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '71836c90-010c-4f03-a0f2-abe0e37eda3d' OR (EntityID = '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')' AND Name = 'AnomalyOutcome')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '71836c90-010c-4f03-a0f2-abe0e37eda3d' OR (EntityID = @JournalEntryEntityID AND Name = 'AnomalyOutcome')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -477,8 +493,8 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          VALUES
          (
             '71836c90-010c-4f03-a0f2-abe0e37eda3d',
-            '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')', -- Entity: MJ_BizApps_Accounting: Journal Entries
-            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')'),
+            @JournalEntryEntityID, -- Entity: MJ_BizApps_Accounting: Journal Entries
+            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = @JournalEntryEntityID),
             'AnomalyOutcome',
             'Anomaly Outcome',
             NULL,
@@ -506,7 +522,7 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
       END;
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'b55285d4-5dd5-42e4-8395-013e87ee0ecb' OR (EntityID = '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')' AND Name = 'TotalDebitAmount')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'b55285d4-5dd5-42e4-8395-013e87ee0ecb' OR (EntityID = @JournalEntryEntityID AND Name = 'TotalDebitAmount')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -540,8 +556,8 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          VALUES
          (
             'b55285d4-5dd5-42e4-8395-013e87ee0ecb',
-            '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')', -- Entity: MJ_BizApps_Accounting: Journal Entries
-            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')'),
+            @JournalEntryEntityID, -- Entity: MJ_BizApps_Accounting: Journal Entries
+            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = @JournalEntryEntityID),
             'TotalDebitAmount',
             'Total Debit Amount',
             NULL,
@@ -569,7 +585,7 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
       END;
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '2bee0bbb-bc51-4fcf-9a48-45d9e25e8734' OR (EntityID = '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')' AND Name = 'LineCount')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '2bee0bbb-bc51-4fcf-9a48-45d9e25e8734' OR (EntityID = @JournalEntryEntityID AND Name = 'LineCount')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -603,8 +619,8 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          VALUES
          (
             '2bee0bbb-bc51-4fcf-9a48-45d9e25e8734',
-            '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')', -- Entity: MJ_BizApps_Accounting: Journal Entries
-            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')'),
+            @JournalEntryEntityID, -- Entity: MJ_BizApps_Accounting: Journal Entries
+            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = @JournalEntryEntityID),
             'LineCount',
             'Line Count',
             NULL,
@@ -632,7 +648,7 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
       END;
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '0be539d7-f9ae-4ca6-b18b-9fe77f456617' OR (EntityID = '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')' AND Name = 'EffectiveMonth')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '0be539d7-f9ae-4ca6-b18b-9fe77f456617' OR (EntityID = @JournalEntryEntityID AND Name = 'EffectiveMonth')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -666,8 +682,8 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          VALUES
          (
             '0be539d7-f9ae-4ca6-b18b-9fe77f456617',
-            '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')', -- Entity: MJ_BizApps_Accounting: Journal Entries
-            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')'),
+            @JournalEntryEntityID, -- Entity: MJ_BizApps_Accounting: Journal Entries
+            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = @JournalEntryEntityID),
             'EffectiveMonth',
             'Effective Month',
             NULL,
@@ -695,7 +711,7 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
       END;
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'e404e4ba-43e1-4d79-ae84-0a7c00f19f3c' OR (EntityID = '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')' AND Name = 'EffectiveDayOfWeek')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'e404e4ba-43e1-4d79-ae84-0a7c00f19f3c' OR (EntityID = @JournalEntryEntityID AND Name = 'EffectiveDayOfWeek')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -729,8 +745,8 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          VALUES
          (
             'e404e4ba-43e1-4d79-ae84-0a7c00f19f3c',
-            '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')', -- Entity: MJ_BizApps_Accounting: Journal Entries
-            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')'),
+            @JournalEntryEntityID, -- Entity: MJ_BizApps_Accounting: Journal Entries
+            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = @JournalEntryEntityID),
             'EffectiveDayOfWeek',
             'Effective Day Of Week',
             NULL,
@@ -758,7 +774,7 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
       END;
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'dda19850-854f-4d3b-ac92-1341b56e1990' OR (EntityID = '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')' AND Name = 'IsWeekend')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'dda19850-854f-4d3b-ac92-1341b56e1990' OR (EntityID = @JournalEntryEntityID AND Name = 'IsWeekend')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -792,8 +808,8 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          VALUES
          (
             'dda19850-854f-4d3b-ac92-1341b56e1990',
-            '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')', -- Entity: MJ_BizApps_Accounting: Journal Entries
-            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')'),
+            @JournalEntryEntityID, -- Entity: MJ_BizApps_Accounting: Journal Entries
+            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = @JournalEntryEntityID),
             'IsWeekend',
             'Is Weekend',
             NULL,
@@ -821,7 +837,7 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
       END;
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '059438ff-3c74-4ab3-82ac-b08de48ef205' OR (EntityID = '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')' AND Name = 'HasLinkedRecord')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '059438ff-3c74-4ab3-82ac-b08de48ef205' OR (EntityID = @JournalEntryEntityID AND Name = 'HasLinkedRecord')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -855,8 +871,8 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          VALUES
          (
             '059438ff-3c74-4ab3-82ac-b08de48ef205',
-            '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')', -- Entity: MJ_BizApps_Accounting: Journal Entries
-            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')'),
+            @JournalEntryEntityID, -- Entity: MJ_BizApps_Accounting: Journal Entries
+            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = @JournalEntryEntityID),
             'HasLinkedRecord',
             'Has Linked Record',
             NULL,
@@ -884,7 +900,7 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
       END;
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '3388c921-27ff-42dd-b308-65e4577df0fe' OR (EntityID = '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')' AND Name = 'HasFile')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '3388c921-27ff-42dd-b308-65e4577df0fe' OR (EntityID = @JournalEntryEntityID AND Name = 'HasFile')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -918,8 +934,8 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          VALUES
          (
             '3388c921-27ff-42dd-b308-65e4577df0fe',
-            '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')', -- Entity: MJ_BizApps_Accounting: Journal Entries
-            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')'),
+            @JournalEntryEntityID, -- Entity: MJ_BizApps_Accounting: Journal Entries
+            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = @JournalEntryEntityID),
             'HasFile',
             'Has File',
             NULL,
@@ -1054,103 +1070,6 @@ IF NOT EXISTS (
     AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[JournalEntry]')
 )
 CREATE INDEX IDX_AUTO_MJ_FKEY_JournalEntry_FileID ON [${flyway:defaultSchema}].[JournalEntry] ([FileID]);
-
-/* Base View SQL for MJ_BizApps_Accounting: Journal Entries */
------------------------------------------------------------------
--- SQL Code Generation
--- Entity: MJ_BizApps_Accounting: Journal Entries
--- Item: vwJournalEntries
---
--- This was generated by the MemberJunction CodeGen tool.
--- This file should NOT be edited by hand.
------------------------------------------------------------------
-
-------------------------------------------------------------
------ BASE VIEW FOR ENTITY:      MJ_BizApps_Accounting: Journal Entries
------               SCHEMA:      ${flyway:defaultSchema}
------               BASE TABLE:  JournalEntry
------               PRIMARY KEY: ID
-------------------------------------------------------------
-IF OBJECT_ID('[${flyway:defaultSchema}].[vwJournalEntries]', 'V') IS NOT NULL
-    DROP VIEW [${flyway:defaultSchema}].[vwJournalEntries];
-GO
-
-CREATE VIEW [${flyway:defaultSchema}].[vwJournalEntries]
-AS
-SELECT
-    j.*,
-    MJCompany_CompanyID.[Name] AS [Company],
-    mjBizAppsAccountingJournalEntryType_EntryTypeID.[Name] AS [EntryType],
-    MJEntity_LinkedEntityID.[Name] AS [LinkedEntity],
-    mjBizAppsAccountingJournalEntry_ReversesJournalEntryID.[EntryNumber] AS [ReversesJournalEntry],
-    mjBizAppsAccountingJournalEntry_ReversedByJournalEntryID.[EntryNumber] AS [ReversedByJournalEntry],
-    mjBizAppsAccountingJournalEntryBatch_JournalEntryBatchID.[JournalEntryBatchNumber] AS [JournalEntryBatch],
-    MJFile_FileID.[Name] AS [File],
-    CASE 
-        WHEN ISNULL((SELECT SUM(jel.DebitAmount) FROM [${flyway:defaultSchema}].[JournalEntryLine] jel WHERE jel.JournalEntryID = j.ID), 0) >= 500
-          OR DATEPART(weekday, j.EffectiveDate) IN (1, 7)
-          OR ISNULL((SELECT COUNT(*) FROM [${flyway:defaultSchema}].[JournalEntryLine] jel WHERE jel.JournalEntryID = j.ID), 0) > 2
-          OR j.LinkedRecordID IS NULL
-        THEN 'Anomalous' 
-        ELSE 'Normal' 
-    END AS AnomalyOutcome,
-    ISNULL((SELECT SUM(jel.DebitAmount) FROM [${flyway:defaultSchema}].[JournalEntryLine] jel WHERE jel.JournalEntryID = j.ID), 0) AS TotalDebitAmount,
-    ISNULL((SELECT COUNT(*) FROM [${flyway:defaultSchema}].[JournalEntryLine] jel WHERE jel.JournalEntryID = j.ID), 0) AS LineCount,
-    MONTH(j.EffectiveDate) AS EffectiveMonth,
-    DATEPART(weekday, j.EffectiveDate) AS EffectiveDayOfWeek,
-    CASE WHEN DATEPART(weekday, j.EffectiveDate) IN (1, 7) THEN 1 ELSE 0 END AS IsWeekend,
-    CASE WHEN j.LinkedRecordID IS NOT NULL THEN 1 ELSE 0 END AS HasLinkedRecord,
-    CASE WHEN j.FileID IS NOT NULL THEN 1 ELSE 0 END AS HasFile
-FROM
-    [${flyway:defaultSchema}].[JournalEntry] AS j
-INNER JOIN
-    [${mjSchema}].[Company] AS MJCompany_CompanyID
-  ON
-    [j].[CompanyID] = MJCompany_CompanyID.[ID]
-INNER JOIN
-    [${flyway:defaultSchema}].[JournalEntryType] AS mjBizAppsAccountingJournalEntryType_EntryTypeID
-  ON
-    [j].[EntryTypeID] = mjBizAppsAccountingJournalEntryType_EntryTypeID.[ID]
-LEFT OUTER JOIN
-    [${mjSchema}].[Entity] AS MJEntity_LinkedEntityID
-  ON
-    [j].[LinkedEntityID] = MJEntity_LinkedEntityID.[ID]
-LEFT OUTER JOIN
-    [${flyway:defaultSchema}].[JournalEntry] AS mjBizAppsAccountingJournalEntry_ReversesJournalEntryID
-  ON
-    [j].[ReversesJournalEntryID] = mjBizAppsAccountingJournalEntry_ReversesJournalEntryID.[ID]
-LEFT OUTER JOIN
-    [${flyway:defaultSchema}].[JournalEntry] AS mjBizAppsAccountingJournalEntry_ReversedByJournalEntryID
-  ON
-    [j].[ReversedByJournalEntryID] = mjBizAppsAccountingJournalEntry_ReversedByJournalEntryID.[ID]
-LEFT OUTER JOIN
-    [${flyway:defaultSchema}].[JournalEntryBatch] AS mjBizAppsAccountingJournalEntryBatch_JournalEntryBatchID
-  ON
-    [j].[JournalEntryBatchID] = mjBizAppsAccountingJournalEntryBatch_JournalEntryBatchID.[ID]
-LEFT OUTER JOIN
-    [${mjSchema}].[File] AS MJFile_FileID
-  ON
-    [j].[FileID] = MJFile_FileID.[ID]
-GO
-REVOKE SELECT ON [${flyway:defaultSchema}].[vwJournalEntries] FROM [cdp_Developer]
-REVOKE SELECT ON [${flyway:defaultSchema}].[vwJournalEntries] FROM [cdp_Integration]
-REVOKE SELECT ON [${flyway:defaultSchema}].[vwJournalEntries] FROM [cdp_UI]
-GRANT SELECT ON [${flyway:defaultSchema}].[vwJournalEntries] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
-
-/* Base View Permissions SQL for MJ_BizApps_Accounting: Journal Entries */
------------------------------------------------------------------
--- SQL Code Generation
--- Entity: MJ_BizApps_Accounting: Journal Entries
--- Item: Permissions for vwJournalEntries
---
--- This was generated by the MemberJunction CodeGen tool.
--- This file should NOT be edited by hand.
------------------------------------------------------------------
-
-REVOKE SELECT ON [${flyway:defaultSchema}].[vwJournalEntries] FROM [cdp_Developer]
-REVOKE SELECT ON [${flyway:defaultSchema}].[vwJournalEntries] FROM [cdp_Integration]
-REVOKE SELECT ON [${flyway:defaultSchema}].[vwJournalEntries] FROM [cdp_UI]
-GRANT SELECT ON [${flyway:defaultSchema}].[vwJournalEntries] TO [cdp_UI], [cdp_Developer], [cdp_Integration];
 
 /* spCreate SQL for MJ_BizApps_Accounting: Journal Entries */
 -----------------------------------------------------------------
@@ -1472,21 +1391,17 @@ BEGIN
         SELECT @ID AS [ID] -- Return the primary key values to indicate we successfully deleted the record
 END
 GO
-REVOKE EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntry] FROM [cdp_Developer]
-REVOKE EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntry] FROM [cdp_Integration]
-GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntry] TO [cdp_Developer], [cdp_Integration];
-
 /* spDelete Permissions for MJ_BizApps_Accounting: Journal Entries */
-
 REVOKE EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntry] FROM [cdp_Developer]
 REVOKE EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntry] FROM [cdp_Integration]
 GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntry] TO [cdp_Developer], [cdp_Integration];
-
-/* SQL text to delete unneeded entity fields (1 scoped entities) */
-EXEC [${mjSchema}].[spDeleteUnneededEntityFields] @ExcludedSchemaNames='', @EntityIDs='(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')', @IncludedSchemaNames='${flyway:defaultSchema}';
 
 /* SQL text to update existing entity fields from schema (1 scoped entities) */
-EXEC [${mjSchema}].[spUpdateExistingEntityFieldsFromSchema] @ExcludedSchemaNames='', @EntityIDs='(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')', @IncludedSchemaNames='${flyway:defaultSchema}';
+DECLARE @JournalEntryEntityID_Settings UNIQUEIDENTIFIER =
+    (SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries');
+IF @JournalEntryEntityID_Settings IS NULL RAISERROR('Journal Entries entity not registered', 16, 1);
+
+EXEC [${mjSchema}].[spUpdateExistingEntityFieldsFromSchema] @ExcludedSchemaNames='', @EntityIDs=@JournalEntryEntityID_Settings, @IncludedSchemaNames='${flyway:defaultSchema}';
 
 /* SQL text to set default column width where needed */
 EXEC [${mjSchema}].[spSetDefaultColumnWidthWhereNeeded] @ExcludedSchemaNames='', @IncludedSchemaNames='${flyway:defaultSchema}';
@@ -1529,7 +1444,7 @@ WHERE
     "icon": "fa fa-exclamation-triangle"
   }
 }', [__mj_UpdatedAt] = GETUTCDATE()
-                  WHERE [EntityID] = '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')' AND [Name] = 'FieldCategoryInfo';
+                  WHERE [EntityID] = @JournalEntryEntityID_Settings AND [Name] = 'FieldCategoryInfo';
 
 /* Update FieldCategoryIcons setting (legacy) */
 
@@ -1537,5 +1452,9 @@ WHERE
                   SET [Value] = '{
   "Anomaly Detection": "fa fa-exclamation-triangle"
 }', [__mj_UpdatedAt] = GETUTCDATE()
-                  WHERE [EntityID] = '(SELECT [ID] FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries')' AND [Name] = 'FieldCategoryIcons';
+                  WHERE [EntityID] = @JournalEntryEntityID_Settings AND [Name] = 'FieldCategoryIcons';
 
+
+/* Refresh custom base views for modified entities so schema changes are picked up */
+EXEC sp_refreshview '${flyway:defaultSchema}.vwJournalEntries';
+GO

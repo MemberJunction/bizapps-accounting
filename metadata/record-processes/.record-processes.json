@@ -12,7 +12,7 @@
       "CronExpression": "0 0 1 * *",
       "Timezone": "UTC",
       "OnDemandEnabled": true,
-      "OutputMapping": null,
+      "OutputMapping": "{\"PredictedAnomalyProbability\":\"$.score\",\"PredictedAnomalyRiskBand\":\"$.band\",\"PredictedAnomalyScoredAt\":\"$.scoredAt\"}",
       "SkipUnchanged": true,
       "BatchSize": 100,
       "MaxConcurrency": 1,
