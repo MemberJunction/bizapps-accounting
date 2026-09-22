@@ -13,7 +13,8 @@
  *   L6  full batch cycle — buildJournalEntryBatch nets to a JournalEntryBatchSummary JE (exact netted totals),
  *       members lock; approve → dispatch (mock poster) → batch Posted, members + summary GLPosted.
  *   L7  batch lifecycle invariants on a SAVED batch — Posted is terminal (illegal transition
- *       rejected by the entity), and a batch cannot be BORN mid-lifecycle.
+ *       rejected by the entity), a batch cannot be BORN mid-lifecycle, and a batch the batching
+ *       process did not build is refused outright (#193).
  *   L8  GLAccount identity lock — Code change is rejected once JE lines reference the account;
  *       cosmetic Name change still saves.
  *
@@ -204,6 +205,10 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
 
     const born = await provider.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, ctx.user);
     born.NewRecord();
+    // Claim the create the way the engine does. Without this the create guard (#193) refuses the
+    // save first and the assertion below passes for the wrong reason — this case is about the
+    // BORN-PENDING rule, so it has to get past the guard to reach it.
+    born.MarkBuiltByBatchingProcess();
     born.CompanyID = ctx.company.id;
     born.PostingDate = new Date();
     born.TargetSystem = 'BusinessCentral';
@@ -211,6 +216,18 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     born.Status = 'Sent'; // illegal: a batch is born Pending
     const bornSaved = await born.Save();
     expect(bornSaved).toBe(false);
+    expect(born.LatestResult?.CompleteMessage ?? '').toContain("must start at Status='Pending'");
+
+    // ...and the guard itself: an unclaimed create is refused even when everything else is legal.
+    const handTyped = await provider.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, ctx.user);
+    handTyped.NewRecord();
+    handTyped.CompanyID = ctx.company.id;
+    handTyped.PostingDate = new Date();
+    handTyped.TargetSystem = 'BusinessCentral';
+    handTyped.BatchedByUserID = ctx.user.ID;
+    handTyped.Status = 'Pending';
+    expect(await handTyped.Save()).toBe(false);
+    expect(handTyped.LatestResult?.CompleteMessage ?? '').toContain('cannot be created directly');
   });
 
   it('L9 — SET op (the Orders call shape): N drafts book atomically in ONE call, sequential numbering', async () => {

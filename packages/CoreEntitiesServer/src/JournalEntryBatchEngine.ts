@@ -537,8 +537,11 @@ async function createBatchHeader(
   companyId: string, targetSystem: JournalEntryBatchTargetSystem, batchedByUserId: string, jeCount: number, contextUser: UserInfo, p: Providers,
 ): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
   await BusinessTimeZoneEngine.Instance.Config(false, contextUser, p.md);
-  const batch = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
+  const batch = await p.md.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, contextUser);
   batch.NewRecord();
+  // The one sanctioned create. Everything else that saves a new batch — Explorer's generic New
+  // form included — is refused by the entity's create guard (#193).
+  batch.MarkBuiltByBatchingProcess();
   batch.CompanyID = companyId;
   batch.PostingDate = todayBusiness();
   batch.TargetSystem = targetSystem;

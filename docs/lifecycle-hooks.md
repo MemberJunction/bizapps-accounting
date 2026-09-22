@@ -115,6 +115,13 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   the owning batch to be `Sent`/`Posted` (ValidateAsync, DB read) — so a direct client save can no
   longer jump `Pending→GLPosted` with forged `GLPostedAt`/`GLReferenceID`, and only the batch
   dispatch flow (`markJournalEntriesGLPosted`, which runs after the batch is Posted) can GL-post.
+- **`JournalEntryBatchEntityServer.Validate` — build is the create verb (golive #193).** A NEW batch
+  is refused unless the batching process claimed the instance via `MarkBuiltByBatchingProcess()`,
+  which only `JournalEntryBatchEngine.createBatchHeader` does. A batch header exists to point at a
+  netted summary entry and a set of locked member entries; a row saved without them carries control
+  totals that foot against nothing and is indistinguishable from a real batch until dispatch.
+  Explorer's generic New form offered exactly that, so the guard is what makes "batches are built,
+  not typed" true rather than a convention. The transient flag is instance state, never a field.
 - **`JournalEntryBatchEntityServer.CheckControlTotalCoherence()`** — the Pending→Approved footing +
   member-count check is now a public method shared with the engine: `sendJournalEntryBatch` re-runs
   it **before** `Approved→Sent`, so a batch whose member set / totals drifted after approval is

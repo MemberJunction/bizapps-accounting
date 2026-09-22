@@ -77,6 +77,28 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
   // — something the collection enforces rather than something a reader has to honour.
   private _summary: mjBizAppsAccountingJournalEntryEntity | null | undefined = undefined;
 
+  /**
+   * Set by {@link MarkBuiltByBatchingProcess}. Transient — never a field, never persisted; it
+   * describes THIS in-memory instance's provenance, not the row.
+   */
+  private _builtByBatchingProcess = false;
+
+  /**
+   * Declare that the batching process is creating this batch (golive #193).
+   *
+   * Build is the create verb for a batch: the header, its netted summary journal entry, the lock
+   * on every member entry and the CFO approval task are one transaction, and a batch that skipped
+   * it is a header with control totals someone typed and nothing underneath. Explorer's generic
+   * New form offered exactly that, and the empty Pending batches it left behind were indistinguishable
+   * from real ones until someone tried to dispatch them.
+   *
+   * Called at the engine's single create site. Anything else that saves a NEW batch is rejected by
+   * {@link Validate} with a message naming where to go instead.
+   */
+  public MarkBuiltByBatchingProcess(): void {
+    this._builtByBatchingProcess = true;
+  }
+
   /** BaseEntity SKIPS ValidateAsync by default — opt in, or the coherence check never runs on Save. */
   public override get DefaultSkipAsyncValidation(): boolean {
     return false;
@@ -106,6 +128,19 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     const result = super.Validate();
 
     if (!this.IsSaved) {
+      // Build is the create verb — a batch is never a blank record someone fills in (#193).
+      if (!this._builtByBatchingProcess) {
+        result.Success = false;
+        result.Errors.push(
+          new ValidationErrorInfo(
+            'JournalEntryBatchEntityServer.Validate',
+            `A journal entry batch cannot be created directly — it is BUILT from pending journal entries, ` +
+              `together with its netted summary entry, the lock on each member entry and the approval task. ` +
+              `Use Build JE batch on the Accounting app's Batches page.`,
+            null,
+          ),
+        );
+      }
       // A batch is born Pending — no path creates it mid-lifecycle.
       if (this.Status && this.Status !== 'Pending') {
         result.Success = false;
