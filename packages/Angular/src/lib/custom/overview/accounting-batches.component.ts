@@ -285,8 +285,8 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                     <!-- Preview Statistics -->
                     <div class="mja-modal-facts">
                         <div class="mja-fact-item">
-                            <span class="mja-fact-lbl">Candidates</span>
-                            <strong class="mja-fact-val">{{ PreviewCandidateCount }} JEs</strong>
+                            <span class="mja-fact-lbl">Including</span>
+                            <strong class="mja-fact-val">{{ IncludedCount }} of {{ PreviewCandidateCount }} JEs</strong>
                         </div>
                         <div class="mja-fact-item">
                             <span class="mja-fact-lbl">Total Debits</span>
@@ -305,6 +305,19 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                         </div>
                     </div>
 
+                    <!-- Skipping an older entry while batching a newer one is ALLOWED, but it must
+                         be visible: the entries reach the ERP out of their own date order. -->
+                    @if (HasOutOfOrder) {
+                        <div class="mja-banner" role="status">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                            <span>
+                                {{ PreviewOutOfOrderSkipCount }} included entr{{ PreviewOutOfOrderSkipCount === 1 ? 'y' : 'ies' }}
+                                will batch ahead of an older entry you have excluded. That is allowed — the excluded
+                                entries stay Pending for a later batch.
+                            </span>
+                        </div>
+                    }
+
                     <!-- Candidate List -->
                     @if (IsPreviewLoading) {
                         <div class="mja-modal-loading">
@@ -321,6 +334,14 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                             <table class="mja-table mja-modal-table">
                                 <thead>
                                     <tr>
+                                        <th class="mja-th-check">
+                                            <input
+                                                type="checkbox"
+                                                [checked]="AllEntriesIncluded"
+                                                [disabled]="IsBuildingBatch"
+                                                (change)="SetAllEntriesIncluded(!AllEntriesIncluded)"
+                                                aria-label="Include every candidate" />
+                                        </th>
                                         <th>Entry №</th>
                                         <th>Date</th>
                                         <th>Type</th>
@@ -330,7 +351,15 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                 </thead>
                                 <tbody>
                                     @for (e of PreviewEntries; track e.ID) {
-                                        <tr>
+                                        <tr [class.mja-row--excluded]="IsExcluded(e.ID)">
+                                            <td class="mja-td-check">
+                                                <input
+                                                    type="checkbox"
+                                                    [checked]="!IsExcluded(e.ID)"
+                                                    [disabled]="IsBuildingBatch"
+                                                    (change)="ToggleEntry(e.ID)"
+                                                    [attr.aria-label]="'Include ' + e.EntryNumber" />
+                                            </td>
                                             <td><strong>{{ e.EntryNumber }}</strong></td>
                                             <td>{{ e.EffectiveDate | date:'mediumDate' }}</td>
                                             <td><span class="mja-type-tag">{{ e.EntryTypeCode }}</span></td>
@@ -345,17 +374,21 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                 </div>
 
                 <mj-dialog-actions>
+                    @if (BuildBlockedReason) {
+                        <span class="mja-modal-blocked" role="status">{{ BuildBlockedReason }}</span>
+                    }
                     <button
                         mjButton
                         variant="primary"
                         size="sm"
                         type="button"
-                        [disabled]="IsBuildingBatch || IsPreviewLoading || PreviewCandidateCount === 0"
+                        [disabled]="!CanBuild"
+                        [title]="BuildBlockedReason || 'Build a batch from the ticked entries'"
                         (click)="ExecuteBuildBatch()">
                         @if (IsBuildingBatch) {
                             <i class="fa-solid fa-spinner fa-spin"></i> Building Batch…
                         } @else {
-                            <i class="fa-solid fa-layer-group"></i> Build Batch ({{ PreviewCandidateCount }})
+                            <i class="fa-solid fa-layer-group"></i> Build Batch ({{ IncludedCount }})
                         }
                     </button>
                     <button mjButton variant="flat" size="sm" type="button" [disabled]="IsBuildingBatch" (click)="CloseBuildBatchModal()">
@@ -923,6 +956,21 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
         .mja-modal-table tbody td {
             color: var(--mj-text-primary);
         }
+        .mja-th-check, .mja-td-check {
+            width: 32px;
+            text-align: center;
+            padding-right: 0;
+        }
+        /* An excluded row stays legible and re-tickable — dimmed, never hidden. */
+        .mja-modal-table tbody tr.mja-row--excluded td:not(.mja-td-check) {
+            opacity: 0.45;
+            text-decoration: line-through;
+        }
+        .mja-modal-blocked {
+            margin-right: auto;
+            font-size: 12px;
+            color: var(--mj-text-muted);
+        }
         .mja-type-tag {
             display: inline-block;
             padding: 2px 7px;
@@ -995,6 +1043,19 @@ export class AccountingBatchesPageComponent implements OnInit {
     public PreviewCandidateCount = 0;
     public PreviewCoveredStartDate: string | null = null;
     public PreviewCoveredEndDate: string | null = null;
+    /**
+     * How many candidates the build would batch ahead of an older entry the operator unticked.
+     * Computed SERVER-side by the same code the build runs, so the warning cannot drift.
+     */
+    public PreviewOutOfOrderSkipCount = 0;
+
+    /**
+     * The operator's unticked entries (golive #193). Held as an EXCLUSION set, not an inclusion
+     * one, because the preview always returns the full candidate pool: an unticked entry stays on
+     * screen and can be re-ticked, and a criteria change that widens the pool leaves new entries
+     * ticked by default rather than silently dropping them.
+     */
+    public ExcludedEntryIDs: string[] = [];
 
     /** Per-row in-flight id so the acting row's button disables, not every row's. */
     public ArchivingBatchID: string | null = null;
@@ -1155,8 +1216,76 @@ export class AccountingBatchesPageComponent implements OnInit {
         this.navService.OpenEntityRecord(BATCH_ENTITY, CompositeKey.FromID(id));
     }
 
+    // ─── include / exclude (golive #193) ──────────────────────────────────────────────────────
+    //
+    // The build's own contract already carries the operator's selection end to end
+    // (`PreviewJournalEntryBatchOptionsInput.IncludedJournalEntryIDs` and
+    // `BuildJournalEntryBatchOptionsInput { Source: 'Explicit', JournalEntryIDs }`, served by
+    // `buildJournalEntryBatchFromExplicitIds`). This page previously ignored it and swept every
+    // candidate, so an operator with entries that must NOT post yet had no way to build at all.
+
+    public IsExcluded(id: string): boolean {
+        return this.ExcludedEntryIDs.includes(id);
+    }
+
+    /** Ticking re-previews: the netted totals and the out-of-order warning are both functions of
+     *  the selection, and both are computed server-side by the code the build itself runs. */
+    public async ToggleEntry(id: string): Promise<void> {
+        if (this.IsBuildingBatch) return;
+        this.ExcludedEntryIDs = this.IsExcluded(id)
+            ? this.ExcludedEntryIDs.filter(x => x !== id)
+            : [...this.ExcludedEntryIDs, id];
+        await this.LoadBuildPreview();
+    }
+
+    public async SetAllEntriesIncluded(included: boolean): Promise<void> {
+        if (this.IsBuildingBatch) return;
+        this.ExcludedEntryIDs = included ? [] : this.PreviewEntries.map(e => e.ID);
+        await this.LoadBuildPreview();
+    }
+
+    public get IncludedEntryIDs(): string[] {
+        const excluded = new Set(this.ExcludedEntryIDs);
+        return this.PreviewEntries.filter(e => !excluded.has(e.ID)).map(e => e.ID);
+    }
+
+    public get IncludedCount(): number {
+        return this.IncludedEntryIDs.length;
+    }
+
+    public get ExcludedCount(): number {
+        return this.PreviewCandidateCount - this.IncludedCount;
+    }
+
+    public get AllEntriesIncluded(): boolean {
+        return this.PreviewCandidateCount > 0 && this.ExcludedCount === 0;
+    }
+
+    /** Cent-level tolerance — amounts are decimal(18,2), matching the server's FOOT_TOLERANCE. */
+    public get IsBalanced(): boolean {
+        return Math.abs(this.PreviewTotalDebits - this.PreviewTotalCredits) < 0.005;
+    }
+
+    public get HasOutOfOrder(): boolean {
+        return this.PreviewOutOfOrderSkipCount > 0;
+    }
+
+    /** Non-null = why Build is disabled. Saying it beats a dead button with no explanation. */
+    public get BuildBlockedReason(): string | null {
+        if (this.PreviewCandidateCount === 0) return 'Nothing matches these criteria.';
+        if (this.IncludedCount === 0) return 'Every entry is excluded — nothing to build.';
+        if (!this.IsBalanced) return 'The selection does not balance (Dr ≠ Cr) — the ledger would reject it.';
+        return null;
+    }
+
+    public get CanBuild(): boolean {
+        return !this.IsBuildingBatch && !this.IsPreviewLoading && this.BuildBlockedReason === null;
+    }
+
     public async OpenBuildBatchModal(): Promise<void> {
         this.BuildModalVisible = true;
+        // A fresh session starts with everything ticked — the sweep remains the one-click default.
+        this.ExcludedEntryIDs = [];
         this.ModalErrorMessage = null;
         if (!this.BuildCutoffDate) {
             this.BuildCutoffDate = BusinessTimeZoneEngine.Instance.Today();
@@ -1179,9 +1308,13 @@ export class AccountingBatchesPageComponent implements OnInit {
         this.cdr.markForCheck();
 
         try {
+            // Send the selection, so the netted totals, the date range and the out-of-order count
+            // describe what the TICKED entries would produce — not the whole pool. The server still
+            // returns every candidate, so an unticked entry stays visible and re-tickable.
             const previewRes = await this.dispatchClient.PreviewJournalEntryBatch({
                 Cutoff: this.BuildCutoffDate || null,
                 ExcludeEntryTypeCodes: this.ExcludeRevRec ? ['RevenueRecognition'] : null,
+                IncludedJournalEntryIDs: this.ExcludedEntryIDs.length > 0 ? this.IncludedEntryIDs : null,
             });
 
             if (previewRes.Success) {
@@ -1189,26 +1322,11 @@ export class AccountingBatchesPageComponent implements OnInit {
                 this.PreviewCandidateCount = this.PreviewEntries.length;
                 this.PreviewTotalDebits = previewRes.TotalDebits;
                 this.PreviewTotalCredits = previewRes.TotalCredits;
-
-                if (this.PreviewEntries.length > 0) {
-                    const dates = this.PreviewEntries.map(e => new Date(e.EffectiveDate).getTime()).filter(t => !isNaN(t));
-                    if (dates.length > 0) {
-                        this.PreviewCoveredStartDate = new Date(Math.min(...dates)).toISOString();
-                        this.PreviewCoveredEndDate = new Date(Math.max(...dates)).toISOString();
-                    } else {
-                        this.PreviewCoveredStartDate = null;
-                        this.PreviewCoveredEndDate = null;
-                    }
-                } else {
-                    this.PreviewCoveredStartDate = null;
-                    this.PreviewCoveredEndDate = null;
-                }
+                this.PreviewOutOfOrderSkipCount = previewRes.OutOfOrderSkipCount;
+                this.setCoveredDateRange(this.PreviewEntries);
             } else {
                 this.ModalErrorMessage = previewRes.ErrorMessage ?? 'Failed to load candidate preview.';
-                this.PreviewEntries = [];
-                this.PreviewCandidateCount = 0;
-                this.PreviewTotalDebits = 0;
-                this.PreviewTotalCredits = 0;
+                this.clearPreview();
             }
         } catch (e) {
             this.ModalErrorMessage = e instanceof Error ? e.message : String(e);
@@ -1218,17 +1336,48 @@ export class AccountingBatchesPageComponent implements OnInit {
         }
     }
 
+    /** The effective-date span the ticked entries cover — the modal's fourth fact. */
+    private setCoveredDateRange(entries: PreviewEntryWire[]): void {
+        const excluded = new Set(this.ExcludedEntryIDs);
+        const dates = entries
+            .filter(e => !excluded.has(e.ID))
+            .map(e => new Date(e.EffectiveDate).getTime())
+            .filter(t => !isNaN(t));
+        if (dates.length === 0) {
+            this.PreviewCoveredStartDate = null;
+            this.PreviewCoveredEndDate = null;
+            return;
+        }
+        this.PreviewCoveredStartDate = new Date(Math.min(...dates)).toISOString();
+        this.PreviewCoveredEndDate = new Date(Math.max(...dates)).toISOString();
+    }
+
+    private clearPreview(): void {
+        this.PreviewEntries = [];
+        this.PreviewCandidateCount = 0;
+        this.PreviewTotalDebits = 0;
+        this.PreviewTotalCredits = 0;
+        this.PreviewOutOfOrderSkipCount = 0;
+        this.PreviewCoveredStartDate = null;
+        this.PreviewCoveredEndDate = null;
+    }
+
     public async ExecuteBuildBatch(): Promise<void> {
-        if (this.IsBuildingBatch || this.PreviewCandidateCount === 0) return;
+        if (!this.CanBuild) return;
         this.IsBuildingBatch = true;
         this.ModalErrorMessage = null;
         this.cdr.markForCheck();
 
         try {
+            // Build EXACTLY the ticked set. Source='Explicit' re-validates server-side that every
+            // id is still Pending and loud-rejects a stale selection — the preview is a snapshot.
+            // With nothing unticked this is the same set the criteria sweep would have taken.
             const buildRes = await this.dispatchClient.BuildJournalEntryBatch({
                 TargetSystem: this.BuildTarget,
                 Cutoff: this.BuildCutoffDate || null,
                 ExcludeEntryTypeCodes: this.ExcludeRevRec ? ['RevenueRecognition'] : null,
+                Source: 'Explicit',
+                JournalEntryIDs: this.IncludedEntryIDs,
             });
 
             if (buildRes.Success) {

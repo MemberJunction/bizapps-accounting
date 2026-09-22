@@ -1,7 +1,8 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { CompositeKey } from '@memberjunction/core';
 import { RegisterClassEx } from '@memberjunction/global';
 import { BaseFormPanel } from '@memberjunction/ng-base-forms';
+import { NavigationService } from '@memberjunction/ng-shared';
 import type { mjBizAppsAccountingJournalEntryEntity } from '@mj-biz-apps/accounting-entities';
 import { awaitsApproval } from '../shared/je-rules';
 import {
@@ -17,6 +18,9 @@ interface TimelineStep {
     Done: boolean;
     Current: boolean;
 }
+
+/** The Accounting app's nav item that hosts the build flow — see `metadata/applications/`. */
+const BATCHES_NAV_ITEM = 'Batches';
 
 const STATUS_ORDER: Record<mjBizAppsAccountingJournalEntryEntity['Status'], number> = {
     Pending: 0,
@@ -46,6 +50,9 @@ const STATUS_ORDER: Record<mjBizAppsAccountingJournalEntryEntity['Status'], numb
     styleUrls: ['./journal-entry-form-panels.css'],
 })
 export class JournalEntryOverviewPanel extends BaseFormPanel<mjBizAppsAccountingJournalEntryEntity> {
+    /** Optional: a panel can be mounted outside Explorer (tests, harnesses), where there is no shell. */
+    private navService = inject(NavigationService, { optional: true });
+
     public get Timeline(): TimelineStep[] {
         const status = this.Record.Status ?? 'Pending';
         const reached = STATUS_ORDER[status] ?? 0;
@@ -75,6 +82,19 @@ export class JournalEntryOverviewPanel extends BaseFormPanel<mjBizAppsAccounting
             EntityName: JOURNAL_ENTRY_BATCH_ENTITY,
             PrimaryKey: CompositeKey.FromID(this.Record.JournalEntryBatchID),
         });
+    }
+
+    /**
+     * Take the operator to where batches are actually built (golive #193).
+     *
+     * The unbatched state used to be a dead sentence — "Assigned when the next batch is built" —
+     * with nothing on this form, on either grid, or in the record's menu saying where that happens.
+     * 'Batches' is the app nav item; the label is resolved at runtime against the Application row,
+     * so this follows a nav rename without a code change (and no-ops if the item is absent).
+     */
+    public async OpenBatchBuilder(): Promise<void> {
+        if (!this.navService) return;
+        await this.navService.OpenNavItemByName(BATCHES_NAV_ITEM);
     }
 
     public OpenSource(): void {

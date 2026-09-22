@@ -127,6 +127,11 @@ export interface PreviewJournalEntryBatchResult {
   Candidates: PreviewEntryWire[];
   TotalDebits: number;
   TotalCredits: number;
+  /**
+   * How many candidates the build would batch AHEAD of an older entry the operator left
+   * unticked. Surfaced so a caller can warn before building; the build allows it.
+   */
+  OutOfOrderSkipCount: number;
   ErrorMessage?: string;
 }
 
@@ -165,17 +170,18 @@ export class JournalEntryBatchDispatchClient {
     try {
       const res = await this.dataProvider.RouteOperation<PreviewJournalEntryBatchOptionsInput, PreviewJournalEntryBatchOutputWire>(
         'Accounting.PreviewJournalEntryBatch', options ?? {});
-      if (!res.Success || !res.Output) return { Success: false, Candidates: [], TotalDebits: 0, TotalCredits: 0, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
+      if (!res.Success || !res.Output) return { Success: false, Candidates: [], TotalDebits: 0, TotalCredits: 0, OutOfOrderSkipCount: 0, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
       return {
         Success: true,
         Candidates: res.Output.Candidates ?? [],
         TotalDebits: res.Output.TotalDebits ?? 0,
         TotalCredits: res.Output.TotalCredits ?? 0,
+        OutOfOrderSkipCount: res.Output.OutOfOrderSkipCount ?? 0,
       };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       LogError(`JournalEntryBatchDispatchClient.PreviewJournalEntryBatch failed: ${msg}`);
-      return { Success: false, Candidates: [], TotalDebits: 0, TotalCredits: 0, ErrorMessage: msg };
+      return { Success: false, Candidates: [], TotalDebits: 0, TotalCredits: 0, OutOfOrderSkipCount: 0, ErrorMessage: msg };
     }
   }
 
