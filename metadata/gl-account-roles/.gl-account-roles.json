@@ -158,7 +158,7 @@
   {
     "fields": {
       "Name": "Unbilled Receivable",
-      "Description": "Contract-asset account for contracted revenue that is not yet billable (orders D89). Debited at order confirm for the portion of a line covered by future-dated payment schedule instalments, and relieved to Accounts Receivable as each instalment is invoiced, so AR means \"billed and unpaid\" specifically. Maps to 11300 Unbilled Revenue (Contract Asset). Company-level link, one per company; without a link orders books the whole line to AR, records the fallback and warns.",
+      "Description": "Contract-asset account for revenue earned ahead of billing (orders D92). It is debited when revenue is recognised beyond what an order line has been billed, and credited when a later instalment invoice bills that amount down — so it holds service already delivered that the contract does not yet allow us to bill, while Accounts Receivable means billed and unpaid. Maps to 11300 Unbilled Revenue (Contract Asset), one company-level link per company; with no link the contract asset is folded into Deferred Revenue and a warning is logged, so the position is still correct and balanced but cannot be told apart from unearned billing.",
       "Status": "Active",
       "Cardinality": "One",
       "Sequence": 100

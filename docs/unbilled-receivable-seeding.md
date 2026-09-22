@@ -1,12 +1,12 @@
 # Seeding the Unbilled Receivable account, per company
 
-**Owner: Johanna.** One `GLAccountLink` per company, pointing at that company's own `11300`. **Not urgent** — read "Not yet, though" below before you start: under D91 nothing in orders resolves this role, so seeding it changes nothing until the period-end reclass ticket ships.
+One `GLAccountLink` per company, pointing at that company's own `11300`. **Until a company has that link, its contract asset does not appear on the balance sheet at all** — orders folds the amount into Deferred Revenue instead and logs a warning. Who creates the links is not decided here.
 
 ## What to create
 
 | | |
 |---|---|
-| **Role** | `Unbilled Receivable` (ID `3EFC77F3-2468-463F-9197-D0A8A6762A36`, seeded by `migrations/V202609201200__v0.1.x__UnbilledReceivableRole.sql`) |
+| **Role** | `Unbilled Receivable` (ID `3EFC77F3-2468-463F-9197-D0A8A6762A36`, seeded by the row in `metadata/gl-account-roles`, which reaches a host through the release's `*__Metadata_Sync.sql`) |
 | **Account** | `11300 Unbilled Revenue (Contract Asset)`, account type `Asset` — Jeremy's 9/18 chart of accounts |
 | **Level** | Company. Not product, not category, not product type |
 | **How many** | Exactly one per company. The role is `Cardinality: One`, so a second Active link for the same company is refused by the tie guard |
@@ -17,11 +17,11 @@ Each company needs its **own** 11300 account, not a shared one. Orders refuses a
 
 Revenue can be earned before it is billed — a contract we have performed against but not yet invoiced. That is a real asset and it needs a name on the balance sheet: a **contract asset**, distinct from a receivable, because no customer owes us anything until we bill them.
 
-Orders tracks the position but does not maintain a running balance in this account. A contract's Deferred Revenue nets billing against recognition, so when recognition runs ahead of billing that account carries a debit balance — and that debit balance IS the contract asset. This role gives a period-end process somewhere to present it.
+Orders maintains the position on the order line itself — `BilledToDate` and `RecognizedToDate` — and this account is where the gap lands whenever recognition runs ahead of billing. Two rules use it (orders D92): **recognising** revenue debits Deferred Revenue down to what has been billed and then debits this account for the rest, and **invoicing** an instalment credits this account first, down to zero, before opening any new Deferred. So the balance here is only ever service delivered that the contract does not yet let us bill.
 
 ## The name is a cross-repo contract
 
-bizapps-orders writes this role's `Name` down in one place — `GL_ROLE.UnbilledReceivable = 'Unbilled Receivable'` in `packages/CoreEntitiesServer/src/GLAccountResolver.ts` — and resolves roles by accounting's exact `Name` string, case- and whitespace-insensitive but otherwise literal. Spaced Title Case matches every role orders resolves; `BankAccount` is the one unspaced role and it is FP&A's. **If the two repos ever disagree by one character the role simply never resolves**, and because every journal entry still balances either way, nothing downstream reports it. Rename it in one repo only and you will not find out from a failure. (Nothing in orders resolves it today — see below — but the rule binds the moment the reclass ships.)
+bizapps-orders writes this role's `Name` down in one place — `GL_ROLE.UnbilledReceivable = 'Unbilled Receivable'` in `packages/CoreEntitiesServer/src/GLAccountResolver.ts` — and resolves roles by accounting's exact `Name` string, case- and whitespace-insensitive but otherwise literal. Spaced Title Case matches every role orders resolves; `BankAccount` is the one unspaced role and it is FP&A's. **If the two repos ever disagree by one character the role simply never resolves**, and because every journal entry still balances either way, nothing downstream reports it. Rename it in one repo only and you will not find out from a failure.
 
 ## How the row reaches a database
 
@@ -29,17 +29,11 @@ bizapps-orders writes this role's `Name` down in one place — `GL_ROLE.Unbilled
 
 The row already exists on the shared MJ dev database under this UUID, because an earlier revision of this change carried a migration that was run there once before Amith corrected the approach. A later `mj sync push` matches it by `primaryKey.ID` and no-ops, so there is nothing to undo.
 
-## Not yet, though — nothing in orders resolves this role (D91)
+## What happens for a company with no link
 
-**Read this before you seed anything.** The model changed after this page was first written. Orders no longer books a contract asset at all: an order billed by instalment now puts no value on the balance sheet at confirm, and each instalment's invoicing posts `Dr Accounts Receivable / Cr Deferred Revenue`. Between billing and recognition a contract's Deferred Revenue runs to a **debit balance**, and that debit balance is the contract asset.
+**The contract asset disappears into Deferred Revenue.** Orders resolves this role every time either rule needs it; when no account is linked it puts the amount on Deferred Revenue instead and logs a warning naming the company and what was not separated. Nothing fails, every entry still balances, and no revenue is misstated — but the balance sheet then shows one number where there should be two, and a reader cannot tell revenue earned ahead of billing from billing taken ahead of performance.
 
-So this role is **inert by design**. It is seeded so that a period-end process can present that Deferred debit balance under its own name — a reclass entry, `Dr Unbilled Receivable / Cr Deferred Revenue`, auto-reversing — rather than having the booking code maintain a second running account all month. That reclass is a separate ticket and does not exist yet.
-
-What that means for you: **the links below are not urgent and seeding them changes nothing today.** No order will post to an Unbilled Receivable account until the reclass ships. Seed them when the reclass ticket lands, or seed them now so the accounts are ready — either is fine, and neither affects the ledger in the meantime. The rest of this page is the reference for when you do.
-
-## What happens until then
-
-Nothing. Under D91 the ledger does not reach for this account, so an unseeded company is not a silent misstatement — it is simply a company whose period-end presentation is not wired up yet. (An earlier version of this page warned that an unseeded company would quietly reproduce the long-term-AR gross-up. That was true of the superseded D89 design, where booking split its debit between AR and this account and fell back to AR when no link existed. It is not true now: there is no fallback because there is no lookup.)
+That is the cost of leaving a company unlinked, and it is silent apart from the log line. Grep the MJAPI log for `no 'Unbilled Receivable' GL account is linked` after any run that recognises or invoices.
 
 ## Open question, not blocking
 
