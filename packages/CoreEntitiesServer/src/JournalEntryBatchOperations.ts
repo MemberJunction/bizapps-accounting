@@ -90,8 +90,12 @@ function toOptions(input: JournalEntryBatchCriteriaInput | undefined): BuildJour
 
 export interface PreviewJournalEntryBatchInput extends JournalEntryBatchCriteriaInput {
   /**
-   * The operator's ticked selection. Omit to preview the whole candidate pool. Supplying it is
-   * what makes the summary/totals/out-of-order warning reflect the include/exclude state.
+   * The operator's ticked selection. Omit (or null) to preview the whole candidate pool. Supplying
+   * it is what makes the summary/totals/out-of-order warning reflect the include/exclude state.
+   *
+   * An EMPTY array means "nothing is ticked" and is honoured as such — it is not the same as
+   * omitting the field. Collapsing the two netted the whole pool behind a header that said nothing
+   * was included, so the numbers contradicted the selection (#193).
    */
   IncludedJournalEntryIDs?: string[] | null;
 }
@@ -106,7 +110,7 @@ export class PreviewJournalEntryBatchOperation extends BaseRemotableOperation<Pr
   public readonly OperationKey = 'Accounting.PreviewJournalEntryBatch';
 
   protected async InternalExecute(input: PreviewJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<JournalEntryBatchPreviewResult> {
-    const included = input?.IncludedJournalEntryIDs?.length ? new Set(input.IncludedJournalEntryIDs) : undefined;
+    const included = input?.IncludedJournalEntryIDs ? new Set(input.IncludedJournalEntryIDs) : undefined;
     return previewBatch(toOptions(input), user, provider, included);
   }
 }
