@@ -1,6 +1,6 @@
 # Seeding the Unbilled Receivable account, per company
 
-**Owner: Johanna.** One `GLAccountLink` per company. Until it exists, the ledger keeps doing what it does today — see "What happens until then" at the bottom, because that part is the reason this page exists.
+**Owner: Johanna.** One `GLAccountLink` per company, pointing at that company's own `11300`. **Not urgent** — read "Not yet, though" below before you start: under D91 nothing in orders resolves this role, so seeding it changes nothing until the period-end reclass ticket ships.
 
 ## What to create
 
@@ -13,16 +13,24 @@
 
 Each company needs its **own** 11300 account, not a shared one. Orders refuses an account belonging to another company outright (D6 — accounting derives a journal entry's company from the account, so a cross-company link would book revenue to the wrong legal entity with nothing downstream to catch it).
 
-## Why the account is needed
+## Why the account exists
 
-An order confirm books the whole contract value to Accounts Receivable today, whatever the billing schedule says, so a three-year contract billed annually lands all three years in AR on day one. With this account in place the booking entry splits the debit — Unbilled for the instalments that are not yet due, AR for the rest — and each instalment's invoicing moves its amount `Dr AR / Cr Unbilled`. AR then means "billed and unpaid" specifically, Unbilled means "contracted, not yet billable", and the monthly long-term AR reclass done by hand today has nothing left to do.
+Revenue can be earned before it is billed — a contract we have performed against but not yet invoiced. That is a real asset and it needs a name on the balance sheet: a **contract asset**, distinct from a receivable, because no customer owes us anything until we bill them.
+
+Orders tracks the position but does not maintain a running balance in this account. A contract's Deferred Revenue nets billing against recognition, so when recognition runs ahead of billing that account carries a debit balance — and that debit balance IS the contract asset. This role gives a period-end process somewhere to present it.
+
+## Not yet, though — nothing in orders resolves this role (D91)
+
+**Read this before you seed anything.** The model changed after this page was first written. Orders no longer books a contract asset at all: an order billed by instalment now puts no value on the balance sheet at confirm, and each instalment's invoicing posts `Dr Accounts Receivable / Cr Deferred Revenue`. Between billing and recognition a contract's Deferred Revenue runs to a **debit balance**, and that debit balance is the contract asset.
+
+So this role is **inert by design**. It is seeded so that a period-end process can present that Deferred debit balance under its own name — a reclass entry, `Dr Unbilled Receivable / Cr Deferred Revenue`, auto-reversing — rather than having the booking code maintain a second running account all month. That reclass is a separate ticket and does not exist yet.
+
+What that means for you: **the links below are not urgent and seeding them changes nothing today.** No order will post to an Unbilled Receivable account until the reclass ships. Seed them when the reclass ticket lands, or seed them now so the accounts are ready — either is fine, and neither affects the ledger in the meantime. The rest of this page is the reference for when you do.
 
 ## What happens until then
 
-Nothing breaks, and that is exactly the hazard. A company with no Unbilled link books the full line to AR just as it does today, the journal entry balances, the order reconciles, and **the only visible sign is a warning in the server log** naming the company and the order line. A converted Active Contract with instalments out to 2029 will sit in AR in full, which is the gross-up this whole change exists to remove.
-
-So: a company is not finished being set up until it has this link, and an unseeded company is a silent reversion rather than a failure. The warning text is `no 'Unbilled Receivable' GL account is linked for company <id>` — grep the MJAPI log for it after a conversion run.
+Nothing. Under D91 the ledger does not reach for this account, so an unseeded company is not a silent misstatement — it is simply a company whose period-end presentation is not wired up yet. (An earlier version of this page warned that an unseeded company would quietly reproduce the long-term-AR gross-up. That was true of the superseded D89 design, where booking split its debit between AR and this account and fell back to AR when no link existed. It is not true now: there is no fallback because there is no lookup.)
 
 ## Open question, not blocking
 
-One contract-asset account or two? Strictly, an unconditional right to consideration is a receivable and a conditional one is a contract asset; a future instalment on a contract we still have to perform against is conditional, so both cases are the same account. Finance may still want them presented separately. This is built for one, and splitting later is additive — a second role and a second link, with no change to what is already seeded (plan §14.1, Johanna).
+One contract-asset account or two? Strictly, an unconditional right to consideration is a receivable and a conditional one is a contract asset; a future instalment on a contract we must still perform against is conditional, so both cases are the same account. Finance may still want them presented separately. This is built for one, and splitting later is additive — a second role and a second link, with no change to what is already seeded (plan §14.1, Johanna).
