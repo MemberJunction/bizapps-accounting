@@ -19,6 +19,16 @@ Revenue can be earned before it is billed — a contract we have performed again
 
 Orders tracks the position but does not maintain a running balance in this account. A contract's Deferred Revenue nets billing against recognition, so when recognition runs ahead of billing that account carries a debit balance — and that debit balance IS the contract asset. This role gives a period-end process somewhere to present it.
 
+## The name is a cross-repo contract
+
+bizapps-orders writes this role's `Name` down in one place — `GL_ROLE.UnbilledReceivable = 'Unbilled Receivable'` in `packages/CoreEntitiesServer/src/GLAccountResolver.ts` — and resolves roles by accounting's exact `Name` string, case- and whitespace-insensitive but otherwise literal. Spaced Title Case matches every role orders resolves; `BankAccount` is the one unspaced role and it is FP&A's. **If the two repos ever disagree by one character the role simply never resolves**, and because every journal entry still balances either way, nothing downstream reports it. Rename it in one repo only and you will not find out from a failure. (Nothing in orders resolves it today — see below — but the rule binds the moment the reclass ships.)
+
+## How the row reaches a database
+
+`metadata/gl-account-roles/.gl-account-roles.json` is the **source of truth**, and it is the only thing this PR contributes. A release reaches hosts through one `*__Metadata_Sync.sql` migration that the build engineer generates from the JSON when cutting the release — PRs do not carry seed migrations of their own (`scripts/check-release-seed-coverage.mjs`: *"NOT a PR gate. PRs contribute JSON only; the build engineer generates one Metadata_Sync per release."*).
+
+The row already exists on the shared MJ dev database under this UUID, because an earlier revision of this change carried a migration that was run there once before Amith corrected the approach. A later `mj sync push` matches it by `primaryKey.ID` and no-ops, so there is nothing to undo.
+
 ## Not yet, though — nothing in orders resolves this role (D91)
 
 **Read this before you seed anything.** The model changed after this page was first written. Orders no longer books a contract asset at all: an order billed by instalment now puts no value on the balance sheet at confirm, and each instalment's invoicing posts `Dr Accounts Receivable / Cr Deferred Revenue`. Between billing and recognition a contract's Deferred Revenue runs to a **debit balance**, and that debit balance is the contract asset.
