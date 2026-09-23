@@ -48,9 +48,8 @@ jobs:
         run: pnpm run build:packages
 
       # Unit tests. Runs even when the build step above fails, because the packages
-      # that carry tests build independently of @mj-biz-apps/accounting-ng, whose
-      # build is red on a pre-existing MJCompanyEntity version skew — chaining the
-      # two would mean the suites never execute while that is unresolved.
+      # that carry tests build independently of @mj-biz-apps/accounting-ng — a
+      # failure there should not stop the suites from executing.
       #
       # `pnpm run test` is turbo-driven and scoped to the packages that have unit
       # tests; turbo builds each one's dependencies first. Until this step existed,
