@@ -148,6 +148,20 @@ IF DATABASE_PRINCIPAL_ID('cdp_Integration') IS NOT NULL
     EXEC('GRANT SELECT ON [${flyway:defaultSchema}].[vwJournalEntries] TO [cdp_Integration]');
 GO
 
+---------------------------------------------------------------------------
+-- 3. Drop EntityField rows for columns the rebuilt view no longer carries
+---------------------------------------------------------------------------
+-- The layered view does not select RootReversesJournalEntryID or
+-- RootReversedByJournalEntryID, which V202608252220 kept. Their EntityField rows
+-- would otherwise hold Sequence values that spUpdateExistingEntitiesFromSchema
+-- reassigns below, and a fresh install fails on UQ_EntityField_EntityID_Sequence.
+-- Removing them first matches what CodeGen does on a database it runs against.
+DECLARE @JournalEntryEntityIDs NVARCHAR(MAX) =
+    (SELECT CONVERT(NVARCHAR(36), [ID]) FROM [${mjSchema}].[Entity] WHERE [Name] = 'MJ_BizApps_Accounting: Journal Entries');
+IF @JournalEntryEntityIDs IS NOT NULL
+    EXEC [${mjSchema}].[spDeleteUnneededEntityFields] @ExcludedSchemaNames='', @EntityIDs=@JournalEntryEntityIDs, @IncludedSchemaNames='${flyway:defaultSchema}';
+GO
+
 
 
 
