@@ -5,9 +5,9 @@
  * doctrine in TEST-ARCHITECTURE): the workspace-tab state machine, the parking-discipline guard,
  * and any other sync helper the components delegate to.
  *
- * Rendering Angular components against a real in-process DB is TIER 4 and has its own config
- * (`vitest.dom.config.ts`) — it needs the analogjs plugin + jsdom, which would slow every tier-1
- * run for no benefit. Keep the two separate.
+ * Rendering Angular components under TestBed has its own config (`vitest.dom.config.ts`) — it
+ * needs the analogjs plugin + jsdom, which would slow every tier-1 run for no benefit. Keep the
+ * two separate. Rendering against a running MJAPI is TIER 4 (`test-harnesses/gui/`).
  */
 import { defineConfig } from 'vitest/config';
 
