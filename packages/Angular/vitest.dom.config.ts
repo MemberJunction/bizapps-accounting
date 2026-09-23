@@ -17,6 +17,8 @@ const setupFile = fileURLToPath(new URL('./vitest.dom.setup.ts', import.meta.url
 export default defineConfig({
   plugins: [angular({ jit: false, tsconfig: './tsconfig.spec.json' })],
   test: {
+    // Load-bearing, not a style choice: with globals on, @angular/core/testing installs its own
+    // afterEach(resetTestingModule), which is what gives every spec a fresh TestBed.
     globals: true,
     environment: 'jsdom',
     setupFiles: [setupFile],

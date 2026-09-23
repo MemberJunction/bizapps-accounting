@@ -17,7 +17,8 @@ export default defineConfig({
     // Any spec under src/, not only src/__tests__/ — a spec co-located with its component must run,
     // not silently pass as zero tests. Same glob as the other packages.
     include: ['src/**/*.test.ts'],
-    // Tier 4's DOM specs are *.dom.test.ts under test-harnesses/gui/ — never picked up here.
+    // *.dom.test.ts are DOM specs — this package's (vitest.dom.config.ts) and tier 4's under
+    // test-harnesses/gui/ — never picked up here.
     exclude: ['**/node_modules/**', '**/dist/**', '**/*.dom.test.ts'],
   },
 });

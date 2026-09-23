@@ -1,41 +1,48 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
-import { RunView } from '@memberjunction/core';
-import { BusinessTimeZoneEngine, type InstanceConfigurationRow } from '@mj-biz-apps/common-entities';
-import { AccountingBatchesPageComponent } from './accounting-batches.component';
+import { RunView, RunViewParams } from '@memberjunction/core';
+import { AccountingBatchesPageComponent, BatchItem } from './accounting-batches.component';
 import {
   JournalEntryBatchDispatchClient,
   PreviewJournalEntryBatchOptionsInput,
 } from '../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
+import { AUGUST_CLOSE_IN_CHICAGO, useBusinessClock, viewResult } from '../../../__tests__/support/business-clock';
 
 /**
- * The Build Batch modal's default cutoff is the BUSINESS day, not the UTC day.
- *
- * 2026-09-01T03:30:00Z is 22:30 CDT on 31 August in Chicago (the business zone) but already
- * 1 September in UTC. The old default, `new Date().toISOString().slice(0, 10)`, answered
- * '2026-09-01' here and swept entries dated the next business day into tonight's batch.
+ * The Build Batch modal's default cutoff is the BUSINESS day, not the UTC or browser day.
+ * See AUGUST_CLOSE_IN_CHICAGO: the business day is 31 August, while the old default,
+ * `new Date().toISOString().slice(0, 10)`, answered 1 September and swept entries dated the
+ * next business day into tonight's batch.
  */
-const INSTANT = new Date('2026-09-01T03:30:00.000Z');
 const BUSINESS_DAY = '2026-08-31';
+const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
+
+const LISTED_BATCH: BatchItem = {
+  ID: '00000000-0000-0000-0000-000000000001',
+  JournalEntryBatchNumber: 'JEB-TEST-0001',
+  Status: 'Pending',
+  TargetSystem: 'BusinessCentral',
+  PostingDate: new Date('2026-08-30T00:00:00.000Z'),
+  BatchedAt: new Date('2026-08-30T06:00:00.000Z'),
+  TotalEntries: 1,
+  TotalDebits: 100,
+  TotalCredits: 100,
+  Company: 'Test Company',
+  ExternalJournalEntryBatchRef: null,
+  ArchiveReason: null,
+};
 
 describe('AccountingBatchesPageComponent — Build Batch modal cutoff (DOM)', () => {
-  // The engine is a singleton; set its loaded state directly (as `batch-status-window.test.ts`
-  // does) so it answers a chosen zone with no IMetadataProvider, then restore it.
-  const engine = BusinessTimeZoneEngine.Instance as unknown as { _configurations: InstanceConfigurationRow[]; _loaded: boolean };
-  const original = { rows: engine._configurations, loaded: engine._loaded };
+  useBusinessClock(AUGUST_CLOSE_IN_CHICAGO);
   let previewCalls: PreviewJournalEntryBatchOptionsInput[];
 
   beforeEach(() => {
-    engine._configurations = [
-      { FeatureKey: 'BizApps.BusinessTimeZone', Value: '{"iana":"America/Chicago","sql":"Central Standard Time"}', DefaultValue: '{"iana":"UTC","sql":"UTC"}' },
-    ];
-    engine._loaded = true;
-    // Only Date is faked: Angular's zoneless scheduler and whenStable() still need real timers.
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(INSTANT);
-
-    // The page's batch list (ngOnInit) reads through the global RunView; answer it empty.
-    vi.spyOn(RunView.prototype, 'RunView').mockResolvedValue({ Success: true, Results: [], TotalRowCount: 0 } as never);
+    // The page's batch list (ngOnInit) reads through the global RunView. One batch comes back so
+    // the spec can see the list render: LoadBatches swallows its own errors, so an empty page is
+    // not evidence that it loaded.
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) =>
+      p.EntityName === BATCH_ENTITY ? viewResult([LISTED_BATCH]) : viewResult([], 0),
+    );
     previewCalls = [];
     vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'PreviewJournalEntryBatch').mockImplementation(async (options) => {
       previewCalls.push(options ?? {});
@@ -43,16 +50,15 @@ describe('AccountingBatchesPageComponent — Build Batch modal cutoff (DOM)', ()
     });
   });
 
-  afterEach(() => {
-    engine._configurations = original.rows;
-    engine._loaded = original.loaded;
-    vi.useRealTimers();
-  });
-
   async function render(): Promise<ComponentFixture<AccountingBatchesPageComponent>> {
     const fixture = TestBed.createComponent(AccountingBatchesPageComponent);
     fixture.detectChanges();
     await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.mja-batch-num')?.textContent?.trim(), 'the batch list rendered').toBe(
+      LISTED_BATCH.JournalEntryBatchNumber,
+    );
     return fixture;
   }
 
@@ -65,6 +71,12 @@ describe('AccountingBatchesPageComponent — Build Batch modal cutoff (DOM)', ()
     return input!;
   }
 
+  async function closeModal(fixture: ComponentFixture<AccountingBatchesPageComponent>): Promise<void> {
+    fixture.componentInstance.CloseBuildBatchModal();
+    fixture.detectChanges();
+    await fixture.whenStable();
+  }
+
   it('defaults an empty cutoff to the business day, sends it to the preview, and shows it in the date input', async () => {
     const fixture = await render();
     const input = await openModal(fixture);
@@ -74,13 +86,20 @@ describe('AccountingBatchesPageComponent — Build Batch modal cutoff (DOM)', ()
     expect(input.value).toBe(BUSINESS_DAY);
   });
 
-  it('keeps a cutoff the user already chose when the modal is reopened', async () => {
+  it('keeps a cutoff the user chose when the modal is closed and reopened', async () => {
     const fixture = await render();
-    fixture.componentInstance.BuildCutoffDate = '2026-07-15';
-    const input = await openModal(fixture);
+    const first = await openModal(fixture);
+    // Choose a day through the input itself, as an operator would.
+    first.value = '2026-07-15';
+    first.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await closeModal(fixture);
+
+    const reopened = await openModal(fixture);
 
     expect(fixture.componentInstance.BuildCutoffDate).toBe('2026-07-15');
-    expect(previewCalls.map(c => c.Cutoff)).toEqual(['2026-07-15']);
-    expect(input.value).toBe('2026-07-15');
+    expect(previewCalls.at(-1)?.Cutoff).toBe('2026-07-15');
+    expect(reopened.value).toBe('2026-07-15');
   });
 });
