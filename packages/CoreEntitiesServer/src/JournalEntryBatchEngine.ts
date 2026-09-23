@@ -64,6 +64,7 @@ import {
   type NetGroup,
   type NettableLine,
 } from '@mj-biz-apps/accounting-engine-base';
+import { BusinessTimeZoneEngine } from '@mj-biz-apps/common-entities';
 import { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 import { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
 import { GetJournalEntryBatchSummaryEntryType } from './JournalEntryTypes.js';
@@ -523,18 +524,26 @@ async function loadDimensionsByLine(lineIds: string[], contextUser: UserInfo, p:
   return byLine;
 }
 
-/** Today as a date-only value, UTC (repo convention). PostingDate selection is a UI-port item. */
-function todayUTC(): Date {
-  return new Date(new Date().toISOString().slice(0, 10));
+/**
+ * Today as a date-only value in the BUSINESS zone, UTC midnight of that day. PostingDate selection
+ * is a UI-port item. Exported (not module-private) so the pinned business-day-semantics test in
+ * `__tests__/JournalEntryBatchEngine.test.ts` can call it directly without a full provider mock.
+ */
+export function todayBusiness(): Date {
+  return BusinessTimeZoneEngine.Instance.TodayAsDate();
 }
 
 async function createBatchHeader(
   companyId: string, targetSystem: JournalEntryBatchTargetSystem, batchedByUserId: string, jeCount: number, contextUser: UserInfo, p: Providers,
 ): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
-  const batch = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
+  await BusinessTimeZoneEngine.Instance.Config(false, contextUser, p.md);
+  const batch = await p.md.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, contextUser);
   batch.NewRecord();
+  // The one sanctioned create. Everything else that saves a new batch — Explorer's generic New
+  // form included — is refused by the entity's create guard (#193).
+  batch.MarkBuiltByBatchingProcess();
   batch.CompanyID = companyId;
-  batch.PostingDate = todayUTC();
+  batch.PostingDate = todayBusiness();
   batch.TargetSystem = targetSystem;
   batch.BatchedAt = new Date();
   batch.BatchedByUserID = batchedByUserId;

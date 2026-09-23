@@ -1,6 +1,7 @@
 import { Directive, ChangeDetectorRef, EventEmitter, Output, inject } from '@angular/core';
 import { RunView, RunViewParams } from '@memberjunction/core';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
+import { BusinessTimeZoneEngine, FirstDayOfMonth } from '@mj-biz-apps/common-entities';
 
 /** One stat card. `Value` is null while loading so the card can show a placeholder, not a wrong 0. */
 export interface DashboardStat {
@@ -96,10 +97,9 @@ export abstract class AccountingDashboardBase extends BaseAngularComponent {
     return res.TotalRowCount ?? 0;
   }
 
-  /** First day of the current month, UTC — this app stores UTC (repo convention). */
-  protected monthStartUTC(): string {
-    const now = new Date();
-    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10);
+  /** First day of the current month in the BUSINESS zone, as `YYYY-MM-DD`. */
+  protected monthStartBusiness(): string {
+    return FirstDayOfMonth(BusinessTimeZoneEngine.Instance.Today());
   }
 
   public StatValue(s: DashboardStat): string {

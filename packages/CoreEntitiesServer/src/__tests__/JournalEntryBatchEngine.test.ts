@@ -2,9 +2,10 @@
  * Compatibility shim: `netLines` still lives on JournalEntryBatchEngine so existing
  * server callers keep compiling. The behavior is owned by EngineBase.NetLines.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { NetLines } from '@mj-biz-apps/accounting-engine-base';
-import { netLines, type NettableLine } from '../JournalEntryBatchEngine.js';
+import { BusinessTimeZoneEngine, type InstanceConfigurationRow } from '@mj-biz-apps/common-entities';
+import { netLines, todayBusiness, type NettableLine } from '../JournalEntryBatchEngine.js';
 
 const line = (glAccountId: string, debit: number, credit: number): NettableLine => ({
     companyId: '11111111-0000-0000-0000-000000000001',
@@ -18,6 +19,41 @@ describe('netLines (compat alias for NetLines)', () => {
     it('delegates to NetLines from accounting-engine-base', () => {
         const input = [line('aaaaaaaa-0000-0000-0000-000000000001', 100, 0), line('aaaaaaaa-0000-0000-0000-000000000001', 0, 30)];
         expect(netLines(input)).toEqual(NetLines(input));
+    });
+});
+
+describe('todayBusiness — PostingDate is stamped with today in the BUSINESS zone, not UTC', () => {
+    // The engine is a singleton; set its loaded state directly (as bizapps-orders'
+    // date-cell.test.ts does) so it answers a chosen zone with no IMetadataProvider at all, then
+    // restore it so the stub cannot leak into other tests sharing this worker.
+    const engine = BusinessTimeZoneEngine.Instance as unknown as { _configurations: InstanceConfigurationRow[]; _loaded: boolean };
+    const original = { rows: engine._configurations, loaded: engine._loaded };
+
+    afterEach(() => {
+        engine._configurations = original.rows;
+        engine._loaded = original.loaded;
+        vi.useRealTimers();
+    });
+
+    it('is the Chicago calendar day, pinned to UTC midnight, at an instant UTC and Chicago disagree on', () => {
+        // 2026-09-01T02:00:00Z is 1 September in UTC but still 31 August, 9 PM, in Chicago (CDT,
+        // UTC-5). The retired `todayUTC()` read UTC parts and answered '2026-09-01'; the fix reads
+        // the business zone and must answer '2026-08-31' — the same acceptance case as C2's
+        // resolveCutoff tests, now covered for PostingDate too.
+        engine._configurations = [
+            { FeatureKey: 'BizApps.BusinessTimeZone', Value: '{"iana":"America/Chicago","sql":"Central Standard Time"}', DefaultValue: '{"iana":"UTC","sql":"UTC"}' },
+        ];
+        engine._loaded = true;
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-09-01T02:00:00.000Z'));
+
+        const result = todayBusiness();
+
+        expect(result.toISOString()).toBe('2026-08-31T00:00:00.000Z');
+        expect(result.getUTCHours()).toBe(0);
+        expect(result.getUTCMinutes()).toBe(0);
+        expect(result.getUTCSeconds()).toBe(0);
+        expect(result.getUTCMilliseconds()).toBe(0);
     });
 });
 

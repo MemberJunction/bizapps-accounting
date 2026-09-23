@@ -142,7 +142,7 @@ The cumulative effect: the audit trail is **correct by construction**. No code p
 | `JournalEntryLine.CounterpartyOrganizationID` | `Organization.ID` | `bizapps-common` |
 | `CustomerTaxProfile.OrganizationID` | `Organization.ID` | `bizapps-common` |
 | `JournalEntry.LinkedEntityID` + `LinkedRecordID` | The JE's single causal origin record (OrderLine, Payment, TaxRemittance, …) — `LinkedEntityID` is a hard FK to `__mj.Entity`; the record ref is soft by nature (D25) | upstream apps |
-| `OrderLine.JournalEntryID` (inverse direction) | This app's `JournalEntry.ID` — one JE per order line | `bizapps-orders` |
+| `OrderLine.JournalEntryID` (inverse direction) | This app's `JournalEntry.ID` — one JE per order line *that has value*; a zero-value line stays NULL, so `IS NOT NULL` is not a "booked" test | `bizapps-orders` |
 
 ---
 

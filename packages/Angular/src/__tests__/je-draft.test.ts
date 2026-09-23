@@ -10,6 +10,7 @@ import {
   draftTotals,
   toCreateInput,
   newAmountText,
+  CalendarDayValue,
   type JEDraftState,
 } from '../lib/custom/shell/pages/je-draft';
 
@@ -133,7 +134,7 @@ async function draft(
   const entry = (await entityObject(JE_ENTITY)) as JournalEntryEntity;
   entry.NewRecord();
   entry.CompanyID = over.CompanyID ?? 'c1';
-  entry.EffectiveDate = new Date('2026-07-16T00:00:00');
+  entry.EffectiveDate = new Date('2026-07-16T00:00:00.000Z');
   entry.Description = over.Description ?? 'Event deposit accrual';
 
   const state: JEDraftState = { Entry: entry, Amounts: new Map(), Dimensions: new Map() };
@@ -324,11 +325,71 @@ describe('toCreateInput', () => {
     expect(toCreateInput(state).Lines[0].Description).toBe('deposit');
   });
 
-  it('formats the posting date from LOCAL parts, so it cannot slip a day', async () => {
-    // `toISOString()` on a local-midnight Date lands on the previous day anywhere west of Greenwich,
-    // which files the entry in the wrong period — balanced, reconciling, and wrong.
+  it('formats the posting date from its UTC parts, not the local ones', async () => {
+    // `toCreateInput` reads `EffectiveDate` through `CalendarDayValue`, which is UTC parts only —
+    // it no longer reads local parts at all. This test just pins the plain case; the zone-pinned
+    // describe below is what proves the UTC read discriminates from a local one.
+    //
+    // The fixture is an explicit UTC INSTANT (trailing Z), not a bare local one. A bare
+    // '2026-01-01T00:00:00' is LOCAL midnight, which reads back as 2026-01-01 only on a runner at
+    // or behind UTC — on any runner east of Greenwich it is 2025-12-31T22:00Z and this test failed
+    // for a reason that had nothing to do with the code under test.
     const state = await balanced();
-    state.Entry.EffectiveDate = new Date('2026-01-01T00:00:00');
+    state.Entry.EffectiveDate = new Date('2026-01-01T00:00:00.000Z');
     expect(toCreateInput(state).EffectiveDate).toBe('2026-01-01');
+  });
+});
+
+/**
+ * Run `fn` with the machine's zone pinned. Restoring an UNSET `TZ` must `delete` it: assigning
+ * `undefined` back stores the string "undefined", which ICU reads as UTC, so every later test in
+ * this worker would quietly run in a zone nobody chose.
+ */
+const AT = (tz: string, fn: () => void) => {
+  const original = process.env.TZ;
+  process.env.TZ = tz;
+  try {
+    fn();
+  } finally {
+    if (original === undefined) delete process.env.TZ;
+    else process.env.TZ = original;
+  }
+};
+
+describe('the effective date travels as the calendar day the user picked, in every zone', () => {
+  it('a UTC-midnight EffectiveDate maps to its own day west of Greenwich', async () => {
+    const state = await balanced();
+    state.Entry.EffectiveDate = new Date('2026-01-01T00:00:00.000Z');
+    AT('America/New_York', () => {
+      expect(toCreateInput(state).EffectiveDate).toBe('2026-01-01');
+    });
+  });
+
+  it('and east of it', async () => {
+    const state = await balanced();
+    state.Entry.EffectiveDate = new Date('2026-08-31T00:00:00.000Z');
+    AT('Asia/Kolkata', () => {
+      expect(toCreateInput(state).EffectiveDate).toBe('2026-08-31');
+    });
+  });
+});
+
+describe('CalendarDayValue renders the stored calendar day in any browser zone', () => {
+  it('shows the stored day west of Greenwich, where local parts would show the day before', () => {
+    AT('America/New_York', () => {
+      expect(CalendarDayValue(new Date('2026-08-31T00:00:00.000Z'))).toBe('2026-08-31');
+      expect(CalendarDayValue(new Date('2026-01-01T00:00:00.000Z'))).toBe('2026-01-01');
+    });
+  });
+
+  it('shows the stored day east of Greenwich too', () => {
+    AT('Asia/Kolkata', () => {
+      expect(CalendarDayValue(new Date('2026-08-31T00:00:00.000Z'))).toBe('2026-08-31');
+    });
+  });
+
+  it('is empty for absent or unreadable values rather than showing a wrong day', () => {
+    expect(CalendarDayValue(null)).toBe('');
+    expect(CalendarDayValue(new Date('nonsense'))).toBe('');
   });
 });
