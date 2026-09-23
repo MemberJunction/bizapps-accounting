@@ -154,5 +154,17 @@
     "primaryKey": {
       "ID": "069B34E1-90C5-4275-A79A-F9EF71BE472F"
     }
+  },
+  {
+    "fields": {
+      "Name": "Unbilled Receivable",
+      "Description": "Contract-asset account for revenue earned ahead of billing (orders D92). It is debited when revenue is recognised beyond what an order line has been billed, and credited when a later instalment invoice bills that amount down — so it holds service already delivered that the contract does not yet allow us to bill, while Accounts Receivable means billed and unpaid. Maps to 11300 Unbilled Revenue (Contract Asset), one company-level link per company; with no link the contract asset is folded into Deferred Revenue and a warning is logged, so the position is still correct and balanced but cannot be told apart from unearned billing.",
+      "Status": "Active",
+      "Cardinality": "One",
+      "Sequence": 100
+    },
+    "primaryKey": {
+      "ID": "3EFC77F3-2468-463F-9197-D0A8A6762A36"
+    }
   }
 ]
