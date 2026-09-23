@@ -347,9 +347,24 @@ This repo uses MemberJunction's CodeGen system to generate entity and action sub
 - See `migrations-pg/README.md` for the conversion workflow and the MJ repo's `/pg-migrate` slash command for the deeper toolchain.
 
 ### Accounting-specific schema invariants (see `plans/bizapps-accounting-master.md` §6)
-- Balanced-JE invariant enforced via DEFERRABLE constraint trigger — never UPDATE/DELETE around it.
-- JE immutability after `Status ∈ {Batched, GLPosted}` enforced by trigger — only `GLPostedAt`/`GLReferenceID`/`Status` may change after lock.
-- Period-close trigger blocks JE inserts into a closed `AccountingPeriod` unless `OriginalAccountingPeriodID` is set (adjusting entry pattern).
+- **Balance is enforced at the LOCK event, not deferred.** T-SQL has no PG `DEFERRABLE` constraint
+  trigger, so `trg_JournalEntry_BalancedOnLock` checks `SUM(Debits) = SUM(Credits)` (± 0.005) only
+  when a JE transitions to `Batched`/`GLPosted`; a `Pending` JE may be freely imbalanced while its
+  lines are built. `trg_JEL_RecheckParentBalance` re-verifies if a line changes on an already-locked
+  JE. Never UPDATE/DELETE around either.
+- **JE immutability after `Status ∈ {Batched, GLPosted}`** enforced by `trg_JournalEntry_Immutability`.
+  DELETE is blocked outright. On a locked row only these may change: `GLPostedAt`, `GLReferenceID`,
+  `ReversedByJournalEntryID`, `Status` `Batched→GLPosted`, and the **reversible preliminary unlock**
+  (`Status` `Batched→Pending` **plus** `JournalEntryBatchID→NULL`, and nothing else, while the owning
+  batch is still `Pending`). `GLPosted` never regresses. Corrections are new `Pending` reversal JEs.
+- **There are no accounting periods and no close machinery** (D2, plan §4 — the ERP owns periods).
+  No `AccountingPeriod` table, no period FK, no close guard, no `OriginalAccountingPeriodID`, no
+  adjusting-entry routing: all removed 2026-07-06 with the period tables, and `AccountingPeriod`
+  heads the plan's §5.9 "deliberately ABSENT" table. JEs carry dates only (`EffectiveDate`), and a
+  dispatched batch lands in whatever period the ERP has active. **Closed-period collisions
+  hold-and-flag, never auto-roll:** when the ERP rejects a batch for a closed posting date, the batch
+  is flagged for review — there is no local period gate to detect it first. Any future timing rule
+  detects by DATE, never a period FK.
 - `AccountingCompanyProfile` is an IsA Disjoint child of `__mj.Company` — same UUID as the parent row, never INSERT a Profile without a matching Company.
 
 ### Instants are UTC; calendar days are calendar days; "today" is the business day (convention)
@@ -417,15 +432,19 @@ This repository provides the **AR subsidiary ledger of record + journal-entry pr
 
 **What lives here** (per `plans/bizapps-accounting-master.md`):
 1. `GLAccount` + seeded default chart of accounts
-2. `AccountingCompanyProfile` — IsA Disjoint child of `__mj.Company` (functional currency, fiscal year, default GL accounts, business-profile fields)
-3. `AccountingPeriod` with hard-close semantics
-4. `JournalEntry` / `JournalEntryLine` / `JournalEntryBatch` with balanced-JE + immutability invariants enforced at the DB level
-5. `Dimension` / `DimensionValue` / `JournalEntryLineDimension` for analytical tagging
-6. `ChartOfAccountsMapping` for ERP roundtrip
-7. Tax entities (`TaxAuthority`, `TaxJurisdiction`, `TaxRate`, `TaxLiability`, `CustomerTaxProfile`) + pluggable `TaxCalculationProvider` — accounting keeps the tax ACCRUAL only; remitting to the authority is an ERP/GL concern (TaxRemittance removed 2026-07-29, Amith PR-27 review)
-8. Recurring JE templates (FX revaluation, depreciation, prepaid amortization, sales-tax snapshot)
-9. Account balance materialization for closed periods
-10. Read-model views (`vw_TrialBalance_AR`, `vw_AROpenByCustomer`, `vw_DefRevRollforward`, etc.) for Skip-generated reports
+2. `AccountingCompanyProfile` — IsA Disjoint child of `__mj.Company` (functional currency, fiscal year, business-profile fields). A company's **default accounts are company-level `GLAccountLink` rows** keyed by role (AR, Sales, Deferred Revenue, …), NOT columns on the profile (D12)
+3. `JournalEntry` / `JournalEntryLine` / `JournalEntryBatch` with balanced-JE + immutability invariants enforced at the DB level
+4. `Dimension` / `DimensionValue` / `JournalEntryLineDimension` for analytical tagging
+5. Tax entities (`TaxAuthority`, `TaxJurisdiction`, `TaxRate`, `TaxLiability`, `CustomerTaxProfile`) + pluggable `TaxCalculationProvider` — accounting keeps the tax ACCRUAL only; remitting to the authority is an ERP/GL concern (TaxRemittance removed 2026-07-29, Amith PR-27 review)
+6. Forward-dated real JEs for rev-rec and other scheduled recognition (D15 — this REPLACED the `Recurring*` template trio, which was never built)
+7. Read-model views (`vw_TrialBalance_AR`, `vw_AROpenByCustomer`, `vw_DefRevRollforward`, etc.) for Skip-generated reports. **Creation is deferred** (2026-07-22): none are in the baseline today; each is built when a report that needs it ships.
+
+**Deliberately ABSENT — do not add these back without a decision** (plan §5.9 carries the full table):
+`AccountingPeriod` + period FKs + close machinery (D2, the ERP owns periods) · `AccountBalance` /
+`AccountBalanceByDimension` (D20, the views compute on demand) · `ChartOfAccountsMapping` (D13, ERP
+account identity lives on `GLAccount` as `ExternalSystem` + `ExternalAccountID`) · `Recurring*`
+templates (D15) · `ScheduledJournalEntry` (D15) · ACP default-GL-account FK columns (D12, superseded
+by company-level `GLAccountLink` rows).
 
 **What does NOT live here**: trial balance / P&L / balance sheet generation, year-end closing, statistical accounts, fixed-asset depreciation as first-class, inventory/COGS, expense management. Those stay in the ERP or future BizApps* siblings.
 
