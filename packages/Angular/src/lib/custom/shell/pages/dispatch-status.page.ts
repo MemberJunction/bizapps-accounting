@@ -7,7 +7,7 @@ import { GridColumnConfig, EntityDataGridComponent } from '@memberjunction/ng-en
 import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
 import { AddDays, BusinessTimeZoneEngine, DayStartUtc, IsCalendarDay } from '@mj-biz-apps/common-entities';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
-import { JournalEntryBatchDispatchClient } from '../../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
+import { JournalEntryBatchDispatchClient, StrandedJournalEntryBatchWire } from '../../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
 import { TIME_WINDOWS, TimeWindowId, timeWindowRange, toSqlDate, andFilters } from '../../../transfer-pending/list-scaffold/time-window';
 import { sqlLiteral, likeContains } from '../../../transfer-pending/list-scaffold/sql-filter';
 import { rowKeyToId } from '../../../transfer-pending/list-scaffold/grid-row-key';
@@ -111,6 +111,14 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
   public IsLoading = false;
   public LoadError: string | null = null;
   public RetryingJournalEntryBatchID: string | null = null;
+  public ResumingJournalEntryBatchID: string | null = null;
+
+  /**
+   * Batches holding entries at `Batched` that no run will pick up (#145) — Failed ones, and Posted
+   * ones whose GL-posting flip did not finish. Deliberately NOT narrowed by this page's filters: like
+   * the failed strip, it is an alarm, and a date window must not hide entries stranded before it.
+   */
+  public StrandedBatches: StrandedJournalEntryBatchWire[] = [];
   public ActionMessage: string | null = null;
   public ActionIsError = false;
 
@@ -261,8 +269,14 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
     this.cdr.markForCheck();
     try {
       const rv = new RunView();
-      const [count, failed] = await rv.RunViews([this.countParams(), this.failedParams()]);
+      const [[count, failed], stranded] = await Promise.all([
+        rv.RunViews([this.countParams(), this.failedParams()]),
+        this.client().GetStrandedJournalEntries(),
+      ]);
       if (token !== this.loadToken) return;
+
+      this.StrandedBatches = stranded.Batches;
+      if (!stranded.Success) this.LoadError = `Could not count stranded journal entries: ${stranded.ErrorMessage ?? 'unknown error'}`;
 
       this.TotalCount = count?.Success ? (count.TotalRowCount ?? 0) : null;
       this.FailedBatches = failed?.Success ? ((failed.Results ?? []) as mjBizAppsAccountingJournalEntryBatchEntity[]) : [];
@@ -272,6 +286,7 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
       this.LoadError = e instanceof Error ? e.message : String(e);
       this.TotalCount = null;
       this.FailedBatches = [];
+      this.StrandedBatches = [];
     } finally {
       if (token === this.loadToken) {
         this.IsLoading = false;
@@ -305,6 +320,16 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
 
   public get FailedCount(): number {
     return this.FailedBatches.length;
+  }
+
+  /** Entries every run skips until someone retries or resumes their batch. */
+  public get StrandedEntryCount(): number {
+    return this.StrandedBatches.reduce((n, b) => n + b.journalEntryCount, 0);
+  }
+
+  /** Posted batches whose member Batched→GLPosted flip did not finish — the resume strip's rows. */
+  public get IncompletePostings(): StrandedJournalEntryBatchWire[] {
+    return this.StrandedBatches.filter((b) => b.recovery === 'ResumePosting');
   }
 
   /** True once the filters have resolved to nothing — the honest empty state, not a bug. */
@@ -441,15 +466,17 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
     }
   }
 
-  /** Re-attempt the ERP send. Same verb (and the same approval gate) as Batch approvals. */
+  /**
+   * Re-attempt the ERP send. Same verb as Batch approvals: the server takes a Failed batch back
+   * through Sent, re-checking the approval it already has and that its content is unchanged.
+   */
   public async Retry(batch: mjBizAppsAccountingJournalEntryBatchEntity): Promise<void> {
     if (!this.CanRetry(batch)) return;
     this.RetryingJournalEntryBatchID = batch.ID;
     this.ActionMessage = null;
     this.cdr.markForCheck();
     try {
-      const client = new JournalEntryBatchDispatchClient(this.ProviderToUse as GraphQLDataProvider);
-      const res = await client.DispatchJournalEntryBatch(batch.ID);
+      const res = await this.client().DispatchJournalEntryBatch(batch.ID);
       if (res.Success) {
         this.ActionMessage = `Re-dispatched ${batch.JournalEntryBatchNumber}${res.ExternalJournalEntryBatchRef ? ` — ERP ref ${res.ExternalJournalEntryBatchRef}` : ''}.`;
         this.ActionIsError = false;
@@ -464,6 +491,42 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
       this.RetryingJournalEntryBatchID = null;
       this.cdr.markForCheck();
     }
+  }
+
+  /** A Posted batch still holding Batched entries — the only state Resume applies to. */
+  public CanResume(batchId: string): boolean {
+    return this.ResumingJournalEntryBatchID === null && this.IncompletePostings.some((b) => UUIDsEqual(b.batchId, batchId));
+  }
+
+  /**
+   * Finish a Posted batch's GL-posting flip. NO ERP call: the ERP already holds this journal, which
+   * is why this is its own verb and a Posted batch never offers Retry.
+   */
+  public async Resume(batchId: string, batchNumber: string | null): Promise<void> {
+    if (!this.CanResume(batchId)) return;
+    this.ResumingJournalEntryBatchID = batchId;
+    this.ActionMessage = null;
+    this.cdr.markForCheck();
+    try {
+      const res = await this.client().ResumeJournalEntryBatchPosting(batchId);
+      if (res.Success) {
+        this.ActionMessage = `Finished GL posting for ${batchNumber ?? batchId} — ${res.JournalEntriesPosted} journal entr${res.JournalEntriesPosted === 1 ? 'y' : 'ies'} marked GL-posted.`;
+        this.ActionIsError = false;
+        this.SelectedBatch = null;
+        this.Refresh();
+      } else {
+        this.setError(res.ErrorMessage ?? 'Resume failed.');
+      }
+    } catch (e) {
+      this.setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      this.ResumingJournalEntryBatchID = null;
+      this.cdr.markForCheck();
+    }
+  }
+
+  private client(): JournalEntryBatchDispatchClient {
+    return new JournalEntryBatchDispatchClient(this.ProviderToUse as GraphQLDataProvider);
   }
 
   private setError(message: string): void {
