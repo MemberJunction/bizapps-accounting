@@ -47,7 +47,7 @@
       },
       {
         "name": "@mj-biz-apps/accounting-actions",
-        "role": "library"
+        "role": "actions"
       }
     ],
     "client": [
