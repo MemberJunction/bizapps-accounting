@@ -1,5 +1,53 @@
 # @mj-biz-apps/accounting-actions
 
+## 0.12.0
+
+### Minor Changes
+
+- 541595e: Give a journal entry batch that fails after approval a way back (#145).
+
+  A `Failed` batch can now be retried: `sendJournalEntryBatch` (and `Accounting.DispatchJournalEntryBatch`)
+  accepts `Failed` as well as `Approved`, taking the `Failed → Sent` edge the status graph already
+  allowed. The retry reuses the batch's existing approval, re-running the approval gate and the
+  coherence check before it sends. Because a `Failed` batch may already be in the ERP, a retry
+  requires `ConfirmNotAlreadyPostedInERP: true`; the Dispatch status page's Retry dispatch button,
+  which the server previously refused, now asks the operator to check the ERP for the batch number
+  first, and reports a retry the ERP rejects as a failure. A successful retry clears the earlier
+  attempt's `ErrorMessage`. A poster that throws now marks the batch `Failed` instead of leaving it
+  at `Sent`, and the summary lines load before the `→Sent` save.
+
+  A `Posted` batch whose member `Batched → GLPosted` flip stopped partway is finished by the new
+  `resumeJournalEntryBatchPosting` / `Accounting.ResumeJournalEntryBatchPosting`, which makes no ERP
+  call. Entries it finishes carry the batch's `PostedAt` and ERP reference.
+
+  `findStrandedJournalEntries` / `Accounting.GetStrandedJournalEntries` report the entries held by
+  either state. `Accounting.BuildJournalEntryBatches` appends that count to every run's message, and
+  the Dispatch status page shows it with a Finish GL posting action for Posted batches. Scheduled
+  runs do not retry failed batches themselves.
+
+### Patch Changes
+
+- ba62339: Declare `@mj-biz-apps/accounting-actions` under `packages.server` in `mj-app.json` instead of
+  `packages.shared`.
+
+  The Open App engine imports every `shared` package into the Explorer client bundle. Every
+  action in this package extends `BaseAction` from `@memberjunction/actions`, and two of them run
+  engines from `@mj-biz-apps/accounting-core-entities-server`; both chains reach Node built-ins, so
+  `ng serve` failed on `node:*` imports after installing the app. The package is only used by
+  `@mj-biz-apps/accounting-server`, which still imports and registers it. Its manifest role is now
+  `actions`.
+
+  Upgrading an existing install removes the package's `dynamicPackages.client` entry, which is what
+  put it in the browser bundle. It does not remove the npm dependency from the client workspace
+  (`MJExplorer/package.json`): upgrade only adds dependencies, and only `mj app remove` removes them.
+  The dependency is no longer imported, but `pnpm install` still resolves `mssql` and builds
+  `isolated-vm` for it; remove it by hand if the client workspace must install without native build
+  tools.
+
+- Updated dependencies [541595e]
+- Updated dependencies [9659501]
+  - @mj-biz-apps/accounting-core-entities-server@0.12.0
+
 ## 0.11.0
 
 ### Minor Changes
