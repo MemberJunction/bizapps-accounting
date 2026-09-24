@@ -78,7 +78,7 @@ export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
         * * Field Name: OperatingTimeZone
         * * Display Name: Operating Time Zone
         * * SQL Data Type: nvarchar(60)
-        * * Description: IANA time-zone name for the company's operations (e.g. 'America/Chicago'). All timestamps store in UTC/Zulu; period and rev-rec boundaries are evaluated in this zone so a transaction near midnight lands in the right local day/month.`),
+        * * Description: Optional IANA time-zone name (e.g. 'America/Chicago') that overrides the business time zone (BizApps.BusinessTimeZone) for this company. Display only: timestamps are stored in UTC and "today" / cutoff calculations use the business time zone. Leave blank to inherit it.`),
     CompanyCode: z.string().describe(`
         * * Field Name: CompanyCode
         * * Display Name: Company Code
@@ -2299,7 +2299,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
     * * Field Name: OperatingTimeZone
     * * Display Name: Operating Time Zone
     * * SQL Data Type: nvarchar(60)
-    * * Description: IANA time-zone name for the company's operations (e.g. 'America/Chicago'). All timestamps store in UTC/Zulu; period and rev-rec boundaries are evaluated in this zone so a transaction near midnight lands in the right local day/month.
+    * * Description: Optional IANA time-zone name (e.g. 'America/Chicago') that overrides the business time zone (BizApps.BusinessTimeZone) for this company. Display only: timestamps are stored in UTC and "today" / cutoff calculations use the business time zone. Leave blank to inherit it.
     */
     get OperatingTimeZone(): string | null {
         return this.Get('OperatingTimeZone');

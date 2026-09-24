@@ -90,10 +90,12 @@ plan is authoritative.
 ### 5.1 Company profile initialization (W1)
 On first save of an `AccountingCompanyProfile`, `AccountingCompanyProfileEntityServer.Save()`
 runs a per-company, idempotent init: seed the **10-account minimal COA** (AD-8 + §C1) with
-`IsSystemSeeded=1`, default **`OperatingTimeZone='UTC'`** (AD-16), and wire the **5 default
+`IsSystemSeeded=1`, and wire the **5 default
 GL-account refs** (AR / Deferred Revenue / Sales Tax / Realized FX / Unrealized FX). All via
 `BaseEntity.Save()` (audit-by-construction). *(Period generation was REMOVED 2026-07-06 —
-periods live in the ERP, CH-1.)* The COA is **per-company runtime seed via the hook — not
+periods live in the ERP, CH-1. The `OperatingTimeZone='UTC'` default (AD-16) was REMOVED in
+#158 — the field is an optional per-company display override, and blank inherits
+`BizApps.BusinessTimeZone`.)* The COA is **per-company runtime seed via the hook — not
 metadata**; global reference data (Currency, **GLAccountRole**) seeds via metadata sync.
 
 <a id="je-lifecycle"></a>

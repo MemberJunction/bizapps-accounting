@@ -26,7 +26,7 @@
  *   DOC:      docs/ARCHITECTURE.md#company-profile-init
  */
 
-import { BaseEntity, EntitySaveOptions, LogError, Metadata, RunView } from '@memberjunction/core';
+import { BaseEntity, LogError, Metadata, RunView } from '@memberjunction/core';
 import { RegisterClass } from '@memberjunction/global';
 import {
   mjBizAppsAccountingAccountingCompanyProfileEntity,
@@ -41,32 +41,14 @@ import {
 @RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Accounting Company Profiles')
 export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAccountingCompanyProfileEntity {
 
-  override async Save(options?: EntitySaveOptions): Promise<boolean> {
-    const isNewRecord = !this.IsSaved;
-
-    // Block 0 / AD-16: default OperatingTimeZone to UTC for a new profile when the
-    // caller didn't supply one. All storage is Zulu; period & rev-rec boundaries are
-    // evaluated in this zone. Set before the first persist so __mj.RecordChange
-    // captures it (audit-by-construction).
-    if (isNewRecord && !this.OperatingTimeZone) {
-      this.OperatingTimeZone = 'UTC';
-    }
-
-    const saved = await super.Save(options);
-    if (!saved) {
-      return false;
-    }
-
-    // NO auto-seed on create (Marcelo ruling 2026-07-30, supersedes the W1 auto-hook): a new
-    // company starts with an EMPTY chart. Rationale: GL accounts identity-lock immediately (L8),
-    // so auto-seeding forced ten locked-identity accounts on every company. The seed remains an
-    // EXPLICIT capability — call `SeedDefaultChartOfAccounts()` (idempotent, code-guarded) from
-    // fixtures, demo seeds, or a future "seed standard chart" affordance. `isNewRecord` is kept
-    // for the TZ default above.
-    void isNewRecord;
-
-    return true;
-  }
+  // No Save override. Two first-save behaviors were retired:
+  //  - COA auto-seed (2026-07-30, supersedes the W1 auto-hook): a new company starts with an
+  //    EMPTY chart, because GL accounts identity-lock immediately (L8) and auto-seeding forced
+  //    ten locked-identity accounts on every company. Seeding stays an EXPLICIT capability —
+  //    call `SeedDefaultChartOfAccounts()` (idempotent, code-guarded).
+  //  - OperatingTimeZone = 'UTC' default (#158): the field is a per-company display override,
+  //    and blank means "inherit `BizApps.BusinessTimeZone`". Stamping 'UTC' made every new
+  //    company override the business zone with UTC.
 
   // ─── Seed COA (explicit capability — no longer an auto-hook) ───────────
 
