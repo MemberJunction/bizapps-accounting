@@ -14,8 +14,10 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['src/__tests__/**/*.test.ts'],
-    // Tier 4's DOM specs live beside their components as *.dom.test.ts — never picked up here.
+    // Any spec under src/, not only src/__tests__/ — a spec co-located with its component must run,
+    // not silently pass as zero tests. Same glob as the other packages.
+    include: ['src/**/*.test.ts'],
+    // Tier 4's DOM specs are *.dom.test.ts under test-harnesses/gui/ — never picked up here.
     exclude: ['**/node_modules/**', '**/dist/**', '**/*.dom.test.ts'],
   },
 });

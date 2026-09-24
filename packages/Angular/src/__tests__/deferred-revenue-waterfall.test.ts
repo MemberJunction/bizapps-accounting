@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DeferredRevenueWaterfallComponent } from '../deferred-revenue-waterfall.component';
+import { DeferredRevenueWaterfallComponent } from '../lib/components/deferred-revenue-waterfall/deferred-revenue-waterfall.component';
 import type { mjBizAppsAccountingJournalEntryEntity } from '@mj-biz-apps/accounting-entities';
 
 function mockEntry(fields: {
