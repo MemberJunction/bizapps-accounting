@@ -1,8 +1,9 @@
 /**
  * #145 — the recovery paths for a batch that got past Approved and then failed.
  *
- *   · Retry:  sendJournalEntryBatch accepts a Failed batch, re-runs the gate and the content seal,
- *             and takes the Failed → Sent edge LEGAL_TRANSITIONS already allowed.
+ *   · Retry:  sendJournalEntryBatch accepts a Failed batch once the caller confirms it has not posted
+ *             in the ERP, re-runs the gate and the coherence check, and takes the Failed → Sent edge
+ *             LEGAL_TRANSITIONS already allowed.
  *   · Resume: resumeJournalEntryBatchPosting finishes a Posted batch's Batched → GLPosted flip with
  *             no ERP call — re-sending a Posted batch would duplicate the ERP journal.
  *   · Visibility: findStrandedJournalEntries reports the entries each of those states holds.
@@ -46,7 +47,7 @@ interface FakeBatch {
 }
 
 /** An in-memory world: one batch, its member entries, and which entry saves should fail. */
-function world(status: string, entries: Record<string, JournalEntryRow>, opts: { failingEntryIds?: string[]; drift?: string[] } = {}) {
+function world(status: string, entries: Record<string, JournalEntryRow>, opts: { failingEntryIds?: string[]; missingEntryIds?: string[]; drift?: string[]; summaryLinesScanFails?: boolean } = {}) {
     const batch: FakeBatch = {
         ID: BATCH_ID,
         JournalEntryBatchNumber: 'JEB-0001',
@@ -55,7 +56,7 @@ function world(status: string, entries: Record<string, JournalEntryRow>, opts: {
         ExternalJournalEntryBatchRef: status === 'Posted' ? 'ERP-REF-1' : null,
         PostedAt: status === 'Posted' ? new Date('2026-09-01T10:00:00Z') : null,
         SentAt: null,
-        SummaryJournalEntryID: null,
+        SummaryJournalEntryID: opts.summaryLinesScanFails ? 'cccccccc-0000-0000-0000-000000000001' : null,
         LatestResult: null,
         statusHistory: [],
         Load: async () => true,
@@ -70,7 +71,10 @@ function world(status: string, entries: Record<string, JournalEntryRow>, opts: {
             GLPostedAt: null as Date | null,
             GLReferenceID: null as string | null,
             LatestResult: { CompleteMessage: 'lock trigger' },
-            Load: async (id: string) => { je.ID = id; Object.assign(je, entries[id]); return true; },
+            Load: async (id: string) => {
+                if (opts.missingEntryIds?.includes(id)) return false;
+                je.ID = id; Object.assign(je, entries[id]); return true;
+            },
             Save: async () => {
                 if (opts.failingEntryIds?.includes(je.ID)) return false;
                 Object.assign(entries[je.ID], { Status: je.Status, GLPostedAt: je.GLPostedAt, GLReferenceID: je.GLReferenceID });
@@ -83,10 +87,10 @@ function world(status: string, entries: Record<string, JournalEntryRow>, opts: {
     const batchedIds = () => Object.entries(entries).filter(([, e]) => e.Status === 'Batched').map(([id]) => ({ ID: id }));
     const provider = {
         GetEntityObject: async (name: string) => (name === BATCH_ENTITY ? batch : journalEntry()),
-        RunView: async (params: RunViewParams) => ({
-            Success: true,
-            Results: params.EntityName === JE_ENTITY ? batchedIds() : [],
-        }),
+        RunView: async (params: RunViewParams) =>
+            params.EntityName !== JE_ENTITY && opts.summaryLinesScanFails
+                ? { Success: false, ErrorMessage: 'timeout', Results: [] }
+                : { Success: true, Results: params.EntityName === JE_ENTITY ? batchedIds() : [] },
     } as unknown as IMetadataProvider;
 
     return { batch, entries, provider };
@@ -103,7 +107,7 @@ describe('sendJournalEntryBatch — retrying a Failed batch', () => {
         const { batch, entries, provider } = world('Failed', { 'je-1': batched(), 'je-2': batched() });
         const gate = approvedGate();
 
-        const result = await sendJournalEntryBatch(BATCH_ID, USER, { gate, poster: acceptingPoster(), provider });
+        const result = await sendJournalEntryBatch(BATCH_ID, USER, { gate, poster: acceptingPoster(), provider, confirmNotAlreadyPostedInERP: true });
 
         expect(result.Status).toBe('Posted');
         expect(batch.statusHistory).toEqual(['Sent', 'Posted']);
@@ -116,7 +120,7 @@ describe('sendJournalEntryBatch — retrying a Failed batch', () => {
         const { provider } = world('Failed', { 'je-1': batched() });
         const gate = approvedGate();
 
-        await sendJournalEntryBatch(BATCH_ID, USER, { gate, poster: acceptingPoster(), provider });
+        await sendJournalEntryBatch(BATCH_ID, USER, { gate, poster: acceptingPoster(), provider, confirmNotAlreadyPostedInERP: true });
 
         expect(gate.assertApproved).toHaveBeenCalledWith(BATCH_ID, USER);
     });
@@ -124,7 +128,7 @@ describe('sendJournalEntryBatch — retrying a Failed batch', () => {
     it('clears the earlier attempt\'s ErrorMessage once the retry posts', async () => {
         const { batch, provider } = world('Failed', { 'je-1': batched() });
 
-        await sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster: acceptingPoster(), provider });
+        await sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster: acceptingPoster(), provider, confirmNotAlreadyPostedInERP: true });
 
         expect(batch.ErrorMessage).toBeNull();
     });
@@ -133,22 +137,45 @@ describe('sendJournalEntryBatch — retrying a Failed batch', () => {
         const { batch, entries, provider } = world('Failed', { 'je-1': batched() });
         const poster: ErpPoster = async () => ({ success: false, error: 'still down' });
 
-        const result = await sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, provider });
+        const result = await sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, provider, confirmNotAlreadyPostedInERP: true });
 
         expect(result.Status).toBe('Failed');
         expect(batch.ErrorMessage).toBe('still down');
         expect(entries['je-1'].Status).toBe('Batched');
     });
 
-    // A Failed batch is not frozen by the immutability trigger, so the seal is what protects a retry.
+    // Member-set / footing drift is caught on a retry. This is self-consistency only: fields the
+    // check does not read, such as PostingDate, are not covered (#183).
     it('refuses a retry whose content no longer matches what was approved, without calling the ERP', async () => {
         const { batch, provider } = world('Failed', { 'je-1': batched() }, { drift: ['Member set changed.'] });
         const poster = acceptingPoster();
 
-        await expect(sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, provider }))
+        await expect(sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, provider, confirmNotAlreadyPostedInERP: true }))
             .rejects.toThrow(/no longer matches its approved content/);
         expect(poster).not.toHaveBeenCalled();
         expect(batch.Status).toBe('Failed');
+    });
+
+    // Failed does not prove the ERP rejected the journal, so a retry needs the operator's ERP check.
+    it.each([undefined, false])('refuses a retry without the ERP confirmation (%s), without calling the ERP', async (confirm) => {
+        const { batch, provider } = world('Failed', { 'je-1': batched() });
+        const poster = acceptingPoster();
+
+        await expect(sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, provider, confirmNotAlreadyPostedInERP: confirm }))
+            .rejects.toThrow(/Confirm in the ERP that document JEB-0001 has not posted/);
+        expect(poster).not.toHaveBeenCalled();
+        expect(batch.Status).toBe('Failed');
+        expect(batch.Save).not.toHaveBeenCalled();
+    });
+
+    // An empty result would send the ERP an empty journal.
+    it('throws when the summary lines fail to load, without calling the ERP', async () => {
+        const { provider } = world('Failed', { 'je-1': batched() }, { summaryLinesScanFails: true });
+        const poster = acceptingPoster();
+
+        await expect(sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, provider, confirmNotAlreadyPostedInERP: true }))
+            .rejects.toThrow(/summary JE lines for batch .* failed to load: timeout/);
+        expect(poster).not.toHaveBeenCalled();
     });
 
     it.each(['Pending', 'Sent', 'Posted', 'Archived', 'Cancelled'])('refuses to send a %s batch', async (status) => {
@@ -186,6 +213,14 @@ describe('resumeJournalEntryBatchPosting', () => {
         const { entries, provider } = world('Posted', { 'je-1': batched(), 'je-2': batched() }, { failingEntryIds: ['je-1'] });
 
         await expect(resumeJournalEntryBatchPosting(BATCH_ID, USER, provider)).rejects.toThrow(/JE je-1 Batched→GLPosted failed: lock trigger/);
+        expect(entries['je-1'].Status).toBe('Batched');
+    });
+
+    // A failed Load leaves a new record, and saving it would attempt a CREATE.
+    it('stops loudly on an entry that will not load instead of saving a new record', async () => {
+        const { entries, provider } = world('Posted', { 'je-1': batched() }, { missingEntryIds: ['je-1'] });
+
+        await expect(resumeJournalEntryBatchPosting(BATCH_ID, USER, provider)).rejects.toThrow(/JE je-1 not found/);
         expect(entries['je-1'].Status).toBe('Batched');
     });
 

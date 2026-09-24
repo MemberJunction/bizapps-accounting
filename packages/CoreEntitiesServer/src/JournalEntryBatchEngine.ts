@@ -13,11 +13,13 @@
  *     members, set the balanced control totals + SummaryJournalEntryID (trigger 50023
  *     verifies coherence), **lock** the member JEs to Batched, and raise the approval task.
  *   approveJournalEntryBatch(): the human sign-off — Pending→Approved (+ApprovedAt/ApprovedByUserID).
- *     Content is frozen from here (trg_JournalEntryBatch_Immutability, 50009).
+ *     Content is frozen from here (trg_JournalEntryBatch_Immutability, 50009) until the batch is
+ *     Failed, which the trigger does not freeze (#183).
  *   sendJournalEntryBatch(): require approval (gate seam + Status='Approved', or 'Failed' for a
  *     retry), flip →Sent, post the summary JE's lines to the ERP (all-or-nothing per batch), and on
  *     confirmation flip Sent→Posted + the member JEs AND the summary JE Batched→GLPosted.
- *     Failure → Failed; an operator retries by sending again (#145).
+ *     Failure → Failed; an operator retries by sending again, after confirming in the ERP that the
+ *     batch did not post (#145, #182).
  *   resumeJournalEntryBatchPosting(): finish a Posted batch's Batched→GLPosted flip, no ERP call.
  *   findStrandedJournalEntries(): the entries Failed / partly-flipped Posted batches hold.
  *
@@ -816,11 +818,17 @@ export interface SendJournalEntryBatchOptions {
   poster?: ErpPoster;
   /** The provider for this call — injected by the caller (required; no global fallback). */
   provider: IMetadataProvider;
+  /**
+   * Required `true` to retry a `Failed` batch: the operator has checked the ERP and this batch's
+   * number has NOT posted there. `Failed` does not prove the ERP rejected the journal — see
+   * {@link sendJournalEntryBatch} — and nothing here can check for itself yet (#182).
+   */
+  confirmNotAlreadyPostedInERP?: boolean;
 }
 
 /**
  * The statuses a send may start from. `Failed` is a RETRY (#145): the batch was approved before its
- * first send, and the gate and the content seal below are re-run on every send, so a retry reuses
+ * first send, and the gate and the coherence check below re-run on every send, so a retry reuses
  * that approval rather than asking for a second one. `Failed → Sent` is already an edge of
  * JournalEntryBatchEntityServer's LEGAL_TRANSITIONS; without this, nothing could reach it and a
  * Failed batch held its entries at `Batched` for good.
@@ -829,12 +837,22 @@ const SENDABLE_FROM: ReadonlyArray<string> = ['Approved', 'Failed'];
 
 /**
  * Send an APPROVED batch to the ERP, or retry a FAILED one. Requires the approval gate + a sendable
- * status; then re-verifies the batch's content still matches what was approved (member set +
- * control-total footing — the same coherence check the Pending→Approved transition runs, so approval
- * cannot be a stale signature over content that has since drifted; a Failed batch is not frozen by
- * trg_JournalEntryBatch_Immutability, which makes this check the retry's seal), then →Sent, posts the
- * summary JE's lines to the ERP (all-or-nothing), and on confirmation flips Sent→Posted + the member
- * JEs AND the summary JE Batched→GLPosted.
+ * status; then re-runs the approval-time coherence check (member set + control-total footing), then
+ * →Sent, posts the summary JE's lines to the ERP (all-or-nothing), and on confirmation flips
+ * Sent→Posted + the member JEs AND the summary JE Batched→GLPosted.
+ *
+ * **The coherence check is not a content seal.** It checks that the batch agrees with itself, both
+ * sides read now; no snapshot of the approved content is stored to compare against. On an Approved
+ * batch trg_JournalEntryBatch_Immutability freezes the content, so that is enough. A Failed batch
+ * is not frozen, and fields the check never reads can change between approval and a retry — above
+ * all `PostingDate`, the journal date the ERP receives. Freezing Failed content is #183.
+ *
+ * **A retry can duplicate the ERP journal.** `Failed` does not prove the ERP rejected the journal:
+ * the poster can succeed with the response lost, or succeed and then have the Sent→Posted save fail,
+ * and both are recorded as Failed. The ERP poster sends the batch number as the document number but
+ * does not check whether that document already posted. So a retry from `Failed` requires
+ * `confirmNotAlreadyPostedInERP`: the operator has checked the ERP for this batch's number. A
+ * pre-flight lookup or idempotency key that makes the check unnecessary is #182.
  */
 export async function sendJournalEntryBatch(batchId: string, contextUser: UserInfo, options: SendJournalEntryBatchOptions): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
   const p = resolveProviders(options.provider);
@@ -845,11 +863,17 @@ export async function sendJournalEntryBatch(batchId: string, contextUser: UserIn
   if (!SENDABLE_FROM.includes(fromStatus)) {
     throw new Error(`sendJournalEntryBatch: batch ${batchId} is ${fromStatus}, only an Approved batch can be sent or a Failed batch retried`);
   }
+  if (fromStatus === 'Failed' && options.confirmNotAlreadyPostedInERP !== true) {
+    throw new Error(
+      `sendJournalEntryBatch: batch ${batch.JournalEntryBatchNumber ?? batchId} is Failed, and a Failed batch may already be in the ERP. ` +
+      `Confirm in the ERP that document ${batch.JournalEntryBatchNumber ?? batchId} has not posted, then retry with that confirmation.`,
+    );
+  }
 
   await options.gate.assertApproved(batchId, contextUser); // throws if not CFO-approved
 
-  // Seal check: what dispatches must be EXACTLY what was approved. Re-run the approval-time
-  // member-set + footing verification against the database, right before the flip to Sent.
+  // Re-run the approval-time member-set + footing verification against the database, right before
+  // the flip to Sent. Self-consistency only — see the docstring for what it does not cover.
   const drift = await batch.CheckControlTotalCoherence(contextUser);
   if (drift.length > 0) {
     throw new Error(
@@ -875,7 +899,9 @@ async function loadSummaryLines(batch: mjBizAppsAccountingJournalEntryBatchEntit
     { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID='${batch.SummaryJournalEntryID}'`, OrderBy: 'LineNumber', ResultType: 'entity_object', BypassCache: true },
     contextUser,
   );
-  return res.Success ? res.Results : [];
+  // Loud on failure: an empty result here would send the ERP an empty journal.
+  if (!res.Success) throw new Error(`loadSummaryLines: summary JE lines for batch ${batch.ID} failed to load: ${res.ErrorMessage ?? 'unknown'}`);
+  return res.Results ?? [];
 }
 
 /**
@@ -912,7 +938,7 @@ async function markJournalEntriesGLPosted(batch: mjBizAppsAccountingJournalEntry
   const rows = res.Results ?? [];
   for (const row of rows) {
     const je = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
-    await je.Load(row.ID);
+    if (!(await je.Load(row.ID))) throw new Error(`markJournalEntriesGLPosted: JE ${row.ID} not found`);
     je.Status = 'GLPosted';
     je.GLPostedAt = batch.PostedAt ?? new Date();
     if (batch.ExternalJournalEntryBatchRef) je.GLReferenceID = batch.ExternalJournalEntryBatchRef;
@@ -959,7 +985,10 @@ export async function resumeJournalEntryBatchPosting(
 /** How a stranded batch is recovered: dispatch it again, or finish its GL-posting flip. */
 export type StrandedJournalEntryRecovery = 'Retry' | 'ResumePosting';
 
-/** One batch holding journal entries at `Batched` that no scheduled run or build will pick up. */
+/**
+ * One batch holding journal entries at `Batched` that no scheduled run or build will pick up. Keep in
+ * sync with `StrandedJournalEntryBatchWire` in the Angular dispatch client, which duplicates this shape.
+ */
 export interface StrandedJournalEntryBatch {
   batchId: string;
   batchNumber: string | null;

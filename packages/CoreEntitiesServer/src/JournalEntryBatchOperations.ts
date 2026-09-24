@@ -16,7 +16,8 @@
  *                                                            all-pending sweep when CompanyID is omitted
  *   Accounting.RegenerateJournalEntryBatch       → regenerateJournalEntryBatch(...) rebuild a Pending batch in place; empty → cancel + throw
  *   Accounting.DispatchJournalEntryBatch         → sendJournalEntryBatch(...)       Approved|Failed→Sent→Posted via AccountingERPEngine (AM-4 account numbers);
- *                                                            from Failed it is the retry, reusing the batch's approval (#145)
+ *                                                            from Failed it is the retry, reusing the batch's approval and requiring
+ *                                                            ConfirmNotAlreadyPostedInERP (#145)
  *   Accounting.ResumeJournalEntryBatchPosting    → resumeJournalEntryBatchPosting(...) finish a Posted batch's Batched→GLPosted flip; NO ERP call (#145)
  *   Accounting.GetStrandedJournalEntries         → findStrandedJournalEntries(...)  read-only: Failed / partly-flipped Posted batches holding entries (#145)
  *   Accounting.RecordJournalEntryBatchDecision   → gate.recordDecision + approveJournalEntryBatch | cancelJournalEntryBatch (in-app CFO approve/reject)
@@ -217,12 +218,18 @@ export class RegenerateJournalEntryBatchOperation extends BaseRemotableOperation
 
 // ─── Accounting.DispatchJournalEntryBatch ────────────────────────────────────────────────
 
-export interface DispatchJournalEntryBatchInput { JournalEntryBatchID: string }
+export interface DispatchJournalEntryBatchInput {
+  JournalEntryBatchID: string;
+  /** Required `true` to retry a Failed batch: the caller checked the ERP and the batch number has not posted. */
+  ConfirmNotAlreadyPostedInERP?: boolean;
+}
 export interface DispatchJournalEntryBatchOutput { Status: string; ExternalJournalEntryBatchRef: string | null }
 
 /**
  * Dispatch an Approved batch to the ERP, or retry a Failed one. The gate and the engine's
  * sendable-status check block anything else; a retry re-runs both, so it needs no second approval.
+ * A retry also needs `ConfirmNotAlreadyPostedInERP`, because a Failed batch may already be in the
+ * ERP (see sendJournalEntryBatch). A send the ERP rejects returns normally with `Status: 'Failed'`.
  */
 @RegisterClass(BaseRemotableOperation, 'Accounting.DispatchJournalEntryBatch')
 export class DispatchJournalEntryBatchOperation extends BaseRemotableOperation<DispatchJournalEntryBatchInput, DispatchJournalEntryBatchOutput> {
@@ -235,6 +242,7 @@ export class DispatchJournalEntryBatchOperation extends BaseRemotableOperation<D
       gate: new TasksAppApprovalGate(provider),
       poster: createAccountingERPPoster(provider),
       provider,
+      confirmNotAlreadyPostedInERP: input.ConfirmNotAlreadyPostedInERP === true,
     });
     return { Status: batch.Status, ExternalJournalEntryBatchRef: batch.ExternalJournalEntryBatchRef ?? null };
   }

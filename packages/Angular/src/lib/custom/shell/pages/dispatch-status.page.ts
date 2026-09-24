@@ -111,6 +111,11 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
   public IsLoading = false;
   public LoadError: string | null = null;
   public RetryingJournalEntryBatchID: string | null = null;
+  /**
+   * The Failed batch whose retry waits on the operator's ERP check. A Failed batch may already be in
+   * the ERP, and nothing checks for it yet (#182), so Retry opens this confirmation instead of sending.
+   */
+  public RetryConfirmBatch: mjBizAppsAccountingJournalEntryBatchEntity | null = null;
   public ResumingJournalEntryBatchID: string | null = null;
 
   /**
@@ -276,11 +281,14 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
       if (token !== this.loadToken) return;
 
       this.StrandedBatches = stranded.Batches;
-      if (!stranded.Success) this.LoadError = `Could not count stranded journal entries: ${stranded.ErrorMessage ?? 'unknown error'}`;
-
       this.TotalCount = count?.Success ? (count.TotalRowCount ?? 0) : null;
       this.FailedBatches = failed?.Success ? ((failed.Results ?? []) as mjBizAppsAccountingJournalEntryBatchEntity[]) : [];
-      if (!failed?.Success) this.LoadError = failed?.ErrorMessage ?? 'Could not load failed dispatches.';
+
+      // Both failures are reported; neither overwrites the other.
+      const errors: string[] = [];
+      if (!failed?.Success) errors.push(failed?.ErrorMessage ?? 'Could not load failed dispatches.');
+      if (!stranded.Success) errors.push(`Could not count stranded journal entries: ${stranded.ErrorMessage ?? 'unknown error'}`);
+      this.LoadError = errors.length > 0 ? errors.join(' ') : null;
     } catch (e) {
       if (token !== this.loadToken) return;
       this.LoadError = e instanceof Error ? e.message : String(e);
@@ -467,21 +475,45 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
   }
 
   /**
-   * Re-attempt the ERP send. Same verb as Batch approvals: the server takes a Failed batch back
-   * through Sent, re-checking the approval it already has and that its content is unchanged.
+   * Ask the operator to check the ERP before a retry. `Failed` does not prove the ERP rejected the
+   * journal — the post can succeed with the response lost, or succeed and then fail to record Posted —
+   * and a retry of a journal the ERP already holds posts it twice.
    */
-  public async Retry(batch: mjBizAppsAccountingJournalEntryBatchEntity): Promise<void> {
+  public Retry(batch: mjBizAppsAccountingJournalEntryBatchEntity): void {
     if (!this.CanRetry(batch)) return;
+    this.RetryConfirmBatch = batch;
+    this.cdr.markForCheck();
+  }
+
+  public CancelRetry(): void {
+    this.RetryConfirmBatch = null;
+    this.cdr.markForCheck();
+  }
+
+  /**
+   * Re-attempt the ERP send once the operator confirms the batch number has not posted there. Same
+   * verb as Batch approvals: the server takes a Failed batch back through Sent, re-checking the
+   * approval it already has. A send the ERP rejects returns `Success` with `Status: 'Failed'`, so
+   * only `Posted` is reported as a successful retry.
+   */
+  public async ConfirmRetry(): Promise<void> {
+    const batch = this.RetryConfirmBatch;
+    if (!batch || !this.CanRetry(batch)) return;
+    this.RetryConfirmBatch = null;
     this.RetryingJournalEntryBatchID = batch.ID;
     this.ActionMessage = null;
     this.cdr.markForCheck();
     try {
-      const res = await this.client().DispatchJournalEntryBatch(batch.ID);
-      if (res.Success) {
+      const res = await this.client().DispatchJournalEntryBatch(batch.ID, true);
+      if (res.Success && res.Status === 'Posted') {
         this.ActionMessage = `Re-dispatched ${batch.JournalEntryBatchNumber}${res.ExternalJournalEntryBatchRef ? ` — ERP ref ${res.ExternalJournalEntryBatchRef}` : ''}.`;
         this.ActionIsError = false;
         this.SelectedBatch = null;
         this.Refresh(); // refetch-on-mutating-action (§8)
+      } else if (res.Success) {
+        this.setError(`Retry of ${batch.JournalEntryBatchNumber} did not post — the batch is ${res.Status ?? 'unknown'}. The ERP's error is on the batch below.`);
+        this.SelectedBatch = null;
+        this.Refresh();
       } else {
         this.setError(res.ErrorMessage ?? 'Dispatch failed.');
       }
@@ -494,8 +526,13 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
   }
 
   /** A Posted batch still holding Batched entries — the only state Resume applies to. */
+  /** True when this Posted batch still holds entries at `Batched` — whether or not a resume is running. */
+  public IsIncompletePosting(batchId: string): boolean {
+    return this.IncompletePostings.some((b) => UUIDsEqual(b.batchId, batchId));
+  }
+
   public CanResume(batchId: string): boolean {
-    return this.ResumingJournalEntryBatchID === null && this.IncompletePostings.some((b) => UUIDsEqual(b.batchId, batchId));
+    return this.ResumingJournalEntryBatchID === null && this.IsIncompletePosting(batchId);
   }
 
   /**

@@ -93,7 +93,7 @@
     <section class="ds-attention" aria-label="Failed dispatches">
       <h2 class="ds-attention__title">
         <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
-        {{ FailedBatches.length }} dispatch{{ FailedBatches.length === 1 ? '' : 'es' }} failed — needs a retry
+        {{ FailedBatches.length }} dispatch{{ FailedBatches.length === 1 ? '' : 'es' }} failed — check the ERP before retrying
       </h2>
       @for (b of FailedBatches; track b.ID) {
         <article class="ds-fail">
@@ -110,7 +110,7 @@
               variant="primary"
               size="sm"
               [disabled]="!CanRetry(b)"
-              [title]="RetryBlockedReason(b) ?? 'Re-attempt the ERP dispatch'"
+              [title]="RetryBlockedReason(b) ?? 'Re-attempt the ERP dispatch, after confirming the batch number has not posted in the ERP'"
               (click)="Retry(b)">
               @if (RetryingJournalEntryBatchID === b.ID) {
                 <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Retrying…
@@ -173,10 +173,15 @@
             <i class="fa-solid fa-rotate-right" aria-hidden="true"></i> Retry dispatch
           </button>
         }
-        @if (SelectedBatch.Status === 'Posted' && CanResume(SelectedBatch.ID)) {
-          <button type="button" mjButton variant="primary" size="sm" (click)="Resume(SelectedBatch.ID, SelectedBatch.JournalEntryBatchNumber)"
+        @if (SelectedBatch.Status === 'Posted' && IsIncompletePosting(SelectedBatch.ID)) {
+          <button type="button" mjButton variant="primary" size="sm" [disabled]="!CanResume(SelectedBatch.ID)"
+            (click)="Resume(SelectedBatch.ID, SelectedBatch.JournalEntryBatchNumber)"
             title="Mark the remaining journal entries GL-posted. Makes no ERP call.">
-            <i class="fa-solid fa-check-double" aria-hidden="true"></i> Finish GL posting
+            @if (ResumingJournalEntryBatchID === SelectedBatch.ID) {
+              <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Finishing…
+            } @else {
+              <i class="fa-solid fa-check-double" aria-hidden="true"></i> Finish GL posting
+            }
           </button>
         }
         <button type="button" mjButton variant="flat" size="sm" (click)="ClearSelection()" aria-label="Clear selection">
@@ -218,3 +223,25 @@
     </div>
   }
 </mj-page-body-interior>
+
+<!-- RETRY CONFIRMATION — Failed does not prove the ERP rejected the journal: the post can succeed with
+     the response lost, or succeed and then fail to record Posted. Nothing checks the ERP for the
+     document yet (#182), so the operator does, and the server refuses a retry without this answer. -->
+<mj-dialog [Visible]="RetryConfirmBatch !== null" Title="Check the ERP before retrying" Width="560px" (Close)="CancelRetry()">
+  @if (RetryConfirmBatch) {
+    <p>
+      Batch <span class="ds-mono">{{ RetryConfirmBatch.JournalEntryBatchNumber }}</span> failed, but the
+      {{ RetryConfirmBatch.TargetSystem }} journal may have posted anyway. Retrying a journal that already posted posts it twice.
+    </p>
+    <p>
+      In {{ RetryConfirmBatch.TargetSystem }}, search for document number
+      <span class="ds-mono">{{ RetryConfirmBatch.JournalEntryBatchNumber }}</span>. Retry only if it is not there.
+    </p>
+  }
+  <mj-dialog-actions>
+    <button mjButton variant="primary" size="sm" (click)="ConfirmRetry()">
+      <i class="fa-solid fa-rotate-right" aria-hidden="true"></i> It has not posted — retry
+    </button>
+    <button mjButton variant="flat" size="sm" (click)="CancelRetry()">Cancel</button>
+  </mj-dialog-actions>
+</mj-dialog>

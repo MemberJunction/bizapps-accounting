@@ -367,7 +367,7 @@ describe('BuildJournalEntryBatchesAction', () => {
 
         expect(result.ResultCode).toBe('NO_BATCHES');
         expect(result.Message).toContain('4 journal entries are stranded in 2 batch(es)');
-        expect(result.Message).toContain('JEB-1 (Failed, 3 — retry the dispatch)');
+        expect(result.Message).toContain('JEB-1 (Failed, 3 — confirm in the ERP that document JEB-1 has not posted before retrying the dispatch; if it has, do not retry)');
         expect(result.Message).toContain('JEB-2 (Posted, 1 — resume its GL posting)');
     });
 

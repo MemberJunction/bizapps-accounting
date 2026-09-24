@@ -15,6 +15,7 @@ import {
   TasksAppApprovalGate,
   type BuildJournalEntryBatchResult,
   type JournalEntryBatchApprovalGate,
+  type StrandedJournalEntryBatch,
   type JournalEntryBatchTargetSystem,
   type BuildJournalEntryBatchOptions,
 } from '@mj-biz-apps/accounting-core-entities-server';
@@ -279,7 +280,7 @@ async function strandedNote(user: UserInfo, provider: IMetadataProvider): Promis
     if (stranded.length === 0) return null;
     const total = stranded.reduce((n, b) => n + b.journalEntryCount, 0);
     const detail = stranded
-      .map(b => `${b.batchNumber ?? b.batchId} (${b.batchStatus}, ${b.journalEntryCount} — ${b.recovery === 'Retry' ? 'retry the dispatch' : 'resume its GL posting'})`)
+      .map(b => `${b.batchNumber ?? b.batchId} (${b.batchStatus}, ${b.journalEntryCount} — ${recoveryStep(b)})`)
       .join('; ');
     return `${total} journal entries are stranded in ${stranded.length} batch(es) that no run will pick up: ${detail}.`;
   } catch (e) {
@@ -287,6 +288,16 @@ async function strandedNote(user: UserInfo, provider: IMetadataProvider): Promis
     LogError(`Accounting.BuildJournalEntryBatches: could not count stranded journal entries: ${message}`);
     return `Could not count stranded journal entries: ${message}`;
   }
+}
+
+/**
+ * A Failed batch may already be in the ERP — the post can succeed with the response lost, or succeed
+ * and then fail to record Posted — so the step is to check the ERP first, never just to retry (#182).
+ */
+function recoveryStep(b: StrandedJournalEntryBatch): string {
+  return b.recovery === 'Retry'
+    ? `confirm in the ERP that document ${b.batchNumber ?? b.batchId} has not posted before retrying the dispatch; if it has, do not retry`
+    : 'resume its GL posting';
 }
 
 function withStrandedNote(result: ActionResultSimple, note: string | null): ActionResultSimple {

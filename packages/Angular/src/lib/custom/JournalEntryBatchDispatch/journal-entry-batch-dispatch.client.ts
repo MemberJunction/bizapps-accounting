@@ -44,7 +44,11 @@ interface RecordJournalEntryBatchDecisionOutputWire { Recorded: true }
 interface ArchiveJournalEntryBatchOutputWire { Status: string; ArchivedAt: string | null }
 interface ResumeJournalEntryBatchPostingOutputWire { Status: string; JournalEntriesPosted: number }
 
-/** One batch holding entries at `Batched` that no run will pick up (#145). */
+/**
+ * One batch holding entries at `Batched` that no run will pick up (#145). Keep in sync with
+ * `StrandedJournalEntryBatch` in CoreEntitiesServer's JournalEntryBatchEngine.ts: a status or
+ * recovery value added there compiles clean here and the page silently drops those rows.
+ */
 export interface StrandedJournalEntryBatchWire {
   batchId: string;
   batchNumber: string | null;
@@ -229,11 +233,16 @@ export class JournalEntryBatchDispatchClient {
     }
   }
 
-  /** Dispatch an Approved batch to the ERP, or retry a Failed one (reusing its approval). */
-  public async DispatchJournalEntryBatch(batchID: string): Promise<DispatchJournalEntryBatchResult> {
+  /**
+   * Dispatch an Approved batch to the ERP, or retry a Failed one (reusing its approval). A retry
+   * needs `confirmNotAlreadyPostedInERP`: a Failed batch may already be in the ERP, and the server
+   * refuses the retry without it. `Success` means the call ran, not that the ERP accepted — read
+   * `Status`, which is `'Failed'` when the ERP rejected the journal.
+   */
+  public async DispatchJournalEntryBatch(batchID: string, confirmNotAlreadyPostedInERP = false): Promise<DispatchJournalEntryBatchResult> {
     try {
-      const res = await this.dataProvider.RouteOperation<{ JournalEntryBatchID: string }, DispatchJournalEntryBatchOutputWire>(
-        'Accounting.DispatchJournalEntryBatch', { JournalEntryBatchID: batchID });
+      const res = await this.dataProvider.RouteOperation<{ JournalEntryBatchID: string; ConfirmNotAlreadyPostedInERP: boolean }, DispatchJournalEntryBatchOutputWire>(
+        'Accounting.DispatchJournalEntryBatch', { JournalEntryBatchID: batchID, ConfirmNotAlreadyPostedInERP: confirmNotAlreadyPostedInERP });
       if (!res.Success || !res.Output) return { Success: false, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
       return { Success: true, Status: res.Output.Status, ExternalJournalEntryBatchRef: res.Output.ExternalJournalEntryBatchRef ?? undefined };
     } catch (e) {

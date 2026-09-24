@@ -9,8 +9,11 @@ Give a journal entry batch that fails after approval a way back (#145).
 A `Failed` batch can now be retried: `sendJournalEntryBatch` (and `Accounting.DispatchJournalEntryBatch`)
 accepts `Failed` as well as `Approved`, taking the `Failed → Sent` edge the status graph already
 allowed. The retry reuses the batch's existing approval, re-running the approval gate and the
-content seal before it sends. The Dispatch status page's Retry dispatch button, which the server
-previously refused, now works. A successful retry clears the earlier attempt's `ErrorMessage`.
+coherence check before it sends. Because a `Failed` batch may already be in the ERP, a retry
+requires `ConfirmNotAlreadyPostedInERP: true`; the Dispatch status page's Retry dispatch button,
+which the server previously refused, now asks the operator to check the ERP for the batch number
+first, and reports a retry the ERP rejects as a failure. A successful retry clears the earlier
+attempt's `ErrorMessage`.
 
 A `Posted` batch whose member `Batched → GLPosted` flip stopped partway is finished by the new
 `resumeJournalEntryBatchPosting` / `Accounting.ResumeJournalEntryBatchPosting`, which makes no ERP

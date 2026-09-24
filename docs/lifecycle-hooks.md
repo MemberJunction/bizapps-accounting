@@ -124,8 +124,12 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   not typed" true rather than a convention. The transient flag is instance state, never a field.
 - **`JournalEntryBatchEntityServer.CheckControlTotalCoherence()`** — the Pending→Approved footing +
   member-count check is now a public method shared with the engine: `sendJournalEntryBatch` re-runs
-  it **before** `Approved→Sent`, so a batch whose member set / totals drifted after approval is
-  refused at dispatch instead of shipping under a stale signature.
+  it **before** every `→Sent` (`Approved→Sent`, and `Failed→Sent` on a retry), so a batch whose member
+  set / totals drifted after approval is refused at dispatch instead of shipping under a stale
+  signature. It is a self-consistency check, not a seal: both sides are read at check time and no
+  snapshot of the approved content is stored. On `Approved` the immutability trigger freezes the
+  content; on `Failed` it does not, so fields the check never reads (`PostingDate`, the journal date
+  the ERP receives) can change before a retry (#183).
 - **`TasksAppApprovalGate.recordDecision`** — now requires `contextUser` to BE the batch company's
   `AccountingCompanyProfile.ApprovalCFOUserID` (no CFO configured ⇒ hard-fail). Previously any
   authenticated user could approve any batch, including their own.
@@ -139,9 +143,21 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
 - **S1 batch dispatch — ✅** (`JournalEntryBatchEngine.ts`): `buildJournalEntryBatch(targetSystem, …)` is **GLOBAL** — nets ALL
   Pending JEs (every company) into ONE multi-company batch (netting keys on company × account × dims; the
   ERP-post seam splits by company, by **account number** — AM-4); `approveJournalEntryBatch` flips Pending→Approved with
-  audit stamps; `sendJournalEntryBatch` requires Approved + the CFO gate (`TasksAppApprovalGate` — per-company CFO
-  **union**: one Task assigned to every involved company's CFO) → Sent → **Posted** (mock ERP poster for
-  now) + JEs→GLPosted. Lifecycle: `Pending → Approved → Sent → Posted | Failed | Cancelled`.
+  audit stamps; `sendJournalEntryBatch` requires Approved (or Failed, for a retry) + the CFO gate
+  (`TasksAppApprovalGate` — per-company CFO **union**: one Task assigned to every involved company's CFO) → Sent →
+  **Posted** + JEs→GLPosted. A send the ERP rejects returns normally with the batch `Failed`.
+  Lifecycle (`LEGAL_TRANSITIONS`): `Pending → Approved | Cancelled | Archived`, `Approved → Sent | Archived`,
+  `Sent → Posted | Failed`, `Failed → Sent | Archived`; `Posted`, `Cancelled` and `Archived` are terminal.
+- **Batch recovery (#145).** *Retry* — `sendJournalEntryBatch` on a `Failed` batch reuses its approval
+  and requires `confirmNotAlreadyPostedInERP` (`ConfirmNotAlreadyPostedInERP` on
+  `Accounting.DispatchJournalEntryBatch`). `Failed` does not prove the ERP rejected the journal: the
+  post can succeed with the response lost, or succeed and then fail to save `Posted`, and the poster
+  does not check whether the batch number already posted, so a retry can duplicate the ERP journal.
+  The operator checks the ERP for the batch number first; a pre-flight lookup is #182. *Resume* —
+  `resumeJournalEntryBatchPosting` (`Accounting.ResumeJournalEntryBatchPosting`) finishes a `Posted`
+  batch's member `Batched → GLPosted` flip with no ERP call. *Visibility* — `findStrandedJournalEntries`
+  (`Accounting.GetStrandedJournalEntries`) reports entries held at `Batched` by either state; the
+  scheduled `Accounting.BuildJournalEntryBatches` appends the count to every run. Scheduled runs never retry.
 - **S3 scheduled-JE schedules — ✅ creation only** (`ScheduledJournalEntryService.createScheduledEntries`:
   straight-line schedules with exact cent-remainder spread). **The central materializer is RETIRED (AM-6)**
   — *domain entity servers* (e.g. a future SubscriptionEntityServer) generate the real Pending JE when a row
