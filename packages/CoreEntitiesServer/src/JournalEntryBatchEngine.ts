@@ -897,7 +897,9 @@ export async function sendJournalEntryBatch(batchId: string, contextUser: UserIn
 /**
  * Run the poster, turning a THROW into `{success:false}` so the batch is marked Failed instead of
  * left at Sent, where no operator action can reach it. A poster throws before its ERP call or after
- * that call has failed, so Failed is accurate; the retry confirmation covers the rest.
+ * that call has failed, so Failed is accurate. The exception is an `afterPost` hook that throws after
+ * the ERP accepted the journal, followed by a throwing `afterPostFailure` (#182); the retry
+ * confirmation covers that case.
  */
 async function postOrFail(
   poster: ErpPoster, batch: mjBizAppsAccountingJournalEntryBatchEntity, summaryLines: mjBizAppsAccountingJournalEntryLineEntity[], contextUser: UserInfo,
@@ -905,6 +907,8 @@ async function postOrFail(
   try {
     return await poster(batch, summaryLines, contextUser);
   } catch (err) {
+    // The message lands in ErrorMessage; log the error itself so its stack is not lost.
+    LogError(`sendJournalEntryBatch: poster threw for batch ${batch.JournalEntryBatchNumber ?? batch.ID}`, null, err);
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
