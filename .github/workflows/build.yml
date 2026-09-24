@@ -47,14 +47,14 @@ jobs:
       - name: Build all packages
         run: pnpm run build:packages
 
-      # Unit tests. Runs even when the build step above fails, because the packages
-      # that carry tests build independently of @mj-biz-apps/accounting-ng — a
-      # failure there should not stop the suites from executing.
+      # Unit tests. Runs even when the build step above fails: turbo builds each
+      # tested package's own dependencies first, so a failure in an unrelated
+      # package should not stop the suites from executing.
       #
-      # `pnpm run test` is turbo-driven and scoped to the packages that have unit
-      # tests; turbo builds each one's dependencies first. Until this step existed,
-      # NO workflow in this repo ran a test: the layered-view guard and 216 other
-      # tests were green only on whoever's laptop last ran them.
+      # `pnpm run test` is turbo-driven and runs every package's unit tests,
+      # excluding only the integration tests. Until this step existed, NO workflow
+      # in this repo ran a test: the suites were green only on whoever's laptop
+      # last ran them.
       - name: Unit tests
         if: always()
         run: pnpm run test
