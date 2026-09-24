@@ -32,8 +32,9 @@ const BUSINESS_DAY = '2026-08-31';
  * stamps defaults, adds two blank lines, and validates on render. Nothing here is saved or loaded.
  *
  * This is a fake of an entity, which MJ's Angular testing guide cautions against; it is kept to
- * exactly what `defaultDraft()` and the empty-draft template read, so a new dependency on the
- * entity surfaces as a guard error rather than a silently wrong fake. The cast is confined here.
+ * exactly what `defaultDraft()` and the empty-draft template read. A new method call on the entity
+ * throws and fails the test through the error guard; a new property read does not, since it just
+ * returns `undefined`, so add any member the page starts to read here. The cast is confined here.
  */
 function blankDraftEntry(): JournalEntryEntity {
   const ok = (): ValidationResult => {
