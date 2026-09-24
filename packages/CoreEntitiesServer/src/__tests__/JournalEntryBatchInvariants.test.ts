@@ -14,6 +14,8 @@ const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 
 describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
   let batch: JournalEntryBatchEntityServer;
+  /** Kept in scope so a case can build a SECOND batch off the same EntityInfo. */
+  let batchInfo: ReturnType<typeof Object.create>;
 
   beforeEach(() => {
     const createMockEntity = (name: string, fieldNames: string[]) => {
@@ -39,7 +41,7 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
       return info;
     };
 
-    const batchInfo = createMockEntity(BATCH_ENTITY, [
+    batchInfo = createMockEntity(BATCH_ENTITY, [
       'ID', 'JournalEntryBatchNumber', 'CompanyID', 'PostingDate', 'SummaryJournalEntryID', 'TargetSystem',
       'BatchedAt', 'BatchedByUserID', 'Status', 'TotalEntries', 'TotalDebits', 'TotalCredits',
       'ApprovedAt', 'ApprovedByUserID', 'ArchiveReason', 'ArchivedAt', 'ArchivedByUserID',
@@ -52,6 +54,9 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
 
     batch = new JournalEntryBatchEntityServer(batchInfo as any);
     batch.NewRecord();
+    // These cases are about the lifecycle rules, so they stand in the batching process's shoes.
+    // The create guard itself is covered separately below.
+    batch.MarkBuiltByBatchingProcess();
     batch.CompanyID = 'CO_1';
     batch.TargetSystem = 'BusinessCentral';
   });
@@ -70,6 +75,28 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
     const result = batch.Validate();
     const lifecycleErrors = result.Errors.filter(e => getErrorText(e).includes('status') || getErrorText(e).includes('Status'));
     expect(lifecycleErrors).toEqual([]);
+  });
+
+  // ─── build is the create verb (golive #193) ──────────────────────────────
+
+  it('a NEW batch that the batching process did not build is refused', () => {
+    const handTyped = new JournalEntryBatchEntityServer(batchInfo as any);
+    handTyped.NewRecord();
+    handTyped.CompanyID = 'CO_1';
+    handTyped.TargetSystem = 'BusinessCentral';
+    handTyped.Status = 'Pending';
+    handTyped.TotalEntries = 12;
+    handTyped.TotalDebits = 1000;
+    handTyped.TotalCredits = 1000;
+
+    const result = handTyped.Validate();
+    expect(result.Success).toBe(false);
+    expect(result.Errors.some(e => getErrorText(e).includes('cannot be created directly'))).toBe(true);
+  });
+
+  it('the same batch passes once the batching process claims it', () => {
+    batch.Status = 'Pending';
+    expect(batch.Validate().Errors.some(e => getErrorText(e).includes('cannot be created directly'))).toBe(false);
   });
 
   it('an Approved batch without its audit pair (ApprovedAt + ApprovedByUserID) fails', () => {

@@ -625,8 +625,10 @@ scaffolding only, replaced before non-dev use).
 
 One aggregated JE per batch (the summary JE) posts to the GL, dated `PostingDate`. Status walk:
 `Pending → Approved → Sent → Posted` (member JEs + the summary JE → `GLPosted`) ·
-`Sent → Failed` (ERP rejection — hold for review/retry) · `Pending → Cancelled` (reject —
-member JEs unlock back to the candidate pool). Closed-period rejections HOLD-and-flag (§4).
+`Sent → Failed` (ERP rejection — hold for review/retry) · `Failed → Sent` (operator retry,
+reusing the batch's approval — scheduled runs never retry on their own) · `Pending → Cancelled`
+(reject — member JEs unlock back to the candidate pool). A `Posted` batch whose member flip to
+`GLPosted` did not finish is resumed without an ERP call, never re-sent (#145). Closed-period rejections HOLD-and-flag (§4).
 
 ### 7.5 BC dispatch mechanics (Jeremy/Robert, 2026-07-17)
 
@@ -807,6 +809,14 @@ The accounting-facing shape of the order booking (the orders repo owns its own p
   order↔JE junction. **Display aggregation is UI-only:** an accounting-engine helper (Amith,
   2026-07-28) groups the per-line JEs per order / per payment for presentation (grouped by
   default, expandable to individual JEs) — never aggregated in the database.
+- **A zero-value line books no JE.** A line with no economic legs (a comped, 100%-discounted or
+  zero-priced item) has nothing to debit or credit, and a Dr 0 / Cr 0 draft is refused
+  (`MALFORMED_DRAFT`). The line is kept — it is what was ordered and what ships — but its
+  `JournalEntryID` stays NULL permanently. The rule is one JE per line *that has value*, and an
+  order whose every line is zero-value books no entries at all. Consequence for any
+  reconciliation, aging or completeness query: `OrderLine.JournalEntryID IS NOT NULL` is **not** a
+  "booked" test — it reports a correctly-booked order containing a zero-value line as forever
+  unbooked. Test the valued lines, or test the order's status.
 - **Booking pattern per line:** Dr line-company AR (net) · Cr Sales (gross) · Dr Sales-Discounts
   for discounts (netting into Sales when the role is unlinked) · deferred-revenue-typed products
   credit DefRev instead of Sales, with the recognition waterfall staged as forward-dated JEs (D15).

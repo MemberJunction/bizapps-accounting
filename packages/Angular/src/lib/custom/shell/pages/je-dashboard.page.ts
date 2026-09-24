@@ -148,7 +148,7 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
    * not worth its price.
    */
   private async loadCounts(): Promise<JeCounts> {
-    const monthStart = this.monthStartUTC();
+    const monthStart = this.monthStartBusiness();
     const scoped = (own: string | null): string => this.Scope.ComposeFilter(own);
 
     // NO scheduled-entries count: the ScheduledJournalEntry system was retired (D15) — its count
@@ -172,7 +172,7 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
   private buildStats(c: JeCounts): DashboardStat[] {
     return [
       { Id: 'month', Label: 'Entries this month', Value: c.thisMonth, Icon: 'fa-solid fa-book-open', GoTo: 'all-entries',
-        Tooltip: 'Journal entries with an effective date in the current calendar month (UTC).' },
+        Tooltip: 'Journal entries with an effective date in the current calendar month, in the business time zone.' },
       { Id: 'pending', Label: 'Pending', Value: c.pending, Icon: 'fa-solid fa-layer-group', GoTo: 'all-entries',
         Tooltip: 'Not yet batched — the candidate pool a JE batch build would sweep.' },
       { Id: 'batched', Label: 'Batched', Value: c.batched, Icon: 'fa-solid fa-box-archive', GoTo: 'all-batches',

@@ -48,7 +48,7 @@ import '@memberjunction/server-bootstrap-lite';
 import '@mj-biz-apps/common-entities';
 import '@mj-biz-apps/accounting-entities';
 import '@mj-biz-apps/accounting-core-entities-server';
-import { RequireJournalEntryTypeID, JournalEntryEntityServer } from '@mj-biz-apps/accounting-core-entities-server';
+import { RequireJournalEntryTypeID, JournalEntryEntityServer, JournalEntryBatchEntityServer } from '@mj-biz-apps/accounting-core-entities-server';
 import type {
   mjBizAppsAccountingAccountingCompanyProfileEntity,
   mjBizAppsAccountingJournalEntryEntity,
@@ -299,8 +299,11 @@ async function main(): Promise<void> {
   // description promises BATCH-{CompanyCode}-{seq} but spAssignNextJournalEntryBatchNumber emits the
   // global BATCH-{seq} — asserted here as the sproc actually behaves; see plans/donor-audit.md) ──
   const makeBatch = async (): Promise<mjBizAppsAccountingJournalEntryBatchEntity> => {
-    const batch = await md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, user);
+    const batch = await md.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, user);
     batch.NewRecord();
+    // W3 exercises the numbering sproc, not the build flow, so it declares its own provenance —
+    // the create guard (#193) refuses any new batch that does not.
+    batch.MarkBuiltByBatchingProcess();
     batch.CompanyID = acpId; // batches are single-company (D7/MOD-15)
     batch.PostingDate = new Date(new Date().toISOString().slice(0, 10));
     batch.TargetSystem = 'BusinessCentral';

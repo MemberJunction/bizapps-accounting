@@ -343,20 +343,50 @@ This repo uses MemberJunction's CodeGen system to generate entity and action sub
 - Write all migrations as **T-SQL** in `migrations/` (`V<TS>__v<X.Y.x>__<description>.sql`).
 - The PostgreSQL counterparts in `migrations-pg/` are produced by the MJ converter (`@memberjunction/sql-converter`) via `pnpm exec mj sql-convert <file> --from tsql --to postgres --output migrations-pg/<file>.pg.sql --schema __mj_BizAppsAccounting`. PG-only patches use the `.pg-only.sql` extension.
 - **Never hand-edit `migrations-pg/*.pg.sql`** — fix the converter rule and re-convert. PG-only patches are the exception, and live next to the converted files.
-- CI runs `.github/workflows/pg-migrations.yml` on PRs that touch migrations or the converter to validate the PG output still applies cleanly to a fresh PG 17 database.
+- `.github/workflows/pg-migrations.yml` validates PG parity on `workflow_dispatch` (manual trigger) rather than gating PRs, per MJ cross-repo policy.
 - See `migrations-pg/README.md` for the conversion workflow and the MJ repo's `/pg-migrate` slash command for the deeper toolchain.
 
 ### Accounting-specific schema invariants (see `plans/bizapps-accounting-master.md` §6)
-- Balanced-JE invariant enforced via DEFERRABLE constraint trigger — never UPDATE/DELETE around it.
-- JE immutability after `Status ∈ {Batched, GLPosted}` enforced by trigger — only `GLPostedAt`/`GLReferenceID`/`Status` may change after lock.
-- Period-close trigger blocks JE inserts into a closed `AccountingPeriod` unless `OriginalAccountingPeriodID` is set (adjusting entry pattern).
+- **Balance is enforced at the LOCK event, not deferred.** T-SQL has no PG `DEFERRABLE` constraint
+  trigger, so `trg_JournalEntry_BalancedOnLock` checks `SUM(Debits) = SUM(Credits)` (± 0.005) only
+  when a JE transitions to `Batched`/`GLPosted`; a `Pending` JE may be freely imbalanced while its
+  lines are built. `trg_JEL_RecheckParentBalance` re-verifies if a line changes on an already-locked
+  JE. Never UPDATE/DELETE around either.
+- **JE immutability after `Status ∈ {Batched, GLPosted}`** enforced by `trg_JournalEntry_Immutability`.
+  DELETE is blocked outright. On a locked row only these may change: `GLPostedAt`, `GLReferenceID`,
+  `ReversedByJournalEntryID`, `Status` `Batched→GLPosted`, and the **reversible preliminary unlock**
+  (`Status` `Batched→Pending` **plus** `JournalEntryBatchID→NULL`, and nothing else, while the owning
+  batch is still `Pending`). `GLPosted` never regresses. Corrections are new `Pending` reversal JEs.
+- **There are no accounting periods and no close machinery** (D2, plan §4 — the ERP owns periods).
+  No `AccountingPeriod` table, no period FK, no close guard, no `OriginalAccountingPeriodID`, no
+  adjusting-entry routing: all removed 2026-07-06 with the period tables, and `AccountingPeriod`
+  heads the plan's §5.9 "deliberately ABSENT" table. JEs carry dates only (`EffectiveDate`), and a
+  dispatched batch lands in whatever period the ERP has active. **Closed-period collisions
+  hold-and-flag, never auto-roll:** when the ERP rejects a batch for a closed posting date, the batch
+  is flagged for review — there is no local period gate to detect it first. Any future timing rule
+  detects by DATE, never a period FK.
 - `AccountingCompanyProfile` is an IsA Disjoint child of `__mj.Company` — same UUID as the parent row, never INSERT a Profile without a matching Company.
 
-### Time is ALWAYS stored in UTC (convention)
-Every timestamp this app persists is **UTC** — no exceptions, no local-time storage.
-- **Code writes UTC instants:** use `new Date()` (a JS Date is a UTC instant; the mssql driver persists it to `DATETIMEOFFSET` as `+00:00`), `new Date().toISOString().slice(0,10)` for `DATE` values, and `getUTC*()` for any date-part math (e.g. fiscal year). **Never** use local-time getters (`getFullYear()`, `getMonth()`, `toLocaleString()`, `toDateString()`) for a value that gets stored or compared — they introduce the runner's local zone.
-- **DB defaults are UTC:** the SQL Server container runs at `+00:00`, so `SYSDATETIMEOFFSET()` / `GETUTCDATE()` defaults (and CodeGen's `__mj_CreatedAt`/`__mj_UpdatedAt`) are UTC. Verify with `SELECT DATENAME(TZOFFSET, SYSDATETIMEOFFSET())` → must be `+00:00`. If a deployment's server is NOT UTC, fix the server/container TZ — do not paper over it in code.
-- **Display/zone is a presentation concern:** `AccountingCompanyProfile.OperatingTimeZone` (defaults `'UTC'`, W1) is for *rendering* dates to a company's users; storage stays UTC regardless.
+### Instants are UTC; calendar days are calendar days; "today" is the business day (convention)
+- **Timestamps** (`DATETIMEOFFSET`): write `new Date()`; the driver persists `+00:00`. Never local getters.
+- **Calendar days** (`DATE` columns such as `EffectiveDate`, `PostingDate`): a day with no time and no
+  zone. Read it with `ToCalendarDay` (UTC parts) and write it with `FromCalendarDay` (UTC midnight),
+  both from `@mj-biz-apps/common-entities`. Never `toISOString().slice(0,10)` on a clock reading and
+  never local getters on a stored value; the first files the evening into tomorrow, the second files
+  midnight into yesterday.
+- **"Today", "prior day", "prior month", cutoffs:** `BusinessTimeZoneEngine.Instance.Today()` /
+  `.Zone` (bizapps-common). The zone is the instance's `BizApps.BusinessTimeZone` setting (AIDP
+  Next: Central). `AccountingCompanyProfile.OperatingTimeZone` is still read as a per-company
+  OVERRIDE where a profile has set it (`company-accounting-header.panel.ts`:
+  `p['OperatingTimeZone'] || BusinessTimeZoneEngine.Instance.Zone`); the engine is the FALLBACK
+  when it is blank, replacing a hardcoded `'America/New_York'`. `OperatingTimeZone` itself migrates
+  into MJ Companies at 6.2, at which point this override/fallback split goes away.
+- **DB defaults are UTC:** the SQL Server container runs at `+00:00`; verify with
+  `SELECT DATENAME(TZOFFSET, SYSDATETIMEOFFSET())`. Views that need "today" are intended to cross
+  join `[__mj_BizAppsCommon].[fnBusinessToday]()` rather than cast `GETUTCDATE()` — but as of this
+  writing no migration in THIS repo creates that function; it ships from bizapps-common. Confirm it
+  exists (`SELECT OBJECT_ID('[__mj_BizAppsCommon].[fnBusinessToday]')`) before writing a view that
+  assumes it.
 
 ---
 
@@ -402,15 +432,19 @@ This repository provides the **AR subsidiary ledger of record + journal-entry pr
 
 **What lives here** (per `plans/bizapps-accounting-master.md`):
 1. `GLAccount` + seeded default chart of accounts
-2. `AccountingCompanyProfile` — IsA Disjoint child of `__mj.Company` (functional currency, fiscal year, default GL accounts, business-profile fields)
-3. `AccountingPeriod` with hard-close semantics
-4. `JournalEntry` / `JournalEntryLine` / `JournalEntryBatch` with balanced-JE + immutability invariants enforced at the DB level
-5. `Dimension` / `DimensionValue` / `JournalEntryLineDimension` for analytical tagging
-6. `ChartOfAccountsMapping` for ERP roundtrip
-7. Tax entities (`TaxAuthority`, `TaxJurisdiction`, `TaxRate`, `TaxLiability`, `CustomerTaxProfile`) + pluggable `TaxCalculationProvider` — accounting keeps the tax ACCRUAL only; remitting to the authority is an ERP/GL concern (TaxRemittance removed 2026-07-29, Amith PR-27 review)
-8. Recurring JE templates (FX revaluation, depreciation, prepaid amortization, sales-tax snapshot)
-9. Account balance materialization for closed periods
-10. Read-model views (`vw_TrialBalance_AR`, `vw_AROpenByCustomer`, `vw_DefRevRollforward`, etc.) for Skip-generated reports
+2. `AccountingCompanyProfile` — IsA Disjoint child of `__mj.Company` (functional currency, fiscal year, business-profile fields). A company's **default accounts are company-level `GLAccountLink` rows** keyed by role (AR, Sales, Deferred Revenue, …), NOT columns on the profile (D12)
+3. `JournalEntry` / `JournalEntryLine` / `JournalEntryBatch` with balanced-JE + immutability invariants enforced at the DB level
+4. `Dimension` / `DimensionValue` / `JournalEntryLineDimension` for analytical tagging
+5. Tax entities (`TaxAuthority`, `TaxJurisdiction`, `TaxRate`, `TaxLiability`, `CustomerTaxProfile`) + pluggable `TaxCalculationProvider` — accounting keeps the tax ACCRUAL only; remitting to the authority is an ERP/GL concern (TaxRemittance removed 2026-07-29, Amith PR-27 review)
+6. Forward-dated real JEs for rev-rec and other scheduled recognition (D15 — this REPLACED the `Recurring*` template trio, which was never built)
+7. Read-model views (`vw_TrialBalance_AR`, `vw_AROpenByCustomer`, `vw_DefRevRollforward`, etc.) for Skip-generated reports. **Creation is deferred** (2026-07-22): none are in the baseline today; each is built when a report that needs it ships.
+
+**Deliberately ABSENT — do not add these back without a decision** (plan §5.9 carries the full table):
+`AccountingPeriod` + period FKs + close machinery (D2, the ERP owns periods) · `AccountBalance` /
+`AccountBalanceByDimension` (D20, the views compute on demand) · `ChartOfAccountsMapping` (D13, ERP
+account identity lives on `GLAccount` as `ExternalSystem` + `ExternalAccountID`) · `Recurring*`
+templates (D15) · `ScheduledJournalEntry` (D15) · ACP default-GL-account FK columns (D12, superseded
+by company-level `GLAccountLink` rows).
 
 **What does NOT live here**: trial balance / P&L / balance sheet generation, year-end closing, statistical accounts, fixed-asset depreciation as first-class, inventory/COGS, expense management. Those stay in the ERP or future BizApps* siblings.
 

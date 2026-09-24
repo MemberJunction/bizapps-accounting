@@ -5,8 +5,9 @@ import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
 import { GridColumnConfig, EntityDataGridComponent } from '@memberjunction/ng-entity-viewer';
 import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
+import { AddDays, BusinessTimeZoneEngine, DayStartUtc, IsCalendarDay } from '@mj-biz-apps/common-entities';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
-import { JournalEntryBatchDispatchClient } from '../../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
+import { JournalEntryBatchDispatchClient, StrandedJournalEntryBatchWire } from '../../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
 import { TIME_WINDOWS, TimeWindowId, timeWindowRange, toSqlDate, andFilters } from '../../../transfer-pending/list-scaffold/time-window';
 import { sqlLiteral, likeContains } from '../../../transfer-pending/list-scaffold/sql-filter';
 import { rowKeyToId } from '../../../transfer-pending/list-scaffold/grid-row-key';
@@ -110,6 +111,19 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
   public IsLoading = false;
   public LoadError: string | null = null;
   public RetryingJournalEntryBatchID: string | null = null;
+  /**
+   * The Failed batch whose retry waits on the operator's ERP check. A Failed batch may already be in
+   * the ERP, and nothing checks for it yet (#182), so Retry opens this confirmation instead of sending.
+   */
+  public RetryConfirmBatch: mjBizAppsAccountingJournalEntryBatchEntity | null = null;
+  public ResumingJournalEntryBatchID: string | null = null;
+
+  /**
+   * Batches holding entries at `Batched` that no run will pick up (#145) — Failed ones, and Posted
+   * ones whose GL-posting flip did not finish. Deliberately NOT narrowed by this page's filters: like
+   * the failed strip, it is an alarm, and a date window must not hide entries stranded before it.
+   */
+  public StrandedBatches: StrandedJournalEntryBatchWire[] = [];
   public ActionMessage: string | null = null;
   public ActionIsError = false;
 
@@ -215,14 +229,25 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
    * widens the status toggles).
    *
    * BatchedAt is `datetimeoffset`, so the To box (which states an INCLUSIVE last day) becomes an
-   * EXCLUSIVE `< To+1day` bound — a `<= '2026-07-16'` would compare against midnight and drop that
-   * whole day's dispatches.
+   * EXCLUSIVE bound at the START OF THE NEXT BUSINESS DAY — resolved through `DayStartUtc`, not by
+   * pasting the calendar day into the SQL, which would compare an instant against midnight UTC.
    */
   private dateFilter(): string | null {
+    // BatchedAt is an INSTANT; the boxes hold CALENDAR DAYS. Comparing the two directly comes out
+    // an offset short: a bare 'YYYY-MM-DD' literal is midnight UTC, which is 19:00 the previous
+    // evening in Chicago. Between 00:00 and 05:00 UTC that made the upper bound land BEFORE the
+    // 01:00 UTC nightly run, hiding the very batches (and failures) this page exists to triage.
+    // DayStartUtc turns a business calendar day into the instant it actually begins, DST included.
+    const zone = BusinessTimeZoneEngine.Instance.Zone;
+    const startOf = (day: string): string | null =>
+      IsCalendarDay(day) ? DayStartUtc(day, zone).toISOString() : null;
+    const from = this.FromDate ? startOf(this.FromDate) : null;
+    // The To box states an INCLUSIVE last day, so the exclusive bound is the start of the day after.
+    const toExclusive = this.ToDate && IsCalendarDay(this.ToDate) ? startOf(AddDays(this.ToDate, 1)) : null;
     return (
       andFilters(
-        this.FromDate ? `BatchedAt >= '${sqlLiteral(this.FromDate)}'` : null,
-        this.ToDate ? `BatchedAt < '${sqlLiteral(nextDay(this.ToDate))}'` : null,
+        from ? `BatchedAt >= '${sqlLiteral(from)}'` : null,
+        toExclusive ? `BatchedAt < '${sqlLiteral(toExclusive)}'` : null,
       ) || null
     );
   }
@@ -249,17 +274,27 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
     this.cdr.markForCheck();
     try {
       const rv = new RunView();
-      const [count, failed] = await rv.RunViews([this.countParams(), this.failedParams()]);
+      const [[count, failed], stranded] = await Promise.all([
+        rv.RunViews([this.countParams(), this.failedParams()]),
+        this.client().GetStrandedJournalEntries(),
+      ]);
       if (token !== this.loadToken) return;
 
+      this.StrandedBatches = stranded.Batches;
       this.TotalCount = count?.Success ? (count.TotalRowCount ?? 0) : null;
       this.FailedBatches = failed?.Success ? ((failed.Results ?? []) as mjBizAppsAccountingJournalEntryBatchEntity[]) : [];
-      if (!failed?.Success) this.LoadError = failed?.ErrorMessage ?? 'Could not load failed dispatches.';
+
+      // Both failures are reported; neither overwrites the other.
+      const errors: string[] = [];
+      if (!failed?.Success) errors.push(failed?.ErrorMessage ?? 'Could not load failed dispatches.');
+      if (!stranded.Success) errors.push(`Could not count stranded journal entries: ${stranded.ErrorMessage ?? 'unknown error'}`);
+      this.LoadError = errors.length > 0 ? errors.join(' ') : null;
     } catch (e) {
       if (token !== this.loadToken) return;
       this.LoadError = e instanceof Error ? e.message : String(e);
       this.TotalCount = null;
       this.FailedBatches = [];
+      this.StrandedBatches = [];
     } finally {
       if (token === this.loadToken) {
         this.IsLoading = false;
@@ -293,6 +328,16 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
 
   public get FailedCount(): number {
     return this.FailedBatches.length;
+  }
+
+  /** Entries every run skips until someone retries or resumes their batch. */
+  public get StrandedEntryCount(): number {
+    return this.StrandedBatches.reduce((n, b) => n + b.journalEntryCount, 0);
+  }
+
+  /** Posted batches whose member Batched→GLPosted flip did not finish — the resume strip's rows. */
+  public get IncompletePostings(): StrandedJournalEntryBatchWire[] {
+    return this.StrandedBatches.filter((b) => b.recovery === 'ResumePosting');
   }
 
   /** True once the filters have resolved to nothing — the honest empty state, not a bug. */
@@ -357,7 +402,7 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
   }
 
   private applyWindowRange(window: TimeWindowId): void {
-    const { From, To } = timeWindowRange(window);
+    const { From, To } = timeWindowRange(window, new Date(), BusinessTimeZoneEngine.Instance.Zone);
     this.FromDate = From ? toSqlDate(From) : null;
     // timeWindowRange's To is EXCLUSIVE (tomorrow 00:00 UTC); the calendar box states an INCLUSIVE
     // last day, so step back one — dateFilter() re-opens it to an exclusive bound for the compare.
@@ -429,20 +474,46 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
     }
   }
 
-  /** Re-attempt the ERP send. Same verb (and the same approval gate) as Batch approvals. */
-  public async Retry(batch: mjBizAppsAccountingJournalEntryBatchEntity): Promise<void> {
+  /**
+   * Ask the operator to check the ERP before a retry. `Failed` does not prove the ERP rejected the
+   * journal — the post can succeed with the response lost, or succeed and then fail to record Posted —
+   * and a retry of a journal the ERP already holds posts it twice.
+   */
+  public Retry(batch: mjBizAppsAccountingJournalEntryBatchEntity): void {
     if (!this.CanRetry(batch)) return;
+    this.RetryConfirmBatch = batch;
+    this.cdr.markForCheck();
+  }
+
+  public CancelRetry(): void {
+    this.RetryConfirmBatch = null;
+    this.cdr.markForCheck();
+  }
+
+  /**
+   * Re-attempt the ERP send once the operator confirms the batch number has not posted there. Same
+   * verb as Batch approvals: the server takes a Failed batch back through Sent, re-checking the
+   * approval it already has. A send the ERP rejects returns `Success` with `Status: 'Failed'`, so
+   * only `Posted` is reported as a successful retry.
+   */
+  public async ConfirmRetry(): Promise<void> {
+    const batch = this.RetryConfirmBatch;
+    if (!batch || !this.CanRetry(batch)) return;
+    this.RetryConfirmBatch = null;
     this.RetryingJournalEntryBatchID = batch.ID;
     this.ActionMessage = null;
     this.cdr.markForCheck();
     try {
-      const client = new JournalEntryBatchDispatchClient(this.ProviderToUse as GraphQLDataProvider);
-      const res = await client.DispatchJournalEntryBatch(batch.ID);
-      if (res.Success) {
+      const res = await this.client().DispatchJournalEntryBatch(batch.ID, true);
+      if (res.Success && res.Status === 'Posted') {
         this.ActionMessage = `Re-dispatched ${batch.JournalEntryBatchNumber}${res.ExternalJournalEntryBatchRef ? ` — ERP ref ${res.ExternalJournalEntryBatchRef}` : ''}.`;
         this.ActionIsError = false;
         this.SelectedBatch = null;
         this.Refresh(); // refetch-on-mutating-action (§8)
+      } else if (res.Success) {
+        this.setError(`Retry of ${batch.JournalEntryBatchNumber} did not post — the batch is ${res.Status ?? 'unknown'}. The ERP's error is on the batch below.`);
+        this.SelectedBatch = null;
+        this.Refresh();
       } else {
         this.setError(res.ErrorMessage ?? 'Dispatch failed.');
       }
@@ -454,6 +525,47 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
     }
   }
 
+  /** True when this Posted batch still holds entries at `Batched` — whether or not a resume is running. */
+  public IsIncompletePosting(batchId: string): boolean {
+    return this.IncompletePostings.some((b) => UUIDsEqual(b.batchId, batchId));
+  }
+
+  /** A Posted batch still holding Batched entries, with no resume running — the only state Resume applies to. */
+  public CanResume(batchId: string): boolean {
+    return this.ResumingJournalEntryBatchID === null && this.IsIncompletePosting(batchId);
+  }
+
+  /**
+   * Finish a Posted batch's GL-posting flip. NO ERP call: the ERP already holds this journal, which
+   * is why this is its own verb and a Posted batch never offers Retry.
+   */
+  public async Resume(batchId: string, batchNumber: string | null): Promise<void> {
+    if (!this.CanResume(batchId)) return;
+    this.ResumingJournalEntryBatchID = batchId;
+    this.ActionMessage = null;
+    this.cdr.markForCheck();
+    try {
+      const res = await this.client().ResumeJournalEntryBatchPosting(batchId);
+      if (res.Success) {
+        this.ActionMessage = `Finished GL posting for ${batchNumber ?? batchId} — ${res.JournalEntriesPosted} journal entr${res.JournalEntriesPosted === 1 ? 'y' : 'ies'} marked GL-posted.`;
+        this.ActionIsError = false;
+        this.SelectedBatch = null;
+        this.Refresh();
+      } else {
+        this.setError(res.ErrorMessage ?? 'Resume failed.');
+      }
+    } catch (e) {
+      this.setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      this.ResumingJournalEntryBatchID = null;
+      this.cdr.markForCheck();
+    }
+  }
+
+  private client(): JournalEntryBatchDispatchClient {
+    return new JournalEntryBatchDispatchClient(this.ProviderToUse as GraphQLDataProvider);
+  }
+
   private setError(message: string): void {
     this.ActionMessage = message;
     this.ActionIsError = true;
@@ -461,7 +573,3 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
   }
 }
 
-/** `YYYY-MM-DD` one day on, in UTC — the exclusive upper bound for an inclusive To box. */
-function nextDay(sqlDate: string): string {
-  return toSqlDate(new Date(Date.parse(`${sqlDate}T00:00:00.000Z`) + DAY_MS));
-}

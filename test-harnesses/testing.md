@@ -13,6 +13,25 @@ create + open questions for the human, recorded so dev can roll through and circ
 Tiers: **1** Vitest (unit) · **2** server (tsx, in-process direct SQL) · **3** API (GraphQL→MJAPI) ·
 **4** GUI/DOM (no-browser — parked, mjdev overlay) · **5** Playwright (browser e2e, pre-PR only).
 
+## ✅ 2026-09-23 — tier 1 runs in CI, accounting-ng included (#170)
+
+`pnpm run test` runs on every PR (`build.yml`). accounting-ng's suite was never run before: its
+`test` script had no vitest dependency, and the root script excluded the package. The "4 packages
+remain stubs" note in the 2026-08-06 entries no longer holds. The counts in the entries below are
+as of their own dates.
+
+| Package | Files | Tests |
+|---|---|---|
+| accounting-ng | 11 | **150/150** |
+| accounting-engine-base | 6 | **80/80** |
+| accounting-core-entities-server | 14 | **108/108** (+1 skipped) |
+| accounting-actions | 3 | **36/36** |
+| **Tier 1 total** | **34** | **374/374** (+1 skipped) |
+
+accounting-ng's include glob is now `src/**/*.test.ts`, the same as the other packages, so a spec
+next to its component runs. Known gap: the waterfall spec builds its dates at local midnight, so it
+passes in every zone and cannot catch the component's local-getter month bucketing (#181).
+
 ## ✅ 2026-08-06 (final) — AI-enriched metadata baseline + the V-migration deviation layer
 
 Rebuilt the baseline's generated half with CodeGen's AI advanced-generation on (commit `c02112a`),

@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/MemberJunction/MJ/main/logo.png" alt="MemberJunction" width="120" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://github.com/MemberJunction/MJ/raw/main/MJ_logo_dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="https://github.com/MemberJunction/MJ/raw/main/MJ_logo.webp">
+    <img alt="MemberJunction" src="https://github.com/MemberJunction/MJ/raw/main/MJ_logo.webp" width="220">
+  </picture>
 </p>
 
 <h1 align="center">BizApps Accounting</h1>
@@ -142,7 +146,7 @@ The cumulative effect: the audit trail is **correct by construction**. No code p
 | `JournalEntryLine.CounterpartyOrganizationID` | `Organization.ID` | `bizapps-common` |
 | `CustomerTaxProfile.OrganizationID` | `Organization.ID` | `bizapps-common` |
 | `JournalEntry.LinkedEntityID` + `LinkedRecordID` | The JE's single causal origin record (OrderLine, Payment, TaxRemittance, …) — `LinkedEntityID` is a hard FK to `__mj.Entity`; the record ref is soft by nature (D25) | upstream apps |
-| `OrderLine.JournalEntryID` (inverse direction) | This app's `JournalEntry.ID` — one JE per order line | `bizapps-orders` |
+| `OrderLine.JournalEntryID` (inverse direction) | This app's `JournalEntry.ID` — one JE per order line *that has value*; a zero-value line stays NULL, so `IS NOT NULL` is not a "booked" test | `bizapps-orders` |
 
 ---
 

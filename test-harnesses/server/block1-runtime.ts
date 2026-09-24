@@ -28,12 +28,11 @@ import '@memberjunction/server-bootstrap-lite';
 import '@mj-biz-apps/common-entities';
 import '@mj-biz-apps/accounting-entities';
 import '@mj-biz-apps/accounting-core-entities-server';
-import { JournalEntryEntityServer, RequireJournalEntryTypeID } from '@mj-biz-apps/accounting-core-entities-server';
+import { JournalEntryEntityServer, JournalEntryBatchEntityServer, RequireJournalEntryTypeID } from '@mj-biz-apps/accounting-core-entities-server';
 import type {
   mjBizAppsAccountingAccountingCompanyProfileEntity,
   mjBizAppsAccountingJournalEntryEntity,
   mjBizAppsAccountingJournalEntryLineEntity,
-  mjBizAppsAccountingJournalEntryBatchEntity,
 } from '@mj-biz-apps/accounting-entities';
 import { finishAndExit } from './harness-exit.js';
 import { assertInvariantTriggers } from './trigger-preflight.js';
@@ -131,8 +130,11 @@ async function bootstrap(): Promise<Ctx> {
   // A Pending batch (company A) for the lock tests — a JE can only be Batched if JournalEntryBatchID is set
   // (CK_JournalEntry_BatchedHasJournalEntryBatch). The batch stays Pending so it can be referenced + cleaned.
   const md = new Metadata();
-  const batch = await md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, ctxUser);
+  const batch = await md.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, ctxUser);
   batch.NewRecord();
+  // This fixture is scaffolding for the LOCK tests, not a build — it declares its own provenance,
+  // because the create guard (#193) refuses any new batch the batching process did not claim.
+  batch.MarkBuiltByBatchingProcess();
   batch.CompanyID = companyA.id;
   batch.PostingDate = new Date(new Date().toISOString().slice(0, 10));
   batch.TargetSystem = 'BusinessCentral';

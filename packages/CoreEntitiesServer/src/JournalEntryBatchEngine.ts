@@ -13,11 +13,15 @@
  *     members, set the balanced control totals + SummaryJournalEntryID (trigger 50023
  *     verifies coherence), **lock** the member JEs to Batched, and raise the approval task.
  *   approveJournalEntryBatch(): the human sign-off — Pending→Approved (+ApprovedAt/ApprovedByUserID).
- *     Content is frozen from here (trg_JournalEntryBatch_Immutability, 50009).
- *   sendJournalEntryBatch(): require approval (gate seam + Status='Approved'), flip Approved→Sent,
- *     post the summary JE's lines to the ERP (all-or-nothing per batch), and on
+ *     Content is frozen from here (trg_JournalEntryBatch_Immutability, 50009) until the batch is
+ *     Failed, which the trigger does not freeze (#183).
+ *   sendJournalEntryBatch(): require approval (gate seam + Status='Approved', or 'Failed' for a
+ *     retry), flip →Sent, post the summary JE's lines to the ERP (all-or-nothing per batch), and on
  *     confirmation flip Sent→Posted + the member JEs AND the summary JE Batched→GLPosted.
- *     Failure → Failed (retry + escalating alerts).
+ *     Failure → Failed; an operator retries by sending again, after confirming in the ERP that the
+ *     batch did not post (#145, #182).
+ *   resumeJournalEntryBatchPosting(): finish a Posted batch's Batched→GLPosted flip, no ERP call.
+ *   findStrandedJournalEntries(): the entries Failed / partly-flipped Posted batches hold.
  *
  * The detail (member JournalEntryLines) stays in the subledger for drill-through; the
  * netted summary JE is what the ERP sees, dated the batch's PostingDate.
@@ -64,6 +68,7 @@ import {
   type NetGroup,
   type NettableLine,
 } from '@mj-biz-apps/accounting-engine-base';
+import { BusinessTimeZoneEngine } from '@mj-biz-apps/common-entities';
 import { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 import { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
 import { GetJournalEntryBatchSummaryEntryType } from './JournalEntryTypes.js';
@@ -523,18 +528,26 @@ async function loadDimensionsByLine(lineIds: string[], contextUser: UserInfo, p:
   return byLine;
 }
 
-/** Today as a date-only value, UTC (repo convention). PostingDate selection is a UI-port item. */
-function todayUTC(): Date {
-  return new Date(new Date().toISOString().slice(0, 10));
+/**
+ * Today as a date-only value in the BUSINESS zone, UTC midnight of that day. PostingDate selection
+ * is a UI-port item. Exported (not module-private) so the pinned business-day-semantics test in
+ * `__tests__/JournalEntryBatchEngine.test.ts` can call it directly without a full provider mock.
+ */
+export function todayBusiness(): Date {
+  return BusinessTimeZoneEngine.Instance.TodayAsDate();
 }
 
 async function createBatchHeader(
   companyId: string, targetSystem: JournalEntryBatchTargetSystem, batchedByUserId: string, jeCount: number, contextUser: UserInfo, p: Providers,
 ): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
-  const batch = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
+  await BusinessTimeZoneEngine.Instance.Config(false, contextUser, p.md);
+  const batch = await p.md.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, contextUser);
   batch.NewRecord();
+  // The one sanctioned create. Everything else that saves a new batch — Explorer's generic New
+  // form included — is refused by the entity's create guard (#193).
+  batch.MarkBuiltByBatchingProcess();
   batch.CompanyID = companyId;
-  batch.PostingDate = todayUTC();
+  batch.PostingDate = todayBusiness();
   batch.TargetSystem = targetSystem;
   batch.BatchedAt = new Date();
   batch.BatchedByUserID = batchedByUserId;
@@ -805,27 +818,62 @@ export interface SendJournalEntryBatchOptions {
   poster?: ErpPoster;
   /** The provider for this call — injected by the caller (required; no global fallback). */
   provider: IMetadataProvider;
+  /**
+   * Required `true` to retry a `Failed` batch: the operator has checked the ERP and this batch's
+   * number has NOT posted there. `Failed` does not prove the ERP rejected the journal — see
+   * {@link sendJournalEntryBatch} — and nothing here can check for itself yet (#182).
+   */
+  confirmNotAlreadyPostedInERP?: boolean;
 }
 
 /**
- * Send an APPROVED batch to the ERP. Requires the approval gate + Status='Approved'; then
- * re-verifies the batch's content still matches what was approved (member set + control-total
- * footing — the same coherence check the Pending→Approved transition runs, so approval cannot be
- * a stale signature over content that has since drifted), then Approved→Sent, posts the summary
- * JE's lines to the ERP (all-or-nothing), and on confirmation flips Sent→Posted + the member JEs
- * AND the summary JE Batched→GLPosted.
+ * The statuses a send may start from. `Failed` is a RETRY (#145): the batch was approved before its
+ * first send, and the gate and the coherence check below re-run on every send, so a retry reuses
+ * that approval rather than asking for a second one. `Failed → Sent` is already an edge of
+ * JournalEntryBatchEntityServer's LEGAL_TRANSITIONS; without this, nothing could reach it and a
+ * Failed batch held its entries at `Batched` for good.
+ */
+const SENDABLE_FROM: ReadonlyArray<string> = ['Approved', 'Failed'];
+
+/**
+ * Send an APPROVED batch to the ERP, or retry a FAILED one. Requires the approval gate + a sendable
+ * status; then re-runs the approval-time coherence check (member set + control-total footing), then
+ * →Sent, posts the summary JE's lines to the ERP (all-or-nothing), and on confirmation flips
+ * Sent→Posted + the member JEs AND the summary JE Batched→GLPosted.
+ *
+ * **The coherence check is not a content seal.** It checks that the batch agrees with itself, both
+ * sides read now; no snapshot of the approved content is stored to compare against. On an Approved
+ * batch trg_JournalEntryBatch_Immutability freezes the content, so that is enough. A Failed batch
+ * is not frozen, and fields the check never reads can change between approval and a retry — above
+ * all `PostingDate`, the journal date the ERP receives. Freezing Failed content is #183.
+ *
+ * **A retry can duplicate the ERP journal.** `Failed` does not prove the ERP rejected the journal:
+ * the poster can succeed with the response lost, or succeed and then have the Sent→Posted save fail,
+ * and both are recorded as Failed. The ERP poster sends the batch number as the document number but
+ * does not check whether that document already posted. So a retry from `Failed` requires
+ * `confirmNotAlreadyPostedInERP`: the operator has checked the ERP for this batch's number. A
+ * pre-flight lookup or idempotency key that makes the check unnecessary is #182.
  */
 export async function sendJournalEntryBatch(batchId: string, contextUser: UserInfo, options: SendJournalEntryBatchOptions): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
   const p = resolveProviders(options.provider);
   const poster = options.poster ?? mockErpPoster;
   const batch = await p.md.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, contextUser);
   if (!(await batch.Load(batchId))) throw new Error(`sendJournalEntryBatch: batch ${batchId} not found`);
-  if (batch.Status !== 'Approved') throw new Error(`sendJournalEntryBatch: batch ${batchId} is ${batch.Status}, only an Approved batch can be sent`);
+  const fromStatus = batch.Status;
+  if (!SENDABLE_FROM.includes(fromStatus)) {
+    throw new Error(`sendJournalEntryBatch: batch ${batchId} is ${fromStatus}, only an Approved batch can be sent or a Failed batch retried`);
+  }
+  if (fromStatus === 'Failed' && options.confirmNotAlreadyPostedInERP !== true) {
+    throw new Error(
+      `sendJournalEntryBatch: batch ${batch.JournalEntryBatchNumber ?? batchId} is Failed, and a Failed batch may already be in the ERP. ` +
+      `Confirm in the ERP that document ${batch.JournalEntryBatchNumber ?? batchId} has not posted, then retry with that confirmation.`,
+    );
+  }
 
   await options.gate.assertApproved(batchId, contextUser); // throws if not CFO-approved
 
-  // Seal check: what dispatches must be EXACTLY what was approved. Re-run the approval-time
-  // member-set + footing verification against the database, right before the flip to Sent.
+  // Re-run the approval-time member-set + footing verification against the database, right before
+  // the flip to Sent. Self-consistency only — see the docstring for what it does not cover.
   const drift = await batch.CheckControlTotalCoherence(contextUser);
   if (drift.length > 0) {
     throw new Error(
@@ -833,15 +881,36 @@ export async function sendJournalEntryBatch(batchId: string, contextUser: UserIn
     );
   }
 
+  // Before the →Sent save: a throw here must leave the batch where it was, not stranded at Sent.
+  const summaryLines = await loadSummaryLines(batch, contextUser, p);
+
   batch.Status = 'Sent';
   batch.SentAt = new Date();
-  if (!(await batch.Save())) throw new Error(`sendJournalEntryBatch: Approved→Sent failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
+  if (!(await batch.Save())) throw new Error(`sendJournalEntryBatch: ${fromStatus}→Sent failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
 
-  const summaryLines = await loadSummaryLines(batch, contextUser, p);
-  const postResult = await poster(batch, summaryLines, contextUser);
+  const postResult = await postOrFail(poster, batch, summaryLines, contextUser);
   return postResult.success
     ? await markBatchPosted(batch, postResult.externalJournalEntryBatchRef ?? null, contextUser, p)
     : await failBatch(batch, postResult.error ?? 'ERP post failed');
+}
+
+/**
+ * Run the poster, turning a THROW into `{success:false}` so the batch is marked Failed instead of
+ * left at Sent, where no operator action can reach it. A poster throws before its ERP call or after
+ * that call has failed, so Failed is accurate. The exception is an `afterPost` hook that throws after
+ * the ERP accepted the journal, followed by a throwing `afterPostFailure` (#182); the retry
+ * confirmation covers that case.
+ */
+async function postOrFail(
+  poster: ErpPoster, batch: mjBizAppsAccountingJournalEntryBatchEntity, summaryLines: mjBizAppsAccountingJournalEntryLineEntity[], contextUser: UserInfo,
+): Promise<ErpPostResult> {
+  try {
+    return await poster(batch, summaryLines, contextUser);
+  } catch (err) {
+    // The message lands in ErrorMessage; log the error itself so its stack is not lost.
+    LogError(`sendJournalEntryBatch: poster threw for batch ${batch.JournalEntryBatchNumber ?? batch.ID}`, null, err);
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 /** The summary JE's lines — what the ERP receives. */
@@ -851,35 +920,151 @@ async function loadSummaryLines(batch: mjBizAppsAccountingJournalEntryBatchEntit
     { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID='${batch.SummaryJournalEntryID}'`, OrderBy: 'LineNumber', ResultType: 'entity_object', BypassCache: true },
     contextUser,
   );
-  return res.Success ? res.Results : [];
+  // Loud on failure: an empty result here would send the ERP an empty journal.
+  if (!res.Success) throw new Error(`loadSummaryLines: summary JE lines for batch ${batch.ID} failed to load: ${res.ErrorMessage ?? 'unknown'}`);
+  return res.Results ?? [];
 }
 
-/** Sent → Posted (the ERP confirmed posting; allowed by 50009) + flip each batched JE Batched→GLPosted. */
+/**
+ * Sent → Posted (the ERP confirmed posting; allowed by 50009) + flip each batched JE Batched→GLPosted.
+ * Clears ErrorMessage: on a successful retry it still holds the earlier attempt's failure, and a
+ * Posted batch carrying an error reads as a batch that did not post.
+ */
 async function markBatchPosted(
   batch: mjBizAppsAccountingJournalEntryBatchEntity, externalJournalEntryBatchRef: string | null, contextUser: UserInfo, p: Providers,
 ): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
   batch.ExternalJournalEntryBatchRef = externalJournalEntryBatchRef;
   batch.PostedAt = new Date();
+  batch.ErrorMessage = null;
   batch.Status = 'Posted';
   if (!(await batch.Save())) throw new Error(`sendJournalEntryBatch: Sent→Posted failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
-  await markJournalEntriesGLPosted(batch.ID, externalJournalEntryBatchRef, contextUser, p);
+  await markJournalEntriesGLPosted(batch, contextUser, p);
   return batch;
 }
 
-/** Every Batched JE in the batch's orbit (members + summary) → GLPosted (only GL-roundtrip fields may change on a locked JE). */
-async function markJournalEntriesGLPosted(batchId: string, externalJournalEntryBatchRef: string | null, contextUser: UserInfo, p: Providers): Promise<void> {
+/**
+ * Every Batched JE in the batch's orbit (members + summary) → GLPosted (only GL-roundtrip fields may
+ * change on a locked JE). Stamps the BATCH's PostedAt and ERP reference, so an entry finished later
+ * by {@link resumeJournalEntryBatchPosting} carries the same values as the ones flipped at dispatch.
+ * Selects only what is still Batched, so running it again over a partial flip finishes the rest.
+ * Returns how many entries it flipped.
+ */
+async function markJournalEntriesGLPosted(batch: mjBizAppsAccountingJournalEntryBatchEntity, contextUser: UserInfo, p: Providers): Promise<number> {
   const res = await p.rv.RunView<{ ID: string }>(
-    { EntityName: JE_ENTITY, ExtraFilter: `JournalEntryBatchID='${batchId}' AND Status='Batched'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true },
+    { EntityName: JE_ENTITY, ExtraFilter: `JournalEntryBatchID=${sqlGuid(batch.ID)} AND Status='Batched'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true },
     contextUser,
   );
-  for (const row of res.Results ?? []) {
+  // Loud on failure: an empty result here would report the flip complete with every entry still Batched.
+  if (!res.Success) throw new Error(`markJournalEntriesGLPosted: member scan for batch ${batch.ID} failed: ${res.ErrorMessage ?? 'unknown'}`);
+  const rows = res.Results ?? [];
+  for (const row of rows) {
     const je = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY, contextUser);
-    await je.Load(row.ID);
+    if (!(await je.Load(row.ID))) throw new Error(`markJournalEntriesGLPosted: JE ${row.ID} not found`);
     je.Status = 'GLPosted';
-    je.GLPostedAt = new Date();
-    if (externalJournalEntryBatchRef) je.GLReferenceID = externalJournalEntryBatchRef;
+    je.GLPostedAt = batch.PostedAt ?? new Date();
+    if (batch.ExternalJournalEntryBatchRef) je.GLReferenceID = batch.ExternalJournalEntryBatchRef;
     if (!(await je.Save())) throw new Error(`sendJournalEntryBatch: JE ${row.ID} Batched→GLPosted failed: ${je.LatestResult?.CompleteMessage ?? 'unknown'}`);
   }
+  return rows.length;
+}
+
+// ─── resumeJournalEntryBatchPosting — finish an incomplete Batched→GLPosted flip ─────────────
+
+/** What a resume did: the batch (still Posted) and how many entries it moved to GLPosted. */
+export interface ResumeJournalEntryBatchPostingResult {
+  batch: mjBizAppsAccountingJournalEntryBatchEntity;
+  journalEntriesPosted: number;
+}
+
+/**
+ * Finish the member `Batched → GLPosted` flip of a batch the ERP has already accepted (#145, stuck
+ * state 2). `markBatchPosted` saves the batch Posted BEFORE it flips the entries — deliberately, since
+ * the ERP holds the journal at that point — so a flip that throws partway leaves a Posted batch with
+ * some entries still Batched. `Posted` is terminal, and a re-send would duplicate the ERP journal, so
+ * this is the only way forward: it makes NO ERP call and only runs the remaining flips.
+ *
+ * Safe to run on a Posted batch whose flip completed — it finds nothing Batched and returns 0.
+ */
+export async function resumeJournalEntryBatchPosting(
+  batchId: string, contextUser: UserInfo, provider: IMetadataProvider,
+): Promise<ResumeJournalEntryBatchPostingResult> {
+  const p = resolveProviders(provider);
+  const batch = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
+  if (!(await batch.Load(batchId))) throw new Error(`resumeJournalEntryBatchPosting: batch ${batchId} not found`);
+  if (batch.Status !== 'Posted') {
+    throw new Error(
+      `resumeJournalEntryBatchPosting: batch ${batch.JournalEntryBatchNumber ?? batchId} is ${batch.Status}; only a Posted batch has a GL-posting flip to finish` +
+      (batch.Status === 'Failed' ? ' — a Failed batch is retried by dispatching it again.' : '.'),
+    );
+  }
+  const journalEntriesPosted = await markJournalEntriesGLPosted(batch, contextUser, p);
+  return { batch, journalEntriesPosted };
+}
+
+// ─── findStrandedJournalEntries — entries locked in a batch that will not move them on its own ─
+
+/** How a stranded batch is recovered: dispatch it again, or finish its GL-posting flip. */
+export type StrandedJournalEntryRecovery = 'Retry' | 'ResumePosting';
+
+/**
+ * One batch holding journal entries at `Batched` that no scheduled run or build will pick up. Keep in
+ * sync with `StrandedJournalEntryBatchWire` in the Angular dispatch client, which duplicates this shape.
+ */
+export interface StrandedJournalEntryBatch {
+  batchId: string;
+  batchNumber: string | null;
+  batchStatus: 'Failed' | 'Posted';
+  /** Member entries still `Batched` — the batch's own summary entry is not counted. */
+  journalEntryCount: number;
+  recovery: StrandedJournalEntryRecovery;
+}
+
+/** The two batch states that hold entries at `Batched` with nothing scheduled to release them. */
+const STRANDING_STATUSES: ReadonlyArray<{ status: 'Failed' | 'Posted'; recovery: StrandedJournalEntryRecovery }> = [
+  { status: 'Failed', recovery: 'Retry' },
+  { status: 'Posted', recovery: 'ResumePosting' },
+];
+
+/**
+ * Every batch holding member entries at `Batched` that will stay there until someone acts (#145):
+ * a `Failed` batch (retry it) and a `Posted` batch with an incomplete flip (resume it). Both are
+ * invisible otherwise — a build or scheduled run gathers `Status='Pending'` only, so these entries
+ * silently drop out of every sweep, and a Posted batch reads as fully successful.
+ *
+ * Deliberately excludes `Archived` (entries locked on purpose — that is what archiving means) and
+ * `Sent` (in flight: its outcome is Posted or Failed).
+ */
+export async function findStrandedJournalEntries(contextUser: UserInfo, provider: IMetadataProvider): Promise<StrandedJournalEntryBatch[]> {
+  const p = resolveProviders(provider);
+  const summaryType = await GetJournalEntryBatchSummaryEntryType(contextUser, p.md);
+  const results = await p.rv.RunViews<{ JournalEntryBatchID: string; JournalEntryBatch: string | null }>(
+    STRANDING_STATUSES.map(({ status }) => ({
+      EntityName: JE_ENTITY,
+      ExtraFilter:
+        `Status='Batched' AND EntryTypeID<>${sqlGuid(summaryType.ID)} AND JournalEntryBatchID IN ` +
+        `(SELECT ID FROM __mj_BizAppsAccounting.JournalEntryBatch WHERE Status='${status}')`,
+      Fields: ['JournalEntryBatchID', 'JournalEntryBatch'],
+      ResultType: 'simple',
+      BypassCache: true,
+    })),
+    contextUser,
+  );
+  return STRANDING_STATUSES.flatMap(({ status, recovery }, i) => {
+    const res = results[i];
+    if (!res?.Success) throw new Error(`findStrandedJournalEntries: ${status} scan failed: ${res?.ErrorMessage ?? 'unknown'}`);
+    return groupByBatch(res.Results ?? []).map(g => ({ ...g, batchStatus: status, recovery }));
+  });
+}
+
+/** Collapse one row per stranded entry into one count per batch. */
+function groupByBatch(rows: Array<{ JournalEntryBatchID: string; JournalEntryBatch: string | null }>): Array<Pick<StrandedJournalEntryBatch, 'batchId' | 'batchNumber' | 'journalEntryCount'>> {
+  const byBatch = new Map<string, Pick<StrandedJournalEntryBatch, 'batchId' | 'batchNumber' | 'journalEntryCount'>>();
+  for (const row of rows) {
+    const entry = byBatch.get(row.JournalEntryBatchID) ?? { batchId: row.JournalEntryBatchID, batchNumber: row.JournalEntryBatch, journalEntryCount: 0 };
+    entry.journalEntryCount++;
+    byBatch.set(row.JournalEntryBatchID, entry);
+  }
+  return [...byBatch.values()];
 }
 
 /** What a batch actually is after a dispatch throw, and whether this call moved it to Failed. */
@@ -888,9 +1073,9 @@ export interface DispatchFailureRecord { status: string; marked: boolean }
 /**
  * Triage a batch whose dispatch THREW, and report what is actually true of it.
  *
- * `sendJournalEntryBatch` converts a poster that RETURNS `{success:false}` into `Failed` itself. A
- * poster — or any save inside the send path — that THROWS instead leaves the batch wherever it got
- * to, and `Failed` is reachable from exactly ONE of those states: `JournalEntryBatchEntityServer`'s
+ * `sendJournalEntryBatch` converts a poster that returns `{success:false}` or throws into `Failed`
+ * itself. Any save inside the send path that THROWS instead leaves the batch wherever it got to, and
+ * `Failed` is reachable from exactly ONE of those states: `JournalEntryBatchEntityServer`'s
  * LEGAL_TRANSITIONS allows `Sent → Failed` and neither `Pending → Failed`, `Approved → Failed` nor
  * `Posted → Failed`. Asserting `Failed` from the others is not merely rejected, it is dangerous:
  *

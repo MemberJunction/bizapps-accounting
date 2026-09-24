@@ -1,5 +1,166 @@
 # @mj-biz-apps/accounting-core-entities-server
 
+## 0.12.0
+
+### Minor Changes
+
+- 541595e: Give a journal entry batch that fails after approval a way back (#145).
+
+  A `Failed` batch can now be retried: `sendJournalEntryBatch` (and `Accounting.DispatchJournalEntryBatch`)
+  accepts `Failed` as well as `Approved`, taking the `Failed → Sent` edge the status graph already
+  allowed. The retry reuses the batch's existing approval, re-running the approval gate and the
+  coherence check before it sends. Because a `Failed` batch may already be in the ERP, a retry
+  requires `ConfirmNotAlreadyPostedInERP: true`; the Dispatch status page's Retry dispatch button,
+  which the server previously refused, now asks the operator to check the ERP for the batch number
+  first, and reports a retry the ERP rejects as a failure. A successful retry clears the earlier
+  attempt's `ErrorMessage`. A poster that throws now marks the batch `Failed` instead of leaving it
+  at `Sent`, and the summary lines load before the `→Sent` save.
+
+  A `Posted` batch whose member `Batched → GLPosted` flip stopped partway is finished by the new
+  `resumeJournalEntryBatchPosting` / `Accounting.ResumeJournalEntryBatchPosting`, which makes no ERP
+  call. Entries it finishes carry the batch's `PostedAt` and ERP reference.
+
+  `findStrandedJournalEntries` / `Accounting.GetStrandedJournalEntries` report the entries held by
+  either state. `Accounting.BuildJournalEntryBatches` appends that count to every run's message, and
+  the Dispatch status page shows it with a Finish GL posting action for Posted batches. Scheduled
+  runs do not retry failed batches themselves.
+
+- 9659501: Seed the `Unbilled Receivable` GL account role (contract asset) — orders D92, golive #240.
+
+  Revenue can be earned before it is billed: service already delivered that the contract does not yet allow us to invoice. That is a contract asset, distinct from a receivable because no customer owes anything until they are billed, and it needs its own name on the balance sheet.
+
+  Orders keeps the position on the order line (`BilledToDate` and `RecognizedToDate`) and this account is where the gap lands. Both of its ordering rules use it: recognising revenue debits Deferred Revenue down to what has been billed and then debits this account for the rest, and invoicing an instalment credits this account first, down to zero, before opening any new Deferred. So the balance here is only ever revenue earned ahead of billing.
+
+  `metadata/gl-account-roles/.gl-account-roles.json` gains one row — `Unbilled Receivable`, ID `3EFC77F3-2468-463F-9197-D0A8A6762A36`, Active, Cardinality `One`, Sequence 100. The JSON is the source of truth and the only thing this change contributes: hosts receive it through the single `*__Metadata_Sync.sql` the build engineer generates per release, not through a migration in this PR.
+
+  `docs/unbilled-receivable-seeding.md` is the runbook for the company-level `GLAccountLink` rows, one per company against that company's own `11300 Unbilled Revenue (Contract Asset)`. **Until a company has that link its contract asset does not appear on the balance sheet at all** — orders folds the amount into Deferred Revenue and logs a warning, so nothing fails and nothing is misstated, but one number stands where there should be two and a reader cannot tell revenue earned ahead of billing from billing taken ahead of performance. The runbook also records that the role's `Name` is a cross-repo contract: bizapps-orders resolves roles by accounting's exact `Name` string, so a one-character difference makes the role silently unresolvable while every entry still balances.
+
+### Patch Changes
+
+- Updated dependencies [a64b1e0]
+  - @mj-biz-apps/accounting-entities@0.12.0
+  - @mj-biz-apps/accounting-engine-base@0.12.0
+
+## 0.11.0
+
+### Minor Changes
+
+- dc4235d: Make the journal entry batch build reachable, selective and the only way to create a batch.
+
+  The Batches page's Build Batch dialog now carries an Include checkbox per candidate entry, so an
+  operator can hold specific entries back and batch the rest. Ticking re-previews, so the netted
+  totals, the covered date range and the out-of-order warning always describe the ticked set; the
+  build sends exactly that selection. The server contract for this already existed and was unused.
+
+  The preview operation now distinguishes an empty `IncludedJournalEntryIDs` array ("nothing is
+  ticked") from an omitted one ("no selection filter"); collapsing the two netted the whole pool
+  behind a header that said nothing was included.
+
+  An unbatched journal entry no longer says only "Assigned when the next batch is built" — it links
+  to the Batches page. Creating a batch through Explorer's generic New form is now refused by
+  `JournalEntryBatchEntityServer`, and a new batch record opens on an explainer that points at the
+  build flow instead of a blank form with control totals to type.
+
+### Patch Changes
+
+- 8ae3395: Effective dates, posting dates and batch cutoffs are judged on the business day (bc-aidp-next-golive#168).
+
+  A journal entry drafted at 9 PM Eastern on 31 August defaulted to 1 September, because the default
+  was the UTC calendar day; the prior-day batch run at 1 AM UTC on the 1st judged "yesterday" in UTC
+  too and skipped it. The draft now defaults to today in the instance's business time zone
+  (`BusinessTimeZoneEngine` from bizapps-common), the picker writes UTC midnight of the chosen day and
+  the draft reads it back from UTC parts, so the two never disagree by a browser offset. The batch
+  engine's posting date and `resolveCutoff`'s prior-day and prior-month arithmetic take the business
+  zone as an argument. The dashboards' month window, the batch-build modal's default cutoff and the
+  "last N days" list windows on Dispatch status, All batches and All journal entries all anchor on the
+  same day. CLAUDE.md's "display/zone is a presentation concern" line is replaced with the
+  calendar-day doctrine.
+
+  `AccountingCompanyProfile.OperatingTimeZone` is unchanged as the per-company OVERRIDE: the company
+  profile panel still prefers it and falls back to `BusinessTimeZoneEngine.Instance.Zone` when it is
+  blank, replacing a hardcoded `'America/New_York'`. It migrates into MJ Companies at 6.2, at which
+  point the override/fallback split goes away. Note that new profiles are stamped with a non-blank
+  `'UTC'`, so the fallback rarely fires in practice — tracked separately.
+
+  **The two posting jobs now schedule on the business clock.** `Timezone` on
+  `accounting-post-orders-payments-nightly` and `accounting-post-subscriptions-monthly` moves from
+  `UTC` to `America/Chicago`, because the cutoff is resolved from the BUSINESS day at the firing
+  instant and a job that fires before that day has rolled over resolves a day early. With the cron on
+  UTC and the business zone on Central, the nightly run fired at 20:00 Central the previous evening —
+  so PriorDay excluded that whole day's entries, and PriorMonth closed JULY on the 1 September run,
+  leaving all of August to wait for October. **A host in another zone must set these two rows to their
+  own business zone.** A test reads the committed job metadata and fails if the two stop agreeing on a
+  zone or name one the runtime cannot resolve.
+
+  Two window filters compared an instant against a calendar day and are corrected: Dispatch status
+  bounds `BatchedAt` (a `datetimeoffset`) on the instants the business day actually starts and ends
+  via `DayStartUtc`, rather than pasting `YYYY-MM-DD` into the SQL — which hid the 01:00 UTC nightly
+  run's own batches from the page that exists to triage them; and the batch-status dashboard's span
+  filter parses both ends as UTC midnight, where the upper end had been parsed in the browser's zone.
+  The journal-entry posting-date picker no longer throws on an out-of-range date: `<input type="date">` accepts
+  years beyond four digits, and `FromCalendarDay` raises a `RangeError` on anything that is
+  not a calendar day, so the handler now leaves the draft's date alone instead.
+
+  `timeWindowFilter`, exported from this package's public API, now takes `now` and `zone` as required
+  arguments rather than defaulting them. It had no callers inside this repo, but the change is
+  source-breaking for anyone outside it: a silent `'UTC'` default would have let a caller believe it
+  had the business-day fix when it did not, so the argument is now forced. `timeWindowRange` keeps its
+  optional parameters and its existing behaviour.
+
+  `resolveCutoff`, exported from `@mj-biz-apps/accounting-actions`'s public API (`export *` in
+  `packages/Actions/src/index.ts`), gained a required 4th parameter, `zone: string` — callers now pass
+  `resolveCutoff(explicitCutoff, mode, now, zone)` instead of the old 3-argument form. Same reasoning
+  as `timeWindowFilter`: an optional/defaulted zone would have let a caller believe prior-day/prior-month
+  cutoffs were business-zone-aware when they were not, so the argument is required rather than
+  defaulted. This is source-breaking for anyone outside this repo calling `resolveCutoff` directly.
+
+  Requires `@mj-biz-apps/common-entities` >= 5.43.0.
+
+  - @mj-biz-apps/accounting-engine-base@0.11.0
+  - @mj-biz-apps/accounting-entities@0.11.0
+
+## 0.10.0
+
+### Minor Changes
+
+- 2919ad0: Add predictive journal entry anomaly outcome columns, layered base views (vwJournalEntriesGenerated and vwJournalEntries), and scoring binding write-back.
+
+### Patch Changes
+
+- 74b1ee0: Posting a journal entry batch to Business Central dropped every dimension tag on the lines.
+
+  The batch engine already groups summary lines by GL account **plus dimension combination** and
+  writes the tags onto the summary journal entry, so the values exist at post time. They were lost
+  at the last two steps: `CreateERPJournalInput.Lines` had no dimension field, and MJ's Business
+  Central `CreateJournalEntry` plugin never reads `line.dimensions` at all — its QuickBooks sibling
+  already does. A fully tagged batch landed in Business Central bare, so the consolidated chart
+  could not report by venture, product, new-vs-renewal, event or counterparty.
+
+  `resolveExternalDimensions` now resolves a line's tags into ERP wire codes the same way
+  `resolveExternalAccount` resolves the account number, and `PostJournalBatch` attaches them per
+  line in one batched lookup. Unlike GL accounts — which carry `ExternalSystem` /
+  `ExternalAccountID` and so can hold a per-ERP override — `Dimension` and `DimensionValue` have
+  only `Code`, which the pull sync fills with the ERP's own code. A tag whose dimension or value
+  has no code fails the post instead of posting an untagged line.
+
+  `CreateBusinessCentralJournalEntryWithDimensionsAction` writes them. It registers for the
+  `CreateJournalEntry:Microsoft Dynamics 365 Business Central` plugin key, which the ClassFactory's
+  priority auto-increment resolves to ahead of the platform's own registration. **Known, accepted
+  footprint:** that overrides Business Central journal posting for every app in the instance, not
+  just Accounting — the predictable cost of keeping the fix in the app repo rather than editing the
+  platform.
+
+  Note on the wire format: the Business Central standard API v2.0 `journalLine` resource has **no**
+  `shortcutDimension1Code` / `shortcutDimension2Code` properties. Its only dimension surface is the
+  `dimensionSetLines` child collection, which accepts POST with `journalLine` as a parent. So every
+  dimension travels the same way and Business Central derives Shortcut Dimension 1 and 2 on the
+  posted G/L entry from the dimension set — the two global dimensions land in their slots on their
+  own, provided they are configured as global dimensions in that Business Central company.
+
+- Updated dependencies [2919ad0]
+  - @mj-biz-apps/accounting-entities@0.10.0
+  - @mj-biz-apps/accounting-engine-base@0.10.0
+
 ## 0.9.0
 
 ### Patch Changes
