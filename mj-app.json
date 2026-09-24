@@ -4,7 +4,7 @@
   "name": "mj-bizapps-accounting",
   "displayName": "BizApps Accounting",
   "description": "AR subsidiary ledger of record and journal entry primitives (GL accounts, accounting periods, balanced JEs with multi-currency, dimensions, tax) for MemberJunction. Not a general ledger — batches to ERP/QBO/NetSuite/BC.",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "license": "BUSL-1.1",
   "icon": "fa-solid fa-file-invoice-dollar",
   "publisher": {
@@ -44,6 +44,10 @@
       {
         "name": "@mj-biz-apps/accounting-core-entities-server",
         "role": "library"
+      },
+      {
+        "name": "@mj-biz-apps/accounting-actions",
+        "role": "actions"
       }
     ],
     "client": [
@@ -56,10 +60,6 @@
     "shared": [
       {
         "name": "@mj-biz-apps/accounting-entities",
-        "role": "library"
-      },
-      {
-        "name": "@mj-biz-apps/accounting-actions",
         "role": "library"
       }
     ]

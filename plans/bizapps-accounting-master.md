@@ -625,8 +625,10 @@ scaffolding only, replaced before non-dev use).
 
 One aggregated JE per batch (the summary JE) posts to the GL, dated `PostingDate`. Status walk:
 `Pending → Approved → Sent → Posted` (member JEs + the summary JE → `GLPosted`) ·
-`Sent → Failed` (ERP rejection — hold for review/retry) · `Pending → Cancelled` (reject —
-member JEs unlock back to the candidate pool). Closed-period rejections HOLD-and-flag (§4).
+`Sent → Failed` (ERP rejection — hold for review/retry) · `Failed → Sent` (operator retry,
+reusing the batch's approval — scheduled runs never retry on their own) · `Pending → Cancelled`
+(reject — member JEs unlock back to the candidate pool). A `Posted` batch whose member flip to
+`GLPosted` did not finish is resumed without an ERP call, never re-sent (#145). Closed-period rejections HOLD-and-flag (§4).
 
 ### 7.5 BC dispatch mechanics (Jeremy/Robert, 2026-07-17)
 

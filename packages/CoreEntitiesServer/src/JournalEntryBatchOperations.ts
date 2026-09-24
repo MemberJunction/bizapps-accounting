@@ -15,7 +15,11 @@
  *   Accounting.BuildJournalEntryBatch            → buildJournalEntryBatch(...)      one single-company batch (D7), or the
  *                                                            all-pending sweep when CompanyID is omitted
  *   Accounting.RegenerateJournalEntryBatch       → regenerateJournalEntryBatch(...) rebuild a Pending batch in place; empty → cancel + throw
- *   Accounting.DispatchJournalEntryBatch         → sendJournalEntryBatch(...)       Approved→Sent→Posted via AccountingERPEngine (AM-4 account numbers)
+ *   Accounting.DispatchJournalEntryBatch         → sendJournalEntryBatch(...)       Approved|Failed→Sent→Posted via AccountingERPEngine (AM-4 account numbers);
+ *                                                            from Failed it is the retry, reusing the batch's approval and requiring
+ *                                                            ConfirmNotAlreadyPostedInERP (#145)
+ *   Accounting.ResumeJournalEntryBatchPosting    → resumeJournalEntryBatchPosting(...) finish a Posted batch's Batched→GLPosted flip; NO ERP call (#145)
+ *   Accounting.GetStrandedJournalEntries         → findStrandedJournalEntries(...)  read-only: Failed / partly-flipped Posted batches holding entries (#145)
  *   Accounting.RecordJournalEntryBatchDecision   → gate.recordDecision + approveJournalEntryBatch | cancelJournalEntryBatch (in-app CFO approve/reject)
  *   Accounting.GetJournalEntryBatchApprovalState → gate.assertApproved probe (read-only: is this batch dispatchable?)
  *   Accounting.ArchiveJournalEntryBatch          → batch.Archive(reason)             terminal close with NO ERP call; members stay locked (#214)
@@ -39,6 +43,8 @@ import {
   previewBatch,
   regenerateJournalEntryBatch,
   sendJournalEntryBatch,
+  resumeJournalEntryBatchPosting,
+  findStrandedJournalEntries,
   approveJournalEntryBatch,
   cancelJournalEntryBatch,
   pendingCompanies,
@@ -47,6 +53,7 @@ import {
   type BuildJournalEntryBatchResult,
   type BuildJournalEntryBatchOptions,
   type JournalEntryBatchPreviewResult,
+  type StrandedJournalEntryBatch,
 } from './JournalEntryBatchEngine.js';
 import { createAccountingERPPoster } from './AccountingERPEngine.js';
 import { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
@@ -211,10 +218,19 @@ export class RegenerateJournalEntryBatchOperation extends BaseRemotableOperation
 
 // ─── Accounting.DispatchJournalEntryBatch ────────────────────────────────────────────────
 
-export interface DispatchJournalEntryBatchInput { JournalEntryBatchID: string }
+export interface DispatchJournalEntryBatchInput {
+  JournalEntryBatchID: string;
+  /** Required `true` to retry a Failed batch: the caller checked the ERP and the batch number has not posted. */
+  ConfirmNotAlreadyPostedInERP?: boolean;
+}
 export interface DispatchJournalEntryBatchOutput { Status: string; ExternalJournalEntryBatchRef: string | null }
 
-/** Dispatch an Approved batch to the ERP (mock poster, v1). The gate + Status='Approved' block otherwise. */
+/**
+ * Dispatch an Approved batch to the ERP, or retry a Failed one. The gate and the engine's
+ * sendable-status check block anything else; a retry re-runs both, so it needs no second approval.
+ * A retry also needs `ConfirmNotAlreadyPostedInERP`, because a Failed batch may already be in the
+ * ERP (see sendJournalEntryBatch). A send the ERP rejects returns normally with `Status: 'Failed'`.
+ */
 @RegisterClass(BaseRemotableOperation, 'Accounting.DispatchJournalEntryBatch')
 export class DispatchJournalEntryBatchOperation extends BaseRemotableOperation<DispatchJournalEntryBatchInput, DispatchJournalEntryBatchOutput> {
   public readonly OperationKey = 'Accounting.DispatchJournalEntryBatch';
@@ -226,8 +242,45 @@ export class DispatchJournalEntryBatchOperation extends BaseRemotableOperation<D
       gate: new TasksAppApprovalGate(provider),
       poster: createAccountingERPPoster(provider),
       provider,
+      confirmNotAlreadyPostedInERP: input.ConfirmNotAlreadyPostedInERP === true,
     });
     return { Status: batch.Status, ExternalJournalEntryBatchRef: batch.ExternalJournalEntryBatchRef ?? null };
+  }
+}
+
+// ─── Accounting.ResumeJournalEntryBatchPosting ───────────────────────────────────────────
+
+export interface ResumeJournalEntryBatchPostingInput { JournalEntryBatchID: string }
+export interface ResumeJournalEntryBatchPostingOutput { Status: string; JournalEntriesPosted: number }
+
+/**
+ * Finish the Batched→GLPosted flip of a batch the ERP already accepted (#145). Makes NO ERP call —
+ * re-dispatching a Posted batch would duplicate the ERP journal, which is why this is its own verb.
+ */
+@RegisterClass(BaseRemotableOperation, 'Accounting.ResumeJournalEntryBatchPosting')
+export class ResumeJournalEntryBatchPostingOperation extends BaseRemotableOperation<ResumeJournalEntryBatchPostingInput, ResumeJournalEntryBatchPostingOutput> {
+  public readonly OperationKey = 'Accounting.ResumeJournalEntryBatchPosting';
+
+  protected async InternalExecute(input: ResumeJournalEntryBatchPostingInput, provider: IMetadataProvider, user: UserInfo): Promise<ResumeJournalEntryBatchPostingOutput> {
+    if (!input?.JournalEntryBatchID) throw new Error('ResumeJournalEntryBatchPosting: JournalEntryBatchID is required.');
+    requireSqlGuid(input.JournalEntryBatchID, 'ResumeJournalEntryBatchPosting');
+    const { batch, journalEntriesPosted } = await resumeJournalEntryBatchPosting(input.JournalEntryBatchID, user, provider);
+    return { Status: batch.Status, JournalEntriesPosted: journalEntriesPosted };
+  }
+}
+
+// ─── Accounting.GetStrandedJournalEntries ────────────────────────────────────────────────
+
+export interface GetStrandedJournalEntriesOutput { Batches: StrandedJournalEntryBatch[]; JournalEntryCount: number }
+
+/** Read-only: which batches hold entries at Batched that nothing will move without an operator (#145). */
+@RegisterClass(BaseRemotableOperation, 'Accounting.GetStrandedJournalEntries')
+export class GetStrandedJournalEntriesOperation extends BaseRemotableOperation<Record<string, never>, GetStrandedJournalEntriesOutput> {
+  public readonly OperationKey = 'Accounting.GetStrandedJournalEntries';
+
+  protected async InternalExecute(_input: Record<string, never>, provider: IMetadataProvider, user: UserInfo): Promise<GetStrandedJournalEntriesOutput> {
+    const batches = await findStrandedJournalEntries(user, provider);
+    return { Batches: batches, JournalEntryCount: batches.reduce((n, b) => n + b.journalEntryCount, 0) };
   }
 }
 

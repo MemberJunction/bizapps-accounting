@@ -19,6 +19,13 @@
       "outputs": [],
       "cache": false
     },
+    "test:dom": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [],
+      "cache": false
+    },
     "start": {
       "cache": false,
       "persistent": true

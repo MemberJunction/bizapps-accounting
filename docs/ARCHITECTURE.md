@@ -114,6 +114,14 @@ balance **overall and per company** (AM-4), and writes atomically. Hooks on the 
   *(The period-close trigger + W4 routing were retired with the period tables.)*
 - **Batch lifecycle (CH-3):** `Pending → Approved → Sent → Posted | Failed | Cancelled` — see
   `JournalEntryBatchEngine.ts`; the ERP wire is **account numbers, split per company** (AM-4).
+- **Recovery past Approved (#145):** a `Failed` batch is retried by dispatching it again
+  (`Failed → Sent`; the gate and the coherence check re-run, the original approval is reused). A
+  `Failed` batch may already be in the ERP, so a retry requires the operator's confirmation that the
+  batch number has not posted there (#182); its content is not frozen (#183). A
+  `Posted` batch whose member `Batched → GLPosted` flip stopped partway is finished by
+  `resumeJournalEntryBatchPosting` (`Accounting.ResumeJournalEntryBatchPosting`), which makes no
+  ERP call. `findStrandedJournalEntries` reports the entries both states hold; the scheduled
+  action and the Dispatch status page surface it. Scheduled runs never retry on their own.
 - **W5** realized-FX auto-emit: retired — Orders/Payments computes + posts the FX line (§C1).
 
 ## 6. Connection map

@@ -18,7 +18,7 @@ import {
   MJRefreshButtonComponent,
   MJEmptyStateComponent,
   MjSlidePanelComponent,
-  MJAlertComponent, MJDropdownComponent } from '@memberjunction/ng-ui-components';
+  MJAlertComponent, MJDropdownComponent, MJDialogComponent, MJDialogActionsComponent } from '@memberjunction/ng-ui-components';
 
 import { CompanyScopeChipComponent } from '../shared/company-scope-chip.component';
 import { PageRefreshService } from '../../transfer-pending/shell-refresh/page-refresh.service';
@@ -133,6 +133,8 @@ import { DimensionsResourceComponent } from '../resources/dimensions-resource.co
     MJEmptyStateComponent,
     MjSlidePanelComponent,
     MJAlertComponent,
+    MJDialogComponent,
+    MJDialogActionsComponent,
     CompanyScopeChipComponent,
     GlResolutionPreviewComponent,
     WorkspaceTabStripComponent,

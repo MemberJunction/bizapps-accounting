@@ -13,7 +13,7 @@
     "build:stream": "turbo --log-order=stream build",
     "build:generated": "turbo --log-order=stream build --filter=\"@mj-biz-apps/accounting-entities\" --filter=\"@mj-biz-apps/accounting-actions\"",
     "build:packages": "turbo --log-order=stream build --filter=\"@mj-biz-apps/accounting-*\"",
-    "test": "turbo --log-order=stream test --filter=!@mj-biz-apps/accounting-ng --filter=!@mj-biz-apps/accounting-integration-tests",
+    "test": "turbo --log-order=stream --continue test test:dom --filter=!@mj-biz-apps/accounting-integration-tests",
     "mj": "mj",
     "mj:migrate": "mj migrate --schema __mj_BizAppsAccounting --dir ./migrations",
     "mj:codegen": "mj codegen",
