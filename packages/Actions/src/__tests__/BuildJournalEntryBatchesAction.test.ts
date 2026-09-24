@@ -43,6 +43,7 @@ describe('BuildJournalEntryBatchesAction', () => {
         Metadata.Provider = {
             Config: { ActiveStatusAssertions: false },
         } as never;
+        vi.spyOn(serverEngine, 'findStrandedJournalEntries').mockResolvedValue([]);
     });
 
     it('is registered in MJGlobal ClassFactory as Accounting.BuildJournalEntryBatches', () => {
@@ -352,5 +353,31 @@ describe('BuildJournalEntryBatchesAction', () => {
         const params = runParams([...AUTO_POST_INPUTS, { Name: 'ExcludeEntryTypeCodes', Value: ['Manual'] }]);
 
         await expect(new BuildJournalEntryBatchesAction().Run(params)).rejects.toThrow(/not a blacklist/);
+    });
+    // #145: entries a Failed or partly-flipped Posted batch holds are invisible to the sweep, so every
+    // run reports them — including one with nothing new to batch.
+    it('reports stranded journal entries on every run, with the recovery each batch needs', async () => {
+        vi.spyOn(serverEngine, 'pendingCompanies').mockResolvedValue([]);
+        vi.spyOn(serverEngine, 'findStrandedJournalEntries').mockResolvedValue([
+            { batchId: 'B-1', batchNumber: 'JEB-1', batchStatus: 'Failed', journalEntryCount: 3, recovery: 'Retry' },
+            { batchId: 'B-2', batchNumber: 'JEB-2', batchStatus: 'Posted', journalEntryCount: 1, recovery: 'ResumePosting' },
+        ]);
+
+        const result = await new BuildJournalEntryBatchesAction().Run(runParams(AUTO_POST_INPUTS));
+
+        expect(result.ResultCode).toBe('NO_BATCHES');
+        expect(result.Message).toContain('4 journal entries are stranded in 2 batch(es)');
+        expect(result.Message).toContain('JEB-1 (Failed, 3 — confirm in the ERP that document JEB-1 has not posted before retrying the dispatch; if it has, do not retry)');
+        expect(result.Message).toContain('JEB-2 (Posted, 1 — resume its GL posting)');
+    });
+
+    it('does not fail a run when the stranded-entry scan itself fails', async () => {
+        vi.spyOn(serverEngine, 'pendingCompanies').mockResolvedValue([]);
+        vi.spyOn(serverEngine, 'findStrandedJournalEntries').mockRejectedValue(new Error('scan timeout'));
+
+        const result = await new BuildJournalEntryBatchesAction().Run(runParams(AUTO_POST_INPUTS));
+
+        expect(result.Success).toBe(true);
+        expect(result.Message).toContain('Could not count stranded journal entries: scan timeout');
     });
 });

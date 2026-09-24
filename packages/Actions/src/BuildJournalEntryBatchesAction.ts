@@ -6,6 +6,7 @@ import {
   approveJournalEntryBatch,
   buildJournalEntryBatch,
   createAccountingERPPoster,
+  findStrandedJournalEntries,
   pendingCompanies,
   recordDispatchFailure,
   sendJournalEntryBatch,
@@ -14,6 +15,7 @@ import {
   TasksAppApprovalGate,
   type BuildJournalEntryBatchResult,
   type JournalEntryBatchApprovalGate,
+  type StrandedJournalEntryBatch,
   type JournalEntryBatchTargetSystem,
   type BuildJournalEntryBatchOptions,
 } from '@mj-biz-apps/accounting-core-entities-server';
@@ -54,7 +56,7 @@ export class BuildJournalEntryBatchesAction extends BaseAction {
     const gate: JournalEntryBatchApprovalGate = autoPost ? AutoApproveGate : new TasksAppApprovalGate(provider);
     const outcomes = await sweep({ user, provider, gate, targetSystem, options, autoPost });
 
-    return summarize(params, outcomes, autoPost);
+    return withStrandedNote(summarize(params, outcomes, autoPost), await strandedNote(user, provider));
   }
 }
 
@@ -217,7 +219,7 @@ async function triage(
     if (status === 'Posted') {
       // The ERP took this journal. Only the member Batched→GLPosted flip is incomplete, and the
       // repair is to finish that flip — NOT to post again.
-      const warning = `ALREADY POSTED TO THE ERP — DO NOT RE-POST. The batch reached the ERP and only the member Batched→GLPosted flip is incomplete: ${message}`;
+      const warning = `ALREADY POSTED TO THE ERP — DO NOT RE-POST. The batch reached the ERP and only the member Batched→GLPosted flip is incomplete; finish it with Accounting.ResumeJournalEntryBatchPosting: ${message}`;
       LogError(`Accounting.BuildJournalEntryBatches: batch ${batchId} ${warning}`);
       return { status, error: warning };
     }
@@ -259,6 +261,47 @@ function summarize(params: RunActionParams, outcomes: CompanyOutcome[], autoPost
     Message: `${summary} ${problems.length} of ${outcomes.length} company(ies) did not post: ${detail}`,
     ResultCode: 'POST_INCOMPLETE',
   };
+}
+
+// ─── Stranded entries ────────────────────────────────────────────────────────────────────
+
+/**
+ * What this run cannot see (#145): entries held at `Batched` by a Failed batch or a partly-flipped
+ * Posted one. The sweep gathers `Status='Pending'` only, so they drop out of every run without a
+ * trace, and a failure on one night would otherwise be reported once and then never again. Runs
+ * never retry them — a retry is an operator's call — so reporting them every run is the recovery.
+ *
+ * Best-effort: failing to COUNT stranded entries must not turn a run that posted into a failed one,
+ * so a scan error is reported in the message instead.
+ */
+async function strandedNote(user: UserInfo, provider: IMetadataProvider): Promise<string | null> {
+  try {
+    const stranded = await findStrandedJournalEntries(user, provider);
+    if (stranded.length === 0) return null;
+    const total = stranded.reduce((n, b) => n + b.journalEntryCount, 0);
+    const detail = stranded
+      .map(b => `${b.batchNumber ?? b.batchId} (${b.batchStatus}, ${b.journalEntryCount} — ${recoveryStep(b)})`)
+      .join('; ');
+    return `${total} journal entries are stranded in ${stranded.length} batch(es) that no run will pick up: ${detail}.`;
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    LogError(`Accounting.BuildJournalEntryBatches: could not count stranded journal entries: ${message}`);
+    return `Could not count stranded journal entries: ${message}`;
+  }
+}
+
+/**
+ * A Failed batch may already be in the ERP — the post can succeed with the response lost, or succeed
+ * and then fail to record Posted — so the step is to check the ERP first, never just to retry (#182).
+ */
+function recoveryStep(b: StrandedJournalEntryBatch): string {
+  return b.recovery === 'Retry'
+    ? `confirm in the ERP that document ${b.batchNumber ?? b.batchId} has not posted before retrying the dispatch; if it has, do not retry`
+    : 'resume its GL posting';
+}
+
+function withStrandedNote(result: ActionResultSimple, note: string | null): ActionResultSimple {
+  return note ? { ...result, Message: `${result.Message} ${note}` } : result;
 }
 
 const sum = (outcomes: CompanyOutcome[], pick: (b: BuildJournalEntryBatchResult) => number): number =>

@@ -63,6 +63,8 @@ export {
   JournalEntryBatchFromViewError,
   approveJournalEntryBatch,
   sendJournalEntryBatch,
+  resumeJournalEntryBatchPosting,
+  findStrandedJournalEntries,
   recordDispatchFailure,
   cancelJournalEntryBatch,
   regenerateJournalEntryBatch,
@@ -89,6 +91,9 @@ export type {
   JournalEntryBatchApprovalGate,
   SendJournalEntryBatchOptions,
   DispatchFailureRecord,
+  ResumeJournalEntryBatchPostingResult,
+  StrandedJournalEntryBatch,
+  StrandedJournalEntryRecovery,
 } from './JournalEntryBatchEngine.js';
 
 // S1 — the REAL CFO-approval gate, backed by the bizapps-tasks app (replaces AutoApproveGate in
@@ -135,6 +140,8 @@ export {
   RecordJournalEntryBatchDecisionOperation,
   GetJournalEntryBatchApprovalStateOperation,
   ArchiveJournalEntryBatchOperation,
+  ResumeJournalEntryBatchPostingOperation,
+  GetStrandedJournalEntriesOperation,
   LoadJournalEntryBatchOperations,
   type JournalEntryBatchCriteriaInput,
   type PreviewJournalEntryBatchInput,
@@ -150,4 +157,7 @@ export {
   type GetJournalEntryBatchApprovalStateOutput,
   type ArchiveJournalEntryBatchInput,
   type ArchiveJournalEntryBatchOutput,
+  type ResumeJournalEntryBatchPostingInput,
+  type ResumeJournalEntryBatchPostingOutput,
+  type GetStrandedJournalEntriesOutput,
 } from './JournalEntryBatchOperations.js';
