@@ -44,6 +44,10 @@
       {
         "name": "@mj-biz-apps/accounting-core-entities-server",
         "role": "library"
+      },
+      {
+        "name": "@mj-biz-apps/accounting-actions",
+        "role": "actions"
       }
     ],
     "client": [
@@ -56,10 +60,6 @@
     "shared": [
       {
         "name": "@mj-biz-apps/accounting-entities",
-        "role": "library"
-      },
-      {
-        "name": "@mj-biz-apps/accounting-actions",
         "role": "library"
       }
     ]
