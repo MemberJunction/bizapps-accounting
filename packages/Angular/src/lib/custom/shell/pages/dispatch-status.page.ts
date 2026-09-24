@@ -525,12 +525,12 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
     }
   }
 
-  /** A Posted batch still holding Batched entries — the only state Resume applies to. */
   /** True when this Posted batch still holds entries at `Batched` — whether or not a resume is running. */
   public IsIncompletePosting(batchId: string): boolean {
     return this.IncompletePostings.some((b) => UUIDsEqual(b.batchId, batchId));
   }
 
+  /** A Posted batch still holding Batched entries, with no resume running — the only state Resume applies to. */
   public CanResume(batchId: string): boolean {
     return this.ResumingJournalEntryBatchID === null && this.IsIncompletePosting(batchId);
   }

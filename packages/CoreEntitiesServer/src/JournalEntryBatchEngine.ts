@@ -881,15 +881,32 @@ export async function sendJournalEntryBatch(batchId: string, contextUser: UserIn
     );
   }
 
+  // Before the →Sent save: a throw here must leave the batch where it was, not stranded at Sent.
+  const summaryLines = await loadSummaryLines(batch, contextUser, p);
+
   batch.Status = 'Sent';
   batch.SentAt = new Date();
   if (!(await batch.Save())) throw new Error(`sendJournalEntryBatch: ${fromStatus}→Sent failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
 
-  const summaryLines = await loadSummaryLines(batch, contextUser, p);
-  const postResult = await poster(batch, summaryLines, contextUser);
+  const postResult = await postOrFail(poster, batch, summaryLines, contextUser);
   return postResult.success
     ? await markBatchPosted(batch, postResult.externalJournalEntryBatchRef ?? null, contextUser, p)
     : await failBatch(batch, postResult.error ?? 'ERP post failed');
+}
+
+/**
+ * Run the poster, turning a THROW into `{success:false}` so the batch is marked Failed instead of
+ * left at Sent, where no operator action can reach it. A poster throws before its ERP call or after
+ * that call has failed, so Failed is accurate; the retry confirmation covers the rest.
+ */
+async function postOrFail(
+  poster: ErpPoster, batch: mjBizAppsAccountingJournalEntryBatchEntity, summaryLines: mjBizAppsAccountingJournalEntryLineEntity[], contextUser: UserInfo,
+): Promise<ErpPostResult> {
+  try {
+    return await poster(batch, summaryLines, contextUser);
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 /** The summary JE's lines — what the ERP receives. */
@@ -1052,9 +1069,9 @@ export interface DispatchFailureRecord { status: string; marked: boolean }
 /**
  * Triage a batch whose dispatch THREW, and report what is actually true of it.
  *
- * `sendJournalEntryBatch` converts a poster that RETURNS `{success:false}` into `Failed` itself. A
- * poster — or any save inside the send path — that THROWS instead leaves the batch wherever it got
- * to, and `Failed` is reachable from exactly ONE of those states: `JournalEntryBatchEntityServer`'s
+ * `sendJournalEntryBatch` converts a poster that returns `{success:false}` or throws into `Failed`
+ * itself. Any save inside the send path that THROWS instead leaves the batch wherever it got to, and
+ * `Failed` is reachable from exactly ONE of those states: `JournalEntryBatchEntityServer`'s
  * LEGAL_TRANSITIONS allows `Sent → Failed` and neither `Pending → Failed`, `Approved → Failed` nor
  * `Posted → Failed`. Asserting `Failed` from the others is not merely rejected, it is dangerous:
  *

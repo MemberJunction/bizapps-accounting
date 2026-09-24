@@ -145,7 +145,8 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   ERP-post seam splits by company, by **account number** — AM-4); `approveJournalEntryBatch` flips Pending→Approved with
   audit stamps; `sendJournalEntryBatch` requires Approved (or Failed, for a retry) + the CFO gate
   (`TasksAppApprovalGate` — per-company CFO **union**: one Task assigned to every involved company's CFO) → Sent →
-  **Posted** + JEs→GLPosted. A send the ERP rejects returns normally with the batch `Failed`.
+  **Posted** + JEs→GLPosted. A send the ERP rejects, or whose poster throws, returns normally with the batch `Failed`;
+  the summary lines load before the `→Sent` save, so a failed load leaves the batch where it was.
   Lifecycle (`LEGAL_TRANSITIONS`): `Pending → Approved | Cancelled | Archived`, `Approved → Sent | Archived`,
   `Sent → Posted | Failed`, `Failed → Sent | Archived`; `Posted`, `Cancelled` and `Archived` are terminal.
 - **Batch recovery (#145).** *Retry* — `sendJournalEntryBatch` on a `Failed` batch reuses its approval

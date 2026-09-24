@@ -169,13 +169,29 @@ describe('sendJournalEntryBatch — retrying a Failed batch', () => {
     });
 
     // An empty result would send the ERP an empty journal.
-    it('throws when the summary lines fail to load, without calling the ERP', async () => {
-        const { provider } = world('Failed', { 'je-1': batched() }, { summaryLinesScanFails: true });
+    // Loaded before the →Sent save, so the batch is not left stranded at Sent.
+    it('throws when the summary lines fail to load, without calling the ERP or leaving Failed', async () => {
+        const { batch, provider } = world('Failed', { 'je-1': batched() }, { summaryLinesScanFails: true });
         const poster = acceptingPoster();
 
         await expect(sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, provider, confirmNotAlreadyPostedInERP: true }))
             .rejects.toThrow(/summary JE lines for batch .* failed to load: timeout/);
         expect(poster).not.toHaveBeenCalled();
+        expect(batch.Save).not.toHaveBeenCalled();
+        expect(batch.Status).toBe('Failed');
+    });
+
+    // A throwing poster would otherwise leave the batch at Sent, which no operator action can leave.
+    it('marks the batch Failed with the cause when the poster throws', async () => {
+        const { batch, entries, provider } = world('Failed', { 'je-1': batched() });
+        const poster: ErpPoster = async () => { throw new Error('beforePost extension failed'); };
+
+        const result = await sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, provider, confirmNotAlreadyPostedInERP: true });
+
+        expect(result.Status).toBe('Failed');
+        expect(batch.statusHistory).toEqual(['Sent', 'Failed']);
+        expect(batch.ErrorMessage).toBe('beforePost extension failed');
+        expect(entries['je-1'].Status).toBe('Batched');
     });
 
     it.each(['Pending', 'Sent', 'Posted', 'Archived', 'Cancelled'])('refuses to send a %s batch', async (status) => {
@@ -185,6 +201,21 @@ describe('sendJournalEntryBatch — retrying a Failed batch', () => {
         await expect(sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, provider }))
             .rejects.toThrow(/only an Approved batch can be sent or a Failed batch retried/);
         expect(poster).not.toHaveBeenCalled();
+    });
+});
+
+describe('sendJournalEntryBatch — sending an Approved batch', () => {
+    // The ERP confirmation applies to a Failed retry only; a first send cannot already be in the ERP.
+    it('sends an Approved batch without the ERP confirmation', async () => {
+        const { batch, entries, provider } = world('Approved', { 'je-1': batched() });
+        const poster = acceptingPoster();
+
+        const result = await sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, provider });
+
+        expect(result.Status).toBe('Posted');
+        expect(poster).toHaveBeenCalledOnce();
+        expect(batch.statusHistory).toEqual(['Sent', 'Posted']);
+        expect(entries['je-1'].Status).toBe('GLPosted');
     });
 });
 
