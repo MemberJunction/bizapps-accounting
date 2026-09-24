@@ -153,7 +153,7 @@ GO
 ---------------------------------------------------------------------------
 -- The layered view does not select RootReversesJournalEntryID or
 -- RootReversedByJournalEntryID, which V202608252220 kept. Their EntityField rows
--- would otherwise hold Sequence values that spUpdateExistingEntitiesFromSchema
+-- would otherwise hold Sequence values that spUpdateExistingEntityFieldsFromSchema
 -- reassigns below, and a fresh install fails on UQ_EntityField_EntityID_Sequence.
 -- Removing them first matches what CodeGen does on a database it runs against.
 DECLARE @JournalEntryEntityIDs NVARCHAR(MAX) =

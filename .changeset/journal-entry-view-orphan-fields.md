@@ -1,5 +1,5 @@
 ---
-"@mj-biz-apps/accounting-entities": patch
+"@mj-biz-apps/accounting-entities": minor
 ---
 
 `Predictive_Journal_Entry_Anomaly_Fields` could not apply on a fresh install.
@@ -7,7 +7,7 @@
 The migration rebuilds `vwJournalEntries` as a layered view that no longer selects
 `RootReversesJournalEntryID` or `RootReversedByJournalEntryID`, which
 `CodeGen_Scoped_SQL_Objects` kept. Their `EntityField` rows stayed at Sequence 25 and 26, and
-`spUpdateExistingEntitiesFromSchema` then moved `ReversedByJournalEntry` onto 25:
+`spUpdateExistingEntityFieldsFromSchema` then moved `ReversedByJournalEntry` onto 25:
 
     Violation of UNIQUE KEY constraint 'UQ_EntityField_EntityID_Sequence'.
     The duplicate key value is (<Journal Entries entity ID>, 25).
