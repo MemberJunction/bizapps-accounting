@@ -1,73 +1,19 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { BaseEntity, EntityInfo, Metadata } from '@memberjunction/core';
-import { MJGlobal } from '@memberjunction/global';
-import type {
-    mjBizAppsAccountingJournalEntryEntity,
-    mjBizAppsAccountingJournalEntryLineEntity,
-} from '@mj-biz-apps/accounting-entities';
-import '@mj-biz-apps/accounting-entities';
+import type { mjBizAppsAccountingJournalEntryEntity } from '@mj-biz-apps/accounting-entities';
+import { entityObject, installStubProvider, stubEntityInfo } from './support/entity-stubs';
 import { DeferredRevenueWaterfallComponent } from '../lib/components/deferred-revenue-waterfall/deferred-revenue-waterfall.component';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
 
-/**
- * EntityInfo stubs, so `BaseEntity`'s constructor succeeds with no database. Same shape as
- * `je-draft.test.ts`: the component takes real entities, so the spec hands it real entities
- * rather than an object literal cast to one.
- */
-function mockEntityInfo(name: string, fieldNames: string[]): EntityInfo {
-    const info = Object.create(EntityInfo.prototype);
-    info.ID = `id-${name}`;
-    info.Name = name;
-    info.Status = 'Active';
-    info.AllowDirectSQL = true;
-
-    const fields = fieldNames.map((fn) => ({
-        Name: fn,
-        CodeName: fn,
-        Type: fn === 'ID' || fn.endsWith('ID') ? 'uniqueidentifier' : 'nvarchar',
-        TSType: 'string',
-        IsPrimaryKey: fn === 'ID',
-        AutoIncrement: false,
-        ReadOnly: false,
-        AllowsNull: true,
-    })) as unknown[];
-
-    Object.defineProperty(info, 'Fields', { get: () => fields, configurable: true });
-    Object.defineProperty(info, 'PrimaryKeys', {
-        get: () => (fields as Array<{ IsPrimaryKey: boolean }>).filter((f) => f.IsPrimaryKey),
-        configurable: true,
-    });
-    Object.defineProperty(info, 'HasInactiveFields', { get: () => false, configurable: true });
-    return info as EntityInfo;
-}
-
-let entities: EntityInfo[];
-
-/** An entity through the class factory, as a real provider's `GetEntityObject` does. */
-async function entityObject(entityName: string): Promise<BaseEntity> {
-    const info = entities.find((e) => e.Name.toLowerCase() === entityName.toLowerCase());
-    if (!info) throw new Error(`No EntityInfo registered in this test for '${entityName}'.`);
-    return MJGlobal.Instance.ClassFactory.CreateInstance<BaseEntity>(BaseEntity, entityName, info)!;
-}
-
 beforeEach(() => {
-    entities = [
-        mockEntityInfo(JE_ENTITY, ['ID', 'EntryNumber', 'EffectiveDate', 'LinkedRecordID', 'Description']),
-        mockEntityInfo(JEL_ENTITY, ['ID', 'JournalEntryID', 'DebitAmount', 'CreditAmount']),
-    ];
-    const provider = {
-        Entities: entities,
-        FindEntityByName: (name: string) => entities.find((e) => e.Name.toLowerCase() === name.toLowerCase()),
-        // What `Lines.Create()` calls to issue a child.
-        GetEntityObject: (name: string) => entityObject(name),
-        Config: { ActiveStatusAssertions: false },
-    } as never;
-    Metadata.Provider = provider;
-    BaseEntity.Provider = provider;
+    installStubProvider([
+        stubEntityInfo(JE_ENTITY, ['ID', 'EntryNumber', 'EffectiveDate', 'LinkedRecordID', 'Description']),
+        stubEntityInfo(JEL_ENTITY, ['ID', 'JournalEntryID', 'DebitAmount', 'CreditAmount']),
+    ]);
 });
 
+/** A real entity with one credit line: the component takes entities, so the spec hands it entities. */
 async function mockEntry(fields: {
     EntryNumber: string;
     EffectiveDate: Date;
@@ -75,14 +21,14 @@ async function mockEntry(fields: {
     Description: string;
     CreditAmount: number;
 }): Promise<mjBizAppsAccountingJournalEntryEntity> {
-    const entry = (await entityObject(JE_ENTITY)) as mjBizAppsAccountingJournalEntryEntity;
+    const entry = await entityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY);
     entry.NewRecord();
     entry.EntryNumber = fields.EntryNumber;
     entry.EffectiveDate = fields.EffectiveDate;
     entry.LinkedRecordID = fields.LinkedRecordID;
     entry.Description = fields.Description;
 
-    const line = (await entry.Lines.Create()) as mjBizAppsAccountingJournalEntryLineEntity;
+    const line = await entry.Lines.Create();
     line.CreditAmount = fields.CreditAmount;
     return entry;
 }

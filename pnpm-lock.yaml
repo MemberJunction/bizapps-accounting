@@ -95,15 +95,18 @@ importers:
         specifier: ^3.25.28
         version: 3.25.76
     devDependencies:
+      '@types/node':
+        specifier: ^24.10.11
+        version: 24.10.11
       ts-node-dev:
         specifier: ^2.0.0
-        version: 2.0.0(@types/node@25.9.5)(typescript@5.9.3)
+        version: 2.0.0(@types/node@24.10.11)(typescript@5.9.3)
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
       vitest:
         specifier: ^4.0.18
-        version: 4.1.11(@types/node@25.9.5)(jsdom@26.1.0)(vite@7.3.6(@types/node@25.9.5)(sass@1.97.1))
+        version: 4.1.11(@types/node@24.10.11)(jsdom@26.1.0)(vite@7.3.6(@types/node@24.10.11)(sass@1.97.1))
 
   packages/Angular:
     dependencies:
@@ -23080,6 +23083,24 @@ snapshots:
 
   ts-dedent@2.3.0: {}
 
+  ts-node-dev@2.0.0(@types/node@24.10.11)(typescript@5.9.3):
+    dependencies:
+      chokidar: 3.6.0
+      dynamic-dedupe: 0.3.0
+      minimist: 1.2.8
+      mkdirp: 1.0.4
+      resolve: 1.22.12
+      rimraf: 2.7.1
+      source-map-support: 0.5.21
+      tree-kill: 1.2.2
+      ts-node: 10.9.2(@types/node@24.10.11)(typescript@5.9.3)
+      tsconfig: 7.0.0
+      typescript: 5.9.3
+    transitivePeerDependencies:
+      - '@swc/core'
+      - '@swc/wasm'
+      - '@types/node'
+
   ts-node-dev@2.0.0(@types/node@25.9.5)(typescript@5.9.3):
     dependencies:
       chokidar: 3.6.0
@@ -23097,6 +23118,24 @@ snapshots:
       - '@swc/core'
       - '@swc/wasm'
       - '@types/node'
+
+  ts-node@10.9.2(@types/node@24.10.11)(typescript@5.9.3):
+    dependencies:
+      '@cspotcode/source-map-support': 0.8.1
+      '@tsconfig/node10': 1.0.13
+      '@tsconfig/node12': 1.0.11
+      '@tsconfig/node14': 1.0.3
+      '@tsconfig/node16': 1.0.4
+      '@types/node': 24.10.11
+      acorn: 8.18.0
+      acorn-walk: 8.3.5
+      arg: 4.1.3
+      create-require: 1.1.1
+      diff: 4.0.4
+      make-error: 1.3.6
+      typescript: 5.9.3
+      v8-compile-cache-lib: 3.0.1
+      yn: 3.1.1
 
   ts-node@10.9.2(@types/node@25.9.5)(typescript@5.9.3):
     dependencies:
