@@ -162,7 +162,11 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
     }
   }
 
-  /** Dispatch a Pending, approved batch to the ERP (gate blocks if not approved; mock poster v1). */
+  /**
+   * Dispatch a Pending, approved batch to the ERP (gate blocks if not approved; mock poster v1).
+   * `Success` means only that the call returned: an ERP rejection comes back as `Success` with the
+   * batch at `Failed` (or stuck at `Sent`), so anything other than `Posted` is reported as an error.
+   */
   public async OnDispatch(row: BatchRow): Promise<void> {
     if (row.Busy) return;
     row.Busy = true;
@@ -170,10 +174,16 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
     this.cdr.markForCheck();
     try {
       const res = await this.client().DispatchJournalEntryBatch(row.ID);
-      if (res.Success) {
+      if (res.Success && res.Status === 'Posted') {
         this.setActionMessage(
-          `Dispatched batch ${row.JournalEntryBatchNumber} → ${res.Status}${res.ExternalJournalEntryBatchRef ? ` (ref ${res.ExternalJournalEntryBatchRef})` : ''}.`,
+          `Dispatched batch ${row.JournalEntryBatchNumber} → Posted${res.ExternalJournalEntryBatchRef ? ` (ref ${res.ExternalJournalEntryBatchRef})` : ''}.`,
           false,
+        );
+        await this.loadBatches();
+      } else if (res.Success) {
+        this.setActionMessage(
+          `Batch ${row.JournalEntryBatchNumber} did not post — the batch is ${res.Status ?? 'unknown'}. See Dispatch status for the ERP's error and to retry.`,
+          true,
         );
         await this.loadBatches();
       } else {
