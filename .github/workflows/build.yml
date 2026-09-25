@@ -18,6 +18,11 @@ on:
     # main's package set has never been built, so it must run unconditionally.
     branches: [next, main]
 
+# Least-privilege token: this workflow only checks out and builds — it never writes
+# to the repo, so the default (potentially write-capable) GITHUB_TOKEN is scoped down.
+permissions:
+  contents: read
+
 concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true

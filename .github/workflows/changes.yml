@@ -4,6 +4,10 @@ on:
   pull_request:
     branches: [next, main]
 
+# Least-privilege token: validation only — nothing here writes to the repo.
+permissions:
+  contents: read
+
 concurrency:
   group: changes-${{ github.ref }}
   cancel-in-progress: true
