@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { BusinessTimeZoneEngine, FromCalendarDay, type InstanceConfigurationRow } from '@mj-biz-apps/common-entities';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { FromCalendarDay } from '@mj-biz-apps/common-entities';
 import { DeferredRevenueWaterfallComponent } from '../lib/components/deferred-revenue-waterfall/deferred-revenue-waterfall.component';
 import type { mjBizAppsAccountingJournalEntryEntity } from '@mj-biz-apps/accounting-entities';
+import { useBusinessClock } from './support/business-clock';
 import { entityObject, installStubProvider, stubEntityInfo } from './support/entity-stubs';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
@@ -15,23 +16,15 @@ beforeEach(() => {
 });
 
 /**
- * Run `fn` with the machine's zone pinned. Restoring an UNSET `TZ` must `delete` it: assigning
- * `undefined` back stores the string "undefined", which ICU reads as UTC. Same technique as
- * `batch-status-window.test.ts`'s `AT`.
+ * Business zone Chicago at 2026-02-01T03:00Z: 21:00 CST on 31 January, so the business month is
+ * January while UTC is already in February. Each machine zone catches a different regression:
+ * - Los Angeles is west of Greenwich, so a local-getter read of a UTC-midnight `EffectiveDate`
+ *   falls into the previous month there. East of Greenwich it does not.
+ * - Tokyo is already in February, so a browser-local "today" fails there. A UTC "today"
+ *   (`toISOString`) fails under both.
  */
-const AT = (tz: string, fn: () => void) => {
-    const original = process.env.TZ;
-    process.env.TZ = tz;
-    try {
-        fn();
-    } finally {
-        if (original === undefined) delete process.env.TZ;
-        else process.env.TZ = original;
-    }
-};
-
-/** Machine zones either side of Greenwich: a local-getter read shifts a UTC-midnight day in each. */
-const MACHINE_ZONES = ['UTC', 'America/Chicago', 'Pacific/Auckland'];
+const MACHINE_ZONES = ['America/Los_Angeles', 'Asia/Tokyo'];
+const LAST_BUSINESS_DAY_OF_JANUARY = new Date('2026-02-01T03:00:00.000Z');
 
 /**
  * A real entity with one credit line: the component takes entities, so the spec hands it entities.
@@ -115,26 +108,6 @@ describe('DeferredRevenueWaterfallComponent', () => {
     });
 
     describe('month bucketing on the calendar day, not the machine zone', () => {
-        // The engine is a singleton; set its loaded state directly (as `batch-status-window.test.ts`
-        // does) and restore it so the stub cannot leak into other tests sharing this worker.
-        const engine = BusinessTimeZoneEngine.Instance as unknown as { _configurations: InstanceConfigurationRow[]; _loaded: boolean };
-        const original = { rows: engine._configurations, loaded: engine._loaded };
-
-        afterEach(() => {
-            engine._configurations = original.rows;
-            engine._loaded = original.loaded;
-            vi.useRealTimers();
-        });
-
-        function useChicagoBusinessZone(now: string): void {
-            engine._configurations = [
-                { FeatureKey: 'BizApps.BusinessTimeZone', Value: '{"iana":"America/Chicago","sql":"Central Standard Time"}', DefaultValue: '{"iana":"UTC","sql":"UTC"}' },
-            ];
-            engine._loaded = true;
-            vi.useFakeTimers();
-            vi.setSystemTime(new Date(now));
-        }
-
         async function monthlySchedule(): Promise<mjBizAppsAccountingJournalEntryEntity[]> {
             const entries: mjBizAppsAccountingJournalEntryEntity[] = [];
             for (let i = 1; i <= 12; i++) {
@@ -159,11 +132,16 @@ describe('DeferredRevenueWaterfallComponent', () => {
         }
 
         for (const zone of MACHINE_ZONES) {
-            it(`puts each EffectiveDate in its own month with the machine in ${zone}`, async () => {
-                useChicagoBusinessZone('2026-06-15T17:00:00.000Z');
-                const schedule = await monthlySchedule();
-                AT(zone, () => {
-                    const comp = render(schedule);
+            describe(`with the machine in ${zone}`, () => {
+                useBusinessClock({
+                    BusinessZone: 'America/Chicago',
+                    BusinessSqlZone: 'Central Standard Time',
+                    MachineZone: zone,
+                    Instant: LAST_BUSINESS_DAY_OF_JANUARY,
+                });
+
+                it('puts each EffectiveDate in its own month', async () => {
+                    const comp = render(await monthlySchedule());
                     expect(comp.MonthHeaders.map((h) => h.Key)).toEqual([
                         '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06',
                         '2026-07', '2026-08', '2026-09', '2026-10', '2026-11', '2026-12',
@@ -174,34 +152,29 @@ describe('DeferredRevenueWaterfallComponent', () => {
                     expect(cells.find((c) => c.MonthKey === '2026-12')?.Amount).toBe(1200);
                     expect(cells[0].MonthShort).toBe('Jan');
                 });
-            });
 
-            it(`recognizes to date through the business month with the machine in ${zone}`, async () => {
-                // 2026-02-01T03:00Z is still 31 January (21:00 CST) in the Chicago business zone,
-                // so only January has been recognized.
-                useChicagoBusinessZone('2026-02-01T03:00:00.000Z');
-                const schedule = await monthlySchedule();
-                AT(zone, () => {
-                    const comp = render(schedule);
+                it('recognizes and releases through the business month, inclusive', async () => {
+                    const comp = render(await monthlySchedule());
                     expect(comp.Rows[0].RecognizedToDate).toBe(100);
                     expect(comp.Summary.TotalRecognizedYTD).toBe(100);
                     expect(comp.Summary.MonthlyTotals.filter((m) => m.IsPastOrCurrent).map((m) => m.MonthKey)).toEqual(['2026-01']);
+                    // What the template renders: each cell's IsPastOrCurrent and the year's ReleasedAmount.
+                    expect(comp.YearGroups[0].Months.filter((m) => m.IsPastOrCurrent).map((m) => m.MonthKey)).toEqual(['2026-01']);
+                    expect(comp.YearGroups[0].ReleasedAmount).toBe(100);
                 });
-            });
 
-            it(`places an undated entry by its creation instant on the business calendar with the machine in ${zone}`, async () => {
-                // 2026-03-01T02:00Z is 20:00 CST on 28 February in the business zone.
-                useChicagoBusinessZone('2026-06-15T17:00:00.000Z');
-                const undated = await mockEntry({
-                    EntryNumber: '2000',
-                    EffectiveDate: null,
-                    CreatedAt: new Date('2026-03-01T02:00:00.000Z'),
-                    LinkedRecordID: 'sub-term-1',
-                    Description: 'Monthly Subscription Rev Rec',
-                    CreditAmount: 500,
-                });
-                AT(zone, () => {
-                    const comp = render([undated]);
+                it('places an undated entry by its creation instant on the business calendar', async () => {
+                    // 2026-03-01T02:00Z is 20:00 CST on 28 February in the business zone.
+                    const comp = render([
+                        await mockEntry({
+                            EntryNumber: '2000',
+                            EffectiveDate: null,
+                            CreatedAt: new Date('2026-03-01T02:00:00.000Z'),
+                            LinkedRecordID: 'sub-term-1',
+                            Description: 'Monthly Subscription Rev Rec',
+                            CreditAmount: 500,
+                        }),
+                    ]);
                     expect(comp.MonthHeaders[0].Key).toBe('2026-02');
                     expect(comp.Rows[0].MonthlyCells.find((c) => c.MonthKey === '2026-02')?.Amount).toBe(500);
                 });
