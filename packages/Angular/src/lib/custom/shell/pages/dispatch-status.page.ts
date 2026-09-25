@@ -116,6 +116,15 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
    * the ERP, and nothing checks for it yet (#182), so Retry opens this confirmation instead of sending.
    */
   public RetryConfirmBatch: mjBizAppsAccountingJournalEntryBatchEntity | null = null;
+  /**
+   * The Failed batch the operator is cancelling (#183): its entries go back to the next build, so the
+   * dialog asks for a reason and the same ERP check a retry needs — a journal that did post would
+   * otherwise post again in the next batch.
+   */
+  public CancelConfirmBatch: mjBizAppsAccountingJournalEntryBatchEntity | null = null;
+  /** The reason typed into the cancel dialog; required by the server for a batch past approval. */
+  public CancelReason = '';
+  public CancellingJournalEntryBatchID: string | null = null;
   public ResumingJournalEntryBatchID: string | null = null;
 
   /**
@@ -521,6 +530,62 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
       this.setError(e instanceof Error ? e.message : String(e));
     } finally {
       this.RetryingJournalEntryBatchID = null;
+      this.cdr.markForCheck();
+    }
+  }
+
+  /** A Failed batch can be cancelled instead of retried, when no retry or cancel is already running. */
+  public CanCancelBatch(batch: mjBizAppsAccountingJournalEntryBatchEntity): boolean {
+    return batch.Status === 'Failed' && this.RetryingJournalEntryBatchID === null && this.CancellingJournalEntryBatchID === null;
+  }
+
+  /**
+   * Open the cancel dialog. Cancel is the correction path when the batch's content, not the ERP, is
+   * what is wrong: it discards the summary and returns the entries to the next build, where a new
+   * batch is approved. Archive, by contrast, keeps the entries locked for good.
+   */
+  public CancelBatch(batch: mjBizAppsAccountingJournalEntryBatchEntity): void {
+    if (!this.CanCancelBatch(batch)) return;
+    this.CancelConfirmBatch = batch;
+    this.CancelReason = '';
+    this.cdr.markForCheck();
+  }
+
+  public DismissCancelBatch(): void {
+    this.CancelConfirmBatch = null;
+    this.CancelReason = '';
+    this.cdr.markForCheck();
+  }
+
+  /** The dialog's confirm is live only with a reason — the server refuses a blank one past approval. */
+  public get CanConfirmCancelBatch(): boolean {
+    return this.CancelReason.trim().length > 0;
+  }
+
+  /** Cancel the batch once the operator has given a reason and confirmed it has not posted in the ERP. */
+  public async ConfirmCancelBatch(): Promise<void> {
+    const batch = this.CancelConfirmBatch;
+    const reason = this.CancelReason.trim();
+    if (!batch || !reason || !this.CanCancelBatch(batch)) return;
+    this.CancelConfirmBatch = null;
+    this.CancelReason = '';
+    this.CancellingJournalEntryBatchID = batch.ID;
+    this.ActionMessage = null;
+    this.cdr.markForCheck();
+    try {
+      const res = await this.client().CancelBatch(batch.ID, reason, true);
+      if (res.Success) {
+        this.ActionMessage = `Cancelled ${batch.JournalEntryBatchNumber} — its journal entries return to the next build.`;
+        this.ActionIsError = false;
+        this.SelectedBatch = null;
+        this.Refresh(); // refetch-on-mutating-action (§8)
+      } else {
+        this.setError(res.ErrorMessage ?? 'Cancel failed.');
+      }
+    } catch (e) {
+      this.setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      this.CancellingJournalEntryBatchID = null;
       this.cdr.markForCheck();
     }
   }

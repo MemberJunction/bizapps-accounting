@@ -25,7 +25,7 @@ type BatchStatus = mjBizAppsAccountingJournalEntryBatchEntity['Status'];
  */
 type BatchRow = Pick<
   mjBizAppsAccountingJournalEntryBatchEntity,
-  'ID' | 'JournalEntryBatchNumber' | 'Status' | 'TargetSystem' | 'TotalEntries' | 'TotalDebits' | 'TotalCredits' | 'ExternalJournalEntryBatchRef' | 'ErrorMessage' | 'ArchiveReason'
+  'ID' | 'JournalEntryBatchNumber' | 'Status' | 'TargetSystem' | 'TotalEntries' | 'TotalDebits' | 'TotalCredits' | 'ExternalJournalEntryBatchRef' | 'ErrorMessage' | 'ArchiveReason' | 'CancelReason'
 > & {
   /** undefined = not yet checked; null = unknown/error; true/false = gate result. */
   Approved?: boolean | null;
@@ -217,6 +217,52 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
     return window.prompt(`Archive batch ${row.JournalEntryBatchNumber}? It will never post to the ERP and its journal entries stay locked to it.\n\nReason (required):`);
   }
 
+  /**
+   * Cancel an Approved or Failed batch (#183): the batch becomes Cancelled, its summary journal entry
+   * is deleted and its journal entries return to the candidate pool for the next build — the opposite
+   * of Archive, which keeps them locked. A cancelled or blank prompt aborts silently. A Failed batch
+   * may already be in the ERP, so the operator must also confirm its document number has not posted
+   * there; declining aborts, because cancelling would let its entries post a second time.
+   */
+  public async OnCancelApproved(row: BatchRow): Promise<void> {
+    if (row.Busy) return;
+    const reason = this.PromptForCancelReason(row);
+    if (!reason?.trim()) return;
+    const isFailed = row.Status === 'Failed';
+    if (isFailed && !this.ConfirmNotPostedInERP(row)) return;
+
+    row.Busy = true;
+    this.clearActionMessage();
+    this.cdr.markForCheck();
+    try {
+      const res = await this.client().CancelBatch(row.ID, reason.trim(), isFailed);
+      if (res.Success) {
+        this.setActionMessage(`Cancelled batch ${row.JournalEntryBatchNumber} — its journal entries return to the next build.`, false);
+        await this.loadBatches();
+      } else {
+        this.setActionMessage(res.ErrorMessage ?? 'Cancel failed.', true);
+      }
+    } finally {
+      row.Busy = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  /** The cancel-reason prompt, as a seam a test can stub. */
+  protected PromptForCancelReason(row: BatchRow): string | null {
+    return window.prompt(`Cancel batch ${row.JournalEntryBatchNumber}? Its journal entries return to the candidate pool for the next build.\n\nReason (required):`);
+  }
+
+  /** The Failed-batch ERP check, as a seam a test can stub. */
+  protected ConfirmNotPostedInERP(row: BatchRow): boolean {
+    const erp = row.TargetSystem || this.TargetSystem;
+    return window.confirm(
+      `Batch ${row.JournalEntryBatchNumber} failed, but it may still have posted to ${erp}.\n\n` +
+      `Confirm you searched ${erp} for document ${row.JournalEntryBatchNumber} and it has NOT posted. ` +
+      `If it has, cancelling lets its journal entries post a second time in the next batch.`,
+    );
+  }
+
   // ─── view helpers (template-facing) ──────────────────────────────────────
 
   /** An Approved batch (status flip happens with the CFO decision) can dispatch. */
@@ -237,6 +283,11 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
   /** Archive is offered wherever LEGAL_TRANSITIONS allows `→ Archived` (server-side: Pending / Approved / Failed). */
   public canArchive(row: BatchRow): boolean {
     return ['Pending', 'Approved', 'Failed'].includes(row.Status) && !row.Busy;
+  }
+
+  /** Cancel (#183) is offered on an Approved or Failed batch; a Pending batch uses Reject instead. */
+  public canCancelApproved(row: BatchRow): boolean {
+    return (row.Status === 'Approved' || row.Status === 'Failed') && !row.Busy;
   }
 
   /** Map a batch status to a stat-badge variant for the status pill. */
@@ -288,6 +339,7 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
       ExternalJournalEntryBatchRef: b.ExternalJournalEntryBatchRef,
       ErrorMessage: b.ErrorMessage,
       ArchiveReason: b.ArchiveReason,
+      CancelReason: b.CancelReason,
     };
   }
 

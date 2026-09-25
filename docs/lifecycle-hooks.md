@@ -126,10 +126,20 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   member-count check is now a public method shared with the engine: `sendJournalEntryBatch` re-runs
   it **before** every `→Sent` (`Approved→Sent`, and `Failed→Sent` on a retry), so a batch whose member
   set / totals drifted after approval is refused at dispatch instead of shipping under a stale
-  signature. It is a self-consistency check, not a seal: both sides are read at check time and no
-  snapshot of the approved content is stored. On `Approved` the immutability trigger freezes the
-  content; on `Failed` it does not, so fields the check never reads (`PostingDate`, the journal date
-  the ERP receives) can change before a retry (#183).
+  signature. It also checks that the summary entry carries the batch's date and company, and (#183)
+  compares the content with **`ApprovedContentHash`**, the SHA-256 seal `Save()` writes on
+  Pending→Approved over the batch header, summary entry and lines (with dimension tags) and member
+  set — so it now means "unchanged since approval", not only "coherent right now". A batch approved
+  before the seal existed has no hash and gets the other checks. The immutability trigger freezes
+  `Failed` content as well as `Approved`, so the seal is the second line of defence.
+- **`JournalEntryBatchEntityServer.Cancel(contextUser, { reason, confirmNotAlreadyPostedInERP })`**
+  (#183) — legal from `Pending`, `Approved` and `Failed`. It saves `Cancelled` with the summary
+  pointer cleared and the cancel audit triple in ONE update, then releases the members and deletes the
+  summary, in one transaction; the triggers key on that order (a member unlocks only while its batch
+  is `Pending` or `Cancelled`; a frozen batch clears its pointer only in the update that cancels it).
+  From `Approved`/`Failed` a reason is required; from `Failed` so is the ERP confirmation, because the
+  released entries would otherwise post again in the next batch. `Save()` stamps `CancelledAt` /
+  `CancelledByUserID` on the transition, as it does for the approval and archive pairs.
 - **`TasksAppApprovalGate.recordDecision`** — now requires `contextUser` to BE the batch company's
   `AccountingCompanyProfile.ApprovalCFOUserID` (no CFO configured ⇒ hard-fail). Previously any
   authenticated user could approve any batch, including their own.

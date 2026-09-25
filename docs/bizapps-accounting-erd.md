@@ -228,7 +228,7 @@ erDiagram
     Company ||--o{ JournalEntryBatch : "single-company (D7)"
     JournalEntryBatch ||--o{ JournalEntry : "JournalEntryBatchID (members + summary, by IsJournalEntryBatchSummary type)"
     JournalEntryBatch |o--o| JournalEntry : "SummaryJournalEntryID"
-    User ||--o{ JournalEntryBatch : "BatchedBy / ApprovedBy"
+    User ||--o{ JournalEntryBatch : "BatchedBy / ApprovedBy / ArchivedBy / CancelledBy"
     Company ||--o{ JournalEntrySequence : "per-company per-FY numbering"
     %% ---- tax ----
     TaxAuthority ||--o{ TaxJurisdiction : ""
@@ -389,11 +389,18 @@ erDiagram
         date PostingDate "must match the GL (D8)"
         uuid SummaryJournalEntryID FK "summary JE (type flagged IsJournalEntryBatchSummary)"
         string TargetSystem
-        string Status "Pending | Approved | Sent | Posted | Failed | Cancelled"
+        string Status "Pending | Approved | Sent | Posted | Failed | Cancelled | Archived"
         datetimeoffset BatchedAt
         uuid BatchedByUserID FK
         datetimeoffset ApprovedAt
         uuid ApprovedByUserID FK
+        string ApprovedContentHash "SHA-256 seal written at approval (#183)"
+        string ArchiveReason
+        datetimeoffset ArchivedAt
+        uuid ArchivedByUserID FK
+        string CancelReason
+        datetimeoffset CancelledAt
+        uuid CancelledByUserID FK
         int TotalEntries
         decimal TotalDebits
         decimal TotalCredits
@@ -723,7 +730,7 @@ erDiagram
     Company ||--o{ JournalEntryBatch : "CompanyID NOT NULL - single-company (D7)"
     JournalEntryBatch ||--o{ JournalEntry : "JournalEntryBatchID - members AND the summary (discriminated by the type IsJournalEntryBatchSummary flag)"
     JournalEntryBatch |o--o| JournalEntry : "SummaryJournalEntryID - coherence trigger 50023"
-    User ||--o{ JournalEntryBatch : "BatchedBy / ApprovedBy"
+    User ||--o{ JournalEntryBatch : "BatchedBy / ApprovedBy / ArchivedBy / CancelledBy"
 
     JournalEntryBatch {
         uuid ID PK
@@ -732,11 +739,18 @@ erDiagram
         date PostingDate "singular, accountant-set - must match the GL (D8)"
         uuid SummaryJournalEntryID FK "type IsJournalEntryBatchSummary, EffectiveDate=PostingDate, same JournalEntryBatchID"
         string TargetSystem "BusinessCentral | QuickBooks | NetSuite | Sage | Xero | Other"
-        string Status "Pending | Approved | Sent | Posted | Failed | Cancelled"
+        string Status "Pending | Approved | Sent | Posted | Failed | Cancelled | Archived"
         datetimeoffset BatchedAt
         uuid BatchedByUserID FK
         datetimeoffset ApprovedAt "nullable"
         uuid ApprovedByUserID FK "nullable"
+        string ApprovedContentHash "nullable - SHA-256 of the approved content, frozen; dispatch compares it (#183)"
+        string ArchiveReason "nullable - required when Archived (CK_JournalEntryBatch_ArchiveAudit)"
+        datetimeoffset ArchivedAt "nullable"
+        uuid ArchivedByUserID FK "nullable"
+        string CancelReason "nullable - required when cancelled after approval (CK_JournalEntryBatch_CancelAudit)"
+        datetimeoffset CancelledAt "nullable"
+        uuid CancelledByUserID FK "nullable"
         int TotalEntries "control totals"
         decimal TotalDebits
         decimal TotalCredits
@@ -750,8 +764,12 @@ erDiagram
 ```
 
 **Lock model (derived, one machinery):** member + summary JEs lock preliminarily at build
-(`Batched`, batch still `Pending` — reversible unlock sanctioned), permanently at approval,
-`GLPosted` at post. Summary is excluded from netting/count/sweep via its type's `IsJournalEntryBatchSummary` flag (the
+(`Batched`, batch still `Pending` — reversible unlock sanctioned), and at approval for as long as
+the batch stays approved, `GLPosted` at post. Batch content is frozen (trg_JournalEntryBatch_Immutability)
+from `Approved` on, `Failed` included. `Cancelled` — from `Pending`, `Approved` or `Failed` —
+releases the members: the unlock is sanctioned while the owning batch is `Pending` or `Cancelled`,
+and an `Approved`/`Failed` batch clears its summary pointer only in the update that cancels it
+(#183). `Archived` keeps them locked for good. Summary is excluded from netting/count/sweep via its type's `IsJournalEntryBatchSummary` flag (the
 discriminator); footing-trigger successor = pending Amith.
 
 ---

@@ -186,6 +186,51 @@ async function setStatus(ctx: Ctx, jeId: string, status: JEStatus): Promise<bool
   }
 }
 
+interface RawBatch { batchId: string; memberId: string; summaryId: string }
+
+/**
+ * A batch past approval, built by raw SQL (#183): one locked member entry and a locked summary entry,
+ * approved, then moved on to `status`. Raw SQL is the path the batch triggers exist to police, so this
+ * sets up exactly what they see. Rows are company A's, so the teardown removes them.
+ */
+async function rawBatchAt(ctx: Ctx, status: 'Approved' | 'Failed'): Promise<RawBatch> {
+  const { pool, companyA: co, user } = ctx;
+  const summaryTypeId = await RequireJournalEntryTypeID('JournalEntryBatchSummary', user, Metadata.Provider);
+  const batch: RawBatch = { batchId: randomUUID(), memberId: randomUUID(), summaryId: randomUUID() };
+  const { batchId, memberId, summaryId } = batch;
+  const tag = `${RUN_TAG}-${batchId.slice(0, 6)}`;
+  await pool.request().query(`
+    INSERT INTO ${SCHEMA}.JournalEntryBatch (ID, JournalEntryBatchNumber, CompanyID, PostingDate, TargetSystem, BatchedByUserID, BatchedAt, Status, TotalEntries, TotalDebits, TotalCredits)
+      VALUES ('${batchId}', 'RAWB-${tag}', '${co.id}', '2026-09-30', 'BusinessCentral', '${user.ID}', SYSDATETIMEOFFSET(), 'Pending', 1, 100, 100);
+    INSERT INTO ${SCHEMA}.JournalEntry (ID, EntryNumber, CompanyID, EffectiveDate, EntryTypeID, Status)
+      VALUES ('${memberId}', 'RAWM-${tag}', '${co.id}', '2026-09-30', '${ctx.manualTypeId}', 'Pending');
+    INSERT INTO ${SCHEMA}.JournalEntry (ID, EntryNumber, CompanyID, EffectiveDate, EntryTypeID, Status, JournalEntryBatchID)
+      VALUES ('${summaryId}', 'RAWS-${tag}', '${co.id}', '2026-09-30', '${summaryTypeId}', 'Pending', '${batchId}');
+    INSERT INTO ${SCHEMA}.JournalEntryLine (ID, JournalEntryID, LineNumber, GLAccountID, DebitAmount)
+      VALUES (NEWID(), '${memberId}', 1, '${co.arGL}', 100), (NEWID(), '${summaryId}', 1, '${co.arGL}', 100);
+    INSERT INTO ${SCHEMA}.JournalEntryLine (ID, JournalEntryID, LineNumber, GLAccountID, CreditAmount)
+      VALUES (NEWID(), '${memberId}', 2, '${co.revGL}', 100), (NEWID(), '${summaryId}', 2, '${co.revGL}', 100);
+    UPDATE ${SCHEMA}.JournalEntry SET Status='Batched', JournalEntryBatchID='${batchId}' WHERE ID IN ('${memberId}', '${summaryId}');
+    UPDATE ${SCHEMA}.JournalEntryBatch SET SummaryJournalEntryID='${summaryId}' WHERE ID='${batchId}';
+    UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Approved', ApprovedAt=SYSDATETIMEOFFSET(), ApprovedByUserID='${user.ID}' WHERE ID='${batchId}';`);
+  if (status === 'Failed') {
+    await pool.request().query(`
+      UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Sent', SentAt=SYSDATETIMEOFFSET() WHERE ID='${batchId}';
+      UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Failed', ErrorMessage='ERP timeout' WHERE ID='${batchId}';`);
+  }
+  return batch;
+}
+
+/** The sanctioned cancel, in JournalEntryBatchEntityServer.Cancel's order: commit to Cancelled, then release, then drop the summary. */
+async function rawCancel(ctx: Ctx, b: RawBatch): Promise<void> {
+  await ctx.pool.request().query(`
+    UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Cancelled', SummaryJournalEntryID=NULL, CancelReason='Posting date belongs in the next period',
+      CancelledAt=SYSDATETIMEOFFSET(), CancelledByUserID='${ctx.user.ID}' WHERE ID='${b.batchId}';
+    UPDATE ${SCHEMA}.JournalEntry SET Status='Pending', JournalEntryBatchID=NULL WHERE ID IN ('${b.memberId}', '${b.summaryId}');
+    DELETE FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID='${b.summaryId}';
+    DELETE FROM ${SCHEMA}.JournalEntry WHERE ID='${b.summaryId}';`);
+}
+
 async function main(): Promise<void> {
   let ctx: Ctx;
   try { ctx = await bootstrap(); } catch (e) { console.error('BOOTSTRAP ERROR:', e instanceof Error ? e.message : String(e)); process.exit(2); }
@@ -296,6 +341,42 @@ async function main(): Promise<void> {
     assert(tipped, 'adding a line to a Pending JE should be allowed');
     assert(!(await setStatus(ctx, je.ID, 'Batched')), 'an unbalanced JE must not lock to Batched (50001 floor)');
   });
+
+  // ─── INV: a Failed batch is frozen; Approved/Failed → Cancelled releases (#183) ──
+  await test('INV batch immutability — raw re-date of a Failed batch\'s PostingDate → rejected (50009)', async () => {
+    const b = await rawBatchAt(ctx, 'Failed');
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET PostingDate='2026-10-31' WHERE ID='${b.batchId}'`), 'JournalEntryBatch is locked');
+  });
+
+  await test('INV batch immutability — raw change of a Failed batch\'s ApprovedContentHash → rejected (50009)', async () => {
+    const b = await rawBatchAt(ctx, 'Failed');
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET ApprovedContentHash=REPLICATE('b', 64) WHERE ID='${b.batchId}'`), 'JournalEntryBatch is locked');
+  });
+
+  await test('INV batch immutability — raw clear of a Failed batch\'s summary pointer without cancelling → rejected (50009)', async () => {
+    const b = await rawBatchAt(ctx, 'Failed');
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET SummaryJournalEntryID=NULL WHERE ID='${b.batchId}'`), 'JournalEntryBatch is locked');
+  });
+
+  await test('INV JE immutability — raw release of a member while its batch is Failed → rejected (50004)', async () => {
+    const b = await rawBatchAt(ctx, 'Failed');
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntry SET Status='Pending', JournalEntryBatchID=NULL WHERE ID='${b.memberId}'`), 'JournalEntry is locked');
+  });
+
+  await test('INV cancel audit — raw cancel of an approved batch without a reason → rejected (CK_JournalEntryBatch_CancelAudit)', async () => {
+    const b = await rawBatchAt(ctx, 'Failed');
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Cancelled', SummaryJournalEntryID=NULL WHERE ID='${b.batchId}'`), 'CK_JournalEntryBatch_CancelAudit');
+  });
+
+  for (const status of ['Approved', 'Failed'] as const) {
+    await test(`INV cancel — allowed: ${status} → Cancelled, then the members return to the candidate pool`, async () => {
+      const b = await rawBatchAt(ctx, status);
+      await rawCancel(ctx, b);
+      const res = await pool.request().query(`SELECT Status, JournalEntryBatchID FROM ${SCHEMA}.JournalEntry WHERE ID='${b.memberId}'`);
+      const row = res.recordset[0] as { Status: string; JournalEntryBatchID: string | null } | undefined;
+      assert(row?.Status === 'Pending' && row.JournalEntryBatchID === null, `member should be Pending and unbatched, got ${row?.Status}/${row?.JournalEntryBatchID}`);
+    });
+  }
 
   // ─── Teardown (disable accounting triggers to clean locked rows) ──────────
   const exec = async (q: string) => { try { await ctx.teardownPool.request().query(q); } catch (e) { console.log(`      teardown warn: ${(e instanceof Error ? e.message : String(e)).split('\n')[0]}`); } };

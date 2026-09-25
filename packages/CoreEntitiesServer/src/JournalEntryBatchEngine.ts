@@ -13,13 +13,15 @@
  *     members, set the balanced control totals + SummaryJournalEntryID (trigger 50023
  *     verifies coherence), **lock** the member JEs to Batched, and raise the approval task.
  *   approveJournalEntryBatch(): the human sign-off — Pending→Approved (+ApprovedAt/ApprovedByUserID).
- *     Content is frozen from here (trg_JournalEntryBatch_Immutability, 50009) until the batch is
- *     Failed, which the trigger does not freeze (#183).
+ *     Content is frozen from here (trg_JournalEntryBatch_Immutability, 50009), Failed included,
+ *     and the approval writes ApprovedContentHash, the seal dispatch compares against (#183).
  *   sendJournalEntryBatch(): require approval (gate seam + Status='Approved', or 'Failed' for a
  *     retry), flip →Sent, post the summary JE's lines to the ERP (all-or-nothing per batch), and on
  *     confirmation flip Sent→Posted + the member JEs AND the summary JE Batched→GLPosted.
  *     Failure → Failed; an operator retries by sending again, after confirming in the ERP that the
  *     batch did not post (#145, #182).
+ *   cancelJournalEntryBatch(): Pending | Approved | Failed → Cancelled, releasing the member JEs to
+ *     the candidate pool (#183: a reason from Approved/Failed, the ERP confirmation from Failed).
  *   resumeJournalEntryBatchPosting(): finish a Posted batch's Batched→GLPosted flip, no ERP call.
  *   findStrandedJournalEntries(): the entries Failed / partly-flipped Posted batches hold.
  *
@@ -70,7 +72,7 @@ import {
 } from '@mj-biz-apps/accounting-engine-base';
 import { BusinessTimeZoneEngine } from '@mj-biz-apps/common-entities';
 import { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
-import { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
+import { JournalEntryBatchEntityServer, type JournalEntryBatchCancelOptions } from './JournalEntryBatchEntityServer.js';
 import { GetJournalEntryBatchSummaryEntryType } from './JournalEntryTypes.js';
 import { sqlGuidLiteral } from './SqlGuards.js';
 
@@ -723,15 +725,16 @@ async function lockJournalEntries(jeIds: string[], batchId: string, contextUser:
   }
 }
 
-// ─── cancelJournalEntryBatch / regenerateJournalEntryBatch — reverse a PRELIMINARY (unapproved) lock ──
+// ─── cancelJournalEntryBatch / regenerateJournalEntryBatch — reverse a batch's lock ──
 
 /**
- * Reverse an unapproved (Pending) batch: return its member journal entries to the candidate pool,
- * delete its JournalEntryBatchSummary JE, and mark it Cancelled. Valid ONLY while Status='Pending' (approval
- * makes the lock permanent — plan §7.3).
+ * Cancel a Pending, Approved or Failed batch: mark it Cancelled, return its member journal entries
+ * to the candidate pool and delete its JournalEntryBatchSummary JE. From Approved or Failed (#183)
+ * `options.reason` is required, and from Failed `options.confirmNotAlreadyPostedInERP` too — see
+ * {@link JournalEntryBatchCancelOptions}. A Pending cancel (a CFO rejection) needs neither.
  */
 export async function cancelJournalEntryBatch(
-  batchId: string, contextUser: UserInfo, provider: IMetadataProvider,
+  batchId: string, contextUser: UserInfo, provider: IMetadataProvider, options: JournalEntryBatchCancelOptions = {},
 ): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
   // Cancel is single-aggregate work (the batch reversing ITS OWN preliminary lock), so the logic
   // lives on the entity (JournalEntryBatchEntityServer.Cancel — one transaction, encapsulated);
@@ -739,7 +742,7 @@ export async function cancelJournalEntryBatch(
   const p = resolveProviders(provider);
   const batch = await p.md.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, contextUser);
   if (!(await batch.Load(batchId))) throw new Error(`cancelJournalEntryBatch: batch ${batchId} not found`);
-  await batch.Cancel(contextUser);
+  await batch.Cancel(contextUser, options);
   return batch;
 }
 
@@ -841,11 +844,12 @@ const SENDABLE_FROM: ReadonlyArray<string> = ['Approved', 'Failed'];
  * →Sent, posts the summary JE's lines to the ERP (all-or-nothing), and on confirmation flips
  * Sent→Posted + the member JEs AND the summary JE Batched→GLPosted.
  *
- * **The coherence check is not a content seal.** It checks that the batch agrees with itself, both
- * sides read now; no snapshot of the approved content is stored to compare against. On an Approved
- * batch trg_JournalEntryBatch_Immutability freezes the content, so that is enough. A Failed batch
- * is not frozen, and fields the check never reads can change between approval and a retry — above
- * all `PostingDate`, the journal date the ERP receives. Freezing Failed content is #183.
+ * **The coherence check compares against the approval.** Besides footing, member count and the
+ * summary entry's date and company, it recomputes the batch's content hash and compares it with the
+ * `ApprovedContentHash` written at approval (#183), so a batch whose header, summary or member set
+ * changed after approval is refused. trg_JournalEntryBatch_Immutability also freezes Approved and
+ * Failed content, so the seal is the second line of defence, not the first. A batch approved before
+ * the seal existed has no hash and gets the other checks only.
  *
  * **A retry can duplicate the ERP journal.** `Failed` does not prove the ERP rejected the journal:
  * the poster can succeed with the response lost, or succeed and then have the Sent→Posted save fail,
@@ -872,8 +876,8 @@ export async function sendJournalEntryBatch(batchId: string, contextUser: UserIn
 
   await options.gate.assertApproved(batchId, contextUser); // throws if not CFO-approved
 
-  // Re-run the approval-time member-set + footing verification against the database, right before
-  // the flip to Sent. Self-consistency only — see the docstring for what it does not cover.
+  // Re-run the approval-time checks and the seal comparison against the database, right before
+  // the flip to Sent.
   const drift = await batch.CheckControlTotalCoherence(contextUser);
   if (drift.length > 0) {
     throw new Error(
@@ -1003,7 +1007,11 @@ export async function resumeJournalEntryBatchPosting(
 
 // ─── findStrandedJournalEntries — entries locked in a batch that will not move them on its own ─
 
-/** How a stranded batch is recovered: dispatch it again, or finish its GL-posting flip. */
+/**
+ * How a stranded batch is recovered: dispatch it again, or finish its GL-posting flip. A `Retry`
+ * batch may instead be cancelled (#183), which releases its entries to the next build — the choice
+ * when its content, not the ERP, is what is wrong.
+ */
 export type StrandedJournalEntryRecovery = 'Retry' | 'ResumePosting';
 
 /**

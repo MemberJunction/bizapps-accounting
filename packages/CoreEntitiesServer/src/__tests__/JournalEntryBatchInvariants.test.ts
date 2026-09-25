@@ -45,6 +45,7 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
       'ID', 'JournalEntryBatchNumber', 'CompanyID', 'PostingDate', 'SummaryJournalEntryID', 'TargetSystem',
       'BatchedAt', 'BatchedByUserID', 'Status', 'TotalEntries', 'TotalDebits', 'TotalCredits',
       'ApprovedAt', 'ApprovedByUserID', 'ArchiveReason', 'ArchivedAt', 'ArchivedByUserID',
+      'CancelReason', 'CancelledAt', 'CancelledByUserID', 'ApprovedContentHash',
     ]);
     Metadata.Provider = {
       Entities: [batchInfo],
@@ -142,6 +143,42 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
     expect(transitionErrors(result).length).toBe(1);
   });
 
+  it.each(['Approved', 'Failed'])('%s → Cancelled is legal (#183)', (from) => {
+    asSaved(from);
+    batch.Status = 'Cancelled';
+    expect(transitionErrors(batch.Validate())).toEqual([]);
+  });
+
+  it('Sent → Cancelled is rejected — a sent batch may still be posting in the ERP', () => {
+    asSaved('Sent');
+    batch.Status = 'Cancelled';
+    expect(transitionErrors(batch.Validate()).length).toBe(1);
+  });
+
+  // ─── the cancel audit triple, once approved (#183) ────────────────────────
+
+  const cancelAudit = { CancelReason: 'Posting date belongs in October', CancelledAt: new Date(), CancelledByUserID: 'U1' };
+
+  it.each([
+    ['a missing reason', { ...cancelAudit, CancelReason: null }],
+    ['a blank reason', { ...cancelAudit, CancelReason: '   ' }],
+    ['no CancelledAt', { ...cancelAudit, CancelledAt: null }],
+    ['no CancelledByUserID', { ...cancelAudit, CancelledByUserID: null }],
+  ])('a batch cancelled after approval with %s fails validation', (_label, audit) => {
+    asSaved('Failed', { ApprovedAt: new Date(), ApprovedByUserID: 'U1' });
+    batch.SetMany(audit, true);
+    batch.Status = 'Cancelled';
+    const result = batch.Validate();
+    expect(result.Success).toBe(false);
+    expect(result.Errors.some(e => getErrorText(e).includes('CancelReason'))).toBe(true);
+  });
+
+  it('a Pending cancel needs no reason — only a batch past approval does', () => {
+    asSaved('Pending');
+    batch.Status = 'Cancelled';
+    expect(batch.Validate().Errors.some(e => getErrorText(e).includes('CancelReason'))).toBe(false);
+  });
+
   // ─── the archive audit triple ─────────────────────────────────────────────
 
   it.each([
@@ -167,7 +204,7 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
     beforeEach(() => {
       save = vi.spyOn(BaseEntity.prototype, 'Save').mockResolvedValue(true);
       teardown = vi.fn().mockResolvedValue(undefined);
-      batch.TearDownSummaryAndUnlock = teardown;
+      batch.ReleaseMembersAndDeleteSummary = teardown;
       // Cancel() opens a provider transaction; the mock harness has no data provider, so give the
       // instance one that only knows the three transaction verbs Cancel actually calls.
       Object.defineProperty(batch, 'ProviderToUse', {
@@ -197,6 +234,7 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
       await batch.Cancel();
 
       expect(teardown).toHaveBeenCalledTimes(1);
+      expect(teardown).toHaveBeenCalledWith('SUM1', null);
       expect(batch.Status).toBe('Cancelled');
     });
 
@@ -209,6 +247,57 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
     it('Archive() refuses a blank reason', async () => {
       asSaved('Pending');
       await expect(batch.Archive('   ')).rejects.toThrow(/reason/i);
+    });
+
+    // ─── cancel after approval (#183) ─────────────────────────────────────────
+
+    it('Cancel() saves Cancelled with the pointer cleared BEFORE releasing — the triggers key on that', async () => {
+      const seenAtRelease: Array<{ status: string; pointer: string | null }> = [];
+      teardown.mockImplementation(async () => { seenAtRelease.push({ status: batch.Status, pointer: batch.SummaryJournalEntryID }); });
+      asSaved('Approved', { SummaryJournalEntryID: 'SUM1', ApprovedAt: new Date(), ApprovedByUserID: 'U1' });
+
+      await batch.Cancel({ ID: 'U-CANCELLER' } as never, { reason: 'Posting date belongs in October' });
+
+      expect(save).toHaveBeenCalledTimes(1);
+      expect(seenAtRelease).toEqual([{ status: 'Cancelled', pointer: null }]);
+      expect(teardown).toHaveBeenCalledWith('SUM1', { ID: 'U-CANCELLER' });
+      expect(batch.CancelReason).toBe('Posting date belongs in October');
+      expect(batch.CancelledByUserID).toBe('U-CANCELLER');
+      expect(batch.CancelledAt).toBeInstanceOf(Date);
+    });
+
+    it.each(['Approved', 'Failed'])('Cancel() refuses a %s batch without a reason', async (from) => {
+      asSaved(from, { SummaryJournalEntryID: 'SUM1' });
+      await expect(batch.Cancel(undefined, { reason: '  ', confirmNotAlreadyPostedInERP: true })).rejects.toThrow(/reason is required/);
+      expect(save).not.toHaveBeenCalled();
+      expect(teardown).not.toHaveBeenCalled();
+    });
+
+    it.each([undefined, false])('Cancel() refuses a Failed batch without the ERP confirmation (%s)', async (confirm) => {
+      asSaved('Failed', { SummaryJournalEntryID: 'SUM1' });
+      await expect(batch.Cancel(undefined, { reason: 'Wrong period', confirmNotAlreadyPostedInERP: confirm }))
+        .rejects.toThrow(/Confirm in the ERP that document JEB-000001 has not posted/);
+      expect(save).not.toHaveBeenCalled();
+      expect(teardown).not.toHaveBeenCalled();
+    });
+
+    it('Cancel() takes a Failed batch with a reason and the ERP confirmation', async () => {
+      asSaved('Failed', { SummaryJournalEntryID: 'SUM1' });
+      await batch.Cancel(undefined, { reason: 'Wrong period', confirmNotAlreadyPostedInERP: true });
+      expect(batch.Status).toBe('Cancelled');
+      expect(teardown).toHaveBeenCalledWith('SUM1', null);
+    });
+
+    it('Cancel() needs no ERP confirmation from Approved — an Approved batch was never sent', async () => {
+      asSaved('Approved', { SummaryJournalEntryID: 'SUM1' });
+      await batch.Cancel(undefined, { reason: 'Wrong period' });
+      expect(batch.Status).toBe('Cancelled');
+    });
+
+    it.each(['Sent', 'Posted', 'Archived', 'Cancelled'])('Cancel() refuses a %s batch, naming the actual status', async (from) => {
+      asSaved(from);
+      await expect(batch.Cancel(undefined, { reason: 'x', confirmNotAlreadyPostedInERP: true })).rejects.toThrow(new RegExp(`is ${from}`));
+      expect(teardown).not.toHaveBeenCalled();
     });
 
     it('the → Archived transition auto-stamps ArchivedAt / ArchivedByUserID from the context user', async () => {

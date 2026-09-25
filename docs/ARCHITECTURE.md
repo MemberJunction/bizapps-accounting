@@ -110,14 +110,19 @@ balance **overall and per company** (AM-4), and writes atomically. Hooks on the 
 - **DB invariants (triggers)** validated by `test-harnesses/server/block1-runtime.ts`, each with
   a raw-SQL bypass case: balanced-on-lock overall (50001) **and per company (50019/50022 —
   AM-4)**, JE immutability (50003/50004), JE-line immutability (50006). Batch side: summary
-  foots overall (50014) **and per company (50023)**, batch immutability (50008/50009).
+  foots overall (50014) **and per company (50023)**, batch immutability (50008/50009, `Failed`
+  included since #183), the cancel-after-approval release and `CK_JournalEntryBatch_CancelAudit`.
   *(The period-close trigger + W4 routing were retired with the period tables.)*
 - **Batch lifecycle (CH-3):** `Pending → Approved → Sent → Posted | Failed | Cancelled` — see
   `JournalEntryBatchEngine.ts`; the ERP wire is **account numbers, split per company** (AM-4).
 - **Recovery past Approved (#145):** a `Failed` batch is retried by dispatching it again
   (`Failed → Sent`; the gate and the coherence check re-run, the original approval is reused). A
   `Failed` batch may already be in the ERP, so a retry requires the operator's confirmation that the
-  batch number has not posted there (#182); its content is not frozen (#183). A
+  batch number has not posted there (#182). Its content is frozen like an Approved batch's, and the
+  dispatch check compares it with the `ApprovedContentHash` seal written at approval (#183). A
+  `Failed` or `Approved` batch whose content is wrong is cancelled instead (`Accounting.CancelJournalEntryBatch`,
+  reason required, plus the ERP confirmation from `Failed`), which releases its entries to the next
+  build. A
   `Posted` batch whose member `Batched → GLPosted` flip stopped partway is finished by
   `resumeJournalEntryBatchPosting` (`Accounting.ResumeJournalEntryBatchPosting`), which makes no
   ERP call. `findStrandedJournalEntries` reports the entries both states hold; the scheduled

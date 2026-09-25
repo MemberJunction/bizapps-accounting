@@ -30,6 +30,7 @@ const LISTED_BATCH: BatchItem = {
   Company: 'Test Company',
   ExternalJournalEntryBatchRef: null,
   ArchiveReason: null,
+  CancelReason: null,
 };
 
 describe('AccountingBatchesPageComponent — Build Batch modal cutoff (DOM)', () => {
@@ -101,5 +102,67 @@ describe('AccountingBatchesPageComponent — Build Batch modal cutoff (DOM)', ()
     expect(fixture.componentInstance.BuildCutoffDate).toBe('2026-07-15');
     expect(previewCalls.at(-1)?.Cutoff).toBe('2026-07-15');
     expect(reopened.value).toBe('2026-07-15');
+  });
+});
+
+describe('AccountingBatchesPageComponent — Cancel an Approved/Failed batch (#183)', () => {
+  const APPROVED: BatchItem = { ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000002', JournalEntryBatchNumber: 'JEB-TEST-0002', Status: 'Approved' };
+  const FAILED: BatchItem = { ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000003', JournalEntryBatchNumber: 'JEB-TEST-0003', Status: 'Failed' };
+  let cancelCalls: { ID: string; Reason: string; Confirm: boolean }[];
+
+  beforeEach(() => {
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) =>
+      p.EntityName === BATCH_ENTITY ? viewResult([LISTED_BATCH, APPROVED, FAILED]) : viewResult([], 0),
+    );
+    cancelCalls = [];
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'CancelBatch').mockImplementation(async (id, reason, confirm = false) => {
+      cancelCalls.push({ ID: id, Reason: reason, Confirm: confirm });
+      return { Success: true, Status: 'Cancelled' };
+    });
+  });
+
+  async function render(): Promise<AccountingBatchesPageComponent> {
+    const fixture = TestBed.createComponent(AccountingBatchesPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
+    return fixture.componentInstance;
+  }
+
+  it('offers Cancel on Approved and Failed batches but not on Pending', async () => {
+    const page = await render();
+    expect(page.CanCancelApproved(APPROVED)).toBe(true);
+    expect(page.CanCancelApproved(FAILED)).toBe(true);
+    expect(page.CanCancelApproved(LISTED_BATCH)).toBe(false);
+  });
+
+  it('does not cancel with a blank reason', async () => {
+    const page = await render();
+    page.OnCancelApproved(APPROVED, new Event('click'));
+    page.CancelReasonDraft = '   ';
+    await page.ConfirmCancelApproved();
+    expect(cancelCalls).toEqual([]);
+  });
+
+  it('cancels an Approved batch without the ERP confirmation', async () => {
+    const page = await render();
+    page.OnCancelApproved(APPROVED, new Event('click'));
+    page.CancelReasonDraft = '  wrong period  ';
+    await page.ConfirmCancelApproved();
+    expect(cancelCalls).toEqual([{ ID: APPROVED.ID, Reason: 'wrong period', Confirm: false }]);
+    expect(page.ActionMessageIsError).toBe(false);
+    expect(page.CancelModalVisible).toBe(false);
+  });
+
+  it('does not cancel a Failed batch until the operator confirms it has not posted in the ERP', async () => {
+    const page = await render();
+    page.OnCancelApproved(FAILED, new Event('click'));
+    page.CancelReasonDraft = 'ERP rejected the journal';
+    await page.ConfirmCancelApproved();
+    expect(cancelCalls).toEqual([]);
+
+    page.CancelConfirmNotPostedInERP = true;
+    await page.ConfirmCancelApproved();
+    expect(cancelCalls).toEqual([{ ID: FAILED.ID, Reason: 'ERP rejected the journal', Confirm: true }]);
   });
 });

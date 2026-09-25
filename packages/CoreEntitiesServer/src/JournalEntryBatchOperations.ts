@@ -23,6 +23,9 @@
  *   Accounting.RecordJournalEntryBatchDecision   → gate.recordDecision + approveJournalEntryBatch | cancelJournalEntryBatch (in-app CFO approve/reject)
  *   Accounting.GetJournalEntryBatchApprovalState → gate.assertApproved probe (read-only: is this batch dispatchable?)
  *   Accounting.ArchiveJournalEntryBatch          → batch.Archive(reason)             terminal close with NO ERP call; members stay locked (#214)
+ *   Accounting.CancelJournalEntryBatch           → cancelJournalEntryBatch(...)     Pending|Approved|Failed→Cancelled; members return to the
+ *                                                            candidate pool (#183: Reason from Approved/Failed,
+ *                                                            ConfirmNotAlreadyPostedInERP from Failed)
  *
  * These are thin by design — every rule (netting, the one-transaction build incl. the approval
  * Task + ApprovalTaskID stamp (D10 rev. 2026-07-29), the CFO precondition, EmptyJournalEntryBatchError) lives
@@ -393,6 +396,38 @@ export class ArchiveJournalEntryBatchOperation extends BaseRemotableOperation<Ar
     if (!(await batch.Load(input.JournalEntryBatchID))) throw new Error(`ArchiveJournalEntryBatch: batch ${input.JournalEntryBatchID} not found.`);
     await batch.Archive(input.Reason, user);
     return { Status: batch.Status, ArchivedAt: batch.ArchivedAt?.toISOString() ?? null };
+  }
+}
+
+// ─── Accounting.CancelJournalEntryBatch ──────────────────────────────────────────────────
+
+export interface CancelJournalEntryBatchInput {
+  JournalEntryBatchID: string;
+  /** Required when the batch is Approved or Failed: cancelling discards a summary the approver signed. */
+  Reason?: string | null;
+  /** Required `true` to cancel a Failed batch: the caller checked the ERP and the batch number has not posted. */
+  ConfirmNotAlreadyPostedInERP?: boolean;
+}
+export interface CancelJournalEntryBatchOutput { Status: string; CancelledAt: string | null }
+
+/**
+ * Cancel a batch and return its journal entries to the candidate pool (#183) — the correction path
+ * for an Approved or Failed batch whose frozen content is wrong, as opposed to Archive, which keeps
+ * the entries locked for good. The legal-from statuses, the required reason and the ERP confirmation
+ * are the entity's invariants (JournalEntryBatchEntityServer.Cancel); this operation only marshals.
+ */
+@RegisterClass(BaseRemotableOperation, 'Accounting.CancelJournalEntryBatch')
+export class CancelJournalEntryBatchOperation extends BaseRemotableOperation<CancelJournalEntryBatchInput, CancelJournalEntryBatchOutput> {
+  public readonly OperationKey = 'Accounting.CancelJournalEntryBatch';
+
+  protected async InternalExecute(input: CancelJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<CancelJournalEntryBatchOutput> {
+    if (!input?.JournalEntryBatchID) throw new Error('CancelJournalEntryBatch: JournalEntryBatchID is required.');
+    requireSqlGuid(input.JournalEntryBatchID, 'CancelJournalEntryBatch');
+    const batch = await cancelJournalEntryBatch(input.JournalEntryBatchID, user, provider, {
+      reason: input.Reason ?? null,
+      confirmNotAlreadyPostedInERP: input.ConfirmNotAlreadyPostedInERP === true,
+    });
+    return { Status: batch.Status, CancelledAt: batch.CancelledAt?.toISOString() ?? null };
   }
 }
 

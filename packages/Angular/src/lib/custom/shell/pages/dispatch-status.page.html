@@ -118,6 +118,20 @@
                 <i class="fa-solid fa-rotate-right" aria-hidden="true"></i> Retry dispatch
               }
             </button>
+            <button
+              type="button"
+              mjButton
+              variant="secondary"
+              size="sm"
+              [disabled]="!CanCancelBatch(b)"
+              title="Cancel this batch and return its journal entries to the next build, when its content is what needs correcting"
+              (click)="CancelBatch(b)">
+              @if (CancellingJournalEntryBatchID === b.ID) {
+                <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Cancelling…
+              } @else {
+                <i class="fa-solid fa-ban" aria-hidden="true"></i> Cancel batch
+              }
+            </button>
           </div>
           <p class="ds-fail__error">{{ b.ErrorMessage || 'The ERP send failed but returned no message.' }}</p>
         </article>
@@ -171,6 +185,10 @@
         @if (SelectedBatch.Status === 'Failed') {
           <button type="button" mjButton variant="primary" size="sm" [disabled]="!CanRetry(SelectedBatch)" (click)="Retry(SelectedBatch)">
             <i class="fa-solid fa-rotate-right" aria-hidden="true"></i> Retry dispatch
+          </button>
+          <button type="button" mjButton variant="secondary" size="sm" [disabled]="!CanCancelBatch(SelectedBatch)" (click)="CancelBatch(SelectedBatch)"
+            title="Cancel this batch and return its journal entries to the next build, when its content is what needs correcting">
+            <i class="fa-solid fa-ban" aria-hidden="true"></i> Cancel batch
           </button>
         }
         @if (SelectedBatch.Status === 'Posted' && IsIncompletePosting(SelectedBatch.ID)) {
@@ -243,5 +261,29 @@
       <i class="fa-solid fa-rotate-right" aria-hidden="true"></i> It has not posted — retry
     </button>
     <button mjButton variant="flat" size="sm" (click)="CancelRetry()">Cancel</button>
+  </mj-dialog-actions>
+</mj-dialog>
+
+<!-- CANCEL CONFIRMATION (#183) — cancelling a Failed batch returns its entries to the next build. The
+     same ERP check as a retry applies: a journal that already posted would post again in that build.
+     The reason is required past approval and is the record of why an approved summary was discarded. -->
+<mj-dialog [Visible]="CancelConfirmBatch !== null" Title="Cancel this batch" Width="560px" (Close)="DismissCancelBatch()">
+  @if (CancelConfirmBatch) {
+    <p>
+      Cancelling <span class="ds-mono">{{ CancelConfirmBatch.JournalEntryBatchNumber }}</span> deletes its summary entry and
+      returns its {{ CancelConfirmBatch.TotalEntries }} journal entries to the next build, which needs a new approval.
+    </p>
+    <p>
+      The failed send may have posted anyway. In {{ CancelConfirmBatch.TargetSystem }}, search for document number
+      <span class="ds-mono">{{ CancelConfirmBatch.JournalEntryBatchNumber }}</span>. Cancel only if it is not there.
+    </p>
+    <label class="ds-cancel__label" for="ds-cancel-reason">Reason (required)</label>
+    <textarea id="ds-cancel-reason" class="ds-cancel__reason" rows="3" maxlength="500" [(ngModel)]="CancelReason"></textarea>
+  }
+  <mj-dialog-actions>
+    <button mjButton variant="primary" size="sm" [disabled]="!CanConfirmCancelBatch" (click)="ConfirmCancelBatch()">
+      <i class="fa-solid fa-ban" aria-hidden="true"></i> It has not posted — cancel batch
+    </button>
+    <button mjButton variant="flat" size="sm" (click)="DismissCancelBatch()">Keep batch</button>
   </mj-dialog-actions>
 </mj-dialog>

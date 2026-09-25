@@ -39,6 +39,7 @@ export type BatchItem = Pick<
     | 'Company'
     | 'ExternalJournalEntryBatchRef'
     | 'ArchiveReason'
+    | 'CancelReason'
 >;
 
 interface StageCount {
@@ -218,6 +219,9 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                             @if (batch.Status === 'Archived' && batch.ArchiveReason) {
                                                 <span class="mja-archive-reason" [title]="batch.ArchiveReason">{{ batch.ArchiveReason }}</span>
                                             }
+                                            @if (batch.Status === 'Cancelled' && batch.CancelReason) {
+                                                <span class="mja-archive-reason" [title]="batch.CancelReason">{{ batch.CancelReason }}</span>
+                                            }
                                         </td>
                                         <td class="mja-td-right">{{ batch.TotalEntries }}</td>
                                         <td class="mja-td-right">
@@ -230,6 +234,14 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                                         title="Close this batch permanently without sending it to the ERP. Its journal entries stay locked to it."
                                                         (click)="OnArchive(batch, $event)">
                                                     <i class="fa-solid fa-box-archive"></i> Archive
+                                                </button>
+                                            }
+                                            @if (CanCancelApproved(batch)) {
+                                                <button mjButton variant="secondary" size="sm" type="button"
+                                                        [disabled]="CancellingBatchID === batch.ID"
+                                                        title="Cancel this batch and return its journal entries to the next build."
+                                                        (click)="OnCancelApproved(batch, $event)">
+                                                    <i class="fa-solid fa-ban"></i> Cancel
                                                 </button>
                                             }
                                             <i class="fa-solid fa-arrow-up-right-from-square"></i>
@@ -430,6 +442,55 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                     </button>
                     <button mjButton variant="flat" size="sm" type="button" [disabled]="!!ArchivingBatchID" (click)="CloseArchiveModal()">
                         Cancel
+                    </button>
+                </mj-dialog-actions>
+            </mj-dialog>
+
+            <mj-dialog [Visible]="CancelModalVisible" Title="Cancel Journal Entry Batch" [Width]="560" (Close)="CloseCancelModal()">
+                <div class="mja-modal-content">
+                    <p class="mja-archive-blurb">
+                        Batch <strong>{{ CancelTarget?.JournalEntryBatchNumber }}</strong> will be cancelled and its summary
+                        journal entry deleted. Its {{ CancelTarget?.TotalEntries }}
+                        journal entr{{ CancelTarget?.TotalEntries === 1 ? 'y' : 'ies' }}
+                        <strong>return to the candidate pool</strong> for the next build — this is not an archive.
+                    </p>
+
+                    <div class="mja-modal-field">
+                        <label class="mja-modal-label" for="aidp-cancel-reason">Reason (required)</label>
+                        <textarea
+                            id="aidp-cancel-reason"
+                            class="mj-input mja-archive-reason-input"
+                            rows="3"
+                            maxlength="500"
+                            [(ngModel)]="CancelReasonDraft"></textarea>
+                    </div>
+
+                    @if (CancelTarget?.Status === 'Failed') {
+                        <div class="mja-modal-options">
+                            <label class="mja-modal-checkbox-label">
+                                <input type="checkbox" [(ngModel)]="CancelConfirmNotPostedInERP" />
+                                <span>
+                                    I searched {{ CancelTarget?.TargetSystem }} for document
+                                    <strong>{{ CancelTarget?.JournalEntryBatchNumber }}</strong> and it has <strong>not</strong> posted.
+                                    If it has, cancelling lets its journal entries post a second time in the next batch.
+                                </span>
+                            </label>
+                        </div>
+                    }
+                </div>
+
+                <mj-dialog-actions>
+                    <button mjButton variant="danger" size="sm" type="button"
+                            [disabled]="!CanConfirmCancel"
+                            (click)="ConfirmCancelApproved()">
+                        @if (CancellingBatchID) {
+                            <i class="fa-solid fa-spinner fa-spin"></i> Cancelling…
+                        } @else {
+                            <i class="fa-solid fa-ban"></i> Cancel Batch
+                        }
+                    </button>
+                    <button mjButton variant="flat" size="sm" type="button" [disabled]="!!CancellingBatchID" (click)="CloseCancelModal()">
+                        Close
                     </button>
                 </mj-dialog-actions>
             </mj-dialog>
@@ -1114,6 +1175,81 @@ export class AccountingBatchesPageComponent implements OnInit {
             }
         } finally {
             this.ArchivingBatchID = null;
+            this.cdr.markForCheck();
+        }
+    }
+
+    /** Per-row in-flight id for Cancel (#183), scoped like ArchivingBatchID. */
+    public CancellingBatchID: string | null = null;
+    public CancelModalVisible = false;
+    public CancelTarget: BatchItem | null = null;
+    public CancelReasonDraft = '';
+    /** For a Failed batch: the operator confirmed its document number has not posted in the ERP. */
+    public CancelConfirmNotPostedInERP = false;
+
+    /** Cancel (#183) is offered on an Approved or Failed batch; a Pending batch uses Reject instead. */
+    public CanCancelApproved(batch: BatchItem): boolean {
+        return (batch.Status === 'Approved' || batch.Status === 'Failed') && this.CancellingBatchID !== batch.ID;
+    }
+
+    /**
+     * Cancel an Approved or Failed batch (#183): the batch becomes Cancelled, its summary journal entry
+     * is deleted and its journal entries return to the candidate pool — the opposite of Archive, which
+     * keeps them locked. The dialog requires a reason and, for a Failed batch (which may already be in
+     * the ERP), the operator's confirmation that its document number has not posted there.
+     */
+    public OnCancelApproved(batch: BatchItem, event: Event): void {
+        // The row itself opens the record — an action button inside it must not also navigate.
+        event.stopPropagation();
+        if (this.CancellingBatchID) return;
+        this.CancelTarget = batch;
+        this.CancelReasonDraft = '';
+        this.CancelConfirmNotPostedInERP = false;
+        this.CancelModalVisible = true;
+        this.cdr.markForCheck();
+    }
+
+    public CloseCancelModal(): void {
+        if (this.CancellingBatchID) return;
+        this.CancelModalVisible = false;
+        this.CancelTarget = null;
+        this.CancelReasonDraft = '';
+        this.CancelConfirmNotPostedInERP = false;
+        this.cdr.markForCheck();
+    }
+
+    /** A non-blank reason, plus the ERP confirmation when the batch is Failed, and nothing in flight. */
+    public get CanConfirmCancel(): boolean {
+        const batch = this.CancelTarget;
+        if (!batch || this.CancellingBatchID || !this.CancelReasonDraft.trim()) return false;
+        return batch.Status !== 'Failed' || this.CancelConfirmNotPostedInERP;
+    }
+
+    /** Run the cancel with the reason (and, for a Failed batch, the ERP confirmation) captured in the dialog. */
+    public async ConfirmCancelApproved(): Promise<void> {
+        const batch = this.CancelTarget;
+        if (!batch || !this.CanConfirmCancel) return;
+        const reason = this.CancelReasonDraft.trim();
+        const isFailed = batch.Status === 'Failed';
+
+        this.CancellingBatchID = batch.ID;
+        this.ActionMessage = null;
+        this.cdr.markForCheck();
+        try {
+            const res = await this.dispatchClient.CancelBatch(batch.ID, reason, isFailed);
+            this.ActionMessageIsError = !res.Success;
+            this.ActionMessage = res.Success
+                ? `Cancelled batch ${batch.JournalEntryBatchNumber} — its journal entries return to the next build.`
+                : (res.ErrorMessage ?? 'Cancel failed.');
+            if (res.Success) {
+                this.CancelModalVisible = false;
+                this.CancelTarget = null;
+                this.CancelReasonDraft = '';
+                this.CancelConfirmNotPostedInERP = false;
+                await this.LoadBatches();
+            }
+        } finally {
+            this.CancellingBatchID = null;
             this.cdr.markForCheck();
         }
     }

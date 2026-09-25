@@ -2,7 +2,7 @@
  * JournalEntryBatchDispatchClient — a thin, strongly-typed wrapper over the batch Remote Operations
  * (`Accounting.BuildJournalEntryBatch` / `Accounting.RegenerateJournalEntryBatch` / `Accounting.DispatchJournalEntryBatch` /
  * `Accounting.RecordJournalEntryBatchDecision` / `Accounting.GetJournalEntryBatchApprovalState` /
- * `Accounting.ArchiveJournalEntryBatch` / `Accounting.ResumeJournalEntryBatchPosting` /
+ * `Accounting.ArchiveJournalEntryBatch` / `Accounting.CancelJournalEntryBatch` / `Accounting.ResumeJournalEntryBatchPosting` /
  * `Accounting.GetStrandedJournalEntries`).
  *
  * Deliberately NOT a hand-written GraphQL client (the old shape, which talked to the deleted
@@ -42,6 +42,7 @@ interface DispatchJournalEntryBatchOutputWire { Status: string; ExternalJournalE
 interface GetJournalEntryBatchApprovalStateOutputWire { Approved: boolean; Reason?: string }
 interface RecordJournalEntryBatchDecisionOutputWire { Recorded: true }
 interface ArchiveJournalEntryBatchOutputWire { Status: string; ArchivedAt: string | null }
+interface CancelJournalEntryBatchOutputWire { Status: string; CancelledAt: string | null }
 interface ResumeJournalEntryBatchPostingOutputWire { Status: string; JournalEntriesPosted: number }
 
 /**
@@ -85,6 +86,12 @@ export interface RecordJournalEntryBatchDecisionResult {
 }
 
 export interface ArchiveJournalEntryBatchResult {
+  Success: boolean;
+  Status?: string;
+  ErrorMessage?: string;
+}
+
+export interface CancelJournalEntryBatchResult {
   Success: boolean;
   Status?: string;
   ErrorMessage?: string;
@@ -279,6 +286,25 @@ export class JournalEntryBatchDispatchClient {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       LogError(`JournalEntryBatchDispatchClient.ArchiveBatch failed: ${msg}`);
+      return { Success: false, ErrorMessage: msg };
+    }
+  }
+
+  /**
+   * Cancel an Approved or Failed batch and return its journal entries to the candidate pool (#183) —
+   * the opposite of Archive, which keeps them locked. The server requires a reason, and for a Failed
+   * batch `confirmNotAlreadyPostedInERP`: a Failed batch may already be in the ERP, and its entries
+   * would post again in the next batch.
+   */
+  public async CancelBatch(batchID: string, reason: string, confirmNotAlreadyPostedInERP = false): Promise<CancelJournalEntryBatchResult> {
+    try {
+      const res = await this.dataProvider.RouteOperation<{ JournalEntryBatchID: string; Reason: string; ConfirmNotAlreadyPostedInERP: boolean }, CancelJournalEntryBatchOutputWire>(
+        'Accounting.CancelJournalEntryBatch', { JournalEntryBatchID: batchID, Reason: reason, ConfirmNotAlreadyPostedInERP: confirmNotAlreadyPostedInERP });
+      if (!res.Success || !res.Output) return { Success: false, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
+      return { Success: true, Status: res.Output.Status };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      LogError(`JournalEntryBatchDispatchClient.CancelBatch failed: ${msg}`);
       return { Success: false, ErrorMessage: msg };
     }
   }
