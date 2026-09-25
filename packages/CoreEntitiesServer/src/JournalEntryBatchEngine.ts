@@ -884,8 +884,9 @@ export async function sendJournalEntryBatch(batchId: string, contextUser: UserIn
   // Before the →Sent save: a throw here must leave the batch where it was, not stranded at Sent.
   const summaryLines = await loadSummaryLines(batch, contextUser, p);
 
+  // The entity stamps SentAt, SentByUserID and SendAttemptCount. If another send of this batch got
+  // here first, trg_JournalEntryBatch_SendOnce fails this save and the ERP is never called (#184).
   batch.Status = 'Sent';
-  batch.SentAt = new Date();
   if (!(await batch.Save())) throw new Error(`sendJournalEntryBatch: ${fromStatus}→Sent failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
 
   const postResult = await postOrFail(poster, batch, summaryLines, contextUser);

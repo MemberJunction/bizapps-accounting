@@ -28,6 +28,10 @@ export interface BatchDetailHeader {
   ExternalJournalEntryBatchRef: string | null;
   ApprovedAt: Date | null;
   SentAt: Date | null;
+  /** Denormalized name of the user who made the latest send. */
+  SentByUser: string | null;
+  /** 1 for a first dispatch, one more per retry (#184). */
+  SendAttemptCount: number;
   PostedAt: Date | null;
   ErrorMessage: string | null;
   ApprovalTaskID: string | null;
@@ -176,7 +180,7 @@ export class BatchDetailPanelComponent extends BaseAngularComponent {
             Fields: [
               'ID', 'JournalEntryBatchNumber', 'Status', 'TargetSystem', 'PostingDate', 'TotalEntries',
               'TotalDebits', 'TotalCredits', 'CompanyID', 'Company', 'ExternalJournalEntryBatchRef',
-              'ApprovedAt', 'SentAt', 'PostedAt', 'ErrorMessage', 'ApprovalTaskID',
+              'ApprovedAt', 'SentAt', 'SentByUser', 'SendAttemptCount', 'PostedAt', 'ErrorMessage', 'ApprovalTaskID',
               'ApprovalTaskRaisedAt', 'SummaryJournalEntryID', '__mj_CreatedAt',
             ],
             ResultType: 'simple',

@@ -120,7 +120,22 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
       if (!this.ArchivedAt) this.ArchivedAt = new Date();
       if (!this.ArchivedByUserID && this.ContextCurrentUser) this.ArchivedByUserID = this.ContextCurrentUser.ID;
     }
+    if (this.IsSaved && this.Status === 'Sent' && oldStatus !== 'Sent') this.stampSend();
     return super.Save(options);
+  }
+
+  /**
+   * The send audit (#184), stamped on EVERY transition into Sent — a retry included, so unlike the
+   * approval and archive pairs it overwrites. A new stamp on a batch that is already Sent is what
+   * trg_JournalEntryBatch_SendOnce refuses: of two concurrent sends, the second save fails before
+   * its ERP call. The count builds on the loaded value, and __mj.RecordChange keeps every earlier
+   * SentAt, sender and ErrorMessage.
+   */
+  private stampSend(): void {
+    const loadedCount = (this.GetFieldByName('SendAttemptCount')?.OldValue as number | null | undefined) ?? 0;
+    this.SentAt = new Date();
+    this.SentByUserID = this.ContextCurrentUser?.ID ?? null;
+    this.SendAttemptCount = loadedCount + 1;
   }
 
   /** Always-applies batch invariants: legal status transitions + approval-audit pairing. */
