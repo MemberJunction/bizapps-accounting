@@ -16,7 +16,7 @@
 export { AccountingCompanyProfileEntityServer } from './AccountingCompanyProfileEntityServer.js';
 export { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 export { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
-export { JournalEntryBatchEntityServer, type JournalEntryBatchCancelOptions } from './JournalEntryBatchEntityServer.js';
+export { JournalEntryBatchEntityServer, type ERPNotPostedBasis, type JournalEntryBatchCancelOptions } from './JournalEntryBatchEntityServer.js';
 export { GLAccountEntityServer } from './GLAccountEntityServer.js';
 export { GLAccountLinkEntityServer, LoadGLAccountLinkEntityServer } from './GLAccountLinkEntityServer.js';
 export { IntercompanyAccountMatchEntityServer } from './IntercompanyAccountMatchEntityServer.js';
@@ -96,6 +96,7 @@ export type {
   JournalEntryBatchApprovalGate,
   JournalEntryBatchCancelGate,
   CancelJournalEntryBatchOptions,
+  RecordedCancellation,
   SendJournalEntryBatchOptions,
   DispatchFailureRecord,
   ResumeJournalEntryBatchPostingResult,

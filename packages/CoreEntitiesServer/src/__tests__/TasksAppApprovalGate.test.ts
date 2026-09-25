@@ -75,7 +75,8 @@ function cancelProvider(opts: { cfoUserId: string | null; hasTask: boolean; hasP
   return {
     GetEntityObject: async (entityName: string) => {
       if (entityName === BATCH_ENTITY) {
-        return { Load: async () => true, ID: BATCH_ID, CompanyID: COMPANY_ID, JournalEntryBatchNumber: 'BATCH-0007', Status: 'Failed', ApprovedByUserID: APPROVER_USER_ID };
+        // Cancelled, as the batch reads when recordCancellation runs: after the cancel was saved, inside its transaction.
+        return { Load: async () => true, ID: BATCH_ID, CompanyID: COMPANY_ID, JournalEntryBatchNumber: 'BATCH-0007', Status: 'Cancelled', ApprovedByUserID: APPROVER_USER_ID };
       }
       if (entityName === ACP_ENTITY) return { Load: async () => true, ApprovalCFOUserID: opts.cfoUserId };
       if (entityName === 'MJ_BizApps_Tasks: Tasks') return { Load: async () => true, ID: TASK_ID };
@@ -120,25 +121,26 @@ describe('TasksAppApprovalGate.recordCancellation — the approval Task records 
   it('writes a comment on the approval Task, by the cancelling user\'s Person, with the reason', async () => {
     const w: CancelWorld = { comments: [] };
     const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, hasTask: true, hasPerson: true }, w));
-    await gate.recordCancellation(BATCH_ID, '  Wrong posting period  ', cfo);
+    await gate.recordCancellation(BATCH_ID, { reason: '  Wrong posting period  ', fromStatus: 'Failed', erpCheck: 'The ERP lookup found nothing posted under document BATCH-0007.' }, cfo);
 
     expect(w.comments).toHaveLength(1);
     expect(w.comments[0].TaskID).toBe(TASK_ID);
     expect(w.comments[0].PersonID).toBe(PERSON_ID);
-    expect(w.comments[0].Content).toMatch(/BATCH-0007 was cancelled after approval.*Reason: Wrong posting period$/);
+    expect(w.comments[0].Content).toMatch(/BATCH-0007 was cancelled after approval \(it was Failed\).*Reason: Wrong posting period ERP check: The ERP lookup found nothing/);
+    expect(w.comments[0].Content).not.toMatch(/it was Cancelled/);
   });
 
   it('does nothing for a batch with no approval Task', async () => {
     const w: CancelWorld = { comments: [] };
     const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, hasTask: false, hasPerson: true }, w));
-    await gate.recordCancellation(BATCH_ID, 'Wrong posting period', cfo);
+    await gate.recordCancellation(BATCH_ID, { reason: 'Wrong posting period', fromStatus: 'Approved' }, cfo);
     expect(w.comments).toHaveLength(0);
   });
 
   it('refuses when the cancelling user has no linked Person, so the cancel rolls back rather than going unrecorded', async () => {
     const w: CancelWorld = { comments: [] };
     const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, hasTask: true, hasPerson: false }, w));
-    await expect(gate.recordCancellation(BATCH_ID, 'Wrong posting period', cfo)).rejects.toThrow(/has no linked Person/);
+    await expect(gate.recordCancellation(BATCH_ID, { reason: 'Wrong posting period', fromStatus: 'Approved' }, cfo)).rejects.toThrow(/has no linked Person/);
     expect(w.comments).toHaveLength(0);
   });
 });

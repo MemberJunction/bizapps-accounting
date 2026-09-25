@@ -16,7 +16,7 @@
  *   recordDecision(batchId, outcome, decidedByPersonId, notes): resolve the batch's Task and record
  *     the decision via TaskOrchestrationService. The shared entry point for BOTH the in-app approve
  *     control and the Tasks inbox.
- *   assertMayCancelApproved(batchId) / recordCancellation(batchId, reason) (#183): only the company's
+ *   assertMayCancelApproved(batchId) / recordCancellation(batchId, cancellation) (#183): only the company's
  *     CFO or the batch's recorded approver may cancel a batch past approval, and the cancel is
  *     written to the approval Task as a comment, so the approver's record shows what became of it.
  *
@@ -53,7 +53,7 @@ import type {
   mjBizAppsAccountingJournalEntryBatchEntity,
   mjBizAppsAccountingAccountingCompanyProfileEntity,
 } from '@mj-biz-apps/accounting-entities';
-import type { JournalEntryBatchApprovalGate, JournalEntryBatchCancelGate } from './JournalEntryBatchEngine.js';
+import type { JournalEntryBatchApprovalGate, JournalEntryBatchCancelGate, RecordedCancellation } from './JournalEntryBatchEngine.js';
 import { requireSqlGuid, sqlGuidLiteral } from './SqlGuards.js';
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
@@ -208,7 +208,7 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
    * TaskComment requires one; the caller runs this inside the cancel's transaction, so the cancel
    * rolls back with it rather than going unrecorded.
    */
-  async recordCancellation(batchId: string, reason: string, contextUser: UserInfo, erpCheck?: string): Promise<void> {
+  async recordCancellation(batchId: string, cancellation: RecordedCancellation, contextUser: UserInfo): Promise<void> {
     const task = await this.resolveBatchTask(batchId, contextUser);
     if (!task) return;
     const batch = await this.loadBatch(batchId, contextUser);
@@ -223,8 +223,10 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     comment.NewRecord();
     comment.TaskID = task.ID;
     comment.PersonID = personId;
-    comment.Content = `Journal entry batch ${batch.JournalEntryBatchNumber} was cancelled after approval (it was ${batch.Status}). Its journal entries return to the next build. Reason: ${reason.trim()}` +
-      (erpCheck ? ` ERP check: ${erpCheck}` : '');
+    // The prior status comes from the caller: this runs after the cancel was saved, so the batch
+    // loaded above already reads Cancelled.
+    comment.Content = `Journal entry batch ${batch.JournalEntryBatchNumber} was cancelled after approval (it was ${cancellation.fromStatus}). Its journal entries return to the next build. Reason: ${cancellation.reason.trim()}` +
+      (cancellation.erpCheck ? ` ERP check: ${cancellation.erpCheck}` : '');
     if (!(await comment.Save())) {
       throw new Error(`Batch ${batch.JournalEntryBatchNumber ?? batchId}: recording the cancel on its approval Task failed: ${comment.LatestResult?.CompleteMessage ?? 'unknown'}`);
     }

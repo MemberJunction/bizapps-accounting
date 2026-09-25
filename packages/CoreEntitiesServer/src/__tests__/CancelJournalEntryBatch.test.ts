@@ -87,10 +87,26 @@ describe('cancelJournalEntryBatch — authorizing a cancel past approval', () =>
 
     expect(g.assertMayCancelApproved).toHaveBeenCalledWith(BATCH_ID, USER);
     // No lookup supplied counts as an ERP that offers none, so the operator's confirmation stands.
-    expect(g.recordCancellation).toHaveBeenCalledWith(BATCH_ID, 'Wrong period', USER, expect.stringMatching(/confirmed document JEB-0183 had not posted.*\(Unavailable\)/));
+    expect(g.recordCancellation).toHaveBeenCalledWith(
+      BATCH_ID,
+      { reason: 'Wrong period', fromStatus: 'Failed', erpCheck: expect.stringMatching(/confirmed document JEB-0183 had not posted.*\(Unavailable\)/) },
+      USER,
+    );
     const [, options] = batch.Cancel.mock.calls[0] as [UserInfo, JournalEntryBatchCancelOptions];
     expect(options.confirmNotAlreadyPostedInERP).toBe(true);
+    expect(options.erpNotPostedBasis).toBe('UserAttested');
     expect(batch.Status).toBe('Cancelled');
+  });
+
+  it('records the status the batch was cancelled FROM, not what it reads after the cancel', async () => {
+    const { batch, provider } = world('Approved');
+    const g = gate({ allowed: true });
+    await cancelJournalEntryBatch(BATCH_ID, USER, provider, { reason: 'Wrong period', gate: g });
+
+    expect(batch.Status).toBe('Cancelled');
+    expect(g.recordCancellation).toHaveBeenCalledWith(BATCH_ID, { reason: 'Wrong period', fromStatus: 'Approved', erpCheck: undefined }, USER);
+    const [, options] = batch.Cancel.mock.calls[0] as [UserInfo, JournalEntryBatchCancelOptions];
+    expect(options.erpNotPostedBasis).toBeUndefined(); // never sent, so there is no ERP check to record
   });
 });
 
@@ -122,7 +138,9 @@ describe('cancelJournalEntryBatch — the ERP check before cancelling a Failed b
 
     const [, options] = batch.Cancel.mock.calls[0] as [UserInfo, JournalEntryBatchCancelOptions];
     expect(options.confirmNotAlreadyPostedInERP).toBe(true); // the lookup is the check; the entity persists it
-    expect(g.recordCancellation).toHaveBeenCalledWith(BATCH_ID, 'Wrong period', USER, 'The ERP lookup found nothing posted under document JEB-0183.');
+    expect(options.erpNotPostedBasis).toBe('ERPLookup');
+    expect(g.recordCancellation).toHaveBeenCalledWith(
+      BATCH_ID, { reason: 'Wrong period', fromStatus: 'Failed', erpCheck: 'The ERP lookup found nothing posted under document JEB-0183.' }, USER);
     expect(batch.Status).toBe('Cancelled');
   });
 
@@ -152,7 +170,10 @@ describe('cancelJournalEntryBatch — the ERP check before cancelling a Failed b
     await cancelJournalEntryBatch(BATCH_ID, USER, provider, { reason: 'Wrong period', confirmNotAlreadyPostedInERP: true, gate: g, lookup: lookupOf(result) });
 
     expect(batch.Status).toBe('Cancelled');
-    expect(g.recordCancellation).toHaveBeenCalledWith(BATCH_ID, 'Wrong period', USER, expect.stringContaining(`(${result.status})`));
+    expect(g.recordCancellation).toHaveBeenCalledWith(
+      BATCH_ID, { reason: 'Wrong period', fromStatus: 'Failed', erpCheck: expect.stringContaining(`(${result.status})`) }, USER);
+    const [, options] = batch.Cancel.mock.calls[0] as [UserInfo, JournalEntryBatchCancelOptions];
+    expect(options.erpNotPostedBasis).toBe('UserAttested');
   });
 
   it('treats a lookup that throws as unable to answer — the operator must confirm', async () => {

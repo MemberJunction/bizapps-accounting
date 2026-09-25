@@ -74,7 +74,7 @@ import {
 } from '@mj-biz-apps/accounting-engine-base';
 import { BusinessTimeZoneEngine } from '@mj-biz-apps/common-entities';
 import { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
-import { JournalEntryBatchEntityServer, type JournalEntryBatchCancelOptions } from './JournalEntryBatchEntityServer.js';
+import { JournalEntryBatchEntityServer, type ERPNotPostedBasis, type JournalEntryBatchCancelOptions } from './JournalEntryBatchEntityServer.js';
 import { GetJournalEntryBatchSummaryEntryType } from './JournalEntryTypes.js';
 import { sqlGuidLiteral } from './SqlGuards.js';
 
@@ -763,8 +763,26 @@ async function lockJournalEntries(jeIds: string[], batchId: string, contextUser:
  */
 export interface JournalEntryBatchCancelGate {
   assertMayCancelApproved(batchId: string, contextUser: UserInfo): Promise<void>;
-  /** `erpCheck`, for a Failed batch, says how "not posted in the ERP" was established (#207). */
-  recordCancellation(batchId: string, reason: string, contextUser: UserInfo, erpCheck?: string): Promise<void>;
+  recordCancellation(batchId: string, cancellation: RecordedCancellation, contextUser: UserInfo): Promise<void>;
+}
+
+/** What a cancel past approval records on the approval Task. */
+export interface RecordedCancellation {
+  reason: string;
+  /**
+   * The status the batch was cancelled FROM. Passed in, not re-read: the recording runs inside the
+   * cancel's transaction, after the batch was saved Cancelled, so a reload would say Cancelled.
+   */
+  fromStatus: string;
+  /** For a Failed batch, how "not posted in the ERP" was established (#207). */
+  erpCheck?: string;
+}
+
+/** How a Failed cancel's ERP check came out, when it lets the cancel go ahead. */
+interface FailedCancelErpCheck {
+  basis: ERPNotPostedBasis;
+  /** For the approval Task comment. */
+  description: string;
 }
 
 /** {@link cancelJournalEntryBatch}'s options: the entity's, plus the gate a cancel past approval requires. */
@@ -808,15 +826,16 @@ export async function cancelJournalEntryBatch(
   }
   await gate.assertMayCancelApproved(batch.ID, contextUser);
   const { lookup, ...entityOptions } = cancelOptions;
+  const fromStatus = batch.Status;
   // Authorized first, so an unauthorized caller learns nothing from the ERP.
-  const erpCheck = batch.Status === 'Failed'
+  const erpCheck = fromStatus === 'Failed'
     ? await checkFailedBatchBeforeCancel(batch, contextUser, p, lookup ?? unavailableErpLookup, entityOptions.confirmNotAlreadyPostedInERP === true)
     : undefined;
   await batch.Cancel(contextUser, {
     ...entityOptions,
-    // A lookup that found nothing IS the ERP check; the entity persists it as the attestation either way.
-    ...(erpCheck ? { confirmNotAlreadyPostedInERP: true } : {}),
-    onCancelled: () => gate.recordCancellation(batch.ID, entityOptions.reason ?? '', contextUser, erpCheck),
+    // A lookup that found nothing IS the ERP check; the entity persists it, and on what basis, either way.
+    ...(erpCheck ? { confirmNotAlreadyPostedInERP: true, erpNotPostedBasis: erpCheck.basis } : {}),
+    onCancelled: () => gate.recordCancellation(batch.ID, { reason: entityOptions.reason ?? '', fromStatus, erpCheck: erpCheck?.description }, contextUser),
   });
   return batch;
 }
@@ -832,7 +851,7 @@ export async function cancelJournalEntryBatch(
  */
 async function checkFailedBatchBeforeCancel(
   batch: mjBizAppsAccountingJournalEntryBatchEntity, contextUser: UserInfo, p: Providers, lookup: ErpJournalLookup, confirmed: boolean,
-): Promise<string> {
+): Promise<FailedCancelErpCheck> {
   const doc = batch.JournalEntryBatchNumber ?? batch.ID;
   const summaryLines = await loadSummaryLines(batch, contextUser, p);
   const found = await lookupOrError(lookup, batch, summaryLines, contextUser, 'cancelJournalEntryBatch');
@@ -842,10 +861,10 @@ async function checkFailedBatchBeforeCancel(
       'Cancelling would release its entries to post again under a new number. Retry it from Dispatch status instead: the retry records it Posted without sending it again.',
     );
   }
-  if (found.status === 'NotFound') return `The ERP lookup found nothing posted under document ${doc}.`;
+  if (found.status === 'NotFound') return { basis: 'ERPLookup', description: `The ERP lookup found nothing posted under document ${doc}.` };
   const refusal = cancelRefusal(found, doc);
   if (!confirmed) throw new ErpPostingUnconfirmedError(refusal.kind, refusal.reason, 'cancelJournalEntryBatch');
-  return `The canceller confirmed document ${doc} had not posted; the ERP lookup could not settle it (${refusal.kind}).`;
+  return { basis: 'UserAttested', description: `The canceller confirmed document ${doc} had not posted; the ERP lookup could not settle it (${refusal.kind}).` };
 }
 
 /** Why a Failed cancel needs the operator's word: the lookup ran and could not say "not posted". */

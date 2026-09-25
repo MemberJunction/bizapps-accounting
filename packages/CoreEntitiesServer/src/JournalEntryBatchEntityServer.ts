@@ -95,6 +95,13 @@ const CANCELLABLE_FROM = legalFrom('Cancelled');
 const CANCEL_ONLY_FROM: ReadonlyArray<string> = ['Approved', 'Failed'];
 
 /**
+ * How a sent batch was established as not posted in the ERP before it was cancelled (#183): the ERP
+ * lookup found nothing under its number, or the lookup could not settle it and the canceller attested.
+ * Derived from the generated field, never hand-copied.
+ */
+export type ERPNotPostedBasis = NonNullable<mjBizAppsAccountingJournalEntryBatchEntity['ERPNotPostedBasis']>;
+
+/**
  * Options for {@link JournalEntryBatchEntityServer.Cancel}. Both matter only once the batch has
  * been approved; a Pending cancel (a CFO rejection) needs neither.
  */
@@ -111,6 +118,12 @@ export interface JournalEntryBatchCancelOptions {
    * confirmation. Calling `Cancel()` directly skips that lookup, so go through the engine.
    */
   confirmNotAlreadyPostedInERP?: boolean;
+  /**
+   * How "not posted" was established, persisted as ERPNotPostedBasis with the attestation. The engine
+   * passes 'ERPLookup' when its lookup found nothing; otherwise it is the canceller's word,
+   * 'UserAttested' (the default).
+   */
+  erpNotPostedBasis?: ERPNotPostedBasis;
   /**
    * Runs inside Cancel's transaction, after the members are released — for work that must commit
    * or roll back with the cancel, such as recording it on the batch's approval Task.
@@ -260,8 +273,8 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
 
     // ERP-check attestation, once the batch had been sent: it may already be in the ERP, and cancelling
     // releases its entries to post again. Enforced at the DB too (CK_JournalEntryBatch_CancelERPCheck).
-    if (this.Status === 'Cancelled' && this.SentAt && (!this.ERPNotPostedConfirmedAt || !this.ERPNotPostedConfirmedByUserID)) {
-      fail(`A batch cancelled after it was sent must carry ERPNotPostedConfirmedAt and ERPNotPostedConfirmedByUserID — the attestation that it had not posted in the ERP.`);
+    if (this.Status === 'Cancelled' && this.SentAt && (!this.ERPNotPostedConfirmedAt || !this.ERPNotPostedConfirmedByUserID || !this.ERPNotPostedBasis)) {
+      fail(`A batch cancelled after it was sent must carry ERPNotPostedConfirmedAt, ERPNotPostedConfirmedByUserID and ERPNotPostedBasis — the record that it had not posted in the ERP, and how that was established.`);
     }
 
     return result;
@@ -555,7 +568,8 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
 
   /**
    * The single update that commits the batch to cancelling: status, cleared summary pointer, the
-   * audit triple and — for a batch that had been sent — the ERP-check attestation.
+   * audit triple and — for a batch that had been sent — the ERP check: when, by whose cancel, and
+   * whether the lookup or the canceller's attestation established it.
    */
   private async markCancelled(options: JournalEntryBatchCancelOptions, user: UserInfo | undefined): Promise<void> {
     const fromStatus = this.Status;
@@ -567,6 +581,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     if (this.SentAt && options.confirmNotAlreadyPostedInERP === true) {
       this.ERPNotPostedConfirmedAt = now;
       this.ERPNotPostedConfirmedByUserID = user?.ID ?? null;
+      this.ERPNotPostedBasis = options.erpNotPostedBasis ?? 'UserAttested';
     }
     this.Status = 'Cancelled';
     this._cancelling = true;

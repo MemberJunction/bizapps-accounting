@@ -572,13 +572,25 @@ Critical invariants hold at the database level (T-SQL triggers/CHECKs), immune t
 ```mermaid
 stateDiagram-v2
     [*] --> Pending : buildBatch - Preliminary Lock
-    Pending --> Approved : CFO Approval - Permanent Lock
+    Pending --> Approved : CFO Approval - Content Frozen, JEs Locked
     Pending --> Cancelled : Reject Batch - Unlocks JEs
     Pending --> Pending : Regenerate Batch
+    Pending --> Archived : Archive - JEs Stay Locked, No ERP Call
     Approved --> Sent : Dispatch to ERP
+    Approved --> Cancelled : Cancel by CFO or Approver - Unlocks JEs
+    Approved --> Archived : Archive - JEs Stay Locked, No ERP Call
     Sent --> Posted : ERP Confirms Receipt
     Sent --> Failed : ERP Rejection - Hold for Review
+    Failed --> Sent : Retry - Reuses the Approval
+    Failed --> Cancelled : Cancel by CFO or Approver, ERP Checked - Unlocks JEs
+    Failed --> Archived : Archive - JEs Stay Locked, No ERP Call
+    Posted --> [*]
+    Cancelled --> [*]
+    Archived --> [*]
 ```
+
+`Posted`, `Cancelled` and `Archived` are terminal; no batch returns to `Pending`, and a `Sent`
+batch does not return to `Approved` (`trg_JournalEntryBatch_Immutability`, #183).
 
 ### 7.1 States
 
@@ -586,7 +598,7 @@ stateDiagram-v2
 |---|---|---|
 | `Pending` | Emitted by an upstream event or staged forward-dated rev-rec. Awaiting batch. | Yes |
 | `Batched` (unapproved batch) | In a Pending batch — **preliminary, reversible lock**: can't be double-batched, but reject/regenerate frees it. | No (but releasable) |
-| `Batched` (approved batch) | **Permanent lock** through dispatch. | No |
+| `Batched` (approved batch) | **Locked** for as long as the batch stays approved — through dispatch, retry and posting, and for good if it is archived. A cancel past approval (Approved or Failed; the CFO or the approver, with a reason, and from Failed only once the ERP is known not to hold it — #183/#207) releases it to the candidate pool. | No (releasable only by that cancel) |
 | `GLPosted` | ERP acknowledged the batch. | Only GL-roundtrip fields |
 
 **Reversals (pen, not pencil):** business-entity reversals emit NEW Pending JEs cross-linked via
@@ -634,7 +646,12 @@ One aggregated JE per batch (the summary JE) posts to the GL, dated `PostingDate
 `Pending → Approved → Sent → Posted` (member JEs + the summary JE → `GLPosted`) ·
 `Sent → Failed` (ERP rejection — hold for review/retry) · `Failed → Sent` (operator retry,
 reusing the batch's approval — scheduled runs never retry on their own) · `Pending → Cancelled`
-(reject — member JEs unlock back to the candidate pool). A `Posted` batch whose member flip to
+(reject — member JEs unlock back to the candidate pool) · `Approved → Cancelled` and `Failed → Cancelled`
+(cancel past approval by the company's CFO or the batch's approver, with a reason recorded on the
+approval Task; from `Failed` only after the ERP lookup finds nothing under the batch number, or the
+operator attests when it cannot settle it — member JEs unlock for a new batch and approval) ·
+`Pending | Approved | Failed → Archived` (a batch that must never post: no ERP call, member JEs stay
+locked). A `Posted` batch whose member flip to
 `GLPosted` did not finish is resumed without an ERP call, never re-sent (#145). Closed-period rejections HOLD-and-flag (§4).
 
 ### 7.5 BC dispatch mechanics (Jeremy/Robert, 2026-07-17)

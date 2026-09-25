@@ -141,14 +141,16 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   unlocks only while its batch is `Pending` or `Cancelled`; an Approved/Failed batch becomes
   Cancelled only with its pointer cleared in the same update). From `Approved`/`Failed` a reason is
   required; from `Failed` so is `confirmNotAlreadyPostedInERP`, persisted as `ERPNotPostedConfirmedAt` /
-  `ERPNotPostedConfirmedByUserID`. Calling `Cancel()` directly skips the ERP lookup below, so the
+  `ERPNotPostedConfirmedByUserID` / `ERPNotPostedBasis` (`ERPLookup` when the engine's lookup found
+  nothing, `UserAttested` when the canceller confirmed). Calling `Cancel()` directly skips the ERP lookup below, so the
   engine is the way in. A rolled-back cancel reloads the instance. `Save()` stamps
   `CancelledAt` / `CancelledByUserID` on the transition, as it does for the approval and archive pairs.
 - **`cancelJournalEntryBatch` + `TasksAppApprovalGate`** (#183) — a cancel past approval must pass
   `assertMayCancelApproved` (the company's `ApprovalCFOUserID` or the batch's `ApprovedByUserID`) and
   records itself on the approval Task as a comment (`recordCancellation`, run as `onCancelled`, so it
-  commits or rolls back with the cancel; it refuses when the user has no linked Person). The
-  `Accounting.CancelJournalEntryBatch` operation refuses a Pending batch — that cancel is a CFO
+  commits or rolls back with the cancel; it refuses when the user has no linked Person). The engine
+  passes the status the batch was cancelled FROM, because when the comment is written the batch
+  already reads Cancelled. The `Accounting.CancelJournalEntryBatch` operation refuses a Pending batch — that cancel is a CFO
   rejection through `RecordJournalEntryBatchDecision`.
   **From `Failed` it looks the batch number up in the ERP first (#207)**, after authorizing and
   before writing anything. A cancel releases the entries to be batched again under a NEW number that
@@ -157,7 +159,8 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   nothing found cancels, the lookup standing as the ERP check the attestation columns record; a
   mismatch, a failed lookup or no lookup refuses with `ErpPostingUnconfirmedError` unless the
   operator confirmed. The operation returns that refusal as `ConfirmationRequired` /
-  `ConfirmationKind`, and the approval Task comment says which way "not posted" was established.
+  `ConfirmationKind`; which way "not posted" was established is persisted as `ERPNotPostedBasis`
+  and repeated in the approval Task comment.
 - **`TasksAppApprovalGate.recordDecision`** — now requires `contextUser` to BE the batch company's
   `AccountingCompanyProfile.ApprovalCFOUserID` (no CFO configured ⇒ hard-fail). Previously any
   authenticated user could approve any batch, including their own.

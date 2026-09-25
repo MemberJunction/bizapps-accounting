@@ -226,7 +226,7 @@ async function rawCancel(ctx: Ctx, b: RawBatch): Promise<void> {
   await ctx.pool.request().query(`
     UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Cancelled', SummaryJournalEntryID=NULL, CancelReason='Posting date belongs in the next period',
       CancelledAt=SYSDATETIMEOFFSET(), CancelledByUserID='${ctx.user.ID}',
-      ERPNotPostedConfirmedAt=SYSDATETIMEOFFSET(), ERPNotPostedConfirmedByUserID='${ctx.user.ID}' WHERE ID='${b.batchId}';
+      ERPNotPostedConfirmedAt=SYSDATETIMEOFFSET(), ERPNotPostedConfirmedByUserID='${ctx.user.ID}', ERPNotPostedBasis='UserAttested' WHERE ID='${b.batchId}';
     UPDATE ${SCHEMA}.JournalEntry SET Status='Pending', JournalEntryBatchID=NULL WHERE ID IN ('${b.memberId}', '${b.summaryId}');
     DELETE FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID='${b.summaryId}';
     DELETE FROM ${SCHEMA}.JournalEntry WHERE ID='${b.summaryId}';`);
@@ -383,12 +383,25 @@ async function main(): Promise<void> {
       'status change refused');
   });
 
+  await test('INV batch status — raw regression of a Failed batch to Pending → rejected (50031)', async () => {
+    const b = await rawBatchAt(ctx, 'Failed');
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Pending' WHERE ID='${b.batchId}'`), 'status change refused');
+  });
+
+  await test('INV batch audit — raw clear of a Failed batch\'s SentAt, or an attestation stamped without cancelling → rejected (50032)', async () => {
+    const b = await rawBatchAt(ctx, 'Failed');
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET SentAt=NULL WHERE ID='${b.batchId}'`), 'audit refused');
+    await expectThrow(() => pool.request().query(
+      `UPDATE ${SCHEMA}.JournalEntryBatch SET ERPNotPostedConfirmedAt=SYSDATETIMEOFFSET(), ERPNotPostedConfirmedByUserID='${ctx.user.ID}', ERPNotPostedBasis='ERPLookup' WHERE ID='${b.batchId}'`),
+      'audit refused');
+  });
+
   await test('INV batch status — raw Sent → Cancelled → rejected (50031); the members stay locked (50004)', async () => {
     const b = await rawBatchAt(ctx, 'Failed');
     await pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Sent' WHERE ID='${b.batchId}'`);
     await expectThrow(() => pool.request().query(
       `UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Cancelled', SummaryJournalEntryID=NULL, CancelReason='x', CancelledAt=SYSDATETIMEOFFSET(), CancelledByUserID='${ctx.user.ID}',
-         ERPNotPostedConfirmedAt=SYSDATETIMEOFFSET(), ERPNotPostedConfirmedByUserID='${ctx.user.ID}' WHERE ID='${b.batchId}'`),
+         ERPNotPostedConfirmedAt=SYSDATETIMEOFFSET(), ERPNotPostedConfirmedByUserID='${ctx.user.ID}', ERPNotPostedBasis='UserAttested' WHERE ID='${b.batchId}'`),
       'status change refused');
     await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntry SET Status='Pending', JournalEntryBatchID=NULL WHERE ID='${b.memberId}'`), 'JournalEntry is locked');
   });

@@ -3470,12 +3470,16 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @MaxLength(36)
     CancelledByUserID?: string;
         
-    @Field({nullable: true, description: `When a user attested that this batch had NOT posted in the ERP before it was cancelled. Required when a batch that had been sent is cancelled (CK_JournalEntryBatch_CancelERPCheck): a Failed batch may already be in the ERP, and cancelling releases its entries to be batched again.`}) 
+    @Field({nullable: true, description: `When this batch was established as NOT posted in the ERP before it was cancelled — by the ERP lookup finding nothing under its number, or by the canceller's attestation when the lookup could not settle it (see ERPNotPostedBasis). Required when a batch that had been sent is cancelled (CK_JournalEntryBatch_CancelERPCheck): a Failed batch may already be in the ERP, and cancelling releases its entries to be batched again.`}) 
     ERPNotPostedConfirmedAt?: Date;
         
-    @Field({nullable: true, description: `User who attested that this batch had NOT posted in the ERP before it was cancelled. Required with ERPNotPostedConfirmedAt.`}) 
+    @Field({nullable: true, description: `User whose cancel established this batch as NOT posted in the ERP — accountable for the cancel whether the ERP lookup or their own attestation settled it (see ERPNotPostedBasis). Required with ERPNotPostedConfirmedAt.`}) 
     @MaxLength(36)
     ERPNotPostedConfirmedByUserID?: string;
+        
+    @Field({nullable: true, description: `How this batch was established as NOT posted in the ERP before it was cancelled: ERPLookup (the ERP lookup found nothing under its number) or UserAttested (the lookup could not settle it and the canceller confirmed). Required with ERPNotPostedConfirmedAt (CK_JournalEntryBatch_CancelERPCheck).`}) 
+    @MaxLength(20)
+    ERPNotPostedBasis?: string;
         
     @Field({nullable: true, description: `SHA-256 of the approved content (batch header, summary entry and lines, member set), written at approval and frozen by trg_JournalEntryBatch_Immutability. Dispatch recomputes and compares it. NULL on batches approved before the seal existed.`}) 
     @MaxLength(64)
@@ -3608,6 +3612,9 @@ export class CreatemjBizAppsAccountingJournalEntryBatchInput {
     ERPNotPostedConfirmedByUserID: string | null;
 
     @Field({ nullable: true })
+    ERPNotPostedBasis: string | null;
+
+    @Field({ nullable: true })
     ApprovedContentHash: string | null;
 
     @Field(() => RestoreContextInput, { nullable: true })
@@ -3703,6 +3710,9 @@ export class UpdatemjBizAppsAccountingJournalEntryBatchInput {
 
     @Field({ nullable: true })
     ERPNotPostedConfirmedByUserID?: string | null;
+
+    @Field({ nullable: true })
+    ERPNotPostedBasis?: string | null;
 
     @Field({ nullable: true })
     ApprovedContentHash?: string | null;

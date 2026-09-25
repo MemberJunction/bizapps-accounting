@@ -76,11 +76,14 @@ GO
 -- -----------------------------------------------------------------------------
 -- 1. The cancel audit triple, the ERP-check attestation, and the seal
 -- -----------------------------------------------------------------------------
--- ERPNotPostedConfirmedAt / ByUserID record who attested, and when, that a
--- batch which had been sent had NOT posted in the ERP before it was cancelled.
--- A Failed batch may already be in the ERP (the post can succeed with the
--- response lost), and cancelling releases its entries to be batched again
--- under a new document number, so the attestation is the audit of that risk.
+-- ERPNotPostedConfirmedAt / ByUserID record when, and by whose cancel, a batch
+-- which had been sent was established as NOT posted in the ERP, and
+-- ERPNotPostedBasis records how: 'ERPLookup' when the ERP lookup found nothing
+-- under the batch number, 'UserAttested' when the lookup could not settle it
+-- and the canceller confirmed. A Failed batch may already be in the ERP (the
+-- post can succeed with the response lost), and cancelling releases its
+-- entries to be batched again under a new document number, so this is the
+-- audit of that risk.
 -- -----------------------------------------------------------------------------
 ALTER TABLE __mj_BizAppsAccounting.JournalEntryBatch ADD
     CancelReason                   NVARCHAR(500)    NULL,
@@ -88,6 +91,7 @@ ALTER TABLE __mj_BizAppsAccounting.JournalEntryBatch ADD
     CancelledByUserID              UNIQUEIDENTIFIER NULL,
     ERPNotPostedConfirmedAt        DATETIMEOFFSET   NULL,
     ERPNotPostedConfirmedByUserID  UNIQUEIDENTIFIER NULL,
+    ERPNotPostedBasis              NVARCHAR(20)     NULL,
     ApprovedContentHash            NVARCHAR(64)     NULL;
 GO
 
@@ -108,7 +112,8 @@ GO
 -- CancelAudit: once approved, a cancel says why, who and when. Scoped to rows
 -- with ApprovedAt set, because a Pending cancel (a CFO rejection, an empty
 -- regenerate) still does not need a reason.
--- CancelERPCheck: once sent, a cancel carries the ERP-check attestation.
+-- CancelERPCheck: once sent, a cancel carries the ERP check — when, by whose
+-- cancel, and on what basis.
 -- The pre-check in §0 proves no existing row violates either.
 -- -----------------------------------------------------------------------------
 ALTER TABLE __mj_BizAppsAccounting.JournalEntryBatch
@@ -127,8 +132,14 @@ ALTER TABLE __mj_BizAppsAccounting.JournalEntryBatch
         Status <> 'Cancelled' OR SentAt IS NULL OR (
             ERPNotPostedConfirmedAt IS NOT NULL
             AND ERPNotPostedConfirmedByUserID IS NOT NULL
+            AND ERPNotPostedBasis IS NOT NULL
         )
     );
+GO
+
+ALTER TABLE __mj_BizAppsAccounting.JournalEntryBatch
+    ADD CONSTRAINT CK_JournalEntryBatch_ERPNotPostedBasis
+    CHECK (ERPNotPostedBasis IS NULL OR ERPNotPostedBasis IN ('ERPLookup','UserAttested'));
 GO
 
 
@@ -155,7 +166,8 @@ BEGIN
 
     -- STATUS: Cancelled releases entries, so only Pending / Approved / Failed may reach it, an
     -- Approved or Failed batch reaches it only with its summary pointer cleared in the same update,
-    -- and the terminal statuses never change again.
+    -- and the terminal statuses never change again. Nothing moves back to Pending (a Pending batch's
+    -- members can be released by any journal entry save) and a Sent batch does not return to Approved.
     IF EXISTS (
         SELECT 1
         FROM deleted d
@@ -163,13 +175,41 @@ BEGIN
         WHERE i.Status <> d.Status
           AND (
             d.Status IN ('Posted','Cancelled','Archived')
+            OR i.Status = 'Pending'
+            OR (d.Status = 'Sent' AND i.Status = 'Approved')
             OR (i.Status = 'Cancelled' AND d.Status NOT IN ('Pending','Approved','Failed'))
             OR (i.Status = 'Cancelled' AND d.Status IN ('Approved','Failed') AND i.SummaryJournalEntryID IS NOT NULL)
           )
     )
     BEGIN
         ROLLBACK TRANSACTION;
-        THROW 50031, 'JournalEntryBatch status change refused. Posted, Cancelled and Archived are terminal; Cancelled is reachable only from Pending, Approved or Failed; and an Approved or Failed batch is cancelled only with its summary pointer cleared in the same update (JournalEntryBatchEntityServer.Cancel).', 1;
+        THROW 50031, 'JournalEntryBatch status change refused. Posted, Cancelled and Archived are terminal; no batch returns to Pending and a Sent batch does not return to Approved; Cancelled is reachable only from Pending, Approved or Failed; and an Approved or Failed batch is cancelled only with its summary pointer cleared in the same update (JournalEntryBatchEntityServer.Cancel).', 1;
+    END;
+
+    -- AUDIT: the cancel audit and the ERP check are written only by the update that cancels the
+    -- batch, so no other save can stamp a "not posted in the ERP" record on it; and SentAt, once set,
+    -- is never cleared, because it is the evidence CK_JournalEntryBatch_CancelERPCheck keys on. A
+    -- retry re-stamps SentAt with a new time, which is allowed.
+    IF EXISTS (
+        SELECT 1
+        FROM deleted d
+        JOIN inserted i ON i.ID = d.ID
+        WHERE (d.SentAt IS NOT NULL AND i.SentAt IS NULL)
+           OR (
+               NOT (i.Status = 'Cancelled' AND d.Status <> 'Cancelled')
+               AND (
+                   ISNULL(i.CancelReason,                  N'')                                    <> ISNULL(d.CancelReason,                  N'')                                    OR
+                   (CASE WHEN i.CancelledAt IS NULL AND d.CancelledAt IS NULL THEN 0 WHEN i.CancelledAt IS NULL OR d.CancelledAt IS NULL THEN 1 WHEN ABS(DATEDIFF_BIG(MICROSECOND, i.CancelledAt, d.CancelledAt)) >= 1000 THEN 1 ELSE 0 END) = 1 OR
+                   ISNULL(i.CancelledByUserID,             '00000000-0000-0000-0000-000000000000') <> ISNULL(d.CancelledByUserID,             '00000000-0000-0000-0000-000000000000') OR
+                   (CASE WHEN i.ERPNotPostedConfirmedAt IS NULL AND d.ERPNotPostedConfirmedAt IS NULL THEN 0 WHEN i.ERPNotPostedConfirmedAt IS NULL OR d.ERPNotPostedConfirmedAt IS NULL THEN 1 WHEN ABS(DATEDIFF_BIG(MICROSECOND, i.ERPNotPostedConfirmedAt, d.ERPNotPostedConfirmedAt)) >= 1000 THEN 1 ELSE 0 END) = 1 OR
+                   ISNULL(i.ERPNotPostedConfirmedByUserID, '00000000-0000-0000-0000-000000000000') <> ISNULL(d.ERPNotPostedConfirmedByUserID, '00000000-0000-0000-0000-000000000000') OR
+                   ISNULL(i.ERPNotPostedBasis,             N'')                                    <> ISNULL(d.ERPNotPostedBasis,             N'')
+               )
+           )
+    )
+    BEGIN
+        ROLLBACK TRANSACTION;
+        THROW 50032, 'JournalEntryBatch audit refused. CancelReason / CancelledAt / CancelledByUserID and ERPNotPostedConfirmedAt / ERPNotPostedConfirmedByUserID / ERPNotPostedBasis are written only by the update that cancels the batch, and SentAt is never cleared once set.', 1;
     END;
 
     -- CONTENT: frozen from approval on, Failed and Cancelled included. The timestamps this migration
@@ -333,13 +373,18 @@ EXEC sp_addextendedproperty @name = N'MS_Description',
 GO
 
 EXEC sp_addextendedproperty @name = N'MS_Description',
-    @value = N'When a user attested that this batch had NOT posted in the ERP before it was cancelled. Required when a batch that had been sent is cancelled (CK_JournalEntryBatch_CancelERPCheck): a Failed batch may already be in the ERP, and cancelling releases its entries to be batched again.',
+    @value = N'When this batch was established as NOT posted in the ERP before it was cancelled — by the ERP lookup finding nothing under its number, or by the canceller''s attestation when the lookup could not settle it (see ERPNotPostedBasis). Required when a batch that had been sent is cancelled (CK_JournalEntryBatch_CancelERPCheck): a Failed batch may already be in the ERP, and cancelling releases its entries to be batched again.',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'ERPNotPostedConfirmedAt';
 GO
 
 EXEC sp_addextendedproperty @name = N'MS_Description',
-    @value = N'User who attested that this batch had NOT posted in the ERP before it was cancelled. Required with ERPNotPostedConfirmedAt.',
+    @value = N'User whose cancel established this batch as NOT posted in the ERP — accountable for the cancel whether the ERP lookup or their own attestation settled it (see ERPNotPostedBasis). Required with ERPNotPostedConfirmedAt.',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'ERPNotPostedConfirmedByUserID';
+GO
+
+EXEC sp_addextendedproperty @name = N'MS_Description',
+    @value = N'How this batch was established as NOT posted in the ERP before it was cancelled: ERPLookup (the ERP lookup found nothing under its number) or UserAttested (the lookup could not settle it and the canceller confirmed). Required with ERPNotPostedConfirmedAt (CK_JournalEntryBatch_CancelERPCheck).',
+    @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'ERPNotPostedBasis';
 GO
 
 EXEC sp_addextendedproperty @name = N'MS_Description',
@@ -430,9 +475,9 @@ GO
 /* SQL text to update existing entities from schema */
 EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='', @IncludedSchemaNames='${flyway:defaultSchema}';
 
-/* SQL text to insert 6 new entity field(s) */
+/* SQL text to insert 7 new entity field(s) */
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'ede712f1-621a-41bb-91d9-534563f35012' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'CancelReason')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '6406f392-3f92-4aca-8074-ac724d9bc84e' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'CancelReason')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -465,7 +510,7 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
          VALUES
          (
-            'ede712f1-621a-41bb-91d9-534563f35012',
+            '6406f392-3f92-4aca-8074-ac724d9bc84e',
             '87AD37E9-62F9-4F0E-A15B-F64ADF009112', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
             (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112'),
             'CancelReason',
@@ -495,7 +540,7 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
       END;
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'ae9caaa9-545c-4f86-8d73-fdde7614128d' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'CancelledAt')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '64374970-4ebc-4c98-bf06-d0ab0ff77e1a' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'CancelledAt')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -528,7 +573,7 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
          VALUES
          (
-            'ae9caaa9-545c-4f86-8d73-fdde7614128d',
+            '64374970-4ebc-4c98-bf06-d0ab0ff77e1a',
             '87AD37E9-62F9-4F0E-A15B-F64ADF009112', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
             (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112'),
             'CancelledAt',
@@ -558,7 +603,7 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
       END;
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '79318dcd-016c-4b84-a77c-6e0b9e648675' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'CancelledByUserID')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '16b22107-5fa2-4b82-8036-f46c7538c6e2' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'CancelledByUserID')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -591,7 +636,7 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
          VALUES
          (
-            '79318dcd-016c-4b84-a77c-6e0b9e648675',
+            '16b22107-5fa2-4b82-8036-f46c7538c6e2',
             '87AD37E9-62F9-4F0E-A15B-F64ADF009112', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
             (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112'),
             'CancelledByUserID',
@@ -621,7 +666,7 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
       END;
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'f4787a16-21a4-419b-b7d3-934236d659c0' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'ERPNotPostedConfirmedAt')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '027161e2-d4b6-456b-b1b0-fba348a47418' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'ERPNotPostedConfirmedAt')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -654,12 +699,12 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
          VALUES
          (
-            'f4787a16-21a4-419b-b7d3-934236d659c0',
+            '027161e2-d4b6-456b-b1b0-fba348a47418',
             '87AD37E9-62F9-4F0E-A15B-F64ADF009112', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
             (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112'),
             'ERPNotPostedConfirmedAt',
             'ERP Not Posted Confirmed At',
-            'When a user attested that this batch had NOT posted in the ERP before it was cancelled. Required when a batch that had been sent is cancelled (CK_JournalEntryBatch_CancelERPCheck): a Failed batch may already be in the ERP, and cancelling releases its entries to be batched again.',
+            'When this batch was established as NOT posted in the ERP before it was cancelled — by the ERP lookup finding nothing under its number, or by the canceller''s attestation when the lookup could not settle it (see ERPNotPostedBasis). Required when a batch that had been sent is cancelled (CK_JournalEntryBatch_CancelERPCheck): a Failed batch may already be in the ERP, and cancelling releases its entries to be batched again.',
             'datetimeoffset',
             10,
             34,
@@ -684,7 +729,7 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
       END;
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '9d9bfacb-8fd0-4c04-868c-b679a9f35a39' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'ERPNotPostedConfirmedByUserID')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '128683a4-8f4f-441c-b1bb-9f959fc48d8c' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'ERPNotPostedConfirmedByUserID')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -717,12 +762,12 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
          VALUES
          (
-            '9d9bfacb-8fd0-4c04-868c-b679a9f35a39',
+            '128683a4-8f4f-441c-b1bb-9f959fc48d8c',
             '87AD37E9-62F9-4F0E-A15B-F64ADF009112', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
             (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112'),
             'ERPNotPostedConfirmedByUserID',
             'ERP Not Posted Confirmed By User ID',
-            'User who attested that this batch had NOT posted in the ERP before it was cancelled. Required with ERPNotPostedConfirmedAt.',
+            'User whose cancel established this batch as NOT posted in the ERP — accountable for the cancel whether the ERP lookup or their own attestation settled it (see ERPNotPostedBasis). Required with ERPNotPostedConfirmedAt.',
             'uniqueidentifier',
             16,
             0,
@@ -747,7 +792,7 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
       END;
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '7f75e819-8414-4807-b566-788f0bcce2e9' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'ApprovedContentHash')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '000637f6-2791-4465-9c75-0ee90d9481c0' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'ERPNotPostedBasis')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -780,7 +825,70 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
          VALUES
          (
-            '7f75e819-8414-4807-b566-788f0bcce2e9',
+            '000637f6-2791-4465-9c75-0ee90d9481c0',
+            '87AD37E9-62F9-4F0E-A15B-F64ADF009112', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112'),
+            'ERPNotPostedBasis',
+            'ERP Not Posted Basis',
+            'How this batch was established as NOT posted in the ERP before it was cancelled: ERPLookup (the ERP lookup found nothing under its number) or UserAttested (the lookup could not settle it and the canceller confirmed). Required with ERPNotPostedConfirmedAt (CK_JournalEntryBatch_CancelERPCheck).',
+            'nvarchar',
+            40,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            1,
+            0,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '2d7ec068-5665-4f0c-a205-2ec00f1a9b16' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'ApprovedContentHash')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '2d7ec068-5665-4f0c-a205-2ec00f1a9b16',
             '87AD37E9-62F9-4F0E-A15B-F64ADF009112', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
             (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112'),
             'ApprovedContentHash',
@@ -816,23 +924,38 @@ EXEC [${mjSchema}].[spUpdateExistingEntityFieldsFromSchema] @ExcludedSchemaNames
 /* SQL text to set default column width where needed */
 EXEC [${mjSchema}].[spSetDefaultColumnWidthWhereNeeded] @ExcludedSchemaNames='', @IncludedSchemaNames='${flyway:defaultSchema}';
 
+/* SQL text to insert entity field value with ID 908fc4ee-e821-4f39-b1f8-d7b201b9a5b1 */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('908fc4ee-e821-4f39-b1f8-d7b201b9a5b1', '000637F6-2791-4465-9C75-0EE90D9481C0', 1, 'ERPLookup', 'ERPLookup', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to insert entity field value with ID 5a723566-21c1-4449-a5fc-dc2a9e90bf8b */
+INSERT INTO [${mjSchema}].[EntityFieldValue]
+                                       ([ID], [EntityFieldID], [Sequence], [Value], [Code], [__mj_CreatedAt], [__mj_UpdatedAt])
+                                    VALUES
+                                       ('5a723566-21c1-4449-a5fc-dc2a9e90bf8b', '000637F6-2791-4465-9C75-0EE90D9481C0', 2, 'UserAttested', 'UserAttested', GETUTCDATE(), GETUTCDATE());
+
+/* SQL text to update ValueListType for entity field ID 000637F6-2791-4465-9C75-0EE90D9481C0 */
+UPDATE [${mjSchema}].[EntityField] SET ValueListType='List' WHERE ID='000637F6-2791-4465-9C75-0EE90D9481C0';
+
 
 /* Create Entity Relationship: MJ: Users -> MJ_BizApps_Accounting: Journal Entry Batches (One To Many via CancelledByUserID) */
    IF NOT EXISTS (
-      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = 'decd297a-5156-483c-aded-381482bc9af4'
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '3ef6396f-782f-40fc-9886-f9360fbd9721'
    )
    BEGIN
       INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
-                    VALUES ('decd297a-5156-483c-aded-381482bc9af4', 'E1238F34-2837-EF11-86D4-6045BDEE16E6', '87AD37E9-62F9-4F0E-A15B-F64ADF009112', 'CancelledByUserID', 'One To Many', 1, 1, 114, GETUTCDATE(), GETUTCDATE())
+                    VALUES ('3ef6396f-782f-40fc-9886-f9360fbd9721', 'E1238F34-2837-EF11-86D4-6045BDEE16E6', '87AD37E9-62F9-4F0E-A15B-F64ADF009112', 'CancelledByUserID', 'One To Many', 1, 1, 114, GETUTCDATE(), GETUTCDATE())
    END;
                     
 /* Create Entity Relationship: MJ: Users -> MJ_BizApps_Accounting: Journal Entry Batches (One To Many via ERPNotPostedConfirmedByUserID) */
    IF NOT EXISTS (
-      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '9c2ab39f-98b0-46b5-b79d-663630a8bb7f'
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = 'da2a1682-fec8-4df4-8d05-32a8e2e14ceb'
    )
    BEGIN
       INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
-                    VALUES ('9c2ab39f-98b0-46b5-b79d-663630a8bb7f', 'E1238F34-2837-EF11-86D4-6045BDEE16E6', '87AD37E9-62F9-4F0E-A15B-F64ADF009112', 'ERPNotPostedConfirmedByUserID', 'One To Many', 1, 1, 115, GETUTCDATE(), GETUTCDATE())
+                    VALUES ('da2a1682-fec8-4df4-8d05-32a8e2e14ceb', 'E1238F34-2837-EF11-86D4-6045BDEE16E6', '87AD37E9-62F9-4F0E-A15B-F64ADF009112', 'ERPNotPostedConfirmedByUserID', 'One To Many', 1, 1, 115, GETUTCDATE(), GETUTCDATE())
    END;
 
 /* SQL text to sync schema info from database schemas */
@@ -919,8 +1042,8 @@ IF NOT EXISTS (
 )
 CREATE INDEX IDX_AUTO_MJ_FKEY_JournalEntryBatch_ERPNotPostedConfirmedByUserID ON [${flyway:defaultSchema}].[JournalEntryBatch] ([ERPNotPostedConfirmedByUserID]);
 
-/* SQL text to update entity field related entity name field map for entity field ID 79318DCD-016C-4B84-A77C-6E0B9E648675 */
-EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='79318DCD-016C-4B84-A77C-6E0B9E648675', @RelatedEntityNameFieldMap='CancelledByUser';
+/* SQL text to update entity field related entity name field map for entity field ID 16B22107-5FA2-4B82-8036-F46C7538C6E2 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='16B22107-5FA2-4B82-8036-F46C7538C6E2', @RelatedEntityNameFieldMap='CancelledByUser';
 
 /* Base View SQL for MJ_BizApps_Accounting: Journal Entries */
 -----------------------------------------------------------------
@@ -1340,8 +1463,8 @@ REVOKE EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntry] FROM [cdp_Dev
 REVOKE EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntry] FROM [cdp_Integration]
 GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntry] TO [cdp_Developer], [cdp_Integration];
 
-/* SQL text to update entity field related entity name field map for entity field ID 9D9BFACB-8FD0-4C04-868C-B679A9F35A39 */
-EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='9D9BFACB-8FD0-4C04-868C-B679A9F35A39', @RelatedEntityNameFieldMap='ERPNotPostedConfirmedByUser';
+/* SQL text to update entity field related entity name field map for entity field ID 128683A4-8F4F-441C-B1BB-9F959FC48D8C */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='128683A4-8F4F-441C-B1BB-9F959FC48D8C', @RelatedEntityNameFieldMap='ERPNotPostedConfirmedByUser';
 
 /* Base View SQL for MJ_BizApps_Accounting: Journal Entry Batches */
 -----------------------------------------------------------------
@@ -1493,6 +1616,8 @@ CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateJournalEntryBatch]
     @ERPNotPostedConfirmedAt datetimeoffset = NULL,
     @ERPNotPostedConfirmedByUserID_Clear bit = 0,
     @ERPNotPostedConfirmedByUserID uniqueidentifier = NULL,
+    @ERPNotPostedBasis_Clear bit = 0,
+    @ERPNotPostedBasis nvarchar(20) = NULL,
     @ApprovedContentHash_Clear bit = 0,
     @ApprovedContentHash nvarchar(64) = NULL
 AS
@@ -1533,6 +1658,7 @@ BEGIN
                 [CancelledByUserID],
                 [ERPNotPostedConfirmedAt],
                 [ERPNotPostedConfirmedByUserID],
+                [ERPNotPostedBasis],
                 [ApprovedContentHash]
             )
         OUTPUT INSERTED.[ID] INTO @InsertedRow
@@ -1566,6 +1692,7 @@ BEGIN
                 CASE WHEN @CancelledByUserID_Clear = 1 THEN NULL ELSE ISNULL(@CancelledByUserID, NULL) END,
                 CASE WHEN @ERPNotPostedConfirmedAt_Clear = 1 THEN NULL ELSE ISNULL(@ERPNotPostedConfirmedAt, NULL) END,
                 CASE WHEN @ERPNotPostedConfirmedByUserID_Clear = 1 THEN NULL ELSE ISNULL(@ERPNotPostedConfirmedByUserID, NULL) END,
+                CASE WHEN @ERPNotPostedBasis_Clear = 1 THEN NULL ELSE ISNULL(@ERPNotPostedBasis, NULL) END,
                 CASE WHEN @ApprovedContentHash_Clear = 1 THEN NULL ELSE ISNULL(@ApprovedContentHash, NULL) END
             )
     END
@@ -1601,6 +1728,7 @@ BEGIN
                 [CancelledByUserID],
                 [ERPNotPostedConfirmedAt],
                 [ERPNotPostedConfirmedByUserID],
+                [ERPNotPostedBasis],
                 [ApprovedContentHash]
             )
         OUTPUT INSERTED.[ID] INTO @InsertedRow
@@ -1633,6 +1761,7 @@ BEGIN
                 CASE WHEN @CancelledByUserID_Clear = 1 THEN NULL ELSE ISNULL(@CancelledByUserID, NULL) END,
                 CASE WHEN @ERPNotPostedConfirmedAt_Clear = 1 THEN NULL ELSE ISNULL(@ERPNotPostedConfirmedAt, NULL) END,
                 CASE WHEN @ERPNotPostedConfirmedByUserID_Clear = 1 THEN NULL ELSE ISNULL(@ERPNotPostedConfirmedByUserID, NULL) END,
+                CASE WHEN @ERPNotPostedBasis_Clear = 1 THEN NULL ELSE ISNULL(@ERPNotPostedBasis, NULL) END,
                 CASE WHEN @ApprovedContentHash_Clear = 1 THEN NULL ELSE ISNULL(@ApprovedContentHash, NULL) END
             )
     END
@@ -1713,6 +1842,8 @@ CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateJournalEntryBatch]
     @ERPNotPostedConfirmedAt datetimeoffset = NULL,
     @ERPNotPostedConfirmedByUserID_Clear bit = 0,
     @ERPNotPostedConfirmedByUserID uniqueidentifier = NULL,
+    @ERPNotPostedBasis_Clear bit = 0,
+    @ERPNotPostedBasis nvarchar(20) = NULL,
     @ApprovedContentHash_Clear bit = 0,
     @ApprovedContentHash nvarchar(64) = NULL
 AS
@@ -1748,6 +1879,7 @@ BEGIN
         [CancelledByUserID] = CASE WHEN @CancelledByUserID_Clear = 1 THEN NULL ELSE ISNULL(@CancelledByUserID, [CancelledByUserID]) END,
         [ERPNotPostedConfirmedAt] = CASE WHEN @ERPNotPostedConfirmedAt_Clear = 1 THEN NULL ELSE ISNULL(@ERPNotPostedConfirmedAt, [ERPNotPostedConfirmedAt]) END,
         [ERPNotPostedConfirmedByUserID] = CASE WHEN @ERPNotPostedConfirmedByUserID_Clear = 1 THEN NULL ELSE ISNULL(@ERPNotPostedConfirmedByUserID, [ERPNotPostedConfirmedByUserID]) END,
+        [ERPNotPostedBasis] = CASE WHEN @ERPNotPostedBasis_Clear = 1 THEN NULL ELSE ISNULL(@ERPNotPostedBasis, [ERPNotPostedBasis]) END,
         [ApprovedContentHash] = CASE WHEN @ApprovedContentHash_Clear = 1 THEN NULL ELSE ISNULL(@ApprovedContentHash, [ApprovedContentHash]) END
     WHERE
         [ID] = @ID
@@ -1854,7 +1986,7 @@ EXEC [${mjSchema}].[spDeleteUnneededEntityFields] @ExcludedSchemaNames='', @Enti
 
 /* SQL text to insert 2 new entity field(s) */
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '80276dd8-8111-4095-b371-80365409f117' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'CancelledByUser')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '8623a34a-250c-4f0b-9970-dd96a5f4c81a' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'CancelledByUser')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -1887,7 +2019,7 @@ EXEC [${mjSchema}].[spDeleteUnneededEntityFields] @ExcludedSchemaNames='', @Enti
          )
          VALUES
          (
-            '80276dd8-8111-4095-b371-80365409f117',
+            '8623a34a-250c-4f0b-9970-dd96a5f4c81a',
             '87AD37E9-62F9-4F0E-A15B-F64ADF009112', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
             (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112'),
             'CancelledByUser',
@@ -1917,7 +2049,7 @@ EXEC [${mjSchema}].[spDeleteUnneededEntityFields] @ExcludedSchemaNames='', @Enti
          )
       END;
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'e404c6b4-d76b-4935-8b64-5ac0bb150a30' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'ERPNotPostedConfirmedByUser')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '30613c2a-0afb-4806-8d94-dfdbe739af61' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'ERPNotPostedConfirmedByUser')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -1950,7 +2082,7 @@ EXEC [${mjSchema}].[spDeleteUnneededEntityFields] @ExcludedSchemaNames='', @Enti
          )
          VALUES
          (
-            'e404c6b4-d76b-4935-8b64-5ac0bb150a30',
+            '30613c2a-0afb-4806-8d94-dfdbe739af61',
             '87AD37E9-62F9-4F0E-A15B-F64ADF009112', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
             (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112'),
             'ERPNotPostedConfirmedByUser',
@@ -1986,65 +2118,75 @@ EXEC [${mjSchema}].[spUpdateExistingEntityFieldsFromSchema] @ExcludedSchemaNames
 /* SQL text to set default column width where needed */
 EXEC [${mjSchema}].[spSetDefaultColumnWidthWhereNeeded] @ExcludedSchemaNames='', @IncludedSchemaNames='${flyway:defaultSchema}';
 
-/* Set categories for 8 fields */
+/* Set categories for 9 fields */
 
 -- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.CancelReason 
 UPDATE [${mjSchema}].[EntityField]
 SET 
-   Category = 'Status and Lifecycle',
+   Category = 'Cancellation Details',
    GeneratedFormSection = 'Category'
 WHERE 
-   ID = 'EDE712F1-621A-41BB-91D9-534563F35012';
+   ID = '6406F392-3F92-4ACA-8074-AC724D9BC84E';
 
 -- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.CancelledAt 
 UPDATE [${mjSchema}].[EntityField]
 SET 
-   Category = 'Status and Lifecycle',
+   Category = 'Cancellation Details',
    GeneratedFormSection = 'Category'
 WHERE 
-   ID = 'AE9CAAA9-545C-4F86-8D73-FDDE7614128D';
+   ID = '64374970-4EBC-4C98-BF06-D0AB0FF77E1A';
 
 -- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.CancelledByUserID 
 UPDATE [${mjSchema}].[EntityField]
 SET 
-   Category = 'Status and Lifecycle',
-   GeneratedFormSection = 'Category'
+   Category = 'Cancellation Details',
+   GeneratedFormSection = 'Category',
+   DisplayName = 'Cancelled By User'
 WHERE 
-   ID = '79318DCD-016C-4B84-A77C-6E0B9E648675';
+   ID = '16B22107-5FA2-4B82-8036-F46C7538C6E2';
 
 -- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.CancelledByUser 
 UPDATE [${mjSchema}].[EntityField]
 SET 
-   Category = 'Status and Lifecycle',
+   Category = 'Cancellation Details',
    GeneratedFormSection = 'Category',
-   DisplayName = 'Cancelled By'
+   DisplayName = 'Cancelled By User Name'
 WHERE 
-   ID = '80276DD8-8111-4095-B371-80365409F117';
+   ID = '8623A34A-250C-4F0B-9970-DD96A5F4C81A';
 
 -- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.ERPNotPostedConfirmedAt 
 UPDATE [${mjSchema}].[EntityField]
 SET 
-   Category = 'Approval and Dispatch',
+   Category = 'Cancellation Details',
    GeneratedFormSection = 'Category'
 WHERE 
-   ID = 'F4787A16-21A4-419B-B7D3-934236D659C0';
+   ID = '027161E2-D4B6-456B-B1B0-FBA348A47418';
 
 -- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.ERPNotPostedConfirmedByUserID 
 UPDATE [${mjSchema}].[EntityField]
 SET 
-   Category = 'Approval and Dispatch',
-   GeneratedFormSection = 'Category'
+   Category = 'Cancellation Details',
+   GeneratedFormSection = 'Category',
+   DisplayName = 'ERP Not Posted Confirmed By User'
 WHERE 
-   ID = '9D9BFACB-8FD0-4C04-868C-B679A9F35A39';
+   ID = '128683A4-8F4F-441C-B1BB-9F959FC48D8C';
 
 -- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.ERPNotPostedConfirmedByUser 
 UPDATE [${mjSchema}].[EntityField]
 SET 
-   Category = 'Approval and Dispatch',
+   Category = 'Cancellation Details',
    GeneratedFormSection = 'Category',
-   DisplayName = 'ERP Not Posted Confirmed By'
+   DisplayName = 'ERP Not Posted Confirmed By User Name'
 WHERE 
-   ID = 'E404C6B4-D76B-4935-8B64-5AC0BB150A30';
+   ID = '30613C2A-0AFB-4806-8D94-DFDBE739AF61';
+
+-- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.ERPNotPostedBasis 
+UPDATE [${mjSchema}].[EntityField]
+SET 
+   Category = 'Cancellation Details',
+   GeneratedFormSection = 'Category'
+WHERE 
+   ID = '000637F6-2791-4465-9C75-0EE90D9481C0';
 
 -- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.ApprovedContentHash 
 UPDATE [${mjSchema}].[EntityField]
@@ -2052,7 +2194,26 @@ SET
    Category = 'Approval and Dispatch',
    GeneratedFormSection = 'Category'
 WHERE 
-   ID = '7F75E819-8414-4807-B566-788F0BCCE2E9';
+   ID = '2D7EC068-5665-4F0C-A205-2EC00F1A9B16';
+
+/* Update FieldCategoryInfo setting for entity */
+
+                  UPDATE [${mjSchema}].[EntitySetting]
+                  SET [Value] = '{
+  "Cancellation Details": {
+    "description": "Information regarding batch cancellation and ERP verification status",
+    "icon": "fa fa-ban"
+  }
+}', [__mj_UpdatedAt] = GETUTCDATE()
+                  WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND [Name] = 'FieldCategoryInfo';
+
+/* Update FieldCategoryIcons setting (legacy) */
+
+                  UPDATE [${mjSchema}].[EntitySetting]
+                  SET [Value] = '{
+  "Cancellation Details": "fa fa-ban"
+}', [__mj_UpdatedAt] = GETUTCDATE()
+                  WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND [Name] = 'FieldCategoryIcons';
 
 /* Generated Validation Functions for MJ_BizApps_Accounting: Journal Entry Batches */
 -- CHECK constraint for MJ_BizApps_Accounting: Journal Entry Batches @ Table Level was newly set or modified since the last generation of the validation function, the code was regenerated and updating the GeneratedCode table with the new generated validation function
@@ -2061,35 +2222,38 @@ IF NOT EXISTS (
    )
    BEGIN
       INSERT INTO [${mjSchema}].[GeneratedCode] ([ID], [CategoryID], [GeneratedByModelID], [GeneratedAt], [Language], [Status], [Source], [Code], [Description], [Name], [LinkedEntityID], [LinkedRecordPrimaryKey])
-VALUES ('a26a4875-2f64-41c8-b3d4-e3d3acf0f614', (SELECT [ID] FROM [${mjSchema}].[vwGeneratedCodeCategories] WHERE [Name]='CodeGen: Validators'), 'C43229F6-4CC8-4838-9D04-03419A2DA191', GETUTCDATE(), 'TypeScript', 'Approved', '([Status]<>''Cancelled'' OR [ApprovedAt] IS NULL OR [CancelReason] IS NOT NULL AND len(ltrim(rtrim([CancelReason])))>(0) AND [CancelledAt] IS NOT NULL AND [CancelledByUserID] IS NOT NULL)', '	public ValidateCancelledApprovedBatchRequirements(result: ValidationResult) {
-		if (this.Status === "Cancelled" && this.ApprovedAt != null) {
-			const hasCancelReason = this.CancelReason != null && this.CancelReason.trim().length > 0;
-			if (!hasCancelReason) {
-				result.Errors.push(new ValidationErrorInfo(
-					"CancelReason",
-					"A cancellation reason is required when cancelling an approved batch.",
-					this.CancelReason,
-					ValidationErrorType.Failure
-				));
-			}
-			if (this.CancelledAt == null) {
-				result.Errors.push(new ValidationErrorInfo(
-					"CancelledAt",
-					"The cancellation date and time must be specified when cancelling an approved batch.",
-					this.CancelledAt,
-					ValidationErrorType.Failure
-				));
-			}
-			if (this.CancelledByUserID == null) {
-				result.Errors.push(new ValidationErrorInfo(
-					"CancelledByUserID",
-					"The user who cancelled the batch must be specified when cancelling an approved batch.",
-					this.CancelledByUserID,
-					ValidationErrorType.Failure
-				));
-			}
-		}
-	}', 'If an approved journal entry batch is cancelled, it must include a cancellation reason, the date and time of cancellation, and the user who performed the cancellation.', 'ValidateCancelledApprovedBatchRequirements', 'E0238F34-2837-EF11-86D4-6045BDEE16E6', '87AD37E9-62F9-4F0E-A15B-F64ADF009112')
+VALUES ('b2bc943c-829f-430b-a9ec-5c30af729a60', (SELECT [ID] FROM [${mjSchema}].[vwGeneratedCodeCategories] WHERE [Name]='CodeGen: Validators'), 'C43229F6-4CC8-4838-9D04-03419A2DA191', GETUTCDATE(), 'TypeScript', 'Approved', '([Status]<>''Cancelled'' OR [ApprovedAt] IS NULL OR [CancelReason] IS NOT NULL AND len(ltrim(rtrim([CancelReason])))>(0) AND [CancelledAt] IS NOT NULL AND [CancelledByUserID] IS NOT NULL)', 'public ValidateCancellationDetailsForApprovedBatch(result: ValidationResult) {
+    if (this.Status === ''Cancelled'' && this.ApprovedAt != null) {
+        const hasCancelReason = this.CancelReason != null && this.CancelReason.trim().length > 0;
+        const hasCancelledAt = this.CancelledAt != null;
+        const hasCancelledBy = this.CancelledByUserID != null;
+
+        if (!hasCancelReason) {
+            result.Errors.push(new ValidationErrorInfo(
+                "CancelReason",
+                "A cancellation reason is required when cancelling an approved batch.",
+                this.CancelReason,
+                ValidationErrorType.Failure
+            ));
+        }
+        if (!hasCancelledAt) {
+            result.Errors.push(new ValidationErrorInfo(
+                "CancelledAt",
+                "Cancellation date is required when cancelling an approved batch.",
+                this.CancelledAt,
+                ValidationErrorType.Failure
+            ));
+        }
+        if (!hasCancelledBy) {
+            result.Errors.push(new ValidationErrorInfo(
+                "CancelledByUserID",
+                "The user who cancelled the batch must be specified when cancelling an approved batch.",
+                this.CancelledByUserID,
+                ValidationErrorType.Failure
+            ));
+        }
+    }
+}', 'If an approved journal entry batch is cancelled, a cancellation reason, cancellation date, and the user who cancelled it must all be provided.', 'ValidateCancellationDetailsForApprovedBatch', 'E0238F34-2837-EF11-86D4-6045BDEE16E6', '87AD37E9-62F9-4F0E-A15B-F64ADF009112')
    END;
 
 -- CHECK constraint for MJ_BizApps_Accounting: Journal Entry Batches @ Table Level was newly set or modified since the last generation of the validation function, the code was regenerated and updating the GeneratedCode table with the new generated validation function
@@ -2098,18 +2262,18 @@ IF NOT EXISTS (
    )
    BEGIN
       INSERT INTO [${mjSchema}].[GeneratedCode] ([ID], [CategoryID], [GeneratedByModelID], [GeneratedAt], [Language], [Status], [Source], [Code], [Description], [Name], [LinkedEntityID], [LinkedRecordPrimaryKey])
-VALUES ('3be67f79-316f-4da8-b296-70ee015c109b', (SELECT [ID] FROM [${mjSchema}].[vwGeneratedCodeCategories] WHERE [Name]='CodeGen: Validators'), 'C43229F6-4CC8-4838-9D04-03419A2DA191', GETUTCDATE(), 'TypeScript', 'Approved', '([Status]<>''Cancelled'' OR [SentAt] IS NULL OR [ERPNotPostedConfirmedAt] IS NOT NULL AND [ERPNotPostedConfirmedByUserID] IS NOT NULL)', 'public ValidateCancelledSentBatchConfirmation(result: ValidationResult) {
-	if (this.Status === "Cancelled" && this.SentAt != null) {
-		if (this.ERPNotPostedConfirmedAt == null || this.ERPNotPostedConfirmedByUserID == null) {
+VALUES ('0b581d3e-db71-4e9f-987d-79a5ec16cdc6', (SELECT [ID] FROM [${mjSchema}].[vwGeneratedCodeCategories] WHERE [Name]='CodeGen: Validators'), 'C43229F6-4CC8-4838-9D04-03419A2DA191', GETUTCDATE(), 'TypeScript', 'Approved', '([Status]<>''Cancelled'' OR [SentAt] IS NULL OR [ERPNotPostedConfirmedAt] IS NOT NULL AND [ERPNotPostedConfirmedByUserID] IS NOT NULL AND [ERPNotPostedBasis] IS NOT NULL)', 'public ValidateERPNotPostedConfirmationForCancelledSentBatches(result: ValidationResult) {
+	if (this.Status === ''Cancelled'' && this.SentAt != null) {
+		if (this.ERPNotPostedConfirmedAt == null || this.ERPNotPostedConfirmedByUserID == null || this.ERPNotPostedBasis == null) {
 			result.Errors.push(new ValidationErrorInfo(
-				"ERPNotPostedConfirmedAt",
-				"Cancelled batches that were already sent must have both ERP Not Posted Confirmation Date and Confirmed By User specified.",
-				this.ERPNotPostedConfirmedAt,
+				''Status'',
+				''If a sent journal entry batch is cancelled, the ERP non-posting confirmation date, user, and basis must all be provided.'',
+				this.Status,
 				ValidationErrorType.Failure
 			));
 		}
 	}
-}', 'If a journal entry batch has been sent and is subsequently cancelled, both the ERP confirmation date and the confirming user must be recorded to ensure we track who verified that the batch was not posted in the ERP.', 'ValidateCancelledSentBatchConfirmation', 'E0238F34-2837-EF11-86D4-6045BDEE16E6', '87AD37E9-62F9-4F0E-A15B-F64ADF009112')
+}', 'If a journal entry batch has already been sent and is subsequently cancelled, the ERP non-posting confirmation details (date, user, and basis) must be provided to ensure proper audit tracking.', 'ValidateERPNotPostedConfirmationForCancelledSentBatches', 'E0238F34-2837-EF11-86D4-6045BDEE16E6', '87AD37E9-62F9-4F0E-A15B-F64ADF009112')
    END;
 
 

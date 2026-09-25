@@ -46,7 +46,7 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
       'BatchedAt', 'BatchedByUserID', 'Status', 'TotalEntries', 'TotalDebits', 'TotalCredits',
       'ApprovedAt', 'ApprovedByUserID', 'ArchiveReason', 'ArchivedAt', 'ArchivedByUserID',
       'CancelReason', 'CancelledAt', 'CancelledByUserID', 'ApprovedContentHash', 'SentAt',
-      'ERPNotPostedConfirmedAt', 'ERPNotPostedConfirmedByUserID',
+      'ERPNotPostedConfirmedAt', 'ERPNotPostedConfirmedByUserID', 'ERPNotPostedBasis',
     ]);
     Metadata.Provider = {
       Entities: [batchInfo],
@@ -305,6 +305,13 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
       expect(teardown).toHaveBeenCalledWith('SUM1', { ID: 'U-CFO' });
       expect(batch.ERPNotPostedConfirmedByUserID).toBe('U-CFO');
       expect(batch.ERPNotPostedConfirmedAt).toBeInstanceOf(Date);
+      expect(batch.ERPNotPostedBasis).toBe('UserAttested'); // the canceller's word, absent a lookup
+    });
+
+    it('Cancel() persists ERPLookup as the basis when the engine\'s lookup found nothing', async () => {
+      asSaved('Failed', { SummaryJournalEntryID: 'SUM1', SentAt: new Date('2026-09-30T12:00:00Z') });
+      await batch.Cancel({ ID: 'U-CFO' } as never, { reason: 'Wrong period', confirmNotAlreadyPostedInERP: true, erpNotPostedBasis: 'ERPLookup' });
+      expect(batch.ERPNotPostedBasis).toBe('ERPLookup');
     });
 
     it('Cancel() runs onCancelled inside the transaction, after the release', async () => {
