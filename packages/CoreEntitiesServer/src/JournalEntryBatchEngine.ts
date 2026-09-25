@@ -16,10 +16,11 @@
  *     Content is frozen from here (trg_JournalEntryBatch_Immutability, 50009) until the batch is
  *     Failed, which the trigger does not freeze (#183).
  *   sendJournalEntryBatch(): require approval (gate seam + Status='Approved', or 'Failed' for a
- *     retry), flip →Sent, post the summary JE's lines to the ERP (all-or-nothing per batch), and on
- *     confirmation flip Sent→Posted + the member JEs AND the summary JE Batched→GLPosted.
- *     Failure → Failed; an operator retries by sending again, after confirming in the ERP that the
- *     batch did not post (#145, #182).
+ *     retry), look the batch number up in the ERP, flip →Sent, post the summary JE's lines to the ERP
+ *     (all-or-nothing per batch), and on confirmation flip Sent→Posted + the member JEs AND the
+ *     summary JE Batched→GLPosted. Failure → Failed; an operator retries by sending again (#145). A
+ *     retry the ERP already holds is recorded Posted with no second post; the operator confirms the
+ *     batch did not post only when the lookup cannot settle it (#182).
  *   resumeJournalEntryBatchPosting(): finish a Posted batch's Batched→GLPosted flip, no ERP call.
  *   findStrandedJournalEntries(): the entries Failed / partly-flipped Posted batches hold.
  *
@@ -860,12 +861,22 @@ export interface SendJournalEntryBatchOptions {
 }
 
 /**
+ * Why a pre-flight lookup could not settle whether the ERP already holds a batch:
+ *   · `Unavailable` — the ERP offers no lookup.
+ *   · `Error`       — the lookup ran and could not answer.
+ *   · `Mismatch`    — the ERP holds something under the number that differs from the batch. It may be
+ *                     this very batch, changed by the ERP (tax or VAT entries it added) or by a mapping
+ *                     change since it posted, so an operator must treat it more carefully than the others.
+ */
+export type ErpPostingUnconfirmedKind = 'Unavailable' | 'Error' | 'Mismatch';
+
+/**
  * A Failed retry refused because the pre-flight lookup could not settle whether the ERP already holds
- * the batch. `Reason` says why, for an operator deciding whether to retry with
+ * the batch. `Kind` and `Reason` say why, for an operator deciding whether to retry with
  * `confirmNotAlreadyPostedInERP`. The batch is untouched: still Failed, the ERP not called.
  */
 export class ErpPostingUnconfirmedError extends Error {
-  constructor(public readonly Reason: string) {
+  constructor(public readonly Kind: ErpPostingUnconfirmedKind, public readonly Reason: string) {
     super(`sendJournalEntryBatch: ${Reason}`);
     this.name = 'ErpPostingUnconfirmedError';
   }
@@ -898,12 +909,18 @@ const SENDABLE_FROM: ReadonlyArray<string> = ['Approved', 'Failed'];
  * and both are recorded as Failed. So before posting, the lookup reads what the ERP holds under the
  * batch's number:
  *   · nothing                → post.
- *   · a matching posting     → the ERP already has this batch; record it Posted with no second post.
+ *   · a matching posting     → on a Failed retry, the ERP already has this batch: record it Posted
+ *                              with no second post. On a first send the batch has never reached the
+ *                              ERP, so the match is another journal under the same number (another
+ *                              environment, a reused number): refuse, and leave the batch Approved.
+ *                              No confirmation overrides either outcome.
  *   · a posting that differs → refuse, unless `confirmNotAlreadyPostedInERP`.
  *   · the lookup failed      → refuse, unless `confirmNotAlreadyPostedInERP`.
  *   · no lookup for this ERP → a first send posts; a Failed retry needs `confirmNotAlreadyPostedInERP`.
- * A refused Failed retry throws {@link ErpPostingUnconfirmedError} and stays Failed. A refused first send goes Sent→Failed with the
- * reason, so it surfaces as a stranded batch to retry rather than sitting at Approved unseen.
+ * A refused Failed retry throws {@link ErpPostingUnconfirmedError} and stays Failed. Any other refused
+ * first send goes Sent→Failed with the reason, so it surfaces as a stranded batch to retry rather
+ * than sitting at Approved unseen. The matched first send is the exception: marked Failed, its retry
+ * would find the same match and record it Posted.
  */
 export async function sendJournalEntryBatch(batchId: string, contextUser: UserInfo, options: SendJournalEntryBatchOptions): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
   const p = resolveProviders(options.provider);
@@ -929,14 +946,15 @@ export async function sendJournalEntryBatch(batchId: string, contextUser: UserIn
   // Before the →Sent save: a throw here must leave the batch where it was, not stranded at Sent.
   const summaryLines = await loadSummaryLines(batch, contextUser, p);
   const preflight = await lookupOrError(options.lookup ?? unavailableErpLookup, batch, summaryLines, contextUser);
+  if (preflight.status === 'Found' && fromStatus !== 'Failed') throw new Error(`sendJournalEntryBatch: ${numberCollision(batch, preflight.externalJournalEntryBatchRef)}`);
   const refusal = preflightRefusal(preflight, batch, fromStatus, options.confirmNotAlreadyPostedInERP === true);
-  if (refusal && fromStatus === 'Failed') throw new ErpPostingUnconfirmedError(refusal);
+  if (refusal && fromStatus === 'Failed') throw new ErpPostingUnconfirmedError(refusal.kind, refusal.reason);
 
   batch.Status = 'Sent';
   batch.SentAt = new Date();
   if (!(await batch.Save())) throw new Error(`sendJournalEntryBatch: ${fromStatus}→Sent failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
 
-  if (refusal) return await failBatch(batch, refusal);
+  if (refusal) return await failBatch(batch, refusal.reason);
   if (preflight.status === 'Found') {
     LogStatus(`sendJournalEntryBatch: the ERP already holds batch ${batch.JournalEntryBatchNumber ?? batch.ID} as ${preflight.externalJournalEntryBatchRef}; recording it Posted without sending it again.`);
     return await markBatchPosted(batch, preflight.externalJournalEntryBatchRef, contextUser, p);
@@ -960,10 +978,18 @@ async function lookupOrError(
   }
 }
 
+/** A first send whose number the ERP already holds, matching line for line: not this batch, which never reached the ERP. */
+function numberCollision(batch: mjBizAppsAccountingJournalEntryBatchEntity, externalRef: string): string {
+  const doc = batch.JournalEntryBatchNumber ?? batch.ID;
+  return `the ERP already holds a posting under document ${doc} (${externalRef}) that matches this batch, but this batch has never been sent. ` +
+    'It is another journal under the same number, from another environment or a reused number. Refusing to send it or to record it Posted; ' +
+    'the batch stays Approved. Resolve the collision in the ERP, or archive this batch from Batch approvals.';
+}
+
 /** Why the pre-flight lookup stops this send, or null when it may go ahead. See {@link sendJournalEntryBatch}. */
 function preflightRefusal(
   preflight: ErpJournalLookupResult, batch: mjBizAppsAccountingJournalEntryBatchEntity, fromStatus: string, confirmed: boolean,
-): string | null {
+): { kind: ErpPostingUnconfirmedKind; reason: string } | null {
   if (confirmed) return null;
   const doc = batch.JournalEntryBatchNumber ?? batch.ID;
   const confirmHint = `Confirm in the ERP that document ${doc} has not posted, then retry with that confirmation.`;
@@ -973,13 +999,17 @@ function preflightRefusal(
       return null;
     case 'Unavailable':
       return fromStatus === 'Failed'
-        ? `batch ${doc} is Failed, and a Failed batch may already be in the ERP, which offers no lookup to check. ${confirmHint}`
+        ? { kind: 'Unavailable', reason: `batch ${doc} is Failed, and a Failed batch may already be in the ERP, which offers no lookup to check. ${confirmHint}` }
         : null;
     case 'Error':
-      return `could not check the ERP for document ${doc} before sending: ${preflight.error} Retry once the ERP answers, or: ${confirmHint}`;
+      return { kind: 'Error', reason: `could not check the ERP for document ${doc} before sending: ${preflight.error} Retry once the ERP answers, or: ${confirmHint}` };
     case 'Mismatch':
-      return `the ERP already holds document ${doc}, and it does not match this batch: ${preflight.detail} ` +
-        `If that posting is not this batch: ${confirmHint}`;
+      return {
+        kind: 'Mismatch',
+        reason: `the ERP already holds document ${doc}, and it does not match this batch: ${preflight.detail} ` +
+          'It may still be this batch, changed by the ERP (tax or VAT entries it added) or by an account mapping change since it posted. ' +
+          `Only if that posting is not this batch: ${confirmHint}`,
+      };
   }
 }
 

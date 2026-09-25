@@ -225,9 +225,9 @@
 </mj-page-body-interior>
 
 <!-- RETRY CONFIRMATION — shown only when the server's ERP lookup could not settle whether this Failed
-     batch already posted (#182): the ERP offers no lookup, the lookup failed, or the ERP holds
-     something under the number that does not match. The operator checks, and confirms or cancels. -->
-<mj-dialog [Visible]="RetryConfirmBatch !== null" Title="Check the ERP before retrying" Width="560px" (Close)="CancelRetry()">
+     batch already posted (#182): the ERP offers no lookup, or the lookup failed. The operator checks,
+     and confirms or cancels. A Mismatch gets its own, stronger dialog below. -->
+<mj-dialog [Visible]="RetryConfirmBatch !== null && RetryConfirmKind !== 'Mismatch'" Title="Check the ERP before retrying" Width="560px" (Close)="CancelRetry()">
   @if (RetryConfirmBatch) {
     <p>
       Batch <span class="ds-mono">{{ RetryConfirmBatch.JournalEntryBatchNumber }}</span> was not retried: the
@@ -246,5 +246,43 @@
       <i class="fa-solid fa-rotate-right" aria-hidden="true"></i> It has not posted — retry
     </button>
     <button mjButton variant="flat" size="sm" (click)="CancelRetry()">Cancel</button>
+  </mj-dialog-actions>
+</mj-dialog>
+
+<!-- MISMATCH — the ERP holds a posting under this number that differs from the batch. That is most
+     often this very batch, changed by the ERP (tax or VAT entries it added) or by an account mapping
+     change since it posted. Posting again then puts two journals under one number, and every later
+     lookup reads Mismatch, so the check can never protect this batch again. Cancel is the default;
+     the override needs the batch number retyped. -->
+<mj-dialog [Visible]="RetryConfirmBatch !== null && RetryConfirmKind === 'Mismatch'" Title="The ERP already holds this document number" Width="600px" (Close)="CancelRetry()">
+  @if (RetryConfirmBatch) {
+    <p>
+      {{ RetryConfirmBatch.TargetSystem }} already holds a posting under document number
+      <span class="ds-mono">{{ RetryConfirmBatch.JournalEntryBatchNumber }}</span>, and it does not match this batch line for line.
+    </p>
+    @if (RetryConfirmReason) {
+      <p>{{ RetryConfirmReason }}</p>
+    }
+    <p>
+      <strong>This is most likely this batch, already posted.</strong> The ERP may have added entries of its own, such as tax,
+      or an account mapping may have changed since. If so, do not retry: reconcile the posting in
+      {{ RetryConfirmBatch.TargetSystem }}, then archive this batch from Batch approvals.
+    </p>
+    <p>
+      Post again only if you have confirmed that posting belongs to something else. Posting again when it is this batch
+      doubles it in the general ledger. To post again, type the batch number:
+    </p>
+    <input
+      type="text"
+      class="mj-input ds-mono"
+      [(ngModel)]="MismatchConfirmText"
+      [attr.aria-label]="'Type ' + RetryConfirmBatch.JournalEntryBatchNumber + ' to post again'"
+      [placeholder]="RetryConfirmBatch.JournalEntryBatchNumber" />
+  }
+  <mj-dialog-actions>
+    <button mjButton variant="primary" size="sm" (click)="CancelRetry()">Cancel</button>
+    <button mjButton variant="flat" size="sm" [disabled]="!CanConfirmRetry" (click)="ConfirmRetry()">
+      It is not this batch — post again
+    </button>
   </mj-dialog-actions>
 </mj-dialog>

@@ -4,6 +4,7 @@
  */
 import { RegisterClass, RequiresSubclass } from '@memberjunction/global';
 import { UserInfo } from '@memberjunction/core';
+import { ToCalendarDay } from '@mj-biz-apps/common-entities';
 import type { AccountingVerbResult, AccountingVerbRunner } from './AccountingVerbRunner.js';
 import type { ErpPostResult, ExternalDimensionRef } from './JournalEntryBatchEngine.js';
 
@@ -160,16 +161,10 @@ function outputParam(result: AccountingVerbResult, name: string): unknown {
 function parseBCGLEntry(entry: unknown): ERPPostedJournalLine | null {
   if (typeof entry !== 'object' || entry === null) return null;
   const row = entry as Record<string, unknown>;
-  const postingDate = dateOnly(row.postingDate);
+  const postingDate = ToCalendarDay(row.postingDate);
   if (typeof row.accountNumber !== 'string' || !postingDate) return null;
   if (typeof row.debitAmount !== 'number' || typeof row.creditAmount !== 'number') return null;
   return { accountNumber: row.accountNumber, postingDate, debit: row.debitAmount, credit: row.creditAmount };
-}
-
-function dateOnly(value: unknown): string | null {
-  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.toISOString().slice(0, 10);
-  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
-  return null;
 }
 
 export function LoadAccountingERPProviders(): void {}

@@ -38,7 +38,14 @@ interface BuildJournalEntryBatchOutputWire {
   NothingToBatch: boolean;
 }
 
-interface DispatchJournalEntryBatchOutputWire { Status: string; ExternalJournalEntryBatchRef: string | null; ConfirmationRequired?: string }
+/** Keep in sync with `ErpPostingUnconfirmedKind` in CoreEntitiesServer's JournalEntryBatchEngine.ts. */
+export type DispatchConfirmationKind = 'Unavailable' | 'Error' | 'Mismatch';
+interface DispatchJournalEntryBatchOutputWire {
+  Status: string;
+  ExternalJournalEntryBatchRef: string | null;
+  ConfirmationRequired?: string;
+  ConfirmationKind?: DispatchConfirmationKind;
+}
 interface GetJournalEntryBatchApprovalStateOutputWire { Approved: boolean; Reason?: string }
 interface RecordJournalEntryBatchDecisionOutputWire { Recorded: true }
 interface ArchiveJournalEntryBatchOutputWire { Status: string; ArchivedAt: string | null }
@@ -79,6 +86,8 @@ export interface DispatchJournalEntryBatchResult {
   ErrorMessage?: string;
   /** Why a Failed retry was not sent: the ERP lookup could not settle whether the batch already posted. */
   ConfirmationRequired?: string;
+  /** Which way it could not settle it. `Mismatch` may be this very batch and needs the most care. */
+  ConfirmationKind?: DispatchConfirmationKind;
 }
 
 export interface RecordJournalEntryBatchDecisionResult {
@@ -252,6 +261,7 @@ export class JournalEntryBatchDispatchClient {
         Status: res.Output.Status,
         ExternalJournalEntryBatchRef: res.Output.ExternalJournalEntryBatchRef ?? undefined,
         ConfirmationRequired: res.Output.ConfirmationRequired,
+        ConfirmationKind: res.Output.ConfirmationKind,
       };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

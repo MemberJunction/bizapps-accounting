@@ -8,17 +8,15 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { IMetadataProvider, UserInfo } from '@memberjunction/core';
-
-const sendSpy = vi.fn();
+import { DispatchJournalEntryBatchOperation, type DispatchJournalEntryBatchInput as DispatchInput } from '../JournalEntryBatchOperations.js';
+import { ErpPostingUnconfirmedError, sendJournalEntryBatch } from '../JournalEntryBatchEngine.js';
 
 vi.mock('../JournalEntryBatchEngine.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../JournalEntryBatchEngine.js')>();
-  return { ...actual, sendJournalEntryBatch: sendSpy };
+  return { ...actual, sendJournalEntryBatch: vi.fn() };
 });
 
-const { DispatchJournalEntryBatchOperation } = await import('../JournalEntryBatchOperations.js');
-const { ErpPostingUnconfirmedError } = await import('../JournalEntryBatchEngine.js');
-type DispatchInput = import('../JournalEntryBatchOperations.js').DispatchJournalEntryBatchInput;
+const sendSpy = vi.mocked(sendJournalEntryBatch);
 
 /** Exposes the protected entry point; the op's own Execute wrapper is not what is under test. */
 class ProbeOperation extends DispatchJournalEntryBatchOperation {
@@ -36,15 +34,16 @@ describe('DispatchJournalEntryBatchOperation — a retry the lookup could not se
     sendSpy.mockReset();
   });
 
-  it('answers ConfirmationRequired with the reason, leaving the batch Failed', async () => {
-    sendSpy.mockRejectedValue(new ErpPostingUnconfirmedError('could not check the ERP for document JEB-0001 before sending: BC 503.'));
+  it.each(['Unavailable', 'Error', 'Mismatch'] as const)('answers ConfirmationRequired with the %s kind and reason, leaving the batch Failed', async (kind) => {
+    sendSpy.mockRejectedValue(new ErpPostingUnconfirmedError(kind, 'could not check the ERP for document JEB-0001.'));
 
     const out = await new ProbeOperation().Run({ JournalEntryBatchID: BATCH_ID }, provider, user);
 
     expect(out).toEqual({
       Status: 'Failed',
       ExternalJournalEntryBatchRef: null,
-      ConfirmationRequired: 'could not check the ERP for document JEB-0001 before sending: BC 503.',
+      ConfirmationRequired: 'could not check the ERP for document JEB-0001.',
+      ConfirmationKind: kind,
     });
   });
 
@@ -56,7 +55,7 @@ describe('DispatchJournalEntryBatchOperation — a retry the lookup could not se
   });
 
   it('passes the lookup to the engine alongside the poster', async () => {
-    sendSpy.mockResolvedValue({ Status: 'Posted', ExternalJournalEntryBatchRef: 'JEB-0001' });
+    sendSpy.mockResolvedValue({ Status: 'Posted', ExternalJournalEntryBatchRef: 'JEB-0001' } as never);
 
     const out = await new ProbeOperation().Run({ JournalEntryBatchID: BATCH_ID, ConfirmNotAlreadyPostedInERP: true }, provider, user);
 

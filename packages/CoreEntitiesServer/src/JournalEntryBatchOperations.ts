@@ -56,6 +56,7 @@ import {
   type BuildJournalEntryBatchOptions,
   type JournalEntryBatchPreviewResult,
   type StrandedJournalEntryBatch,
+  type ErpPostingUnconfirmedKind,
 } from './JournalEntryBatchEngine.js';
 import { createAccountingERPLookup, createAccountingERPPoster } from './AccountingERPEngine.js';
 import { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
@@ -236,6 +237,8 @@ export interface DispatchJournalEntryBatchOutput {
    * already posted: why, for the operator to check before retrying with `ConfirmNotAlreadyPostedInERP`.
    */
   ConfirmationRequired?: string;
+  /** Why the lookup could not settle it; `Mismatch` needs the most care — see ErpPostingUnconfirmedKind. */
+  ConfirmationKind?: ErpPostingUnconfirmedKind;
 }
 
 /**
@@ -264,7 +267,7 @@ export class DispatchJournalEntryBatchOperation extends BaseRemotableOperation<D
       return { Status: batch.Status, ExternalJournalEntryBatchRef: batch.ExternalJournalEntryBatchRef ?? null };
     } catch (e) {
       // An answer for the operator, not a failure of the call: the batch is untouched and still Failed.
-      if (e instanceof ErpPostingUnconfirmedError) return { Status: 'Failed', ExternalJournalEntryBatchRef: null, ConfirmationRequired: e.Reason };
+      if (e instanceof ErpPostingUnconfirmedError) return { Status: 'Failed', ExternalJournalEntryBatchRef: null, ConfirmationRequired: e.Reason, ConfirmationKind: e.Kind };
       throw e;
     }
   }

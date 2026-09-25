@@ -153,13 +153,18 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   `Failed` does not prove the ERP rejected the journal: the post can succeed with the response lost, or
   succeed and then fail to save `Posted`. So every send, first or retry, looks the batch number up in
   the ERP first (#182; `AccountingERPEngine.FindPostedJournalBatch`, Business Central via `GetGLEntries`).
-  A posting that matches the batch line for line (account, debit, credit, posting date) is recorded
-  `Posted` with no second send. A posting that differs, or a failed lookup, refuses the send unless
+  On a `Failed` retry, a posting that matches the batch line for line (account, debit, credit, posting
+  date) is recorded `Posted` with no second send. On a first send the batch never reached the ERP, so
+  a match is another journal under the same number: the send is refused and the batch stays
+  `Approved`. A posting that differs, or a failed lookup, refuses the send unless
   `confirmNotAlreadyPostedInERP` (`ConfirmNotAlreadyPostedInERP` on `Accounting.DispatchJournalEntryBatch`),
   which also stays required on a `Failed` retry to an ERP with no lookup (QuickBooks Online today). A
-  refused retry stays `Failed` and the op answers `ConfirmationRequired` with the reason; a refused
-  first send goes `Sent → Failed`. An `afterPost` extension hook that throws never overturns a post the
-  ERP accepted. *Resume* —
+  refused retry stays `Failed` and the op answers `ConfirmationRequired` with the reason and its kind
+  (`Unavailable`, `Error` or `Mismatch`; the Dispatch status page gives `Mismatch` a stronger dialog,
+  since it is often this very batch); any other refused first send goes `Sent → Failed`. The lookup
+  reads posted G/L entries only, so Business Central posting refuses to write into a journal that
+  already holds unposted lines, which `Microsoft.NAV.post` would otherwise post along with the batch.
+  An `afterPost` extension hook that throws never overturns a post the ERP accepted. *Resume* —
   `resumeJournalEntryBatchPosting` (`Accounting.ResumeJournalEntryBatchPosting`) finishes a `Posted`
   batch's member `Batched → GLPosted` flip with no ERP call. *Visibility* — `findStrandedJournalEntries`
   (`Accounting.GetStrandedJournalEntries`) reports entries held at `Batched` by either state; the

@@ -8,6 +8,7 @@
 import { IntegrationEngine } from '@memberjunction/integration-engine';
 import { IMetadataProvider, IRunViewProvider, LogError, LogStatus, UserInfo } from '@memberjunction/core';
 import { BaseSingleton, EscapeSQLString, MJGlobal } from '@memberjunction/global';
+import { ToCalendarDay } from '@mj-biz-apps/common-entities';
 import {
   ACCOUNTING_ENGINE_EXTENSION_ENTITY,
   ALL_ERP_SYNC_OBJECTS,
@@ -239,7 +240,10 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
       if (found.status !== 'Ok') return found;
       if (found.lines.length === 0) return { status: 'NotFound' };
       const expected = await erpLinesFor(summaryLines, target, user, provider);
-      const detail = postedJournalMismatch(expected, entryDateOf(batch).toISOString().slice(0, 10), found.lines);
+      // The day the post sends: the verb writes EntryDate from the same Date's UTC parts.
+      const postingDate = ToCalendarDay(entryDateOf(batch));
+      if (!postingDate) return { status: 'Error', error: `batch ${batch.JournalEntryBatchNumber} has an unreadable posting date.` };
+      const detail = postedJournalMismatch(expected, postingDate, found.lines);
       return detail
         ? { status: 'Mismatch', detail }
         : { status: 'Found', externalJournalEntryBatchRef: found.externalJournalEntryBatchRef };

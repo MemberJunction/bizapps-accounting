@@ -7,7 +7,7 @@ import { GridColumnConfig, EntityDataGridComponent } from '@memberjunction/ng-en
 import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
 import { AddDays, BusinessTimeZoneEngine, DayStartUtc, IsCalendarDay } from '@mj-biz-apps/common-entities';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
-import { JournalEntryBatchDispatchClient, StrandedJournalEntryBatchWire } from '../../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
+import { DispatchConfirmationKind, JournalEntryBatchDispatchClient, StrandedJournalEntryBatchWire } from '../../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
 import { TIME_WINDOWS, TimeWindowId, timeWindowRange, toSqlDate, andFilters } from '../../../transfer-pending/list-scaffold/time-window';
 import { sqlLiteral, likeContains } from '../../../transfer-pending/list-scaffold/sql-filter';
 import { rowKeyToId } from '../../../transfer-pending/list-scaffold/grid-row-key';
@@ -117,6 +117,12 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
    */
   public RetryConfirmBatch: mjBizAppsAccountingJournalEntryBatchEntity | null = null;
   public RetryConfirmReason: string | null = null;
+  public RetryConfirmKind: DispatchConfirmationKind | null = null;
+  /**
+   * What the operator typed to override a `Mismatch`. The ERP holds something under this number, and it
+   * may be this very batch, so posting again is gated on retyping the batch number, not a single click.
+   */
+  public MismatchConfirmText = '';
   public ResumingJournalEntryBatchID: string | null = null;
 
   /**
@@ -486,9 +492,15 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
   }
 
   public CancelRetry(): void {
-    this.RetryConfirmBatch = null;
-    this.RetryConfirmReason = null;
+    this.clearRetryConfirm();
     this.cdr.markForCheck();
+  }
+
+  /** A `Mismatch` override is enabled only once the batch number has been retyped exactly. */
+  public get CanConfirmRetry(): boolean {
+    if (!this.RetryConfirmBatch) return false;
+    if (this.RetryConfirmKind !== 'Mismatch') return true;
+    return this.MismatchConfirmText.trim() === (this.RetryConfirmBatch.JournalEntryBatchNumber ?? '');
   }
 
   /**
@@ -498,10 +510,17 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
    */
   public async ConfirmRetry(): Promise<void> {
     const batch = this.RetryConfirmBatch;
+    if (!batch || !this.CanConfirmRetry) return;
+    this.clearRetryConfirm();
+    if (!this.CanRetry(batch)) return;
+    await this.dispatchRetry(batch, true);
+  }
+
+  private clearRetryConfirm(): void {
     this.RetryConfirmBatch = null;
     this.RetryConfirmReason = null;
-    if (!batch || !this.CanRetry(batch)) return;
-    await this.dispatchRetry(batch, true);
+    this.RetryConfirmKind = null;
+    this.MismatchConfirmText = '';
   }
 
   /**
@@ -518,6 +537,8 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
       if (res.Success && res.ConfirmationRequired) {
         this.RetryConfirmBatch = batch;
         this.RetryConfirmReason = res.ConfirmationRequired;
+        this.RetryConfirmKind = res.ConfirmationKind ?? null;
+        this.MismatchConfirmText = '';
       } else if (res.Success && res.Status === 'Posted') {
         this.ActionMessage = `Re-dispatched ${batch.JournalEntryBatchNumber}${res.ExternalJournalEntryBatchRef ? ` — ERP ref ${res.ExternalJournalEntryBatchRef}` : ''}.`;
         this.ActionIsError = false;

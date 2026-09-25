@@ -487,6 +487,66 @@ describe('AccountingERPEngine.FindPostedJournalBatch', () => {
     expect(result.status === 'Mismatch' && result.detail).toMatch(detail);
   });
 
+  // BC adds entries of its own under the document (VAT/tax posting groups): a genuine retry of this
+  // same batch then reads as a mismatch, never as a match.
+  it('reports a mismatch when BC holds an extra entry of its own under the number', async () => {
+    AccountingERPEngine.Instance.UseSeams({ runVerb: glEntriesVerb([glEntry(100, 0), glEntry(0, 100), glEntry(0, 7.5)]) });
+
+    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes()));
+
+    expect(result.status).toBe('Mismatch');
+    expect(result.status === 'Mismatch' && result.detail).toMatch(/3 ERP line\(s\) against 2 in the batch; .*1000 0.00\/7.50 \(batch 0, ERP 1\)/);
+  });
+
+  // What the poster sends, as BC would book it and GetGLEntries would return it (dates as JSON strings).
+  it('finds the journal the poster sent, round-tripped through BC\'s G/L entry shape', async () => {
+    let sent: Array<{ accountNumber: string; debit?: number; credit?: number }> = [];
+    let sentDate = '';
+    const runVerb = vi.fn(async (call: { Verb: string; Params: Record<string, unknown> }) => {
+      if (call.Verb === 'CreateJournalEntry') {
+        sent = call.Params.Lines as typeof sent;
+        sentDate = call.Params.EntryDate as string;
+        return { Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'DocNumber', Value: call.Params.DocNumber, Type: 'Output' }] };
+      }
+      const entries = sent.map((l, i) => ({
+        entryNumber: i + 1,
+        documentNumber: 'BATCH-1',
+        accountNumber: l.accountNumber,
+        postingDate: `${sentDate}T00:00:00.000Z`,
+        debitAmount: l.debit ?? 0,
+        creditAmount: l.credit ?? 0,
+      }));
+      return { Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'GLEntries', Value: JSON.parse(JSON.stringify(entries)), Type: 'Output' }] };
+    });
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+    const p = providerWith(taggedViewsWithCodes());
+
+    const posted = await AccountingERPEngine.Instance.PostJournalBatch(taggedBatch(), taggedLines(), user, p);
+    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, p);
+
+    expect(posted.success).toBe(true);
+    expect(result).toEqual({ status: 'Found', externalJournalEntryBatchRef: posted.externalJournalEntryBatchRef });
+  });
+
+  it('reports an error when the number reaches the lookup cap, since the answer may be partial', async () => {
+    AccountingERPEngine.Instance.UseSeams({ runVerb: glEntriesVerb(Array.from({ length: 5000 }, () => glEntry(1, 0))) });
+
+    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes()));
+
+    expect(result).toEqual({ status: 'Error', error: 'document BATCH-1 has 5000 or more G/L entries, more than one lookup reads.' });
+  });
+
+  it('reports an error without calling BC when the number would break the OData filter', async () => {
+    const runVerb = glEntriesVerb([]);
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+    const batch = { ...(taggedBatch() as object), JournalEntryBatchNumber: "BATCH-1' or 1 eq 1" } as never;
+
+    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(batch, taggedLines(), user, providerWith(taggedViewsWithCodes()));
+
+    expect(result.status).toBe('Error');
+    expect(runVerb).not.toHaveBeenCalled();
+  });
+
   it('reports an error, never nothing posted, when the lookup verb fails', async () => {
     AccountingERPEngine.Instance.UseSeams({ runVerb: async () => ({ Success: false, ResultCode: 'ERROR', Message: 'BC 503' }) });
 

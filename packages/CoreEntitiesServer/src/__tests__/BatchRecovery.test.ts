@@ -230,8 +230,8 @@ describe('sendJournalEntryBatch — the pre-flight ERP lookup (#182)', () => {
     const lookupReturning = (result: ErpJournalLookupResult): ErpJournalLookup => vi.fn(async () => result);
     const found = (): ErpJournalLookup => lookupReturning({ status: 'Found', externalJournalEntryBatchRef: 'JEB-0001' });
 
-    it.each(['Approved', 'Failed'])('records a %s batch the ERP already holds as Posted, without posting it again', async (status) => {
-        const { batch, entries, provider } = world(status, { 'je-1': batched() });
+    it('records a Failed batch the ERP already holds as Posted, without posting it again', async () => {
+        const { batch, entries, provider } = world('Failed', { 'je-1': batched() });
         const poster = acceptingPoster();
 
         const result = await sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, lookup: found(), provider });
@@ -242,6 +242,20 @@ describe('sendJournalEntryBatch — the pre-flight ERP lookup (#182)', () => {
         expect(batch.ExternalJournalEntryBatchRef).toBe('JEB-0001');
         expect(batch.ErrorMessage).toBeNull();
         expect(entries['je-1']).toMatchObject({ Status: 'GLPosted', GLReferenceID: 'JEB-0001' });
+    });
+
+    // A batch that never reached the ERP cannot be the posting found there: it is another journal under
+    // the same number. Marking it Failed would let its retry adopt that journal, so it stays Approved.
+    it.each([undefined, true])('refuses a first send whose number the ERP already holds, leaving it Approved (confirmation: %s)', async (confirm) => {
+        const { batch, entries, provider } = world('Approved', { 'je-1': batched() });
+        const poster = acceptingPoster();
+
+        await expect(sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, lookup: found(), provider, confirmNotAlreadyPostedInERP: confirm }))
+            .rejects.toThrow(/already holds a posting under document JEB-0001 \(JEB-0001\) that matches this batch, but this batch has never been sent/);
+        expect(poster).not.toHaveBeenCalled();
+        expect(batch.Save).not.toHaveBeenCalled();
+        expect(batch.Status).toBe('Approved');
+        expect(entries['je-1'].Status).toBe('Batched');
     });
 
     // The operator's confirmation is an override for a lookup that cannot answer, not for one that did.

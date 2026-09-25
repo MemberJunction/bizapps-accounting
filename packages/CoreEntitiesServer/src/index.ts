@@ -92,6 +92,7 @@ export type {
   ErpPoster,
   ErpJournalLookup,
   ErpJournalLookupResult,
+  ErpPostingUnconfirmedKind,
   JournalEntryBatchApprovalGate,
   SendJournalEntryBatchOptions,
   DispatchFailureRecord,
