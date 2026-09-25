@@ -52,7 +52,7 @@ export class mjBizAppsAccountingAccountingCompanyProfile_ {
     @MaxLength(40)
     FederalTaxID?: string;
         
-    @Field({nullable: true, description: `IANA time-zone name for the company's operations (e.g. 'America/Chicago'). All timestamps store in UTC/Zulu; period and rev-rec boundaries are evaluated in this zone so a transaction near midnight lands in the right local day/month.`}) 
+    @Field({nullable: true, description: `Optional IANA time-zone name (e.g. 'America/Chicago') that overrides the business time zone (BizApps.BusinessTimeZone) for this company. Display only: timestamps are stored in UTC and "today" / cutoff calculations use the business time zone. Leave blank to inherit it.`}) 
     @MaxLength(60)
     OperatingTimeZone?: string;
         
