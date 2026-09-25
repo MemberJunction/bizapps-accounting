@@ -1,6 +1,7 @@
 -- =============================================================================
--- Migration: V202609241900__v0.13.x__OperatingTimeZone_Description.sql
--- Description: #158 — restate what AccountingCompanyProfile.OperatingTimeZone is for.
+-- Migration: V202609241900__v0.13.x__OperatingTimeZone_Inherit_Business_Zone.sql
+-- Description: #158 — AccountingCompanyProfile.OperatingTimeZone is an optional override;
+--              blank inherits the business time zone.
 -- =============================================================================
 --
 -- The column description said period and rev-rec boundaries are evaluated in this zone. Neither
@@ -8,8 +9,15 @@
 -- BizApps.BusinessTimeZone through BusinessTimeZoneEngine. The only reader is the company header
 -- panel, which shows this value when it is set and the business zone when it is blank.
 --
--- The entity server no longer stamps 'UTC' on a new profile, so blank is now the normal value.
--- Existing rows are not changed: a profile created while that default was live keeps 'UTC'.
+-- BACKFILL. From 2026-06-28 until this release the entity server stamped 'UTC' on every new
+-- profile, so the header showed UTC instead of the business zone for all of them. The stamp was
+-- written before the first save, so the audit trail cannot tell a chosen UTC from the default;
+-- every 'UTC' row is cleared. The field is display only, so no calculation changes. A company
+-- that genuinely operates in UTC shows the business zone until the value is entered again.
+
+UPDATE [__mj_BizAppsAccounting].[AccountingCompanyProfile]
+SET OperatingTimeZone = NULL
+WHERE OperatingTimeZone = N'UTC';
 
 EXEC sp_updateextendedproperty @name = N'MS_Description',
     @value = N'Optional IANA time-zone name (e.g. ''America/Chicago'') that overrides the business time zone (BizApps.BusinessTimeZone) for this company. Display only: timestamps are stored in UTC and "today" / cutoff calculations use the business time zone. Leave blank to inherit it.',

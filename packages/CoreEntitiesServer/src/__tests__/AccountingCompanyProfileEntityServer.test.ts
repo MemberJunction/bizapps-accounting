@@ -1,36 +1,32 @@
 /**
  * AccountingCompanyProfileEntityServer — a new profile's OperatingTimeZone stays as the caller
  * left it (issue #158). Blank means "inherit BizApps.BusinessTimeZone"; a first-save default
- * would make every new company override the business zone. No DB: mock EntityInfo, and the
- * persist step is stubbed on BaseEntity so the test sees what the subclass hands it.
+ * would make every new company override the business zone. No DB: an in-memory EntityInfo, and
+ * the persist step is stubbed on BaseEntity so the test sees what the subclass hands it.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { BaseEntity, Metadata, EntityInfo } from '@memberjunction/core';
+import { BaseEntity, EntityInfo } from '@memberjunction/core';
 import { AccountingCompanyProfileEntityServer } from '../AccountingCompanyProfileEntityServer.js';
 
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 
-function createMockEntity(name: string, fieldNames: string[]): EntityInfo {
-  const info = Object.create(EntityInfo.prototype);
-  info.ID = `id-${name}`;
-  info.Name = name;
-  info.Status = 'Active';
-  info.AllowDirectSQL = true;
-  const fields = fieldNames.map(fn => ({
-    Name: fn,
-    CodeName: fn,
-    Type: fn === 'ID' ? 'uniqueidentifier' : 'nvarchar',
-    TSType: 'string',
-    IsPrimaryKey: fn === 'ID',
-    AutoIncrement: false,
-    ReadOnly: false,
-    AllowsNull: true,
-    ValueIsPermittedByValueList: () => true,
-  })) as any[];
-  Object.defineProperty(info, 'Fields', { get: () => fields, configurable: true });
-  Object.defineProperty(info, 'PrimaryKeys', { get: () => fields.filter((f: any) => f.IsPrimaryKey), configurable: true });
-  Object.defineProperty(info, 'HasInactiveFields', { get: () => false, configurable: true });
-  return info;
+/** A real EntityInfo built from init data, as the metadata provider would build it. */
+function createEntityInfo(name: string, fieldNames: string[]): EntityInfo {
+  return new EntityInfo({
+    ID: `id-${name}`,
+    Name: name,
+    Status: 'Active',
+    AllowDirectSQL: true,
+    EntityFields: fieldNames.map(fn => ({
+      Name: fn,
+      CodeName: fn,
+      Type: fn === 'ID' ? 'uniqueidentifier' : 'nvarchar',
+      IsPrimaryKey: fn === 'ID',
+      AutoIncrement: false,
+      AllowsNull: true,
+      Status: 'Active',
+    })),
+  });
 }
 
 describe('AccountingCompanyProfileEntityServer (OperatingTimeZone on create)', () => {
@@ -38,8 +34,7 @@ describe('AccountingCompanyProfileEntityServer (OperatingTimeZone on create)', (
   let persisted: Array<string | null>;
 
   beforeEach(() => {
-    info = createMockEntity(ACP_ENTITY, ['ID', 'CompanyCode', 'FunctionalCurrencyCode', 'OperatingTimeZone']);
-    Metadata.Provider = { Entities: [info] } as any;
+    info = createEntityInfo(ACP_ENTITY, ['ID', 'CompanyCode', 'FunctionalCurrencyCode', 'OperatingTimeZone']);
     persisted = [];
     vi.spyOn(BaseEntity.prototype, 'Save').mockImplementation(async function (this: BaseEntity) {
       persisted.push(this.Get('OperatingTimeZone'));
@@ -52,7 +47,7 @@ describe('AccountingCompanyProfileEntityServer (OperatingTimeZone on create)', (
   });
 
   it('leaves a blank OperatingTimeZone blank on a new profile', async () => {
-    const acp = new AccountingCompanyProfileEntityServer(info as any);
+    const acp = new AccountingCompanyProfileEntityServer(info);
     acp.NewRecord();
     acp.CompanyCode = 'ACME';
 
@@ -62,7 +57,7 @@ describe('AccountingCompanyProfileEntityServer (OperatingTimeZone on create)', (
 
   it('keeps a caller-supplied OperatingTimeZone, including UTC', async () => {
     for (const zone of ['America/Chicago', 'UTC']) {
-      const acp = new AccountingCompanyProfileEntityServer(info as any);
+      const acp = new AccountingCompanyProfileEntityServer(info);
       acp.NewRecord();
       acp.OperatingTimeZone = zone;
       await acp.Save();

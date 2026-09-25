@@ -9,5 +9,8 @@ The field is an optional per-company display override; blank inherits the instan
 company header's fallback to the business zone never fired and new companies showed UTC. A new
 profile now keeps whatever the caller supplied, including blank.
 
-Existing profiles are not backfilled: a profile created while the default was live still carries
-`'UTC'` and shows UTC until the field is cleared.
+**Data change:** the migration clears `OperatingTimeZone` on every profile that holds `'UTC'`, so
+existing companies show the business zone too. The stamp was written before the first save, so a
+chosen UTC cannot be told apart from the default. The field is display only, so no calculation
+changes; a company that genuinely operates in UTC shows the business zone until the value is
+entered again.
