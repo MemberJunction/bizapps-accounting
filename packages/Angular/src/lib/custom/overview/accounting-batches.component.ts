@@ -1289,10 +1289,10 @@ export class AccountingBatchesPageComponent implements OnInit {
             this.ActionMessage = res.Success
                 ? `Cancelled batch ${batch.JournalEntryBatchNumber} — its journal entries return to the next build.`
                 : (res.ErrorMessage ?? 'Cancel failed.');
-            if (res.Success) {
-                this.resetCancelDialog();
-                await this.LoadBatches();
-            }
+            // Close on a refusal too: the message is on the page, and the modal would hide it. The one
+            // that matters most, "the ERP holds this batch — retry it instead", has nothing to redo here.
+            this.resetCancelDialog();
+            if (res.Success) await this.LoadBatches();
         } finally {
             this.CancellingBatchID = null;
             this.cdr.markForCheck();

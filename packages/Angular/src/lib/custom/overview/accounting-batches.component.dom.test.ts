@@ -216,5 +216,6 @@ describe('AccountingBatchesPageComponent — Cancel an Approved/Failed batch (#1
     expect(page.ActionMessageIsError).toBe(true);
     expect(page.ActionMessage).toMatch(/so the batch posted/);
     expect(page.CancelERPCheckReason).toBeNull();
+    expect(page.CancelModalVisible).toBe(false); // the refusal is on the page, not behind the modal
   });
 });

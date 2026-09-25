@@ -481,11 +481,11 @@ database as part of ordinary development.
 
 Editing the baseline was correct while the schema changed constantly and nothing depended on it.
 That phase is over: an edit to the baseline is invisible to any database that already ran it — the
-column never appears and nothing reports a problem — and flyway checksums the script, so every
-existing database refuses to migrate until someone repairs it by hand. `scripts/rebuild-db.sh`
+column never appears and nothing reports a problem: `mj migrate` (Skyway) records a checksum but
+never validates it, so the edited script is silently skipped. `scripts/rebuild-db.sh`
 remains only for standing up a brand-new empty database; it is not a development loop.
 
-Write migrations **deterministically** against the state earlier migrations leave: Flyway runs each
+Write migrations **deterministically** against the state earlier migrations leave: Skyway runs each
 `V` migration once, in order, so guards against this repo's own earlier migrations are unnecessary
 (header: `DETERMINISTIC, NOT IDEMPOTENT`). Assume the database already has data, pre-check existing
 rows before adding a constraint, and keep guards where the starting point genuinely varies — see the
