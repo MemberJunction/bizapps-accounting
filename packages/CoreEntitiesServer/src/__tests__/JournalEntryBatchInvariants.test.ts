@@ -6,7 +6,7 @@
  * field OldValues the graph check reads — no live database needed.
  * Same mock harness pattern as JournalEntryExtendedServer.test.ts.
  */
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach, type Mock } from 'vitest';
 import { BaseEntity, Metadata, EntityInfo } from '@memberjunction/core';
 import { JournalEntryBatchEntityServer } from '../JournalEntryBatchEntityServer.js';
 
@@ -215,12 +215,12 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
   // ─── Archive() vs Cancel(): the load-bearing distinction of golive #214 ────
 
   describe('Archive() keeps the member entries locked; Cancel() releases them', () => {
-    let teardown: ReturnType<typeof vi.fn>;
+    let teardown: Mock<JournalEntryBatchEntityServer['ReleaseMembersAndDeleteSummary']>;
     let save: ReturnType<typeof vi.spyOn>;
 
     beforeEach(() => {
       save = vi.spyOn(BaseEntity.prototype, 'Save').mockResolvedValue(true);
-      teardown = vi.fn().mockResolvedValue(undefined);
+      teardown = vi.fn<JournalEntryBatchEntityServer['ReleaseMembersAndDeleteSummary']>().mockResolvedValue(undefined);
       batch.ReleaseMembersAndDeleteSummary = teardown;
       // Cancel() opens a provider transaction; the mock harness has no data provider, so give the
       // instance one that only knows the three transaction verbs Cancel actually calls.

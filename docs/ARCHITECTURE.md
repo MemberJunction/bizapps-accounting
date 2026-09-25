@@ -117,12 +117,16 @@ balance **overall and per company** (AM-4), and writes atomically. Hooks on the 
   `JournalEntryBatchEngine.ts`; the ERP wire is **account numbers, split per company** (AM-4).
 - **Recovery past Approved (#145):** a `Failed` batch is retried by dispatching it again
   (`Failed → Sent`; the gate and the coherence check re-run, the original approval is reused). A
-  `Failed` batch may already be in the ERP, so a retry requires the operator's confirmation that the
-  batch number has not posted there (#182). Its content is frozen like an Approved batch's, and the
-  dispatch check compares it with the `ApprovedContentHash` seal written at approval (#183). A
-  `Failed` or `Approved` batch whose content is wrong is cancelled instead (`Accounting.CancelJournalEntryBatch`:
-  the company's CFO or the batch's approver only, reason required and written to the approval Task,
-  plus the persisted ERP confirmation from `Failed`), which releases its entries to the next build.
+  `Failed` batch may already be in the ERP, so every send first looks the batch number up there
+  (#182): a Failed batch the ERP holds line for line is recorded `Posted` without a second send; a
+  first send whose number is already there is refused. The operator's confirmation that the number
+  has not posted is needed only when the lookup cannot settle it: a mismatch, a failed lookup, or an
+  ERP with no lookup. Business Central posting also refuses a journal that already holds unposted
+  lines. Its content is frozen like an Approved batch's, and the dispatch check compares it with the
+  `ApprovedContentHash` seal written at approval (#183). A `Failed` or `Approved` batch whose content
+  is wrong is cancelled instead (`Accounting.CancelJournalEntryBatch`: the company's CFO or the
+  batch's approver only, reason required and written to the approval Task, plus the persisted ERP
+  confirmation from `Failed`), which releases its entries to the next build.
   A
   `Posted` batch whose member `Batched → GLPosted` flip stopped partway is finished by
   `resumeJournalEntryBatchPosting` (`Accounting.ResumeJournalEntryBatchPosting`), which makes no
