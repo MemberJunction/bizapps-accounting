@@ -26,6 +26,13 @@
       "outputs": [],
       "cache": false
     },
+    "test:types": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [],
+      "cache": false
+    },
     "start": {
       "cache": false,
       "persistent": true

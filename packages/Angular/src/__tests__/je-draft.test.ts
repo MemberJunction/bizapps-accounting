@@ -137,7 +137,7 @@ async function draft(
   entry.EffectiveDate = new Date('2026-07-16T00:00:00.000Z');
   entry.Description = over.Description ?? 'Event deposit accrual';
 
-  const state: JEDraftState = { Entry: entry, Amounts: new Map(), Dimensions: new Map() };
+  const state: JEDraftState = { Entry: entry, Amounts: new Map() };
 
   for (const spec of lines) {
     // ISSUED BY THE COLLECTION. It stamps the foreign key at save and tracks the child for the save
