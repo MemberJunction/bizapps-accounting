@@ -21,6 +21,9 @@ jobs:
         with:
           node-version: 24
 
+      - name: Reject sibling ../MJ references
+        run: ./.github/scripts/validate-no-sibling-mj-paths.sh
+
       - name: Check for migration file changes
         id: migration_check
         run: |
