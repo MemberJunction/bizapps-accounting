@@ -16,8 +16,9 @@
  *                                                            all-pending sweep when CompanyID is omitted
  *   Accounting.RegenerateJournalEntryBatch       → regenerateJournalEntryBatch(...) rebuild a Pending batch in place; empty → cancel + throw
  *   Accounting.DispatchJournalEntryBatch         → sendJournalEntryBatch(...)       Approved|Failed→Sent→Posted via AccountingERPEngine (AM-4 account numbers);
- *                                                            from Failed it is the retry, reusing the batch's approval and requiring
- *                                                            ConfirmNotAlreadyPostedInERP (#145)
+ *                                                            from Failed it is the retry, reusing the batch's approval (#145); every
+ *                                                            send checks the ERP first, ConfirmNotAlreadyPostedInERP overriding a
+ *                                                            lookup that cannot settle it (#182)
  *   Accounting.ResumeJournalEntryBatchPosting    → resumeJournalEntryBatchPosting(...) finish a Posted batch's Batched→GLPosted flip; NO ERP call (#145)
  *   Accounting.GetStrandedJournalEntries         → findStrandedJournalEntries(...)  read-only: Failed / partly-flipped Posted batches holding entries (#145)
  *   Accounting.RecordJournalEntryBatchDecision   → gate.recordDecision + approveJournalEntryBatch | cancelJournalEntryBatch (in-app CFO approve/reject)
@@ -43,6 +44,7 @@ import {
   previewBatch,
   regenerateJournalEntryBatch,
   sendJournalEntryBatch,
+  ErpPostingUnconfirmedError,
   resumeJournalEntryBatchPosting,
   findStrandedJournalEntries,
   approveJournalEntryBatch,
@@ -54,8 +56,9 @@ import {
   type BuildJournalEntryBatchOptions,
   type JournalEntryBatchPreviewResult,
   type StrandedJournalEntryBatch,
+  type ErpPostingUnconfirmedKind,
 } from './JournalEntryBatchEngine.js';
-import { createAccountingERPPoster } from './AccountingERPEngine.js';
+import { createAccountingERPLookup, createAccountingERPPoster } from './AccountingERPEngine.js';
 import { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
 import { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
 import { requireSqlGuid } from './SqlGuards.js';
@@ -220,16 +223,31 @@ export class RegenerateJournalEntryBatchOperation extends BaseRemotableOperation
 
 export interface DispatchJournalEntryBatchInput {
   JournalEntryBatchID: string;
-  /** Required `true` to retry a Failed batch: the caller checked the ERP and the batch number has not posted. */
+  /**
+   * The caller checked the ERP and the batch number has not posted. Needed only when the pre-flight
+   * lookup cannot settle it — see sendJournalEntryBatch.
+   */
   ConfirmNotAlreadyPostedInERP?: boolean;
 }
-export interface DispatchJournalEntryBatchOutput { Status: string; ExternalJournalEntryBatchRef: string | null }
+export interface DispatchJournalEntryBatchOutput {
+  Status: string;
+  ExternalJournalEntryBatchRef: string | null;
+  /**
+   * Set when a Failed retry was refused because the ERP lookup could not settle whether the batch
+   * already posted: why, for the operator to check before retrying with `ConfirmNotAlreadyPostedInERP`.
+   */
+  ConfirmationRequired?: string;
+  /** Why the lookup could not settle it; `Mismatch` needs the most care — see ErpPostingUnconfirmedKind. */
+  ConfirmationKind?: ErpPostingUnconfirmedKind;
+}
 
 /**
  * Dispatch an Approved batch to the ERP, or retry a Failed one. The gate and the engine's
  * sendable-status check block anything else; a retry re-runs both, so it needs no second approval.
- * A retry also needs `ConfirmNotAlreadyPostedInERP`, because a Failed batch may already be in the
- * ERP (see sendJournalEntryBatch). A send the ERP rejects returns normally with `Status: 'Failed'`.
+ * Every send first asks the ERP what it holds under the batch's number: a matching posting is recorded
+ * as this batch's instead of being sent again, and `ConfirmNotAlreadyPostedInERP` overrides a lookup
+ * that cannot settle it (see sendJournalEntryBatch). A send the ERP rejects returns normally with
+ * `Status: 'Failed'`.
  */
 @RegisterClass(BaseRemotableOperation, 'Accounting.DispatchJournalEntryBatch')
 export class DispatchJournalEntryBatchOperation extends BaseRemotableOperation<DispatchJournalEntryBatchInput, DispatchJournalEntryBatchOutput> {
@@ -238,13 +256,20 @@ export class DispatchJournalEntryBatchOperation extends BaseRemotableOperation<D
   protected async InternalExecute(input: DispatchJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<DispatchJournalEntryBatchOutput> {
     if (!input?.JournalEntryBatchID) throw new Error('DispatchJournalEntryBatch: JournalEntryBatchID is required.');
     requireSqlGuid(input.JournalEntryBatchID, 'DispatchJournalEntryBatch');
-    const batch = await sendJournalEntryBatch(input.JournalEntryBatchID, user, {
-      gate: new TasksAppApprovalGate(provider),
-      poster: createAccountingERPPoster(provider),
-      provider,
-      confirmNotAlreadyPostedInERP: input.ConfirmNotAlreadyPostedInERP === true,
-    });
-    return { Status: batch.Status, ExternalJournalEntryBatchRef: batch.ExternalJournalEntryBatchRef ?? null };
+    try {
+      const batch = await sendJournalEntryBatch(input.JournalEntryBatchID, user, {
+        gate: new TasksAppApprovalGate(provider),
+        poster: createAccountingERPPoster(provider),
+        lookup: createAccountingERPLookup(provider),
+        provider,
+        confirmNotAlreadyPostedInERP: input.ConfirmNotAlreadyPostedInERP === true,
+      });
+      return { Status: batch.Status, ExternalJournalEntryBatchRef: batch.ExternalJournalEntryBatchRef ?? null };
+    } catch (e) {
+      // An answer for the operator, not a failure of the call: the batch is untouched and still Failed.
+      if (e instanceof ErpPostingUnconfirmedError) return { Status: 'Failed', ExternalJournalEntryBatchRef: null, ConfirmationRequired: e.Reason, ConfirmationKind: e.Kind };
+      throw e;
+    }
   }
 }
 

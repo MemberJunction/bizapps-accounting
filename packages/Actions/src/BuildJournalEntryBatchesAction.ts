@@ -5,6 +5,7 @@ import { RegisterClass } from '@memberjunction/global';
 import {
   approveJournalEntryBatch,
   buildJournalEntryBatch,
+  createAccountingERPLookup,
   createAccountingERPPoster,
   findStrandedJournalEntries,
   pendingCompanies,
@@ -193,6 +194,7 @@ async function dispatchOne(
     const sent = await sendJournalEntryBatch(batch.batchId, user, {
       gate: AutoApproveGate,
       poster: createAccountingERPPoster(provider),
+      lookup: createAccountingERPLookup(provider),
       provider,
     });
     return { companyId, batch, status: sent.Status, error: sent.ErrorMessage ?? null, needsAttention: sent.Status !== 'Posted' };

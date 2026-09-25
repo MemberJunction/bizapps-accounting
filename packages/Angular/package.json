@@ -1,7 +1,7 @@
 {
   "name": "@mj-biz-apps/accounting-ng",
   "type": "module",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "BizApps Accounting Angular bootstrap - form components and module for the AR subledger and JE primitives Open App",
   "main": "dist/public-api.js",
   "types": "dist/public-api.d.ts",
@@ -14,14 +14,16 @@
   "scripts": {
     "build": "ngc",
     "test": "vitest run",
-    "test:dom": "vitest run --config vitest.dom.config.ts"
+    "test:dom": "vitest run --config vitest.dom.config.ts",
+    "test:types": "tsc --noEmit -p tsconfig.spec.json",
+    "test:gui": "vitest run --config test-harnesses/gui/vitest.gui.config.ts"
   },
   "author": "MemberJunction.com",
   "license": "BUSL-1.1",
   "dependencies": {
     "@memberjunction/ng-hierarchy-tree": "^6.1.0-edge.7",
-    "@mj-biz-apps/accounting-engine-base": "0.12.0",
-    "@mj-biz-apps/accounting-entities": "0.12.0",
+    "@mj-biz-apps/accounting-engine-base": "0.13.0",
+    "@mj-biz-apps/accounting-entities": "0.13.0",
     "ag-grid-angular": "^35.0.1",
     "ag-grid-community": "^35.0.1"
   },
@@ -59,6 +61,7 @@
     "@angular/forms": "21.1.3",
     "@angular/cdk": "21.1.3",
     "@angular/platform-browser": "21.1.3",
+    "@types/node": "^24.10.11",
     "jsdom": "^26.1.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"

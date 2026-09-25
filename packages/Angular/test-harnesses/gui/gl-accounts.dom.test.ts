@@ -79,7 +79,7 @@ describe('All Accounts page (tier 4)', () => {
     // The rendered table shows the same row.
     const el: HTMLElement = fixture.nativeElement;
     // The table is the STANDARD mj-entity-data-grid now (2026-08-05). jsdom cannot paint the AG
-    // grid (TEST-ARCHITECTURE: virtualized grids are a tier-5 render concern), so the render
+    // grid (virtualized grids are a tier-5 render concern), so the render
     // anchor moved to tier 5; HERE we assert the component's QUERY is right at value level.
     const comp2 = fixture.componentInstance;
     expect(comp2.GridParams.EntityName).toBe(GL_ENTITY);

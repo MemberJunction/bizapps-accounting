@@ -1,6 +1,6 @@
 # Seeding the Unbilled Receivable account, per company
 
-One `GLAccountLink` per company, pointing at that company's own `11300`. **Until a company has that link, its contract asset does not appear on the balance sheet at all** — orders folds the amount into Deferred Revenue instead and logs a warning. Who creates the links is not decided here.
+One `GLAccountLink` per company, pointing at that company's own `11300`. **Until a company has that link, orders refuses any journal entry that needs it** — including the confirm of an order for a company billed by instalment that has an up-front line. Link every such company before go-live. Who creates the links is not decided here.
 
 ## What to create
 
@@ -21,7 +21,7 @@ Orders maintains the position on the order line itself — `BilledToDate` and `R
 
 ## The name is a cross-repo contract
 
-bizapps-orders writes this role's `Name` down in one place — `GL_ROLE.UnbilledReceivable = 'Unbilled Receivable'` in `packages/CoreEntitiesServer/src/GLAccountResolver.ts` — and resolves roles by accounting's exact `Name` string, case- and whitespace-insensitive but otherwise literal. Spaced Title Case matches every role orders resolves; `BankAccount` is the one unspaced role and it is FP&A's. **If the two repos ever disagree by one character the role simply never resolves**, and because every journal entry still balances either way, nothing downstream reports it. Rename it in one repo only and you will not find out from a failure.
+bizapps-orders writes this role's `Name` down in one place — `GL_ROLE.UnbilledReceivable = 'Unbilled Receivable'` in `packages/CoreEntitiesServer/src/GLAccountResolver.ts` — and resolves roles by accounting's exact `Name` string, case- and whitespace-insensitive but otherwise literal. Spaced Title Case matches every role orders resolves; `BankAccount` is the one unspaced role and it is FP&A's. **If the two repos ever disagree by one character the role never resolves**, and every company then looks unlinked: orders refuses each entry that needs this account, with a message saying no `Unbilled Receivable` account is linked, even though one is. Rename it in both repos or neither.
 
 ## How the row reaches a database
 
@@ -31,9 +31,11 @@ The row already exists on the shared MJ dev database under this UUID, because an
 
 ## What happens for a company with no link
 
-**The contract asset disappears into Deferred Revenue.** Orders resolves this role every time either rule needs it; when no account is linked it puts the amount on Deferred Revenue instead and logs a warning naming the company and what was not separated. Nothing fails, every entry still balances, and no revenue is misstated — but the balance sheet then shows one number where there should be two, and a reader cannot tell revenue earned ahead of billing from billing taken ahead of performance.
+**The entry is refused and nothing is posted** (golive #261). Orders resolves this role every time either rule needs it — recognising revenue ahead of billing, or invoicing an instalment against revenue already earned. When no account is linked it stops with an error naming the order, line, amount and company, and says to link an account in Account Links. An instalment invoice that is refused keeps no document number and no `Invoiced` stamp.
 
-That is the cost of leaving a company unlinked, and it is silent apart from the log line. Grep the MJAPI log for `no 'Unbilled Receivable' GL account is linked` after any run that recognises or invoices.
+There is no fallback to Deferred Revenue: that would put a contract asset in a liability account with nothing on screen to say so.
+
+Where this bites first: on a company billed by instalment, an up-front line is earned at confirm but not yet billed, so **confirming the order needs this link**. A company that is not billed by instalment never needs the role and is unaffected.
 
 ## Open question, not blocking
 

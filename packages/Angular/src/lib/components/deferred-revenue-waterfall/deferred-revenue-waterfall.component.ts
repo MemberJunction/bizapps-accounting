@@ -3,6 +3,7 @@ import type {
     mjBizAppsAccountingJournalEntryEntity,
     mjBizAppsAccountingJournalEntryLineEntity,
 } from '@mj-biz-apps/accounting-entities';
+import { BusinessTimeZoneEngine, CalendarDayIn, ToCalendarDay } from '@mj-biz-apps/common-entities';
 
 /** A single month's release cell in the waterfall */
 export interface WaterfallMonthCell {
@@ -156,11 +157,11 @@ export class DeferredRevenueWaterfallComponent implements OnChanges {
 
         const activeEntries = selectActiveEntries(this.JournalEntries);
         this.DistinctTerms = this.buildDistinctTerms(activeEntries);
-        this.MonthHeaders = buildMonthHeaders(collectDates(activeEntries));
-
         const todayKey = currentMonthKey();
+        this.MonthHeaders = buildMonthHeaders(collectMonthKeys(activeEntries), todayKey);
+
         const groups = this.groupEntriesByOrigin(activeEntries);
-        const aggregated = this.emptyMonthlyCells();
+        const aggregated = this.emptyMonthlyCells(todayKey);
         const monthTotalsMap = new Map<string, number>();
         this.MonthHeaders.forEach((mh) => monthTotalsMap.set(mh.Key, 0));
 
@@ -219,17 +220,15 @@ export class DeferredRevenueWaterfallComponent implements OnChanges {
         return groups;
     }
 
-    private emptyMonthlyCells(group?: OriginGroup): WaterfallMonthCell[] {
+    private emptyMonthlyCells(todayKey: string, group?: OriginGroup): WaterfallMonthCell[] {
         return this.MonthHeaders.map((mh) => {
-            const [y, mStr] = mh.Key.split('-');
-            const d = new Date(Number(y), Number(mStr) - 1, 1);
             return {
                 MonthKey: mh.Key,
                 MonthLabel: mh.Label,
-                MonthShort: d.toLocaleDateString('en-US', { month: 'short' }),
-                Year: y,
+                MonthShort: monthShort(mh.Key),
+                Year: mh.Year,
                 Amount: 0,
-                IsPastOrCurrent: mh.Key <= currentMonthKey(),
+                IsPastOrCurrent: mh.Key <= todayKey,
                 JournalEntry: undefined,
                 TermLabel: group?.label,
                 TermIndex: group?.termIndex,
@@ -257,14 +256,12 @@ export class DeferredRevenueWaterfallComponent implements OnChanges {
         monthTotalsMap: Map<string, number>,
         todayKey: string,
     ): WaterfallRow {
-        const monthlyCells = this.emptyMonthlyCells(group);
+        const monthlyCells = this.emptyMonthlyCells(todayKey, group);
         let rowContractVal = 0;
         let rowRecognized = 0;
 
         for (const je of group.entries) {
-            const dateVal = je.EffectiveDate || je.__mj_CreatedAt;
-            const d = dateVal ? new Date(dateVal) : new Date();
-            const mKey = monthKeyFromDate(d);
+            const mKey = entryMonthKey(je) ?? todayKey;
             const amt = resolveEntryAmount(je);
             rowContractVal += amt;
             addAmountToCell(monthlyCells.find((c) => c.MonthKey === mKey), amt, je);
@@ -300,13 +297,24 @@ function emptySummary(): WaterfallSummary {
     };
 }
 
+/** The business month it is now (`YYYY-MM`), in the instance's business zone — never the browser's. */
 function currentMonthKey(): string {
-    const now = new Date();
-    return monthKeyFromDate(now);
+    return BusinessTimeZoneEngine.Instance.Today().slice(0, 7);
 }
 
-function monthKeyFromDate(d: Date): string {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+/**
+ * The month (`YYYY-MM`) an entry recognizes in, or null when it carries no date.
+ *
+ * `EffectiveDate` is a `DATE` column: a calendar day held as UTC midnight, so it is read from its UTC
+ * parts. The `__mj_CreatedAt` fallback is an instant, so it is placed on the business zone's calendar.
+ */
+function entryMonthKey(je: mjBizAppsAccountingJournalEntryEntity): string | null {
+    const effectiveDay = ToCalendarDay(je.EffectiveDate);
+    if (effectiveDay !== null) return effectiveDay.slice(0, 7);
+    if (!je.__mj_CreatedAt) return null;
+    const createdAt = new Date(je.__mj_CreatedAt);
+    if (Number.isNaN(createdAt.getTime())) return null;
+    return CalendarDayIn(createdAt, BusinessTimeZoneEngine.Instance.Zone).slice(0, 7);
 }
 
 function isRecognitionEntry(je: mjBizAppsAccountingJournalEntryEntity): boolean {
@@ -321,38 +329,48 @@ function selectActiveEntries(
     return entries.some(isRecognitionEntry) ? entries.filter(isRecognitionEntry) : entries;
 }
 
-function collectDates(entries: mjBizAppsAccountingJournalEntryEntity[]): Date[] {
-    const dates: Date[] = [];
+function collectMonthKeys(entries: mjBizAppsAccountingJournalEntryEntity[]): string[] {
+    const keys: string[] = [];
     for (const je of entries) {
-        const dateVal = je.EffectiveDate || je.__mj_CreatedAt;
-        if (dateVal) {
-            dates.push(new Date(dateVal));
-        }
+        const key = entryMonthKey(je);
+        if (key !== null) keys.push(key);
     }
-    return dates;
+    return keys;
 }
 
-function buildMonthHeaders(dates: Date[]): MonthHeader[] {
-    const now = new Date();
-    const sortedDates = dates.length > 0 ? [...dates].sort((a, b) => a.getTime() - b.getTime()) : [now];
-    const minDate = sortedDates[0];
-    const maxDate = sortedDates[sortedDates.length - 1];
-    const startMonthDate = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
-    const endMonthDate = new Date(maxDate.getFullYear(), maxDate.getMonth(), 1);
-    let totalMonths =
-        (endMonthDate.getFullYear() - startMonthDate.getFullYear()) * 12 +
-        (endMonthDate.getMonth() - startMonthDate.getMonth()) +
-        1;
-    if (totalMonths < 12) totalMonths = 12;
+/** A `YYYY-MM` key as a count of months, so ranges are integer arithmetic with no Date involved. */
+function monthIndex(key: string): number {
+    const [y, m] = key.split('-');
+    return Number(y) * 12 + (Number(m) - 1);
+}
+
+function monthKeyFromIndex(index: number): string {
+    const y = Math.floor(index / 12);
+    const m = (index % 12) + 1;
+    return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}`;
+}
+
+/** "Jan" for "2026-01". Formatted in UTC from UTC midnight, so the machine zone cannot move the month. */
+function monthShort(key: string): string {
+    const [y, m] = key.split('-');
+    return new Date(Date.UTC(Number(y), Number(m) - 1, 1)).toLocaleDateString('en-US', {
+        month: 'short',
+        timeZone: 'UTC',
+    });
+}
+
+function buildMonthHeaders(monthKeys: string[], todayKey: string): MonthHeader[] {
+    // Fixed-width `YYYY-MM` keys sort lexically in chronological order.
+    const sortedKeys = monthKeys.length > 0 ? [...monthKeys].sort() : [todayKey];
+    const startIndex = monthIndex(sortedKeys[0]);
+    const endIndex = monthIndex(sortedKeys[sortedKeys.length - 1]);
+    const totalMonths = Math.max(12, endIndex - startIndex + 1);
 
     const headers: MonthHeader[] = [];
     for (let i = 0; i < totalMonths; i++) {
-        const d = new Date(startMonthDate.getFullYear(), startMonthDate.getMonth() + i, 1);
-        const y = d.getFullYear();
-        const m = d.getMonth() + 1;
-        const key = `${y}-${String(m).padStart(2, '0')}`;
-        const label = d.toLocaleDateString('en-US', { month: 'short' }) + ` '${String(y).slice(2)}`;
-        headers.push({ Key: key, Label: label, Year: String(y) });
+        const key = monthKeyFromIndex(startIndex + i);
+        const year = key.slice(0, 4);
+        headers.push({ Key: key, Label: `${monthShort(key)} '${year.slice(2)}`, Year: year });
     }
     return headers;
 }
