@@ -52,9 +52,10 @@ const FILE_ENTITY = 'Files'; // __mj.File
 /**
  * The legal JE status graph (plan §7 + the DB triggers' sanctioned carve-outs):
  *   Pending → Batched (the batch build's lock) · Batched → GLPosted (the batch DISPATCH — see the
- *   owning-batch check in ValidateAsync) · Batched → Pending (the reversible preliminary unlock the
- *   immutability trigger sanctions: JournalEntryBatchID cleared while the owning batch is still
- *   Pending — the batch-side condition stays DB-enforced, 50004/50005) · GLPosted is terminal.
+ *   owning-batch check in ValidateAsync) · Batched → Pending (the reversible unlock the immutability
+ *   trigger sanctions: JournalEntryBatchID cleared while the owning batch is Pending or Cancelled —
+ *   the batch-side condition stays DB-enforced, 50004/50005; an Approved or Failed batch reaches
+ *   Cancelled only through JournalEntryBatchEntityServer.Cancel, #183) · GLPosted is terminal.
  * The DB triggers freeze a LOCKED row but do not police a Pending row's transitions at all — without
  * this graph a direct client save could jump Pending→GLPosted with forged GLPostedAt/GLReferenceID
  * and the entry would look ERP-posted without ever being batched, approved, or dispatched.
@@ -234,7 +235,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
         if (!(JE_LEGAL_TRANSITIONS[oldStatus] ?? []).includes(this.Status)) {
           fail(`Illegal journal entry status transition '${oldStatus}' → '${this.Status}'. Legal from '${oldStatus}': ${(JE_LEGAL_TRANSITIONS[oldStatus] ?? []).filter(s => s !== oldStatus).join(', ') || '(terminal)'}.`);
         } else if (oldStatus === 'Batched' && this.Status === 'Pending' && this.JournalEntryBatchID) {
-          fail(`Batched→Pending is only the reversible unlock of an unapproved batch — JournalEntryBatchID must be cleared in the same save.`);
+          fail(`Batched→Pending is only the reversible unlock of a Pending or Cancelled batch — JournalEntryBatchID must be cleared in the same save.`);
         }
       }
     }

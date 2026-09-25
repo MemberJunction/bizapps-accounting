@@ -120,9 +120,10 @@ balance **overall and per company** (AM-4), and writes atomically. Hooks on the 
   `Failed` batch may already be in the ERP, so a retry requires the operator's confirmation that the
   batch number has not posted there (#182). Its content is frozen like an Approved batch's, and the
   dispatch check compares it with the `ApprovedContentHash` seal written at approval (#183). A
-  `Failed` or `Approved` batch whose content is wrong is cancelled instead (`Accounting.CancelJournalEntryBatch`,
-  reason required, plus the ERP confirmation from `Failed`), which releases its entries to the next
-  build. A
+  `Failed` or `Approved` batch whose content is wrong is cancelled instead (`Accounting.CancelJournalEntryBatch`:
+  the company's CFO or the batch's approver only, reason required and written to the approval Task,
+  plus the persisted ERP confirmation from `Failed`), which releases its entries to the next build.
+  A
   `Posted` batch whose member `Batched → GLPosted` flip stopped partway is finished by
   `resumeJournalEntryBatchPosting` (`Accounting.ResumeJournalEntryBatchPosting`), which makes no
   ERP call. `findStrandedJournalEntries` reports the entries both states hold; the scheduled

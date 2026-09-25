@@ -45,7 +45,8 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
       'ID', 'JournalEntryBatchNumber', 'CompanyID', 'PostingDate', 'SummaryJournalEntryID', 'TargetSystem',
       'BatchedAt', 'BatchedByUserID', 'Status', 'TotalEntries', 'TotalDebits', 'TotalCredits',
       'ApprovedAt', 'ApprovedByUserID', 'ArchiveReason', 'ArchivedAt', 'ArchivedByUserID',
-      'CancelReason', 'CancelledAt', 'CancelledByUserID', 'ApprovedContentHash',
+      'CancelReason', 'CancelledAt', 'CancelledByUserID', 'ApprovedContentHash', 'SentAt',
+      'ERPNotPostedConfirmedAt', 'ERPNotPostedConfirmedByUserID',
     ]);
     Metadata.Provider = {
       Entities: [batchInfo],
@@ -147,6 +148,22 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
     asSaved(from);
     batch.Status = 'Cancelled';
     expect(transitionErrors(batch.Validate())).toEqual([]);
+  });
+
+  it.each(['Approved', 'Failed'])('a plain save of %s → Cancelled is refused — only Cancel() takes that edge', (from) => {
+    asSaved(from, { ApprovedAt: new Date(), ApprovedByUserID: 'U1' });
+    batch.SetMany({ CancelReason: 'typed on the form', CancelledAt: new Date(), CancelledByUserID: 'U1' }, true);
+    batch.Status = 'Cancelled';
+    const result = batch.Validate();
+    expect(result.Success).toBe(false);
+    expect(result.Errors.some(e => getErrorText(e).includes('cancelled only through Cancel'))).toBe(true);
+  });
+
+  it('a batch cancelled after it was sent, without the ERP-check attestation, fails validation', () => {
+    asSaved('Failed', { ApprovedAt: new Date(), ApprovedByUserID: 'U1', SentAt: new Date() });
+    batch.SetMany({ CancelReason: 'Wrong period', CancelledAt: new Date(), CancelledByUserID: 'U1' }, true);
+    batch.Status = 'Cancelled';
+    expect(batch.Validate().Errors.some(e => getErrorText(e).includes('ERPNotPostedConfirmedAt'))).toBe(true);
   });
 
   it('Sent → Cancelled is rejected — a sent batch may still be posting in the ERP', () => {
@@ -281,11 +298,31 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
       expect(teardown).not.toHaveBeenCalled();
     });
 
-    it('Cancel() takes a Failed batch with a reason and the ERP confirmation', async () => {
-      asSaved('Failed', { SummaryJournalEntryID: 'SUM1' });
-      await batch.Cancel(undefined, { reason: 'Wrong period', confirmNotAlreadyPostedInERP: true });
+    it('Cancel() takes a Failed batch with a reason and the ERP confirmation, and persists the attestation', async () => {
+      asSaved('Failed', { SummaryJournalEntryID: 'SUM1', SentAt: new Date('2026-09-30T12:00:00Z') });
+      await batch.Cancel({ ID: 'U-CFO' } as never, { reason: 'Wrong period', confirmNotAlreadyPostedInERP: true });
       expect(batch.Status).toBe('Cancelled');
-      expect(teardown).toHaveBeenCalledWith('SUM1', null);
+      expect(teardown).toHaveBeenCalledWith('SUM1', { ID: 'U-CFO' });
+      expect(batch.ERPNotPostedConfirmedByUserID).toBe('U-CFO');
+      expect(batch.ERPNotPostedConfirmedAt).toBeInstanceOf(Date);
+    });
+
+    it('Cancel() runs onCancelled inside the transaction, after the release', async () => {
+      const order: string[] = [];
+      teardown.mockImplementation(async () => { order.push('release'); });
+      asSaved('Approved', { SummaryJournalEntryID: 'SUM1' });
+      await batch.Cancel(undefined, { reason: 'Wrong period', onCancelled: async () => { order.push('onCancelled'); } });
+      expect(order).toEqual(['release', 'onCancelled']);
+    });
+
+    it('a failed Cancel() rolls back and reloads the instance instead of claiming Cancelled', async () => {
+      const load = vi.fn(async () => true);
+      batch.Load = load as never;
+      teardown.mockRejectedValue(new Error('member save failed'));
+      asSaved('Approved', { SummaryJournalEntryID: 'SUM1' });
+
+      await expect(batch.Cancel(undefined, { reason: 'Wrong period' })).rejects.toThrow('member save failed');
+      expect(load).toHaveBeenCalledWith('B1');
     });
 
     it('Cancel() needs no ERP confirmation from Approved — an Approved batch was never sent', async () => {

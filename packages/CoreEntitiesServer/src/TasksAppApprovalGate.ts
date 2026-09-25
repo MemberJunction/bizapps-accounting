@@ -16,6 +16,9 @@
  *   recordDecision(batchId, outcome, decidedByPersonId, notes): resolve the batch's Task and record
  *     the decision via TaskOrchestrationService. The shared entry point for BOTH the in-app approve
  *     control and the Tasks inbox.
+ *   assertMayCancelApproved(batchId) / recordCancellation(batchId, reason) (#183): only the company's
+ *     CFO or the batch's recorded approver may cancel a batch past approval, and the cancel is
+ *     written to the approval Task as a comment, so the approver's record shows what became of it.
  *
  * PROVIDER: the gate is a plain helper with no provider of its own, so the correct
  * IMetadataProvider is INJECTED at construction — required, no global fallback (the system
@@ -24,8 +27,9 @@
  *
  * CONNECTS TO:
  *   READS:  Journal Entry Batches · Accounting Company Profiles · Task Links · Task Decisions
- *           · Task Decision Outcomes · Task Types
+ *           · Task Decision Outcomes · Task Types · People
  *   WRITES (via TaskOrchestrationService): Tasks · Task Links · Task Assignments · Task Decisions
+ *   WRITES (directly): Task Comments (a batch cancelled past approval)
  *   ENTITY (gated): 'MJ_BizApps_Accounting: Journal Entry Batches'
  *   DOC:    JournalEntryBatchEngine.ts (JournalEntryBatchApprovalGate seam) · plan §S1 (CFO-approval workflow gate)
  */
@@ -38,6 +42,7 @@ import {
   type TaskDecisionOutcomeCode,
 } from '@mj-biz-apps/tasks-core';
 import type {
+  mjBizAppsTasksTaskCommentEntity,
   mjBizAppsTasksTaskEntity,
   mjBizAppsTasksTaskTypeEntity,
   mjBizAppsTasksTaskLinkEntity,
@@ -48,8 +53,8 @@ import type {
   mjBizAppsAccountingJournalEntryBatchEntity,
   mjBizAppsAccountingAccountingCompanyProfileEntity,
 } from '@mj-biz-apps/accounting-entities';
-import type { JournalEntryBatchApprovalGate } from './JournalEntryBatchEngine.js';
-import { requireSqlGuid } from './SqlGuards.js';
+import type { JournalEntryBatchApprovalGate, JournalEntryBatchCancelGate } from './JournalEntryBatchEngine.js';
+import { requireSqlGuid, sqlGuidLiteral } from './SqlGuards.js';
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
@@ -57,6 +62,8 @@ const TASK_TYPE_ENTITY = 'MJ_BizApps_Tasks: Task Types';
 const TASK_LINK_ENTITY = 'MJ_BizApps_Tasks: Task Links';
 const TASK_DECISION_ENTITY = 'MJ_BizApps_Tasks: Task Decisions';
 const TASK_DECISION_OUTCOME_ENTITY = 'MJ_BizApps_Tasks: Task Decision Outcomes';
+const TASK_COMMENT_ENTITY = 'MJ_BizApps_Tasks: Task Comments';
+const PERSON_ENTITY = 'MJ_BizApps_Common: People';
 
 /** The seeded generic approval TaskType that CreateApprovalRequest expects. */
 const APPROVAL_REQUEST_TASK_TYPE = 'Approval Request';
@@ -75,7 +82,7 @@ const USER_ENTITY = 'MJ: Users';
  * Real CFO-approval gate, backed by bizapps-tasks. Stateless — one instance can serve every batch.
  * The correct IMetadataProvider is injected at construction (required; no global fallback).
  */
-export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate {
+export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, JournalEntryBatchCancelGate {
   private readonly orchestration = new TaskOrchestrationService();
 
   constructor(private readonly provider: IMetadataProvider) {
@@ -175,7 +182,71 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate {
     await this.orchestration.RecordDecision({ TaskID: task.ID, OutcomeCode: outcome, DecidedByPersonID: decidedByPersonId, Notes: notes }, contextUser);
   }
 
+  /**
+   * Who may cancel a batch past approval (#183): the company's configured CFO, or the user recorded
+   * as the batch's approver. Cancelling discards a summary that one of them signed and returns its
+   * entries to the next build, so it is theirs to decide — before this, the only cancel path was a
+   * CFO rejection through recordDecision. Unlike recordDecision this does not hard-fail when no CFO
+   * is configured, because the recorded approver is enough.
+   */
+  async assertMayCancelApproved(batchId: string, contextUser: UserInfo): Promise<void> {
+    const batch = await this.loadBatch(batchId, contextUser);
+    const cfoUserId = await this.readCFOUserIdForCompany(batch.CompanyID, contextUser);
+    const allowed = [cfoUserId, batch.ApprovedByUserID].filter((id): id is string => !!id);
+    if (allowed.some(id => UUIDsEqual(id, contextUser.ID))) return;
+    throw new Error(
+      `Batch ${batch.JournalEntryBatchNumber ?? batchId}: only the company's configured approver ` +
+      `(AccountingCompanyProfile.ApprovalCFOUserID) or the user who approved this batch may cancel it after approval.`,
+    );
+  }
+
+  /**
+   * Record a cancel past approval on the batch's approval Task, as a comment by the cancelling user's
+   * Person. The Task keeps its approved decision — the comment is what tells the approver the batch
+   * they signed was cancelled, and why. A batch with no approval Task (approved without the tasks
+   * workflow) has nothing to annotate. Refuses when the user has no linked Person, because
+   * TaskComment requires one; the caller runs this inside the cancel's transaction, so the cancel
+   * rolls back with it rather than going unrecorded.
+   */
+  async recordCancellation(batchId: string, reason: string, contextUser: UserInfo): Promise<void> {
+    const task = await this.resolveBatchTask(batchId, contextUser);
+    if (!task) return;
+    const batch = await this.loadBatch(batchId, contextUser);
+    const personId = await this.resolvePersonIdForUser(contextUser);
+    if (!personId) {
+      throw new Error(
+        `Batch ${batch.JournalEntryBatchNumber ?? batchId}: the cancel cannot be recorded on its approval Task because user ` +
+        `${contextUser.Email ?? contextUser.ID} has no linked Person (MJ_BizApps_Common: People.LinkedUserID).`,
+      );
+    }
+    const comment = await this.provider.GetEntityObject<mjBizAppsTasksTaskCommentEntity>(TASK_COMMENT_ENTITY, contextUser);
+    comment.NewRecord();
+    comment.TaskID = task.ID;
+    comment.PersonID = personId;
+    comment.Content = `Journal entry batch ${batch.JournalEntryBatchNumber} was cancelled after approval (it was ${batch.Status}). Its journal entries return to the next build. Reason: ${reason.trim()}`;
+    if (!(await comment.Save())) {
+      throw new Error(`Batch ${batch.JournalEntryBatchNumber ?? batchId}: recording the cancel on its approval Task failed: ${comment.LatestResult?.CompleteMessage ?? 'unknown'}`);
+    }
+  }
+
   // ─── helpers ───────────────────────────────────────────────────────────────
+
+  /** The company's CFO User, or null when none is configured (no hard-fail — see assertMayCancelApproved). */
+  private async readCFOUserIdForCompany(companyId: string, contextUser: UserInfo): Promise<string | null> {
+    const acp = await this.provider.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, contextUser);
+    if (!(await acp.Load(companyId))) return null;
+    return acp.ApprovalCFOUserID ?? null;
+  }
+
+  /** The bizapps-common Person linked to this MJ user (Person.LinkedUserID), or null. */
+  private async resolvePersonIdForUser(contextUser: UserInfo): Promise<string | null> {
+    const res = await this.viewProvider.RunView<{ ID: string }>(
+      { EntityName: PERSON_ENTITY, ExtraFilter: `LinkedUserID=${sqlGuidLiteral(contextUser.ID, 'TasksAppApprovalGate.resolvePersonIdForUser')}`, Fields: ['ID'], MaxRows: 1, ResultType: 'simple', BypassCache: true },
+      contextUser,
+    );
+    if (!res.Success) throw new Error(`TasksAppApprovalGate: Person lookup failed: ${res.ErrorMessage ?? 'unknown'}`);
+    return res.Results?.[0]?.ID ?? null;
+  }
 
   private async loadBatch(batchId: string, contextUser: UserInfo): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
     const batch = await this.provider.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);

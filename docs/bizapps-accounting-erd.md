@@ -228,7 +228,7 @@ erDiagram
     Company ||--o{ JournalEntryBatch : "single-company (D7)"
     JournalEntryBatch ||--o{ JournalEntry : "JournalEntryBatchID (members + summary, by IsJournalEntryBatchSummary type)"
     JournalEntryBatch |o--o| JournalEntry : "SummaryJournalEntryID"
-    User ||--o{ JournalEntryBatch : "BatchedBy / ApprovedBy / ArchivedBy / CancelledBy"
+    User ||--o{ JournalEntryBatch : "BatchedBy / ApprovedBy / ArchivedBy / CancelledBy / ERPNotPostedConfirmedBy"
     Company ||--o{ JournalEntrySequence : "per-company per-FY numbering"
     %% ---- tax ----
     TaxAuthority ||--o{ TaxJurisdiction : ""
@@ -401,6 +401,8 @@ erDiagram
         string CancelReason
         datetimeoffset CancelledAt
         uuid CancelledByUserID FK
+        datetimeoffset ERPNotPostedConfirmedAt
+        uuid ERPNotPostedConfirmedByUserID FK
         int TotalEntries
         decimal TotalDebits
         decimal TotalCredits
@@ -730,7 +732,7 @@ erDiagram
     Company ||--o{ JournalEntryBatch : "CompanyID NOT NULL - single-company (D7)"
     JournalEntryBatch ||--o{ JournalEntry : "JournalEntryBatchID - members AND the summary (discriminated by the type IsJournalEntryBatchSummary flag)"
     JournalEntryBatch |o--o| JournalEntry : "SummaryJournalEntryID - coherence trigger 50023"
-    User ||--o{ JournalEntryBatch : "BatchedBy / ApprovedBy / ArchivedBy / CancelledBy"
+    User ||--o{ JournalEntryBatch : "BatchedBy / ApprovedBy / ArchivedBy / CancelledBy / ERPNotPostedConfirmedBy"
 
     JournalEntryBatch {
         uuid ID PK
@@ -751,6 +753,8 @@ erDiagram
         string CancelReason "nullable - required when cancelled after approval (CK_JournalEntryBatch_CancelAudit)"
         datetimeoffset CancelledAt "nullable"
         uuid CancelledByUserID FK "nullable"
+        datetimeoffset ERPNotPostedConfirmedAt "nullable - required when a batch that was sent is cancelled (CK_JournalEntryBatch_CancelERPCheck)"
+        uuid ERPNotPostedConfirmedByUserID FK "nullable"
         int TotalEntries "control totals"
         decimal TotalDebits
         decimal TotalCredits
@@ -768,8 +772,10 @@ erDiagram
 the batch stays approved, `GLPosted` at post. Batch content is frozen (trg_JournalEntryBatch_Immutability)
 from `Approved` on, `Failed` included. `Cancelled` — from `Pending`, `Approved` or `Failed` —
 releases the members: the unlock is sanctioned while the owning batch is `Pending` or `Cancelled`,
-and an `Approved`/`Failed` batch clears its summary pointer only in the update that cancels it
-(#183). `Archived` keeps them locked for good. Summary is excluded from netting/count/sweep via its type's `IsJournalEntryBatchSummary` flag (the
+and an `Approved`/`Failed` batch becomes `Cancelled` only with its summary pointer cleared in the
+same update (#183). `Posted`, `Cancelled` and `Archived` are terminal, and a `Cancelled` batch's
+content, approval pair and cancel audit are frozen (50031 / 50009). `Archived` keeps the members
+locked for good. Summary is excluded from netting/count/sweep via its type's `IsJournalEntryBatchSummary` flag (the
 discriminator); footing-trigger successor = pending Amith.
 
 ---

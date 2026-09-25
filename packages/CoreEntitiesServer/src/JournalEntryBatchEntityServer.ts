@@ -25,6 +25,8 @@
  *   run behind Remote Operations per the engine+transaction ruling (Marcelo 2026-07-21).
  */
 
+import { createHash } from 'node:crypto';
+
 import { BaseEntity, DatabaseProviderBase, EntitySaveOptions, IMetadataProvider, IRunViewProvider, LogStatus, UserInfo, ValidationErrorInfo, ValidationResult } from '@memberjunction/core';
 import { RegisterClass } from '@memberjunction/global';
 import {
@@ -35,6 +37,7 @@ import {
 import { ToCalendarDay } from '@mj-biz-apps/common-entities';
 
 import { getNextJournalEntryBatchNumber } from './SequenceService.js';
+import { sqlGuidLiteral } from './SqlGuards.js';
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
@@ -85,6 +88,13 @@ const ARCHIVABLE_FROM = legalFrom('Archived');
 const CANCELLABLE_FROM = legalFrom('Cancelled');
 
 /**
+ * The `→ Cancelled` edges that only {@link JournalEntryBatchEntityServer.Cancel} may take. Cancelling
+ * past approval must run the teardown, the ERP check and the approver's authorization together; a
+ * plain save that sets Status would skip all three.
+ */
+const CANCEL_ONLY_FROM: ReadonlyArray<string> = ['Approved', 'Failed'];
+
+/**
  * Options for {@link JournalEntryBatchEntityServer.Cancel}. Both matter only once the batch has
  * been approved; a Pending cancel (a CFO rejection) needs neither.
  */
@@ -93,10 +103,16 @@ export interface JournalEntryBatchCancelOptions {
   reason?: string | null;
   /**
    * Required `true` to cancel a Failed batch: the operator has checked the ERP and this batch's
-   * number has NOT posted there. Cancel releases the members, the next build batches them again,
-   * and a journal that did post would then post twice.
+   * number has NOT posted there. Cancel releases the members, the next build batches them again
+   * under a NEW document number, and a journal that did post would then post twice. The attestation
+   * is persisted (ERPNotPostedConfirmedAt / ERPNotPostedConfirmedByUserID).
    */
   confirmNotAlreadyPostedInERP?: boolean;
+  /**
+   * Runs inside Cancel's transaction, after the members are released — for work that must commit
+   * or roll back with the cancel, such as recording it on the batch's approval Task.
+   */
+  onCancelled?: () => Promise<void>;
 }
 
 /** One summary line, as the footing check and the seal read it. */
@@ -141,6 +157,13 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
    * describes THIS in-memory instance's provenance, not the row.
    */
   private _builtByBatchingProcess = false;
+
+  /**
+   * Set only while {@link Cancel} is saving the cancel update. Transient, like
+   * `_builtByBatchingProcess`: it is what lets the Approved/Failed → Cancelled edge through
+   * {@link Validate}, so the generic form or the GraphQL update cannot take that edge on its own.
+   */
+  private _cancelling = false;
 
   /**
    * Declare that the batching process is creating this batch (golive #193).
@@ -232,6 +255,12 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
       fail(`A batch cancelled after approval must carry a non-blank CancelReason plus CancelledAt and CancelledByUserID.`);
     }
 
+    // ERP-check attestation, once the batch had been sent: it may already be in the ERP, and cancelling
+    // releases its entries to post again. Enforced at the DB too (CK_JournalEntryBatch_CancelERPCheck).
+    if (this.Status === 'Cancelled' && this.SentAt && (!this.ERPNotPostedConfirmedAt || !this.ERPNotPostedConfirmedByUserID)) {
+      fail(`A batch cancelled after it was sent must carry ERPNotPostedConfirmedAt and ERPNotPostedConfirmedByUserID — the attestation that it had not posted in the ERP.`);
+    }
+
     return result;
   }
 
@@ -253,12 +282,24 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     return problems;
   }
 
-  /** A SAVED batch: the status change, if any, is an edge of LEGAL_TRANSITIONS. */
+  /**
+   * A SAVED batch: the status change, if any, is an edge of LEGAL_TRANSITIONS — and a cancel past
+   * approval comes through {@link Cancel}, never a plain save.
+   */
   private transitionProblems(): string[] {
     const oldStatus = this.loadedStatus;
-    if (!oldStatus || this.Status === oldStatus || (LEGAL_TRANSITIONS[oldStatus] ?? []).includes(this.Status)) return [];
-    const legal = (LEGAL_TRANSITIONS[oldStatus] ?? []).filter(s => s !== oldStatus).join(', ') || '(terminal)';
-    return [`Illegal batch status transition '${oldStatus}' → '${this.Status}'. Legal from '${oldStatus}': ${legal}.`];
+    if (!oldStatus || this.Status === oldStatus) return [];
+    if (!(LEGAL_TRANSITIONS[oldStatus] ?? []).includes(this.Status)) {
+      const legal = (LEGAL_TRANSITIONS[oldStatus] ?? []).filter(s => s !== oldStatus).join(', ') || '(terminal)';
+      return [`Illegal batch status transition '${oldStatus}' → '${this.Status}'. Legal from '${oldStatus}': ${legal}.`];
+    }
+    if (this.Status === 'Cancelled' && CANCEL_ONLY_FROM.includes(oldStatus) && !this._cancelling) {
+      return [
+        `A ${oldStatus} batch is cancelled only through Cancel (the Cancel action), which releases its journal entries, ` +
+          `deletes its summary and records who may cancel and why — setting Status directly would skip all of that.`,
+      ];
+    }
+    return [];
   }
 
   /**
@@ -298,7 +339,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
       ...this.footingProblems(content.lines),
       ...this.memberCountProblems(content.memberIds),
       ...this.summaryHeaderProblems(content.summary),
-      ...(await this.sealProblems(content)),
+      ...this.sealProblems(content),
     ];
   }
 
@@ -337,13 +378,13 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
    * approval (the seal is being written by it), and for a batch approved before the seal existed,
    * which has none to compare against — the other checks still run for it.
    */
-  private async sealProblems(content: ApprovedContent): Promise<string[]> {
+  private sealProblems(content: ApprovedContent): string[] {
     if (this.isApproving || this.Status === 'Pending') return [];
     if (!this.ApprovedContentHash) {
       LogStatus(`JournalEntryBatchEntityServer: batch ${this.JournalEntryBatchNumber} was approved before the approved-content seal existed; checking control totals, member count and summary header only.`);
       return [];
     }
-    if ((await this.hashContent(content)) === this.ApprovedContentHash) return [];
+    if (this.hashContent(content) === this.ApprovedContentHash) return [];
     return [`Batch ${this.JournalEntryBatchNumber} no longer matches the content that was approved — its header, summary entry, summary lines or member set changed after approval. Cancel it and build a new batch.`];
   }
 
@@ -352,19 +393,23 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
    * summary entry's company and date, every summary line with its dimension tags, and the member
    * set. Written on Pending→Approved by {@link Save}. Null when there is no summary to seal — the
    * approval's coherence check then refuses the save.
+   *
+   * Lines are sealed by GLAccountID, not by the ERP account number the poster sends. That is enough
+   * while a GL account's ERP mapping cannot change under a batch; if it becomes editable, the number
+   * sent should be sealed too.
    */
   public async ComputeApprovedContentHash(contextUser?: UserInfo): Promise<string | null> {
     const content = await this.loadApprovedContent(contextUser);
-    return content ? await this.hashContent(content) : null;
+    return content ? this.hashContent(content) : null;
   }
 
   /**
-   * A canonical serialisation of the approved content, then its hex SHA-256 (Web Crypto, which Node
-   * provides globally). Arrays with a fixed field order (not objects) and sorted collections,
-   * lower-cased IDs, two-decimal amounts and calendar days, so the same content always yields the
-   * same string whatever order the database returned it in.
+   * A canonical serialisation of the approved content, then its hex SHA-256. Arrays with a fixed
+   * field order (not objects) and sorted collections (ordinal, not locale, comparison), lower-cased
+   * IDs, two-decimal amounts and calendar days, so the same content always yields the same string
+   * whatever order the database returned it in.
    */
-  private async hashContent(content: ApprovedContent): Promise<string> {
+  private hashContent(content: ApprovedContent): string {
     const tagsByLine = new Map<string, string[]>();
     for (const d of content.dimensions) {
       const key = lowerId(d.JournalEntryLineID) ?? '';
@@ -372,15 +417,14 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     }
     const lines = content.lines
       .map(l => [lowerId(l.ID) ?? '', lowerId(l.GLAccountID), money(l.DebitAmount), money(l.CreditAmount), (tagsByLine.get(lowerId(l.ID) ?? '') ?? []).sort()] as const)
-      .sort((a, b) => a[0].localeCompare(b[0]));
+      .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
     const canonical = JSON.stringify([
       [lowerId(this.ID), lowerId(this.CompanyID), ToCalendarDay(this.PostingDate), lowerId(this.SummaryJournalEntryID), this.TargetSystem, this.TotalEntries, money(this.TotalDebits), money(this.TotalCredits)],
       [lowerId(content.summary.ID), lowerId(content.summary.CompanyID), ToCalendarDay(content.summary.EffectiveDate)],
       lines,
       [...content.memberIds].sort(),
     ]);
-    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical));
-    return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+    return createHash('sha256').update(canonical, 'utf8').digest('hex');
   }
 
   /** Read everything the approver signs, fresh from the database. Null when there is no summary entry. */
@@ -398,27 +442,24 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     return { summary, lines, dimensions, memberIds };
   }
 
+  /** The summary's lines, then their dimension tags filtered by the line IDs just read (no subquery, so it runs on any provider). */
   private async loadSummaryLines(summaryId: string, user: UserInfo | undefined): Promise<{ lines: SummaryLineContent[]; dimensions: SummaryLineDimensionContent[] }> {
     const rv = this.ProviderToUse as unknown as IRunViewProvider;
-    const [lineRes, dimRes] = await Promise.all([
-      rv.RunView<SummaryLineContent>(
-        { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID='${summaryId}'`, Fields: ['ID', 'GLAccountID', 'DebitAmount', 'CreditAmount'], ResultType: 'simple', BypassCache: true },
-        user,
-      ),
-      rv.RunView<SummaryLineDimensionContent>(
-        {
-          EntityName: JELD_ENTITY,
-          ExtraFilter: `JournalEntryLineID IN (SELECT ID FROM __mj_BizAppsAccounting.JournalEntryLine WHERE JournalEntryID='${summaryId}')`,
-          Fields: ['JournalEntryLineID', 'DimensionID', 'DimensionValueID'],
-          ResultType: 'simple',
-          BypassCache: true,
-        },
-        user,
-      ),
-    ]);
+    const lineRes = await rv.RunView<SummaryLineContent>(
+      { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID=${sqlGuidLiteral(summaryId, 'summary journal entry')}`, Fields: ['ID', 'GLAccountID', 'DebitAmount', 'CreditAmount'], ResultType: 'simple', BypassCache: true },
+      user,
+    );
     if (!lineRes.Success) throw new Error(`JournalEntryBatchEntityServer: could not load summary lines: ${lineRes.ErrorMessage ?? 'unknown'}`);
+    const lines = lineRes.Results ?? [];
+    if (lines.length === 0) return { lines, dimensions: [] };
+
+    const lineIds = lines.map(l => sqlGuidLiteral(l.ID, 'summary journal entry line')).join(', ');
+    const dimRes = await rv.RunView<SummaryLineDimensionContent>(
+      { EntityName: JELD_ENTITY, ExtraFilter: `JournalEntryLineID IN (${lineIds})`, Fields: ['JournalEntryLineID', 'DimensionID', 'DimensionValueID'], ResultType: 'simple', BypassCache: true },
+      user,
+    );
     if (!dimRes.Success) throw new Error(`JournalEntryBatchEntityServer: could not load summary line dimensions: ${dimRes.ErrorMessage ?? 'unknown'}`);
-    return { lines: lineRes.Results ?? [], dimensions: dimRes.Results ?? [] };
+    return { lines, dimensions: dimRes.Results ?? [] };
   }
 
   // ─── owned collections (read-only hydration — JE.Lines-style) ─────────────
@@ -458,7 +499,10 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
    *
    * From Approved or Failed a reason is required, since the cancel discards a summary the approver
    * signed. From Failed the caller must also confirm the batch has not posted in the ERP (see
-   * {@link JournalEntryBatchCancelOptions.confirmNotAlreadyPostedInERP}).
+   * {@link JournalEntryBatchCancelOptions.confirmNotAlreadyPostedInERP}). WHO may cancel past approval
+   * is the engine's check (cancelJournalEntryBatch), which knows the approver; this method is the
+   * mechanics. If anything fails the transaction rolls back and the instance is reloaded, so it never
+   * claims a Cancelled state the database does not hold.
    */
   public async Cancel(contextUser?: UserInfo, options: JournalEntryBatchCancelOptions = {}): Promise<boolean> {
     if (!this.IsSaved) throw new Error('JournalEntryBatchEntityServer.Cancel: the batch must be saved.');
@@ -468,14 +512,26 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     const dbProvider = this.ProviderToUse as unknown as DatabaseProviderBase;
     await dbProvider.BeginTransaction();
     try {
-      await this.markCancelled(options.reason, user);
+      await this.markCancelled(options, user);
       await this.ReleaseMembersAndDeleteSummary(summaryId, user);
+      if (options.onCancelled) await options.onCancelled();
       await dbProvider.CommitTransaction();
       return true;
     } catch (e) {
       try { await dbProvider.RollbackTransaction(); } catch { /* rollback best-effort */ }
+      await this.reloadAfterRollback();
       throw e;
     }
+  }
+
+  /** Put the instance back to what the database holds after a rolled-back Cancel. Best-effort: the original error is what the caller needs. */
+  private async reloadAfterRollback(): Promise<void> {
+    try {
+      await this.Load(this.ID);
+    } catch {
+      /* the rollback is authoritative; a failed reload leaves a stale instance, never a wrong database */
+    }
+    this._summary = undefined;
   }
 
   private assertCancellable(options: JournalEntryBatchCancelOptions): void {
@@ -494,15 +550,28 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     }
   }
 
-  /** The single update that commits the batch to cancelling: status, cleared summary pointer and the audit triple. */
-  private async markCancelled(reason: string | null | undefined, user: UserInfo | undefined): Promise<void> {
+  /**
+   * The single update that commits the batch to cancelling: status, cleared summary pointer, the
+   * audit triple and — for a batch that had been sent — the ERP-check attestation.
+   */
+  private async markCancelled(options: JournalEntryBatchCancelOptions, user: UserInfo | undefined): Promise<void> {
     const fromStatus = this.Status;
+    const now = new Date();
     this.SummaryJournalEntryID = null;
-    this.CancelReason = reason?.trim() || null;
-    this.CancelledAt = new Date();
+    this.CancelReason = options.reason?.trim() || null;
+    this.CancelledAt = now;
     this.CancelledByUserID = user?.ID ?? null;
+    if (this.SentAt && options.confirmNotAlreadyPostedInERP === true) {
+      this.ERPNotPostedConfirmedAt = now;
+      this.ERPNotPostedConfirmedByUserID = user?.ID ?? null;
+    }
     this.Status = 'Cancelled';
-    if (!(await this.Save())) throw new Error(`Cancel: ${fromStatus}→Cancelled failed: ${this.LatestResult?.CompleteMessage ?? 'unknown'}`);
+    this._cancelling = true;
+    try {
+      if (!(await this.Save())) throw new Error(`Cancel: ${fromStatus}→Cancelled failed: ${this.LatestResult?.CompleteMessage ?? 'unknown'}`);
+    } finally {
+      this._cancelling = false;
+    }
   }
 
   /**

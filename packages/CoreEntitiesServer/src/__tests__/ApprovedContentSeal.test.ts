@@ -16,6 +16,10 @@ import { JournalEntryBatchEntityServer } from '../JournalEntryBatchEntityServer.
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
 
+const SUM_ID = '5a5a5a5a-0000-4000-8000-000000000001';
+const L1_ID = '11111111-0000-4000-8000-00000000000a';
+const L2_ID = '22222222-0000-4000-8000-00000000000b';
+
 const DATE_FIELDS = new Set(['PostingDate', 'BatchedAt', 'ApprovedAt', 'ArchivedAt', 'CancelledAt']);
 const NUMBER_FIELDS = new Set(['TotalEntries', 'TotalDebits', 'TotalCredits']);
 
@@ -61,16 +65,16 @@ describe('JournalEntryBatchEntityServer — approved-content seal (#183)', () =>
     } as never;
 
     batch = new JournalEntryBatchEntityServer(info);
-    summary = { ID: 'SUM-1', CompanyID: 'CO-1', EffectiveDate: new Date('2026-09-30T00:00:00.000Z') };
+    summary = { ID: SUM_ID, CompanyID: 'CO-1', EffectiveDate: new Date('2026-09-30T00:00:00.000Z') };
     lines = [
-      { ID: 'L-1', GLAccountID: 'GL-AR', DebitAmount: 100, CreditAmount: null },
-      { ID: 'L-2', GLAccountID: 'GL-REV', DebitAmount: null, CreditAmount: 100 },
+      { ID: L1_ID, GLAccountID: 'GL-AR', DebitAmount: 100, CreditAmount: null },
+      { ID: L2_ID, GLAccountID: 'GL-REV', DebitAmount: null, CreditAmount: 100 },
     ];
-    tags = [{ JournalEntryLineID: 'L-2', DimensionID: 'DIM-DEPT', DimensionValueID: 'DV-EDU' }];
+    tags = [{ JournalEntryLineID: L2_ID, DimensionID: 'DIM-DEPT', DimensionValueID: 'DV-EDU' }];
     memberIds = ['JE-1', 'JE-2'];
 
     batch.LoadSummaryJournalEntry = vi.fn(async () => summary as never);
-    batch.LoadMembers = vi.fn(async () => [{ ID: 'SUM-1' }, ...memberIds.map(ID => ({ ID }))] as never);
+    batch.LoadMembers = vi.fn(async () => [{ ID: SUM_ID }, ...memberIds.map(ID => ({ ID }))] as never);
     Object.defineProperty(batch, 'ProviderToUse', {
       configurable: true,
       get: () => ({
@@ -83,7 +87,7 @@ describe('JournalEntryBatchEntityServer — approved-content seal (#183)', () =>
   const asSaved = (status: string, extra: Record<string, unknown> = {}) =>
     batch.SetMany({
       ID: 'B-1', JournalEntryBatchNumber: 'JEB-000001', Status: status, CompanyID: 'CO-1',
-      PostingDate: new Date('2026-09-30T00:00:00.000Z'), SummaryJournalEntryID: 'SUM-1', TargetSystem: 'BusinessCentral',
+      PostingDate: new Date('2026-09-30T00:00:00.000Z'), SummaryJournalEntryID: SUM_ID, TargetSystem: 'BusinessCentral',
       TotalEntries: 2, TotalDebits: 100, TotalCredits: 100, ApprovedAt: new Date(), ApprovedByUserID: 'U-1',
       ...extra,
     }, true, true);
@@ -117,7 +121,7 @@ describe('JournalEntryBatchEntityServer — approved-content seal (#183)', () =>
 
   it('a changed dimension tag — invisible to footing and member count — breaks the seal', async () => {
     await seal('Approved');
-    tags = [{ JournalEntryLineID: 'L-2', DimensionID: 'DIM-DEPT', DimensionValueID: 'DV-EVENTS' }];
+    tags = [{ JournalEntryLineID: L2_ID, DimensionID: 'DIM-DEPT', DimensionValueID: 'DV-EVENTS' }];
 
     const problems = await batch.CheckControlTotalCoherence();
     expect(problems).toHaveLength(1);
@@ -134,7 +138,8 @@ describe('JournalEntryBatchEntityServer — approved-content seal (#183)', () =>
   it('the hash ignores the order rows come back in and the case of their IDs', async () => {
     asSaved('Approved');
     const before = await batch.ComputeApprovedContentHash();
-    lines = [...lines].reverse().map(l => ({ ...l, ID: l.ID.toLowerCase(), GLAccountID: l.GLAccountID.toLowerCase() }));
+    lines = [...lines].reverse().map(l => ({ ...l, ID: l.ID.toUpperCase(), GLAccountID: l.GLAccountID.toLowerCase() }));
+    tags = tags.map(t => ({ ...t, JournalEntryLineID: t.JournalEntryLineID.toUpperCase() }));
     memberIds = [...memberIds].reverse();
     expect(await batch.ComputeApprovedContentHash()).toBe(before);
   });

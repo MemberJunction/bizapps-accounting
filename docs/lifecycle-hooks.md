@@ -132,14 +132,23 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   set — so it now means "unchanged since approval", not only "coherent right now". A batch approved
   before the seal existed has no hash and gets the other checks. The immutability trigger freezes
   `Failed` content as well as `Approved`, so the seal is the second line of defence.
-- **`JournalEntryBatchEntityServer.Cancel(contextUser, { reason, confirmNotAlreadyPostedInERP })`**
-  (#183) — legal from `Pending`, `Approved` and `Failed`. It saves `Cancelled` with the summary
-  pointer cleared and the cancel audit triple in ONE update, then releases the members and deletes the
-  summary, in one transaction; the triggers key on that order (a member unlocks only while its batch
-  is `Pending` or `Cancelled`; a frozen batch clears its pointer only in the update that cancels it).
-  From `Approved`/`Failed` a reason is required; from `Failed` so is the ERP confirmation, because the
-  released entries would otherwise post again in the next batch. `Save()` stamps `CancelledAt` /
-  `CancelledByUserID` on the transition, as it does for the approval and archive pairs.
+- **`JournalEntryBatchEntityServer.Cancel(contextUser, { reason, confirmNotAlreadyPostedInERP, onCancelled })`**
+  (#183) — legal from `Pending`, `Approved` and `Failed`, and the ONLY way an `Approved`/`Failed`
+  batch reaches `Cancelled`: a transient flag set by `Cancel()` is what lets `Validate()` pass that
+  edge, so the generic form or GraphQL update cannot take it. It saves `Cancelled` with the summary
+  pointer cleared and the cancel audit triple in ONE update, then releases the members, deletes the
+  summary and runs `onCancelled`, in one transaction; the triggers key on that order (a member
+  unlocks only while its batch is `Pending` or `Cancelled`; an Approved/Failed batch becomes
+  Cancelled only with its pointer cleared in the same update). From `Approved`/`Failed` a reason is
+  required; from `Failed` so is the ERP confirmation, persisted as `ERPNotPostedConfirmedAt` /
+  `ERPNotPostedConfirmedByUserID`. A rolled-back cancel reloads the instance. `Save()` stamps
+  `CancelledAt` / `CancelledByUserID` on the transition, as it does for the approval and archive pairs.
+- **`cancelJournalEntryBatch` + `TasksAppApprovalGate`** (#183) — a cancel past approval must pass
+  `assertMayCancelApproved` (the company's `ApprovalCFOUserID` or the batch's `ApprovedByUserID`) and
+  records itself on the approval Task as a comment (`recordCancellation`, run as `onCancelled`, so it
+  commits or rolls back with the cancel; it refuses when the user has no linked Person). The
+  `Accounting.CancelJournalEntryBatch` operation refuses a Pending batch — that cancel is a CFO
+  rejection through `RecordJournalEntryBatchDecision`.
 - **`TasksAppApprovalGate.recordDecision`** — now requires `contextUser` to BE the batch company's
   `AccountingCompanyProfile.ApprovalCFOUserID` (no CFO configured ⇒ hard-fail). Previously any
   authenticated user could approve any batch, including their own.

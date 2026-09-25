@@ -3459,7 +3459,7 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @MaxLength(36)
     ArchivedByUserID?: string;
         
-    @Field({nullable: true, description: `Why this batch was cancelled. Required when an approved batch is cancelled (CK_JournalEntryBatch_CancelAudit); optional when a Pending batch is.`}) 
+    @Field({nullable: true, description: `Why this batch was cancelled. Required when an approved batch is cancelled (CK_JournalEntryBatch_CancelAudit); optional when a Pending batch is. Frozen once Cancelled.`}) 
     @MaxLength(500)
     CancelReason?: string;
         
@@ -3469,6 +3469,13 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @Field({nullable: true, description: `User who cancelled the batch. Required when an approved batch is cancelled.`}) 
     @MaxLength(36)
     CancelledByUserID?: string;
+        
+    @Field({nullable: true, description: `When a user attested that this batch had NOT posted in the ERP before it was cancelled. Required when a batch that had been sent is cancelled (CK_JournalEntryBatch_CancelERPCheck): a Failed batch may already be in the ERP, and cancelling releases its entries to be batched again.`}) 
+    ERPNotPostedConfirmedAt?: Date;
+        
+    @Field({nullable: true, description: `User who attested that this batch had NOT posted in the ERP before it was cancelled. Required with ERPNotPostedConfirmedAt.`}) 
+    @MaxLength(36)
+    ERPNotPostedConfirmedByUserID?: string;
         
     @Field({nullable: true, description: `SHA-256 of the approved content (batch header, summary entry and lines, member set), written at approval and frozen by trg_JournalEntryBatch_Immutability. Dispatch recomputes and compares it. NULL on batches approved before the seal existed.`}) 
     @MaxLength(64)
@@ -3501,6 +3508,10 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @Field({nullable: true}) 
     @MaxLength(100)
     CancelledByUser?: string;
+        
+    @Field({nullable: true}) 
+    @MaxLength(100)
+    ERPNotPostedConfirmedByUser?: string;
         
     @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
     ReadableFields___?: string[];
@@ -3589,6 +3600,12 @@ export class CreatemjBizAppsAccountingJournalEntryBatchInput {
 
     @Field({ nullable: true })
     CancelledByUserID: string | null;
+
+    @Field({ nullable: true })
+    ERPNotPostedConfirmedAt: Date | null;
+
+    @Field({ nullable: true })
+    ERPNotPostedConfirmedByUserID: string | null;
 
     @Field({ nullable: true })
     ApprovedContentHash: string | null;
@@ -3680,6 +3697,12 @@ export class UpdatemjBizAppsAccountingJournalEntryBatchInput {
 
     @Field({ nullable: true })
     CancelledByUserID?: string | null;
+
+    @Field({ nullable: true })
+    ERPNotPostedConfirmedAt?: Date | null;
+
+    @Field({ nullable: true })
+    ERPNotPostedConfirmedByUserID?: string | null;
 
     @Field({ nullable: true })
     ApprovedContentHash?: string | null;

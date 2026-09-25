@@ -89,6 +89,8 @@ export type {
   ErpPostResult,
   ErpPoster,
   JournalEntryBatchApprovalGate,
+  JournalEntryBatchCancelGate,
+  CancelJournalEntryBatchOptions,
   SendJournalEntryBatchOptions,
   DispatchFailureRecord,
   ResumeJournalEntryBatchPostingResult,

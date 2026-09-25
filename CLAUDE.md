@@ -356,7 +356,8 @@ This repo uses MemberJunction's CodeGen system to generate entity and action sub
   DELETE is blocked outright. On a locked row only these may change: `GLPostedAt`, `GLReferenceID`,
   `ReversedByJournalEntryID`, `Status` `Batched→GLPosted`, and the **reversible preliminary unlock**
   (`Status` `Batched→Pending` **plus** `JournalEntryBatchID→NULL`, and nothing else, while the owning
-  batch is still `Pending`). `GLPosted` never regresses. Corrections are new `Pending` reversal JEs.
+  batch is `Pending` or `Cancelled` — an Approved or Failed batch reaches `Cancelled` only through
+  `JournalEntryBatchEntityServer.Cancel`, #183). `GLPosted` never regresses. Corrections are new `Pending` reversal JEs.
 - **There are no accounting periods and no close machinery** (D2, plan §4 — the ERP owns periods).
   No `AccountingPeriod` table, no period FK, no close guard, no `OriginalAccountingPeriodID`, no
   adjusting-entry routing: all removed 2026-07-06 with the period tables, and `AccountingPeriod`

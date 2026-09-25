@@ -728,21 +728,50 @@ async function lockJournalEntries(jeIds: string[], batchId: string, contextUser:
 // ─── cancelJournalEntryBatch / regenerateJournalEntryBatch — reverse a batch's lock ──
 
 /**
+ * Who may cancel a batch past approval, and where that cancel is recorded (#183). Implemented by
+ * TasksAppApprovalGate: the company's CFO or the batch's recorded approver, with the cancel written
+ * to the approval Task.
+ */
+export interface JournalEntryBatchCancelGate {
+  assertMayCancelApproved(batchId: string, contextUser: UserInfo): Promise<void>;
+  recordCancellation(batchId: string, reason: string, contextUser: UserInfo): Promise<void>;
+}
+
+/** {@link cancelJournalEntryBatch}'s options: the entity's, plus the gate a cancel past approval requires. */
+export interface CancelJournalEntryBatchOptions extends Omit<JournalEntryBatchCancelOptions, 'onCancelled'> {
+  /** Required to cancel an Approved or Failed batch; a Pending cancel (a CFO rejection, already gated) needs none. */
+  gate?: JournalEntryBatchCancelGate;
+}
+
+/**
  * Cancel a Pending, Approved or Failed batch: mark it Cancelled, return its member journal entries
  * to the candidate pool and delete its JournalEntryBatchSummary JE. From Approved or Failed (#183)
- * `options.reason` is required, and from Failed `options.confirmNotAlreadyPostedInERP` too — see
- * {@link JournalEntryBatchCancelOptions}. A Pending cancel (a CFO rejection) needs neither.
+ * the caller must be allowed to cancel (`options.gate`), `options.reason` is required, and from
+ * Failed `options.confirmNotAlreadyPostedInERP` too; the cancel is recorded on the approval Task in
+ * the same transaction. A Pending cancel (a CFO rejection, gated by recordDecision) needs none of it.
  */
 export async function cancelJournalEntryBatch(
-  batchId: string, contextUser: UserInfo, provider: IMetadataProvider, options: JournalEntryBatchCancelOptions = {},
+  batchId: string, contextUser: UserInfo, provider: IMetadataProvider, options: CancelJournalEntryBatchOptions = {},
 ): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
-  // Cancel is single-aggregate work (the batch reversing ITS OWN preliminary lock), so the logic
-  // lives on the entity (JournalEntryBatchEntityServer.Cancel — one transaction, encapsulated);
-  // this engine function is retained as the stable call-site for the ops/resolver era callers.
+  // The mechanics are single-aggregate (the batch reversing ITS OWN lock) and live on the entity
+  // (JournalEntryBatchEntityServer.Cancel — one transaction). Authorizing a cancel past approval and
+  // recording it on the Task reach other aggregates, so they are composed here.
   const p = resolveProviders(provider);
   const batch = await p.md.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, contextUser);
   if (!(await batch.Load(batchId))) throw new Error(`cancelJournalEntryBatch: batch ${batchId} not found`);
-  await batch.Cancel(contextUser, options);
+  const { gate, ...cancelOptions } = options;
+  if (batch.Status === 'Pending') {
+    await batch.Cancel(contextUser, cancelOptions);
+    return batch;
+  }
+  if (!gate) {
+    throw new Error(`cancelJournalEntryBatch: batch ${batch.JournalEntryBatchNumber ?? batchId} is ${batch.Status}; cancelling past approval needs the approval gate to authorize and record it.`);
+  }
+  await gate.assertMayCancelApproved(batch.ID, contextUser);
+  await batch.Cancel(contextUser, {
+    ...cancelOptions,
+    onCancelled: () => gate.recordCancellation(batch.ID, cancelOptions.reason ?? '', contextUser),
+  });
   return batch;
 }
 
@@ -1092,9 +1121,9 @@ export interface DispatchFailureRecord { status: string; marked: boolean }
  *   · `Posted` → LEAVE IT. The ERP has already accepted this journal and only the member
  *                `Batched → GLPosted` flip is incomplete. Reporting it as `Failed` would invite a
  *                re-post and a DUPLICATE ERP journal — the worst outcome available here.
- *   · `Pending` / `Approved` → nothing to mark. `Pending` is still cancellable; `Approved` is not
- *                (LEGAL_TRANSITIONS offers only `Sent`), so it needs a human either way. Say which
- *                it is instead of recording a failure that never happened.
+ *   · `Pending` / `Approved` → nothing to mark. Either can be cancelled, but `Approved` only by
+ *                its approver or the company's CFO with a reason (#183), so it needs a human either
+ *                way. Say which it is instead of recording a failure that never happened.
  *
  * Deliberately does NOT route through `failBatch`, so the send path's own semantics are untouched.
  */

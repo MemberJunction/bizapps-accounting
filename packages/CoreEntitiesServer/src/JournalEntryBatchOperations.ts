@@ -23,9 +23,9 @@
  *   Accounting.RecordJournalEntryBatchDecision   → gate.recordDecision + approveJournalEntryBatch | cancelJournalEntryBatch (in-app CFO approve/reject)
  *   Accounting.GetJournalEntryBatchApprovalState → gate.assertApproved probe (read-only: is this batch dispatchable?)
  *   Accounting.ArchiveJournalEntryBatch          → batch.Archive(reason)             terminal close with NO ERP call; members stay locked (#214)
- *   Accounting.CancelJournalEntryBatch           → cancelJournalEntryBatch(...)     Pending|Approved|Failed→Cancelled; members return to the
- *                                                            candidate pool (#183: Reason from Approved/Failed,
- *                                                            ConfirmNotAlreadyPostedInERP from Failed)
+ *   Accounting.CancelJournalEntryBatch           → cancelJournalEntryBatch(...)     Approved|Failed→Cancelled; members return to the
+ *                                                            candidate pool (#183: CFO or approver only, Reason required,
+ *                                                            ConfirmNotAlreadyPostedInERP from Failed; Pending uses Reject)
  *
  * These are thin by design — every rule (netting, the one-transaction build incl. the approval
  * Task + ApprovalTaskID stamp (D10 rev. 2026-07-29), the CFO precondition, EmptyJournalEntryBatchError) lives
@@ -411,10 +411,12 @@ export interface CancelJournalEntryBatchInput {
 export interface CancelJournalEntryBatchOutput { Status: string; CancelledAt: string | null }
 
 /**
- * Cancel a batch and return its journal entries to the candidate pool (#183) — the correction path
- * for an Approved or Failed batch whose frozen content is wrong, as opposed to Archive, which keeps
- * the entries locked for good. The legal-from statuses, the required reason and the ERP confirmation
- * are the entity's invariants (JournalEntryBatchEntityServer.Cancel); this operation only marshals.
+ * Cancel an Approved or Failed batch and return its journal entries to the candidate pool (#183) —
+ * the correction path for a batch whose frozen content is wrong, as opposed to Archive, which keeps
+ * the entries locked for good. A Pending batch is refused here: its cancel is a rejection, which
+ * goes through RecordJournalEntryBatchDecision so the CFO's decision is recorded on the Task.
+ * Who may cancel (the CFO or the batch's approver), the required reason and the ERP confirmation
+ * are enforced by the engine, the gate and the entity; this operation only marshals.
  */
 @RegisterClass(BaseRemotableOperation, 'Accounting.CancelJournalEntryBatch')
 export class CancelJournalEntryBatchOperation extends BaseRemotableOperation<CancelJournalEntryBatchInput, CancelJournalEntryBatchOutput> {
@@ -423,11 +425,21 @@ export class CancelJournalEntryBatchOperation extends BaseRemotableOperation<Can
   protected async InternalExecute(input: CancelJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<CancelJournalEntryBatchOutput> {
     if (!input?.JournalEntryBatchID) throw new Error('CancelJournalEntryBatch: JournalEntryBatchID is required.');
     requireSqlGuid(input.JournalEntryBatchID, 'CancelJournalEntryBatch');
+    await this.refusePending(input.JournalEntryBatchID, provider, user);
     const batch = await cancelJournalEntryBatch(input.JournalEntryBatchID, user, provider, {
       reason: input.Reason ?? null,
       confirmNotAlreadyPostedInERP: input.ConfirmNotAlreadyPostedInERP === true,
+      gate: new TasksAppApprovalGate(provider),
     });
     return { Status: batch.Status, CancelledAt: batch.CancelledAt?.toISOString() ?? null };
+  }
+
+  private async refusePending(batchId: string, provider: IMetadataProvider, user: UserInfo): Promise<void> {
+    const batch = await provider.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, user);
+    if (!(await batch.Load(batchId))) throw new Error(`CancelJournalEntryBatch: batch ${batchId} not found.`);
+    if (batch.Status === 'Pending') {
+      throw new Error(`CancelJournalEntryBatch: batch ${batch.JournalEntryBatchNumber} is Pending — reject it from Batch approvals instead, so the decision is recorded on its approval Task.`);
+    }
   }
 }
 

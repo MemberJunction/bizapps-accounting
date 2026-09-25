@@ -225,7 +225,8 @@ async function rawBatchAt(ctx: Ctx, status: 'Approved' | 'Failed'): Promise<RawB
 async function rawCancel(ctx: Ctx, b: RawBatch): Promise<void> {
   await ctx.pool.request().query(`
     UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Cancelled', SummaryJournalEntryID=NULL, CancelReason='Posting date belongs in the next period',
-      CancelledAt=SYSDATETIMEOFFSET(), CancelledByUserID='${ctx.user.ID}' WHERE ID='${b.batchId}';
+      CancelledAt=SYSDATETIMEOFFSET(), CancelledByUserID='${ctx.user.ID}',
+      ERPNotPostedConfirmedAt=SYSDATETIMEOFFSET(), ERPNotPostedConfirmedByUserID='${ctx.user.ID}' WHERE ID='${b.batchId}';
     UPDATE ${SCHEMA}.JournalEntry SET Status='Pending', JournalEntryBatchID=NULL WHERE ID IN ('${b.memberId}', '${b.summaryId}');
     DELETE FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID='${b.summaryId}';
     DELETE FROM ${SCHEMA}.JournalEntry WHERE ID='${b.summaryId}';`);
@@ -364,8 +365,32 @@ async function main(): Promise<void> {
   });
 
   await test('INV cancel audit — raw cancel of an approved batch without a reason → rejected (CK_JournalEntryBatch_CancelAudit)', async () => {
-    const b = await rawBatchAt(ctx, 'Failed');
+    const b = await rawBatchAt(ctx, 'Approved');
     await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Cancelled', SummaryJournalEntryID=NULL WHERE ID='${b.batchId}'`), 'CK_JournalEntryBatch_CancelAudit');
+  });
+
+  await test('INV cancel ERP check — raw cancel of a sent batch without the attestation → rejected (CK_JournalEntryBatch_CancelERPCheck)', async () => {
+    const b = await rawBatchAt(ctx, 'Failed');
+    await expectThrow(() => pool.request().query(
+      `UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Cancelled', SummaryJournalEntryID=NULL, CancelReason='x', CancelledAt=SYSDATETIMEOFFSET(), CancelledByUserID='${ctx.user.ID}' WHERE ID='${b.batchId}'`),
+      'CK_JournalEntryBatch_CancelERPCheck');
+  });
+
+  await test('INV batch status — raw cancel that keeps the summary pointer (skipping the teardown) → rejected (50031)', async () => {
+    const b = await rawBatchAt(ctx, 'Approved');
+    await expectThrow(() => pool.request().query(
+      `UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Cancelled', CancelReason='x', CancelledAt=SYSDATETIMEOFFSET(), CancelledByUserID='${ctx.user.ID}' WHERE ID='${b.batchId}'`),
+      'status change refused');
+  });
+
+  await test('INV batch status — raw Sent → Cancelled → rejected (50031); the members stay locked (50004)', async () => {
+    const b = await rawBatchAt(ctx, 'Failed');
+    await pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Sent' WHERE ID='${b.batchId}'`);
+    await expectThrow(() => pool.request().query(
+      `UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Cancelled', SummaryJournalEntryID=NULL, CancelReason='x', CancelledAt=SYSDATETIMEOFFSET(), CancelledByUserID='${ctx.user.ID}',
+         ERPNotPostedConfirmedAt=SYSDATETIMEOFFSET(), ERPNotPostedConfirmedByUserID='${ctx.user.ID}' WHERE ID='${b.batchId}'`),
+      'status change refused');
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntry SET Status='Pending', JournalEntryBatchID=NULL WHERE ID='${b.memberId}'`), 'JournalEntry is locked');
   });
 
   for (const status of ['Approved', 'Failed'] as const) {
@@ -377,6 +402,15 @@ async function main(): Promise<void> {
       assert(row?.Status === 'Pending' && row.JournalEntryBatchID === null, `member should be Pending and unbatched, got ${row?.Status}/${row?.JournalEntryBatchID}`);
     });
   }
+
+  await test('INV batch status — a cancelled-after-approval batch is terminal and its record frozen (50031 / 50009 / 50008)', async () => {
+    const b = await rawBatchAt(ctx, 'Approved');
+    await rawCancel(ctx, b);
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Pending' WHERE ID='${b.batchId}'`), 'status change refused');
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET ApprovedAt=NULL WHERE ID='${b.batchId}'`), 'JournalEntryBatch is locked');
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET CancelReason='rewritten' WHERE ID='${b.batchId}'`), 'JournalEntryBatch is locked');
+    await expectThrow(() => pool.request().query(`DELETE FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${b.batchId}'`), 'cannot be deleted');
+  });
 
   // ─── Teardown (disable accounting triggers to clean locked rows) ──────────
   const exec = async (q: string) => { try { await ctx.teardownPool.request().query(q); } catch (e) { console.log(`      teardown warn: ${(e instanceof Error ? e.message : String(e)).split('\n')[0]}`); } };
