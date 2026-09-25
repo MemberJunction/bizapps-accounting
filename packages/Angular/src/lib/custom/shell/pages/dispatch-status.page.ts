@@ -7,7 +7,7 @@ import { GridColumnConfig, EntityDataGridComponent } from '@memberjunction/ng-en
 import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
 import { AddDays, BusinessTimeZoneEngine, DayStartUtc, IsCalendarDay } from '@mj-biz-apps/common-entities';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
-import { DispatchConfirmationKind, JournalEntryBatchDispatchClient, StrandedJournalEntryBatchWire } from '../../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
+import { CancelJournalEntryBatchResult, DispatchConfirmationKind, JournalEntryBatchDispatchClient, StrandedJournalEntryBatchWire } from '../../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
 import { TIME_WINDOWS, TimeWindowId, timeWindowRange, toSqlDate, andFilters } from '../../../transfer-pending/list-scaffold/time-window';
 import { sqlLiteral, likeContains } from '../../../transfer-pending/list-scaffold/sql-filter';
 import { rowKeyToId } from '../../../transfer-pending/list-scaffold/grid-row-key';
@@ -124,13 +124,21 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
    */
   public MismatchConfirmText = '';
   /**
-   * The Failed batch the operator is cancelling (#183): its entries go back to the next build, so the
-   * dialog asks for a reason and the same ERP check a retry needs — a journal that did post would
-   * otherwise post again in the next batch.
+   * The Failed batch the operator is cancelling (#183): its entries go back to the next build, where
+   * they get a NEW document number. The server looks this batch's number up in the ERP first (#207),
+   * because a journal that did post would otherwise post again in that build.
    */
   public CancelConfirmBatch: mjBizAppsAccountingJournalEntryBatchEntity | null = null;
   /** The reason typed into the cancel dialog; required by the server for a batch past approval. */
   public CancelReason = '';
+  /**
+   * Set when the server's ERP lookup could not settle whether this batch already posted, and so
+   * refused the cancel until the operator checks: why, and which way. Null on the first attempt.
+   */
+  public CancelERPCheckReason: string | null = null;
+  public CancelERPCheckKind: DispatchConfirmationKind | null = null;
+  /** The batch number retyped to override a `Mismatch`, which is most likely this batch, already posted. */
+  public CancelMismatchText = '';
   public CancellingJournalEntryBatchID: string | null = null;
   public ResumingJournalEntryBatchID: string | null = null;
 
@@ -580,48 +588,77 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
    */
   public CancelBatch(batch: mjBizAppsAccountingJournalEntryBatchEntity): void {
     if (!this.CanCancelBatch(batch)) return;
+    this.resetCancelDialog();
     this.CancelConfirmBatch = batch;
-    this.CancelReason = '';
     this.cdr.markForCheck();
   }
 
   public DismissCancelBatch(): void {
-    this.CancelConfirmBatch = null;
-    this.CancelReason = '';
+    this.resetCancelDialog();
     this.cdr.markForCheck();
   }
 
-  /** The dialog's confirm is live only with a reason — the server refuses a blank one past approval. */
+  /**
+   * The dialog's confirm needs a reason (the server refuses a blank one past approval) and, once the
+   * server has asked for the ERP check on a `Mismatch`, the batch number retyped exactly.
+   */
   public get CanConfirmCancelBatch(): boolean {
-    return this.CancelReason.trim().length > 0;
+    if (!this.CancelConfirmBatch || this.CancelReason.trim().length === 0) return false;
+    if (this.CancelERPCheckKind !== 'Mismatch') return true;
+    return this.CancelMismatchText.trim() === (this.CancelConfirmBatch.JournalEntryBatchNumber ?? '');
   }
 
-  /** Cancel the batch once the operator has given a reason and confirmed it has not posted in the ERP. */
+  /**
+   * Cancel with the reason given. The first attempt carries no ERP confirmation: the server checks
+   * the ERP itself and cancels if nothing posted there. Only when its lookup cannot settle it does
+   * the dialog stay open and ask, and only that second attempt carries the operator's word.
+   */
   public async ConfirmCancelBatch(): Promise<void> {
     const batch = this.CancelConfirmBatch;
+    if (!batch || !this.CanConfirmCancelBatch || !this.CanCancelBatch(batch)) return;
     const reason = this.CancelReason.trim();
-    if (!batch || !reason || !this.CanCancelBatch(batch)) return;
-    this.CancelConfirmBatch = null;
-    this.CancelReason = '';
+    const confirmed = this.CancelERPCheckReason !== null;
     this.CancellingJournalEntryBatchID = batch.ID;
     this.ActionMessage = null;
     this.cdr.markForCheck();
     try {
-      const res = await this.client().CancelBatch(batch.ID, reason, true);
-      if (res.Success) {
-        this.ActionMessage = `Cancelled ${batch.JournalEntryBatchNumber} — its journal entries return to the next build.`;
-        this.ActionIsError = false;
-        this.SelectedBatch = null;
-        this.Refresh(); // refetch-on-mutating-action (§8)
-      } else {
-        this.setError(res.ErrorMessage ?? 'Cancel failed.');
-      }
+      const res = await this.client().CancelBatch(batch.ID, reason, confirmed);
+      this.applyCancelResult(batch, res);
     } catch (e) {
+      this.resetCancelDialog();
       this.setError(e instanceof Error ? e.message : String(e));
     } finally {
       this.CancellingJournalEntryBatchID = null;
       this.cdr.markForCheck();
     }
+  }
+
+  private applyCancelResult(batch: mjBizAppsAccountingJournalEntryBatchEntity, res: CancelJournalEntryBatchResult): void {
+    if (res.Success && res.ConfirmationRequired) {
+      // Keep the dialog (and the reason) and ask for the ERP check the server could not do.
+      this.CancelERPCheckReason = res.ConfirmationRequired;
+      this.CancelERPCheckKind = res.ConfirmationKind ?? null;
+      this.CancelMismatchText = '';
+      return;
+    }
+    this.resetCancelDialog();
+    if (res.Success) {
+      this.ActionMessage = `Cancelled ${batch.JournalEntryBatchNumber} — its journal entries return to the next build.`;
+      this.ActionIsError = false;
+      this.SelectedBatch = null;
+      this.Refresh(); // refetch-on-mutating-action (§8)
+    } else {
+      // Includes the ERP holding the batch: that refusal has no override, and points to Retry.
+      this.setError(res.ErrorMessage ?? 'Cancel failed.');
+    }
+  }
+
+  private resetCancelDialog(): void {
+    this.CancelConfirmBatch = null;
+    this.CancelReason = '';
+    this.CancelERPCheckReason = null;
+    this.CancelERPCheckKind = null;
+    this.CancelMismatchText = '';
   }
 
   /** True when this Posted batch still holds entries at `Batched` — whether or not a resume is running. */

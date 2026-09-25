@@ -14,6 +14,7 @@ vi.mock('../JournalEntryBatchEngine.js', async (importOriginal) => ({
 }));
 
 import { CancelJournalEntryBatchOperation } from '../JournalEntryBatchOperations.js';
+import { ErpPostingUnconfirmedError } from '../JournalEntryBatchEngine.js';
 import { TasksAppApprovalGate } from '../TasksAppApprovalGate.js';
 
 const USER = { ID: 'USER-1' } as UserInfo;
@@ -49,6 +50,32 @@ describe('Accounting.CancelJournalEntryBatch', () => {
     expect(options.reason).toBe('Wrong period');
     expect(options.confirmNotAlreadyPostedInERP).toBe(true);
     expect(options.gate).toBeInstanceOf(TasksAppApprovalGate);
+  });
+
+  // #207: a Failed cancel checks the ERP first, so the operation must hand the engine a real lookup.
+  it('hands the engine the ERP lookup', async () => {
+    await run('Failed', { Reason: 'Wrong period' });
+    const options = engineCancel.mock.calls[0][3] as { lookup?: unknown };
+    expect(typeof options.lookup).toBe('function');
+  });
+
+  it('answers with the confirmation the operator must give when the lookup cannot settle it', async () => {
+    engineCancel.mockRejectedValue(new ErpPostingUnconfirmedError('Mismatch', 'the ERP already holds document JEB-0183, and it does not match this batch', 'cancelJournalEntryBatch'));
+    const result = await run('Failed', { Reason: 'Wrong period' });
+    expect(result.Success).toBe(true);
+    expect(result.Output).toEqual({
+      Status: 'Failed',
+      CancelledAt: null,
+      ConfirmationRequired: 'the ERP already holds document JEB-0183, and it does not match this batch',
+      ConfirmationKind: 'Mismatch',
+    });
+  });
+
+  it('fails the call when the ERP holds the batch — that refusal has no override', async () => {
+    engineCancel.mockRejectedValue(new Error('cancelJournalEntryBatch: the ERP already holds document JEB-0183 (JEB-0183) and it matches this batch, so the batch posted.'));
+    const result = await run('Failed', { Reason: 'Wrong period', ConfirmNotAlreadyPostedInERP: true });
+    expect(result.Success).toBe(false);
+    expect(result.ErrorMessage).toMatch(/so the batch posted/);
   });
 
   it('refuses a malformed batch id before reading anything', async () => {

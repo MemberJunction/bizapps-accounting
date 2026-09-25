@@ -208,7 +208,7 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
    * TaskComment requires one; the caller runs this inside the cancel's transaction, so the cancel
    * rolls back with it rather than going unrecorded.
    */
-  async recordCancellation(batchId: string, reason: string, contextUser: UserInfo): Promise<void> {
+  async recordCancellation(batchId: string, reason: string, contextUser: UserInfo, erpCheck?: string): Promise<void> {
     const task = await this.resolveBatchTask(batchId, contextUser);
     if (!task) return;
     const batch = await this.loadBatch(batchId, contextUser);
@@ -223,7 +223,8 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     comment.NewRecord();
     comment.TaskID = task.ID;
     comment.PersonID = personId;
-    comment.Content = `Journal entry batch ${batch.JournalEntryBatchNumber} was cancelled after approval (it was ${batch.Status}). Its journal entries return to the next build. Reason: ${reason.trim()}`;
+    comment.Content = `Journal entry batch ${batch.JournalEntryBatchNumber} was cancelled after approval (it was ${batch.Status}). Its journal entries return to the next build. Reason: ${reason.trim()}` +
+      (erpCheck ? ` ERP check: ${erpCheck}` : '');
     if (!(await comment.Save())) {
       throw new Error(`Batch ${batch.JournalEntryBatchNumber ?? batchId}: recording the cancel on its approval Task failed: ${comment.LatestResult?.CompleteMessage ?? 'unknown'}`);
     }

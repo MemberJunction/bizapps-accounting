@@ -3,6 +3,7 @@ import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { RunView, RunViewParams } from '@memberjunction/core';
 import { AccountingBatchesPageComponent, BatchItem } from './accounting-batches.component';
 import {
+  CancelJournalEntryBatchResult,
   JournalEntryBatchDispatchClient,
   PreviewJournalEntryBatchOptionsInput,
 } from '../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
@@ -109,14 +110,21 @@ describe('AccountingBatchesPageComponent — Cancel an Approved/Failed batch (#1
   const APPROVED: BatchItem = { ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000002', JournalEntryBatchNumber: 'JEB-TEST-0002', Status: 'Approved' };
   const FAILED: BatchItem = { ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000003', JournalEntryBatchNumber: 'JEB-TEST-0003', Status: 'Failed' };
   let cancelCalls: { ID: string; Reason: string; Confirm: boolean }[];
+  /**
+   * What the server answers an unconfirmed Failed cancel, standing in for its ERP lookup (#207):
+   * null = nothing posted, so it cancels; otherwise the refusal the operator must answer.
+   */
+  let unconfirmedFailedAnswer: CancelJournalEntryBatchResult | null;
 
   beforeEach(() => {
     vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) =>
       p.EntityName === BATCH_ENTITY ? viewResult([LISTED_BATCH, APPROVED, FAILED]) : viewResult([], 0),
     );
     cancelCalls = [];
+    unconfirmedFailedAnswer = null;
     vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'CancelBatch').mockImplementation(async (id, reason, confirm = false) => {
       cancelCalls.push({ ID: id, Reason: reason, Confirm: confirm });
+      if (id === FAILED.ID && !confirm && unconfirmedFailedAnswer) return unconfirmedFailedAnswer;
       return { Success: true, Status: 'Cancelled' };
     });
   });
@@ -154,15 +162,59 @@ describe('AccountingBatchesPageComponent — Cancel an Approved/Failed batch (#1
     expect(page.CancelModalVisible).toBe(false);
   });
 
-  it('does not cancel a Failed batch until the operator confirms it has not posted in the ERP', async () => {
+  it('cancels a Failed batch on the first attempt, unconfirmed, when the server finds nothing in the ERP', async () => {
     const page = await render();
     page.OnCancelApproved(FAILED, new Event('click'));
     page.CancelReasonDraft = 'ERP rejected the journal';
     await page.ConfirmCancelApproved();
-    expect(cancelCalls).toEqual([]);
+    expect(cancelCalls).toEqual([{ ID: FAILED.ID, Reason: 'ERP rejected the journal', Confirm: false }]);
+    expect(page.CancelModalVisible).toBe(false);
+    expect(page.ActionMessageIsError).toBe(false);
+  });
+
+  it('asks for the ERP check only when the server cannot settle it, then sends the confirmation', async () => {
+    unconfirmedFailedAnswer = { Success: true, Status: 'Failed', ConfirmationRequired: 'could not check the ERP for document JEB-TEST-0003: timeout', ConfirmationKind: 'Error' };
+    const page = await render();
+    page.OnCancelApproved(FAILED, new Event('click'));
+    page.CancelReasonDraft = 'ERP rejected the journal';
+    await page.ConfirmCancelApproved();
+
+    expect(page.CancelModalVisible).toBe(true);
+    expect(page.CancelERPCheckReason).toMatch(/could not check the ERP/);
+    expect(page.CanConfirmCancel).toBe(false); // the checkbox is the operator's word
 
     page.CancelConfirmNotPostedInERP = true;
     await page.ConfirmCancelApproved();
-    expect(cancelCalls).toEqual([{ ID: FAILED.ID, Reason: 'ERP rejected the journal', Confirm: true }]);
+    expect(cancelCalls.map((c) => c.Confirm)).toEqual([false, true]);
+    expect(page.CancelModalVisible).toBe(false);
+  });
+
+  it('needs the batch number retyped to cancel past a Mismatch — the checkbox is not enough', async () => {
+    unconfirmedFailedAnswer = { Success: true, Status: 'Failed', ConfirmationRequired: 'the ERP already holds document JEB-TEST-0003, and it does not match', ConfirmationKind: 'Mismatch' };
+    const page = await render();
+    page.OnCancelApproved(FAILED, new Event('click'));
+    page.CancelReasonDraft = 'ERP rejected the journal';
+    await page.ConfirmCancelApproved();
+
+    page.CancelConfirmNotPostedInERP = true;
+    page.CancelMismatchText = 'JEB-TEST-000';
+    expect(page.CanConfirmCancel).toBe(false);
+    page.CancelMismatchText = 'JEB-TEST-0003';
+    expect(page.CanConfirmCancel).toBe(true);
+    await page.ConfirmCancelApproved();
+    expect(cancelCalls.map((c) => c.Confirm)).toEqual([false, true]);
+  });
+
+  it('shows the refusal when the ERP holds the batch, and does not ask to override it', async () => {
+    unconfirmedFailedAnswer = { Success: false, ErrorMessage: 'the ERP already holds document JEB-TEST-0003 and it matches this batch, so the batch posted. Retry it from Dispatch status instead' };
+    const page = await render();
+    page.OnCancelApproved(FAILED, new Event('click'));
+    page.CancelReasonDraft = 'ERP rejected the journal';
+    await page.ConfirmCancelApproved();
+
+    expect(cancelCalls).toHaveLength(1);
+    expect(page.ActionMessageIsError).toBe(true);
+    expect(page.ActionMessage).toMatch(/so the batch posted/);
+    expect(page.CancelERPCheckReason).toBeNull();
   });
 });

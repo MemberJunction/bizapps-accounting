@@ -22,7 +22,8 @@
  *     retry the ERP already holds is recorded Posted with no second post; the operator confirms the
  *     batch did not post only when the lookup cannot settle it (#182).
  *   cancelJournalEntryBatch(): Pending | Approved | Failed → Cancelled, releasing the member JEs to
- *     the candidate pool (#183: a reason from Approved/Failed, the ERP confirmation from Failed).
+ *     the candidate pool (#183: a reason from Approved/Failed). From Failed the ERP is looked up first
+ *     (#207): a posting it holds refuses the cancel, and the operator confirms only when it cannot say.
  *   resumeJournalEntryBatchPosting(): finish a Posted batch's Batched→GLPosted flip, no ERP call.
  *   findStrandedJournalEntries(): the entries Failed / partly-flipped Posted batches hold.
  *
@@ -762,21 +763,31 @@ async function lockJournalEntries(jeIds: string[], batchId: string, contextUser:
  */
 export interface JournalEntryBatchCancelGate {
   assertMayCancelApproved(batchId: string, contextUser: UserInfo): Promise<void>;
-  recordCancellation(batchId: string, reason: string, contextUser: UserInfo): Promise<void>;
+  /** `erpCheck`, for a Failed batch, says how "not posted in the ERP" was established (#207). */
+  recordCancellation(batchId: string, reason: string, contextUser: UserInfo, erpCheck?: string): Promise<void>;
 }
 
 /** {@link cancelJournalEntryBatch}'s options: the entity's, plus the gate a cancel past approval requires. */
 export interface CancelJournalEntryBatchOptions extends Omit<JournalEntryBatchCancelOptions, 'onCancelled'> {
   /** Required to cancel an Approved or Failed batch; a Pending cancel (a CFO rejection, already gated) needs none. */
   gate?: JournalEntryBatchCancelGate;
+  /**
+   * The ERP lookup a Failed cancel runs first (#207). Omitted, the ERP counts as offering none, so a
+   * Failed cancel needs the operator's confirmation — the behaviour before the lookup existed.
+   */
+  lookup?: ErpJournalLookup;
 }
 
 /**
  * Cancel a Pending, Approved or Failed batch: mark it Cancelled, return its member journal entries
  * to the candidate pool and delete its JournalEntryBatchSummary JE. From Approved or Failed (#183)
- * the caller must be allowed to cancel (`options.gate`), `options.reason` is required, and from
- * Failed `options.confirmNotAlreadyPostedInERP` too; the cancel is recorded on the approval Task in
- * the same transaction. A Pending cancel (a CFO rejection, gated by recordDecision) needs none of it.
+ * the caller must be allowed to cancel (`options.gate`) and `options.reason` is required; the cancel
+ * is recorded on the approval Task in the same transaction. A Pending cancel (a CFO rejection, gated
+ * by recordDecision) needs none of it.
+ *
+ * From Failed the ERP is checked first (#207), because a Failed batch may already have posted and a
+ * cancel releases its entries to be batched again under a NEW number that no later lookup can
+ * connect to this journal. See {@link checkFailedBatchBeforeCancel}.
  */
 export async function cancelJournalEntryBatch(
   batchId: string, contextUser: UserInfo, provider: IMetadataProvider, options: CancelJournalEntryBatchOptions = {},
@@ -796,11 +807,65 @@ export async function cancelJournalEntryBatch(
     throw new Error(`cancelJournalEntryBatch: batch ${batch.JournalEntryBatchNumber ?? batchId} is ${batch.Status}; cancelling past approval needs the approval gate to authorize and record it.`);
   }
   await gate.assertMayCancelApproved(batch.ID, contextUser);
+  const { lookup, ...entityOptions } = cancelOptions;
+  // Authorized first, so an unauthorized caller learns nothing from the ERP.
+  const erpCheck = batch.Status === 'Failed'
+    ? await checkFailedBatchBeforeCancel(batch, contextUser, p, lookup ?? unavailableErpLookup, entityOptions.confirmNotAlreadyPostedInERP === true)
+    : undefined;
   await batch.Cancel(contextUser, {
-    ...cancelOptions,
-    onCancelled: () => gate.recordCancellation(batch.ID, cancelOptions.reason ?? '', contextUser),
+    ...entityOptions,
+    // A lookup that found nothing IS the ERP check; the entity persists it as the attestation either way.
+    ...(erpCheck ? { confirmNotAlreadyPostedInERP: true } : {}),
+    onCancelled: () => gate.recordCancellation(batch.ID, entityOptions.reason ?? '', contextUser, erpCheck),
   });
   return batch;
+}
+
+/**
+ * The ERP check a Failed cancel runs before anything is written (#207). Returns how "not posted" was
+ * established, for the approval Task; throws when the cancel must not go ahead:
+ *   · a matching posting → the batch DID post. Refused, with no override: cancelling would post its
+ *                          entries a second time. A retry records it Posted without sending again.
+ *   · nothing posted     → proceed; the lookup is the check.
+ *   · a posting that differs, a failed lookup, or no lookup → refused with
+ *                          {@link ErpPostingUnconfirmedError} unless the operator confirmed.
+ */
+async function checkFailedBatchBeforeCancel(
+  batch: mjBizAppsAccountingJournalEntryBatchEntity, contextUser: UserInfo, p: Providers, lookup: ErpJournalLookup, confirmed: boolean,
+): Promise<string> {
+  const doc = batch.JournalEntryBatchNumber ?? batch.ID;
+  const summaryLines = await loadSummaryLines(batch, contextUser, p);
+  const found = await lookupOrError(lookup, batch, summaryLines, contextUser, 'cancelJournalEntryBatch');
+  if (found.status === 'Found') {
+    throw new Error(
+      `cancelJournalEntryBatch: the ERP already holds document ${doc} (${found.externalJournalEntryBatchRef}) and it matches this batch, so the batch posted. ` +
+      'Cancelling would release its entries to post again under a new number. Retry it from Dispatch status instead: the retry records it Posted without sending it again.',
+    );
+  }
+  if (found.status === 'NotFound') return `The ERP lookup found nothing posted under document ${doc}.`;
+  const refusal = cancelRefusal(found, doc);
+  if (!confirmed) throw new ErpPostingUnconfirmedError(refusal.kind, refusal.reason, 'cancelJournalEntryBatch');
+  return `The canceller confirmed document ${doc} had not posted; the ERP lookup could not settle it (${refusal.kind}).`;
+}
+
+/** Why a Failed cancel needs the operator's word: the lookup ran and could not say "not posted". */
+function cancelRefusal(
+  found: Exclude<ErpJournalLookupResult, { status: 'Found' } | { status: 'NotFound' }>, doc: string,
+): { kind: ErpPostingUnconfirmedKind; reason: string } {
+  const confirmHint = `Confirm in the ERP that document ${doc} has not posted, then cancel with that confirmation; otherwise its entries post again in the next batch.`;
+  switch (found.status) {
+    case 'Unavailable':
+      return { kind: 'Unavailable', reason: `batch ${doc} is Failed and may already be in the ERP, which offers no lookup to check. ${confirmHint}` };
+    case 'Error':
+      return { kind: 'Error', reason: `could not check the ERP for document ${doc} before cancelling: ${found.error} Try again once the ERP answers, or: ${confirmHint}` };
+    case 'Mismatch':
+      return {
+        kind: 'Mismatch',
+        reason: `the ERP already holds document ${doc}, and it does not match this batch: ${found.detail} ` +
+          'That is most likely this batch, changed by the ERP (tax or VAT entries it added) or by an account mapping change, in which case it has posted and cancelling would post its entries again. ' +
+          `Reconcile it in the ERP instead. Only if that posting is not this batch: ${confirmHint}`,
+      };
+  }
 }
 
 /**
@@ -903,13 +968,17 @@ export interface SendJournalEntryBatchOptions {
 export type ErpPostingUnconfirmedKind = 'Unavailable' | 'Error' | 'Mismatch';
 
 /**
- * A Failed retry refused because the pre-flight lookup could not settle whether the ERP already holds
- * the batch. `Kind` and `Reason` say why, for an operator deciding whether to retry with
- * `confirmNotAlreadyPostedInERP`. The batch is untouched: still Failed, the ERP not called.
+ * A Failed retry or cancel refused because the ERP lookup could not settle whether the ERP already
+ * holds the batch. `Kind` and `Reason` say why, for an operator deciding whether to go ahead with
+ * `confirmNotAlreadyPostedInERP`. The batch is untouched: still Failed, nothing written.
  */
 export class ErpPostingUnconfirmedError extends Error {
-  constructor(public readonly Kind: ErpPostingUnconfirmedKind, public readonly Reason: string) {
-    super(`sendJournalEntryBatch: ${Reason}`);
+  constructor(
+    public readonly Kind: ErpPostingUnconfirmedKind,
+    public readonly Reason: string,
+    operation: 'sendJournalEntryBatch' | 'cancelJournalEntryBatch' = 'sendJournalEntryBatch',
+  ) {
+    super(`${operation}: ${Reason}`);
     this.name = 'ErpPostingUnconfirmedError';
   }
 }
@@ -1002,11 +1071,12 @@ export async function sendJournalEntryBatch(batchId: string, contextUser: UserIn
 /** Run the lookup, turning a THROW into `Error` so it refuses the send like any other failed lookup. */
 async function lookupOrError(
   lookup: ErpJournalLookup, batch: mjBizAppsAccountingJournalEntryBatchEntity, summaryLines: mjBizAppsAccountingJournalEntryLineEntity[], contextUser: UserInfo,
+  operation: 'sendJournalEntryBatch' | 'cancelJournalEntryBatch' = 'sendJournalEntryBatch',
 ): Promise<ErpJournalLookupResult> {
   try {
     return await lookup(batch, summaryLines, contextUser);
   } catch (err) {
-    LogError(`sendJournalEntryBatch: ERP lookup threw for batch ${batch.JournalEntryBatchNumber ?? batch.ID}`, null, err);
+    LogError(`${operation}: ERP lookup threw for batch ${batch.JournalEntryBatchNumber ?? batch.ID}`, null, err);
     return { status: 'Error', error: err instanceof Error ? err.message : String(err) };
   }
 }

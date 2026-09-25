@@ -49,7 +49,12 @@ interface DispatchJournalEntryBatchOutputWire {
 interface GetJournalEntryBatchApprovalStateOutputWire { Approved: boolean; Reason?: string }
 interface RecordJournalEntryBatchDecisionOutputWire { Recorded: true }
 interface ArchiveJournalEntryBatchOutputWire { Status: string; ArchivedAt: string | null }
-interface CancelJournalEntryBatchOutputWire { Status: string; CancelledAt: string | null }
+interface CancelJournalEntryBatchOutputWire {
+  Status: string;
+  CancelledAt: string | null;
+  ConfirmationRequired?: string;
+  ConfirmationKind?: DispatchConfirmationKind;
+}
 interface ResumeJournalEntryBatchPostingOutputWire { Status: string; JournalEntriesPosted: number }
 
 /**
@@ -106,6 +111,13 @@ export interface CancelJournalEntryBatchResult {
   Success: boolean;
   Status?: string;
   ErrorMessage?: string;
+  /**
+   * Why a Failed cancel was not done (#207): the ERP lookup could not settle whether the batch already
+   * posted. The batch is untouched; cancel again with the operator's confirmation, or not at all.
+   */
+  ConfirmationRequired?: string;
+  /** Which way it could not settle it. `Mismatch` is most likely this batch, already posted. */
+  ConfirmationKind?: DispatchConfirmationKind;
 }
 
 export interface ResumeJournalEntryBatchPostingResult {
@@ -310,16 +322,22 @@ export class JournalEntryBatchDispatchClient {
 
   /**
    * Cancel an Approved or Failed batch and return its journal entries to the candidate pool (#183) —
-   * the opposite of Archive, which keeps them locked. The server requires a reason, and for a Failed
-   * batch `confirmNotAlreadyPostedInERP`: a Failed batch may already be in the ERP, and its entries
-   * would post again in the next batch.
+   * the opposite of Archive, which keeps them locked. The server requires a reason. A Failed batch may
+   * already be in the ERP, so the server looks its number up first (#207): a posting it finds refuses
+   * the cancel (an error); nothing found lets it through; otherwise it answers `ConfirmationRequired`,
+   * and the caller sends `confirmNotAlreadyPostedInERP` only once the operator has checked.
    */
   public async CancelBatch(batchID: string, reason: string, confirmNotAlreadyPostedInERP = false): Promise<CancelJournalEntryBatchResult> {
     try {
       const res = await this.dataProvider.RouteOperation<{ JournalEntryBatchID: string; Reason: string; ConfirmNotAlreadyPostedInERP: boolean }, CancelJournalEntryBatchOutputWire>(
         'Accounting.CancelJournalEntryBatch', { JournalEntryBatchID: batchID, Reason: reason, ConfirmNotAlreadyPostedInERP: confirmNotAlreadyPostedInERP });
       if (!res.Success || !res.Output) return { Success: false, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
-      return { Success: true, Status: res.Output.Status };
+      return {
+        Success: true,
+        Status: res.Output.Status,
+        ConfirmationRequired: res.Output.ConfirmationRequired,
+        ConfirmationKind: res.Output.ConfirmationKind,
+      };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       LogError(`JournalEntryBatchDispatchClient.CancelBatch failed: ${msg}`);

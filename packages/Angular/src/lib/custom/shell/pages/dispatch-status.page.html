@@ -267,27 +267,53 @@
   </mj-dialog-actions>
 </mj-dialog>
 
-<!-- CANCEL CONFIRMATION (#183) — cancelling a Failed batch returns its entries to the next build. The
-     same ERP check as a retry applies: a journal that already posted would post again in that build.
-     The reason is required past approval and is the record of why an approved summary was discarded. -->
+<!-- CANCEL (#183, #207) — cancelling a Failed batch returns its entries to the next build, under a NEW
+     document number. The server looks this batch's number up in the ERP first: a posting it finds
+     refuses the cancel, and nothing found lets it through. Only when the lookup cannot settle it does
+     the dialog ask the operator, with the server's reason; a Mismatch needs the number retyped. The
+     reason is required past approval and is the record of why an approved summary was discarded. -->
 <mj-dialog [Visible]="CancelConfirmBatch !== null" Title="Cancel this batch" Width="560px" (Close)="DismissCancelBatch()">
   @if (CancelConfirmBatch) {
     <p>
       Cancelling <span class="ds-mono">{{ CancelConfirmBatch.JournalEntryBatchNumber }}</span> deletes its summary entry and
       returns its {{ CancelConfirmBatch.TotalEntries }} journal entries to the next build, which needs a new approval.
     </p>
-    <p>
-      The failed send may have posted anyway. In {{ CancelConfirmBatch.TargetSystem }}, search for document number
-      <span class="ds-mono">{{ CancelConfirmBatch.JournalEntryBatchNumber }}</span>. Cancel only if it is not there.
-    </p>
+    @if (CancelERPCheckReason === null) {
+      <p>
+        {{ CancelConfirmBatch.TargetSystem }} is checked for document number
+        <span class="ds-mono">{{ CancelConfirmBatch.JournalEntryBatchNumber }}</span> first. If the failed send posted anyway,
+        the cancel is refused: retry the batch instead, and the retry records it posted.
+      </p>
+    } @else if (CancelERPCheckKind === 'Mismatch') {
+      <p><strong>{{ CancelConfirmBatch.TargetSystem }} already holds a posting under this document number.</strong> {{ CancelERPCheckReason }}</p>
+      <p>
+        If that posting is this batch, do not cancel: its entries would post a second time. Reconcile it in
+        {{ CancelConfirmBatch.TargetSystem }} instead. To cancel anyway, type the batch number:
+      </p>
+      <input
+        type="text"
+        class="mj-input ds-mono"
+        [(ngModel)]="CancelMismatchText"
+        [attr.aria-label]="'Type ' + CancelConfirmBatch.JournalEntryBatchNumber + ' to cancel anyway'"
+        [placeholder]="CancelConfirmBatch.JournalEntryBatchNumber" />
+    } @else {
+      <p>{{ CancelERPCheckReason }}</p>
+      <p>
+        In {{ CancelConfirmBatch.TargetSystem }}, search for document number
+        <span class="ds-mono">{{ CancelConfirmBatch.JournalEntryBatchNumber }}</span>. Cancel only if it is not there.
+      </p>
+    }
     <label class="ds-cancel__label" for="ds-cancel-reason">Reason (required)</label>
     <textarea id="ds-cancel-reason" class="ds-cancel__reason" rows="3" maxlength="500" [(ngModel)]="CancelReason"></textarea>
   }
   <mj-dialog-actions>
-    <button mjButton variant="primary" size="sm" [disabled]="!CanConfirmCancelBatch" (click)="ConfirmCancelBatch()">
-      <i class="fa-solid fa-ban" aria-hidden="true"></i> It has not posted — cancel batch
+    <button mjButton [variant]="CancelERPCheckKind === 'Mismatch' ? 'flat' : 'primary'" size="sm" [disabled]="!CanConfirmCancelBatch" (click)="ConfirmCancelBatch()">
+      <i class="fa-solid fa-ban" aria-hidden="true"></i>
+      @if (CancelERPCheckReason === null) { Cancel batch }
+      @else if (CancelERPCheckKind === 'Mismatch') { It is not this batch — cancel anyway }
+      @else { It has not posted — cancel batch }
     </button>
-    <button mjButton variant="flat" size="sm" (click)="DismissCancelBatch()">Keep batch</button>
+    <button mjButton [variant]="CancelERPCheckKind === 'Mismatch' ? 'primary' : 'flat'" size="sm" (click)="DismissCancelBatch()">Keep batch</button>
   </mj-dialog-actions>
 </mj-dialog>
 

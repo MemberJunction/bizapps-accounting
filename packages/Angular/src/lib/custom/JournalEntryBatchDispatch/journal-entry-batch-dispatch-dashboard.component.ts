@@ -8,7 +8,7 @@ import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
 import {
   mjBizAppsAccountingJournalEntryBatchEntity,
 } from '@mj-biz-apps/accounting-entities';
-import { JournalEntryBatchDispatchClient, JournalEntryBatchDecision } from './journal-entry-batch-dispatch.client';
+import { DispatchConfirmationKind, JournalEntryBatchDispatchClient, JournalEntryBatchDecision } from './journal-entry-batch-dispatch.client';
 
 /** The generated batch Status union (rule 2c: derived, never hand-copied). */
 type BatchStatus = mjBizAppsAccountingJournalEntryBatchEntity['Status'];
@@ -232,22 +232,29 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
   /**
    * Cancel an Approved or Failed batch (#183): the batch becomes Cancelled, its summary journal entry
    * is deleted and its journal entries return to the candidate pool for the next build — the opposite
-   * of Archive, which keeps them locked. A cancelled or blank prompt aborts silently. A Failed batch
-   * may already be in the ERP, so the operator must also confirm its document number has not posted
-   * there; declining aborts, because cancelling would let its entries post a second time.
+   * of Archive, which keeps them locked. A cancelled or blank reason prompt aborts silently.
+   *
+   * A Failed batch may already be in the ERP, and its entries would post again under the next batch's
+   * new number. The server looks the number up first (#207) and refuses outright if the ERP holds it;
+   * the operator is asked only when the lookup cannot settle it, and declining leaves the batch as is.
    */
   public async OnCancelApproved(row: BatchRow): Promise<void> {
     if (row.Busy) return;
-    const reason = this.PromptForCancelReason(row);
-    if (!reason?.trim()) return;
-    const isFailed = row.Status === 'Failed';
-    if (isFailed && !this.ConfirmNotPostedInERP(row)) return;
+    const reason = this.PromptForCancelReason(row)?.trim();
+    if (!reason) return;
 
     row.Busy = true;
     this.clearActionMessage();
     this.cdr.markForCheck();
     try {
-      const res = await this.client().CancelBatch(row.ID, reason.trim(), isFailed);
+      let res = await this.client().CancelBatch(row.ID, reason, false);
+      if (res.Success && res.ConfirmationRequired) {
+        if (!this.ConfirmNotPostedInERP(row, res.ConfirmationRequired, res.ConfirmationKind)) {
+          this.setActionMessage(`Batch ${row.JournalEntryBatchNumber} was not cancelled.`, false);
+          return;
+        }
+        res = await this.client().CancelBatch(row.ID, reason, true);
+      }
       if (res.Success) {
         this.setActionMessage(`Cancelled batch ${row.JournalEntryBatchNumber} — its journal entries return to the next build.`, false);
         await this.loadBatches();
@@ -265,12 +272,22 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
     return window.prompt(`Cancel batch ${row.JournalEntryBatchNumber}? Its journal entries return to the candidate pool for the next build.\n\nReason (required):`);
   }
 
-  /** The Failed-batch ERP check, as a seam a test can stub. */
-  protected ConfirmNotPostedInERP(row: BatchRow): boolean {
+  /**
+   * The Failed-batch ERP check, asked only when the server's lookup could not settle it, as a seam a
+   * test can stub. A `Mismatch` is most likely this batch already posted, so it needs the number typed.
+   */
+  protected ConfirmNotPostedInERP(row: BatchRow, serverReason: string, kind: DispatchConfirmationKind | undefined): boolean {
     const erp = row.TargetSystem || this.TargetSystem;
+    const doc = row.JournalEntryBatchNumber;
+    if (kind === 'Mismatch') {
+      const typed = window.prompt(
+        `${erp} already holds a posting under document ${doc} that differs from this batch.\n\n${serverReason}\n\n` +
+        `If it is this batch, do not cancel: its journal entries would post a second time. To cancel anyway, type ${doc}:`,
+      );
+      return typed?.trim() === doc;
+    }
     return window.confirm(
-      `Batch ${row.JournalEntryBatchNumber} failed, but it may still have posted to ${erp}.\n\n` +
-      `Confirm you searched ${erp} for document ${row.JournalEntryBatchNumber} and it has NOT posted. ` +
+      `${serverReason}\n\nConfirm you searched ${erp} for document ${doc} and it has NOT posted. ` +
       `If it has, cancelling lets its journal entries post a second time in the next batch.`,
     );
   }

@@ -125,8 +125,10 @@ balance **overall and per company** (AM-4), and writes atomically. Hooks on the 
   lines. Its content is frozen like an Approved batch's, and the dispatch check compares it with the
   `ApprovedContentHash` seal written at approval (#183). A `Failed` or `Approved` batch whose content
   is wrong is cancelled instead (`Accounting.CancelJournalEntryBatch`: the company's CFO or the
-  batch's approver only, reason required and written to the approval Task, plus the persisted ERP
-  confirmation from `Failed`), which releases its entries to the next build.
+  batch's approver only, reason required and written to the approval Task), which releases its
+  entries to the next build. From `Failed` the ERP is looked up first (#207), because the released
+  entries get a new number no later lookup can connect: a posting it holds refuses the cancel, nothing
+  found lets it through, and the operator confirms, persisted, only when the lookup cannot settle it.
   A
   `Posted` batch whose member `Batched → GLPosted` flip stopped partway is finished by
   `resumeJournalEntryBatchPosting` (`Accounting.ResumeJournalEntryBatchPosting`), which makes no

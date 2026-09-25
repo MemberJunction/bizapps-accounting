@@ -102,10 +102,13 @@ export interface JournalEntryBatchCancelOptions {
   /** Why the batch is being cancelled. Required from Approved or Failed (CK_JournalEntryBatch_CancelAudit). */
   reason?: string | null;
   /**
-   * Required `true` to cancel a Failed batch: the operator has checked the ERP and this batch's
-   * number has NOT posted there. Cancel releases the members, the next build batches them again
-   * under a NEW document number, and a journal that did post would then post twice. The attestation
-   * is persisted (ERPNotPostedConfirmedAt / ERPNotPostedConfirmedByUserID).
+   * Required `true` to cancel a Failed batch: this batch's number has NOT posted in the ERP. Cancel
+   * releases the members, the next build batches them again under a NEW document number, and a
+   * journal that did post would then post twice. The attestation is persisted
+   * (ERPNotPostedConfirmedAt / ERPNotPostedConfirmedByUserID). `cancelJournalEntryBatch` looks the
+   * number up in the ERP before calling this (#207): it sets `true` itself when the lookup found
+   * nothing, refuses when the lookup found the posting, and otherwise passes on the operator's
+   * confirmation. Calling `Cancel()` directly skips that lookup, so go through the engine.
    */
   confirmNotAlreadyPostedInERP?: boolean;
   /**

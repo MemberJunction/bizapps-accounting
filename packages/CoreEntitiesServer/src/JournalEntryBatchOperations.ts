@@ -433,7 +433,18 @@ export interface CancelJournalEntryBatchInput {
   /** Required `true` to cancel a Failed batch: the caller checked the ERP and the batch number has not posted. */
   ConfirmNotAlreadyPostedInERP?: boolean;
 }
-export interface CancelJournalEntryBatchOutput { Status: string; CancelledAt: string | null }
+export interface CancelJournalEntryBatchOutput {
+  Status: string;
+  CancelledAt: string | null;
+  /**
+   * Set, with the batch untouched, when a Failed cancel was refused because the ERP lookup could not
+   * settle whether the batch already posted (#207): why, for the operator to check before cancelling
+   * again with `ConfirmNotAlreadyPostedInERP`. A lookup that FOUND the posting refuses outright.
+   */
+  ConfirmationRequired?: string;
+  /** Which way the lookup could not settle it; `Mismatch` is most likely this batch, already posted. */
+  ConfirmationKind?: ErpPostingUnconfirmedKind;
+}
 
 /**
  * Cancel an Approved or Failed batch and return its journal entries to the candidate pool (#183) —
@@ -451,12 +462,19 @@ export class CancelJournalEntryBatchOperation extends BaseRemotableOperation<Can
     if (!input?.JournalEntryBatchID) throw new Error('CancelJournalEntryBatch: JournalEntryBatchID is required.');
     requireSqlGuid(input.JournalEntryBatchID, 'CancelJournalEntryBatch');
     await this.refusePending(input.JournalEntryBatchID, provider, user);
-    const batch = await cancelJournalEntryBatch(input.JournalEntryBatchID, user, provider, {
-      reason: input.Reason ?? null,
-      confirmNotAlreadyPostedInERP: input.ConfirmNotAlreadyPostedInERP === true,
-      gate: new TasksAppApprovalGate(provider),
-    });
-    return { Status: batch.Status, CancelledAt: batch.CancelledAt?.toISOString() ?? null };
+    try {
+      const batch = await cancelJournalEntryBatch(input.JournalEntryBatchID, user, provider, {
+        reason: input.Reason ?? null,
+        confirmNotAlreadyPostedInERP: input.ConfirmNotAlreadyPostedInERP === true,
+        gate: new TasksAppApprovalGate(provider),
+        lookup: createAccountingERPLookup(provider),
+      });
+      return { Status: batch.Status, CancelledAt: batch.CancelledAt?.toISOString() ?? null };
+    } catch (e) {
+      // An answer for the operator, not a failure of the call: the batch is untouched and still Failed.
+      if (e instanceof ErpPostingUnconfirmedError) return { Status: 'Failed', CancelledAt: null, ConfirmationRequired: e.Reason, ConfirmationKind: e.Kind };
+      throw e;
+    }
   }
 
   private async refusePending(batchId: string, provider: IMetadataProvider, user: UserInfo): Promise<void> {

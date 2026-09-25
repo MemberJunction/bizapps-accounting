@@ -140,8 +140,9 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   summary and runs `onCancelled`, in one transaction; the triggers key on that order (a member
   unlocks only while its batch is `Pending` or `Cancelled`; an Approved/Failed batch becomes
   Cancelled only with its pointer cleared in the same update). From `Approved`/`Failed` a reason is
-  required; from `Failed` so is the ERP confirmation, persisted as `ERPNotPostedConfirmedAt` /
-  `ERPNotPostedConfirmedByUserID`. A rolled-back cancel reloads the instance. `Save()` stamps
+  required; from `Failed` so is `confirmNotAlreadyPostedInERP`, persisted as `ERPNotPostedConfirmedAt` /
+  `ERPNotPostedConfirmedByUserID`. Calling `Cancel()` directly skips the ERP lookup below, so the
+  engine is the way in. A rolled-back cancel reloads the instance. `Save()` stamps
   `CancelledAt` / `CancelledByUserID` on the transition, as it does for the approval and archive pairs.
 - **`cancelJournalEntryBatch` + `TasksAppApprovalGate`** (#183) — a cancel past approval must pass
   `assertMayCancelApproved` (the company's `ApprovalCFOUserID` or the batch's `ApprovedByUserID`) and
@@ -149,6 +150,14 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   commits or rolls back with the cancel; it refuses when the user has no linked Person). The
   `Accounting.CancelJournalEntryBatch` operation refuses a Pending batch — that cancel is a CFO
   rejection through `RecordJournalEntryBatchDecision`.
+  **From `Failed` it looks the batch number up in the ERP first (#207)**, after authorizing and
+  before writing anything. A cancel releases the entries to be batched again under a NEW number that
+  no later lookup can connect to this journal, so this is the last point a posted batch is caught:
+  a matching posting refuses the cancel with no override (a retry records it `Posted` instead);
+  nothing found cancels, the lookup standing as the ERP check the attestation columns record; a
+  mismatch, a failed lookup or no lookup refuses with `ErpPostingUnconfirmedError` unless the
+  operator confirmed. The operation returns that refusal as `ConfirmationRequired` /
+  `ConfirmationKind`, and the approval Task comment says which way "not posted" was established.
 - **`TasksAppApprovalGate.recordDecision`** — now requires `contextUser` to BE the batch company's
   `AccountingCompanyProfile.ApprovalCFOUserID` (no CFO configured ⇒ hard-fail). Previously any
   authenticated user could approve any batch, including their own.
@@ -166,8 +175,8 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   (`TasksAppApprovalGate` — per-company CFO **union**: one Task assigned to every involved company's CFO) → Sent →
   **Posted** + JEs→GLPosted. A send the ERP rejects, or whose poster throws, returns normally with the batch `Failed`;
   the summary lines load before the `→Sent` save, so a failed load leaves the batch where it was.
-  Lifecycle (`LEGAL_TRANSITIONS`): `Pending → Approved | Cancelled | Archived`, `Approved → Sent | Archived`,
-  `Sent → Posted | Failed`, `Failed → Sent | Archived`; `Posted`, `Cancelled` and `Archived` are terminal.
+  Lifecycle (`LEGAL_TRANSITIONS`): `Pending → Approved | Cancelled | Archived`, `Approved → Sent | Cancelled | Archived`,
+  `Sent → Posted | Failed`, `Failed → Sent | Cancelled | Archived`; `Posted`, `Cancelled` and `Archived` are terminal.
 - **Batch recovery (#145).** *Retry* — `sendJournalEntryBatch` on a `Failed` batch reuses its approval.
   `Failed` does not prove the ERP rejected the journal: the post can succeed with the response lost, or
   succeed and then fail to save `Posted`. So every send, first or retry, looks the batch number up in
