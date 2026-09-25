@@ -485,8 +485,11 @@ column never appears and nothing reports a problem — and flyway checksums the 
 existing database refuses to migrate until someone repairs it by hand. `scripts/rebuild-db.sh`
 remains only for standing up a brand-new empty database; it is not a development loop.
 
-Write migrations idempotently (`IF NOT EXISTS`, `IF COL_LENGTH(...) IS NULL`) and assume the database
-already has data. A migration that reads `__mj.Entity` must skip cleanly when the row is absent —
+Write migrations **deterministically** against the state earlier migrations leave: Flyway runs each
+`V` migration once, in order, so guards against this repo's own earlier migrations are unnecessary
+(header: `DETERMINISTIC, NOT IDEMPOTENT`). Assume the database already has data, pre-check existing
+rows before adding a constraint, and keep guards where the starting point genuinely varies — see the
+doc. A migration that reads `__mj.Entity` must skip cleanly when the row is absent —
 CodeGen runs *after* migrations — and if the change is really about metadata (field categories,
 form layout), its home is `metadata/` and `mj sync push` **during development**.
 

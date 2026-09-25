@@ -30,9 +30,38 @@ migrations/V<yyyyMMddHHmm>__v<app-version>__<Short_Description>.sql
 ```
 
 It runs after the baseline on every deploy — clean install or existing database — so both converge
-on the same schema. Write it to be **idempotent** and to work on a database that already has data:
-guard with `IF NOT EXISTS` / `IF COL_LENGTH(...) IS NULL`, and give new `NOT NULL` columns a default
-or backfill them before adding the constraint.
+on the same schema. Write it to work on a database that **already has data**: give new `NOT NULL`
+columns a default or backfill them before adding the constraint, and check existing rows before
+adding a `CHECK` or `UNIQUE` constraint, so a violation fails with a message naming the rows and the
+fix instead of a bare constraint error.
+
+### Deterministic, not idempotent
+
+Flyway applies each `V` migration **exactly once, in version order**, records it in
+`flyway_schema_history`, and never re-runs one that succeeded. It also refuses to run one whose
+checksum has changed since it ran. So a `V` migration's starting point is exact: the state every
+earlier migration left. Write it **deterministically** against that state. Guards such as
+`IF NOT EXISTS` or `IF COL_LENGTH(...) IS NULL` are not needed for objects this repo's own earlier
+migrations create or leave out; they add nothing Flyway does not already guarantee. Say so in
+the header, as `V202609111415` and `V202609241700` do:
+
+```sql
+-- DETERMINISTIC, NOT IDEMPOTENT: this runs once, in order, against a database
+-- that has the prior migrations.
+```
+
+Guards **are** still required wherever the starting point genuinely differs from one database to
+another:
+
+- **Anything CodeGen creates.** Entity and field metadata rows exist only after CodeGen, which runs
+  after migrations. A migration that reads them must skip cleanly when they are absent (see below).
+- **Objects another schema owns.** MJ core, `bizapps-common` and sibling apps can sit at different
+  versions on different hosts, so check before relying on or altering their objects.
+- **Rows a host or developer may have written.** A backfill or data fix cannot assume which rows
+  exist. Pre-check them and fail with a clear message, as the constraint rule above says.
+
+When a migration can fail on existing data, make the check fail **before the first change**, so a
+host sees the problem and its fix rather than a partly applied script to repair by hand.
 
 Then regenerate the code CodeGen owns:
 
