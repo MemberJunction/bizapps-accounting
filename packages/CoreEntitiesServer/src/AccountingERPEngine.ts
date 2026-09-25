@@ -8,6 +8,7 @@
 import { IntegrationEngine } from '@memberjunction/integration-engine';
 import { IMetadataProvider, IRunViewProvider, LogError, LogStatus, UserInfo } from '@memberjunction/core';
 import { BaseSingleton, EscapeSQLString, MJGlobal } from '@memberjunction/global';
+import { ToCalendarDay } from '@mj-biz-apps/common-entities';
 import {
   ACCOUNTING_ENGINE_EXTENSION_ENTITY,
   ALL_ERP_SYNC_OBJECTS,
@@ -29,10 +30,15 @@ import {
   defaultAccountingVerbRunner,
   type AccountingVerbRunner,
 } from './AccountingVerbRunner.js';
-import { BaseAccountingERPProvider } from './BaseAccountingERPProvider.js';
+import {
+  BaseAccountingERPProvider,
+  type CreateERPJournalInput,
+  type ERPPostedJournalLine,
+} from './BaseAccountingERPProvider.js';
 import {
   resolveExternalAccount,
   resolveExternalDimensions,
+  type ErpJournalLookupResult,
   type ErpPostResult,
   type JournalEntryBatchTargetSystem,
 } from './JournalEntryBatchEngine.js';
@@ -177,41 +183,72 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
       return { success: false, error };
     }
 
+    let posted: ErpPostResult;
     try {
-      // One batched resolution for the whole summary — the tags live in a separate entity, and
-      // re-querying per line would issue two RunViews per line for data that does not vary.
-      const dimensionsByLine = await resolveExternalDimensions(summaryLines.map((l) => l.ID), user, provider);
-      const lines = [];
-      for (const line of summaryLines) {
-        const accountNumber = await resolveExternalAccount(line.GLAccountID, target, user, provider);
-        lines.push({
-          accountNumber,
-          debit: line.DebitAmount ?? undefined,
-          credit: line.CreditAmount ?? undefined,
-          description: line.Description ?? undefined,
-          dimensions: dimensionsByLine.get(line.ID),
-        });
-      }
-      const posted = await plugin.CreateJournalEntry({
+      posted = await plugin.CreateJournalEntry({
         CompanyID: companyId,
-        EntryDate: batch.PostingDate ? new Date(batch.PostingDate) : new Date(),
+        EntryDate: entryDateOf(batch),
         DocNumber: batch.JournalEntryBatchNumber,
         PrivateNote: `Accounting batch ${batch.JournalEntryBatchNumber}`,
-        Lines: lines,
+        Lines: await erpLinesFor(summaryLines, target, user, provider),
       }, user);
-      if (posted.success) {
-        ctx.ExternalJournalEntryBatchRef = posted.externalJournalEntryBatchRef ?? null;
-        await this.invokeExtensions(extensions, ctx, 'afterPost');
-      } else {
-        ctx.ErrorMessage = posted.error ?? 'ERP post failed';
-        await this.invokeExtensions(extensions, ctx, 'afterPostFailure');
-      }
-      return posted;
     } catch (e) {
-      const error = e instanceof Error ? e.message : String(e);
-      ctx.ErrorMessage = error;
+      posted = { success: false, error: e instanceof Error ? e.message : String(e) };
+    }
+
+    if (!posted.success) {
+      ctx.ErrorMessage = posted.error ?? 'ERP post failed';
       await this.invokeExtensions(extensions, ctx, 'afterPostFailure');
-      return { success: false, error };
+      return posted;
+    }
+    // The ERP has accepted the journal. Nothing after this point may turn that into a failure: a
+    // batch recorded Failed invites a retry, and a retry of a journal the ERP holds duplicates it.
+    ctx.ExternalJournalEntryBatchRef = posted.externalJournalEntryBatchRef ?? null;
+    try {
+      await this.invokeExtensions(extensions, ctx, 'afterPost');
+    } catch (e) {
+      LogError(`AccountingERPEngine.PostJournalBatch: afterPost failed for batch ${batch.JournalEntryBatchNumber ?? batch.ID}, which the ERP has accepted; the post stands.`, null, e);
+    }
+    return posted;
+  }
+
+  /**
+   * What the batch's target ERP holds under the batch's number, compared with what the batch would
+   * send (#182). A posting counts as this batch only when every line matches on account, debit and
+   * credit, and every line carries the batch's posting date. Runs no extension hooks: it posts
+   * nothing.
+   */
+  public async FindPostedJournalBatch(
+    batch: mjBizAppsAccountingJournalEntryBatchEntity,
+    summaryLines: mjBizAppsAccountingJournalEntryLineEntity[],
+    user: UserInfo,
+    provider: IMetadataProvider,
+  ): Promise<ErpJournalLookupResult> {
+    await this.Config(false, user, provider);
+    const target = batch.TargetSystem as JournalEntryBatchTargetSystem;
+    const integrations = await this.loadCredentialedIntegrations(user, provider, [batch.CompanyID]);
+    const ci = integrations.find((row) => namesMatch(row.IntegrationName, target));
+    // No integration or no provider: the post cannot run either, and says why when it is attempted.
+    const plugin = ci ? this.providerFor(ci.IntegrationName) : null;
+    if (!plugin) return { status: 'Unavailable' };
+    if (!batch.JournalEntryBatchNumber) {
+      return { status: 'Error', error: `batch ${batch.ID} has no number to look up in the ERP.` };
+    }
+
+    try {
+      const found = await plugin.FindJournalEntry({ CompanyID: batch.CompanyID, DocNumber: batch.JournalEntryBatchNumber }, user);
+      if (found.status !== 'Ok') return found;
+      if (found.lines.length === 0) return { status: 'NotFound' };
+      const expected = await erpLinesFor(summaryLines, target, user, provider);
+      // The day the post sends: the verb writes EntryDate from the same Date's UTC parts.
+      const postingDate = ToCalendarDay(entryDateOf(batch));
+      if (!postingDate) return { status: 'Error', error: `batch ${batch.JournalEntryBatchNumber} has an unreadable posting date.` };
+      const detail = postedJournalMismatch(expected, postingDate, found.lines);
+      return detail
+        ? { status: 'Mismatch', detail }
+        : { status: 'Found', externalJournalEntryBatchRef: found.externalJournalEntryBatchRef };
+    } catch (e) {
+      return { status: 'Error', error: e instanceof Error ? e.message : String(e) };
     }
   }
 
@@ -498,6 +535,73 @@ export function createAccountingERPPoster(provider: IMetadataProvider) {
     summaryLines: mjBizAppsAccountingJournalEntryLineEntity[],
     user: UserInfo,
   ): Promise<ErpPostResult> => AccountingERPEngine.Instance.PostJournalBatch(batch, summaryLines, user, provider);
+}
+
+/** The pre-flight partner of {@link createAccountingERPPoster}: wire the two together. */
+export function createAccountingERPLookup(provider: IMetadataProvider) {
+  return async (
+    batch: mjBizAppsAccountingJournalEntryBatchEntity,
+    summaryLines: mjBizAppsAccountingJournalEntryLineEntity[],
+    user: UserInfo,
+  ): Promise<ErpJournalLookupResult> => AccountingERPEngine.Instance.FindPostedJournalBatch(batch, summaryLines, user, provider);
+}
+
+/** The journal date the ERP receives. */
+function entryDateOf(batch: mjBizAppsAccountingJournalEntryBatchEntity): Date {
+  return batch.PostingDate ? new Date(batch.PostingDate) : new Date();
+}
+
+/** The summary lines in the terms the ERP receives them: external account numbers and dimension codes. */
+async function erpLinesFor(
+  summaryLines: mjBizAppsAccountingJournalEntryLineEntity[],
+  target: JournalEntryBatchTargetSystem,
+  user: UserInfo,
+  provider: IMetadataProvider,
+): Promise<CreateERPJournalInput['Lines']> {
+  // One batched resolution for the whole summary — the tags live in a separate entity, and
+  // re-querying per line would issue two RunViews per line for data that does not vary.
+  const dimensionsByLine = await resolveExternalDimensions(summaryLines.map((l) => l.ID), user, provider);
+  const lines: CreateERPJournalInput['Lines'] = [];
+  for (const line of summaryLines) {
+    const accountNumber = await resolveExternalAccount(line.GLAccountID, target, user, provider);
+    lines.push({
+      accountNumber,
+      debit: line.DebitAmount ?? undefined,
+      credit: line.CreditAmount ?? undefined,
+      description: line.Description ?? undefined,
+      dimensions: dimensionsByLine.get(line.ID),
+    });
+  }
+  return lines;
+}
+
+/**
+ * Why the posted lines are not the batch's lines, or null when they are: the same posting date on
+ * every line, and the same lines by account, debit and credit, each as many times as the batch has it.
+ */
+function postedJournalMismatch(expected: CreateERPJournalInput['Lines'], postingDate: string, posted: ERPPostedJournalLine[]): string | null {
+  const otherDates = [...new Set(posted.map((l) => l.postingDate).filter((d) => d !== postingDate))];
+  if (otherDates.length > 0) {
+    return `it posted on ${otherDates.join(', ')}; the batch's posting date is ${postingDate}.`;
+  }
+  const want = lineCounts(expected.map((l) => lineKey(l.accountNumber, l.debit ?? 0, l.credit ?? 0)));
+  const have = lineCounts(posted.map((l) => lineKey(l.accountNumber, l.debit, l.credit)));
+  const differing = [...new Set([...want.keys(), ...have.keys()])].filter((k) => want.get(k) !== have.get(k));
+  if (differing.length === 0) return null;
+  const shown = differing.slice(0, 5).map((k) => `${k} (batch ${want.get(k) ?? 0}, ERP ${have.get(k) ?? 0})`);
+  return `${posted.length} ERP line(s) against ${expected.length} in the batch; lines that differ, as account debit/credit: ` +
+    `${shown.join('; ')}${differing.length > shown.length ? `; and ${differing.length - shown.length} more` : ''}.`;
+}
+
+/** Account and amounts, rounded to the cent so float noise from either side cannot split a match. */
+function lineKey(accountNumber: string, debit: number, credit: number): string {
+  return `${accountNumber} ${debit.toFixed(2)}/${credit.toFixed(2)}`;
+}
+
+function lineCounts(keys: string[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const k of keys) counts.set(k, (counts.get(k) ?? 0) + 1);
+  return counts;
 }
 
 export function LoadAccountingERPEngine(): void {}

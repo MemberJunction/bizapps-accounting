@@ -72,6 +72,8 @@ export {
   resolveExternalAccount,
   resolveExternalDimensions,
   mockErpPoster,
+  unavailableErpLookup,
+  ErpPostingUnconfirmedError,
   AutoApproveGate,
 } from './JournalEntryBatchEngine.js';
 export type {
@@ -88,6 +90,9 @@ export type {
   JournalEntryBatchPreviewResult,
   ErpPostResult,
   ErpPoster,
+  ErpJournalLookup,
+  ErpJournalLookupResult,
+  ErpPostingUnconfirmedKind,
   JournalEntryBatchApprovalGate,
   SendJournalEntryBatchOptions,
   DispatchFailureRecord,
@@ -115,6 +120,7 @@ export { AccountingEngine } from './AccountingEngine.js';
 export {
   AccountingERPEngine,
   createAccountingERPPoster,
+  createAccountingERPLookup,
   LoadAccountingERPEngine,
 } from './AccountingERPEngine.js';
 export {
@@ -122,6 +128,12 @@ export {
   BusinessCentralERPProvider,
   QuickBooksERPProvider,
   LoadAccountingERPProviders,
+} from './BaseAccountingERPProvider.js';
+export type {
+  CreateERPJournalInput,
+  FindERPJournalInput,
+  ERPPostedJournalLine,
+  FindERPJournalResult,
 } from './BaseAccountingERPProvider.js';
 export { RunERPSyncOperation, LoadRunERPSyncOperation } from './RunERPSyncOperation.js';
 export { CreateJournalEntryOperation, LoadCreateJournalEntryOperation } from './CreateJournalEntryOperation.js';

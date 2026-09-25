@@ -56,6 +56,9 @@ interface BCJournalLineResult {
   documentNumber?: string;
 }
 
+/** How many staged lines the pre-write check reads: enough to name what is there, not to page it all. */
+const STAGED_LINES_SAMPLE = 20;
+
 type AccountingContextUser = NonNullable<RunActionParams['ContextUser']>;
 
 @RegisterClass(BaseAction, erpPluginKey(ACCOUNTING_VERBS.CreateJournalEntry, ERP_INTEGRATION.BusinessCentral))
@@ -82,6 +85,11 @@ export class CreateBusinessCentralJournalEntryWithDimensionsAction extends Creat
       const resolved = await this.resolveJournal(this.getParamValue(params.Params, 'JournalCode'), contextUser);
       if (!resolved.journal) {
         return this.errorResult(resolved.error ?? 'No general journal found in Business Central.', params.Params);
+      }
+
+      const staged = await this.stagedLinesError(resolved.journal, contextUser);
+      if (staged) {
+        return this.errorResult(staged, params.Params);
       }
 
       return await this.writeAndPost(resolved.journal, lines, params, contextUser);
@@ -130,6 +138,31 @@ export class CreateBusinessCentralJournalEntryWithDimensionsAction extends Creat
       await this.deleteJournalLines(createdLineIds, contextUser);
       throw postError;
     }
+  }
+
+  /**
+   * Refuse to write into a journal that already holds unposted lines. `Microsoft.NAV.post` posts the
+   * WHOLE journal, so any line already there goes to the GL with this entry. Lines get left behind
+   * when a post is rejected (a closed posting date, say) and the compensating delete then fails; a
+   * retry would write the batch a second time beside them and post both, doubling the GL under one
+   * document number, and the pre-send lookup cannot see them because it reads posted G/L entries
+   * only (#182). The same applies to lines staged by hand in BC. Returns the error, or null when the
+   * journal is empty.
+   */
+  private async stagedLinesError(journal: BCJournal, contextUser: AccountingContextUser): Promise<string | null> {
+    const response = await this.queryBC<{ value?: BCJournalLineResult[] }>(
+      `journals(${journal.id})/journalLines`, [], ['id', 'documentNumber'], [], undefined, STAGED_LINES_SAMPLE, contextUser,
+    );
+    if (!Array.isArray(response?.value)) {
+      return `Could not read the lines of Business Central journal '${journal.code ?? journal.id}' before posting.`;
+    }
+    if (response.value.length === 0) {
+      return null;
+    }
+    const documents = [...new Set(response.value.map(l => l.documentNumber || '(none)'))].join(', ');
+    const count = response.value.length >= STAGED_LINES_SAMPLE ? `${STAGED_LINES_SAMPLE} or more` : String(response.value.length);
+    return `Business Central journal '${journal.code ?? journal.id}' already holds ${count} unposted line(s), document number(s) ${documents}. ` +
+      'Posting would send them to the GL with this entry. Post or delete them in Business Central, then retry.';
   }
 
   /**

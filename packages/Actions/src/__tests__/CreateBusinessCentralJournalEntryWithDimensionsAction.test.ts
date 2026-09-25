@@ -53,6 +53,9 @@ const stubBC = (
     if (endpoint === 'journals') {
       return { value: [{ id: 'j-1', code: 'GENERAL', balancingAccountNumber: null }] };
     }
+    if (endpoint.startsWith('journals(j-1)/journalLines?') && method === 'GET') {
+      return { value: [] };
+    }
     if (endpoint.endsWith('/journalLines') && method === 'POST') {
       lineNumber += 1;
       return { id: `line-${lineNumber}`, documentNumber: 'JE-9' };
@@ -101,6 +104,7 @@ describe('CreateBusinessCentralJournalEntryWithDimensionsAction', () => {
 
     expect(calls(spy).map(c => [c[0], c[1]])).toEqual([
       ['journals', 'GET'],
+      ['journals(j-1)/journalLines?$select=id,documentNumber&$top=20', 'GET'],
       ['journals(j-1)/journalLines', 'POST'],
       ['journalLines(line-1)/dimensionSetLines', 'POST'],
       ['journalLines(line-1)/dimensionSetLines', 'POST'],
@@ -108,9 +112,9 @@ describe('CreateBusinessCentralJournalEntryWithDimensionsAction', () => {
       ['journalLines(line-2)/dimensionSetLines', 'POST'],
       ['journals(j-1)/Microsoft.NAV.post', 'POST'],
     ]);
-    expect(calls(spy)[2][2]).toEqual({ code: 'VENTURE', valueCode: 'ACME' });
-    expect(calls(spy)[3][2]).toEqual({ code: 'PRODUCT', valueCode: 'WIDGET' });
-    expect(calls(spy)[5][2]).toEqual({ code: 'VENTURE', valueCode: 'ACME' });
+    expect(calls(spy)[3][2]).toEqual({ code: 'VENTURE', valueCode: 'ACME' });
+    expect(calls(spy)[4][2]).toEqual({ code: 'PRODUCT', valueCode: 'WIDGET' });
+    expect(calls(spy)[6][2]).toEqual({ code: 'VENTURE', valueCode: 'ACME' });
     expect(result.Success).toBe(true);
     expect(outParam(result, 'JournalEntryID')).toBe('j-1');
     expect(outParam(result, 'TotalAmount')).toBe(100);
@@ -121,7 +125,7 @@ describe('CreateBusinessCentralJournalEntryWithDimensionsAction', () => {
 
     await run(action, inputs({ CompanyID: 'comp-1', DocNumber: 'JE-9', Lines: TAGGED_LINES }));
 
-    const firstLine = calls(spy)[1][2] as Record<string, unknown>;
+    const firstLine = calls(spy)[2][2] as Record<string, unknown>;
     expect(firstLine.accountNumber).toBe('1000');
     expect(firstLine.amount).toBe(100);
     expect(Object.keys(firstLine)).not.toContain('dimensions');
@@ -157,10 +161,39 @@ describe('CreateBusinessCentralJournalEntryWithDimensionsAction', () => {
     expect(result.Message).toBe('dimension VENTURE does not exist');
     expect(calls(spy).map(c => [c[0], c[1]])).toEqual([
       ['journals', 'GET'],
+      ['journals(j-1)/journalLines?$select=id,documentNumber&$top=20', 'GET'],
       ['journals(j-1)/journalLines', 'POST'],
       ['journalLines(line-1)/dimensionSetLines', 'POST'],
       ['journalLines(line-1)', 'DELETE'],
     ]);
+  });
+
+  // NAV.post posts the whole journal: lines left there by an earlier rejected post would go to the GL
+  // with this entry, and a retry would double the batch beside its own orphans (#182).
+  it('refuses to write into a journal that already holds unposted lines, naming their documents', async () => {
+    const spy = stubBC(action, (endpoint, method) =>
+      endpoint.startsWith('journals(j-1)/journalLines?') && method === 'GET'
+        ? { value: [{ id: 'old-1', documentNumber: 'JE-9' }, { id: 'old-2', documentNumber: 'JE-9' }] }
+        : undefined,
+    );
+
+    const result = await run(action, inputs({ CompanyID: 'comp-1', DocNumber: 'JE-9', Lines: TAGGED_LINES }));
+
+    expect(result.Success).toBe(false);
+    expect(result.Message).toMatch(/journal 'GENERAL' already holds 2 unposted line\(s\), document number\(s\) JE-9/);
+    expect(calls(spy).some(c => c[1] === 'POST')).toBe(false);
+  });
+
+  it('refuses to post when the journal lines cannot be read', async () => {
+    const spy = stubBC(action, (endpoint, method) =>
+      endpoint.startsWith('journals(j-1)/journalLines?') && method === 'GET' ? {} : undefined,
+    );
+
+    const result = await run(action, inputs({ CompanyID: 'comp-1', DocNumber: 'JE-9', Lines: TAGGED_LINES }));
+
+    expect(result.Success).toBe(false);
+    expect(result.Message).toMatch(/Could not read the lines of Business Central journal 'GENERAL'/);
+    expect(calls(spy).some(c => c[1] === 'POST')).toBe(false);
   });
 
   it('fails rather than dropping tags when BC returns a created line with no id', async () => {
