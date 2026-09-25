@@ -38,7 +38,7 @@ interface BuildJournalEntryBatchOutputWire {
   NothingToBatch: boolean;
 }
 
-interface DispatchJournalEntryBatchOutputWire { Status: string; ExternalJournalEntryBatchRef: string | null }
+interface DispatchJournalEntryBatchOutputWire { Status: string; ExternalJournalEntryBatchRef: string | null; ConfirmationRequired?: string }
 interface GetJournalEntryBatchApprovalStateOutputWire { Approved: boolean; Reason?: string }
 interface RecordJournalEntryBatchDecisionOutputWire { Recorded: true }
 interface ArchiveJournalEntryBatchOutputWire { Status: string; ArchivedAt: string | null }
@@ -77,6 +77,8 @@ export interface DispatchJournalEntryBatchResult {
   Status?: string;
   ExternalJournalEntryBatchRef?: string;
   ErrorMessage?: string;
+  /** Why a Failed retry was not sent: the ERP lookup could not settle whether the batch already posted. */
+  ConfirmationRequired?: string;
 }
 
 export interface RecordJournalEntryBatchDecisionResult {
@@ -234,17 +236,23 @@ export class JournalEntryBatchDispatchClient {
   }
 
   /**
-   * Dispatch an Approved batch to the ERP, or retry a Failed one (reusing its approval). A retry
-   * needs `confirmNotAlreadyPostedInERP`: a Failed batch may already be in the ERP, and the server
-   * refuses the retry without it. `Success` means the call ran, not that the ERP accepted — read
-   * `Status`, which is `'Failed'` when the ERP rejected the journal.
+   * Dispatch an Approved batch to the ERP, or retry a Failed one (reusing its approval). The server
+   * checks the ERP for the batch's number first. When that check cannot settle whether a Failed batch
+   * already posted, the retry is not sent and `ConfirmationRequired` says why; retry with
+   * `confirmNotAlreadyPostedInERP` once the operator has checked. `Success` means the call ran, not
+   * that the ERP accepted — read `Status`, which is `'Failed'` when the ERP rejected the journal.
    */
   public async DispatchJournalEntryBatch(batchID: string, confirmNotAlreadyPostedInERP = false): Promise<DispatchJournalEntryBatchResult> {
     try {
       const res = await this.dataProvider.RouteOperation<{ JournalEntryBatchID: string; ConfirmNotAlreadyPostedInERP: boolean }, DispatchJournalEntryBatchOutputWire>(
         'Accounting.DispatchJournalEntryBatch', { JournalEntryBatchID: batchID, ConfirmNotAlreadyPostedInERP: confirmNotAlreadyPostedInERP });
       if (!res.Success || !res.Output) return { Success: false, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
-      return { Success: true, Status: res.Output.Status, ExternalJournalEntryBatchRef: res.Output.ExternalJournalEntryBatchRef ?? undefined };
+      return {
+        Success: true,
+        Status: res.Output.Status,
+        ExternalJournalEntryBatchRef: res.Output.ExternalJournalEntryBatchRef ?? undefined,
+        ConfirmationRequired: res.Output.ConfirmationRequired,
+      };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       LogError(`JournalEntryBatchDispatchClient.DispatchJournalEntryBatch failed: ${msg}`);

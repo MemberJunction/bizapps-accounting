@@ -110,7 +110,7 @@
               variant="primary"
               size="sm"
               [disabled]="!CanRetry(b)"
-              [title]="RetryBlockedReason(b) ?? 'Re-attempt the ERP dispatch, after confirming the batch number has not posted in the ERP'"
+              [title]="RetryBlockedReason(b) ?? 'Re-attempt the ERP dispatch. The ERP is checked for the batch number first, so a batch it already holds is not posted twice'"
               (click)="Retry(b)">
               @if (RetryingJournalEntryBatchID === b.ID) {
                 <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Retrying…
@@ -224,18 +224,21 @@
   }
 </mj-page-body-interior>
 
-<!-- RETRY CONFIRMATION — Failed does not prove the ERP rejected the journal: the post can succeed with
-     the response lost, or succeed and then fail to record Posted. Nothing checks the ERP for the
-     document yet (#182), so the operator does, and the server refuses a retry without this answer. -->
+<!-- RETRY CONFIRMATION — shown only when the server's ERP lookup could not settle whether this Failed
+     batch already posted (#182): the ERP offers no lookup, the lookup failed, or the ERP holds
+     something under the number that does not match. The operator checks, and confirms or cancels. -->
 <mj-dialog [Visible]="RetryConfirmBatch !== null" Title="Check the ERP before retrying" Width="560px" (Close)="CancelRetry()">
   @if (RetryConfirmBatch) {
     <p>
-      Batch <span class="ds-mono">{{ RetryConfirmBatch.JournalEntryBatchNumber }}</span> failed, but the
-      {{ RetryConfirmBatch.TargetSystem }} journal may have posted anyway. Retrying a journal that already posted posts it twice.
+      Batch <span class="ds-mono">{{ RetryConfirmBatch.JournalEntryBatchNumber }}</span> was not retried: the
+      {{ RetryConfirmBatch.TargetSystem }} journal may have posted anyway, and retrying a journal that already posted posts it twice.
     </p>
+    @if (RetryConfirmReason) {
+      <p>{{ RetryConfirmReason }}</p>
+    }
     <p>
       In {{ RetryConfirmBatch.TargetSystem }}, search for document number
-      <span class="ds-mono">{{ RetryConfirmBatch.JournalEntryBatchNumber }}</span>. Retry only if it is not there.
+      <span class="ds-mono">{{ RetryConfirmBatch.JournalEntryBatchNumber }}</span>. Retry only if this batch is not there.
     </p>
   }
   <mj-dialog-actions>

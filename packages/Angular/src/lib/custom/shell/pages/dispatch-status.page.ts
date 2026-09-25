@@ -112,10 +112,11 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
   public LoadError: string | null = null;
   public RetryingJournalEntryBatchID: string | null = null;
   /**
-   * The Failed batch whose retry waits on the operator's ERP check. A Failed batch may already be in
-   * the ERP, and nothing checks for it yet (#182), so Retry opens this confirmation instead of sending.
+   * The Failed batch whose retry waits on the operator's ERP check: the server's lookup could not
+   * settle whether it already posted (#182), and `RetryConfirmReason` says why.
    */
   public RetryConfirmBatch: mjBizAppsAccountingJournalEntryBatchEntity | null = null;
+  public RetryConfirmReason: string | null = null;
   public ResumingJournalEntryBatchID: string | null = null;
 
   /**
@@ -475,37 +476,49 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
   }
 
   /**
-   * Ask the operator to check the ERP before a retry. `Failed` does not prove the ERP rejected the
-   * journal — the post can succeed with the response lost, or succeed and then fail to record Posted —
-   * and a retry of a journal the ERP already holds posts it twice.
+   * Re-attempt the ERP send. The server checks the ERP for the batch's number first: a posting that
+   * matches is recorded Posted without a second send. Only when that check cannot settle it does the
+   * operator get asked, with the server's reason — see {@link ConfirmRetry}.
    */
-  public Retry(batch: mjBizAppsAccountingJournalEntryBatchEntity): void {
+  public async Retry(batch: mjBizAppsAccountingJournalEntryBatchEntity): Promise<void> {
     if (!this.CanRetry(batch)) return;
-    this.RetryConfirmBatch = batch;
-    this.cdr.markForCheck();
+    await this.dispatchRetry(batch, false);
   }
 
   public CancelRetry(): void {
     this.RetryConfirmBatch = null;
+    this.RetryConfirmReason = null;
     this.cdr.markForCheck();
   }
 
   /**
-   * Re-attempt the ERP send once the operator confirms the batch number has not posted there. Same
-   * verb as Batch approvals: the server takes a Failed batch back through Sent, re-checking the
-   * approval it already has. A send the ERP rejects returns `Success` with `Status: 'Failed'`, so
-   * only `Posted` is reported as a successful retry.
+   * Retry with the operator's word that the batch number has not posted in the ERP. Offered only
+   * after the server refused a plain retry: `Failed` does not prove the ERP rejected the journal, and
+   * a retry of a journal the ERP already holds posts it twice.
    */
   public async ConfirmRetry(): Promise<void> {
     const batch = this.RetryConfirmBatch;
-    if (!batch || !this.CanRetry(batch)) return;
     this.RetryConfirmBatch = null;
+    this.RetryConfirmReason = null;
+    if (!batch || !this.CanRetry(batch)) return;
+    await this.dispatchRetry(batch, true);
+  }
+
+  /**
+   * Same verb as Batch approvals: the server takes a Failed batch back through Sent, re-checking the
+   * approval it already has. A send the ERP rejects returns `Success` with `Status: 'Failed'`, so
+   * only `Posted` is reported as a successful retry.
+   */
+  private async dispatchRetry(batch: mjBizAppsAccountingJournalEntryBatchEntity, confirmNotAlreadyPostedInERP: boolean): Promise<void> {
     this.RetryingJournalEntryBatchID = batch.ID;
     this.ActionMessage = null;
     this.cdr.markForCheck();
     try {
-      const res = await this.client().DispatchJournalEntryBatch(batch.ID, true);
-      if (res.Success && res.Status === 'Posted') {
+      const res = await this.client().DispatchJournalEntryBatch(batch.ID, confirmNotAlreadyPostedInERP);
+      if (res.Success && res.ConfirmationRequired) {
+        this.RetryConfirmBatch = batch;
+        this.RetryConfirmReason = res.ConfirmationRequired;
+      } else if (res.Success && res.Status === 'Posted') {
         this.ActionMessage = `Re-dispatched ${batch.JournalEntryBatchNumber}${res.ExternalJournalEntryBatchRef ? ` — ERP ref ${res.ExternalJournalEntryBatchRef}` : ''}.`;
         this.ActionIsError = false;
         this.SelectedBatch = null;
