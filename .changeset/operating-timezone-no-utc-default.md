@@ -1,5 +1,5 @@
 ---
-"@mj-biz-apps/accounting-core-entities-server": patch
+"@mj-biz-apps/accounting-core-entities-server": minor
 ---
 
 Stop defaulting `AccountingCompanyProfile.OperatingTimeZone` to `'UTC'` on create (#158).

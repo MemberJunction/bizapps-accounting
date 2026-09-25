@@ -1,5 +1,5 @@
 -- =============================================================================
--- Migration: V202609241900__v0.12.x__OperatingTimeZone_Description.sql
+-- Migration: V202609241900__v0.13.x__OperatingTimeZone_Description.sql
 -- Description: #158 — restate what AccountingCompanyProfile.OperatingTimeZone is for.
 -- =============================================================================
 --
