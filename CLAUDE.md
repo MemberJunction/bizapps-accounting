@@ -380,7 +380,9 @@ This repo uses MemberJunction's CodeGen system to generate entity and action sub
   Next: Central). `AccountingCompanyProfile.OperatingTimeZone` is still read as a per-company
   OVERRIDE where a profile has set it (`company-accounting-header.panel.ts`:
   `p['OperatingTimeZone'] || BusinessTimeZoneEngine.Instance.Zone`); the engine is the FALLBACK
-  when it is blank, replacing a hardcoded `'America/New_York'`. `OperatingTimeZone` itself migrates
+  when it is blank, replacing a hardcoded `'America/New_York'`. Blank means "inherit": nothing
+  defaults it on create (the old `'UTC'` first-save default is gone, #158). The v0.13 migration
+  cleared the `'UTC'` it had stamped on existing profiles. `OperatingTimeZone` itself migrates
   into MJ Companies at 6.2, at which point this override/fallback split goes away.
 - **DB defaults are UTC:** the SQL Server container runs at `+00:00`; verify with
   `SELECT DATENAME(TZOFFSET, SYSDATETIMEOFFSET())`. Views that need "today" are intended to cross

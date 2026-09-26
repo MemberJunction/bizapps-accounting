@@ -37,9 +37,9 @@ friendly thing happen; the trigger is the floor that catches anything — even r
 ## 1. The hooks in detail
 
 ### W1 — Profile init *(✅ `AccountingCompanyProfileEntityServer.ts` — auto-seed RETIRED 2026-07-30)*
-**Fires:** the only remaining automatic behavior on a new profile's first save is the
-**`OperatingTimeZone = 'UTC'`** default. **The COA auto-seed no longer fires on create** (Marcelo
-ruling 2026-07-30): a new company starts with an **EMPTY chart** — auto-seeding collided with the
+**Fires:** nothing on a new profile's first save. The **`OperatingTimeZone = 'UTC'`** default was
+removed (#158): the field is an optional per-company display override, and blank inherits
+`BizApps.BusinessTimeZone`. **The COA auto-seed no longer fires on create** (ruling 2026-07-30): a new company starts with an **EMPTY chart** — auto-seeding collided with the
 **L8 immediate identity lock**, forcing ten locked-identity accounts on every company.
 **Explicit capability instead:** `SeedDefaultChartOfAccounts()` (public, idempotent — existing codes
 skipped, every row via `BaseEntity.Save()` so it stays audit-by-construction) seeds the 10-account
