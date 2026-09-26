@@ -131,11 +131,27 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate {
 
   /** Block the send unless the batch's Task carries a terminal Approved/ApprovedWithConditions decision. */
   async assertApproved(batchId: string, contextUser: UserInfo): Promise<void> {
-    const task = await this.resolveBatchTask(batchId, contextUser);
-    if (!task) throw new Error(`Batch ${batchId} has no approval Task — it was not raised through TasksAppApprovalGate.onBatchBuilt.`);
+    // SECURITY: resolve the approval Task from the batch's STAMPED ApprovalTaskID column, not
+    // from the newest Task Link. Task Links are writable through the ordinary tasks-app surface,
+    // so a user who can create a Task + Task Link could otherwise point a newer link at this
+    // batch, self-approve their own Task, and have the newest-link lookup resolve to it —
+    // forging approval and dispatching real journal lines to the ERP. The engine stamps
+    // ApprovalTaskID inside the build transaction, so a legitimately-built batch always has it;
+    // a missing value fails closed.
+    const task = await this.resolveStampedApprovalTask(batchId, contextUser);
+    if (!task) throw new Error(`Batch ${batchId} has no stamped approval Task — it was not raised through TasksAppApprovalGate.onBatchBuilt.`);
     if (!(await this.hasApprovedDecision(task.ID, contextUser))) {
       throw new Error(`Batch ${batchId} is not approved — no terminal Approved/ApprovedWithConditions decision on its approval Task.`);
     }
+  }
+
+  /** Load the approval Task named by the batch's own ApprovalTaskID column (fails closed on null). */
+  private async resolveStampedApprovalTask(batchId: string, contextUser: UserInfo): Promise<mjBizAppsTasksTaskEntity | null> {
+    requireSqlGuid(batchId, 'TasksAppApprovalGate.resolveStampedApprovalTask');
+    const batch = await this.provider.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
+    if (!(await batch.Load(batchId)) || !batch.ApprovalTaskID) return null;
+    const task = await this.provider.GetEntityObject<mjBizAppsTasksTaskEntity>('MJ_BizApps_Tasks: Tasks', contextUser);
+    return (await task.Load(batch.ApprovalTaskID)) ? task : null;
   }
 
   /**
