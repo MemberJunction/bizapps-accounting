@@ -776,7 +776,7 @@ from `Approved` on, `Failed` included. `Cancelled` — from `Pending`, `Approved
 releases the members: the unlock is sanctioned while the owning batch is `Pending` or `Cancelled`,
 and an `Approved`/`Failed` batch becomes `Cancelled` only with its summary pointer cleared in the
 same update (#183). `Posted`, `Cancelled` and `Archived` are terminal, no batch returns to `Pending`,
-a `Sent` batch does not return to `Approved`, and a `Cancelled` batch's content, approval pair and
+only a `Pending` batch is approved, a `Sent` batch is not archived, and a `Cancelled` batch's content, approval pair and
 cancel audit are frozen (50031 / 50009). The cancel audit and the ERP check are written only by the
 update that cancels the batch, and `SentAt` is never cleared once set (50032). `Archived` keeps the members
 locked for good. Summary is excluded from netting/count/sweep via its type's `IsJournalEntryBatchSummary` flag (the

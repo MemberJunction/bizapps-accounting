@@ -1,5 +1,5 @@
 -- =============================================================================
--- Migration: V202609241700__v0.13.x__FailedBatchFreeze_CancelAfterApproval.sql
+-- Migration: V202609261000__v0.15.x__FailedBatchFreeze_CancelAfterApproval.sql
 -- Description: #183 — freeze a Failed batch's content, give Approved and Failed
 --              batches a Cancelled exit that releases their entries, and store
 --              a seal of the approved content.
@@ -38,10 +38,18 @@
 --     can only be released after the batch itself has committed to cancelling.
 --
 -- Because Cancelled now RELEASES entries, the batch trigger also polices the
--- statuses around it: Cancelled is reachable only from Pending, Approved or
--- Failed; Cancelled, Posted and Archived are terminal; and a Cancelled batch's
--- content, approval pair and cancel audit are frozen, so the evidence of an
--- approved batch's cancellation cannot be rewritten or deleted afterwards.
+-- statuses around it (50031): Cancelled is reachable only from Pending,
+-- Approved or Failed; Cancelled, Posted and Archived are terminal; no batch
+-- returns to Pending, whose members any journal entry save may release; only a
+-- Pending batch is approved; and a Sent batch is not archived. A Cancelled
+-- batch's content, approval pair and cancel audit are frozen (50009), so the
+-- evidence of an approved batch's cancellation cannot be rewritten or deleted.
+--
+-- The cancel audit and the ERP check (who established "not posted in the ERP",
+-- when, and whether by the ERP lookup or the canceller's attestation) are
+-- written only by the update that cancels the batch, and SentAt is never
+-- cleared once set (50032) — so no other save can stamp a false "not posted"
+-- record, or erase the evidence that a batch was sent.
 --
 -- THE APPROVED-CONTENT SEAL
 --
@@ -69,7 +77,7 @@ IF EXISTS (
     SELECT 1 FROM __mj_BizAppsAccounting.JournalEntryBatch
     WHERE Status = 'Cancelled' AND (ApprovedAt IS NOT NULL OR SentAt IS NOT NULL)
 )
-    THROW 50031, 'Migration V202609241700 cannot apply: at least one Cancelled JournalEntryBatch carries ApprovedAt or SentAt. Before this migration a batch could be cancelled only from Pending, so these rows were written outside the batching process. Review them (SELECT ID, JournalEntryBatchNumber, ApprovedAt, SentAt FROM __mj_BizAppsAccounting.JournalEntryBatch WHERE Status = ''Cancelled'' AND (ApprovedAt IS NOT NULL OR SentAt IS NOT NULL)) and correct them before re-running.', 1;
+    THROW 50031, 'Migration V202609261000 cannot apply: at least one Cancelled JournalEntryBatch carries ApprovedAt or SentAt. Before this migration a batch could be cancelled only from Pending, so these rows were written outside the batching process. Review them (SELECT ID, JournalEntryBatchNumber, ApprovedAt, SentAt FROM __mj_BizAppsAccounting.JournalEntryBatch WHERE Status = ''Cancelled'' AND (ApprovedAt IS NOT NULL OR SentAt IS NOT NULL)) and correct them before re-running.', 1;
 GO
 
 
@@ -167,7 +175,9 @@ BEGIN
     -- STATUS: Cancelled releases entries, so only Pending / Approved / Failed may reach it, an
     -- Approved or Failed batch reaches it only with its summary pointer cleared in the same update,
     -- and the terminal statuses never change again. Nothing moves back to Pending (a Pending batch's
-    -- members can be released by any journal entry save) and a Sent batch does not return to Approved.
+    -- members can be released by any journal entry save), only a Pending batch is approved, and a
+    -- Sent batch is not archived (it may still be posting in the ERP).
+    -- Pending -> Sent / Posted / Failed is refused by the entity only (tracked separately).
     IF EXISTS (
         SELECT 1
         FROM deleted d
@@ -176,14 +186,15 @@ BEGIN
           AND (
             d.Status IN ('Posted','Cancelled','Archived')
             OR i.Status = 'Pending'
-            OR (d.Status = 'Sent' AND i.Status = 'Approved')
+            OR (i.Status = 'Approved' AND d.Status <> 'Pending')
+            OR (i.Status = 'Archived' AND d.Status NOT IN ('Pending','Approved','Failed'))
             OR (i.Status = 'Cancelled' AND d.Status NOT IN ('Pending','Approved','Failed'))
             OR (i.Status = 'Cancelled' AND d.Status IN ('Approved','Failed') AND i.SummaryJournalEntryID IS NOT NULL)
           )
     )
     BEGIN
         ROLLBACK TRANSACTION;
-        THROW 50031, 'JournalEntryBatch status change refused. Posted, Cancelled and Archived are terminal; no batch returns to Pending and a Sent batch does not return to Approved; Cancelled is reachable only from Pending, Approved or Failed; and an Approved or Failed batch is cancelled only with its summary pointer cleared in the same update (JournalEntryBatchEntityServer.Cancel).', 1;
+        THROW 50031, 'JournalEntryBatch status change refused. Posted, Cancelled and Archived are terminal; no batch returns to Pending; only a Pending batch is approved; Archived is reachable only from Pending, Approved or Failed; Cancelled is reachable only from Pending, Approved or Failed; and an Approved or Failed batch is cancelled only with its summary pointer cleared in the same update (JournalEntryBatchEntityServer.Cancel).', 1;
     END;
 
     -- AUDIT: the cancel audit and the ERP check are written only by the update that cancels the
@@ -260,7 +271,7 @@ BEGIN
     )
     BEGIN
         ROLLBACK TRANSACTION;
-        THROW 50009, 'JournalEntryBatch is locked (Status=Approved/Sent/Posted/Failed/Archived/Cancelled). Only Status / SentAt / PostedAt / the Archive audit triple / ExternalJournalEntryBatchRef / ErrorMessage may evolve, plus the Cancel audit and ERP-check attestation until the batch is Cancelled. CompanyID, PostingDate, SummaryJournalEntryID, the approval-task pointer, ApprovedAt / ApprovedByUserID and ApprovedContentHash freeze at approval; the summary pointer may clear only as an Approved or Failed batch is Cancelled.', 1;
+        THROW 50009, 'JournalEntryBatch is locked (Status=Approved/Sent/Posted/Failed/Archived/Cancelled). Only Status / SentAt / PostedAt / the Archive audit triple / ExternalJournalEntryBatchRef / ErrorMessage may evolve; the Cancel audit and ERP check are written only by the update that cancels the batch (50032). CompanyID, PostingDate, SummaryJournalEntryID, the approval-task pointer, ApprovedAt / ApprovedByUserID and ApprovedContentHash freeze at approval; the summary pointer may clear only as an Approved or Failed batch is Cancelled.', 1;
     END;
 END;
 GO
@@ -2123,7 +2134,7 @@ EXEC [${mjSchema}].[spSetDefaultColumnWidthWhereNeeded] @ExcludedSchemaNames='',
 -- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.CancelReason 
 UPDATE [${mjSchema}].[EntityField]
 SET 
-   Category = 'Cancellation Details',
+   Category = 'Status and Lifecycle',
    GeneratedFormSection = 'Category'
 WHERE 
    ID = '6406F392-3F92-4ACA-8074-AC724D9BC84E';
@@ -2131,7 +2142,7 @@ WHERE
 -- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.CancelledAt 
 UPDATE [${mjSchema}].[EntityField]
 SET 
-   Category = 'Cancellation Details',
+   Category = 'Status and Lifecycle',
    GeneratedFormSection = 'Category'
 WHERE 
    ID = '64374970-4EBC-4C98-BF06-D0AB0FF77E1A';
@@ -2139,7 +2150,7 @@ WHERE
 -- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.CancelledByUserID 
 UPDATE [${mjSchema}].[EntityField]
 SET 
-   Category = 'Cancellation Details',
+   Category = 'Status and Lifecycle',
    GeneratedFormSection = 'Category',
    DisplayName = 'Cancelled By User'
 WHERE 
@@ -2148,7 +2159,7 @@ WHERE
 -- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.CancelledByUser 
 UPDATE [${mjSchema}].[EntityField]
 SET 
-   Category = 'Cancellation Details',
+   Category = 'Status and Lifecycle',
    GeneratedFormSection = 'Category',
    DisplayName = 'Cancelled By User Name'
 WHERE 
@@ -2157,7 +2168,7 @@ WHERE
 -- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.ERPNotPostedConfirmedAt 
 UPDATE [${mjSchema}].[EntityField]
 SET 
-   Category = 'Cancellation Details',
+   Category = 'Approval and Dispatch',
    GeneratedFormSection = 'Category'
 WHERE 
    ID = '027161E2-D4B6-456B-B1B0-FBA348A47418';
@@ -2165,7 +2176,7 @@ WHERE
 -- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.ERPNotPostedConfirmedByUserID 
 UPDATE [${mjSchema}].[EntityField]
 SET 
-   Category = 'Cancellation Details',
+   Category = 'Approval and Dispatch',
    GeneratedFormSection = 'Category',
    DisplayName = 'ERP Not Posted Confirmed By User'
 WHERE 
@@ -2174,7 +2185,7 @@ WHERE
 -- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.ERPNotPostedConfirmedByUser 
 UPDATE [${mjSchema}].[EntityField]
 SET 
-   Category = 'Cancellation Details',
+   Category = 'Approval and Dispatch',
    GeneratedFormSection = 'Category',
    DisplayName = 'ERP Not Posted Confirmed By User Name'
 WHERE 
@@ -2183,7 +2194,7 @@ WHERE
 -- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.ERPNotPostedBasis 
 UPDATE [${mjSchema}].[EntityField]
 SET 
-   Category = 'Cancellation Details',
+   Category = 'Approval and Dispatch',
    GeneratedFormSection = 'Category'
 WHERE 
    ID = '000637F6-2791-4465-9C75-0EE90D9481C0';
@@ -2195,25 +2206,6 @@ SET
    GeneratedFormSection = 'Category'
 WHERE 
    ID = '2D7EC068-5665-4F0C-A205-2EC00F1A9B16';
-
-/* Update FieldCategoryInfo setting for entity */
-
-                  UPDATE [${mjSchema}].[EntitySetting]
-                  SET [Value] = '{
-  "Cancellation Details": {
-    "description": "Information regarding batch cancellation and ERP verification status",
-    "icon": "fa fa-ban"
-  }
-}', [__mj_UpdatedAt] = GETUTCDATE()
-                  WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND [Name] = 'FieldCategoryInfo';
-
-/* Update FieldCategoryIcons setting (legacy) */
-
-                  UPDATE [${mjSchema}].[EntitySetting]
-                  SET [Value] = '{
-  "Cancellation Details": "fa fa-ban"
-}', [__mj_UpdatedAt] = GETUTCDATE()
-                  WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND [Name] = 'FieldCategoryIcons';
 
 /* Generated Validation Functions for MJ_BizApps_Accounting: Journal Entry Batches */
 -- CHECK constraint for MJ_BizApps_Accounting: Journal Entry Batches @ Table Level was newly set or modified since the last generation of the validation function, the code was regenerated and updating the GeneratedCode table with the new generated validation function

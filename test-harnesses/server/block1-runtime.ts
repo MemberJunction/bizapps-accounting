@@ -416,12 +416,12 @@ async function main(): Promise<void> {
     });
   }
 
-  await test('INV batch status — a cancelled-after-approval batch is terminal and its record frozen (50031 / 50009 / 50008)', async () => {
+  await test('INV batch status — a cancelled-after-approval batch is terminal and its record frozen (50031 / 50009 / 50032 / 50008)', async () => {
     const b = await rawBatchAt(ctx, 'Approved');
     await rawCancel(ctx, b);
     await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Pending' WHERE ID='${b.batchId}'`), 'status change refused');
     await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET ApprovedAt=NULL WHERE ID='${b.batchId}'`), 'JournalEntryBatch is locked');
-    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET CancelReason='rewritten' WHERE ID='${b.batchId}'`), 'JournalEntryBatch is locked');
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET CancelReason='rewritten' WHERE ID='${b.batchId}'`), 'audit refused');
     await expectThrow(() => pool.request().query(`DELETE FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${b.batchId}'`), 'cannot be deleted');
   });
 

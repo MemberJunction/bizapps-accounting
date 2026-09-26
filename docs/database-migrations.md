@@ -45,7 +45,7 @@ migration older than the newest one already applied. So a `V` migration's starti
 the state every earlier migration left. Write it **deterministically** against that state. Guards
 such as `IF NOT EXISTS` or `IF COL_LENGTH(...) IS NULL` are not needed for objects this repo's own
 earlier migrations create or leave out; they add nothing the runner does not already guarantee. Say
-so in the header, as `V202609111415` and `V202609241700` do:
+so in the header, as `V202609111415` and `V202609261000` do:
 
 ```sql
 -- DETERMINISTIC, NOT IDEMPOTENT: this runs once, in order, against a database

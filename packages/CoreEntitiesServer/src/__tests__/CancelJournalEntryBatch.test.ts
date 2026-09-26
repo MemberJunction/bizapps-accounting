@@ -37,10 +37,11 @@ function world(status: string): { batch: FakeBatch; provider: IMetadataProvider 
     JournalEntryBatchNumber: 'JEB-0183',
     Status: status,
     Load: async () => true,
-    // Run the hook the way the entity does, so the test sees what executes inside the transaction.
+    // In the entity's order: the batch is saved Cancelled (markCancelled), THEN the hook runs inside
+    // the transaction — so a hook that re-reads batch.Status sees Cancelled, as it would for real.
     Cancel: vi.fn(async (_user: UserInfo | undefined, options: JournalEntryBatchCancelOptions) => {
-      if (options.onCancelled) await options.onCancelled();
       batch.Status = 'Cancelled';
+      if (options.onCancelled) await options.onCancelled();
       return true;
     }),
   };

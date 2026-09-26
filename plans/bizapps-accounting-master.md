@@ -589,8 +589,8 @@ stateDiagram-v2
     Archived --> [*]
 ```
 
-`Posted`, `Cancelled` and `Archived` are terminal; no batch returns to `Pending`, and a `Sent`
-batch does not return to `Approved` (`trg_JournalEntryBatch_Immutability`, #183).
+`Posted`, `Cancelled` and `Archived` are terminal; no batch returns to `Pending`, only a `Pending`
+batch is approved, and a `Sent` batch is not archived (`trg_JournalEntryBatch_Immutability`, #183).
 
 ### 7.1 States
 
