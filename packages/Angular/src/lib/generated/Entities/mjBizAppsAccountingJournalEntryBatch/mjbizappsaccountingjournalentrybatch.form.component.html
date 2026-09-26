@@ -94,31 +94,6 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="ArchiveReason"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="ArchivedAt"
-            Type="datepicker"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="ArchivedByUserID"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-            LinkType="Record"
-        ></mj-form-field>
 
     </mj-collapsible-panel>
 
@@ -166,6 +141,14 @@
             [ShowLabel]="true"
             FieldName="ErrorMessage"
             Type="textarea"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="SendAttemptCount"
+            Type="number"
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
@@ -232,7 +215,23 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="SentByUserID"
+            FieldName="ArchiveReason"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="ArchivedAt"
+            Type="datepicker"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="ArchivedByUserID"
             Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
@@ -241,10 +240,11 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="SendAttemptCount"
-            Type="number"
+            FieldName="SentByUserID"
+            Type="textbox"
             [EditMode]="EditMode"
             [FormContext]="formContext"
+            LinkType="Record"
         ></mj-form-field>
 
     </mj-collapsible-panel>

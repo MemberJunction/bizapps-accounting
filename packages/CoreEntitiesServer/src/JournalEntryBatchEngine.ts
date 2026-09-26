@@ -883,6 +883,24 @@ export class ErpPostingUnconfirmedError extends Error {
 }
 
 /**
+ * The text every trg_JournalEntryBatch_SendOnce (50030) message starts with. Keep in sync with
+ * migrations/V202609261200__v0.15.x__BatchSendOnce_SendAudit.sql.
+ */
+const SEND_REFUSED_MARKER = 'JournalEntryBatch send refused';
+
+/**
+ * A send refused by trg_JournalEntryBatch_SendOnce (#184): another dispatch sent this batch after
+ * this one loaded it. The ERP was not called. The batch belongs to that other dispatch, so a caller
+ * must not record a failure against it — `Status` is what the batch reads now.
+ */
+export class JournalEntryBatchSendRefusedError extends Error {
+  constructor(public readonly JournalEntryBatchID: string, public readonly Status: string, detail: string) {
+    super(`sendJournalEntryBatch: batch ${JournalEntryBatchID} was sent by another dispatch (now ${Status}); this send was refused and did not call the ERP. ${detail}`);
+    this.name = 'JournalEntryBatchSendRefusedError';
+  }
+}
+
+/**
  * The statuses a send may start from. `Failed` is a RETRY (#145): the batch was approved before its
  * first send, and the gate and the coherence check below re-run on every send, so a retry reuses
  * that approval rather than asking for a second one. `Failed → Sent` is already an edge of
@@ -953,7 +971,7 @@ export async function sendJournalEntryBatch(batchId: string, contextUser: UserIn
   // The entity stamps SentAt, SentByUserID and SendAttemptCount. If another send of this batch got
   // here first, trg_JournalEntryBatch_SendOnce fails this save and the ERP is never called (#184).
   batch.Status = 'Sent';
-  if (!(await batch.Save())) throw new Error(`sendJournalEntryBatch: ${fromStatus}→Sent failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
+  if (!(await batch.Save())) throw await sentSaveFailure(batch, fromStatus, contextUser, p);
 
   if (refusal) return await failBatch(batch, refusal.reason);
   if (preflight.status === 'Found') {
@@ -965,6 +983,24 @@ export async function sendJournalEntryBatch(batchId: string, contextUser: UserIn
   return postResult.success
     ? await markBatchPosted(batch, postResult.externalJournalEntryBatchRef ?? null, contextUser, p)
     : await failBatch(batch, postResult.error ?? 'ERP post failed');
+}
+
+/**
+ * The error for a →Sent save that did not persist. A trg_JournalEntryBatch_SendOnce refusal becomes
+ * {@link JournalEntryBatchSendRefusedError}, carrying the status the batch reads now; anything else
+ * stays a plain Error.
+ */
+async function sentSaveFailure(
+  batch: mjBizAppsAccountingJournalEntryBatchEntity, fromStatus: string, contextUser: UserInfo, p: Providers,
+): Promise<Error> {
+  const message = batch.LatestResult?.CompleteMessage ?? 'unknown';
+  if (!message.includes(SEND_REFUSED_MARKER)) return new Error(`sendJournalEntryBatch: ${fromStatus}→Sent failed: ${message}`);
+  const res = await p.rv.RunView<{ Status: string }>(
+    { EntityName: BATCH_ENTITY, ExtraFilter: `ID=${sqlGuid(batch.ID)}`, Fields: ['Status'], ResultType: 'simple', BypassCache: true },
+    contextUser,
+  );
+  const status = res.Success ? (res.Results?.[0]?.Status ?? 'Unknown') : 'Unknown';
+  return new JournalEntryBatchSendRefusedError(batch.ID, status, message);
 }
 
 /** Run the lookup, turning a THROW into `Error` so it refuses the send like any other failed lookup. */

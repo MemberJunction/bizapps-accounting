@@ -171,8 +171,13 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   scheduled `Accounting.BuildJournalEntryBatches` appends the count to every run. Scheduled runs never retry.
 - **Send audit and send-once (#184).** `JournalEntryBatchEntityServer.Save` stamps `SentAt`, `SentByUserID` and
   `SendAttemptCount` (the loaded count plus one) on every transition into `Sent`. `trg_JournalEntryBatch_SendOnce`
-  (50030) refuses a new stamp on a row that is already `Sent`: of two concurrent sends of one batch, both of which
-  loaded it as `Approved` or `Failed`, the second save fails and `sendJournalEntryBatch` throws before its ERP call.
+  (50030) treats the count as a version token: a send must start from `Approved` or `Failed` and advance it by
+  exactly one, no update may keep a batch `Sent`, and the stamp changes at no other time. Of two sends that loaded
+  the same batch, the second save fails whether the first is still `Sent`, has `Posted` or has `Failed` again, and
+  `sendJournalEntryBatch` throws `JournalEntryBatchSendRefusedError` before its ERP call. The scheduled
+  `Accounting.BuildJournalEntryBatches` does not mark a batch `Failed` on that error: the batch belongs to the
+  dispatch that won. The count includes a retry adopted from the ERP and a first send the pre-flight refuses
+  (both enter `Sent` without an ERP call); a retry refused before `Sent` is not counted.
   A successful retry still clears `ErrorMessage`; the earlier value, and every overwritten `SentAt` and sender, are
   in `__mj.RecordChange` (the entity tracks record changes).
 - **S3 scheduled-JE schedules — ✅ creation only** (`ScheduledJournalEntryService.createScheduledEntries`:

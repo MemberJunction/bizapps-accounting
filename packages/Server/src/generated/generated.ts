@@ -3426,7 +3426,7 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @MaxLength(36)
     ApprovedByUserID?: string;
         
-    @Field({nullable: true, description: `When the batch was last sent to the ERP. A retry overwrites it; SendAttemptCount counts the sends, and __mj.RecordChange keeps each earlier value.`}) 
+    @Field({nullable: true, description: `When the batch last entered Sent. A retry overwrites it; SendAttemptCount counts the sends, and __mj.RecordChange keeps each earlier value.`}) 
     SentAt?: Date;
         
     @Field({nullable: true, description: `When the ERP confirmed it posted the batch (Status=Posted; renames the old AcknowledgedAt).`}) 
@@ -3459,11 +3459,11 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @MaxLength(36)
     ArchivedByUserID?: string;
         
-    @Field({nullable: true, description: `User who made the latest send to the ERP. Stamped on every transition into Sent. NULL for batches sent before this column existed.`}) 
+    @Field({nullable: true, description: `User whose dispatch last moved the batch into Sent. Stamped on every send; changes at no other time. NULL for batches sent before this column existed.`}) 
     @MaxLength(36)
     SentByUserID?: string;
         
-    @Field(() => Int, {nullable: true, description: `How many times the batch has been sent to the ERP: 1 for a first dispatch, one more for each retry. Above 1 on a Posted batch means an earlier send failed. Batches sent before this column existed read 1.`}) 
+    @Field(() => Int, {nullable: true, description: `Dispatch attempts that moved the batch into Sent, including a retry that finds the batch already in the ERP and a first send the pre-flight lookup refuses; neither calls the ERP. A retry refused before Sent is not counted. Each send must advance it by one (trg_JournalEntryBatch_SendOnce). Batches sent before this column existed read 1.`}) 
     SendAttemptCount?: number;
         
     @Field({nullable: true}) 

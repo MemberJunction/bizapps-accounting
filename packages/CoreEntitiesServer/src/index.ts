@@ -74,6 +74,7 @@ export {
   mockErpPoster,
   unavailableErpLookup,
   ErpPostingUnconfirmedError,
+  JournalEntryBatchSendRefusedError,
   AutoApproveGate,
 } from './JournalEntryBatchEngine.js';
 export type {

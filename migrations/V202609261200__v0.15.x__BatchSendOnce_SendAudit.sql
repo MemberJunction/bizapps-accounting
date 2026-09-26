@@ -1,7 +1,8 @@
 -- =============================================================================
--- Migration: V202609241800__v0.12.x__BatchSendOnce_SendAudit.sql
--- Description: #184 — a batch that is already Sent cannot be sent again, and
---              every send records who made it and which attempt it was.
+-- Migration: V202609261200__v0.15.x__BatchSendOnce_SendAudit.sql
+-- Description: #184 — a batch can be sent only from Approved or Failed, one
+--              send at a time, and every send records who made it and which
+--              attempt it was.
 -- =============================================================================
 --
 -- WHY
@@ -9,20 +10,43 @@
 -- sendJournalEntryBatch reads the batch's Status, checks it is sendable, then
 -- saves Status='Sent'. The generated spUpdate is a blind UPDATE ... WHERE ID=@ID,
 -- so nothing ties that write to the status the send read. Two retries of one
--- Failed batch, started within the same second, both read Failed, both write
--- Sent (Sent -> Sent is a legal no-op edge), and both call the ERP: two journals.
+-- Failed batch, started close together, both read Failed, both write Sent, and
+-- both call the ERP: two journals.
 --
 -- The entity layer cannot catch this. The second writer's Status OldValue is
 -- the Failed it loaded, so its Failed -> Sent looks legal to Validate(). The row
 -- lock on the UPDATE is the only place the two sends meet, so the refusal lives
--- in a trigger: the second UPDATE runs after the first commits, sees the row
--- already Sent in `deleted`, and a new send stamp on a Sent row is exactly a
--- second send. The losing save fails, and sendJournalEntryBatch throws at its
--- "->Sent failed" check before it calls the ERP.
+-- in a trigger, and it has to hold whatever the first send has reached by the
+-- time the second one's UPDATE lands:
 --
--- The stamp is SentAt plus SendAttemptCount. JournalEntryBatchEntityServer.Save
--- sets both, with SentByUserID, on every transition into Sent. A legitimate write
--- to a Sent batch leaves Sent (Posted or Failed) or changes neither.
+--   still Sent          the second UPDATE keeps the row Sent. Nothing keeps a
+--                       batch Sent on purpose — every write to a Sent batch
+--                       moves it to Posted or Failed — so a top-level UPDATE
+--                       that leaves a Sent row Sent is refused. That includes
+--                       one whose stamp matches the first send's exactly, the
+--                       same millisecond from the same user.
+--   Posted, or Failed   the second UPDATE writes the SendAttemptCount it
+--   again               computed from its stale load, which the first send
+--                       has already used. A send is valid only from Approved or
+--                       Failed, and only as the count's next value, so it is
+--                       refused. SendAttemptCount is the version token.
+--
+-- The losing save fails with 50030, and sendJournalEntryBatch throws
+-- JournalEntryBatchSendRefusedError before it calls the ERP.
+--
+-- The send stamp — SentAt, SentByUserID, SendAttemptCount — changes only on a
+-- valid send, so a Posted batch's count or sender cannot be edited afterwards.
+-- SentAt is compared at millisecond precision: the entity writes JavaScript
+-- dates, and an exact comparison misfires on a value SQL wrote with sub-ms digits.
+--
+-- The UPDATE that CodeGen's trgUpdateJournalEntryBatch makes to set
+-- __mj_UpdatedAt fires this trigger again, with the row already Sent. It changes
+-- nothing else, so it is let through by name.
+--
+-- THROW with no ROLLBACK TRANSACTION first. The entity's save runs spUpdate
+-- inside INSERT-EXEC, where a ROLLBACK is itself an error (3915) and the caller
+-- would get that in place of the message below. A trigger runs with XACT_ABORT
+-- on, so THROW alone rolls the update back.
 --
 -- A SEPARATE TRIGGER, not a branch of trg_JournalEntryBatch_Immutability: that
 -- trigger is replaced wholesale (CREATE OR ALTER) by each migration that widens
@@ -33,8 +57,7 @@
 -- full history of each attempt (the ErrorMessage a later success clears, every
 -- overwritten SentAt) is in __mj.RecordChange: the entity tracks record changes.
 --
--- DETERMINISTIC, NOT IDEMPOTENT (release-process.md §CodeGen): this runs once,
--- in order, against a database that has the baseline.
+-- This runs once, in order, against a database that has every earlier migration.
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
@@ -52,7 +75,8 @@ GO
 -- -----------------------------------------------------------------------------
 -- The true count for an existing batch is not recoverable from the row: a retry
 -- overwrote SentAt. 1 is the floor, and it keeps a Posted batch from reading as
--- never sent. SentByUserID stays NULL — unknown, not asserted.
+-- never sent. SentByUserID stays NULL — unknown, not asserted. Runs before the
+-- trigger exists.
 -- -----------------------------------------------------------------------------
 UPDATE __mj_BizAppsAccounting.JournalEntryBatch
 SET SendAttemptCount = 1
@@ -60,13 +84,7 @@ WHERE SentAt IS NOT NULL;
 GO
 
 -- -----------------------------------------------------------------------------
--- 3. A Sent batch cannot be sent again
--- -----------------------------------------------------------------------------
--- THROW with no ROLLBACK TRANSACTION first. The entity's save runs spUpdate
--- inside INSERT-EXEC, where a ROLLBACK is itself an error: the caller would get
--- "Cannot use the ROLLBACK statement within an INSERT-EXEC statement" in place
--- of the message below. A trigger runs with XACT_ABORT on, so THROW alone rolls
--- the update back.
+-- 3. One send at a time, from Approved or Failed, each the count's next value
 -- -----------------------------------------------------------------------------
 CREATE TRIGGER __mj_BizAppsAccounting.trg_JournalEntryBatch_SendOnce
 ON __mj_BizAppsAccounting.JournalEntryBatch
@@ -74,20 +92,35 @@ AFTER UPDATE
 AS
 BEGIN
     SET NOCOUNT ON;
+    IF TRIGGER_NESTLEVEL(OBJECT_ID(N'__mj_BizAppsAccounting.trgUpdateJournalEntryBatch'), 'AFTER', 'DML') > 0 RETURN;
+
+    -- Still Sent: another dispatch holds the batch.
     IF EXISTS (
-        SELECT 1
-        FROM deleted d
-        JOIN inserted i ON i.ID = d.ID
-        WHERE d.Status = 'Sent'
-          AND i.Status = 'Sent'
+        SELECT 1 FROM deleted d JOIN inserted i ON i.ID = d.ID
+        WHERE d.Status = 'Sent' AND i.Status = 'Sent'
+    )
+        THROW 50030, 'JournalEntryBatch send refused: the batch is already Sent. Another dispatch of it is in progress, and its outcome will be Posted or Failed.', 1;
+
+    -- Entering Sent: only from Approved or Failed, and only as the count's next value.
+    IF EXISTS (
+        SELECT 1 FROM deleted d JOIN inserted i ON i.ID = d.ID
+        WHERE i.Status = 'Sent' AND d.Status <> 'Sent'
+          AND (d.Status NOT IN ('Approved', 'Failed') OR i.SendAttemptCount <> d.SendAttemptCount + 1)
+    )
+        THROW 50030, 'JournalEntryBatch send refused: a send must start from Approved or Failed and advance SendAttemptCount by one. The batch has been sent since this send loaded it.', 1;
+
+    -- Not a send: the send stamp stays as it is.
+    IF EXISTS (
+        SELECT 1 FROM deleted d JOIN inserted i ON i.ID = d.ID
+        WHERE NOT (i.Status = 'Sent' AND d.Status <> 'Sent')
           AND (
             i.SendAttemptCount <> d.SendAttemptCount OR
-            ISNULL(i.SentAt, '0001-01-01') <> ISNULL(d.SentAt, '0001-01-01')
+            ISNULL(i.SentByUserID, '00000000-0000-0000-0000-000000000000') <> ISNULL(d.SentByUserID, '00000000-0000-0000-0000-000000000000') OR
+            (i.SentAt IS NULL AND d.SentAt IS NOT NULL) OR (i.SentAt IS NOT NULL AND d.SentAt IS NULL) OR
+            ABS(DATEDIFF_BIG(MICROSECOND, d.SentAt, i.SentAt)) >= 1000
           )
     )
-    BEGIN
-        THROW 50030, 'JournalEntryBatch is already Sent: another dispatch of this batch is in progress. Its outcome will be Posted or Failed; do not send it again.', 1;
-    END;
+        THROW 50030, 'JournalEntryBatch send refused: SentAt, SentByUserID and SendAttemptCount change only when the batch is sent.', 1;
 END;
 GO
 
@@ -95,17 +128,17 @@ GO
 -- 4. Column descriptions — CodeGen carries these into EntityField.Description
 -- -----------------------------------------------------------------------------
 EXEC sp_updateextendedproperty @name = N'MS_Description',
-    @value = N'When the batch was last sent to the ERP. A retry overwrites it; SendAttemptCount counts the sends, and __mj.RecordChange keeps each earlier value.',
+    @value = N'When the batch last entered Sent. A retry overwrites it; SendAttemptCount counts the sends, and __mj.RecordChange keeps each earlier value.',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'SentAt';
 GO
 
 EXEC sp_addextendedproperty @name = N'MS_Description',
-    @value = N'User who made the latest send to the ERP. Stamped on every transition into Sent. NULL for batches sent before this column existed.',
+    @value = N'User whose dispatch last moved the batch into Sent. Stamped on every send; changes at no other time. NULL for batches sent before this column existed.',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'SentByUserID';
 GO
 
 EXEC sp_addextendedproperty @name = N'MS_Description',
-    @value = N'How many times the batch has been sent to the ERP: 1 for a first dispatch, one more for each retry. Above 1 on a Posted batch means an earlier send failed. Batches sent before this column existed read 1.',
+    @value = N'Dispatch attempts that moved the batch into Sent, including a retry that finds the batch already in the ERP and a first send the pre-flight lookup refuses; neither calls the ERP. A retry refused before Sent is not counted. Each send must advance it by one (trg_JournalEntryBatch_SendOnce). Batches sent before this column existed read 1.',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'SendAttemptCount';
 GO
 
@@ -194,7 +227,7 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
 
 /* SQL text to insert 2 new entity field(s) */
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'bc3f1c31-ca94-4b2c-bc79-ecbf76920aba' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'SentByUserID')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'bdff848f-1110-40cb-bcbd-106331b01d8e' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'SentByUserID')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -227,12 +260,12 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
          VALUES
          (
-            'bc3f1c31-ca94-4b2c-bc79-ecbf76920aba',
+            'bdff848f-1110-40cb-bcbd-106331b01d8e',
             '87AD37E9-62F9-4F0E-A15B-F64ADF009112', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
             (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112'),
             'SentByUserID',
             'Sent By User ID',
-            'User who made the latest send to the ERP. Stamped on every transition into Sent. NULL for batches sent before this column existed.',
+            'User whose dispatch last moved the batch into Sent. Stamped on every send; changes at no other time. NULL for batches sent before this column existed.',
             'uniqueidentifier',
             16,
             0,
@@ -257,7 +290,7 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
       END;
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'c208ee98-fbaf-41fd-b16f-24c80c3d9de0' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'SendAttemptCount')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '37c1bed5-8eed-41eb-86d3-f0bd4aacabe2' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'SendAttemptCount')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -290,12 +323,12 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
          VALUES
          (
-            'c208ee98-fbaf-41fd-b16f-24c80c3d9de0',
+            '37c1bed5-8eed-41eb-86d3-f0bd4aacabe2',
             '87AD37E9-62F9-4F0E-A15B-F64ADF009112', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
             (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112'),
             'SendAttemptCount',
             'Send Attempt Count',
-            'How many times the batch has been sent to the ERP: 1 for a first dispatch, one more for each retry. Above 1 on a Posted batch means an earlier send failed. Batches sent before this column existed read 1.',
+            'Dispatch attempts that moved the batch into Sent, including a retry that finds the batch already in the ERP and a first send the pre-flight lookup refuses; neither calls the ERP. A retry refused before Sent is not counted. Each send must advance it by one (trg_JournalEntryBatch_SendOnce). Batches sent before this column existed read 1.',
             'int',
             4,
             10,
@@ -329,11 +362,11 @@ EXEC [${mjSchema}].[spSetDefaultColumnWidthWhereNeeded] @ExcludedSchemaNames='',
 
 /* Create Entity Relationship: MJ: Users -> MJ_BizApps_Accounting: Journal Entry Batches (One To Many via SentByUserID) */
    IF NOT EXISTS (
-      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '93beef01-c86f-483c-8657-0d3de438a756'
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '70d16654-91bd-42d2-9fa6-ad47e227fe94'
    )
    BEGIN
       INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
-                    VALUES ('93beef01-c86f-483c-8657-0d3de438a756', 'E1238F34-2837-EF11-86D4-6045BDEE16E6', '87AD37E9-62F9-4F0E-A15B-F64ADF009112', 'SentByUserID', 'One To Many', 1, 1, 114, GETUTCDATE(), GETUTCDATE())
+                    VALUES ('70d16654-91bd-42d2-9fa6-ad47e227fe94', 'E1238F34-2837-EF11-86D4-6045BDEE16E6', '87AD37E9-62F9-4F0E-A15B-F64ADF009112', 'SentByUserID', 'One To Many', 1, 1, 114, GETUTCDATE(), GETUTCDATE())
    END;
 
 /* SQL text to sync schema info from database schemas */
@@ -411,8 +444,8 @@ IF NOT EXISTS (
 )
 CREATE INDEX IDX_AUTO_MJ_FKEY_JournalEntryBatch_SentByUserID ON [${flyway:defaultSchema}].[JournalEntryBatch] ([SentByUserID]);
 
-/* SQL text to update entity field related entity name field map for entity field ID BC3F1C31-CA94-4B2C-BC79-ECBF76920ABA */
-EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='BC3F1C31-CA94-4B2C-BC79-ECBF76920ABA', @RelatedEntityNameFieldMap='SentByUser';
+/* SQL text to update entity field related entity name field map for entity field ID BDFF848F-1110-40CB-BCBD-106331B01D8E */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='BDFF848F-1110-40CB-BCBD-106331B01D8E', @RelatedEntityNameFieldMap='SentByUser';
 
 /* Base View SQL for MJ_BizApps_Accounting: Journal Entries */
 -----------------------------------------------------------------
@@ -1300,7 +1333,7 @@ EXEC [${mjSchema}].[spDeleteUnneededEntityFields] @ExcludedSchemaNames='', @Enti
 
 /* SQL text to insert 1 new entity field(s) */
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'e7b0fd21-6179-4e35-9d99-a4ce119be8e4' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'SentByUser')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'e01fa5be-dda9-4835-9d33-2fd364d48414' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'SentByUser')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -1333,7 +1366,7 @@ EXEC [${mjSchema}].[spDeleteUnneededEntityFields] @ExcludedSchemaNames='', @Enti
          )
          VALUES
          (
-            'e7b0fd21-6179-4e35-9d99-a4ce119be8e4',
+            'e01fa5be-dda9-4835-9d33-2fd364d48414',
             '87AD37E9-62F9-4F0E-A15B-F64ADF009112', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
             (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112'),
             'SentByUser',
@@ -1374,7 +1407,7 @@ EXEC [${mjSchema}].[spSetDefaultColumnWidthWhereNeeded] @ExcludedSchemaNames='',
 -- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.ArchiveReason 
 UPDATE [${mjSchema}].[EntityField]
 SET 
-   Category = 'Status and Lifecycle',
+   Category = 'Approval and Dispatch',
    GeneratedFormSection = 'Category'
 WHERE 
    ID = '88C4A711-FB72-43A4-9800-069F42D60A3E';
@@ -1382,7 +1415,7 @@ WHERE
 -- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.ArchivedAt 
 UPDATE [${mjSchema}].[EntityField]
 SET 
-   Category = 'Status and Lifecycle',
+   Category = 'Approval and Dispatch',
    GeneratedFormSection = 'Category'
 WHERE 
    ID = '46B12172-B692-4E3E-9700-4838D439AA91';
@@ -1390,7 +1423,7 @@ WHERE
 -- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.ArchivedByUserID 
 UPDATE [${mjSchema}].[EntityField]
 SET 
-   Category = 'Status and Lifecycle',
+   Category = 'Approval and Dispatch',
    GeneratedFormSection = 'Category'
 WHERE 
    ID = '0C7DD17F-A4ED-460E-91BF-07F8F643E56C';
@@ -1398,7 +1431,7 @@ WHERE
 -- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.ArchivedByUser 
 UPDATE [${mjSchema}].[EntityField]
 SET 
-   Category = 'Status and Lifecycle',
+   Category = 'Approval and Dispatch',
    GeneratedFormSection = 'Category'
 WHERE 
    ID = '7DBAEC1E-3101-4314-B8BF-25F0F2EF6EC6';
@@ -1407,83 +1440,46 @@ WHERE
 UPDATE [${mjSchema}].[EntityField]
 SET 
    Category = 'Approval and Dispatch',
-   GeneratedFormSection = 'Category'
+   GeneratedFormSection = 'Category',
+   DisplayName = 'Sent By User'
 WHERE 
-   ID = 'BC3F1C31-CA94-4B2C-BC79-ECBF76920ABA';
-
--- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.SendAttemptCount 
-UPDATE [${mjSchema}].[EntityField]
-SET 
-   Category = 'Approval and Dispatch',
-   GeneratedFormSection = 'Category'
-WHERE 
-   ID = 'C208EE98-FBAF-41FD-B16F-24C80C3D9DE0';
+   ID = 'BDFF848F-1110-40CB-BCBD-106331B01D8E';
 
 -- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.SentByUser 
 UPDATE [${mjSchema}].[EntityField]
 SET 
    Category = 'Approval and Dispatch',
+   GeneratedFormSection = 'Category',
+   DisplayName = 'Sent By User Name'
+WHERE 
+   ID = 'E01FA5BE-DDA9-4835-9D33-2FD364D48414';
+
+-- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.SendAttemptCount 
+UPDATE [${mjSchema}].[EntityField]
+SET 
+   Category = 'Financial Summary',
    GeneratedFormSection = 'Category'
 WHERE 
-   ID = 'E7B0FD21-6179-4E35-9D99-A4CE119BE8E4';
+   ID = '37C1BED5-8EED-41EB-86D3-F0BD4AACABE2';
 
 /* Generated Validation Functions for MJ_BizApps_Accounting: Journal Entry Batches */
 -- CHECK constraint for MJ_BizApps_Accounting: Journal Entry Batches: Field: SendAttemptCount was newly set or modified since the last generation of the validation function, the code was regenerated and updating the GeneratedCode table with the new generated validation function
 IF NOT EXISTS (
-      SELECT 1 FROM [${mjSchema}].[GeneratedCode] WHERE [CategoryID] = (SELECT [ID] FROM [${mjSchema}].[vwGeneratedCodeCategories] WHERE [Name]='CodeGen: Validators') AND [LinkedEntityID] = 'DF238F34-2837-EF11-86D4-6045BDEE16E6' AND [LinkedRecordPrimaryKey] = 'C208EE98-FBAF-41FD-B16F-24C80C3D9DE0'
+      SELECT 1 FROM [${mjSchema}].[GeneratedCode] WHERE [CategoryID] = (SELECT [ID] FROM [${mjSchema}].[vwGeneratedCodeCategories] WHERE [Name]='CodeGen: Validators') AND [LinkedEntityID] = 'DF238F34-2837-EF11-86D4-6045BDEE16E6' AND [LinkedRecordPrimaryKey] = '37C1BED5-8EED-41EB-86D3-F0BD4AACABE2'
    )
    BEGIN
       INSERT INTO [${mjSchema}].[GeneratedCode] ([ID], [CategoryID], [GeneratedByModelID], [GeneratedAt], [Language], [Status], [Source], [Code], [Description], [Name], [LinkedEntityID], [LinkedRecordPrimaryKey])
-VALUES ('9b69230a-e3bf-4cd5-843a-9b13baa86b0b', (SELECT [ID] FROM [${mjSchema}].[vwGeneratedCodeCategories] WHERE [Name]='CodeGen: Validators'), 'C43229F6-4CC8-4838-9D04-03419A2DA191', GETUTCDATE(), 'TypeScript', 'Approved', '([SendAttemptCount]>=(0))', 'public ValidateSendAttemptCountGreaterThanOrEqualToZero(result: ValidationResult) {
-	if (this.SendAttemptCount < 0) {
+VALUES ('2e582586-9527-4379-8024-1bfa01caabd1', (SELECT [ID] FROM [${mjSchema}].[vwGeneratedCodeCategories] WHERE [Name]='CodeGen: Validators'), 'C43229F6-4CC8-4838-9D04-03419A2DA191', GETUTCDATE(), 'TypeScript', 'Approved', '([SendAttemptCount]>=(0))', 'public ValidateSendAttemptCountGreaterThanOrEqualToZero(result: ValidationResult) {
+	if (this.SendAttemptCount != null && this.SendAttemptCount < 0) {
 		result.Errors.push(new ValidationErrorInfo(
 			"SendAttemptCount",
-			"Send attempt count must be 0 or greater.",
+			"Send attempt count must be greater than or equal to 0.",
 			this.SendAttemptCount,
 			ValidationErrorType.Failure
 		));
 	}
-}', 'The number of send attempts must be zero or a positive number to ensure we do not record a negative count of attempts.', 'ValidateSendAttemptCountGreaterThanOrEqualToZero', 'DF238F34-2837-EF11-86D4-6045BDEE16E6', 'C208EE98-FBAF-41FD-B16F-24C80C3D9DE0')
+}', 'The number of send attempts must be zero or a positive number to ensure we maintain an accurate and logical count of communication attempts.', 'ValidateSendAttemptCountGreaterThanOrEqualToZero', 'DF238F34-2837-EF11-86D4-6045BDEE16E6', '37C1BED5-8EED-41EB-86D3-F0BD4AACABE2')
    END;
 
--- CHECK constraint for MJ_BizApps_Accounting: Journal Entry Batches @ Table Level was newly set or modified since the last generation of the validation function, the code was regenerated and updating the GeneratedCode table with the new generated validation function
-IF NOT EXISTS (
-      SELECT 1 FROM [${mjSchema}].[GeneratedCode] WHERE [CategoryID] = (SELECT [ID] FROM [${mjSchema}].[vwGeneratedCodeCategories] WHERE [Name]='CodeGen: Validators') AND [LinkedEntityID] = 'E0238F34-2837-EF11-86D4-6045BDEE16E6' AND [LinkedRecordPrimaryKey] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112'
-   )
-   BEGIN
-      INSERT INTO [${mjSchema}].[GeneratedCode] ([ID], [CategoryID], [GeneratedByModelID], [GeneratedAt], [Language], [Status], [Source], [Code], [Description], [Name], [LinkedEntityID], [LinkedRecordPrimaryKey])
-VALUES ('d4539d60-de60-41c7-8288-b68b79ae4208', (SELECT [ID] FROM [${mjSchema}].[vwGeneratedCodeCategories] WHERE [Name]='CodeGen: Validators'), 'C43229F6-4CC8-4838-9D04-03419A2DA191', GETUTCDATE(), 'TypeScript', 'Approved', '([Status]<>''Archived'' OR [ArchiveReason] IS NOT NULL AND len(ltrim(rtrim([ArchiveReason])))>(0) AND [ArchivedAt] IS NOT NULL AND [ArchivedByUserID] IS NOT NULL)', '	public ValidateArchivedStatusRequirements(result: ValidationResult) {
-		if (this.Status === "Archived") {
-			const hasReason = this.ArchiveReason != null && this.ArchiveReason.trim().length > 0;
-			const hasDate = this.ArchivedAt != null;
-			const hasUser = this.ArchivedByUserID != null;
-
-			if (!hasReason) {
-				result.Errors.push(new ValidationErrorInfo(
-					"ArchiveReason",
-					"An archive reason must be provided when the record is archived.",
-					this.ArchiveReason,
-					ValidationErrorType.Failure
-				));
-			}
-			if (!hasDate) {
-				result.Errors.push(new ValidationErrorInfo(
-					"ArchivedAt",
-					"The archived date must be set when the record is archived.",
-					this.ArchivedAt,
-					ValidationErrorType.Failure
-				));
-			}
-			if (!hasUser) {
-				result.Errors.push(new ValidationErrorInfo(
-					"ArchivedByUserID",
-					"The user who archived the record must be specified when the record is archived.",
-					this.ArchivedByUserID,
-					ValidationErrorType.Failure
-				));
-			}
-		}
-	}', 'When a record''s status is set to ''Archived'', an archive reason must be provided (and cannot be blank), along with the date/time it was archived and the ID of the user who archived it.', 'ValidateArchivedStatusRequirements', 'E0238F34-2837-EF11-86D4-6045BDEE16E6', '87AD37E9-62F9-4F0E-A15B-F64ADF009112')
-   END;
 
 

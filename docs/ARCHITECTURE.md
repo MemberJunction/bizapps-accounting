@@ -116,8 +116,11 @@ balance **overall and per company** (AM-4), and writes atomically. Hooks on the 
 - **DB invariants (triggers)** validated by `test-harnesses/server/block1-runtime.ts`, each with
   a raw-SQL bypass case: balanced-on-lock overall (50001) **and per company (50019/50022 —
   AM-4)**, JE immutability (50003/50004), JE-line immutability (50006). Batch side: summary
-  foots overall (50014) **and per company (50023)**, batch immutability (50008/50009), and send-once (50030): a batch already `Sent` cannot be sent
-  again, so of two concurrent dispatches only one reaches the ERP (#184).
+  foots overall (50014) **and per company (50023)**, batch immutability (50008/50009).
+  Send-once (50030, #184) is validated by L21 and L22 in `test-harnesses/server/phase2-encapsulation.live.test.ts`:
+  a send must start from `Approved` or `Failed` and advance `SendAttemptCount` by one, no update keeps a
+  batch `Sent`, and the send stamp changes at no other time. Of two dispatches that loaded the same batch,
+  only one reaches the ERP, whether the loser's save lands while the winner is `Sent` or after it has left.
   *(The period-close trigger + W4 routing were retired with the period tables.)*
 - **Batch lifecycle (CH-3):** `Pending → Approved → Sent → Posted | Failed | Cancelled` — see
   `JournalEntryBatchEngine.ts`; the ERP wire is **account numbers, split per company** (AM-4).

@@ -1409,7 +1409,7 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * Field Name: SentAt
         * * Display Name: Sent At
         * * SQL Data Type: datetimeoffset
-        * * Description: When the batch was last sent to the ERP. A retry overwrites it; SendAttemptCount counts the sends, and __mj.RecordChange keeps each earlier value.`),
+        * * Description: When the batch last entered Sent. A retry overwrites it; SendAttemptCount counts the sends, and __mj.RecordChange keeps each earlier value.`),
     PostedAt: z.date().nullable().describe(`
         * * Field Name: PostedAt
         * * Display Name: Posted At
@@ -1459,16 +1459,16 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * Description: User who archived the batch. Required when Status = Archived.`),
     SentByUserID: z.string().nullable().describe(`
         * * Field Name: SentByUserID
-        * * Display Name: Sent By User ID
+        * * Display Name: Sent By User
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
-        * * Description: User who made the latest send to the ERP. Stamped on every transition into Sent. NULL for batches sent before this column existed.`),
+        * * Description: User whose dispatch last moved the batch into Sent. Stamped on every send; changes at no other time. NULL for batches sent before this column existed.`),
     SendAttemptCount: z.number().describe(`
         * * Field Name: SendAttemptCount
         * * Display Name: Send Attempt Count
         * * SQL Data Type: int
         * * Default Value: 0
-        * * Description: How many times the batch has been sent to the ERP: 1 for a first dispatch, one more for each retry. Above 1 on a Posted batch means an earlier send failed. Batches sent before this column existed read 1.`),
+        * * Description: Dispatch attempts that moved the batch into Sent, including a retry that finds the batch already in the ERP and a first send the pre-flight lookup refuses; neither calls the ERP. A retry refused before Sent is not counted. Each send must advance it by one (trg_JournalEntryBatch_SendOnce). Batches sent before this column existed read 1.`),
     Company: z.string().describe(`
         * * Field Name: Company
         * * Display Name: Company
@@ -1495,7 +1495,7 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * SQL Data Type: nvarchar(100)`),
     SentByUser: z.string().nullable().describe(`
         * * Field Name: SentByUser
-        * * Display Name: Sent By User
+        * * Display Name: Sent By User Name
         * * SQL Data Type: nvarchar(100)`),
 });
 
@@ -5930,8 +5930,9 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
 
     /**
     * Validate() method override for MJ_BizApps_Accounting: Journal Entry Batches entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
-    * * SendAttemptCount: The number of send attempts must be zero or a positive number to ensure we do not record a negative count of attempts.
+    * * SendAttemptCount: The number of send attempts must be zero or a positive number to ensure we maintain an accurate and logical count of communication attempts.
     * * Table-Level: Both the approval task and the time it was raised must either be set together, or both must be empty.
+    * * Table-Level: When a record's status is set to 'Archived', an archive reason, an archive date, and the archiving user's ID must all be provided.
     * * Table-Level: Total debits, total credits, and total entries must all be greater than or equal to zero to ensure valid financial accounting records.
     * @public
     * @method
@@ -5941,6 +5942,7 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
         const result = super.Validate();
         this.ValidateSendAttemptCountGreaterThanOrEqualToZero(result);
         this.ValidateApprovalTaskAndRaisedAtCoexistence(result);
+        this.ValidateArchivedFieldsWhenStatusIsArchived(result);
         this.ValidateTotalsAreNonNegative(result);
         result.Success = result.Success && (result.Errors.length === 0);
 
@@ -5948,16 +5950,16 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     }
 
     /**
-    * The number of send attempts must be zero or a positive number to ensure we do not record a negative count of attempts.
+    * The number of send attempts must be zero or a positive number to ensure we maintain an accurate and logical count of communication attempts.
     * @param result - the ValidationResult object to add any errors or warnings to
     * @public
     * @method
     */
     public ValidateSendAttemptCountGreaterThanOrEqualToZero(result: ValidationResult) {
-    	if (this.SendAttemptCount < 0) {
+    	if (this.SendAttemptCount != null && this.SendAttemptCount < 0) {
     		result.Errors.push(new ValidationErrorInfo(
     			"SendAttemptCount",
-    			"Send attempt count must be 0 or greater.",
+    			"Send attempt count must be greater than or equal to 0.",
     			this.SendAttemptCount,
     			ValidationErrorType.Failure
     		));
@@ -5981,6 +5983,45 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     			this.ApprovalTaskID,
     			ValidationErrorType.Failure
     		));
+    	}
+    }
+
+    /**
+    * When a record's status is set to 'Archived', an archive reason, an archive date, and the archiving user's ID must all be provided.
+    * @param result - the ValidationResult object to add any errors or warnings to
+    * @public
+    * @method
+    */
+    public ValidateArchivedFieldsWhenStatusIsArchived(result: ValidationResult) {
+    	if (this.Status === "Archived") {
+    		const hasArchiveReason = this.ArchiveReason != null && this.ArchiveReason.trim().length > 0;
+    		const hasArchivedAt = this.ArchivedAt != null;
+    		const hasArchivedByUserID = this.ArchivedByUserID != null;
+    
+    		if (!hasArchiveReason) {
+    			result.Errors.push(new ValidationErrorInfo(
+    				"ArchiveReason",
+    				"An archive reason is required when the status is set to 'Archived'.",
+    				this.ArchiveReason,
+    				ValidationErrorType.Failure
+    			));
+    		}
+    		if (!hasArchivedAt) {
+    			result.Errors.push(new ValidationErrorInfo(
+    				"ArchivedAt",
+    				"The archive date and time are required when the status is set to 'Archived'.",
+    				this.ArchivedAt,
+    				ValidationErrorType.Failure
+    			));
+    		}
+    		if (!hasArchivedByUserID) {
+    			result.Errors.push(new ValidationErrorInfo(
+    				"ArchivedByUserID",
+    				"The user who archived the record is required when the status is set to 'Archived'.",
+    				this.ArchivedByUserID,
+    				ValidationErrorType.Failure
+    			));
+    		}
     	}
     }
 
@@ -6243,7 +6284,7 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     * * Field Name: SentAt
     * * Display Name: Sent At
     * * SQL Data Type: datetimeoffset
-    * * Description: When the batch was last sent to the ERP. A retry overwrites it; SendAttemptCount counts the sends, and __mj.RecordChange keeps each earlier value.
+    * * Description: When the batch last entered Sent. A retry overwrites it; SendAttemptCount counts the sends, and __mj.RecordChange keeps each earlier value.
     */
     get SentAt(): Date | null {
         return this.Get('SentAt');
@@ -6367,10 +6408,10 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
 
     /**
     * * Field Name: SentByUserID
-    * * Display Name: Sent By User ID
+    * * Display Name: Sent By User
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
-    * * Description: User who made the latest send to the ERP. Stamped on every transition into Sent. NULL for batches sent before this column existed.
+    * * Description: User whose dispatch last moved the batch into Sent. Stamped on every send; changes at no other time. NULL for batches sent before this column existed.
     */
     get SentByUserID(): string | null {
         return this.Get('SentByUserID');
@@ -6384,7 +6425,7 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     * * Display Name: Send Attempt Count
     * * SQL Data Type: int
     * * Default Value: 0
-    * * Description: How many times the batch has been sent to the ERP: 1 for a first dispatch, one more for each retry. Above 1 on a Posted batch means an earlier send failed. Batches sent before this column existed read 1.
+    * * Description: Dispatch attempts that moved the batch into Sent, including a retry that finds the batch already in the ERP and a first send the pre-flight lookup refuses; neither calls the ERP. A retry refused before Sent is not counted. Each send must advance it by one (trg_JournalEntryBatch_SendOnce). Batches sent before this column existed read 1.
     */
     get SendAttemptCount(): number {
         return this.Get('SendAttemptCount');
@@ -6449,7 +6490,7 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
 
     /**
     * * Field Name: SentByUser
-    * * Display Name: Sent By User
+    * * Display Name: Sent By User Name
     * * SQL Data Type: nvarchar(100)
     */
     get SentByUser(): string | null {

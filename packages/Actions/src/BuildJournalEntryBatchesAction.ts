@@ -13,6 +13,7 @@ import {
   sendJournalEntryBatch,
   AutoApproveGate,
   EmptyJournalEntryBatchError,
+  JournalEntryBatchSendRefusedError,
   TasksAppApprovalGate,
   type BuildJournalEntryBatchResult,
   type JournalEntryBatchApprovalGate,
@@ -201,6 +202,11 @@ async function dispatchOne(
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     LogError(`Accounting.BuildJournalEntryBatches: dispatch of batch ${batch.batchId} failed: ${message}`);
+    // Another dispatch sent this batch first and owns it. Triage would mark that dispatch's
+    // in-flight batch Failed, inviting a retry while its ERP call may still be running (#184).
+    if (e instanceof JournalEntryBatchSendRefusedError) {
+      return { companyId, batch, status: e.Status, error: message, needsAttention: e.Status !== 'Posted' };
+    }
     // Every route through triage began with a throw, so every one of them needs a human — including
     // the `Posted` one, where the ERP has the journal but the member JE flip did not finish.
     return { companyId, batch, needsAttention: true, ...(await triage(batch.batchId, message, user, provider)) };

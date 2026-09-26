@@ -746,8 +746,8 @@ erDiagram
         datetimeoffset ApprovalTaskRaisedAt "nullable"
         string ExternalJournalEntryBatchRef "nullable"
         datetimeoffset SentAt "nullable - latest send; a retry overwrites it"
-        uuid SentByUserID FK "nullable - who made the latest send (#184)"
-        int SendAttemptCount "sends so far; trg_JournalEntryBatch_SendOnce (50030) refuses a second send of a Sent batch"
+        uuid SentByUserID FK "nullable - whose dispatch last entered Sent (#184)"
+        int SendAttemptCount "dispatch attempts that entered Sent; each send must advance it by one (trg_JournalEntryBatch_SendOnce, 50030)"
         datetimeoffset PostedAt "nullable"
         string ErrorMessage "nullable"
     }

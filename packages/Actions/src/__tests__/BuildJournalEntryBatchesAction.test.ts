@@ -268,6 +268,25 @@ describe('BuildJournalEntryBatchesAction', () => {
         expect(result.Message).toContain('NOT marked Failed');
     });
 
+    // #184: a refused send means another dispatch holds the batch. Marking it Failed would put that
+    // dispatch's in-flight batch on the retry list while its ERP call may still be running.
+    it('never marks a batch Failed when its send was refused because another dispatch holds it', async () => {
+        vi.spyOn(serverEngine, 'pendingCompanies').mockResolvedValue(['CO-1']);
+        vi.spyOn(serverEngine, 'buildJournalEntryBatch').mockImplementation(async (companyId) => buildResult(companyId));
+        vi.spyOn(serverEngine, 'approveJournalEntryBatch').mockResolvedValue({} as never);
+        vi.spyOn(serverEngine, 'createAccountingERPPoster').mockReturnValue(vi.fn() as never);
+        vi.spyOn(serverEngine, 'sendJournalEntryBatch')
+            .mockRejectedValue(new serverEngine.JournalEntryBatchSendRefusedError('BATCH-CO-1', 'Sent', 'JournalEntryBatch send refused: the batch is already Sent.'));
+        const failSpy = vi.spyOn(serverEngine, 'recordDispatchFailure');
+
+        const result = await new BuildJournalEntryBatchesAction().Run(runParams(AUTO_POST_INPUTS));
+
+        expect(failSpy).not.toHaveBeenCalled();
+        expect(result.Success).toBe(false);
+        expect(result.Message).toContain('(Sent:');
+        expect(result.Message).toContain('sent by another dispatch');
+    });
+
     // ─── A build failure must not strand the companies already dispatched ────────────────
 
     it('AutoPost dispatches each company as it builds, so a later build failure strands nothing', async () => {

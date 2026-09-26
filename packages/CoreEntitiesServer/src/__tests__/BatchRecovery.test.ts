@@ -19,6 +19,7 @@ import {
     findStrandedJournalEntries,
     resumeJournalEntryBatchPosting,
     sendJournalEntryBatch,
+    JournalEntryBatchSendRefusedError,
     type ErpJournalLookup,
     type ErpJournalLookupResult,
     type ErpPoster,
@@ -49,7 +50,7 @@ interface FakeBatch {
 }
 
 /** An in-memory world: one batch, its member entries, and which entry saves should fail. */
-function world(status: string, entries: Record<string, JournalEntryRow>, opts: { failingEntryIds?: string[]; missingEntryIds?: string[]; drift?: string[]; summaryLinesScanFails?: boolean; failFirstSaveAt?: string } = {}) {
+function world(status: string, entries: Record<string, JournalEntryRow>, opts: { failingEntryIds?: string[]; missingEntryIds?: string[]; drift?: string[]; summaryLinesScanFails?: boolean; failFirstSaveAt?: string; sentSaveMessage?: string; currentStatus?: string } = {}) {
     let saveFailed = false;
     const batch: FakeBatch = {
         ID: BATCH_ID,
@@ -65,6 +66,7 @@ function world(status: string, entries: Record<string, JournalEntryRow>, opts: {
         Load: async () => true,
         Save: vi.fn(async () => {
             if (opts.failFirstSaveAt === batch.Status && !saveFailed) { saveFailed = true; return false; }
+            if (opts.sentSaveMessage && batch.Status === 'Sent') { batch.LatestResult = { CompleteMessage: opts.sentSaveMessage }; return false; }
             batch.statusHistory.push(batch.Status);
             return true;
         }),
@@ -95,7 +97,9 @@ function world(status: string, entries: Record<string, JournalEntryRow>, opts: {
     const provider = {
         GetEntityObject: async (name: string) => (name === BATCH_ENTITY ? batch : journalEntry()),
         RunView: async (params: RunViewParams) =>
-            params.EntityName !== JE_ENTITY && opts.summaryLinesScanFails
+            params.EntityName === BATCH_ENTITY
+                ? { Success: true, Results: opts.currentStatus ? [{ Status: opts.currentStatus }] : [] }
+                : params.EntityName !== JE_ENTITY && opts.summaryLinesScanFails
                 ? { Success: false, ErrorMessage: 'timeout', Results: [] }
                 : { Success: true, Results: params.EntityName === JE_ENTITY ? batchedIds() : [] },
     } as unknown as IMetadataProvider;
@@ -208,6 +212,31 @@ describe('sendJournalEntryBatch — retrying a Failed batch', () => {
         await expect(sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, provider }))
             .rejects.toThrow(/only an Approved batch can be sent or a Failed batch retried/);
         expect(poster).not.toHaveBeenCalled();
+    });
+});
+
+// #184: trg_JournalEntryBatch_SendOnce refuses the →Sent save of a send that lost a race.
+describe('sendJournalEntryBatch — a send refused because another dispatch sent the batch first', () => {
+    const refusal = 'Error executing SQL: JournalEntryBatch send refused: the batch is already Sent.';
+
+    it.each(['Sent', 'Posted'])('throws JournalEntryBatchSendRefusedError naming the status the batch reads now (%s), without calling the ERP', async (now) => {
+        const { provider } = world('Failed', { 'je-1': batched() }, { sentSaveMessage: refusal, currentStatus: now });
+        const poster = acceptingPoster();
+
+        const sent = sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, provider, confirmNotAlreadyPostedInERP: true });
+
+        await expect(sent).rejects.toBeInstanceOf(JournalEntryBatchSendRefusedError);
+        await expect(sent).rejects.toMatchObject({ JournalEntryBatchID: BATCH_ID, Status: now });
+        expect(poster).not.toHaveBeenCalled();
+    });
+
+    it('keeps any other →Sent save failure a plain error', async () => {
+        const { provider } = world('Approved', { 'je-1': batched() }, { sentSaveMessage: 'deadlock victim', currentStatus: 'Approved' });
+
+        const sent = sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster: acceptingPoster(), provider });
+
+        await expect(sent).rejects.toThrow(/Approved→Sent failed: deadlock victim/);
+        await expect(sent).rejects.not.toBeInstanceOf(JournalEntryBatchSendRefusedError);
     });
 });
 
