@@ -1,7 +1,7 @@
 {
   "name": "@mj-biz-apps/accounting-actions",
   "type": "module",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "Generated action subclasses maintained by the CodeGen utility.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -14,17 +14,19 @@
   "scripts": {
     "start": "ts-node-dev src/index.ts",
     "build": "tsc && tsc-alias -f",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:types": "tsc --noEmit -p tsconfig.spec.json"
   },
   "author": "MemberJunction.com",
   "license": "BUSL-1.1",
   "devDependencies": {
+    "@types/node": "^24.10.11",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
   },
   "dependencies": {
-    "@mj-biz-apps/accounting-core-entities-server": "0.12.0",
+    "@mj-biz-apps/accounting-core-entities-server": "0.13.0",
     "@mj-biz-apps/common-entities": ">=5.43.0",
     "zod": "^3.25.28"
   },

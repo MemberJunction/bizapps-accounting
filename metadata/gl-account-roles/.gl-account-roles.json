@@ -166,5 +166,17 @@
     "primaryKey": {
       "ID": "3EFC77F3-2468-463F-9197-D0A8A6762A36"
     }
+  },
+  {
+    "fields": {
+      "Name": "Customer Deposits",
+      "Description": "Liability account for cash received against an order instalment that has not been invoiced yet (orders #234). A payment credits it for the part no invoice covers, a refund of that cash debits it, and issuing the instalment clears it against Accounts Receivable, so the balance is only ever money held ahead of billing. Resolved like every other role: product, product category, product type, then company. Finance may link it to a dedicated Customer Deposits account or to the Deferred Revenue account; the entries are the same either way. With no link, orders refuses a payment that needs this leg and names the role and the company.",
+      "Status": "Active",
+      "Cardinality": "One",
+      "Sequence": 110
+    },
+    "primaryKey": {
+      "ID": "30F23B36-3BEB-4687-BF49-A5607A9B268A"
+    }
   }
 ]

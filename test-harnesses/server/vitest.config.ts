@@ -2,8 +2,8 @@
  * Vitest config for the tier-2 server harness (phase 2). `*.live.test.ts` specs run against
  * the live instance DB — strictly sequential (one file, no parallelism): the fixtures share one
  * database and the teardown toggles table triggers, so two concurrent runs would race.
- * `*.pure.test.ts` specs are DB-free pure-logic checks of engine internals, housed here (not in
- * a package's src/__tests__) so test scaffolding never ships inside the packages.
+ * DB-free specs do not belong here — nothing runs this config automatically. Put them in the
+ * owning package's `src/__tests__/`, where CI runs them.
  *
  * Run from the app root:
  *   npx vitest run --config test-harnesses/server/vitest.config.ts
@@ -16,7 +16,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['test-harnesses/server/**/*.live.test.ts', 'test-harnesses/server/**/*.pure.test.ts'],
+    include: ['test-harnesses/server/**/*.live.test.ts'],
     fileParallelism: false,
     testTimeout: 120_000,
     hookTimeout: 300_000,

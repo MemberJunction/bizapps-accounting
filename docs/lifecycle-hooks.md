@@ -37,9 +37,9 @@ friendly thing happen; the trigger is the floor that catches anything — even r
 ## 1. The hooks in detail
 
 ### W1 — Profile init *(✅ `AccountingCompanyProfileEntityServer.ts` — auto-seed RETIRED 2026-07-30)*
-**Fires:** the only remaining automatic behavior on a new profile's first save is the
-**`OperatingTimeZone = 'UTC'`** default. **The COA auto-seed no longer fires on create** (Marcelo
-ruling 2026-07-30): a new company starts with an **EMPTY chart** — auto-seeding collided with the
+**Fires:** nothing on a new profile's first save. The **`OperatingTimeZone = 'UTC'`** default was
+removed (#158): the field is an optional per-company display override, and blank inherits
+`BizApps.BusinessTimeZone`. **The COA auto-seed no longer fires on create** (ruling 2026-07-30): a new company starts with an **EMPTY chart** — auto-seeding collided with the
 **L8 immediate identity lock**, forcing ten locked-identity accounts on every company.
 **Explicit capability instead:** `SeedDefaultChartOfAccounts()` (public, idempotent — existing codes
 skipped, every row via `BaseEntity.Save()` so it stays audit-by-construction) seeds the 10-account
@@ -149,12 +149,22 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   the summary lines load before the `→Sent` save, so a failed load leaves the batch where it was.
   Lifecycle (`LEGAL_TRANSITIONS`): `Pending → Approved | Cancelled | Archived`, `Approved → Sent | Archived`,
   `Sent → Posted | Failed`, `Failed → Sent | Archived`; `Posted`, `Cancelled` and `Archived` are terminal.
-- **Batch recovery (#145).** *Retry* — `sendJournalEntryBatch` on a `Failed` batch reuses its approval
-  and requires `confirmNotAlreadyPostedInERP` (`ConfirmNotAlreadyPostedInERP` on
-  `Accounting.DispatchJournalEntryBatch`). `Failed` does not prove the ERP rejected the journal: the
-  post can succeed with the response lost, or succeed and then fail to save `Posted`, and the poster
-  does not check whether the batch number already posted, so a retry can duplicate the ERP journal.
-  The operator checks the ERP for the batch number first; a pre-flight lookup is #182. *Resume* —
+- **Batch recovery (#145).** *Retry* — `sendJournalEntryBatch` on a `Failed` batch reuses its approval.
+  `Failed` does not prove the ERP rejected the journal: the post can succeed with the response lost, or
+  succeed and then fail to save `Posted`. So every send, first or retry, looks the batch number up in
+  the ERP first (#182; `AccountingERPEngine.FindPostedJournalBatch`, Business Central via `GetGLEntries`).
+  On a `Failed` retry, a posting that matches the batch line for line (account, debit, credit, posting
+  date) is recorded `Posted` with no second send. On a first send the batch never reached the ERP, so
+  a match is another journal under the same number: the send is refused and the batch stays
+  `Approved`. A posting that differs, or a failed lookup, refuses the send unless
+  `confirmNotAlreadyPostedInERP` (`ConfirmNotAlreadyPostedInERP` on `Accounting.DispatchJournalEntryBatch`),
+  which also stays required on a `Failed` retry to an ERP with no lookup (QuickBooks Online today). A
+  refused retry stays `Failed` and the op answers `ConfirmationRequired` with the reason and its kind
+  (`Unavailable`, `Error` or `Mismatch`; the Dispatch status page gives `Mismatch` a stronger dialog,
+  since it is often this very batch); any other refused first send goes `Sent → Failed`. The lookup
+  reads posted G/L entries only, so Business Central posting refuses to write into a journal that
+  already holds unposted lines, which `Microsoft.NAV.post` would otherwise post along with the batch.
+  An `afterPost` extension hook that throws never overturns a post the ERP accepted. *Resume* —
   `resumeJournalEntryBatchPosting` (`Accounting.ResumeJournalEntryBatchPosting`) finishes a `Posted`
   batch's member `Batched → GLPosted` flip with no ERP call. *Visibility* — `findStrandedJournalEntries`
   (`Accounting.GetStrandedJournalEntries`) reports entries held at `Batched` by either state; the

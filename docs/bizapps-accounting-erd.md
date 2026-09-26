@@ -253,7 +253,7 @@ erDiagram
         string JurisdictionCountry
         string JurisdictionRegion
         string FederalTaxID
-        string OperatingTimeZone "display only - UTC storage"
+        string OperatingTimeZone "optional override - blank inherits business zone"
         string FunctionalCurrencyCode FK
         string ReportingCurrencyCode FK
         int FiscalYearStartMonth
@@ -494,7 +494,7 @@ erDiagram
         string JurisdictionCountry "ISO 3166-1, nullable"
         string JurisdictionRegion "nullable"
         string FederalTaxID "nullable"
-        string OperatingTimeZone "display only - storage is UTC"
+        string OperatingTimeZone "optional override - blank inherits business zone"
         string FunctionalCurrencyCode FK "JEs post in this"
         string ReportingCurrencyCode FK "nullable"
         int FiscalYearStartMonth

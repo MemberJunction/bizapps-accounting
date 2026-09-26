@@ -11,7 +11,41 @@ Three sections: the **coverage matrix** (drive every ✗ to zero), the **intenti
 create + open questions for the human, recorded so dev can roll through and circle back).
 
 Tiers: **1** Vitest (unit) · **2** server (tsx, in-process direct SQL) · **3** API (GraphQL→MJAPI) ·
-**4** GUI/DOM (no-browser — parked, mjdev overlay) · **5** Playwright (browser e2e, pre-PR only).
+**4** GUI/DOM (no-browser, needs a running MJAPI — opt-in `test:gui`, not in CI) · **5** Playwright
+(browser e2e, pre-PR only). Separate from tier 4, accounting-ng also has a backend-free DOM suite
+(`test:dom`, TestBed + jsdom, in CI).
+
+## ✅ 2026-09-24 — spec wiring: placement guard, spec type-check, opt-in tier 4 (#185)
+
+- **Placement guard.** `packages/Angular/src/__tests__/spec-placement.test.ts` fails on any spec
+  file under `src/` (`*.test.ts`, `*.spec.ts`, `.tsx`) that is not a `*.test.ts` in
+  `src/__tests__/` or a `*.dom.test.ts`.
+- **Every package's specs are type-checked.** Vitest only transpiles. Each package with specs
+  (accounting-ng, CoreEntitiesServer, EngineBase, Actions) has `test:types` (`tsc --noEmit -p
+  tsconfig.spec.json`), run by `pnpm run test`, so in CI. It found three errors in existing specs,
+  all fixed: `je-draft.test.ts` set a `Dimensions` field `JEDraftState` no longer has; the
+  waterfall spec cast an object literal to a journal entry (it now builds real entities through
+  the shared `src/__tests__/support/entity-stubs.ts`); and `JournalEntryBatchInvariants.test.ts`
+  assigned an untyped `vi.fn()` to `TearDownSummaryAndUnlock`.
+- **Tier 4 has a script.** `pnpm run test:gui` in `packages/Angular` (needs MJAPI; not in CI).
+  It resolves **only inside an mjdev instance**: in a plain clone `@memberjunction/ng-bootstrap-lite`
+  and `undici` are not installed, so all five files fail on module resolution before any test
+  runs. `tsc -p test-harnesses/gui/tsconfig.gui.json` also reports three TS2488 errors
+  (`company-setup.dom.test.ts:65,98`, `journal-entry-batch-workspace.dom.test.ts:68`); tier 4 is
+  outside `test:types`.
+- **`batch-workspace.pure.test.ts` moved** to `packages/CoreEntitiesServer/src/__tests__/BatchWorkspace.test.ts`.
+  It needs no DB, and the tier-2 config it ran under is run by nothing automatic. `src/__tests__/`
+  is excluded from the CES build, so it still does not ship. The tier-2 config now includes only
+  `*.live.test.ts`.
+
+| Package | Files | Tests |
+|---|---|---|
+| accounting-ng | 12 | **152/152** |
+| accounting-engine-base | 6 | **80/80** |
+| accounting-core-entities-server | 16 | **143/143** (+1 skipped) |
+| accounting-actions | 3 | **38/38** |
+| **Tier 1 total** | **37** | **413/413** (+1 skipped) |
+| accounting-ng DOM (`test:dom`) | 3 | **4/4** |
 
 ## ✅ 2026-09-23 — tier 1 runs in CI, accounting-ng included (#170)
 
@@ -461,7 +495,10 @@ Chrome) drives the live Explorer — Build→**Reject** (card flips to Cancelled
 
 | Tier | Harness | Run |
 |---|---|---|
-| 1 | `packages/CoreEntitiesServer/src/__tests__/*.test.ts` | `cd packages/dev-apps/bizapps-accounting/packages/CoreEntitiesServer && npx vitest run` |
+| 1 | `packages/*/src/__tests__/*.test.ts` (every package) + every package's spec type-check | `pnpm run test` from the app root (also runs the DOM suite; this is what CI runs) |
+| 1 | one package | `cd packages/<Package> && npx vitest run` |
+| — | accounting-ng DOM (`src/**/*.dom.test.ts`, no backend) | `cd packages/Angular && pnpm run test:dom` |
+| 4 | `packages/Angular/test-harnesses/gui/*.dom.test.ts` | `cd packages/Angular && pnpm run test:gui` (inside an mjdev instance only, with MJAPI running; not in CI) |
 | 2 | `test-harnesses/server/block{0,1,2,4,5,6}-runtime.ts` · `batching-multicompany-runtime.ts` · `engine-runtime.ts` | `npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/<file>.ts` (per file) |
 | 3 | `test-harnesses/api/readmodels-api.ts` · `batch-dispatch-api.ts` · `batching-scenarios-api.ts` · `engine-op-api.ts` | `npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/api/<file>.ts` |
 | 5 | `test-harnesses/playwright/specs/{dashboards,batching}.spec.ts` | `cd …/test-harnesses/playwright && npx playwright test` (MJAPI+Explorer up) |

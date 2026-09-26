@@ -1,6 +1,7 @@
 {
-  // Used by vitest.dom.config.ts: re-include the specs the build tsconfig excludes, so Angular's
-  // compiler can type-check the templates under test (strictTemplates still applies).
+  // Re-includes the specs the build tsconfig excludes. Used by vitest.dom.config.ts, so Angular's
+  // compiler can type-check the templates under test (strictTemplates still applies), and by
+  // `test:types`, which type-checks every spec — vitest itself only transpiles.
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "types": ["vitest/globals", "node"]

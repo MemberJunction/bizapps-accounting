@@ -4,14 +4,12 @@
  * The DB-touching halves (pendingCandidateFilter, previewBatch, the builds) are
  * covered live by the tier-2 suite + the tier-3 batch-ops harness.
  *
- * Lives in the HARNESS (not the package's src/__tests__) because it drives engine
- * internals directly — test scaffolding stays out of the shipped packages.
- * Imports the package's BUILT public surface (dist), same as the live suite.
- * Needs NO database — safe to run standalone:
- *   npx vitest run --config test-harnesses/server/vitest.config.ts batch-workspace
+ * Needs no database, so it runs in the package's unit suite (and in CI) rather than
+ * under the tier-2 harness config, which nothing runs automatically. `src/__tests__/`
+ * is excluded from the package build, so none of this ships.
  */
 import { describe, it, expect } from 'vitest';
-import { classifyViewEntries, netLines, outOfOrderSkipCount, perCompanySubtotals, type NettableLine } from '@mj-biz-apps/accounting-core-entities-server';
+import { classifyViewEntries, netLines, outOfOrderSkipCount, perCompanySubtotals, type NettableLine } from '../JournalEntryBatchEngine.js';
 
 const A = 'aaaaaaaa-0000-0000-0000-000000000001';
 const B = 'bbbbbbbb-0000-0000-0000-000000000002';

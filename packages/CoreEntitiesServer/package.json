@@ -1,7 +1,7 @@
 {
   "name": "@mj-biz-apps/accounting-core-entities-server",
   "type": "module",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "Server-side entity subclasses for BizApps Accounting — lifecycle hooks for AccountingCompanyProfile, JournalEntry, AccountingPeriod, etc.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -14,20 +14,22 @@
   "scripts": {
     "build": "tsc && tsc-alias -f",
     "test": "vitest run",
+    "test:types": "tsc --noEmit -p tsconfig.spec.json",
     "test:watch": "vitest"
   },
   "author": "MemberJunction.com",
   "license": "BUSL-1.1",
   "devDependencies": {
+    "@types/node": "^24.10.11",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18",
     "vite": "^7.1.5"
   },
   "dependencies": {
-    "@mj-biz-apps/accounting-entities": "0.12.0",
+    "@mj-biz-apps/accounting-entities": "0.13.0",
     "@mj-biz-apps/tasks-core": ">=1.4.1",
     "@mj-biz-apps/tasks-entities": ">=1.4.1",
-    "@mj-biz-apps/accounting-engine-base": "0.12.0",
+    "@mj-biz-apps/accounting-engine-base": "0.13.0",
     "@mj-biz-apps/common-entities": ">=5.43.0",
     "@memberjunction/actions": "^6.1.0-edge.7",
     "@memberjunction/integration-engine": "^6.1.0-edge.7"

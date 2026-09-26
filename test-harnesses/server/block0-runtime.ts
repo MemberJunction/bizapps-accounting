@@ -15,7 +15,7 @@
  *        1. create + Save() succeeds
  *        2. seeds EXACTLY the 10 minimal GL accounts (IsSystemSeeded), codes as expected
  *        3. wires the 5 default GL-account refs to the right account codes
- *        4. defaults OperatingTimeZone = 'UTC' (Block-0 addition)
+ *        4. leaves OperatingTimeZone blank, so the company inherits the business zone (#158)
  *        5. __mj.RecordChange rows exist for the seeded rows (audit-by-construction)
  *        (Period generation was RETIRED — no AccountingPeriod rows exist to assert.)
  *   W2  JournalEntry numbering (JournalEntryEntityServer): EntryNumber = JE-{FY}-{seq:000000}
@@ -242,10 +242,10 @@ async function main(): Promise<void> {
     assert(acp.UnrealizedFXGainLossGLAccountID == null, `UnrealizedFXGainLossGLAccountID unexpectedly wired: ${acp.UnrealizedFXGainLossGLAccountID}`);
   });
 
-  await test('W1.4 defaults OperatingTimeZone = UTC (Block-0 addition)', async () => {
+  await test('W1.4 leaves OperatingTimeZone blank so the business zone applies (#158)', async () => {
     const acp = await md.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, user);
     await acp.Load(acpId);
-    assert(acp.OperatingTimeZone === 'UTC', `OperatingTimeZone expected 'UTC', got '${acp.OperatingTimeZone}'`);
+    assert(acp.OperatingTimeZone == null, `OperatingTimeZone expected blank, got '${acp.OperatingTimeZone}'`);
   });
 
   await test('W1.5 __mj.RecordChange rows exist for seeded rows (audit-by-construction)', async () => {

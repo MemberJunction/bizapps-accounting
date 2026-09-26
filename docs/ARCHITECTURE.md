@@ -88,13 +88,19 @@ plan is authoritative.
 
 <a id="company-profile-init"></a>
 ### 5.1 Company profile initialization (W1)
-On first save of an `AccountingCompanyProfile`, `AccountingCompanyProfileEntityServer.Save()`
-runs a per-company, idempotent init: seed the **10-account minimal COA** (AD-8 + §C1) with
-`IsSystemSeeded=1`, default **`OperatingTimeZone='UTC'`** (AD-16), and wire the **5 default
-GL-account refs** (AR / Deferred Revenue / Sales Tax / Realized FX / Unrealized FX). All via
-`BaseEntity.Save()` (audit-by-construction). *(Period generation was REMOVED 2026-07-06 —
-periods live in the ERP, CH-1.)* The COA is **per-company runtime seed via the hook — not
-metadata**; global reference data (Currency, **GLAccountRole**) seeds via metadata sync.
+Saving a new `AccountingCompanyProfile` does nothing beyond the insert: `AccountingCompanyProfileEntityServer`
+has no `Save()` override. Three first-save behaviors were retired:
+- **COA auto-seed** (retired 2026-07-30): a new company starts with an empty chart, because GL accounts
+  identity-lock immediately (L8). Seeding the **10-account minimal COA** (AD-8 + §C1, `IsSystemSeeded=1`)
+  is an explicit call to `SeedDefaultChartOfAccounts()` — idempotent, every row via `BaseEntity.Save()`
+  (audit-by-construction). The COA is a **per-company runtime seed, not metadata**; global reference
+  data (Currency, **GLAccountRole**) seeds via metadata sync.
+- **Default GL-account refs** (D12): the five profile FK columns were dropped; a company's default
+  accounts are company-level `GLAccountLink` rows.
+- **`OperatingTimeZone='UTC'` default** (AD-16, removed in #158): the field is an optional per-company
+  display override, and blank inherits `BizApps.BusinessTimeZone`.
+
+*(Period generation was REMOVED 2026-07-06 — periods live in the ERP, CH-1.)*
 
 <a id="je-lifecycle"></a>
 ### 5.2 JE lifecycle (Pending → Batched → GLPosted) — updated 2026-07-06
@@ -117,8 +123,12 @@ balance **overall and per company** (AM-4), and writes atomically. Hooks on the 
   `JournalEntryBatchEngine.ts`; the ERP wire is **account numbers, split per company** (AM-4).
 - **Recovery past Approved (#145):** a `Failed` batch is retried by dispatching it again
   (`Failed → Sent`; the gate and the coherence check re-run, the original approval is reused). A
-  `Failed` batch may already be in the ERP, so a retry requires the operator's confirmation that the
-  batch number has not posted there (#182); its content is not frozen (#183). A
+  `Failed` batch may already be in the ERP, so every send first looks the batch number up there
+  (#182): a Failed batch the ERP holds line for line is recorded `Posted` without a second send; a
+  first send whose number is already there is refused. The operator's confirmation that the number
+  has not posted is needed only when the lookup cannot settle it: a mismatch, a failed lookup, or an
+  ERP with no lookup. Business Central posting also refuses a journal that already holds unposted
+  lines. Its content is not frozen (#183). A
   `Posted` batch whose member `Batched → GLPosted` flip stopped partway is finished by
   `resumeJournalEntryBatchPosting` (`Accounting.ResumeJournalEntryBatchPosting`), which makes no
   ERP call. `findStrandedJournalEntries` reports the entries both states hold; the scheduled
