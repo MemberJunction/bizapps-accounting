@@ -356,7 +356,8 @@ This repo uses MemberJunction's CodeGen system to generate entity and action sub
   DELETE is blocked outright. On a locked row only these may change: `GLPostedAt`, `GLReferenceID`,
   `ReversedByJournalEntryID`, `Status` `Batched→GLPosted`, and the **reversible preliminary unlock**
   (`Status` `Batched→Pending` **plus** `JournalEntryBatchID→NULL`, and nothing else, while the owning
-  batch is still `Pending`). `GLPosted` never regresses. Corrections are new `Pending` reversal JEs.
+  batch is `Pending` or `Cancelled` — an Approved or Failed batch reaches `Cancelled` only through
+  `JournalEntryBatchEntityServer.Cancel`, #183). `GLPosted` never regresses. Corrections are new `Pending` reversal JEs.
 - **There are no accounting periods and no close machinery** (D2, plan §4 — the ERP owns periods).
   No `AccountingPeriod` table, no period FK, no close guard, no `OriginalAccountingPeriodID`, no
   adjusting-entry routing: all removed 2026-07-06 with the period tables, and `AccountingPeriod`
@@ -482,12 +483,15 @@ database as part of ordinary development.
 
 Editing the baseline was correct while the schema changed constantly and nothing depended on it.
 That phase is over: an edit to the baseline is invisible to any database that already ran it — the
-column never appears and nothing reports a problem — and flyway checksums the script, so every
-existing database refuses to migrate until someone repairs it by hand. `scripts/rebuild-db.sh`
+column never appears and nothing reports a problem: `mj migrate` (Skyway) records a checksum but
+never validates it, so the edited script is silently skipped. `scripts/rebuild-db.sh`
 remains only for standing up a brand-new empty database; it is not a development loop.
 
-Write migrations idempotently (`IF NOT EXISTS`, `IF COL_LENGTH(...) IS NULL`) and assume the database
-already has data. A migration that reads `__mj.Entity` must skip cleanly when the row is absent —
+Write migrations **deterministically** against the state earlier migrations leave: Skyway runs each
+`V` migration once, in order, so guards against this repo's own earlier migrations are unnecessary
+(header: `DETERMINISTIC, NOT IDEMPOTENT`). Assume the database already has data, pre-check existing
+rows before adding a constraint, and keep guards where the starting point genuinely varies — see the
+doc. A migration that reads `__mj.Entity` must skip cleanly when the row is absent —
 CodeGen runs *after* migrations — and if the change is really about metadata (field categories,
 form layout), its home is `metadata/` and `mj sync push` **during development**.
 

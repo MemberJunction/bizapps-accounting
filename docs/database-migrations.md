@@ -18,8 +18,9 @@ longer hold:
   recorded as applied.
 - **A rebuild throws away data.** Once there is anything worth keeping in a developer or shared
   database, "drop and re-apply" stops being a neutral operation.
-- **Flyway checksums the baseline.** Editing a script that has already run makes every existing
-  database refuse to migrate until someone repairs it by hand.
+- **An edit to an applied script is silently skipped.** `mj migrate` records each script's checksum
+  but never validates it (Skyway's `Migrate()` does not call `Validate()`), so a database that already
+  ran the baseline keeps its old version and nothing reports the difference.
 
 ## What to do instead
 
@@ -30,9 +31,47 @@ migrations/V<yyyyMMddHHmm>__v<app-version>__<Short_Description>.sql
 ```
 
 It runs after the baseline on every deploy — clean install or existing database — so both converge
-on the same schema. Write it to be **idempotent** and to work on a database that already has data:
-guard with `IF NOT EXISTS` / `IF COL_LENGTH(...) IS NULL`, and give new `NOT NULL` columns a default
-or backfill them before adding the constraint.
+on the same schema. Write it to work on a database that **already has data**: give new `NOT NULL`
+columns a default or backfill them before adding the constraint, and check existing rows before
+adding a `CHECK` or `UNIQUE` constraint, so a violation fails with a message naming the rows and the
+fix instead of a bare constraint error.
+
+### Deterministic, not idempotent
+
+`mj migrate` runs on **Skyway** (`@memberjunction/skyway-core`), which keeps a Flyway-compatible
+`flyway_schema_history`. It applies each `V` migration **exactly once, in version order**, and never
+re-runs one that succeeded; with `outOfOrder` off (the default, and this repo's setting) it refuses a
+migration older than the newest one already applied. So a `V` migration's starting point is exact:
+the state every earlier migration left. Write it **deterministically** against that state. Guards
+such as `IF NOT EXISTS` or `IF COL_LENGTH(...) IS NULL` are not needed for objects this repo's own
+earlier migrations create or leave out; they add nothing the runner does not already guarantee. Say
+so in the header, as `V202609111415` and `V202609261000` do:
+
+```sql
+-- DETERMINISTIC, NOT IDEMPOTENT: this runs once, in order, against a database
+-- that has the prior migrations.
+```
+
+Guards **are** still required wherever the starting point genuinely differs from one database to
+another:
+
+- **Anything CodeGen creates.** Entity and field metadata rows exist only after CodeGen, which runs
+  after migrations. A migration that reads them must skip cleanly when they are absent (see below).
+- **Objects another schema owns.** MJ core, `bizapps-common` and sibling apps can sit at different
+  versions on different hosts, so check before relying on or altering their objects.
+- **Rows a host or developer may have written.** A backfill or data fix cannot assume which rows
+  exist. Pre-check them and fail with a clear message, as the constraint rule above says.
+
+When a migration can fail on existing data, make the check fail **before the first change**, with a
+message naming the rows and the fix. Skyway's default `per-run` transaction rolls the whole run back
+on a failure, so nothing is half-applied, but a bare constraint error tells a host nothing.
+
+**Two migrations that regenerate the same entity collide.** A migration's CodeGen block hard-codes
+that entity's whole base view and CRUD procedures. Two branches that each add a column to the same
+table each carry a view and procedures without the other's column, and whichever runs second wins:
+every save then passes a parameter the procedure no longer accepts. The branch that merges second
+must re-run CodeGen on a database that has the first branch's migration applied, and re-timestamp
+past it if it would otherwise sort first.
 
 Then regenerate the code CodeGen owns:
 

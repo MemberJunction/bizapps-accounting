@@ -1370,7 +1370,7 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
     *   * Pending
     *   * Posted
     *   * Sent
-        * * Description: Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled | Archived. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed triggers retry + escalation; Cancelled is terminal from Pending and RELEASES the member entries back to the candidate pool; Archived is terminal from Pending, Approved or Failed, makes no ERP call and KEEPS the member entries locked (trg_JournalEntryBatch_Immutability).`),
+        * * Description: Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled | Archived. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed is retried under the original approval and stays content-locked; Cancelled is terminal from Pending, Approved or Failed and RELEASES the member entries back to the candidate pool; Archived is terminal from Pending, Approved or Failed, makes no ERP call and KEEPS the member entries locked (trg_JournalEntryBatch_Immutability).`),
     TotalEntries: z.number().describe(`
         * * Field Name: TotalEntries
         * * Display Name: Total Entries
@@ -1457,6 +1457,47 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
         * * Description: User who archived the batch. Required when Status = Archived.`),
+    CancelReason: z.string().nullable().describe(`
+        * * Field Name: CancelReason
+        * * Display Name: Cancel Reason
+        * * SQL Data Type: nvarchar(500)
+        * * Description: Why this batch was cancelled. Required when an approved batch is cancelled (CK_JournalEntryBatch_CancelAudit); optional when a Pending batch is. Frozen once Cancelled.`),
+    CancelledAt: z.date().nullable().describe(`
+        * * Field Name: CancelledAt
+        * * Display Name: Cancelled At
+        * * SQL Data Type: datetimeoffset
+        * * Description: When the batch was cancelled. Required when an approved batch is cancelled.`),
+    CancelledByUserID: z.string().nullable().describe(`
+        * * Field Name: CancelledByUserID
+        * * Display Name: Cancelled By User
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+        * * Description: User who cancelled the batch. Required when an approved batch is cancelled.`),
+    ERPNotPostedConfirmedAt: z.date().nullable().describe(`
+        * * Field Name: ERPNotPostedConfirmedAt
+        * * Display Name: ERP Not Posted Confirmed At
+        * * SQL Data Type: datetimeoffset
+        * * Description: When this batch was established as NOT posted in the ERP before it was cancelled — by the ERP lookup finding nothing under its number, or by the canceller's attestation when the lookup could not settle it (see ERPNotPostedBasis). Required when a batch that had been sent is cancelled (CK_JournalEntryBatch_CancelERPCheck): a Failed batch may already be in the ERP, and cancelling releases its entries to be batched again.`),
+    ERPNotPostedConfirmedByUserID: z.string().nullable().describe(`
+        * * Field Name: ERPNotPostedConfirmedByUserID
+        * * Display Name: ERP Not Posted Confirmed By User
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+        * * Description: User whose cancel established this batch as NOT posted in the ERP — accountable for the cancel whether the ERP lookup or their own attestation settled it (see ERPNotPostedBasis). Required with ERPNotPostedConfirmedAt.`),
+    ERPNotPostedBasis: z.union([z.literal('ERPLookup'), z.literal('UserAttested')]).nullable().describe(`
+        * * Field Name: ERPNotPostedBasis
+        * * Display Name: ERP Not Posted Basis
+        * * SQL Data Type: nvarchar(20)
+    * * Value List Type: List
+    * * Possible Values 
+    *   * ERPLookup
+    *   * UserAttested
+        * * Description: How this batch was established as NOT posted in the ERP before it was cancelled: ERPLookup (the ERP lookup found nothing under its number) or UserAttested (the lookup could not settle it and the canceller confirmed). Required with ERPNotPostedConfirmedAt (CK_JournalEntryBatch_CancelERPCheck).`),
+    ApprovedContentHash: z.string().nullable().describe(`
+        * * Field Name: ApprovedContentHash
+        * * Display Name: Approved Content Hash
+        * * SQL Data Type: nvarchar(64)
+        * * Description: SHA-256 of the approved content (batch header, summary entry and lines, member set), written at approval and frozen by trg_JournalEntryBatch_Immutability. Dispatch recomputes and compares it. NULL on batches approved before the seal existed.`),
     Company: z.string().describe(`
         * * Field Name: Company
         * * Display Name: Company
@@ -1480,6 +1521,14 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
     ArchivedByUser: z.string().nullable().describe(`
         * * Field Name: ArchivedByUser
         * * Display Name: Archived By User
+        * * SQL Data Type: nvarchar(100)`),
+    CancelledByUser: z.string().nullable().describe(`
+        * * Field Name: CancelledByUser
+        * * Display Name: Cancelled By User Name
+        * * SQL Data Type: nvarchar(100)`),
+    ERPNotPostedConfirmedByUser: z.string().nullable().describe(`
+        * * Field Name: ERPNotPostedConfirmedByUser
+        * * Display Name: ERP Not Posted Confirmed By User Name
         * * SQL Data Type: nvarchar(100)`),
 });
 
@@ -5916,6 +5965,8 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     * Validate() method override for MJ_BizApps_Accounting: Journal Entry Batches entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
     * * Table-Level: Both the approval task and the time it was raised must either be set together, or both must be empty.
     * * Table-Level: When a record's status is set to 'Archived', an archive reason, an archive date, and the archiving user's ID must all be provided.
+    * * Table-Level: If an approved journal entry batch is cancelled, a cancellation reason, cancellation date, and the user who cancelled it must all be provided.
+    * * Table-Level: If a journal entry batch has already been sent and is subsequently cancelled, the ERP non-posting confirmation details (date, user, and basis) must be provided to ensure proper audit tracking.
     * * Table-Level: Total debits, total credits, and total entries must all be greater than or equal to zero to ensure valid financial accounting records.
     * @public
     * @method
@@ -5925,6 +5976,8 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
         const result = super.Validate();
         this.ValidateApprovalTaskAndRaisedAtCoexistence(result);
         this.ValidateArchivedFieldsWhenStatusIsArchived(result);
+        this.ValidateCancellationDetailsForApprovedBatch(result);
+        this.ValidateERPNotPostedConfirmationForCancelledSentBatches(result);
         this.ValidateTotalsAreNonNegative(result);
         result.Success = result.Success && (result.Errors.length === 0);
 
@@ -5984,6 +6037,64 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     				"ArchivedByUserID",
     				"The user who archived the record is required when the status is set to 'Archived'.",
     				this.ArchivedByUserID,
+    				ValidationErrorType.Failure
+    			));
+    		}
+    	}
+    }
+
+    /**
+    * If an approved journal entry batch is cancelled, a cancellation reason, cancellation date, and the user who cancelled it must all be provided.
+    * @param result - the ValidationResult object to add any errors or warnings to
+    * @public
+    * @method
+    */
+    public ValidateCancellationDetailsForApprovedBatch(result: ValidationResult) {
+        if (this.Status === 'Cancelled' && this.ApprovedAt != null) {
+            const hasCancelReason = this.CancelReason != null && this.CancelReason.trim().length > 0;
+            const hasCancelledAt = this.CancelledAt != null;
+            const hasCancelledBy = this.CancelledByUserID != null;
+    
+            if (!hasCancelReason) {
+                result.Errors.push(new ValidationErrorInfo(
+                    "CancelReason",
+                    "A cancellation reason is required when cancelling an approved batch.",
+                    this.CancelReason,
+                    ValidationErrorType.Failure
+                ));
+            }
+            if (!hasCancelledAt) {
+                result.Errors.push(new ValidationErrorInfo(
+                    "CancelledAt",
+                    "Cancellation date is required when cancelling an approved batch.",
+                    this.CancelledAt,
+                    ValidationErrorType.Failure
+                ));
+            }
+            if (!hasCancelledBy) {
+                result.Errors.push(new ValidationErrorInfo(
+                    "CancelledByUserID",
+                    "The user who cancelled the batch must be specified when cancelling an approved batch.",
+                    this.CancelledByUserID,
+                    ValidationErrorType.Failure
+                ));
+            }
+        }
+    }
+
+    /**
+    * If a journal entry batch has already been sent and is subsequently cancelled, the ERP non-posting confirmation details (date, user, and basis) must be provided to ensure proper audit tracking.
+    * @param result - the ValidationResult object to add any errors or warnings to
+    * @public
+    * @method
+    */
+    public ValidateERPNotPostedConfirmationForCancelledSentBatches(result: ValidationResult) {
+    	if (this.Status === 'Cancelled' && this.SentAt != null) {
+    		if (this.ERPNotPostedConfirmedAt == null || this.ERPNotPostedConfirmedByUserID == null || this.ERPNotPostedBasis == null) {
+    			result.Errors.push(new ValidationErrorInfo(
+    				'Status',
+    				'If a sent journal entry batch is cancelled, the ERP non-posting confirmation date, user, and basis must all be provided.',
+    				this.Status,
     				ValidationErrorType.Failure
     			));
     		}
@@ -6154,7 +6265,7 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     *   * Pending
     *   * Posted
     *   * Sent
-    * * Description: Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled | Archived. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed triggers retry + escalation; Cancelled is terminal from Pending and RELEASES the member entries back to the candidate pool; Archived is terminal from Pending, Approved or Failed, makes no ERP call and KEEPS the member entries locked (trg_JournalEntryBatch_Immutability).
+    * * Description: Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled | Archived. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed is retried under the original approval and stays content-locked; Cancelled is terminal from Pending, Approved or Failed and RELEASES the member entries back to the candidate pool; Archived is terminal from Pending, Approved or Failed, makes no ERP call and KEEPS the member entries locked (trg_JournalEntryBatch_Immutability).
     */
     get Status(): 'Approved' | 'Archived' | 'Cancelled' | 'Failed' | 'Pending' | 'Posted' | 'Sent' {
         return this.Get('Status');
@@ -6372,6 +6483,103 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     }
 
     /**
+    * * Field Name: CancelReason
+    * * Display Name: Cancel Reason
+    * * SQL Data Type: nvarchar(500)
+    * * Description: Why this batch was cancelled. Required when an approved batch is cancelled (CK_JournalEntryBatch_CancelAudit); optional when a Pending batch is. Frozen once Cancelled.
+    */
+    get CancelReason(): string | null {
+        return this.Get('CancelReason');
+    }
+    set CancelReason(value: string | null) {
+        this.Set('CancelReason', value);
+    }
+
+    /**
+    * * Field Name: CancelledAt
+    * * Display Name: Cancelled At
+    * * SQL Data Type: datetimeoffset
+    * * Description: When the batch was cancelled. Required when an approved batch is cancelled.
+    */
+    get CancelledAt(): Date | null {
+        return this.Get('CancelledAt');
+    }
+    set CancelledAt(value: Date | null) {
+        this.Set('CancelledAt', value);
+    }
+
+    /**
+    * * Field Name: CancelledByUserID
+    * * Display Name: Cancelled By User
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+    * * Description: User who cancelled the batch. Required when an approved batch is cancelled.
+    */
+    get CancelledByUserID(): string | null {
+        return this.Get('CancelledByUserID');
+    }
+    set CancelledByUserID(value: string | null) {
+        this.Set('CancelledByUserID', value);
+    }
+
+    /**
+    * * Field Name: ERPNotPostedConfirmedAt
+    * * Display Name: ERP Not Posted Confirmed At
+    * * SQL Data Type: datetimeoffset
+    * * Description: When this batch was established as NOT posted in the ERP before it was cancelled — by the ERP lookup finding nothing under its number, or by the canceller's attestation when the lookup could not settle it (see ERPNotPostedBasis). Required when a batch that had been sent is cancelled (CK_JournalEntryBatch_CancelERPCheck): a Failed batch may already be in the ERP, and cancelling releases its entries to be batched again.
+    */
+    get ERPNotPostedConfirmedAt(): Date | null {
+        return this.Get('ERPNotPostedConfirmedAt');
+    }
+    set ERPNotPostedConfirmedAt(value: Date | null) {
+        this.Set('ERPNotPostedConfirmedAt', value);
+    }
+
+    /**
+    * * Field Name: ERPNotPostedConfirmedByUserID
+    * * Display Name: ERP Not Posted Confirmed By User
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+    * * Description: User whose cancel established this batch as NOT posted in the ERP — accountable for the cancel whether the ERP lookup or their own attestation settled it (see ERPNotPostedBasis). Required with ERPNotPostedConfirmedAt.
+    */
+    get ERPNotPostedConfirmedByUserID(): string | null {
+        return this.Get('ERPNotPostedConfirmedByUserID');
+    }
+    set ERPNotPostedConfirmedByUserID(value: string | null) {
+        this.Set('ERPNotPostedConfirmedByUserID', value);
+    }
+
+    /**
+    * * Field Name: ERPNotPostedBasis
+    * * Display Name: ERP Not Posted Basis
+    * * SQL Data Type: nvarchar(20)
+    * * Value List Type: List
+    * * Possible Values 
+    *   * ERPLookup
+    *   * UserAttested
+    * * Description: How this batch was established as NOT posted in the ERP before it was cancelled: ERPLookup (the ERP lookup found nothing under its number) or UserAttested (the lookup could not settle it and the canceller confirmed). Required with ERPNotPostedConfirmedAt (CK_JournalEntryBatch_CancelERPCheck).
+    */
+    get ERPNotPostedBasis(): 'ERPLookup' | 'UserAttested' | null {
+        return this.Get('ERPNotPostedBasis');
+    }
+    set ERPNotPostedBasis(value: 'ERPLookup' | 'UserAttested' | null) {
+        this.Set('ERPNotPostedBasis', value);
+    }
+
+    /**
+    * * Field Name: ApprovedContentHash
+    * * Display Name: Approved Content Hash
+    * * SQL Data Type: nvarchar(64)
+    * * Description: SHA-256 of the approved content (batch header, summary entry and lines, member set), written at approval and frozen by trg_JournalEntryBatch_Immutability. Dispatch recomputes and compares it. NULL on batches approved before the seal existed.
+    */
+    get ApprovedContentHash(): string | null {
+        return this.Get('ApprovedContentHash');
+    }
+    set ApprovedContentHash(value: string | null) {
+        this.Set('ApprovedContentHash', value);
+    }
+
+    /**
     * * Field Name: Company
     * * Display Name: Company
     * * SQL Data Type: nvarchar(50)
@@ -6423,6 +6631,24 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     */
     get ArchivedByUser(): string | null {
         return this.Get('ArchivedByUser');
+    }
+
+    /**
+    * * Field Name: CancelledByUser
+    * * Display Name: Cancelled By User Name
+    * * SQL Data Type: nvarchar(100)
+    */
+    get CancelledByUser(): string | null {
+        return this.Get('CancelledByUser');
+    }
+
+    /**
+    * * Field Name: ERPNotPostedConfirmedByUser
+    * * Display Name: ERP Not Posted Confirmed By User Name
+    * * SQL Data Type: nvarchar(100)
+    */
+    get ERPNotPostedConfirmedByUser(): string | null {
+        return this.Get('ERPNotPostedConfirmedByUser');
     }
 }
 

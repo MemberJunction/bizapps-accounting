@@ -151,8 +151,8 @@ describe('sendJournalEntryBatch — retrying a Failed batch', () => {
         expect(entries['je-1'].Status).toBe('Batched');
     });
 
-    // Member-set / footing drift is caught on a retry. This is self-consistency only: fields the
-    // check does not read, such as PostingDate, are not covered (#183).
+    // Drift from the approved content is caught on a retry — footing, member set, summary header
+    // and the approved-content seal (#183) are all inside CheckControlTotalCoherence.
     it('refuses a retry whose content no longer matches what was approved, without calling the ERP', async () => {
         const { batch, provider } = world('Failed', { 'je-1': batched() }, { drift: ['Member set changed.'] });
         const poster = acceptingPoster();
