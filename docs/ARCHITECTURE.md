@@ -88,13 +88,19 @@ plan is authoritative.
 
 <a id="company-profile-init"></a>
 ### 5.1 Company profile initialization (W1)
-On first save of an `AccountingCompanyProfile`, `AccountingCompanyProfileEntityServer.Save()`
-runs a per-company, idempotent init: seed the **10-account minimal COA** (AD-8 + §C1) with
-`IsSystemSeeded=1`, default **`OperatingTimeZone='UTC'`** (AD-16), and wire the **5 default
-GL-account refs** (AR / Deferred Revenue / Sales Tax / Realized FX / Unrealized FX). All via
-`BaseEntity.Save()` (audit-by-construction). *(Period generation was REMOVED 2026-07-06 —
-periods live in the ERP, CH-1.)* The COA is **per-company runtime seed via the hook — not
-metadata**; global reference data (Currency, **GLAccountRole**) seeds via metadata sync.
+Saving a new `AccountingCompanyProfile` does nothing beyond the insert: `AccountingCompanyProfileEntityServer`
+has no `Save()` override. Three first-save behaviors were retired:
+- **COA auto-seed** (retired 2026-07-30): a new company starts with an empty chart, because GL accounts
+  identity-lock immediately (L8). Seeding the **10-account minimal COA** (AD-8 + §C1, `IsSystemSeeded=1`)
+  is an explicit call to `SeedDefaultChartOfAccounts()` — idempotent, every row via `BaseEntity.Save()`
+  (audit-by-construction). The COA is a **per-company runtime seed, not metadata**; global reference
+  data (Currency, **GLAccountRole**) seeds via metadata sync.
+- **Default GL-account refs** (D12): the five profile FK columns were dropped; a company's default
+  accounts are company-level `GLAccountLink` rows.
+- **`OperatingTimeZone='UTC'` default** (AD-16, removed in #158): the field is an optional per-company
+  display override, and blank inherits `BizApps.BusinessTimeZone`.
+
+*(Period generation was REMOVED 2026-07-06 — periods live in the ERP, CH-1.)*
 
 <a id="je-lifecycle"></a>
 ### 5.2 JE lifecycle (Pending → Batched → GLPosted) — updated 2026-07-06
