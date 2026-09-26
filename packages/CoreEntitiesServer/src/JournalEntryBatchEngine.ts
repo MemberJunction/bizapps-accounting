@@ -950,8 +950,9 @@ export async function sendJournalEntryBatch(batchId: string, contextUser: UserIn
   const refusal = preflightRefusal(preflight, batch, fromStatus, options.confirmNotAlreadyPostedInERP === true);
   if (refusal && fromStatus === 'Failed') throw new ErpPostingUnconfirmedError(refusal.kind, refusal.reason);
 
+  // The entity stamps SentAt, SentByUserID and SendAttemptCount. If another send of this batch got
+  // here first, trg_JournalEntryBatch_SendOnce fails this save and the ERP is never called (#184).
   batch.Status = 'Sent';
-  batch.SentAt = new Date();
   if (!(await batch.Save())) throw new Error(`sendJournalEntryBatch: ${fromStatus}→Sent failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
 
   if (refusal) return await failBatch(batch, refusal.reason);

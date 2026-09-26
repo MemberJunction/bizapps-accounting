@@ -45,6 +45,7 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
       'ID', 'JournalEntryBatchNumber', 'CompanyID', 'PostingDate', 'SummaryJournalEntryID', 'TargetSystem',
       'BatchedAt', 'BatchedByUserID', 'Status', 'TotalEntries', 'TotalDebits', 'TotalCredits',
       'ApprovedAt', 'ApprovedByUserID', 'ArchiveReason', 'ArchivedAt', 'ArchivedByUserID',
+      'SentAt', 'SentByUserID', 'SendAttemptCount',
     ]);
     Metadata.Provider = {
       Entities: [batchInfo],
@@ -220,6 +221,69 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
 
       expect(batch.ArchivedByUserID).toBe('U-ARCHIVER');
       expect(batch.ArchivedAt).toBeInstanceOf(Date);
+    });
+  });
+
+  // ─── the send audit (#184) ────────────────────────────────────────────────
+  describe('every transition into Sent stamps who sent it and which attempt it is', () => {
+    let save: ReturnType<typeof vi.spyOn>;
+    const earlier = new Date('2026-09-01T12:00:00Z');
+
+    beforeEach(() => {
+      save = vi.spyOn(BaseEntity.prototype, 'Save').mockResolvedValue(true);
+    });
+
+    afterEach(() => save.mockRestore());
+
+    it('a first dispatch (Approved → Sent) is attempt 1, sent by the context user', async () => {
+      batch.ContextCurrentUser = { ID: 'U-DISPATCHER' } as never;
+      asSaved('Approved', { SendAttemptCount: 0 });
+      batch.Status = 'Sent';
+      await batch.Save();
+
+      expect(batch.SendAttemptCount).toBe(1);
+      expect(batch.SentByUserID).toBe('U-DISPATCHER');
+      expect(batch.SentAt).toBeInstanceOf(Date);
+    });
+
+    it('a retry (Failed → Sent) counts on from the loaded attempt and overwrites the earlier stamp', async () => {
+      batch.ContextCurrentUser = { ID: 'U-RETRIER' } as never;
+      asSaved('Failed', { SendAttemptCount: 2, SentAt: earlier, SentByUserID: 'U-FIRST' });
+      batch.Status = 'Sent';
+      await batch.Save();
+
+      expect(batch.SendAttemptCount).toBe(3);
+      expect(batch.SentByUserID).toBe('U-RETRIER');
+      expect(batch.SentAt).not.toEqual(earlier);
+    });
+
+    it('the count builds on the LOADED value, not one a caller set', async () => {
+      batch.ContextCurrentUser = { ID: 'U-RETRIER' } as never;
+      asSaved('Failed', { SendAttemptCount: 1 });
+      batch.SendAttemptCount = 40;
+      batch.Status = 'Sent';
+      await batch.Save();
+
+      expect(batch.SendAttemptCount).toBe(2);
+    });
+
+    it('with no context user the sender is cleared, never left as the previous attempt\'s', async () => {
+      asSaved('Failed', { SendAttemptCount: 1, SentByUserID: 'U-FIRST' });
+      batch.Status = 'Sent';
+      await batch.Save();
+
+      expect(batch.SentByUserID).toBeNull();
+    });
+
+    it.each(['Posted', 'Failed'])('leaving Sent (Sent → %s) does not restamp the send', async (to) => {
+      batch.ContextCurrentUser = { ID: 'U-OTHER' } as never;
+      asSaved('Sent', { SendAttemptCount: 1, SentAt: earlier, SentByUserID: 'U-FIRST' });
+      batch.Status = to;
+      await batch.Save();
+
+      expect(batch.SendAttemptCount).toBe(1);
+      expect(batch.SentByUserID).toBe('U-FIRST');
+      expect(batch.SentAt).toEqual(earlier);
     });
   });
 });

@@ -17,6 +17,10 @@
  *       process did not build is refused outright (#193).
  *   L8  GLAccount identity lock — Code change is rejected once JE lines reference the account;
  *       cosmetic Name change still saves.
+ *   L20 concurrent retry (#184) — two retries of one Failed batch race; the ERP is called once,
+ *       the loser is refused by trg_JournalEntryBatch_SendOnce, and the row and __mj.RecordChange
+ *       together record both sends, who made them, and the failure a later success cleared.
+ *   L21 the send-once trigger holds against raw SQL, not only through the entity.
  *
  * Run from the app root:  npx vitest run --config test-harnesses/server/vitest.config.ts
  * Requires: the live instance DB (mj/.env creds); packages built (imports their dist).
@@ -36,6 +40,7 @@ import {
   AutoApproveGate,
   TasksAppApprovalGate,
   mockErpPoster,
+  type ErpPoster,
   type JournalEntryBatchApprovalGate,
 } from '@mj-biz-apps/accounting-core-entities-server';
 import type { mjBizAppsAccountingAccountingCompanyProfileEntity } from '@mj-biz-apps/accounting-entities';
@@ -513,5 +518,76 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     const batchRow = (await ctx.pool.request().query(
       `SELECT Status FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${result.batchId}'`)).recordset[0];
     expect(batchRow.Status).toBe('Cancelled');
+  });
+
+  it('L20 — two concurrent retries of one Failed batch: one ERP call, the loser refused, both sends on record', async () => {
+    await createJE(false, 60, 'L20');
+    const built = await buildJournalEntryBatch(ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, AutoApproveGate);
+    ctx.createdBatchIds.push(built.batchId);
+    await approveJournalEntryBatch(built.batchId, ctx.user.ID, ctx.user, provider);
+
+    const rejection = `${ctx.runTag} L20 simulated ERP rejection`;
+    const rejectingPoster: ErpPoster = async () => ({ success: false, error: rejection });
+    const failed = await sendJournalEntryBatch(built.batchId, ctx.user, { gate: AutoApproveGate, poster: rejectingPoster, provider });
+    expect(failed.Status).toBe('Failed');
+
+    // Hold both retries at the gate until both have loaded the batch as Failed — the race the
+    // issue describes, made deterministic instead of left to timing.
+    let arrived = 0;
+    let releaseBoth!: () => void;
+    const bothLoaded = new Promise<void>((resolve) => { releaseBoth = resolve; });
+    const barrierGate: JournalEntryBatchApprovalGate = {
+      async assertApproved() { if (++arrived === 2) releaseBoth(); await bothLoaded; },
+    };
+    let erpCalls = 0;
+    const countingPoster: ErpPoster = async (b) => { erpCalls++; return { success: true, externalJournalEntryBatchRef: `MOCK-${b.JournalEntryBatchNumber}` }; };
+    const retry = () => sendJournalEntryBatch(built.batchId, ctx.user, { gate: barrierGate, poster: countingPoster, provider, confirmNotAlreadyPostedInERP: true });
+
+    const outcomes = await Promise.allSettled([retry(), retry()]);
+
+    expect(erpCalls).toBe(1);
+    expect(outcomes.filter((o) => o.status === 'fulfilled')).toHaveLength(1);
+    const losers = outcomes.filter((o): o is PromiseRejectedResult => o.status === 'rejected');
+    expect(losers).toHaveLength(1);
+    expect(String(losers[0].reason)).toContain('already Sent');
+
+    // The row: Posted, the second send, by this user, with the failure cleared.
+    const row = (await ctx.pool.request().query(
+      `SELECT Status, SendAttemptCount, SentByUserID, ErrorMessage FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${built.batchId}'`)).recordset[0];
+    expect(row.Status).toBe('Posted');
+    expect(row.SendAttemptCount).toBe(2);
+    expect(String(row.SentByUserID).toLowerCase()).toBe(ctx.user.ID.toLowerCase());
+    expect(row.ErrorMessage).toBeNull();
+
+    // __mj.RecordChange: the failure the success cleared, and one Sent snapshot per send.
+    const changes = (await ctx.pool.request().query(
+      `SELECT rc.FullRecordJSON, rc.UserID FROM __mj.RecordChange rc
+       JOIN __mj.Entity e ON e.ID = rc.EntityID
+       WHERE e.Name='${BATCH_ENTITY}' AND LOWER(rc.RecordID)=LOWER('ID|${built.batchId}')`)).recordset as Array<{ FullRecordJSON: string; UserID: string }>;
+    const snapshots = changes.map((c) => JSON.parse(c.FullRecordJSON) as { Status: string; ErrorMessage: string | null; SendAttemptCount: number });
+    expect(snapshots.some((s) => s.Status === 'Failed' && s.ErrorMessage === rejection)).toBe(true);
+    expect(snapshots.filter((s) => s.Status === 'Sent').map((s) => s.SendAttemptCount).sort()).toEqual([1, 2]);
+    expect(changes.every((c) => c.UserID.toLowerCase() === ctx.user.ID.toLowerCase())).toBe(true);
+  });
+
+  it('L21 — the send-once trigger holds against raw SQL: a new send stamp on a Sent row is refused', async () => {
+    await createJE(false, 45, 'L21');
+    const built = await buildJournalEntryBatch(ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, AutoApproveGate);
+    ctx.createdBatchIds.push(built.batchId);
+    await approveJournalEntryBatch(built.batchId, ctx.user.ID, ctx.user, provider);
+
+    // Approved → Sent by hand is not a second send: the trigger only guards a row already Sent.
+    await ctx.pool.request().query(
+      `UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Sent', SentAt=SYSDATETIMEOFFSET(), SendAttemptCount=1 WHERE ID='${built.batchId}'`);
+
+    await expect(ctx.pool.request().query(
+      `UPDATE ${SCHEMA}.JournalEntryBatch SET SentAt=DATEADD(second, 1, SentAt) WHERE ID='${built.batchId}'`)).rejects.toThrow(/already Sent/);
+    await expect(ctx.pool.request().query(
+      `UPDATE ${SCHEMA}.JournalEntryBatch SET SendAttemptCount=2 WHERE ID='${built.batchId}'`)).rejects.toThrow(/already Sent/);
+
+    // Leaving Sent is still allowed.
+    await ctx.pool.request().query(
+      `UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Failed', ErrorMessage='L21' WHERE ID='${built.batchId}'`);
+    expect(await scalar(ctx.pool, `SELECT Status FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${built.batchId}'`)).toBe('Failed');
   });
 });

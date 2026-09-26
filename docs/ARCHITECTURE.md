@@ -116,7 +116,8 @@ balance **overall and per company** (AM-4), and writes atomically. Hooks on the 
 - **DB invariants (triggers)** validated by `test-harnesses/server/block1-runtime.ts`, each with
   a raw-SQL bypass case: balanced-on-lock overall (50001) **and per company (50019/50022 —
   AM-4)**, JE immutability (50003/50004), JE-line immutability (50006). Batch side: summary
-  foots overall (50014) **and per company (50023)**, batch immutability (50008/50009).
+  foots overall (50014) **and per company (50023)**, batch immutability (50008/50009), and send-once (50030): a batch already `Sent` cannot be sent
+  again, so of two concurrent dispatches only one reaches the ERP (#184).
   *(The period-close trigger + W4 routing were retired with the period tables.)*
 - **Batch lifecycle (CH-3):** `Pending → Approved → Sent → Posted | Failed | Cancelled` — see
   `JournalEntryBatchEngine.ts`; the ERP wire is **account numbers, split per company** (AM-4).
@@ -132,6 +133,8 @@ balance **overall and per company** (AM-4), and writes atomically. Hooks on the 
   `resumeJournalEntryBatchPosting` (`Accounting.ResumeJournalEntryBatchPosting`), which makes no
   ERP call. `findStrandedJournalEntries` reports the entries both states hold; the scheduled
   action and the Dispatch status page surface it. Scheduled runs never retry on their own.
+  Each send stamps `SentAt`, `SentByUserID` and `SendAttemptCount` on the batch; `__mj.RecordChange`
+  keeps every earlier attempt, including the `ErrorMessage` a successful retry clears (#184).
 - **W5** realized-FX auto-emit: retired — Orders/Payments computes + posts the FX line (§C1).
 
 ## 6. Connection map

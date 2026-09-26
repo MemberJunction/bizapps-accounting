@@ -54,7 +54,10 @@
           <div><dt>Approved</dt><dd>{{ h.ApprovedAt | date: 'medium' }}</dd></div>
         }
         @if (h.SentAt) {
-          <div><dt>Sent</dt><dd>{{ h.SentAt | date: 'medium' }}</dd></div>
+          <div><dt>Sent</dt><dd>{{ h.SentAt | date: 'medium' }}{{ h.SentByUser ? ' by ' + h.SentByUser : '' }}</dd></div>
+        }
+        @if (h.SendAttemptCount > 1) {
+          <div><dt>Send attempts</dt><dd>{{ h.SendAttemptCount }}</dd></div>
         }
         @if (h.PostedAt) {
           <div><dt>Posted</dt><dd>{{ h.PostedAt | date: 'medium' }}</dd></div>

@@ -102,7 +102,8 @@
             <span class="ds-fail__meta">{{ b.TargetSystem }}</span>
             <!-- SentAt is datetimeoffset (a true instant) → render LOCAL, no 'UTC' arg. Passing
                  'UTC' here would misreport when the send actually happened. -->
-            <span class="ds-fail__meta">Sent {{ b.SentAt ? (b.SentAt | date: 'yyyy-MM-dd HH:mm') : '—' }}</span>
+            <span class="ds-fail__meta">Sent {{ b.SentAt ? (b.SentAt | date: 'yyyy-MM-dd HH:mm') : '—' }}{{ b.SentByUser ? ' by ' + b.SentByUser : '' }}</span>
+            <span class="ds-fail__meta">Attempt {{ b.SendAttemptCount }}</span>
             <span class="ds-fail__meta">{{ b.TotalEntries }} JEs</span>
             <button
               type="button"
@@ -165,7 +166,10 @@
       <div class="ds-fail__head">
         <span class="ds-mono">{{ SelectedBatch.JournalEntryBatchNumber }}</span>
         <span class="ds-fail__meta">{{ SelectedBatch.Status }} · {{ SelectedBatch.TargetSystem }}</span>
-        <span class="ds-fail__meta">Sent {{ SelectedBatch.SentAt ? (SelectedBatch.SentAt | date: 'yyyy-MM-dd HH:mm') : '—' }}</span>
+        <span class="ds-fail__meta">Sent {{ SelectedBatch.SentAt ? (SelectedBatch.SentAt | date: 'yyyy-MM-dd HH:mm') : '—' }}{{ SelectedBatch.SentByUser ? ' by ' + SelectedBatch.SentByUser : '' }}</span>
+        @if (SelectedBatch.SendAttemptCount > 0) {
+          <span class="ds-fail__meta">{{ SelectedBatch.SendAttemptCount }} send{{ SelectedBatch.SendAttemptCount === 1 ? '' : 's' }}</span>
+        }
         <span class="ds-fail__meta">Posted {{ SelectedBatch.PostedAt ? (SelectedBatch.PostedAt | date: 'yyyy-MM-dd HH:mm') : '—' }}</span>
         <span class="ds-fail__meta">ERP ref <span class="ds-mono">{{ SelectedBatch.ExternalJournalEntryBatchRef || '—' }}</span></span>
         @if (SelectedBatch.Status === 'Failed') {

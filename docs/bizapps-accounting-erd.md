@@ -401,6 +401,8 @@ erDiagram
         datetimeoffset ApprovalTaskRaisedAt
         string ExternalJournalEntryBatchRef
         datetimeoffset SentAt
+        uuid SentByUserID FK
+        int SendAttemptCount
         datetimeoffset PostedAt
         string ErrorMessage
     }
@@ -743,7 +745,9 @@ erDiagram
         uuid ApprovalTaskID "FK to __mj_BizAppsTasks.Task (#22) - both-or-neither with RaisedAt (CHECK)"
         datetimeoffset ApprovalTaskRaisedAt "nullable"
         string ExternalJournalEntryBatchRef "nullable"
-        datetimeoffset SentAt "nullable"
+        datetimeoffset SentAt "nullable - latest send; a retry overwrites it"
+        uuid SentByUserID FK "nullable - who made the latest send (#184)"
+        int SendAttemptCount "sends so far; trg_JournalEntryBatch_SendOnce (50030) refuses a second send of a Sent batch"
         datetimeoffset PostedAt "nullable"
         string ErrorMessage "nullable"
     }

@@ -139,13 +139,16 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
 
   /**
    * Dispatch-first column set. Ordered as the question is asked: which batch, what state, to which
-   * ERP, when did it leave, when did it land, what did the ERP call it, and what went wrong.
+   * ERP, when did it leave and who sent it, how many sends it took, when did it land, what did the
+   * ERP call it, and what went wrong.
    */
   public Columns: GridColumnConfig[] = [
     { field: 'JournalEntryBatchNumber', title: 'JE batch №', width: 170, sortable: true },
     { field: 'Status', title: 'Status', width: 110, sortable: true },
     { field: 'TargetSystem', title: 'Target ERP', width: 140, sortable: true },
     { field: 'SentAt', title: 'Sent', width: 160, sortable: true },
+    { field: 'SentByUser', title: 'Sent by', width: 150, sortable: true },
+    { field: 'SendAttemptCount', title: 'Attempts', width: 100, sortable: true },
     { field: 'PostedAt', title: 'Posted', width: 160, sortable: true },
     { field: 'ExternalJournalEntryBatchRef', title: 'ERP reference', width: 180, sortable: true },
     { field: 'ErrorMessage', title: 'Error', width: 'auto', sortable: false },

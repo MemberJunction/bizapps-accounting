@@ -169,6 +169,12 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   batch's member `Batched → GLPosted` flip with no ERP call. *Visibility* — `findStrandedJournalEntries`
   (`Accounting.GetStrandedJournalEntries`) reports entries held at `Batched` by either state; the
   scheduled `Accounting.BuildJournalEntryBatches` appends the count to every run. Scheduled runs never retry.
+- **Send audit and send-once (#184).** `JournalEntryBatchEntityServer.Save` stamps `SentAt`, `SentByUserID` and
+  `SendAttemptCount` (the loaded count plus one) on every transition into `Sent`. `trg_JournalEntryBatch_SendOnce`
+  (50030) refuses a new stamp on a row that is already `Sent`: of two concurrent sends of one batch, both of which
+  loaded it as `Approved` or `Failed`, the second save fails and `sendJournalEntryBatch` throws before its ERP call.
+  A successful retry still clears `ErrorMessage`; the earlier value, and every overwritten `SentAt` and sender, are
+  in `__mj.RecordChange` (the entity tracks record changes).
 - **S3 scheduled-JE schedules — ✅ creation only** (`ScheduledJournalEntryService.createScheduledEntries`:
   straight-line schedules with exact cent-remainder spread). **The central materializer is RETIRED (AM-6)**
   — *domain entity servers* (e.g. a future SubscriptionEntityServer) generate the real Pending JE when a row
