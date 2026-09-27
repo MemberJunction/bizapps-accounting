@@ -41,7 +41,16 @@
 --
 -- The UPDATE that CodeGen's trgUpdateJournalEntryBatch makes to set
 -- __mj_UpdatedAt fires this trigger again, with the row already Sent. It changes
--- nothing else, so it is let through by name.
+-- nothing else, so it is let through by name. If that trigger does not exist
+-- (between CodeGen's DROP and CREATE inside a migration), OBJECT_ID is NULL and
+-- TRIGGER_NESTLEVEL(NULL, ...) counts every trigger on the stack, so the bypass
+-- is skipped rather than evaluated against NULL.
+--
+-- FIRED FIRST. trg_JournalEntryBatch_Immutability also refuses Posted -> Sent
+-- and Cancelled -> Sent, with ROLLBACK + THROW. SQL Server does not define the
+-- order of AFTER triggers; if that one fires first, the caller gets 3915 in
+-- place of 50030 and the refused send is not recognised as one. Section 4 sets
+-- this trigger First for UPDATE.
 --
 -- THROW with no ROLLBACK TRANSACTION first. The entity's save runs spUpdate
 -- inside INSERT-EXEC, where a ROLLBACK is itself an error (3915) and the caller
@@ -56,6 +65,10 @@
 -- SentByUserID and SendAttemptCount are the audit trail on the row itself. The
 -- full history of each attempt (the ErrorMessage a later success clears, every
 -- overwritten SentAt) is in __mj.RecordChange: the entity tracks record changes.
+--
+-- SET-BASED UPDATES IN LATER MIGRATIONS: "nothing keeps a batch Sent" refuses
+-- any top-level UPDATE of JournalEntryBatch that touches a Sent row, a backfill
+-- included. Add WHERE Status <> 'Sent', or disable this trigger around it.
 --
 -- This runs once, in order, against a database that has every earlier migration.
 -- =============================================================================
@@ -92,14 +105,15 @@ AFTER UPDATE
 AS
 BEGIN
     SET NOCOUNT ON;
-    IF TRIGGER_NESTLEVEL(OBJECT_ID(N'__mj_BizAppsAccounting.trgUpdateJournalEntryBatch'), 'AFTER', 'DML') > 0 RETURN;
+    DECLARE @CodeGenUpdateTrigger INT = OBJECT_ID(N'__mj_BizAppsAccounting.trgUpdateJournalEntryBatch');
+    IF @CodeGenUpdateTrigger IS NOT NULL AND TRIGGER_NESTLEVEL(@CodeGenUpdateTrigger, 'AFTER', 'DML') > 0 RETURN;
 
     -- Still Sent: another dispatch holds the batch.
     IF EXISTS (
         SELECT 1 FROM deleted d JOIN inserted i ON i.ID = d.ID
         WHERE d.Status = 'Sent' AND i.Status = 'Sent'
     )
-        THROW 50030, 'JournalEntryBatch send refused: the batch is already Sent. Another dispatch of it is in progress, and its outcome will be Posted or Failed.', 1;
+        THROW 50030, 'JournalEntryBatch send refused: the batch is already Sent. An update to a Sent batch must move it to Posted or Failed; if a dispatch is in progress, wait for its outcome.', 1;
 
     -- Entering Sent: only from Approved or Failed, and only as the count's next value.
     IF EXISTS (
@@ -125,7 +139,16 @@ END;
 GO
 
 -- -----------------------------------------------------------------------------
--- 4. Column descriptions — CodeGen carries these into EntityField.Description
+-- 4. Fire before trg_JournalEntryBatch_Immutability, so a refused send reports 50030
+-- -----------------------------------------------------------------------------
+EXEC sp_settriggerorder
+    @triggername = N'__mj_BizAppsAccounting.trg_JournalEntryBatch_SendOnce',
+    @order = N'First',
+    @stmttype = N'UPDATE';
+GO
+
+-- -----------------------------------------------------------------------------
+-- 5. Column descriptions — CodeGen carries these into EntityField.Description
 -- -----------------------------------------------------------------------------
 EXEC sp_updateextendedproperty @name = N'MS_Description',
     @value = N'When the batch last entered Sent. A retry overwrites it; SendAttemptCount counts the sends, and __mj.RecordChange keeps each earlier value.',
@@ -227,7 +250,7 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
 
 /* SQL text to insert 2 new entity field(s) */
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'bdff848f-1110-40cb-bcbd-106331b01d8e' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'SentByUserID')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '6581636b-749c-4cac-996c-c29561233bf9' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'SentByUserID')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -260,7 +283,7 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
          VALUES
          (
-            'bdff848f-1110-40cb-bcbd-106331b01d8e',
+            '6581636b-749c-4cac-996c-c29561233bf9',
             '87AD37E9-62F9-4F0E-A15B-F64ADF009112', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
             (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112'),
             'SentByUserID',
@@ -290,7 +313,7 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
       END;
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '37c1bed5-8eed-41eb-86d3-f0bd4aacabe2' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'SendAttemptCount')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '54a45f54-e6cf-4fe3-962c-93e9b12a316c' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'SendAttemptCount')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -323,7 +346,7 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
          VALUES
          (
-            '37c1bed5-8eed-41eb-86d3-f0bd4aacabe2',
+            '54a45f54-e6cf-4fe3-962c-93e9b12a316c',
             '87AD37E9-62F9-4F0E-A15B-F64ADF009112', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
             (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112'),
             'SendAttemptCount',
@@ -362,11 +385,11 @@ EXEC [${mjSchema}].[spSetDefaultColumnWidthWhereNeeded] @ExcludedSchemaNames='',
 
 /* Create Entity Relationship: MJ: Users -> MJ_BizApps_Accounting: Journal Entry Batches (One To Many via SentByUserID) */
    IF NOT EXISTS (
-      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '70d16654-91bd-42d2-9fa6-ad47e227fe94'
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '4d28ab5a-4887-4c31-8338-b9239355e9e1'
    )
    BEGIN
       INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
-                    VALUES ('70d16654-91bd-42d2-9fa6-ad47e227fe94', 'E1238F34-2837-EF11-86D4-6045BDEE16E6', '87AD37E9-62F9-4F0E-A15B-F64ADF009112', 'SentByUserID', 'One To Many', 1, 1, 114, GETUTCDATE(), GETUTCDATE())
+                    VALUES ('4d28ab5a-4887-4c31-8338-b9239355e9e1', 'E1238F34-2837-EF11-86D4-6045BDEE16E6', '87AD37E9-62F9-4F0E-A15B-F64ADF009112', 'SentByUserID', 'One To Many', 1, 1, 116, GETUTCDATE(), GETUTCDATE())
    END;
 
 /* SQL text to sync schema info from database schemas */
@@ -435,6 +458,24 @@ IF NOT EXISTS (
 )
 CREATE INDEX IDX_AUTO_MJ_FKEY_JournalEntryBatch_ArchivedByUserID ON [${flyway:defaultSchema}].[JournalEntryBatch] ([ArchivedByUserID]);
 
+-- Index for foreign key CancelledByUserID in table JournalEntryBatch
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_JournalEntryBatch_CancelledByUserID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[JournalEntryBatch]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_JournalEntryBatch_CancelledByUserID ON [${flyway:defaultSchema}].[JournalEntryBatch] ([CancelledByUserID]);
+
+-- Index for foreign key ERPNotPostedConfirmedByUserID in table JournalEntryBatch
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IDX_AUTO_MJ_FKEY_JournalEntryBatch_ERPNotPostedConfirmedByUserID' 
+    AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[JournalEntryBatch]')
+)
+CREATE INDEX IDX_AUTO_MJ_FKEY_JournalEntryBatch_ERPNotPostedConfirmedByUserID ON [${flyway:defaultSchema}].[JournalEntryBatch] ([ERPNotPostedConfirmedByUserID]);
+
 -- Index for foreign key SentByUserID in table JournalEntryBatch
 IF NOT EXISTS (
     SELECT 1
@@ -444,426 +485,8 @@ IF NOT EXISTS (
 )
 CREATE INDEX IDX_AUTO_MJ_FKEY_JournalEntryBatch_SentByUserID ON [${flyway:defaultSchema}].[JournalEntryBatch] ([SentByUserID]);
 
-/* SQL text to update entity field related entity name field map for entity field ID BDFF848F-1110-40CB-BCBD-106331B01D8E */
-EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='BDFF848F-1110-40CB-BCBD-106331B01D8E', @RelatedEntityNameFieldMap='SentByUser';
-
-/* Base View SQL for MJ_BizApps_Accounting: Journal Entries */
------------------------------------------------------------------
--- SQL Code Generation
--- Entity: MJ_BizApps_Accounting: Journal Entries
--- Item: vwJournalEntriesGenerated
---
--- This was generated by the MemberJunction CodeGen tool.
--- This file should NOT be edited by hand.
------------------------------------------------------------------
-
-------------------------------------------------------------
------ BASE VIEW FOR ENTITY:      MJ_BizApps_Accounting: Journal Entries
------               SCHEMA:      ${flyway:defaultSchema}
------               BASE TABLE:  JournalEntry
------               PRIMARY KEY: ID
-------------------------------------------------------------
-IF OBJECT_ID('[${flyway:defaultSchema}].[vwJournalEntriesGenerated]', 'V') IS NOT NULL
-    DROP VIEW [${flyway:defaultSchema}].[vwJournalEntriesGenerated];
-GO
-
-CREATE VIEW [${flyway:defaultSchema}].[vwJournalEntriesGenerated]
-AS
-SELECT
-    j.*,
-    MJCompany_CompanyID.[Name] AS [Company],
-    mjBizAppsAccountingJournalEntryType_EntryTypeID.[Name] AS [EntryType],
-    MJEntity_LinkedEntityID.[Name] AS [LinkedEntity],
-    mjBizAppsAccountingJournalEntry_ReversesJournalEntryID.[EntryNumber] AS [ReversesJournalEntry],
-    mjBizAppsAccountingJournalEntry_ReversedByJournalEntryID.[EntryNumber] AS [ReversedByJournalEntry],
-    mjBizAppsAccountingJournalEntryBatch_JournalEntryBatchID.[JournalEntryBatchNumber] AS [JournalEntryBatch],
-    MJFile_FileID.[Name] AS [File]
-FROM
-    [${flyway:defaultSchema}].[JournalEntry] AS j
-INNER JOIN
-    [${mjSchema}].[Company] AS MJCompany_CompanyID
-  ON
-    [j].[CompanyID] = MJCompany_CompanyID.[ID]
-INNER JOIN
-    [${flyway:defaultSchema}].[JournalEntryType] AS mjBizAppsAccountingJournalEntryType_EntryTypeID
-  ON
-    [j].[EntryTypeID] = mjBizAppsAccountingJournalEntryType_EntryTypeID.[ID]
-LEFT OUTER JOIN
-    [${mjSchema}].[Entity] AS MJEntity_LinkedEntityID
-  ON
-    [j].[LinkedEntityID] = MJEntity_LinkedEntityID.[ID]
-LEFT OUTER JOIN
-    [${flyway:defaultSchema}].[JournalEntry] AS mjBizAppsAccountingJournalEntry_ReversesJournalEntryID
-  ON
-    [j].[ReversesJournalEntryID] = mjBizAppsAccountingJournalEntry_ReversesJournalEntryID.[ID]
-LEFT OUTER JOIN
-    [${flyway:defaultSchema}].[JournalEntry] AS mjBizAppsAccountingJournalEntry_ReversedByJournalEntryID
-  ON
-    [j].[ReversedByJournalEntryID] = mjBizAppsAccountingJournalEntry_ReversedByJournalEntryID.[ID]
-LEFT OUTER JOIN
-    [${flyway:defaultSchema}].[JournalEntryBatch] AS mjBizAppsAccountingJournalEntryBatch_JournalEntryBatchID
-  ON
-    [j].[JournalEntryBatchID] = mjBizAppsAccountingJournalEntryBatch_JournalEntryBatchID.[ID]
-LEFT OUTER JOIN
-    [${mjSchema}].[File] AS MJFile_FileID
-  ON
-    [j].[FileID] = MJFile_FileID.[ID]
-GO
-IF OBJECT_ID('[${flyway:defaultSchema}].[vwJournalEntries]', 'V') IS NOT NULL
-BEGIN
-    EXEC sp_executesql N'REVOKE SELECT ON [${flyway:defaultSchema}].[vwJournalEntries] FROM [cdp_Developer]
-REVOKE SELECT ON [${flyway:defaultSchema}].[vwJournalEntries] FROM [cdp_Integration]
-REVOKE SELECT ON [${flyway:defaultSchema}].[vwJournalEntries] FROM [cdp_UI]
-GRANT SELECT ON [${flyway:defaultSchema}].[vwJournalEntries] TO [cdp_UI], [cdp_Developer], [cdp_Integration]';
-END;
-
-/* Base View Permissions SQL for MJ_BizApps_Accounting: Journal Entries */
------------------------------------------------------------------
--- SQL Code Generation
--- Entity: MJ_BizApps_Accounting: Journal Entries
--- Item: Permissions for vwJournalEntries
---
--- This was generated by the MemberJunction CodeGen tool.
--- This file should NOT be edited by hand.
------------------------------------------------------------------
-
-IF OBJECT_ID('[${flyway:defaultSchema}].[vwJournalEntries]', 'V') IS NOT NULL
-BEGIN
-    EXEC sp_executesql N'REVOKE SELECT ON [${flyway:defaultSchema}].[vwJournalEntries] FROM [cdp_Developer]
-REVOKE SELECT ON [${flyway:defaultSchema}].[vwJournalEntries] FROM [cdp_Integration]
-REVOKE SELECT ON [${flyway:defaultSchema}].[vwJournalEntries] FROM [cdp_UI]
-GRANT SELECT ON [${flyway:defaultSchema}].[vwJournalEntries] TO [cdp_UI], [cdp_Developer], [cdp_Integration]';
-END;
-
-/* spCreate SQL for MJ_BizApps_Accounting: Journal Entries */
------------------------------------------------------------------
--- SQL Code Generation
--- Entity: MJ_BizApps_Accounting: Journal Entries
--- Item: spCreateJournalEntry
---
--- This was generated by the MemberJunction CodeGen tool.
--- This file should NOT be edited by hand.
------------------------------------------------------------------
-
-------------------------------------------------------------
------ CREATE PROCEDURE FOR JournalEntry
-------------------------------------------------------------
-IF OBJECT_ID('[${flyway:defaultSchema}].[spCreateJournalEntry]', 'P') IS NOT NULL
-    DROP PROCEDURE [${flyway:defaultSchema}].[spCreateJournalEntry];
-GO
-
-CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateJournalEntry]
-    @ID uniqueidentifier = NULL,
-    @EntryNumber nvarchar(40),
-    @CompanyID uniqueidentifier,
-    @EffectiveDate date,
-    @EntryTypeID uniqueidentifier,
-    @Status nvarchar(20) = NULL,
-    @Description_Clear bit = 0,
-    @Description nvarchar(MAX) = NULL,
-    @LinkedEntityID_Clear bit = 0,
-    @LinkedEntityID uniqueidentifier = NULL,
-    @LinkedRecordID_Clear bit = 0,
-    @LinkedRecordID nvarchar(400) = NULL,
-    @ReversesJournalEntryID_Clear bit = 0,
-    @ReversesJournalEntryID uniqueidentifier = NULL,
-    @ReversedByJournalEntryID_Clear bit = 0,
-    @ReversedByJournalEntryID uniqueidentifier = NULL,
-    @JournalEntryBatchID_Clear bit = 0,
-    @JournalEntryBatchID uniqueidentifier = NULL,
-    @GLPostedAt_Clear bit = 0,
-    @GLPostedAt datetimeoffset = NULL,
-    @GLReferenceID_Clear bit = 0,
-    @GLReferenceID nvarchar(100) = NULL,
-    @FileID_Clear bit = 0,
-    @FileID uniqueidentifier = NULL,
-    @PredictedAnomalyProbability_Clear bit = 0,
-    @PredictedAnomalyProbability decimal(5, 4) = NULL,
-    @PredictedAnomalyRiskBand_Clear bit = 0,
-    @PredictedAnomalyRiskBand nvarchar(20) = NULL,
-    @PredictedAnomalyScoredAt_Clear bit = 0,
-    @PredictedAnomalyScoredAt datetimeoffset = NULL
-AS
-BEGIN
-    SET NOCOUNT ON;
-    DECLARE @InsertedRow TABLE ([ID] UNIQUEIDENTIFIER)
-
-    IF @ID IS NOT NULL
-    BEGIN
-        -- User provided a value, use it
-        INSERT INTO [${flyway:defaultSchema}].[JournalEntry]
-            (
-                [ID],
-                [EntryNumber],
-                [CompanyID],
-                [EffectiveDate],
-                [EntryTypeID],
-                [Status],
-                [Description],
-                [LinkedEntityID],
-                [LinkedRecordID],
-                [ReversesJournalEntryID],
-                [ReversedByJournalEntryID],
-                [JournalEntryBatchID],
-                [GLPostedAt],
-                [GLReferenceID],
-                [FileID],
-                [PredictedAnomalyProbability],
-                [PredictedAnomalyRiskBand],
-                [PredictedAnomalyScoredAt]
-            )
-        OUTPUT INSERTED.[ID] INTO @InsertedRow
-        VALUES
-            (
-                @ID,
-                @EntryNumber,
-                @CompanyID,
-                @EffectiveDate,
-                @EntryTypeID,
-                ISNULL(@Status, 'Pending'),
-                CASE WHEN @Description_Clear = 1 THEN NULL ELSE ISNULL(@Description, NULL) END,
-                CASE WHEN @LinkedEntityID_Clear = 1 THEN NULL ELSE ISNULL(@LinkedEntityID, NULL) END,
-                CASE WHEN @LinkedRecordID_Clear = 1 THEN NULL ELSE ISNULL(@LinkedRecordID, NULL) END,
-                CASE WHEN @ReversesJournalEntryID_Clear = 1 THEN NULL ELSE ISNULL(@ReversesJournalEntryID, NULL) END,
-                CASE WHEN @ReversedByJournalEntryID_Clear = 1 THEN NULL ELSE ISNULL(@ReversedByJournalEntryID, NULL) END,
-                CASE WHEN @JournalEntryBatchID_Clear = 1 THEN NULL ELSE ISNULL(@JournalEntryBatchID, NULL) END,
-                CASE WHEN @GLPostedAt_Clear = 1 THEN NULL ELSE ISNULL(@GLPostedAt, NULL) END,
-                CASE WHEN @GLReferenceID_Clear = 1 THEN NULL ELSE ISNULL(@GLReferenceID, NULL) END,
-                CASE WHEN @FileID_Clear = 1 THEN NULL ELSE ISNULL(@FileID, NULL) END,
-                CASE WHEN @PredictedAnomalyProbability_Clear = 1 THEN NULL ELSE ISNULL(@PredictedAnomalyProbability, NULL) END,
-                CASE WHEN @PredictedAnomalyRiskBand_Clear = 1 THEN NULL ELSE ISNULL(@PredictedAnomalyRiskBand, NULL) END,
-                CASE WHEN @PredictedAnomalyScoredAt_Clear = 1 THEN NULL ELSE ISNULL(@PredictedAnomalyScoredAt, NULL) END
-            )
-    END
-    ELSE
-    BEGIN
-        -- No value provided, let database use its default (e.g., NEWSEQUENTIALID())
-        INSERT INTO [${flyway:defaultSchema}].[JournalEntry]
-            (
-                [EntryNumber],
-                [CompanyID],
-                [EffectiveDate],
-                [EntryTypeID],
-                [Status],
-                [Description],
-                [LinkedEntityID],
-                [LinkedRecordID],
-                [ReversesJournalEntryID],
-                [ReversedByJournalEntryID],
-                [JournalEntryBatchID],
-                [GLPostedAt],
-                [GLReferenceID],
-                [FileID],
-                [PredictedAnomalyProbability],
-                [PredictedAnomalyRiskBand],
-                [PredictedAnomalyScoredAt]
-            )
-        OUTPUT INSERTED.[ID] INTO @InsertedRow
-        VALUES
-            (
-                @EntryNumber,
-                @CompanyID,
-                @EffectiveDate,
-                @EntryTypeID,
-                ISNULL(@Status, 'Pending'),
-                CASE WHEN @Description_Clear = 1 THEN NULL ELSE ISNULL(@Description, NULL) END,
-                CASE WHEN @LinkedEntityID_Clear = 1 THEN NULL ELSE ISNULL(@LinkedEntityID, NULL) END,
-                CASE WHEN @LinkedRecordID_Clear = 1 THEN NULL ELSE ISNULL(@LinkedRecordID, NULL) END,
-                CASE WHEN @ReversesJournalEntryID_Clear = 1 THEN NULL ELSE ISNULL(@ReversesJournalEntryID, NULL) END,
-                CASE WHEN @ReversedByJournalEntryID_Clear = 1 THEN NULL ELSE ISNULL(@ReversedByJournalEntryID, NULL) END,
-                CASE WHEN @JournalEntryBatchID_Clear = 1 THEN NULL ELSE ISNULL(@JournalEntryBatchID, NULL) END,
-                CASE WHEN @GLPostedAt_Clear = 1 THEN NULL ELSE ISNULL(@GLPostedAt, NULL) END,
-                CASE WHEN @GLReferenceID_Clear = 1 THEN NULL ELSE ISNULL(@GLReferenceID, NULL) END,
-                CASE WHEN @FileID_Clear = 1 THEN NULL ELSE ISNULL(@FileID, NULL) END,
-                CASE WHEN @PredictedAnomalyProbability_Clear = 1 THEN NULL ELSE ISNULL(@PredictedAnomalyProbability, NULL) END,
-                CASE WHEN @PredictedAnomalyRiskBand_Clear = 1 THEN NULL ELSE ISNULL(@PredictedAnomalyRiskBand, NULL) END,
-                CASE WHEN @PredictedAnomalyScoredAt_Clear = 1 THEN NULL ELSE ISNULL(@PredictedAnomalyScoredAt, NULL) END
-            )
-    END
-    -- return the new record from the base view, which might have some calculated fields
-    SELECT * FROM [${flyway:defaultSchema}].[vwJournalEntries] WHERE [ID] = (SELECT [ID] FROM @InsertedRow)
-END
-GO
-REVOKE EXECUTE ON [${flyway:defaultSchema}].[spCreateJournalEntry] FROM [cdp_Developer]
-REVOKE EXECUTE ON [${flyway:defaultSchema}].[spCreateJournalEntry] FROM [cdp_Integration]
-GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateJournalEntry] TO [cdp_Developer], [cdp_Integration];
-
-/* spCreate Permissions for MJ_BizApps_Accounting: Journal Entries */
-
-REVOKE EXECUTE ON [${flyway:defaultSchema}].[spCreateJournalEntry] FROM [cdp_Developer]
-REVOKE EXECUTE ON [${flyway:defaultSchema}].[spCreateJournalEntry] FROM [cdp_Integration]
-GRANT EXECUTE ON [${flyway:defaultSchema}].[spCreateJournalEntry] TO [cdp_Developer], [cdp_Integration];
-
-/* spUpdate SQL for MJ_BizApps_Accounting: Journal Entries */
------------------------------------------------------------------
--- SQL Code Generation
--- Entity: MJ_BizApps_Accounting: Journal Entries
--- Item: spUpdateJournalEntry
---
--- This was generated by the MemberJunction CodeGen tool.
--- This file should NOT be edited by hand.
------------------------------------------------------------------
-
-------------------------------------------------------------
------ UPDATE PROCEDURE FOR JournalEntry
-------------------------------------------------------------
-IF OBJECT_ID('[${flyway:defaultSchema}].[spUpdateJournalEntry]', 'P') IS NOT NULL
-    DROP PROCEDURE [${flyway:defaultSchema}].[spUpdateJournalEntry];
-GO
-
-CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateJournalEntry]
-    @ID uniqueidentifier,
-    @EntryNumber nvarchar(40) = NULL,
-    @CompanyID uniqueidentifier = NULL,
-    @EffectiveDate date = NULL,
-    @EntryTypeID uniqueidentifier = NULL,
-    @Status nvarchar(20) = NULL,
-    @Description_Clear bit = 0,
-    @Description nvarchar(MAX) = NULL,
-    @LinkedEntityID_Clear bit = 0,
-    @LinkedEntityID uniqueidentifier = NULL,
-    @LinkedRecordID_Clear bit = 0,
-    @LinkedRecordID nvarchar(400) = NULL,
-    @ReversesJournalEntryID_Clear bit = 0,
-    @ReversesJournalEntryID uniqueidentifier = NULL,
-    @ReversedByJournalEntryID_Clear bit = 0,
-    @ReversedByJournalEntryID uniqueidentifier = NULL,
-    @JournalEntryBatchID_Clear bit = 0,
-    @JournalEntryBatchID uniqueidentifier = NULL,
-    @GLPostedAt_Clear bit = 0,
-    @GLPostedAt datetimeoffset = NULL,
-    @GLReferenceID_Clear bit = 0,
-    @GLReferenceID nvarchar(100) = NULL,
-    @FileID_Clear bit = 0,
-    @FileID uniqueidentifier = NULL,
-    @PredictedAnomalyProbability_Clear bit = 0,
-    @PredictedAnomalyProbability decimal(5, 4) = NULL,
-    @PredictedAnomalyRiskBand_Clear bit = 0,
-    @PredictedAnomalyRiskBand nvarchar(20) = NULL,
-    @PredictedAnomalyScoredAt_Clear bit = 0,
-    @PredictedAnomalyScoredAt datetimeoffset = NULL
-AS
-BEGIN
-    SET NOCOUNT ON;
-    UPDATE
-        [${flyway:defaultSchema}].[JournalEntry]
-    SET
-        [EntryNumber] = ISNULL(@EntryNumber, [EntryNumber]),
-        [CompanyID] = ISNULL(@CompanyID, [CompanyID]),
-        [EffectiveDate] = ISNULL(@EffectiveDate, [EffectiveDate]),
-        [EntryTypeID] = ISNULL(@EntryTypeID, [EntryTypeID]),
-        [Status] = ISNULL(@Status, [Status]),
-        [Description] = CASE WHEN @Description_Clear = 1 THEN NULL ELSE ISNULL(@Description, [Description]) END,
-        [LinkedEntityID] = CASE WHEN @LinkedEntityID_Clear = 1 THEN NULL ELSE ISNULL(@LinkedEntityID, [LinkedEntityID]) END,
-        [LinkedRecordID] = CASE WHEN @LinkedRecordID_Clear = 1 THEN NULL ELSE ISNULL(@LinkedRecordID, [LinkedRecordID]) END,
-        [ReversesJournalEntryID] = CASE WHEN @ReversesJournalEntryID_Clear = 1 THEN NULL ELSE ISNULL(@ReversesJournalEntryID, [ReversesJournalEntryID]) END,
-        [ReversedByJournalEntryID] = CASE WHEN @ReversedByJournalEntryID_Clear = 1 THEN NULL ELSE ISNULL(@ReversedByJournalEntryID, [ReversedByJournalEntryID]) END,
-        [JournalEntryBatchID] = CASE WHEN @JournalEntryBatchID_Clear = 1 THEN NULL ELSE ISNULL(@JournalEntryBatchID, [JournalEntryBatchID]) END,
-        [GLPostedAt] = CASE WHEN @GLPostedAt_Clear = 1 THEN NULL ELSE ISNULL(@GLPostedAt, [GLPostedAt]) END,
-        [GLReferenceID] = CASE WHEN @GLReferenceID_Clear = 1 THEN NULL ELSE ISNULL(@GLReferenceID, [GLReferenceID]) END,
-        [FileID] = CASE WHEN @FileID_Clear = 1 THEN NULL ELSE ISNULL(@FileID, [FileID]) END,
-        [PredictedAnomalyProbability] = CASE WHEN @PredictedAnomalyProbability_Clear = 1 THEN NULL ELSE ISNULL(@PredictedAnomalyProbability, [PredictedAnomalyProbability]) END,
-        [PredictedAnomalyRiskBand] = CASE WHEN @PredictedAnomalyRiskBand_Clear = 1 THEN NULL ELSE ISNULL(@PredictedAnomalyRiskBand, [PredictedAnomalyRiskBand]) END,
-        [PredictedAnomalyScoredAt] = CASE WHEN @PredictedAnomalyScoredAt_Clear = 1 THEN NULL ELSE ISNULL(@PredictedAnomalyScoredAt, [PredictedAnomalyScoredAt]) END
-    WHERE
-        [ID] = @ID
-
-    -- Check if the update was successful
-    IF @@ROWCOUNT = 0
-        -- Nothing was updated, return no rows, but column structure from base view intact, semantically correct this way.
-        SELECT TOP 0 * FROM [${flyway:defaultSchema}].[vwJournalEntries] WHERE 1=0
-    ELSE
-        -- Return the updated record so the caller can see the updated values and any calculated fields
-        SELECT
-                                        *
-                                    FROM
-                                        [${flyway:defaultSchema}].[vwJournalEntries]
-                                    WHERE
-                                        [ID] = @ID
-                                    
-END
-GO
-
-REVOKE EXECUTE ON [${flyway:defaultSchema}].[spUpdateJournalEntry] FROM [cdp_Developer]
-REVOKE EXECUTE ON [${flyway:defaultSchema}].[spUpdateJournalEntry] FROM [cdp_Integration]
-GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateJournalEntry] TO [cdp_Developer], [cdp_Integration]
-GO
-
-------------------------------------------------------------
------ TRIGGER FOR __mj_UpdatedAt field for the JournalEntry table
-------------------------------------------------------------
-IF OBJECT_ID('[${flyway:defaultSchema}].[trgUpdateJournalEntry]', 'TR') IS NOT NULL
-    DROP TRIGGER [${flyway:defaultSchema}].[trgUpdateJournalEntry];
-GO
-CREATE TRIGGER [${flyway:defaultSchema}].trgUpdateJournalEntry
-ON [${flyway:defaultSchema}].[JournalEntry]
-AFTER UPDATE
-AS
-BEGIN
-    SET NOCOUNT ON;
-    UPDATE
-        [${flyway:defaultSchema}].[JournalEntry]
-    SET
-        __mj_UpdatedAt = GETUTCDATE()
-    FROM
-        [${flyway:defaultSchema}].[JournalEntry] AS _organicTable
-    INNER JOIN
-        INSERTED AS I ON
-        _organicTable.[ID] = I.[ID];
-END;
-GO
-
-/* spUpdate Permissions for MJ_BizApps_Accounting: Journal Entries */
-
-REVOKE EXECUTE ON [${flyway:defaultSchema}].[spUpdateJournalEntry] FROM [cdp_Developer]
-REVOKE EXECUTE ON [${flyway:defaultSchema}].[spUpdateJournalEntry] FROM [cdp_Integration]
-GRANT EXECUTE ON [${flyway:defaultSchema}].[spUpdateJournalEntry] TO [cdp_Developer], [cdp_Integration];
-
-/* spDelete SQL for MJ_BizApps_Accounting: Journal Entries */
------------------------------------------------------------------
--- SQL Code Generation
--- Entity: MJ_BizApps_Accounting: Journal Entries
--- Item: spDeleteJournalEntry
---
--- This was generated by the MemberJunction CodeGen tool.
--- This file should NOT be edited by hand.
------------------------------------------------------------------
-
-------------------------------------------------------------
------ DELETE PROCEDURE FOR JournalEntry
-------------------------------------------------------------
-IF OBJECT_ID('[${flyway:defaultSchema}].[spDeleteJournalEntry]', 'P') IS NOT NULL
-    DROP PROCEDURE [${flyway:defaultSchema}].[spDeleteJournalEntry];
-GO
-
-CREATE PROCEDURE [${flyway:defaultSchema}].[spDeleteJournalEntry]
-    @ID uniqueidentifier
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    DELETE FROM
-        [${flyway:defaultSchema}].[JournalEntry]
-    WHERE
-        [ID] = @ID
-
-
-    -- Check if the delete was successful
-    IF @@ROWCOUNT = 0
-        SELECT NULL AS [ID] -- Return NULL for all primary key fields to indicate no record was deleted
-    ELSE
-        SELECT @ID AS [ID] -- Return the primary key values to indicate we successfully deleted the record
-END
-GO
-REVOKE EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntry] FROM [cdp_Developer]
-REVOKE EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntry] FROM [cdp_Integration]
-GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntry] TO [cdp_Developer], [cdp_Integration];
-
-/* spDelete Permissions for MJ_BizApps_Accounting: Journal Entries */
-
-REVOKE EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntry] FROM [cdp_Developer]
-REVOKE EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntry] FROM [cdp_Integration]
-GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntry] TO [cdp_Developer], [cdp_Integration];
+/* SQL text to update entity field related entity name field map for entity field ID 6581636B-749C-4CAC-996C-C29561233BF9 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='6581636B-749C-4CAC-996C-C29561233BF9', @RelatedEntityNameFieldMap='SentByUser';
 
 /* Base View SQL for MJ_BizApps_Accounting: Journal Entry Batches */
 -----------------------------------------------------------------
@@ -895,6 +518,8 @@ SELECT
     MJUser_ApprovedByUserID.[Name] AS [ApprovedByUser],
     mjBizAppsTasksTask_ApprovalTaskID.[Name] AS [ApprovalTask],
     MJUser_ArchivedByUserID.[Name] AS [ArchivedByUser],
+    MJUser_CancelledByUserID.[Name] AS [CancelledByUser],
+    MJUser_ERPNotPostedConfirmedByUserID.[Name] AS [ERPNotPostedConfirmedByUser],
     MJUser_SentByUserID.[Name] AS [SentByUser]
 FROM
     [${flyway:defaultSchema}].[JournalEntryBatch] AS j
@@ -922,6 +547,14 @@ LEFT OUTER JOIN
     [${mjSchema}].[User] AS MJUser_ArchivedByUserID
   ON
     [j].[ArchivedByUserID] = MJUser_ArchivedByUserID.[ID]
+LEFT OUTER JOIN
+    [${mjSchema}].[User] AS MJUser_CancelledByUserID
+  ON
+    [j].[CancelledByUserID] = MJUser_CancelledByUserID.[ID]
+LEFT OUTER JOIN
+    [${mjSchema}].[User] AS MJUser_ERPNotPostedConfirmedByUserID
+  ON
+    [j].[ERPNotPostedConfirmedByUserID] = MJUser_ERPNotPostedConfirmedByUserID.[ID]
 LEFT OUTER JOIN
     [${mjSchema}].[User] AS MJUser_SentByUserID
   ON
@@ -1000,6 +633,20 @@ CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateJournalEntryBatch]
     @ArchivedAt datetimeoffset = NULL,
     @ArchivedByUserID_Clear bit = 0,
     @ArchivedByUserID uniqueidentifier = NULL,
+    @CancelReason_Clear bit = 0,
+    @CancelReason nvarchar(500) = NULL,
+    @CancelledAt_Clear bit = 0,
+    @CancelledAt datetimeoffset = NULL,
+    @CancelledByUserID_Clear bit = 0,
+    @CancelledByUserID uniqueidentifier = NULL,
+    @ERPNotPostedConfirmedAt_Clear bit = 0,
+    @ERPNotPostedConfirmedAt datetimeoffset = NULL,
+    @ERPNotPostedConfirmedByUserID_Clear bit = 0,
+    @ERPNotPostedConfirmedByUserID uniqueidentifier = NULL,
+    @ERPNotPostedBasis_Clear bit = 0,
+    @ERPNotPostedBasis nvarchar(20) = NULL,
+    @ApprovedContentHash_Clear bit = 0,
+    @ApprovedContentHash nvarchar(64) = NULL,
     @SentByUserID_Clear bit = 0,
     @SentByUserID uniqueidentifier = NULL,
     @SendAttemptCount int = NULL
@@ -1036,6 +683,13 @@ BEGIN
                 [ArchiveReason],
                 [ArchivedAt],
                 [ArchivedByUserID],
+                [CancelReason],
+                [CancelledAt],
+                [CancelledByUserID],
+                [ERPNotPostedConfirmedAt],
+                [ERPNotPostedConfirmedByUserID],
+                [ERPNotPostedBasis],
+                [ApprovedContentHash],
                 [SentByUserID],
                 [SendAttemptCount]
             )
@@ -1065,6 +719,13 @@ BEGIN
                 CASE WHEN @ArchiveReason_Clear = 1 THEN NULL ELSE ISNULL(@ArchiveReason, NULL) END,
                 CASE WHEN @ArchivedAt_Clear = 1 THEN NULL ELSE ISNULL(@ArchivedAt, NULL) END,
                 CASE WHEN @ArchivedByUserID_Clear = 1 THEN NULL ELSE ISNULL(@ArchivedByUserID, NULL) END,
+                CASE WHEN @CancelReason_Clear = 1 THEN NULL ELSE ISNULL(@CancelReason, NULL) END,
+                CASE WHEN @CancelledAt_Clear = 1 THEN NULL ELSE ISNULL(@CancelledAt, NULL) END,
+                CASE WHEN @CancelledByUserID_Clear = 1 THEN NULL ELSE ISNULL(@CancelledByUserID, NULL) END,
+                CASE WHEN @ERPNotPostedConfirmedAt_Clear = 1 THEN NULL ELSE ISNULL(@ERPNotPostedConfirmedAt, NULL) END,
+                CASE WHEN @ERPNotPostedConfirmedByUserID_Clear = 1 THEN NULL ELSE ISNULL(@ERPNotPostedConfirmedByUserID, NULL) END,
+                CASE WHEN @ERPNotPostedBasis_Clear = 1 THEN NULL ELSE ISNULL(@ERPNotPostedBasis, NULL) END,
+                CASE WHEN @ApprovedContentHash_Clear = 1 THEN NULL ELSE ISNULL(@ApprovedContentHash, NULL) END,
                 CASE WHEN @SentByUserID_Clear = 1 THEN NULL ELSE ISNULL(@SentByUserID, NULL) END,
                 ISNULL(@SendAttemptCount, 0)
             )
@@ -1096,6 +757,13 @@ BEGIN
                 [ArchiveReason],
                 [ArchivedAt],
                 [ArchivedByUserID],
+                [CancelReason],
+                [CancelledAt],
+                [CancelledByUserID],
+                [ERPNotPostedConfirmedAt],
+                [ERPNotPostedConfirmedByUserID],
+                [ERPNotPostedBasis],
+                [ApprovedContentHash],
                 [SentByUserID],
                 [SendAttemptCount]
             )
@@ -1124,6 +792,13 @@ BEGIN
                 CASE WHEN @ArchiveReason_Clear = 1 THEN NULL ELSE ISNULL(@ArchiveReason, NULL) END,
                 CASE WHEN @ArchivedAt_Clear = 1 THEN NULL ELSE ISNULL(@ArchivedAt, NULL) END,
                 CASE WHEN @ArchivedByUserID_Clear = 1 THEN NULL ELSE ISNULL(@ArchivedByUserID, NULL) END,
+                CASE WHEN @CancelReason_Clear = 1 THEN NULL ELSE ISNULL(@CancelReason, NULL) END,
+                CASE WHEN @CancelledAt_Clear = 1 THEN NULL ELSE ISNULL(@CancelledAt, NULL) END,
+                CASE WHEN @CancelledByUserID_Clear = 1 THEN NULL ELSE ISNULL(@CancelledByUserID, NULL) END,
+                CASE WHEN @ERPNotPostedConfirmedAt_Clear = 1 THEN NULL ELSE ISNULL(@ERPNotPostedConfirmedAt, NULL) END,
+                CASE WHEN @ERPNotPostedConfirmedByUserID_Clear = 1 THEN NULL ELSE ISNULL(@ERPNotPostedConfirmedByUserID, NULL) END,
+                CASE WHEN @ERPNotPostedBasis_Clear = 1 THEN NULL ELSE ISNULL(@ERPNotPostedBasis, NULL) END,
+                CASE WHEN @ApprovedContentHash_Clear = 1 THEN NULL ELSE ISNULL(@ApprovedContentHash, NULL) END,
                 CASE WHEN @SentByUserID_Clear = 1 THEN NULL ELSE ISNULL(@SentByUserID, NULL) END,
                 ISNULL(@SendAttemptCount, 0)
             )
@@ -1195,6 +870,20 @@ CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateJournalEntryBatch]
     @ArchivedAt datetimeoffset = NULL,
     @ArchivedByUserID_Clear bit = 0,
     @ArchivedByUserID uniqueidentifier = NULL,
+    @CancelReason_Clear bit = 0,
+    @CancelReason nvarchar(500) = NULL,
+    @CancelledAt_Clear bit = 0,
+    @CancelledAt datetimeoffset = NULL,
+    @CancelledByUserID_Clear bit = 0,
+    @CancelledByUserID uniqueidentifier = NULL,
+    @ERPNotPostedConfirmedAt_Clear bit = 0,
+    @ERPNotPostedConfirmedAt datetimeoffset = NULL,
+    @ERPNotPostedConfirmedByUserID_Clear bit = 0,
+    @ERPNotPostedConfirmedByUserID uniqueidentifier = NULL,
+    @ERPNotPostedBasis_Clear bit = 0,
+    @ERPNotPostedBasis nvarchar(20) = NULL,
+    @ApprovedContentHash_Clear bit = 0,
+    @ApprovedContentHash nvarchar(64) = NULL,
     @SentByUserID_Clear bit = 0,
     @SentByUserID uniqueidentifier = NULL,
     @SendAttemptCount int = NULL
@@ -1226,6 +915,13 @@ BEGIN
         [ArchiveReason] = CASE WHEN @ArchiveReason_Clear = 1 THEN NULL ELSE ISNULL(@ArchiveReason, [ArchiveReason]) END,
         [ArchivedAt] = CASE WHEN @ArchivedAt_Clear = 1 THEN NULL ELSE ISNULL(@ArchivedAt, [ArchivedAt]) END,
         [ArchivedByUserID] = CASE WHEN @ArchivedByUserID_Clear = 1 THEN NULL ELSE ISNULL(@ArchivedByUserID, [ArchivedByUserID]) END,
+        [CancelReason] = CASE WHEN @CancelReason_Clear = 1 THEN NULL ELSE ISNULL(@CancelReason, [CancelReason]) END,
+        [CancelledAt] = CASE WHEN @CancelledAt_Clear = 1 THEN NULL ELSE ISNULL(@CancelledAt, [CancelledAt]) END,
+        [CancelledByUserID] = CASE WHEN @CancelledByUserID_Clear = 1 THEN NULL ELSE ISNULL(@CancelledByUserID, [CancelledByUserID]) END,
+        [ERPNotPostedConfirmedAt] = CASE WHEN @ERPNotPostedConfirmedAt_Clear = 1 THEN NULL ELSE ISNULL(@ERPNotPostedConfirmedAt, [ERPNotPostedConfirmedAt]) END,
+        [ERPNotPostedConfirmedByUserID] = CASE WHEN @ERPNotPostedConfirmedByUserID_Clear = 1 THEN NULL ELSE ISNULL(@ERPNotPostedConfirmedByUserID, [ERPNotPostedConfirmedByUserID]) END,
+        [ERPNotPostedBasis] = CASE WHEN @ERPNotPostedBasis_Clear = 1 THEN NULL ELSE ISNULL(@ERPNotPostedBasis, [ERPNotPostedBasis]) END,
+        [ApprovedContentHash] = CASE WHEN @ApprovedContentHash_Clear = 1 THEN NULL ELSE ISNULL(@ApprovedContentHash, [ApprovedContentHash]) END,
         [SentByUserID] = CASE WHEN @SentByUserID_Clear = 1 THEN NULL ELSE ISNULL(@SentByUserID, [SentByUserID]) END,
         [SendAttemptCount] = ISNULL(@SendAttemptCount, [SendAttemptCount])
     WHERE
@@ -1333,7 +1029,7 @@ EXEC [${mjSchema}].[spDeleteUnneededEntityFields] @ExcludedSchemaNames='', @Enti
 
 /* SQL text to insert 1 new entity field(s) */
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'e01fa5be-dda9-4835-9d33-2fd364d48414' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'SentByUser')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'efc0dbfa-e37b-4e49-a417-4093baf42ec3' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'SentByUser')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -1366,7 +1062,7 @@ EXEC [${mjSchema}].[spDeleteUnneededEntityFields] @ExcludedSchemaNames='', @Enti
          )
          VALUES
          (
-            'e01fa5be-dda9-4835-9d33-2fd364d48414',
+            'efc0dbfa-e37b-4e49-a417-4093baf42ec3',
             '87AD37E9-62F9-4F0E-A15B-F64ADF009112', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
             (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112'),
             'SentByUser',
@@ -1407,7 +1103,7 @@ EXEC [${mjSchema}].[spSetDefaultColumnWidthWhereNeeded] @ExcludedSchemaNames='',
 -- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.ArchiveReason 
 UPDATE [${mjSchema}].[EntityField]
 SET 
-   Category = 'Approval and Dispatch',
+   Category = 'Status and Lifecycle',
    GeneratedFormSection = 'Category'
 WHERE 
    ID = '88C4A711-FB72-43A4-9800-069F42D60A3E';
@@ -1415,7 +1111,7 @@ WHERE
 -- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.ArchivedAt 
 UPDATE [${mjSchema}].[EntityField]
 SET 
-   Category = 'Approval and Dispatch',
+   Category = 'Status and Lifecycle',
    GeneratedFormSection = 'Category'
 WHERE 
    ID = '46B12172-B692-4E3E-9700-4838D439AA91';
@@ -1423,7 +1119,7 @@ WHERE
 -- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.ArchivedByUserID 
 UPDATE [${mjSchema}].[EntityField]
 SET 
-   Category = 'Approval and Dispatch',
+   Category = 'Status and Lifecycle',
    GeneratedFormSection = 'Category'
 WHERE 
    ID = '0C7DD17F-A4ED-460E-91BF-07F8F643E56C';
@@ -1431,7 +1127,7 @@ WHERE
 -- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.ArchivedByUser 
 UPDATE [${mjSchema}].[EntityField]
 SET 
-   Category = 'Approval and Dispatch',
+   Category = 'Status and Lifecycle',
    GeneratedFormSection = 'Category'
 WHERE 
    ID = '7DBAEC1E-3101-4314-B8BF-25F0F2EF6EC6';
@@ -1440,46 +1136,42 @@ WHERE
 UPDATE [${mjSchema}].[EntityField]
 SET 
    Category = 'Approval and Dispatch',
-   GeneratedFormSection = 'Category',
-   DisplayName = 'Sent By User'
+   GeneratedFormSection = 'Category'
 WHERE 
-   ID = 'BDFF848F-1110-40CB-BCBD-106331B01D8E';
+   ID = '6581636B-749C-4CAC-996C-C29561233BF9';
+
+-- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.SendAttemptCount 
+UPDATE [${mjSchema}].[EntityField]
+SET 
+   Category = 'Approval and Dispatch',
+   GeneratedFormSection = 'Category'
+WHERE 
+   ID = '54A45F54-E6CF-4FE3-962C-93E9B12A316C';
 
 -- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.SentByUser 
 UPDATE [${mjSchema}].[EntityField]
 SET 
    Category = 'Approval and Dispatch',
-   GeneratedFormSection = 'Category',
-   DisplayName = 'Sent By User Name'
-WHERE 
-   ID = 'E01FA5BE-DDA9-4835-9D33-2FD364D48414';
-
--- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.SendAttemptCount 
-UPDATE [${mjSchema}].[EntityField]
-SET 
-   Category = 'Financial Summary',
    GeneratedFormSection = 'Category'
 WHERE 
-   ID = '37C1BED5-8EED-41EB-86D3-F0BD4AACABE2';
+   ID = 'EFC0DBFA-E37B-4E49-A417-4093BAF42EC3';
 
 /* Generated Validation Functions for MJ_BizApps_Accounting: Journal Entry Batches */
 -- CHECK constraint for MJ_BizApps_Accounting: Journal Entry Batches: Field: SendAttemptCount was newly set or modified since the last generation of the validation function, the code was regenerated and updating the GeneratedCode table with the new generated validation function
 IF NOT EXISTS (
-      SELECT 1 FROM [${mjSchema}].[GeneratedCode] WHERE [CategoryID] = (SELECT [ID] FROM [${mjSchema}].[vwGeneratedCodeCategories] WHERE [Name]='CodeGen: Validators') AND [LinkedEntityID] = 'DF238F34-2837-EF11-86D4-6045BDEE16E6' AND [LinkedRecordPrimaryKey] = '37C1BED5-8EED-41EB-86D3-F0BD4AACABE2'
+      SELECT 1 FROM [${mjSchema}].[GeneratedCode] WHERE [CategoryID] = (SELECT [ID] FROM [${mjSchema}].[vwGeneratedCodeCategories] WHERE [Name]='CodeGen: Validators') AND [LinkedEntityID] = 'DF238F34-2837-EF11-86D4-6045BDEE16E6' AND [LinkedRecordPrimaryKey] = '54A45F54-E6CF-4FE3-962C-93E9B12A316C'
    )
    BEGIN
       INSERT INTO [${mjSchema}].[GeneratedCode] ([ID], [CategoryID], [GeneratedByModelID], [GeneratedAt], [Language], [Status], [Source], [Code], [Description], [Name], [LinkedEntityID], [LinkedRecordPrimaryKey])
-VALUES ('2e582586-9527-4379-8024-1bfa01caabd1', (SELECT [ID] FROM [${mjSchema}].[vwGeneratedCodeCategories] WHERE [Name]='CodeGen: Validators'), 'C43229F6-4CC8-4838-9D04-03419A2DA191', GETUTCDATE(), 'TypeScript', 'Approved', '([SendAttemptCount]>=(0))', 'public ValidateSendAttemptCountGreaterThanOrEqualToZero(result: ValidationResult) {
+VALUES ('034181c7-2967-4456-8228-992bdf860999', (SELECT [ID] FROM [${mjSchema}].[vwGeneratedCodeCategories] WHERE [Name]='CodeGen: Validators'), 'C43229F6-4CC8-4838-9D04-03419A2DA191', GETUTCDATE(), 'TypeScript', 'Approved', '([SendAttemptCount]>=(0))', 'public ValidateSendAttemptCountGreaterThanOrEqualToZero(result: ValidationResult) {
 	if (this.SendAttemptCount != null && this.SendAttemptCount < 0) {
 		result.Errors.push(new ValidationErrorInfo(
 			"SendAttemptCount",
-			"Send attempt count must be greater than or equal to 0.",
+			"The send attempt count cannot be negative.",
 			this.SendAttemptCount,
 			ValidationErrorType.Failure
 		));
 	}
-}', 'The number of send attempts must be zero or a positive number to ensure we maintain an accurate and logical count of communication attempts.', 'ValidateSendAttemptCountGreaterThanOrEqualToZero', 'DF238F34-2837-EF11-86D4-6045BDEE16E6', '37C1BED5-8EED-41EB-86D3-F0BD4AACABE2')
+}', 'The number of send attempts must be zero or a positive number to ensure valid tracking of delivery attempts.', 'ValidateSendAttemptCountGreaterThanOrEqualToZero', 'DF238F34-2837-EF11-86D4-6045BDEE16E6', '54A45F54-E6CF-4FE3-962C-93E9B12A316C')
    END;
-
-
 

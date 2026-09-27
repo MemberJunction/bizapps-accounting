@@ -61,3 +61,86 @@ describe('TasksAppApprovalGate.recordDecision — separation of duties', () => {
     );
   });
 });
+
+// ─── cancel past approval (#183) ─────────────────────────────────────────────
+
+const APPROVER_USER_ID = 'f0c1a2b3-0000-4000-8000-00000000a11c';
+const TASK_ID = '7a5c0d1e-0000-4000-8000-0000000074a5';
+const PERSON_ID = '5e2b9c4d-0000-4000-8000-000000009e25';
+
+interface CancelWorld { comments: Array<{ TaskID: string; PersonID: string; Content: string }> }
+
+/** A provider serving an Approved batch approved by APPROVER_USER_ID, its approval Task, and (optionally) the caller's Person. */
+function cancelProvider(opts: { cfoUserId: string | null; hasTask: boolean; hasPerson: boolean }, world: CancelWorld): IMetadataProvider {
+  return {
+    GetEntityObject: async (entityName: string) => {
+      if (entityName === BATCH_ENTITY) {
+        // Cancelled, as the batch reads when recordCancellation runs: after the cancel was saved, inside its transaction.
+        return { Load: async () => true, ID: BATCH_ID, CompanyID: COMPANY_ID, JournalEntryBatchNumber: 'BATCH-0007', Status: 'Cancelled', ApprovedByUserID: APPROVER_USER_ID };
+      }
+      if (entityName === ACP_ENTITY) return { Load: async () => true, ApprovalCFOUserID: opts.cfoUserId };
+      if (entityName === 'MJ_BizApps_Tasks: Tasks') return { Load: async () => true, ID: TASK_ID };
+      if (entityName === 'MJ_BizApps_Tasks: Task Comments') {
+        const c = { TaskID: '', PersonID: '', Content: '', LatestResult: null, NewRecord: () => undefined, Save: async () => { world.comments.push({ TaskID: c.TaskID, PersonID: c.PersonID, Content: c.Content }); return true; } };
+        return c;
+      }
+      throw new Error(`cancelProvider: unexpected entity '${entityName}'`);
+    },
+    EntityByName: (entityName: string) => (entityName === BATCH_ENTITY ? { ID: BATCH_ENTITY_ID } : undefined),
+    RunView: async (params: { EntityName: string }) => {
+      if (params.EntityName === 'MJ_BizApps_Tasks: Task Links') return { Success: true, Results: opts.hasTask ? [{ TaskID: TASK_ID }] : [] };
+      if (params.EntityName === 'MJ_BizApps_Common: People') return { Success: true, Results: opts.hasPerson ? [{ ID: PERSON_ID }] : [] };
+      return { Success: true, Results: [] };
+    },
+  } as unknown as IMetadataProvider;
+}
+
+describe('TasksAppApprovalGate — who may cancel past approval', () => {
+  const world = (): CancelWorld => ({ comments: [] });
+
+  it.each([
+    ['the configured CFO', CFO_USER_ID],
+    ['the user who approved the batch', APPROVER_USER_ID],
+  ])('lets %s cancel', async (_label, userId) => {
+    const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, hasTask: true, hasPerson: true }, world()));
+    await expect(gate.assertMayCancelApproved(BATCH_ID, { ID: userId } as UserInfo)).resolves.toBeUndefined();
+  });
+
+  it('refuses anyone else', async () => {
+    const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, hasTask: true, hasPerson: true }, world()));
+    await expect(gate.assertMayCancelApproved(BATCH_ID, { ID: OTHER_USER_ID } as UserInfo)).rejects.toThrow(/only the company's configured approver/);
+  });
+
+  it('still lets the approver cancel when the company has no CFO configured', async () => {
+    const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: null, hasTask: true, hasPerson: true }, world()));
+    await expect(gate.assertMayCancelApproved(BATCH_ID, { ID: APPROVER_USER_ID } as UserInfo)).resolves.toBeUndefined();
+  });
+});
+
+describe('TasksAppApprovalGate.recordCancellation — the approval Task records the cancel', () => {
+  it('writes a comment on the approval Task, by the cancelling user\'s Person, with the reason', async () => {
+    const w: CancelWorld = { comments: [] };
+    const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, hasTask: true, hasPerson: true }, w));
+    await gate.recordCancellation(BATCH_ID, { reason: '  Wrong posting period  ', fromStatus: 'Failed', erpCheck: 'The ERP lookup found nothing posted under document BATCH-0007.' }, cfo);
+
+    expect(w.comments).toHaveLength(1);
+    expect(w.comments[0].TaskID).toBe(TASK_ID);
+    expect(w.comments[0].PersonID).toBe(PERSON_ID);
+    expect(w.comments[0].Content).toMatch(/BATCH-0007 was cancelled after approval \(it was Failed\).*Reason: Wrong posting period ERP check: The ERP lookup found nothing/);
+    expect(w.comments[0].Content).not.toMatch(/it was Cancelled/);
+  });
+
+  it('does nothing for a batch with no approval Task', async () => {
+    const w: CancelWorld = { comments: [] };
+    const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, hasTask: false, hasPerson: true }, w));
+    await gate.recordCancellation(BATCH_ID, { reason: 'Wrong posting period', fromStatus: 'Approved' }, cfo);
+    expect(w.comments).toHaveLength(0);
+  });
+
+  it('refuses when the cancelling user has no linked Person, so the cancel rolls back rather than going unrecorded', async () => {
+    const w: CancelWorld = { comments: [] };
+    const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, hasTask: true, hasPerson: false }, w));
+    await expect(gate.recordCancellation(BATCH_ID, { reason: 'Wrong posting period', fromStatus: 'Approved' }, cfo)).rejects.toThrow(/has no linked Person/);
+    expect(w.comments).toHaveLength(0);
+  });
+});

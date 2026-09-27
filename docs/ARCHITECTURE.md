@@ -116,7 +116,8 @@ balance **overall and per company** (AM-4), and writes atomically. Hooks on the 
 - **DB invariants (triggers)** validated by `test-harnesses/server/block1-runtime.ts`, each with
   a raw-SQL bypass case: balanced-on-lock overall (50001) **and per company (50019/50022 —
   AM-4)**, JE immutability (50003/50004), JE-line immutability (50006). Batch side: summary
-  foots overall (50014) **and per company (50023)**, batch immutability (50008/50009).
+  foots overall (50014) **and per company (50023)**, batch immutability (50008/50009, `Failed`
+  included since #183), the cancel-after-approval release and `CK_JournalEntryBatch_CancelAudit`.
   Send-once (50030, #184) is validated by L21 and L22 in `test-harnesses/server/phase2-encapsulation.live.test.ts`:
   a send must start from `Approved` or `Failed` and advance `SendAttemptCount` by one, no update keeps a
   batch `Sent`, and the send stamp changes at no other time. Of two dispatches that loaded the same batch,
@@ -131,7 +132,14 @@ balance **overall and per company** (AM-4), and writes atomically. Hooks on the 
   first send whose number is already there is refused. The operator's confirmation that the number
   has not posted is needed only when the lookup cannot settle it: a mismatch, a failed lookup, or an
   ERP with no lookup. Business Central posting also refuses a journal that already holds unposted
-  lines. Its content is not frozen (#183). A
+  lines. Its content is frozen like an Approved batch's, and the dispatch check compares it with the
+  `ApprovedContentHash` seal written at approval (#183). A `Failed` or `Approved` batch whose content
+  is wrong is cancelled instead (`Accounting.CancelJournalEntryBatch`: the company's CFO or the
+  batch's approver only, reason required and written to the approval Task), which releases its
+  entries to the next build. From `Failed` the ERP is looked up first (#207), because the released
+  entries get a new number no later lookup can connect: a posting it holds refuses the cancel, nothing
+  found lets it through, and the operator confirms, persisted, only when the lookup cannot settle it.
+  A
   `Posted` batch whose member `Batched → GLPosted` flip stopped partway is finished by
   `resumeJournalEntryBatchPosting` (`Accounting.ResumeJournalEntryBatchPosting`), which makes no
   ERP call. `findStrandedJournalEntries` reports the entries both states hold; the scheduled

@@ -140,7 +140,7 @@ The current decision set. Each is the standing ruling — superseded ancestors l
 | D2 | **No accounting periods, no close machinery — the ERP owns periods.** No `AccountingPeriod` table, no period FK anywhere, no close guard. Batches land in the ERP's ACTIVE period; "that's not our job to worry about" (Amith). Accountants are responsible for batching entries into the right periods; any future timing rule detects by **DATE, never a period FK**. | Amith 2026-07-02, confirmed final by Marcelo 2026-07-14 after a brief manual-close detour was withdrawn same-day. Batch summaries lose date info anyway. |
 | D3 | **`JournalEntry` is SINGLE-COMPANY:** `CompanyID NOT NULL` header; every line's account belongs to that company (trigger-enforced). Upstream books one JE per order line, so each JE resolves to exactly one company. | Marcelo 2026-07-13 (locks are JE-grained → per-company independence); Robert concurs. |
 | D4 | **Balanced-JE invariant enforced at DB level** (deferred/transaction-scope trigger): `SUM(Debits) = SUM(Credits)` per JE. Cannot be bypassed by any code path. | Audit guarantee. |
-| D5 | **JE lifecycle `Pending → Batched → GLPosted`; batching is the lock event — with LEVELS.** Pre-approval batch = preliminary, REVERSIBLE lock; **approval = permanent lock**; **reject UNLOCKS** entries back to the candidate pool; an open batch can be regenerated. | Robert 2026-07-08. |
+| D5 | **JE lifecycle `Pending → Batched → GLPosted`; batching is the lock event — with LEVELS.** Pre-approval batch = preliminary, REVERSIBLE lock; **approval = permanent lock**; **reject UNLOCKS** entries back to the candidate pool; an open batch can be regenerated. **Amended 2026-09-25 (#183):** approval locks the entries for as long as the batch stays approved; an Approved or Failed batch may be **cancelled** — by the company's CFO or the batch's approver, with a required reason recorded on the approval Task, and from Failed only once the ERP is known not to hold the journal (#207: the ERP lookup finds nothing under the batch number, or, when the lookup cannot settle it, the operator attests; a posting the ERP holds refuses the cancel) — which unlocks its entries like a reject. Archive remains the permanent, no-ERP close. | Robert 2026-07-08; amended 2026-09-25. |
 | D6 | **Immutability after lock** enforced by DB trigger: `UPDATE`/`DELETE` blocked for locked JEs/lines except the GL-roundtrip fields (`GLPostedAt`, `GLReferenceID`, `Status`). Reversals via new JEs only. | Audit trail by construction. |
 | D7 | **Batches are SINGLE-COMPANY:** `JournalEntryBatch.CompanyID` header; one batch per company per run, on that company's own cadence. | Robert's proposal; Jeremy sign-off ("actually a better control" — per-company approvers = segregation of duties); Marcelo ruled independently. See §7.2 conditions. |
 | D8 | **The batch carries a SINGULAR accountant-set `PostingDate`; one aggregated JE per batch posts to the GL.** Posting date must match between systems; document date is informational only (never cross the two — Jeremy). | Amith's model; Jeremy "100% on board". |
@@ -499,7 +499,8 @@ __mj_BizAppsAccounting.JournalEntryBatch
 - Its lines (`JournalEntryLine`) net debits/credits per `(GLAccount × Dimension-combo)`, and tags (`JournalEntryLineDimension`) preserve dimensional breakdown. Dedicated `JournalEntryBatchLineItem` and `JournalEntryBatchLineDimension` schema tables are **retired/dropped** — reusing `JournalEntryLine` saves schema clutter and reuses 100% of line validation, DB constraints, and UI line viewer components out of the box.
 - **Lifecycle:** the summary JE is created at batch build already **`Batched`, carrying the
   batch's `BatchID` like the members** — so it rides the ONE derived lock machinery: preliminary
-  until approval (regeneration uses the standard unlock→rebuild→relock), permanent after, and
+  until approval (regeneration uses the standard unlock→rebuild→relock), locked after for as long
+  as the batch stays approved (a cancel past approval releases it, #183), and
   `GLPosted` when the batch posts. It is distinguished from members purely by its type's `IsBatchSummary` flag (BA-D29 — a flag join, not a magic string).
 - **Default exclusion:** the `IsBatchSummary`-typed summary is excluded by default from batch-candidate
   gathering (engine + UI — a summary can never be swept into a later batch) and from the
@@ -571,13 +572,25 @@ Critical invariants hold at the database level (T-SQL triggers/CHECKs), immune t
 ```mermaid
 stateDiagram-v2
     [*] --> Pending : buildBatch - Preliminary Lock
-    Pending --> Approved : CFO Approval - Permanent Lock
+    Pending --> Approved : CFO Approval - Content Frozen, JEs Locked
     Pending --> Cancelled : Reject Batch - Unlocks JEs
     Pending --> Pending : Regenerate Batch
+    Pending --> Archived : Archive - JEs Stay Locked, No ERP Call
     Approved --> Sent : Dispatch to ERP
+    Approved --> Cancelled : Cancel by CFO or Approver - Unlocks JEs
+    Approved --> Archived : Archive - JEs Stay Locked, No ERP Call
     Sent --> Posted : ERP Confirms Receipt
     Sent --> Failed : ERP Rejection - Hold for Review
+    Failed --> Sent : Retry - Reuses the Approval
+    Failed --> Cancelled : Cancel by CFO or Approver, ERP Checked - Unlocks JEs
+    Failed --> Archived : Archive - JEs Stay Locked, No ERP Call
+    Posted --> [*]
+    Cancelled --> [*]
+    Archived --> [*]
 ```
+
+`Posted`, `Cancelled` and `Archived` are terminal; no batch returns to `Pending`, only a `Pending`
+batch is approved, and a `Sent` batch is not archived (`trg_JournalEntryBatch_Immutability`, #183).
 
 ### 7.1 States
 
@@ -585,7 +598,7 @@ stateDiagram-v2
 |---|---|---|
 | `Pending` | Emitted by an upstream event or staged forward-dated rev-rec. Awaiting batch. | Yes |
 | `Batched` (unapproved batch) | In a Pending batch — **preliminary, reversible lock**: can't be double-batched, but reject/regenerate frees it. | No (but releasable) |
-| `Batched` (approved batch) | **Permanent lock** through dispatch. | No |
+| `Batched` (approved batch) | **Locked** for as long as the batch stays approved — through dispatch, retry and posting, and for good if it is archived. A cancel past approval (Approved or Failed; the CFO or the approver, with a reason, and from Failed only once the ERP is known not to hold it — #183/#207) releases it to the candidate pool. | No (releasable only by that cancel) |
 | `GLPosted` | ERP acknowledged the batch. | Only GL-roundtrip fields |
 
 **Reversals (pen, not pencil):** business-entity reversals emit NEW Pending JEs cross-linked via
@@ -615,8 +628,14 @@ stateDiagram-v2
 ### 7.3 Approval
 
 Raising the CFO approval task (bizapps-tasks) stamps the batch's task pointer in its own
-transaction. **Approve** → permanent lock, dispatch allowed. **Reject** → entries UNLOCK back to
-the candidate pool; the open batch can be regenerated. Regeneration of a batch invalidates any
+transaction. **Approve** → content frozen, entries locked, dispatch allowed. **Reject** → entries UNLOCK back to
+the candidate pool; the open batch can be regenerated. **Cancel past approval** (#183) → an Approved
+or Failed batch whose content is wrong is cancelled by the company's CFO or its approver, with a
+required reason written to the approval Task. From Failed the ERP is looked up first (#207), because
+the released entries get a new document number no later lookup can connect to a journal that did
+post: a posting it holds refuses the cancel (retry instead, which records it Posted); nothing found
+lets it through; the operator attests only when the lookup cannot settle it. Its entries unlock back
+to the candidate pool for a new batch and approval. Regeneration of a batch invalidates any
 pending approval (mechanism for reset-vs-replace deliberately deferred). The enforced decider
 is the **Accounting Approver for the batch's company** (any-linked-person resolution is dev
 scaffolding only, replaced before non-dev use).
@@ -627,7 +646,12 @@ One aggregated JE per batch (the summary JE) posts to the GL, dated `PostingDate
 `Pending → Approved → Sent → Posted` (member JEs + the summary JE → `GLPosted`) ·
 `Sent → Failed` (ERP rejection — hold for review/retry) · `Failed → Sent` (operator retry,
 reusing the batch's approval — scheduled runs never retry on their own) · `Pending → Cancelled`
-(reject — member JEs unlock back to the candidate pool). A `Posted` batch whose member flip to
+(reject — member JEs unlock back to the candidate pool) · `Approved → Cancelled` and `Failed → Cancelled`
+(cancel past approval by the company's CFO or the batch's approver, with a reason recorded on the
+approval Task; from `Failed` only after the ERP lookup finds nothing under the batch number, or the
+operator attests when it cannot settle it — member JEs unlock for a new batch and approval) ·
+`Pending | Approved | Failed → Archived` (a batch that must never post: no ERP call, member JEs stay
+locked). A `Posted` batch whose member flip to
 `GLPosted` did not finish is resumed without an ERP call, never re-sent (#145). Closed-period rejections HOLD-and-flag (§4).
 
 ### 7.5 BC dispatch mechanics (Jeremy/Robert, 2026-07-17)

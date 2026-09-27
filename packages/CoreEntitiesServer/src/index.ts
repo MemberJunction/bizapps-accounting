@@ -16,7 +16,7 @@
 export { AccountingCompanyProfileEntityServer } from './AccountingCompanyProfileEntityServer.js';
 export { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 export { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
-export { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
+export { JournalEntryBatchEntityServer, type ERPNotPostedBasis, type JournalEntryBatchCancelOptions } from './JournalEntryBatchEntityServer.js';
 export { GLAccountEntityServer } from './GLAccountEntityServer.js';
 export { GLAccountLinkEntityServer, LoadGLAccountLinkEntityServer } from './GLAccountLinkEntityServer.js';
 export { IntercompanyAccountMatchEntityServer } from './IntercompanyAccountMatchEntityServer.js';
@@ -95,6 +95,9 @@ export type {
   ErpJournalLookupResult,
   ErpPostingUnconfirmedKind,
   JournalEntryBatchApprovalGate,
+  JournalEntryBatchCancelGate,
+  CancelJournalEntryBatchOptions,
+  RecordedCancellation,
   SendJournalEntryBatchOptions,
   DispatchFailureRecord,
   ResumeJournalEntryBatchPostingResult,
@@ -153,6 +156,7 @@ export {
   RecordJournalEntryBatchDecisionOperation,
   GetJournalEntryBatchApprovalStateOperation,
   ArchiveJournalEntryBatchOperation,
+  CancelJournalEntryBatchOperation,
   ResumeJournalEntryBatchPostingOperation,
   GetStrandedJournalEntriesOperation,
   LoadJournalEntryBatchOperations,
@@ -170,6 +174,8 @@ export {
   type GetJournalEntryBatchApprovalStateOutput,
   type ArchiveJournalEntryBatchInput,
   type ArchiveJournalEntryBatchOutput,
+  type CancelJournalEntryBatchInput,
+  type CancelJournalEntryBatchOutput,
   type ResumeJournalEntryBatchPostingInput,
   type ResumeJournalEntryBatchPostingOutput,
   type GetStrandedJournalEntriesOutput,

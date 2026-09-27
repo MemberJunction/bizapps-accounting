@@ -8,6 +8,7 @@ import { MJButtonDirective, MJDialogComponent, MJDialogActionsComponent, MJDropd
 import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
 import { BusinessTimeZoneEngine } from '@mj-biz-apps/common-entities';
 import {
+    DispatchConfirmationKind,
     JournalEntryBatchDispatchClient,
     PreviewEntryWire,
     BuildJournalEntryBatchOptionsInput,
@@ -39,6 +40,7 @@ export type BatchItem = Pick<
     | 'Company'
     | 'ExternalJournalEntryBatchRef'
     | 'ArchiveReason'
+    | 'CancelReason'
 >;
 
 interface StageCount {
@@ -218,6 +220,9 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                             @if (batch.Status === 'Archived' && batch.ArchiveReason) {
                                                 <span class="mja-archive-reason" [title]="batch.ArchiveReason">{{ batch.ArchiveReason }}</span>
                                             }
+                                            @if (batch.Status === 'Cancelled' && batch.CancelReason) {
+                                                <span class="mja-archive-reason" [title]="batch.CancelReason">{{ batch.CancelReason }}</span>
+                                            }
                                         </td>
                                         <td class="mja-td-right">{{ batch.TotalEntries }}</td>
                                         <td class="mja-td-right">
@@ -230,6 +235,14 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                                         title="Close this batch permanently without sending it to the ERP. Its journal entries stay locked to it."
                                                         (click)="OnArchive(batch, $event)">
                                                     <i class="fa-solid fa-box-archive"></i> Archive
+                                                </button>
+                                            }
+                                            @if (CanCancelApproved(batch)) {
+                                                <button mjButton variant="secondary" size="sm" type="button"
+                                                        [disabled]="CancellingBatchID === batch.ID"
+                                                        title="Cancel this batch and return its journal entries to the next build."
+                                                        (click)="OnCancelApproved(batch, $event)">
+                                                    <i class="fa-solid fa-ban"></i> Cancel
                                                 </button>
                                             }
                                             <i class="fa-solid fa-arrow-up-right-from-square"></i>
@@ -430,6 +443,72 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                     </button>
                     <button mjButton variant="flat" size="sm" type="button" [disabled]="!!ArchivingBatchID" (click)="CloseArchiveModal()">
                         Cancel
+                    </button>
+                </mj-dialog-actions>
+            </mj-dialog>
+
+            <mj-dialog [Visible]="CancelModalVisible" Title="Cancel Journal Entry Batch" [Width]="560" (Close)="CloseCancelModal()">
+                <div class="mja-modal-content">
+                    <p class="mja-archive-blurb">
+                        Batch <strong>{{ CancelTarget?.JournalEntryBatchNumber }}</strong> will be cancelled and its summary
+                        journal entry deleted. Its {{ CancelTarget?.TotalEntries }}
+                        journal entr{{ CancelTarget?.TotalEntries === 1 ? 'y' : 'ies' }}
+                        <strong>return to the candidate pool</strong> for the next build — this is not an archive.
+                    </p>
+
+                    <div class="mja-modal-field">
+                        <label class="mja-modal-label" for="aidp-cancel-reason">Reason (required)</label>
+                        <textarea
+                            id="aidp-cancel-reason"
+                            class="mj-input mja-archive-reason-input"
+                            rows="3"
+                            maxlength="500"
+                            [(ngModel)]="CancelReasonDraft"></textarea>
+                    </div>
+
+                    @if (CancelTarget?.Status === 'Failed' && CancelERPCheckReason === null) {
+                        <p class="mja-archive-blurb">
+                            {{ CancelTarget?.TargetSystem }} is checked for document <strong>{{ CancelTarget?.JournalEntryBatchNumber }}</strong>
+                            first. If the failed send posted anyway, the cancel is refused: retry the batch instead.
+                        </p>
+                    }
+                    @if (CancelERPCheckReason !== null) {
+                        <p class="mja-archive-blurb">{{ CancelERPCheckReason }}</p>
+                        @if (CancelERPCheckKind === 'Mismatch') {
+                            <div class="mja-modal-field">
+                                <label class="mja-modal-label" for="aidp-cancel-mismatch">
+                                    If that posting is this batch, do not cancel: its journal entries would post a second time.
+                                    To cancel anyway, type <strong>{{ CancelTarget?.JournalEntryBatchNumber }}</strong>
+                                </label>
+                                <input id="aidp-cancel-mismatch" type="text" class="mj-input" [(ngModel)]="CancelMismatchText" />
+                            </div>
+                        } @else {
+                            <div class="mja-modal-options">
+                                <label class="mja-modal-checkbox-label">
+                                    <input type="checkbox" [(ngModel)]="CancelConfirmNotPostedInERP" />
+                                    <span>
+                                        I searched {{ CancelTarget?.TargetSystem }} for document
+                                        <strong>{{ CancelTarget?.JournalEntryBatchNumber }}</strong> and it has <strong>not</strong> posted.
+                                        If it has, cancelling lets its journal entries post a second time in the next batch.
+                                    </span>
+                                </label>
+                            </div>
+                        }
+                    }
+                </div>
+
+                <mj-dialog-actions>
+                    <button mjButton variant="danger" size="sm" type="button"
+                            [disabled]="!CanConfirmCancel"
+                            (click)="ConfirmCancelApproved()">
+                        @if (CancellingBatchID) {
+                            <i class="fa-solid fa-spinner fa-spin"></i> Cancelling…
+                        } @else {
+                            <i class="fa-solid fa-ban"></i> Cancel Batch
+                        }
+                    </button>
+                    <button mjButton variant="flat" size="sm" type="button" [disabled]="!!CancellingBatchID" (click)="CloseCancelModal()">
+                        Close
                     </button>
                 </mj-dialog-actions>
             </mj-dialog>
@@ -1114,6 +1193,108 @@ export class AccountingBatchesPageComponent implements OnInit {
             }
         } finally {
             this.ArchivingBatchID = null;
+            this.cdr.markForCheck();
+        }
+    }
+
+    /** Per-row in-flight id for Cancel (#183), scoped like ArchivingBatchID. */
+    public CancellingBatchID: string | null = null;
+    public CancelModalVisible = false;
+    public CancelTarget: BatchItem | null = null;
+    public CancelReasonDraft = '';
+    /** For a Failed batch the server asked about: the operator confirmed its document number has not posted in the ERP. */
+    public CancelConfirmNotPostedInERP = false;
+    /**
+     * Set when the server's ERP lookup could not settle whether a Failed batch already posted, and so
+     * refused the cancel until the operator checks (#207): why, and which way. Null on the first attempt.
+     */
+    public CancelERPCheckReason: string | null = null;
+    public CancelERPCheckKind: DispatchConfirmationKind | null = null;
+    /** The batch number retyped to override a `Mismatch`, which is most likely this batch, already posted. */
+    public CancelMismatchText = '';
+
+    /** Cancel (#183) is offered on an Approved or Failed batch; a Pending batch uses Reject instead. */
+    public CanCancelApproved(batch: BatchItem): boolean {
+        return (batch.Status === 'Approved' || batch.Status === 'Failed') && this.CancellingBatchID !== batch.ID;
+    }
+
+    /**
+     * Cancel an Approved or Failed batch (#183): the batch becomes Cancelled, its summary journal entry
+     * is deleted and its journal entries return to the candidate pool — the opposite of Archive, which
+     * keeps them locked. The dialog requires a reason. A Failed batch may already be in the ERP, so the
+     * server looks its number up first (#207); the dialog asks the operator only when it cannot say.
+     */
+    public OnCancelApproved(batch: BatchItem, event: Event): void {
+        // The row itself opens the record — an action button inside it must not also navigate.
+        event.stopPropagation();
+        if (this.CancellingBatchID) return;
+        this.resetCancelDialog();
+        this.CancelTarget = batch;
+        this.CancelModalVisible = true;
+        this.cdr.markForCheck();
+    }
+
+    public CloseCancelModal(): void {
+        if (this.CancellingBatchID) return;
+        this.resetCancelDialog();
+        this.cdr.markForCheck();
+    }
+
+    private resetCancelDialog(): void {
+        this.CancelModalVisible = false;
+        this.CancelTarget = null;
+        this.CancelReasonDraft = '';
+        this.CancelConfirmNotPostedInERP = false;
+        this.CancelERPCheckReason = null;
+        this.CancelERPCheckKind = null;
+        this.CancelMismatchText = '';
+    }
+
+    /**
+     * A non-blank reason and nothing in flight; once the server has asked for the ERP check, the
+     * operator's confirmation too (the batch number retyped for a `Mismatch`).
+     */
+    public get CanConfirmCancel(): boolean {
+        const batch = this.CancelTarget;
+        if (!batch || this.CancellingBatchID || !this.CancelReasonDraft.trim()) return false;
+        if (this.CancelERPCheckReason === null) return true;
+        if (this.CancelERPCheckKind === 'Mismatch') return this.CancelMismatchText.trim() === batch.JournalEntryBatchNumber;
+        return this.CancelConfirmNotPostedInERP;
+    }
+
+    /**
+     * Run the cancel with the reason captured in the dialog. The first attempt carries no ERP
+     * confirmation: the server checks the ERP itself. Only when it cannot settle it does the dialog
+     * stay open and ask, and only that second attempt carries the operator's word.
+     */
+    public async ConfirmCancelApproved(): Promise<void> {
+        const batch = this.CancelTarget;
+        if (!batch || !this.CanConfirmCancel) return;
+        const reason = this.CancelReasonDraft.trim();
+        const confirmed = this.CancelERPCheckReason !== null;
+
+        this.CancellingBatchID = batch.ID;
+        this.ActionMessage = null;
+        this.cdr.markForCheck();
+        try {
+            const res = await this.dispatchClient.CancelBatch(batch.ID, reason, confirmed);
+            if (res.Success && res.ConfirmationRequired) {
+                this.CancelERPCheckReason = res.ConfirmationRequired;
+                this.CancelERPCheckKind = res.ConfirmationKind ?? null;
+                this.CancelConfirmNotPostedInERP = false;
+                this.CancelMismatchText = '';
+                return;
+            }
+            this.ActionMessageIsError = !res.Success;
+            this.ActionMessage = res.Success
+                ? `Cancelled batch ${batch.JournalEntryBatchNumber} — its journal entries return to the next build.`
+                : (res.ErrorMessage ?? 'Cancel failed.');
+            // Close on a refusal too: the message is on the page, and the modal would hide it. The one
+            // that matters most, "the ERP holds this batch — retry it instead", has nothing to redo here.
+            this.resetCancelDialog();
+            if (res.Success) await this.LoadBatches();
+        } finally {
+            this.CancellingBatchID = null;
             this.cdr.markForCheck();
         }
     }
