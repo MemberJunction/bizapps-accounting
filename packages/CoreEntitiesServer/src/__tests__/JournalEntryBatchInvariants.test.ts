@@ -159,6 +159,14 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
     expect(result.Errors.some(e => getErrorText(e).includes('cancelled only through Cancel'))).toBe(true);
   });
 
+  it('a plain save of Pending → Cancelled is refused — only Cancel() takes that edge (#213)', () => {
+    asSaved('Pending', { SummaryJournalEntryID: 'SUM1' });
+    batch.Status = 'Cancelled';
+    const result = batch.Validate();
+    expect(result.Success).toBe(false);
+    expect(result.Errors.some(e => getErrorText(e).includes('cancelled only through Cancel'))).toBe(true);
+  });
+
   it('a batch cancelled after it was sent, without the ERP-check attestation, fails validation', () => {
     asSaved('Failed', { ApprovedAt: new Date(), ApprovedByUserID: 'U1', SentAt: new Date() });
     batch.SetMany({ CancelReason: 'Wrong period', CancelledAt: new Date(), CancelledByUserID: 'U1' }, true);
@@ -336,6 +344,41 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
       asSaved('Approved', { SummaryJournalEntryID: 'SUM1' });
       await batch.Cancel(undefined, { reason: 'Wrong period' });
       expect(batch.Status).toBe('Cancelled');
+    });
+
+    // ─── regenerate's empty cancel (#213) ─────────────────────────────────────
+
+    it('CancelAfterTeardown() marks a torn-down Pending batch Cancelled, and Validate lets the edge through', async () => {
+      const validationAtSave: boolean[] = [];
+      save.mockImplementation(async () => { validationAtSave.push(batch.Validate().Success); return true; });
+      asSaved('Pending', { SummaryJournalEntryID: null });
+
+      await batch.CancelAfterTeardown();
+
+      expect(batch.Status).toBe('Cancelled');
+      expect(validationAtSave).toEqual([true]);
+      expect(teardown).not.toHaveBeenCalled();
+    });
+
+    it('CancelAfterTeardown() refuses a batch that still points at its summary — the teardown did not run', async () => {
+      asSaved('Pending', { SummaryJournalEntryID: 'SUM1' });
+      await expect(batch.CancelAfterTeardown()).rejects.toThrow(/still points at its summary/);
+      expect(save).not.toHaveBeenCalled();
+      expect(batch.Status).toBe('Pending');
+    });
+
+    it.each(['Approved', 'Failed'])('CancelAfterTeardown() refuses %s — past approval, only Cancel() cancels', async (from) => {
+      asSaved(from, { SummaryJournalEntryID: null });
+      await expect(batch.CancelAfterTeardown()).rejects.toThrow(new RegExp(`is ${from}`));
+      expect(save).not.toHaveBeenCalled();
+    });
+
+    it('a save after CancelAfterTeardown() does not inherit its permission', async () => {
+      asSaved('Pending', { SummaryJournalEntryID: null });
+      await batch.CancelAfterTeardown();
+      asSaved('Pending', { SummaryJournalEntryID: null });
+      batch.Status = 'Cancelled';
+      expect(batch.Validate().Errors.some(e => getErrorText(e).includes('cancelled only through Cancel'))).toBe(true);
     });
 
     it.each(['Sent', 'Posted', 'Archived', 'Cancelled'])('Cancel() refuses a %s batch, naming the actual status', async (from) => {

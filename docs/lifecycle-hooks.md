@@ -133,13 +133,15 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   before the seal existed has no hash and gets the other checks. The immutability trigger freezes
   `Failed` content as well as `Approved`, so the seal is the second line of defence.
 - **`JournalEntryBatchEntityServer.Cancel(contextUser, { reason, confirmNotAlreadyPostedInERP, onCancelled })`**
-  (#183) — legal from `Pending`, `Approved` and `Failed`, and the ONLY way an `Approved`/`Failed`
-  batch reaches `Cancelled`: a transient flag set by `Cancel()` is what lets `Validate()` pass that
-  edge, so the generic form or GraphQL update cannot take it. It saves `Cancelled` with the summary
+  (#183) — legal from `Pending`, `Approved` and `Failed`, and the way a batch reaches `Cancelled`
+  (#213): a transient flag set by `Cancel()` is what lets `Validate()` pass that edge, so the generic
+  form or GraphQL update cannot take it. The one other path is regenerate's empty cancel,
+  `CancelAfterTeardown()`, which sets the same flag for a Pending batch that `TearDownSummaryAndUnlock`
+  has already emptied, and refuses one whose summary pointer is still set. It saves `Cancelled` with the summary
   pointer cleared and the cancel audit triple in ONE update, then releases the members, deletes the
   summary and runs `onCancelled`, in one transaction; the triggers key on that order (a member
-  unlocks only while its batch is `Pending` or `Cancelled`; an Approved/Failed batch becomes
-  Cancelled only with its pointer cleared in the same update). From `Approved`/`Failed` a reason is
+  unlocks only while its batch is `Pending` or `Cancelled`; a batch becomes Cancelled only with its
+  pointer cleared). From `Approved`/`Failed` a reason is
   required; from `Failed` so is `confirmNotAlreadyPostedInERP`, persisted as `ERPNotPostedConfirmedAt` /
   `ERPNotPostedConfirmedByUserID` / `ERPNotPostedBasis` (`ERPLookup` when the engine's lookup found
   nothing, `UserAttested` when the canceller confirmed). Calling `Cancel()` directly skips the ERP lookup below, so the

@@ -193,7 +193,7 @@ interface RawBatch { batchId: string; memberId: string; summaryId: string }
  * approved, then moved on to `status`. Raw SQL is the path the batch triggers exist to police, so this
  * sets up exactly what they see. Rows are company A's, so the teardown removes them.
  */
-async function rawBatchAt(ctx: Ctx, status: 'Approved' | 'Failed'): Promise<RawBatch> {
+async function rawBatchAt(ctx: Ctx, status: 'Pending' | 'Approved' | 'Failed'): Promise<RawBatch> {
   const { pool, companyA: co, user } = ctx;
   const summaryTypeId = await RequireJournalEntryTypeID('JournalEntryBatchSummary', user, Metadata.Provider);
   const batch: RawBatch = { batchId: randomUUID(), memberId: randomUUID(), summaryId: randomUUID() };
@@ -211,7 +211,9 @@ async function rawBatchAt(ctx: Ctx, status: 'Approved' | 'Failed'): Promise<RawB
     INSERT INTO ${SCHEMA}.JournalEntryLine (ID, JournalEntryID, LineNumber, GLAccountID, CreditAmount)
       VALUES (NEWID(), '${memberId}', 2, '${co.revGL}', 100), (NEWID(), '${summaryId}', 2, '${co.revGL}', 100);
     UPDATE ${SCHEMA}.JournalEntry SET Status='Batched', JournalEntryBatchID='${batchId}' WHERE ID IN ('${memberId}', '${summaryId}');
-    UPDATE ${SCHEMA}.JournalEntryBatch SET SummaryJournalEntryID='${summaryId}' WHERE ID='${batchId}';
+    UPDATE ${SCHEMA}.JournalEntryBatch SET SummaryJournalEntryID='${summaryId}' WHERE ID='${batchId}';`);
+  if (status === 'Pending') return batch;
+  await pool.request().query(`
     UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Approved', ApprovedAt=SYSDATETIMEOFFSET(), ApprovedByUserID='${user.ID}' WHERE ID='${batchId}';`);
   if (status === 'Failed') {
     await pool.request().query(`
@@ -381,6 +383,23 @@ async function main(): Promise<void> {
     await expectThrow(() => pool.request().query(
       `UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Cancelled', CancelReason='x', CancelledAt=SYSDATETIMEOFFSET(), CancelledByUserID='${ctx.user.ID}' WHERE ID='${b.batchId}'`),
       'status change refused');
+  });
+
+  await test('INV batch status — raw cancel of a Pending batch that keeps the summary pointer → rejected (50031, #213)', async () => {
+    const b = await rawBatchAt(ctx, 'Pending');
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Cancelled' WHERE ID='${b.batchId}'`), 'status change refused');
+  });
+
+  await test('INV batch status — a Pending batch cancelled in Cancel()\'s order (pointer cleared, then release and drop) → allowed (#213)', async () => {
+    const b = await rawBatchAt(ctx, 'Pending');
+    await pool.request().query(`
+      UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Cancelled', SummaryJournalEntryID=NULL, CancelledAt=SYSDATETIMEOFFSET(), CancelledByUserID='${ctx.user.ID}' WHERE ID='${b.batchId}';
+      UPDATE ${SCHEMA}.JournalEntry SET Status='Pending', JournalEntryBatchID=NULL WHERE ID IN ('${b.memberId}', '${b.summaryId}');
+      DELETE FROM ${SCHEMA}.JournalEntryLine WHERE JournalEntryID='${b.summaryId}';
+      DELETE FROM ${SCHEMA}.JournalEntry WHERE ID='${b.summaryId}';`);
+    const res = await pool.request().query(`SELECT Status FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${b.batchId}'`);
+    const row = res.recordset[0] as { Status: string } | undefined;
+    assert(row?.Status === 'Cancelled', `batch should be Cancelled, got ${row?.Status}`);
   });
 
   await test('INV batch status — raw regression of a Failed batch to Pending → rejected (50031)', async () => {
