@@ -12,6 +12,8 @@ export interface WaterfallMonthCell {
     MonthShort: string; // e.g. "Jan"
     Year: string; // e.g. "2026"
     Amount: number;
+    /** The part of `Amount` whose entries' recognition day is on or before the business day. */
+    RecognizedAmount: number;
     IsPastOrCurrent: boolean;
     JournalEntry?: mjBizAppsAccountingJournalEntryEntity;
     TermLabel?: string;
@@ -42,7 +44,7 @@ export interface WaterfallRow {
 /** Summary statistics for the entire waterfall */
 export interface WaterfallSummary {
     TotalDeferredBeginning: number;
-    TotalRecognizedYTD: number;
+    TotalRecognizedToDate: number;
     TotalRemainingUnearned: number;
     MonthlyRunRate: number;
     PercentRecognized: number;
@@ -133,17 +135,6 @@ export class DeferredRevenueWaterfallComponent implements OnChanges {
         }).format(amount);
     }
 
-    public FormatCompact(amount: number): string {
-        if (amount === 0) return '—';
-        if (Math.abs(amount) >= 1000000) {
-            return `$${(amount / 1000000).toFixed(1)}M`;
-        }
-        if (Math.abs(amount) >= 1000) {
-            return `$${(amount / 1000).toFixed(0)}k`;
-        }
-        return `$${amount.toFixed(0)}`;
-    }
-
     public GetTermBadgeClass(termIndex: number): string {
         const mod = (termIndex % 5) + 1;
         return `mja-term-badge--t${mod}`;
@@ -157,7 +148,8 @@ export class DeferredRevenueWaterfallComponent implements OnChanges {
 
         const activeEntries = selectActiveEntries(this.JournalEntries);
         this.DistinctTerms = this.buildDistinctTerms(activeEntries);
-        const todayKey = currentMonthKey();
+        const today = BusinessTimeZoneEngine.Instance.Today();
+        const todayKey = today.slice(0, 7);
         this.MonthHeaders = buildMonthHeaders(collectMonthKeys(activeEntries), todayKey);
 
         const groups = this.groupEntriesByOrigin(activeEntries);
@@ -165,9 +157,9 @@ export class DeferredRevenueWaterfallComponent implements OnChanges {
         const monthTotalsMap = new Map<string, number>();
         this.MonthHeaders.forEach((mh) => monthTotalsMap.set(mh.Key, 0));
 
-        this.Rows = this.buildRows(groups, aggregated, monthTotalsMap, todayKey);
+        this.Rows = this.buildRows(groups, aggregated, monthTotalsMap, today);
         this.YearGroups = buildYearGroups(aggregated);
-        this.Summary = buildSummary(this.Rows, this.MonthHeaders, monthTotalsMap, todayKey);
+        this.Summary = buildSummary(this.Rows, this.MonthHeaders, monthTotalsMap, aggregated, todayKey);
     }
 
     private resetEmpty(): void {
@@ -228,6 +220,7 @@ export class DeferredRevenueWaterfallComponent implements OnChanges {
                 MonthShort: monthShort(mh.Key),
                 Year: mh.Year,
                 Amount: 0,
+                RecognizedAmount: 0,
                 IsPastOrCurrent: mh.Key <= todayKey,
                 JournalEntry: undefined,
                 TermLabel: group?.label,
@@ -240,11 +233,11 @@ export class DeferredRevenueWaterfallComponent implements OnChanges {
         groups: Map<string, OriginGroup>,
         aggregated: WaterfallMonthCell[],
         monthTotalsMap: Map<string, number>,
-        todayKey: string,
+        today: string,
     ): WaterfallRow[] {
         const rows: WaterfallRow[] = [];
         for (const [originId, group] of groups.entries()) {
-            rows.push(this.buildRow(originId, group, aggregated, monthTotalsMap, todayKey));
+            rows.push(this.buildRow(originId, group, aggregated, monthTotalsMap, today));
         }
         return rows;
     }
@@ -254,19 +247,22 @@ export class DeferredRevenueWaterfallComponent implements OnChanges {
         group: OriginGroup,
         aggregated: WaterfallMonthCell[],
         monthTotalsMap: Map<string, number>,
-        todayKey: string,
+        today: string,
     ): WaterfallRow {
-        const monthlyCells = this.emptyMonthlyCells(todayKey, group);
+        const monthlyCells = this.emptyMonthlyCells(today.slice(0, 7), group);
         let rowContractVal = 0;
         let rowRecognized = 0;
 
         for (const je of group.entries) {
-            const mKey = entryMonthKey(je) ?? todayKey;
+            // Fixed-width `YYYY-MM-DD` days compare lexically in chronological order.
+            const day = entryDay(je) ?? today;
+            const mKey = day.slice(0, 7);
             const amt = resolveEntryAmount(je);
+            const recognized = day <= today;
             rowContractVal += amt;
-            addAmountToCell(monthlyCells.find((c) => c.MonthKey === mKey), amt, je);
-            addAmountToCell(aggregated.find((c) => c.MonthKey === mKey), amt, je, group);
-            if (mKey <= todayKey) {
+            addAmountToCell(monthlyCells.find((c) => c.MonthKey === mKey), amt, recognized, je);
+            addAmountToCell(aggregated.find((c) => c.MonthKey === mKey), amt, recognized, je, group);
+            if (recognized) {
                 rowRecognized += amt;
             }
             monthTotalsMap.set(mKey, (monthTotalsMap.get(mKey) || 0) + amt);
@@ -289,7 +285,7 @@ export class DeferredRevenueWaterfallComponent implements OnChanges {
 function emptySummary(): WaterfallSummary {
     return {
         TotalDeferredBeginning: 0,
-        TotalRecognizedYTD: 0,
+        TotalRecognizedToDate: 0,
         TotalRemainingUnearned: 0,
         MonthlyRunRate: 0,
         PercentRecognized: 0,
@@ -297,24 +293,27 @@ function emptySummary(): WaterfallSummary {
     };
 }
 
-/** The business month it is now (`YYYY-MM`), in the instance's business zone — never the browser's. */
-function currentMonthKey(): string {
-    return BusinessTimeZoneEngine.Instance.Today().slice(0, 7);
-}
-
 /**
- * The month (`YYYY-MM`) an entry recognizes in, or null when it carries no date.
+ * The calendar day (`YYYY-MM-DD`) an entry recognizes on, or null when it carries no date.
  *
  * `EffectiveDate` is a `DATE` column: a calendar day held as UTC midnight, so it is read from its UTC
  * parts. The `__mj_CreatedAt` fallback is an instant, so it is placed on the business zone's calendar.
  */
-function entryMonthKey(je: mjBizAppsAccountingJournalEntryEntity): string | null {
+function entryDay(je: mjBizAppsAccountingJournalEntryEntity): string | null {
     const effectiveDay = ToCalendarDay(je.EffectiveDate);
-    if (effectiveDay !== null) return effectiveDay.slice(0, 7);
+    if (effectiveDay !== null) return effectiveDay;
     if (!je.__mj_CreatedAt) return null;
     const createdAt = new Date(je.__mj_CreatedAt);
     if (Number.isNaN(createdAt.getTime())) return null;
-    return CalendarDayIn(createdAt, BusinessTimeZoneEngine.Instance.Zone).slice(0, 7);
+    return CalendarDayIn(createdAt, BusinessTimeZoneEngine.Instance.Zone);
+}
+
+/**
+ * A reversed entry and its reversal net to zero, so neither belongs in the schedule. Checking both
+ * pointers keeps the pair out even when a caller loads the reversal, which carries no link of its own.
+ */
+function isReversalPair(je: mjBizAppsAccountingJournalEntryEntity): boolean {
+    return je.ReversedByJournalEntryID != null || je.ReversesJournalEntryID != null;
 }
 
 function isRecognitionEntry(je: mjBizAppsAccountingJournalEntryEntity): boolean {
@@ -326,14 +325,15 @@ function isRecognitionEntry(je: mjBizAppsAccountingJournalEntryEntity): boolean 
 function selectActiveEntries(
     entries: mjBizAppsAccountingJournalEntryEntity[],
 ): mjBizAppsAccountingJournalEntryEntity[] {
-    return entries.some(isRecognitionEntry) ? entries.filter(isRecognitionEntry) : entries;
+    const standing = entries.filter((je) => !isReversalPair(je));
+    return standing.some(isRecognitionEntry) ? standing.filter(isRecognitionEntry) : standing;
 }
 
 function collectMonthKeys(entries: mjBizAppsAccountingJournalEntryEntity[]): string[] {
     const keys: string[] = [];
     for (const je of entries) {
-        const key = entryMonthKey(je);
-        if (key !== null) keys.push(key);
+        const day = entryDay(je);
+        if (day !== null) keys.push(day.slice(0, 7));
     }
     return keys;
 }
@@ -378,11 +378,13 @@ function buildMonthHeaders(monthKeys: string[], todayKey: string): MonthHeader[]
 function addAmountToCell(
     cell: WaterfallMonthCell | undefined,
     amt: number,
+    recognized: boolean,
     je: mjBizAppsAccountingJournalEntryEntity,
     group?: OriginGroup,
 ): void {
     if (!cell) return;
     cell.Amount += amt;
+    if (recognized) cell.RecognizedAmount += amt;
     cell.JournalEntry = je;
     if (group) {
         cell.TermLabel = group.label;
@@ -400,7 +402,7 @@ function buildYearGroups(aggregated: WaterfallMonthCell[]): WaterfallYearGroup[]
     return Array.from(yearMap.entries()).map(([year, months]) => ({
         Year: year,
         TotalAmount: months.reduce((sum, m) => sum + m.Amount, 0),
-        ReleasedAmount: months.filter((m) => m.IsPastOrCurrent).reduce((sum, m) => sum + m.Amount, 0),
+        ReleasedAmount: months.reduce((sum, m) => sum + m.RecognizedAmount, 0),
         Months: months,
     }));
 }
@@ -409,6 +411,7 @@ function buildSummary(
     rows: WaterfallRow[],
     monthHeaders: MonthHeader[],
     monthTotalsMap: Map<string, number>,
+    aggregated: WaterfallMonthCell[],
     todayKey: string,
 ): WaterfallSummary {
     const grandDeferred = rows.reduce((sum, r) => sum + r.DeferredBeginning, 0);
@@ -417,7 +420,7 @@ function buildSummary(
     const totalMonthsWithAmt = Array.from(monthTotalsMap.values()).filter((v) => v > 0).length || 1;
     return {
         TotalDeferredBeginning: grandDeferred,
-        TotalRecognizedYTD: grandRecognized,
+        TotalRecognizedToDate: grandRecognized,
         TotalRemainingUnearned: grandUnearned,
         MonthlyRunRate: grandDeferred / totalMonthsWithAmt,
         PercentRecognized: grandDeferred > 0 ? (grandRecognized / grandDeferred) * 100 : 0,
@@ -427,6 +430,7 @@ function buildSummary(
             MonthShort: mh.Label.split(' ')[0],
             Year: mh.Year,
             Amount: monthTotalsMap.get(mh.Key) || 0,
+            RecognizedAmount: aggregated.find((c) => c.MonthKey === mh.Key)?.RecognizedAmount ?? 0,
             IsPastOrCurrent: mh.Key <= todayKey,
         })),
     };
