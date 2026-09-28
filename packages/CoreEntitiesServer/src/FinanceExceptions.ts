@@ -66,6 +66,9 @@ interface ExistingExceptionRow {
   ID: string;
   FinanceExceptionTypeID: string;
   DedupeKey: string;
+  Status: string;
+  SourceCreatedByUserID: string | null;
+  CreatorUnresolved: boolean;
 }
 
 /** A validated raise, with its type and source entity resolved. */
@@ -213,14 +216,14 @@ function existingLookup(chunk: ResolvedRaise[]): RunViewParams {
   return {
     EntityName: FINANCE_EXCEPTION_ENTITY,
     ExtraFilter: clauses.join(' OR '),
-    Fields: ['ID', 'FinanceExceptionTypeID', 'DedupeKey'],
+    Fields: ['ID', 'FinanceExceptionTypeID', 'DedupeKey', 'Status', 'SourceCreatedByUserID', 'CreatorUnresolved'],
     ResultType: 'simple',
   };
 }
 
 /** Existing rows for the raises, keyed by dedupeIdentity. */
-async function loadExisting(raises: ResolvedRaise[], provider: IMetadataProvider, ledger: UserInfo): Promise<Map<string, string>> {
-  const existing = new Map<string, string>();
+async function loadExisting(raises: ResolvedRaise[], provider: IMetadataProvider, ledger: UserInfo): Promise<Map<string, ExistingExceptionRow>> {
+  const existing = new Map<string, ExistingExceptionRow>();
   if (raises.length === 0) return existing;
   const params: RunViewParams[] = [];
   for (let i = 0; i < raises.length; i += EXISTING_LOOKUP_CHUNK) {
@@ -229,7 +232,7 @@ async function loadExisting(raises: ResolvedRaise[], provider: IMetadataProvider
   const results = await runViewProvider(provider).RunViews<ExistingExceptionRow>(params, ledger);
   for (const result of results) {
     if (!result.Success) throw new Error(`Could not read existing finance exceptions: ${result.ErrorMessage}`);
-    for (const row of result.Results ?? []) existing.set(dedupeIdentity(row.FinanceExceptionTypeID, row.DedupeKey), row.ID);
+    for (const row of result.Results ?? []) existing.set(dedupeIdentity(row.FinanceExceptionTypeID, row.DedupeKey), row);
   }
   return existing;
 }
@@ -256,13 +259,42 @@ async function writeException(raise: ResolvedRaise, provider: IMetadataProvider,
   return entity.ID;
 }
 
+/** Whether a repeat raise carries a different answer to "who created the source record". */
+function creatorChanged(row: ExistingExceptionRow, input: AccountingFinanceExceptionToRaise): boolean {
+  const wanted = input.SourceCreatedByUserID ?? null;
+  const sameUser = wanted === null ? row.SourceCreatedByUserID === null : UUIDsEqual(row.SourceCreatedByUserID ?? '', wanted);
+  return !sameUser || !!row.CreatorUnresolved !== !!input.CreatorUnresolved;
+}
+
+/**
+ * Brings an Open row's creator up to date with the latest raise. A creator can become known after
+ * the row was raised (a deal owner's login is linked later), and nothing else can edit the row, so
+ * without this an unresolved row could never be cleared. Reviewed and Corrected rows are final and
+ * never touched. The summary moves with the creator because it describes who that is.
+ */
+async function refreshCreator(row: ExistingExceptionRow, raise: ResolvedRaise, provider: IMetadataProvider, ledger: UserInfo): Promise<boolean> {
+  if (row.Status !== 'Open' || !creatorChanged(row, raise.Input)) return false;
+  const entity = await provider.GetEntityObject<FinanceExceptionEntityServer>(FINANCE_EXCEPTION_ENTITY, ledger);
+  if (!(await entity.Load(row.ID))) throw new Error(`Could not load finance exception ${row.ID} to refresh its creator.`);
+  entity.SourceCreatedByUserID = raise.Input.SourceCreatedByUserID ?? null;
+  entity.CreatorUnresolved = !!raise.Input.CreatorUnresolved;
+  entity.Summary = raise.Input.Summary.trim();
+  if (!(await entity.Save())) {
+    throw new Error(`Could not refresh the creator on finance exception ${row.ID}: ${entity.LatestResult?.CompleteMessage ?? 'save failed'}`);
+  }
+  row.SourceCreatedByUserID = entity.SourceCreatedByUserID;
+  row.CreatorUnresolved = entity.CreatorUnresolved;
+  return true;
+}
+
 /**
  * Writes the raises that have no row yet, in order, and returns every result. A raise whose
- * (type, DedupeKey) repeats an earlier one in the same call returns that one's row.
+ * (type, DedupeKey) repeats an earlier one in the same call returns that one's row. A repeat of an
+ * Open row refreshes its creator (see refreshCreator); nothing else about an existing row changes.
  */
 async function writeRaises(
   raises: ResolvedRaise[],
-  existing: Map<string, string>,
+  existing: Map<string, ExistingExceptionRow>,
   provider: IMetadataProvider,
   ledger: UserInfo,
 ): Promise<AccountingRaiseFinanceExceptionResult[]> {
@@ -275,11 +307,19 @@ async function writeRaises(
     const identity = dedupeIdentity(raise.Type.ID, raise.Input.DedupeKey);
     const found = existing.get(identity);
     if (found) {
-      results.push({ Index: raise.Index, FinanceExceptionID: found, Created: false });
+      await refreshCreator(found, raise, provider, ledger);
+      results.push({ Index: raise.Index, FinanceExceptionID: found.ID, Created: false });
       continue;
     }
     const id = await writeException(raise, provider, ledger);
-    existing.set(identity, id);
+    existing.set(identity, {
+      ID: id,
+      FinanceExceptionTypeID: raise.Type.ID,
+      DedupeKey: raise.Input.DedupeKey,
+      Status: 'Open',
+      SourceCreatedByUserID: raise.Input.SourceCreatedByUserID ?? null,
+      CreatorUnresolved: !!raise.Input.CreatorUnresolved,
+    });
     results.push({ Index: raise.Index, FinanceExceptionID: id, Created: true });
   }
   return results;
@@ -360,14 +400,18 @@ function inputRefusal(input: AccountingClearFinanceExceptionInput | null | undef
 }
 
 /**
- * The creator has no linked login, so whether the reviewer is the creator cannot be checked.
- * Kept as its own rule because whether it should block is still an open question on golive #279.
+ * The creator has no linked login, so whether the reviewer is the creator cannot be checked, and
+ * clearing is refused (golive #279). The row's summary is appended because the raising app names
+ * the creator there, so the message says whose login to link. Once it is linked, the next raise
+ * refreshes the row (refreshCreator) and it can be cleared.
  */
 function creatorUnresolvedRefusal(record: FinanceExceptionEntityServer): ClearRefusal | null {
   if (!record.CreatorUnresolved) return null;
   return {
     Code: 'CREATOR_UNRESOLVED',
-    Message: "The record's creator has no linked login, so separation of duties cannot be checked. Link the creator to a login before clearing this exception.",
+    Message:
+      "The record's creator has no linked login, so separation of duties cannot be checked. Link the creator " +
+      `to a login; the exception can be cleared after the next check refreshes it. ${record.Summary}`,
   };
 }
 

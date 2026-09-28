@@ -179,7 +179,9 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   deleting an Open exception would unblock its month without a review.
 - **`Accounting.RaiseFinanceExceptions`** writes as the system user and joins the caller's transaction
   when one is open (same rule as `CreateJournalEntries`), so a raise made during a save commits or
-  rolls back with it.
+  rolls back with it. A repeat raise of a row that is still Open refreshes its creator fields and summary (an
+  ordinary save: they are not guarded), so a creator identified later unlocks a row raised as
+  unresolved; a terminal row is never touched.
 
 ## 3. Related (not `Save()` hooks)
 

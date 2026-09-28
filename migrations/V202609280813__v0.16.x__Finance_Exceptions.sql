@@ -1,5 +1,5 @@
 -- =============================================================================
--- Migration: V202609280813__v0.15.x__Finance_Exceptions.sql
+-- Migration: V202609280813__v0.16.x__Finance_Exceptions.sql
 -- Description: golive #279 — a finance exception list: records that a finance
 --              reviewer must look at before a month is closed.
 -- =============================================================================

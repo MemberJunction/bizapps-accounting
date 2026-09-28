@@ -18,7 +18,7 @@ export interface AccountingFinanceExceptionToRaise {
     ExceptionDate: string;
     /** Plain description of what was found in the data. */
     Summary: string;
-    /** The detector's identity for this occurrence. Raising the same (TypeCode, DedupeKey) again returns the existing row unchanged. */
+    /** The detector's identity for this occurrence. Raising the same (TypeCode, DedupeKey) again returns the existing row; if it is still Open, its creator fields and summary are refreshed from this raise. */
     DedupeKey: string;
     /** The login whose judgement is under review; that user may not clear the exception. */
     SourceCreatedByUserID?: string | null;

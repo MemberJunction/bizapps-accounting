@@ -948,7 +948,8 @@ erDiagram
 ## 10. Finance exceptions (golive #279)
 
 The month-end review list. Detectors in consuming apps raise rows through
-`Accounting.RaiseFinanceExceptions` (idempotent on type + `DedupeKey`); a holder of
+`Accounting.RaiseFinanceExceptions` (idempotent on type + `DedupeKey`; a repeat refreshes an Open
+row's creator fields and summary); a holder of
 `MJ.BizApps.Accounting.FinanceExceptions.Clear` (the Finance role) who did not create the source
 record clears them through `Accounting.ClearFinanceException`. `Open → Reviewed | Corrected`, both
 terminal; `FinanceExceptionEntityServer` refuses any other status change and any delete. A company's

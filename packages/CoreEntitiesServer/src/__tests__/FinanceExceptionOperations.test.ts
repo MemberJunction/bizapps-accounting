@@ -39,6 +39,7 @@ interface WrittenRow {
   SourceEntityID?: string;
   CreatorUnresolved?: boolean;
   SourceCreatedByUserID?: string | null;
+  Summary?: string;
   ReviewedByUserID?: string | null;
   ReviewedAt?: Date | null;
   ReviewNote?: string | null;
@@ -49,7 +50,14 @@ interface WrittenRow {
 }
 
 interface StubOptions {
-  existing?: Array<{ ID: string; FinanceExceptionTypeID: string; DedupeKey: string }>;
+  existing?: Array<{
+    ID: string;
+    FinanceExceptionTypeID: string;
+    DedupeKey: string;
+    Status?: string;
+    SourceCreatedByUserID?: string | null;
+    CreatorUnresolved?: boolean;
+  }>;
   transactionDepth?: number;
   saveSucceeds?: boolean;
   stored?: Partial<WrittenRow> | null;
@@ -128,7 +136,9 @@ describe('Accounting.RaiseFinanceExceptions', () => {
   });
 
   it('is idempotent on (TypeCode, DedupeKey): an existing row is returned unchanged, and a repeat in one call reuses the first', async () => {
-    const s = stubProvider({ existing: [{ ID: 'EXISTING-1', FinanceExceptionTypeID: TYPES[0].ID, DedupeKey: 'KEY-A' }] });
+    const s = stubProvider({
+      existing: [{ ID: 'EXISTING-1', FinanceExceptionTypeID: TYPES[0].ID, DedupeKey: 'KEY-A', Status: 'Open', SourceCreatedByUserID: CREATOR, CreatorUnresolved: false }],
+    });
     const result = await new RaiseFinanceExceptionsOperation().ExecuteServer(
       { Exceptions: [raise({ DedupeKey: 'KEY-A' }), raise({ DedupeKey: 'KEY-B' }), raise({ DedupeKey: 'KEY-B' })] },
       context(s.provider),
@@ -140,6 +150,30 @@ describe('Accounting.RaiseFinanceExceptions', () => {
       { Index: 2, FinanceExceptionID: 'NEW-1', Created: false },
     ]);
     expect(s.saved).toHaveLength(1);
+  });
+
+  it('refreshes an Open row whose creator has since been resolved', async () => {
+    const existing = { ID: 'EXISTING-1', FinanceExceptionTypeID: TYPES[0].ID, DedupeKey: 'KEY-A', Status: 'Open', SourceCreatedByUserID: null, CreatorUnresolved: true };
+    const s = stubProvider({ existing: [existing], stored: { ...existing, Summary: 'Owner has no linked login.' } });
+    const result = await new RaiseFinanceExceptionsOperation().ExecuteServer(
+      { Exceptions: [raise({ DedupeKey: 'KEY-A', SourceCreatedByUserID: CREATOR, CreatorUnresolved: false, Summary: 'Owner resolved.' })] },
+      context(s.provider),
+    );
+    expect(result.Output?.Results).toEqual([{ Index: 0, FinanceExceptionID: 'EXISTING-1', Created: false }]);
+    expect(s.saved).toHaveLength(1);
+    expect(s.saved[0]).toMatchObject({ ID: 'EXISTING-1', Status: 'Open', SourceCreatedByUserID: CREATOR, CreatorUnresolved: false, Summary: 'Owner resolved.' });
+  });
+
+  it('never touches a Reviewed or Corrected row, even when the creator differs', async () => {
+    const existing = { ID: 'EXISTING-1', FinanceExceptionTypeID: TYPES[0].ID, DedupeKey: 'KEY-A', Status: 'Reviewed', SourceCreatedByUserID: null, CreatorUnresolved: true };
+    const s = stubProvider({ existing: [existing], stored: existing });
+    const result = await new RaiseFinanceExceptionsOperation().ExecuteServer(
+      { Exceptions: [raise({ DedupeKey: 'KEY-A', SourceCreatedByUserID: CREATOR })] },
+      context(s.provider),
+    );
+    expect(result.Output?.Results).toEqual([{ Index: 0, FinanceExceptionID: 'EXISTING-1', Created: false }]);
+    expect(s.saved).toHaveLength(0);
+    expect(s.getEntityObject).not.toHaveBeenCalled();
   });
 
   it("joins the caller's transaction instead of opening one", async () => {
@@ -236,10 +270,11 @@ describe('Accounting.ClearFinanceException', () => {
   });
 
   it('refuses while the creator has no linked login', async () => {
-    const s = stubProvider({ stored: openRow({ SourceCreatedByUserID: null, CreatorUnresolved: true }) });
+    const s = stubProvider({ stored: openRow({ SourceCreatedByUserID: null, CreatorUnresolved: true, Summary: 'Deal owner Pat Example has no linked login.' }) });
     const result = await clear(s, {});
     expect(result.Output?.Errors?.[0]).toMatchObject({ Code: 'CREATOR_UNRESOLVED' });
     expect(result.Output?.Errors?.[0].Message).toMatch(/no linked login, so separation of duties cannot be checked/);
+    expect(result.Output?.Errors?.[0].Message).toContain('Deal owner Pat Example has no linked login.');
     expect(s.saved).toHaveLength(0);
   });
 
