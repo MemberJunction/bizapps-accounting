@@ -196,10 +196,17 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   `Failed` does not prove the ERP rejected the journal: the post can succeed with the response lost, or
   succeed and then fail to save `Posted`. So every send, first or retry, looks the batch number up in
   the ERP first (#182; `AccountingERPEngine.FindPostedJournalBatch`, Business Central via `GetGLEntries`).
-  On a `Failed` retry, a posting that matches the batch line for line (account, debit, credit, posting
-  date) is recorded `Posted` with no second send. On a first send the batch never reached the ERP, so
-  a match is another journal under the same number: the send is refused and the batch stays
-  `Approved`. A posting that differs, or a failed lookup, refuses the send unless
+  Every line the batch sends carries its token, `[JEB <batch ID>]`, after the line's description
+  (#206): batch numbers restart at `BATCH-000001` in every database, so another environment's journal
+  can sit under the same number in the same ERP company, and the batch ID is what tells them apart.
+  On a `Failed` retry, a posting whose every line carries the token and matches the batch line for
+  line (account, debit, credit, posting date) is recorded `Posted` with no second send. On a first
+  send such a match means the database was copied from one that sent the batch: the send is refused
+  and the batch stays `Approved`. A posting whose lines carry only other batches' tokens is another
+  environment's journal: the send or retry is refused with no override and the batch stays where it
+  was, to be archived (`Approved`) or cancelled (`Failed`) so its entries rebatch under a new number;
+  a `Failed` cancel treats it as not posted. A posting with no tokens (sent before tagging, or from an
+  environment that does not tag) or only some is a mismatch. A posting that differs, or a failed lookup, refuses the send unless
   `confirmNotAlreadyPostedInERP` (`ConfirmNotAlreadyPostedInERP` on `Accounting.DispatchJournalEntryBatch`),
   which also stays required on a `Failed` retry to an ERP with no lookup (QuickBooks Online today). A
   refused retry stays `Failed` and the op answers `ConfirmationRequired` with the reason and its kind
