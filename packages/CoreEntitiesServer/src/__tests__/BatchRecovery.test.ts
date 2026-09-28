@@ -244,17 +244,36 @@ describe('sendJournalEntryBatch — the pre-flight ERP lookup (#182)', () => {
         expect(entries['je-1']).toMatchObject({ Status: 'GLPosted', GLReferenceID: 'JEB-0001' });
     });
 
-    // A batch that never reached the ERP cannot be the posting found there: it is another journal under
-    // the same number. Marking it Failed would let its retry adopt that journal, so it stays Approved.
+    // A batch this database never sent cannot have posted from here: the database was copied from one
+    // that sent it. Marking it Failed would let its retry adopt that journal, so it stays Approved.
     it.each([undefined, true])('refuses a first send whose number the ERP already holds, leaving it Approved (confirmation: %s)', async (confirm) => {
         const { batch, entries, provider } = world('Approved', { 'je-1': batched() });
         const poster = acceptingPoster();
 
         await expect(sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, lookup: found(), provider, confirmNotAlreadyPostedInERP: confirm }))
-            .rejects.toThrow(/already holds a posting under document JEB-0001 \(JEB-0001\) that matches this batch, but this batch has never been sent/);
+            .rejects.toThrow(/already holds a posting under document JEB-0001 \(JEB-0001\) that carries this batch's token and matches it, but this batch has never been sent/);
         expect(poster).not.toHaveBeenCalled();
         expect(batch.Save).not.toHaveBeenCalled();
         expect(batch.Status).toBe('Approved');
+        expect(entries['je-1'].Status).toBe('Batched');
+    });
+
+    // #206: another environment's journal under the same number. Recording it Posted would lose this
+    // batch; sending it would put two journals under one document number.
+    it.each<[string, string | undefined, RegExp]>([
+        ['Failed', undefined, /stays Failed\. Cancel it from Dispatch status/],
+        ['Failed', 'confirmed', /stays Failed\. Cancel it from Dispatch status/],
+        ['Approved', undefined, /stays Approved\. Archive it from Batch approvals/],
+    ])('refuses a %s batch whose number holds another batch\'s journal, with no override (%s)', async (status, confirm, wayOut) => {
+        const { batch, entries, provider } = world(status, { 'je-1': batched() });
+        const poster = acceptingPoster();
+        const lookup = lookupReturning({ status: 'Foreign', detail: 'its lines carry the token of batch other-batch.' });
+
+        await expect(sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, lookup, provider, confirmNotAlreadyPostedInERP: confirm === 'confirmed' }))
+            .rejects.toThrow(wayOut);
+        expect(poster).not.toHaveBeenCalled();
+        expect(batch.Save).not.toHaveBeenCalled();
+        expect(batch.Status).toBe(status);
         expect(entries['je-1'].Status).toBe('Batched');
     });
 

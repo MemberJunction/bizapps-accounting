@@ -36,6 +36,8 @@ export interface ERPPostedJournalLine {
   postingDate: string;
   debit: number;
   credit: number;
+  /** The line's description as the ERP holds it, which carries the batch token (#206). */
+  description: string;
 }
 
 /**
@@ -164,7 +166,8 @@ function parseBCGLEntry(entry: unknown): ERPPostedJournalLine | null {
   const postingDate = ToCalendarDay(row.postingDate);
   if (typeof row.accountNumber !== 'string' || !postingDate) return null;
   if (typeof row.debitAmount !== 'number' || typeof row.creditAmount !== 'number') return null;
-  return { accountNumber: row.accountNumber, postingDate, debit: row.debitAmount, credit: row.creditAmount };
+  const description = typeof row.description === 'string' ? row.description : '';
+  return { accountNumber: row.accountNumber, postingDate, debit: row.debitAmount, credit: row.creditAmount, description };
 }
 
 export function LoadAccountingERPProviders(): void {}

@@ -145,6 +145,23 @@ describe('cancelJournalEntryBatch — the ERP check before cancelling a Failed b
     expect(batch.Status).toBe('Cancelled');
   });
 
+  // #206: the only journal under the number is another batch's, so this batch did not post.
+  it('cancels without the operator\'s word when the ERP holds only another batch\'s journal under the number', async () => {
+    const { batch, provider } = world('Failed');
+    const g = gate({ allowed: true });
+    const lookup = lookupOf({ status: 'Foreign', detail: 'its lines carry the token of batch other-batch.' });
+
+    await cancelJournalEntryBatch(BATCH_ID, USER, provider, { reason: 'Wrong period', gate: g, lookup });
+
+    const [, options] = batch.Cancel.mock.calls[0] as [UserInfo, JournalEntryBatchCancelOptions];
+    expect(options.erpNotPostedBasis).toBe('ERPLookup');
+    expect(g.recordCancellation).toHaveBeenCalledWith(BATCH_ID, {
+      reason: 'Wrong period', fromStatus: 'Failed',
+      erpCheck: 'The ERP lookup found only another batch\'s journal under document JEB-0183: its lines carry the token of batch other-batch.',
+    }, USER);
+    expect(batch.Status).toBe('Cancelled');
+  });
+
   const unsettled: ErpJournalLookupResult[] = [
     { status: 'Mismatch', detail: 'BC holds 3 lines, the batch has 2.' },
     { status: 'Error', error: 'BC timed out.' },
