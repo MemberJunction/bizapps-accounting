@@ -254,13 +254,19 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
 
   private providerFor(integrationName: string | undefined): BaseAccountingERPProvider | null {
     if (!integrationName) return null;
+    // Providers register under their full product name ('Microsoft Dynamics 365 Business Central'), while an
+    // Integration row may be named differently (the MJ connector's is 'business-central'). Try the name as given,
+    // then the registered provider key it matches under the same rule PostJournalBatch uses to pick the connection.
+    const key = ERP_PROVIDER_KEYS.includes(integrationName)
+      ? integrationName
+      : ERP_PROVIDER_KEYS.find((k) => namesMatch(integrationName, k)) ?? integrationName;
     const res = MJGlobal.Instance.ClassFactory.TryCreateInstance<BaseAccountingERPProvider>(
       BaseAccountingERPProvider,
-      integrationName,
+      key,
       this.seams.runVerb ?? defaultAccountingVerbRunner,
     );
     if (!res.Resolved || !res.Instance) {
-      LogStatus(`AccountingERPEngine: no provider for '${integrationName}': ${res.Reason}`);
+      LogStatus(`AccountingERPEngine: no provider for '${integrationName}'${key !== integrationName ? ` (tried '${key}')` : ''}: ${res.Reason}`);
       return null;
     }
     return res.Instance;
@@ -360,7 +366,9 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     const rv = provider as unknown as IRunViewProvider;
     const res = await rv.RunView<Record<string, unknown>>({
       EntityName: CI_MAP_ENTITY,
-      ExtraFilter: `CompanyIntegrationID = '${EscapeSQLString(companyIntegrationID)}' AND IsActive = 1`,
+      // Company Integration Entity Maps have no IsActive column (they carry Status and SyncEnabled). Filtering on
+      // IsActive made this RunView fail, so every sync reported "No entity maps" however the maps were set up.
+      ExtraFilter: `CompanyIntegrationID = '${EscapeSQLString(companyIntegrationID)}' AND Status = 'Active' AND SyncEnabled = 1`,
       ResultType: 'simple',
     }, user);
     if (!res.Success) return [];
@@ -520,10 +528,17 @@ function extensionParticipates(
   }
 }
 
-function namesMatch(integrationName: string, targetSystem: string | null | undefined): boolean {
+/** Keys the built-in ERP providers register under (see BaseAccountingERPProvider.ts). */
+const ERP_PROVIDER_KEYS: readonly string[] = ['Microsoft Dynamics 365 Business Central', 'QuickBooks Online'];
+
+/**
+ * Whether an Integration name and an ERP name (a batch's TargetSystem, or a provider key) mean the same system.
+ * Compares letters and digits only, so 'business-central', 'Business Central' and 'BusinessCentral' all match.
+ */
+export function namesMatch(integrationName: string, targetSystem: string | null | undefined): boolean {
   if (!targetSystem) return false;
-  const a = integrationName.toLowerCase().replace(/\s+/g, '');
-  const b = targetSystem.toLowerCase().replace(/\s+/g, '');
+  const a = integrationName.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const b = targetSystem.toLowerCase().replace(/[^a-z0-9]/g, '');
   if (a.includes('quickbooks') && b.includes('quickbooks')) return true;
   if (a.includes('businesscentral') && (b.includes('businesscentral') || b === 'bc')) return true;
   return a === b;
