@@ -11,6 +11,12 @@ on:
       - 'pnpm-workspace.yaml'
       - 'package.json'
       - 'packages/**'
+      # Every package tsconfig extends a root tsconfig, and turbo.json defines the
+      # build graph and its hashing: both change build output.
+      - 'tsconfig.*.json'
+      - 'turbo.json'
+      # So a change to this workflow runs it.
+      - '.github/workflows/build.yml'
   pull_request:
     # No `paths` filter, and `main` included: the release PR (next -> main) is the
     # highest-stakes merge in the repo — it publishes to npm — and was the ONE merge
