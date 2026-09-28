@@ -139,8 +139,11 @@ export const mockErpPoster: ErpPoster = async (batch) => ({
  * What the ERP holds under the batch's number, read before every send so a journal the ERP already
  * holds is never posted twice (#182).
  *   · `NotFound`    — nothing has posted under the number: send.
- *   · `Found`       — a posting that matches the batch on date, account and amount, line for line:
- *                     it IS this batch, so record it Posted instead of sending it again.
+ *   · `Found`       — a posting that carries the batch's token and matches it on date, account and
+ *                     amount, line for line: it IS this batch, so record it Posted instead of
+ *                     sending it again.
+ *   · `Foreign`     — a posting whose lines carry only other batches' tokens (#206): another
+ *                     journal under the same number, from another environment. Not this batch.
  *   · `Mismatch`    — something posted under the number that is not this batch as it stands.
  *   · `Error`       — the lookup ran and could not answer.
  *   · `Unavailable` — the target ERP offers no lookup.
@@ -148,6 +151,7 @@ export const mockErpPoster: ErpPoster = async (batch) => ({
 export type ErpJournalLookupResult =
   | { status: 'NotFound' }
   | { status: 'Found'; externalJournalEntryBatchRef: string }
+  | { status: 'Foreign'; detail: string }
   | { status: 'Mismatch'; detail: string }
   | { status: 'Error'; error: string }
   | { status: 'Unavailable' };
@@ -862,6 +866,9 @@ async function checkFailedBatchBeforeCancel(
     );
   }
   if (found.status === 'NotFound') return { basis: 'ERPLookup', description: `The ERP lookup found nothing posted under document ${doc}.` };
+  if (found.status === 'Foreign') {
+    return { basis: 'ERPLookup', description: `The ERP lookup found only another batch's journal under document ${doc}: ${found.detail}` };
+  }
   const refusal = cancelRefusal(found, doc);
   if (!confirmed) throw new ErpPostingUnconfirmedError(refusal.kind, refusal.reason, 'cancelJournalEntryBatch');
   return { basis: 'UserAttested', description: `The canceller confirmed document ${doc} had not posted; the ERP lookup could not settle it (${refusal.kind}).` };
@@ -869,7 +876,7 @@ async function checkFailedBatchBeforeCancel(
 
 /** Why a Failed cancel needs the operator's word: the lookup ran and could not say "not posted". */
 function cancelRefusal(
-  found: Exclude<ErpJournalLookupResult, { status: 'Found' } | { status: 'NotFound' }>, doc: string,
+  found: Exclude<ErpJournalLookupResult, { status: 'Found' } | { status: 'NotFound' } | { status: 'Foreign' }>, doc: string,
 ): { kind: ErpPostingUnconfirmedKind; reason: string } {
   const confirmHint = `Confirm in the ERP that document ${doc} has not posted, then cancel with that confirmation; otherwise its entries post again in the next batch.`;
   switch (found.status) {
@@ -1031,10 +1038,12 @@ const SENDABLE_FROM: ReadonlyArray<string> = ['Approved', 'Failed'];
  * batch's number:
  *   · nothing                → post.
  *   · a matching posting     → on a Failed retry, the ERP already has this batch: record it Posted
- *                              with no second post. On a first send the batch has never reached the
- *                              ERP, so the match is another journal under the same number (another
- *                              environment, a reused number): refuse, and leave the batch Approved.
+ *                              with no second post. On a first send this database never sent it, so
+ *                              the database was copied from one that did: refuse, and leave the
+ *                              batch Approved.
  *                              No confirmation overrides either outcome.
+ *   · another batch's posting → lines carrying only other batches' tokens (#206): refuse, with no
+ *                              override, and leave the batch where it was.
  *   · a posting that differs → refuse, unless `confirmNotAlreadyPostedInERP`.
  *   · the lookup failed      → refuse, unless `confirmNotAlreadyPostedInERP`.
  *   · no lookup for this ERP → a first send posts; a Failed retry needs `confirmNotAlreadyPostedInERP`.
@@ -1067,6 +1076,7 @@ export async function sendJournalEntryBatch(batchId: string, contextUser: UserIn
   // Before the →Sent save: a throw here must leave the batch where it was, not stranded at Sent.
   const summaryLines = await loadSummaryLines(batch, contextUser, p);
   const preflight = await lookupOrError(options.lookup ?? unavailableErpLookup, batch, summaryLines, contextUser);
+  if (preflight.status === 'Foreign') throw new Error(`sendJournalEntryBatch: ${foreignJournal(batch, preflight.detail, fromStatus)}`);
   if (preflight.status === 'Found' && fromStatus !== 'Failed') throw new Error(`sendJournalEntryBatch: ${numberCollision(batch, preflight.externalJournalEntryBatchRef)}`);
   const refusal = preflightRefusal(preflight, batch, fromStatus, options.confirmNotAlreadyPostedInERP === true);
   if (refusal && fromStatus === 'Failed') throw new ErpPostingUnconfirmedError(refusal.kind, refusal.reason);
@@ -1100,17 +1110,34 @@ async function lookupOrError(
   }
 }
 
-/** A first send whose number the ERP already holds, matching line for line: not this batch, which never reached the ERP. */
+/**
+ * A first send whose number the ERP already holds, carrying this batch's token and matching line for
+ * line. This database never sent it, so the database was copied from one that did.
+ */
 function numberCollision(batch: mjBizAppsAccountingJournalEntryBatchEntity, externalRef: string): string {
   const doc = batch.JournalEntryBatchNumber ?? batch.ID;
-  return `the ERP already holds a posting under document ${doc} (${externalRef}) that matches this batch, but this batch has never been sent. ` +
-    'It is another journal under the same number, from another environment or a reused number. Refusing to send it or to record it Posted; ' +
-    'the batch stays Approved. Resolve the collision in the ERP, or archive this batch from Batch approvals.';
+  return `the ERP already holds a posting under document ${doc} (${externalRef}) that carries this batch's token and matches it, but this batch has never been sent from here. ` +
+    'The database was most likely copied from one that sent it. Refusing to send it or to record it Posted; ' +
+    'the batch stays Approved. Resolve it in the ERP, or archive this batch from Batch approvals.';
+}
+
+/**
+ * Another batch's journal under this batch's number (#206): nothing of this batch is in the ERP, and
+ * a send would put two journals under one document number. Refused with no override; the way out is
+ * to release the entries to a new batch, which takes a new number.
+ */
+function foreignJournal(batch: mjBizAppsAccountingJournalEntryBatchEntity, detail: string, fromStatus: string): string {
+  const doc = batch.JournalEntryBatchNumber ?? batch.ID;
+  const wayOut = fromStatus === 'Failed'
+    ? 'Cancel it from Dispatch status; its entries go into the next batch under a new number.'
+    : 'Archive it from Batch approvals; its entries go into the next batch under a new number.';
+  return `the ERP already holds another journal under document ${doc}, from another environment: ${detail} ` +
+    `Refusing to send this batch under the same number; it stays ${fromStatus}. ${wayOut}`;
 }
 
 /** Why the pre-flight lookup stops this send, or null when it may go ahead. See {@link sendJournalEntryBatch}. */
 function preflightRefusal(
-  preflight: ErpJournalLookupResult, batch: mjBizAppsAccountingJournalEntryBatchEntity, fromStatus: string, confirmed: boolean,
+  preflight: Exclude<ErpJournalLookupResult, { status: 'Foreign' }>, batch: mjBizAppsAccountingJournalEntryBatchEntity, fromStatus: string, confirmed: boolean,
 ): { kind: ErpPostingUnconfirmedKind; reason: string } | null {
   if (confirmed) return null;
   const doc = batch.JournalEntryBatchNumber ?? batch.ID;
