@@ -32,6 +32,7 @@
     "@mj-biz-apps/accounting-engine-base": "0.14.0",
     "@mj-biz-apps/common-entities": ">=5.43.0",
     "@memberjunction/actions": "^6.1.0-edge.7",
+    "@memberjunction/generic-database-provider": "^6.1.0-edge.7",
     "@memberjunction/integration-engine": "^6.1.0-edge.7"
   },
   "peerDependencies": {

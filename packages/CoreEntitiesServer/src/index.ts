@@ -21,6 +21,7 @@ export { GLAccountEntityServer } from './GLAccountEntityServer.js';
 export { GLAccountLinkEntityServer, LoadGLAccountLinkEntityServer } from './GLAccountLinkEntityServer.js';
 export { IntercompanyAccountMatchEntityServer } from './IntercompanyAccountMatchEntityServer.js';
 export { JournalEntryTypeEntityServer, LoadJournalEntryTypeEntityServer } from './JournalEntryTypeEntityServer.js';
+export { FinanceExceptionEntityServer, LoadFinanceExceptionEntityServer } from './FinanceExceptionEntityServer.js';
 // (AccountingPeriodEntityServer removed 2026-07-06 — AccountingPeriod retired, CH-1.)
 
 // Internal helpers exported for use by future EntityServer classes (period
@@ -179,3 +180,21 @@ export {
   type ResumeJournalEntryBatchPostingOutput,
   type GetStrandedJournalEntriesOutput,
 } from './JournalEntryBatchOperations.js';
+
+// Finance exceptions (golive #279): the month-end review list. Three remote operations —
+// Accounting.GetFinanceExceptionTypes / RaiseFinanceExceptions / ClearFinanceException — over the
+// typed bases CodeGen emits into @mj-biz-apps/accounting-entities. Registered via
+// LoadFinanceExceptionOperations. The status guard on FinanceException is FinanceExceptionEntityServer.
+export {
+  GetFinanceExceptionTypesOperation,
+  RaiseFinanceExceptionsOperation,
+  ClearFinanceExceptionOperation,
+  LoadFinanceExceptionOperations,
+} from './FinanceExceptionOperations.js';
+export {
+  FINANCE_EXCEPTION_TYPE_ENTITY,
+  FINANCE_EXCEPTIONS_CLEAR_AUTH,
+  UserCanClearFinanceExceptions,
+  ParseFinanceExceptionConfiguration,
+} from './FinanceExceptions.js';
+export { FINANCE_EXCEPTION_ENTITY } from './FinanceExceptionEntityServer.js';

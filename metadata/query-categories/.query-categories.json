@@ -1,0 +1,13 @@
+[
+  {
+    "fields": {
+      "Name": "Accounting",
+      "ParentID": null,
+      "Description": "BizApps Accounting stored queries — read-only aggregates such as month-end readiness.",
+      "UserID": "@lookup:MJ: Users.Name=System"
+    },
+    "primaryKey": {
+      "ID": "126B4161-E7AF-41F6-88B0-0F1F4D8D0867"
+    }
+  }
+]

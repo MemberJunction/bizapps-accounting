@@ -1,0 +1,28 @@
+[
+  {
+    "fields": {
+      "EntityID": "@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Finance Exceptions",
+      "RoleID": "@lookup:MJ: Roles.Name=Finance",
+      "CanCreate": false,
+      "CanRead": true,
+      "CanUpdate": false,
+      "CanDelete": false
+    },
+    "primaryKey": {
+      "ID": "6D95DAAB-5D05-4003-B67F-26F92A72565F"
+    }
+  },
+  {
+    "fields": {
+      "EntityID": "@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Finance Exception Types",
+      "RoleID": "@lookup:MJ: Roles.Name=Finance",
+      "CanCreate": false,
+      "CanRead": true,
+      "CanUpdate": false,
+      "CanDelete": false
+    },
+    "primaryKey": {
+      "ID": "2460EC28-2F9D-4C21-8999-EF2F8E28062C"
+    }
+  }
+]

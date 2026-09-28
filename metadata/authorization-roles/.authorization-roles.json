@@ -1,0 +1,12 @@
+[
+  {
+    "fields": {
+      "AuthorizationID": "@lookup:MJ: Authorizations.Name=MJ.BizApps.Accounting.FinanceExceptions.Clear",
+      "RoleID": "@lookup:MJ: Roles.Name=Finance",
+      "Type": "Allow"
+    },
+    "primaryKey": {
+      "ID": "DCE9A4DD-C9EF-4DA6-9C03-29D2BE3C1988"
+    }
+  }
+]

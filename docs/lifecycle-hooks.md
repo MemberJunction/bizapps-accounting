@@ -169,6 +169,18 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   interpolated into an `ExtraFilter`: the batch remote ops, the gate's Task-Link lookups, W9's
   `FileID`, JE line `GLAccountID`s, `GLAccountLink` / `IntercompanyAccountMatch` FK checks.
 
+## 2c. Finance exception status guard (golive #279)
+
+- **`FinanceExceptionEntityServer`** — a new row is `Open` with no review; on a saved row `Status`,
+  `ReviewedByUserID`, `ReviewedAt` and `ReviewNote` change only inside `SaveFinanceExceptionClearance`,
+  which `Accounting.ClearFinanceException` calls after its checks (authorization, not the source
+  record's creator, creator resolved, still Open, note given). A sanctioned save moves `Open` to
+  `Reviewed` or `Corrected` only; a terminal row cannot change; `Delete()` always throws, because
+  deleting an Open exception would unblock its month without a review.
+- **`Accounting.RaiseFinanceExceptions`** writes as the system user and joins the caller's transaction
+  when one is open (same rule as `CreateJournalEntries`), so a raise made during a save commits or
+  rolls back with it.
+
 ## 3. Related (not `Save()` hooks)
 
 - **S1 batch dispatch — ✅** (`JournalEntryBatchEngine.ts`): `buildJournalEntryBatch(targetSystem, …)` is **GLOBAL** — nets ALL

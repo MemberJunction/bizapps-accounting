@@ -1,6 +1,13 @@
 export * from './generated/entity_subclasses'
 
 /**
+ * Typed Remote Operation bases, one per `MJ: Remote Operations` row, emitted by CodeGen from
+ * `metadata/remote-operations/`. Browser-safe contracts: the server bodies live in
+ * `@mj-biz-apps/accounting-core-entities-server`.
+ */
+export * from './generated/remote_operations'
+
+/**
  * This function is used to force the generated entities to be loaded. This is necessary because of the way that tree shaking works in webpack.
  * If you don't import this function and execute it, then the generated entities will not be included in the build. This is because the entities are not directly
  * referenced in this file, so webpack doesn't know that they are needed. By importing this function and calling it, webpack will include the generated entities

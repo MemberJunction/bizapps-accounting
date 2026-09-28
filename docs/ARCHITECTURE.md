@@ -141,6 +141,11 @@ balance **overall and per company** (AM-4), and writes atomically. Hooks on the 
   ERP call. `findStrandedJournalEntries` reports the entries both states hold; the scheduled
   action and the Dispatch status page surface it. Scheduled runs never retry on their own.
 - **W5** realized-FX auto-emit: retired — Orders/Payments computes + posts the FX line (§C1).
+- **Finance exceptions (golive #279):** `FinanceExceptions.ts` holds the logic behind
+  `Accounting.GetFinanceExceptionTypes` / `RaiseFinanceExceptions` / `ClearFinanceException`
+  (`FinanceExceptionOperations.ts`, over the CodeGen-emitted bases in `accounting-entities`);
+  `FinanceExceptionEntityServer.ts` makes the clear operation the only way a status changes. Orders
+  and sales resolve the operations by key through the ClassFactory, with no build-time dependency.
 
 ## 6. Connection map
 Hand-written, cross-layer files carry a top-of-file `CONNECTS TO:` block (CALLED BY / CALLS /
