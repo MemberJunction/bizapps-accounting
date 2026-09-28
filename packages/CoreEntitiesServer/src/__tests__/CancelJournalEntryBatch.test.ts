@@ -81,6 +81,16 @@ describe('cancelJournalEntryBatch — authorizing a cancel past approval', () =>
     expect(g.recordCancellation).not.toHaveBeenCalled();
   });
 
+  // The gate's refusals include a canceller with no linked Person to record the cancel (#212).
+  it('refuses a Failed batch the gate does not allow before the ERP lookup runs', async () => {
+    const { batch, provider } = world('Failed');
+    const g = gate({ allowed: false });
+    const lookup = lookupOf({ status: 'NotFound' });
+    await expect(cancelJournalEntryBatch(BATCH_ID, USER, provider, { reason: 'Wrong period', gate: g, lookup })).rejects.toThrow(/configured approver/);
+    expect(lookup).not.toHaveBeenCalled();
+    expect(batch.Cancel).not.toHaveBeenCalled();
+  });
+
   it('cancels for an allowed user and records the cancel on the Task inside the cancel', async () => {
     const { batch, provider } = world('Failed');
     const g = gate({ allowed: true });

@@ -115,6 +115,22 @@ describe('TasksAppApprovalGate — who may cancel past approval', () => {
     const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: null, hasTask: true, hasPerson: true }, world()));
     await expect(gate.assertMayCancelApproved(BATCH_ID, { ID: APPROVER_USER_ID } as UserInfo)).resolves.toBeUndefined();
   });
+
+  // #212: recordCancellation needs the canceller's Person, so the refusal comes before the cancel starts.
+  it('refuses an allowed user with no linked Person when the batch has an approval Task', async () => {
+    const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, hasTask: true, hasPerson: false }, world()));
+    await expect(gate.assertMayCancelApproved(BATCH_ID, cfo)).rejects.toThrow(/BATCH-0007: .*has no linked Person.*An administrator must link this user to a Person/);
+  });
+
+  it('lets an allowed user with no linked Person cancel a batch with no approval Task, which records nothing', async () => {
+    const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, hasTask: false, hasPerson: false }, world()));
+    await expect(gate.assertMayCancelApproved(BATCH_ID, cfo)).resolves.toBeUndefined();
+  });
+
+  it('tells a user who may not cancel only that, even when they also have no linked Person', async () => {
+    const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, hasTask: true, hasPerson: false }, world()));
+    await expect(gate.assertMayCancelApproved(BATCH_ID, { ID: OTHER_USER_ID } as UserInfo)).rejects.toThrow(/only the company's configured approver/);
+  });
 });
 
 describe('TasksAppApprovalGate.recordCancellation — the approval Task records the cancel', () => {
