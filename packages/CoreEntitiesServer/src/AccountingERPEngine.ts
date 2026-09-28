@@ -8,7 +8,7 @@
 import { IntegrationEngine } from '@memberjunction/integration-engine';
 import { IMetadataProvider, IRunViewProvider, LogError, LogStatus, UserInfo } from '@memberjunction/core';
 import { BaseSingleton, EscapeSQLString, MJGlobal } from '@memberjunction/global';
-import { ToCalendarDay } from '@mj-biz-apps/common-entities';
+import { ExternalFieldLimitEngine, ToCalendarDay } from '@mj-biz-apps/common-entities';
 import {
   ACCOUNTING_ENGINE_EXTENSION_ENTITY,
   ALL_ERP_SYNC_OBJECTS,
@@ -26,6 +26,7 @@ import type {
   mjBizAppsAccountingJournalEntryLineEntity,
 } from '@mj-biz-apps/accounting-entities';
 import { AccountingEngine } from './AccountingEngine.js';
+import { CheckErpJournalInput, HasErpFieldLimits } from './ErpFieldLimits.js';
 import {
   defaultAccountingVerbRunner,
   type AccountingVerbRunner,
@@ -185,13 +186,15 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
 
     let posted: ErpPostResult;
     try {
-      posted = await plugin.CreateJournalEntry({
+      const input: CreateERPJournalInput = {
         CompanyID: companyId,
         EntryDate: entryDateOf(batch),
         DocNumber: batch.JournalEntryBatchNumber,
         PrivateNote: `Accounting batch ${batch.JournalEntryBatchNumber}`,
         Lines: await erpLinesFor(summaryLines, target, user, provider),
-      }, user);
+      };
+      const tooLong = await this.checkFieldLengths(ci.IntegrationName, input, user, provider);
+      posted = tooLong ?? await plugin.CreateJournalEntry(input, user);
     } catch (e) {
       posted = { success: false, error: e instanceof Error ? e.message : String(e) };
     }
@@ -210,6 +213,23 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
       LogError(`AccountingERPEngine.PostJournalBatch: afterPost failed for batch ${batch.JournalEntryBatchNumber ?? batch.ID}, which the ERP has accepted; the post stands.`, null, e);
     }
     return posted;
+  }
+
+  /**
+   * A failed post naming every value too long for the ERP's fields, or null when all fit
+   * (bc-aidp-next-golive#280). Runs before the ERP is called, so an over-long value fails here
+   * with the field and limit named instead of at the ERP; nothing is truncated.
+   */
+  private async checkFieldLengths(
+    integrationName: string,
+    input: CreateERPJournalInput,
+    user: UserInfo,
+    provider: IMetadataProvider,
+  ): Promise<ErpPostResult | null> {
+    if (!HasErpFieldLimits(integrationName)) return null;
+    await ExternalFieldLimitEngine.Instance.Config(false, user, provider);
+    const problems = CheckErpJournalInput(integrationName, input);
+    return problems.length === 0 ? null : { success: false, error: `Not sent to ${integrationName}: ${problems.join(' ')}` };
   }
 
   /**

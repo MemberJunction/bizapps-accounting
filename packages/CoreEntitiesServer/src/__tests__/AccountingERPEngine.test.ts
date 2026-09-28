@@ -17,6 +17,7 @@ vi.mock('@memberjunction/actions', () => ({
 import { RegisterClass, MJGlobal } from '@memberjunction/global';
 import type { UserInfo } from '@memberjunction/core';
 import { BaseAccountingEngineExtension } from '@mj-biz-apps/accounting-engine-base';
+import { CheckExternalFieldLength, ExternalFieldLimitEngine, type ExternalFieldTarget } from '@mj-biz-apps/common-entities';
 import { AccountingEngine } from '../AccountingEngine.js';
 import { AccountingERPEngine } from '../AccountingERPEngine.js';
 import { BaseAccountingERPProvider } from '../BaseAccountingERPProvider.js';
@@ -63,6 +64,29 @@ class ThrowingAfterPostExt extends BaseAccountingEngineExtension {
   async AfterPostJournalBatch(): Promise<void> { extensionCalls.push('afterPost'); throw new Error('afterPost boom'); }
   async AfterPostJournalBatchFailure(): Promise<void> { extensionCalls.push('afterPostFailure'); }
 }
+
+// The limit engine reads connector metadata the fake provider does not serve; every post here
+// checks against Business Central's journal-line lengths instead (bc-aidp-next-golive#280).
+const BC_LIMIT_OBJECTS = [
+  { ID: 'o-lines', Name: 'journalLines', Integration: 'business-central' },
+  { ID: 'o-dims', Name: 'dimensions', Integration: 'business-central' },
+  { ID: 'o-vals', Name: 'dimensionValues', Integration: 'business-central' },
+];
+const BC_LIMIT_FIELDS = [
+  { IntegrationObjectID: 'o-lines', Name: 'accountNumber', Length: 20 },
+  { IntegrationObjectID: 'o-lines', Name: 'documentNumber', Length: 20 },
+  { IntegrationObjectID: 'o-lines', Name: 'description', Length: 100 },
+  { IntegrationObjectID: 'o-dims', Name: 'code', Length: 20 },
+  { IntegrationObjectID: 'o-vals', Name: 'code', Length: 20 },
+];
+
+beforeEach(() => {
+  vi.spyOn(ExternalFieldLimitEngine.Instance, 'Config').mockResolvedValue(undefined);
+  vi.spyOn(ExternalFieldLimitEngine.Instance, 'Check').mockImplementation(
+    (label: string, value: string | null | undefined, targets: ReadonlyArray<ExternalFieldTarget>) =>
+      CheckExternalFieldLength(label, value, targets, BC_LIMIT_OBJECTS, BC_LIMIT_FIELDS),
+  );
+});
 
 function providerWith(views: Record<string, unknown[]>) {
   return {
@@ -361,6 +385,30 @@ describe('AccountingERPEngine.PostJournalBatch', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/has no code/);
+    expect(runVerb).not.toHaveBeenCalled();
+  });
+
+  it('refuses to send a value longer than its Business Central field, naming the field and limit', async () => {
+    const runVerb = vi.fn(async () => ({ Success: true, ResultCode: 'SUCCESS' }));
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+    const p = providerWith({
+      ...dimensionTaggedViews(),
+      'MJ_BizApps_Accounting: Dimensions': [
+        { ID: DIM_VENTURE, Code: 'VENTURE' },
+        { ID: DIM_PRODUCT, Code: 'PRODUCT' },
+      ],
+      'MJ_BizApps_Accounting: Dimension Values': [
+        { ID: VAL_ACME, Code: 'ACME' },
+        { ID: VAL_WIDGET, Code: 'W'.repeat(21) },
+      ],
+    });
+
+    const result: ErpPostResult = await AccountingERPEngine.Instance.PostJournalBatch(
+      taggedBatch(), taggedLines(), user, p,
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Dimension value code is 21 characters; .* dimensionValues\.code allows 20/);
     expect(runVerb).not.toHaveBeenCalled();
   });
 });
