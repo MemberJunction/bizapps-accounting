@@ -220,14 +220,22 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
    * Record a cancel past approval on the batch's approval Task, as a comment by the cancelling user's
    * Person. The Task keeps its approved decision — the comment is what tells the approver the batch
    * they signed was cancelled, and why. A batch with no approval Task (approved without the tasks
-   * workflow) has nothing to annotate. Refuses when the user has no linked Person, because
-   * TaskComment requires one; the caller runs this inside the cancel's transaction, so the cancel
-   * rolls back with it rather than going unrecorded.
+   * workflow, so ApprovalTaskID is null) has nothing to annotate. Refuses when the stamped Task
+   * does not load, or the user has no linked Person, because TaskComment requires one; the caller
+   * runs this inside the cancel's transaction, so the cancel rolls back with it rather than going
+   * unrecorded.
+   *
+   * SECURITY (#223): the Task comes from the batch's stamped ApprovalTaskID, never the newest Task
+   * Link — Task Links are writable through the tasks-app surface, so a forged newer link would
+   * otherwise redirect the comment to another Task, or suppress it.
    */
   async recordCancellation(batchId: string, cancellation: RecordedCancellation, contextUser: UserInfo): Promise<void> {
-    const task = await this.resolveBatchTask(batchId, contextUser);
-    if (!task) return;
     const batch = await this.loadBatch(batchId, contextUser);
+    if (!batch.ApprovalTaskID) return;
+    const task = await this.provider.GetEntityObject<mjBizAppsTasksTaskEntity>('MJ_BizApps_Tasks: Tasks', contextUser);
+    if (!(await task.Load(batch.ApprovalTaskID))) {
+      throw new Error(`Batch ${batch.JournalEntryBatchNumber ?? batchId}: the cancel cannot be recorded because its approval Task ${batch.ApprovalTaskID} did not load.`);
+    }
     const personId = await this.resolvePersonIdForUser(contextUser);
     if (!personId) {
       throw new Error(
