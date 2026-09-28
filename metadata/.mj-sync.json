@@ -13,7 +13,11 @@
     "actions",
     "entity-actions",
     "entity-relationships",
-    "scheduled-jobs"
+    "scheduled-jobs",
+    "record-processes",
+    "ml-training-pipelines",
+    "ml-models",
+    "ml-model-scoring-bindings"
   ],
   "sqlLogging": {
     "enabled": true,
