@@ -271,7 +271,7 @@ BEGIN
     )
     BEGIN
         ROLLBACK TRANSACTION;
-        THROW 50009, 'JournalEntryBatch is locked (Status=Approved/Sent/Posted/Failed/Archived/Cancelled). Only Status / PostedAt / the Archive audit triple / ExternalJournalEntryBatchRef / ErrorMessage may evolve; the send stamp (SentAt / SentByUserID / SendAttemptCount) changes only on a send (50030); the Cancel audit and ERP check are written only by the update that cancels the batch (50032). CompanyID, PostingDate, SummaryJournalEntryID, the approval-task pointer, ApprovedAt / ApprovedByUserID and ApprovedContentHash freeze at approval; the summary pointer may clear only as an Approved or Failed batch is Cancelled.', 1;
+        THROW 50009, 'JournalEntryBatch is locked (Status=Approved/Sent/Posted/Failed/Archived/Cancelled). Only Status / SentAt / PostedAt / the Archive audit triple / ExternalJournalEntryBatchRef / ErrorMessage may evolve; the Cancel audit and ERP check are written only by the update that cancels the batch (50032). CompanyID, PostingDate, SummaryJournalEntryID, the approval-task pointer, ApprovedAt / ApprovedByUserID and ApprovedContentHash freeze at approval; the summary pointer may clear only as an Approved or Failed batch is Cancelled.', 1;
     END;
 END;
 GO
