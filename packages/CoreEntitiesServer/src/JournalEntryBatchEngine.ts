@@ -1204,9 +1204,27 @@ async function markBatchPosted(
   batch.PostedAt = new Date();
   batch.ErrorMessage = null;
   batch.Status = 'Posted';
-  if (!(await batch.Save())) throw new Error(`sendJournalEntryBatch: Sent→Posted failed: ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
+  if (!(await batch.Save())) return await failAcceptedBatch(batch, batch.LatestResult?.CompleteMessage ?? 'unknown');
   await markJournalEntriesGLPosted(batch, contextUser, p);
   return batch;
+}
+
+/**
+ * Sent → Failed for a batch the ERP HAS accepted whose Sent→Posted save failed. Thrown instead, it
+ * left the batch at Sent on a manual dispatch, where nothing retries, archives or reports it. Failed
+ * keeps the ERP reference and says the journal posted, so the retry's lookup records it Posted and
+ * an operator asked to confirm it unposted knows not to.
+ */
+async function failAcceptedBatch(batch: mjBizAppsAccountingJournalEntryBatchEntity, saveError: string): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
+  const doc = batch.JournalEntryBatchNumber ?? batch.ID;
+  const ref = batch.ExternalJournalEntryBatchRef ? ` as ${batch.ExternalJournalEntryBatchRef}` : '';
+  LogError(`sendJournalEntryBatch: the ERP accepted batch ${doc}${ref}, but Sent→Posted failed: ${saveError}`);
+  batch.PostedAt = null;
+  return await failBatch(
+    batch,
+    `The ERP accepted document ${doc}${ref}, but recording the batch Posted failed: ${saveError} ` +
+      'Retry it: the ERP lookup finds the posting and records it Posted without sending it again. Do not confirm it as not posted.',
+  );
 }
 
 /**
