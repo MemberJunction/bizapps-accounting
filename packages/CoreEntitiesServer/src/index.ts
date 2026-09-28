@@ -148,6 +148,14 @@ export {
   type GenerateReversalOutput,
 } from './GenerateReversalOperation.js';
 export {
+  GetJournalEntryStatesOperation,
+  LoadGetJournalEntryStatesOperation,
+  MAX_JOURNAL_ENTRY_STATE_IDS,
+  type GetJournalEntryStatesInput,
+  type GetJournalEntryStatesOutput,
+  type JournalEntryState,
+} from './GetJournalEntryStatesOperation.js';
+export {
   BuildJournalEntryBatchOperation,
   PreviewJournalEntryBatchOperation,
   RegenerateJournalEntryBatchOperation,
