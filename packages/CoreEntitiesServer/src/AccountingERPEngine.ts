@@ -26,7 +26,7 @@ import type {
   mjBizAppsAccountingJournalEntryLineEntity,
 } from '@mj-biz-apps/accounting-entities';
 import { AccountingEngine } from './AccountingEngine.js';
-import { CheckErpJournalInput, HasErpFieldLimits } from './ErpFieldLimits.js';
+import { CheckErpJournalInput, HasErpFieldLimits, LimitCheckUser } from './ErpFieldLimits.js';
 import {
   defaultAccountingVerbRunner,
   type AccountingVerbRunner,
@@ -227,7 +227,7 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     provider: IMetadataProvider,
   ): Promise<ErpPostResult | null> {
     if (!HasErpFieldLimits(integrationName)) return null;
-    await ExternalFieldLimitEngine.Instance.Config(false, user, provider);
+    await ExternalFieldLimitEngine.Instance.Config(false, LimitCheckUser(user), provider);
     const problems = CheckErpJournalInput(integrationName, input);
     return problems.length === 0 ? null : { success: false, error: `Not sent to ${integrationName}: ${problems.join(' ')}` };
   }

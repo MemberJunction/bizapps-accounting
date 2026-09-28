@@ -16,6 +16,7 @@
  */
 import { IMetadataProvider, IRunViewProvider, UserInfo } from '@memberjunction/core';
 import { EscapeSQLString } from '@memberjunction/global';
+import { UserCache } from '@memberjunction/generic-database-provider';
 import { ExternalFieldLimitEngine, type ExternalFieldTarget } from '@mj-biz-apps/common-entities';
 import type { CreateERPJournalInput } from './BaseAccountingERPProvider.js';
 
@@ -105,6 +106,15 @@ export async function LoadLimitedErpIntegrationNames(user: UserInfo, provider: I
 }
 
 /**
+ * The user the limit engine is configured with: the server's system user, falling back to `user`.
+ * Field lengths are catalog data, so whether they can be read must not depend on which user's
+ * save is being checked.
+ */
+export function LimitCheckUser(user: UserInfo): UserInfo {
+  return UserCache.Instance.GetSystemUser() ?? user;
+}
+
+/**
  * Messages for one value against every limited ERP integration in scope. Configures the limit
  * engine, so it can be called straight from an entity's ValidateAsync.
  */
@@ -117,6 +127,6 @@ export async function CheckErpFieldOnSave(
 ): Promise<string[]> {
   const integrations = await LoadLimitedErpIntegrationNames(user, provider, companyId);
   if (integrations.length === 0) return [];
-  await ExternalFieldLimitEngine.Instance.Config(false, user, provider);
+  await ExternalFieldLimitEngine.Instance.Config(false, LimitCheckUser(user), provider);
   return integrations.map((name) => CheckErpFieldValue(name, field, value)).filter((m): m is string => m !== null);
 }

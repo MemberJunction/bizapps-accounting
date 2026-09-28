@@ -39,6 +39,7 @@
     "@memberjunction/core-entities": "^6.1.0-edge.7",
     "@memberjunction/global": "^6.1.0-edge.7",
     "@memberjunction/sqlserver-dataprovider": "^6.1.0-edge.7",
+    "@memberjunction/generic-database-provider": "^6.1.0-edge.7",
     "@memberjunction/actions": "^6.1.0-edge.7",
     "@memberjunction/integration-engine": "^6.1.0-edge.7"
   },

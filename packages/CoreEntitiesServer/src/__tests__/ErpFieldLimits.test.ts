@@ -74,12 +74,12 @@ describe('CheckErpJournalInput', () => {
   it('names an account number over 20 characters, such as a BC account id', () => {
     const guid = '0f4fd84f-1111-2222-3333-444455556666';
     const problems = CheckErpJournalInput(BC, journal({ Lines: [{ accountNumber: guid, debit: 1 }] }));
-    expect(problems).toEqual([`GL account number is 36 characters; ${BC} journalLines.accountNumber allows 20. Shorten it before saving.`]);
+    expect(problems).toEqual([`GL account number is 36 characters; ${BC} journalLines.accountNumber allows 20. Shorten it.`]);
   });
 
   it('names a document number over 20 characters', () => {
     expect(CheckErpJournalInput(BC, journal({ DocNumber: 'B'.repeat(21) }))).toEqual([
-      `Batch number is 21 characters; ${BC} journalLines.documentNumber allows 20. Shorten it before saving.`,
+      `Batch number is 21 characters; ${BC} journalLines.documentNumber allows 20. Shorten it.`,
     ]);
   });
 
@@ -98,12 +98,12 @@ describe('CheckErpJournalInput', () => {
 
   it('names a line description over 100 characters', () => {
     const problems = CheckErpJournalInput(BC, journal({ Lines: [{ accountNumber: '40100', debit: 1, description: 'x'.repeat(101) }] }));
-    expect(problems).toEqual([`Journal line description is 101 characters; ${BC} journalLines.description allows 100. Shorten it before saving.`]);
+    expect(problems).toEqual([`Journal line description is 101 characters; ${BC} journalLines.description allows 100. Shorten it.`]);
   });
 
   it("reads BC's lengths from the connector's metadata whatever the company's integration is named", () => {
     const problems = CheckErpJournalInput('Microsoft Dynamics 365 Business Central', journal({ DocNumber: 'B'.repeat(21) }));
-    expect(problems).toEqual([`Batch number is 21 characters; ${BC} journalLines.documentNumber allows 20. Shorten it before saving.`]);
+    expect(problems).toEqual([`Batch number is 21 characters; ${BC} journalLines.documentNumber allows 20. Shorten it.`]);
   });
 
   it('checks nothing for an ERP it has no field table for', () => {
@@ -125,7 +125,7 @@ describe('CheckErpFieldOnSave', () => {
 
   it('checks a code when some company posts to Business Central', async () => {
     const messages = await CheckErpFieldOnSave('DimensionValueCode', 'V'.repeat(21), user, providerWith([BC, 'HubSpot']));
-    expect(messages).toEqual([`Dimension value code is 21 characters; ${BC} dimensionValues.code allows 20. Shorten it before saving.`]);
+    expect(messages).toEqual([`Dimension value code is 21 characters; ${BC} dimensionValues.code allows 20. Shorten it.`]);
   });
 
   it('checks nothing when no company posts to an ERP with limits', async () => {
