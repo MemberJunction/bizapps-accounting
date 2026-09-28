@@ -180,6 +180,8 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   the summary lines load before the `→Sent` save, so a failed load leaves the batch where it was.
   Lifecycle (`LEGAL_TRANSITIONS`): `Pending → Approved | Cancelled | Archived`, `Approved → Sent | Cancelled | Archived`,
   `Sent → Posted | Failed`, `Failed → Sent | Cancelled | Archived`; `Posted`, `Cancelled` and `Archived` are terminal.
+  The database enforces the same graph on raw SQL: `trg_JournalEntryBatch_Immutability` (50031) and, for `→ Sent`,
+  `trg_JournalEntryBatch_SendOnce` (50030).
 - **Batch recovery (#145).** *Retry* — `sendJournalEntryBatch` on a `Failed` batch reuses its approval.
   `Failed` does not prove the ERP rejected the journal: the post can succeed with the response lost, or
   succeed and then fail to save `Posted`. So every send, first or retry, looks the batch number up in

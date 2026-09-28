@@ -189,11 +189,11 @@ async function setStatus(ctx: Ctx, jeId: string, status: JEStatus): Promise<bool
 interface RawBatch { batchId: string; memberId: string; summaryId: string }
 
 /**
- * A batch past approval, built by raw SQL (#183): one locked member entry and a locked summary entry,
- * approved, then moved on to `status`. Raw SQL is the path the batch triggers exist to police, so this
+ * A batch built by raw SQL (#183): one locked member entry and a locked summary entry, left Pending or
+ * approved and then moved on to `status`. Raw SQL is the path the batch triggers exist to police, so this
  * sets up exactly what they see. Rows are company A's, so the teardown removes them.
  */
-async function rawBatchAt(ctx: Ctx, status: 'Approved' | 'Failed'): Promise<RawBatch> {
+async function rawBatchAt(ctx: Ctx, status: 'Pending' | 'Approved' | 'Failed'): Promise<RawBatch> {
   const { pool, companyA: co, user } = ctx;
   const summaryTypeId = await RequireJournalEntryTypeID('JournalEntryBatchSummary', user, Metadata.Provider);
   const batch: RawBatch = { batchId: randomUUID(), memberId: randomUUID(), summaryId: randomUUID() };
@@ -211,7 +211,9 @@ async function rawBatchAt(ctx: Ctx, status: 'Approved' | 'Failed'): Promise<RawB
     INSERT INTO ${SCHEMA}.JournalEntryLine (ID, JournalEntryID, LineNumber, GLAccountID, CreditAmount)
       VALUES (NEWID(), '${memberId}', 2, '${co.revGL}', 100), (NEWID(), '${summaryId}', 2, '${co.revGL}', 100);
     UPDATE ${SCHEMA}.JournalEntry SET Status='Batched', JournalEntryBatchID='${batchId}' WHERE ID IN ('${memberId}', '${summaryId}');
-    UPDATE ${SCHEMA}.JournalEntryBatch SET SummaryJournalEntryID='${summaryId}' WHERE ID='${batchId}';
+    UPDATE ${SCHEMA}.JournalEntryBatch SET SummaryJournalEntryID='${summaryId}' WHERE ID='${batchId}';`);
+  if (status === 'Pending') return batch;
+  await pool.request().query(`
     UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Approved', ApprovedAt=SYSDATETIMEOFFSET(), ApprovedByUserID='${user.ID}' WHERE ID='${batchId}';`);
   if (status === 'Failed') {
     await pool.request().query(`
@@ -386,6 +388,36 @@ async function main(): Promise<void> {
   await test('INV batch status — raw regression of a Failed batch to Pending → rejected (50031)', async () => {
     const b = await rawBatchAt(ctx, 'Failed');
     await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Pending' WHERE ID='${b.batchId}'`), 'status change refused');
+  });
+
+  // ─── INV: Posted and Failed are the outcomes of a send (#221) ──
+  for (const from of ['Pending', 'Approved'] as const) {
+    await test(`INV batch status — raw ${from} → Posted and ${from} → Failed, never sent → rejected (50031)`, async () => {
+      const b = await rawBatchAt(ctx, from);
+      await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Posted', PostedAt=SYSDATETIMEOFFSET() WHERE ID='${b.batchId}'`), 'status change refused');
+      await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Failed', ErrorMessage='x' WHERE ID='${b.batchId}'`), 'status change refused');
+    });
+  }
+
+  await test('INV batch status — raw Failed → Posted, without a retry → rejected (50031)', async () => {
+    const b = await rawBatchAt(ctx, 'Failed');
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Posted', PostedAt=SYSDATETIMEOFFSET() WHERE ID='${b.batchId}'`), 'status change refused');
+  });
+
+  await test('INV batch status — raw Pending → Sent, skipping approval → rejected (50030)', async () => {
+    const b = await rawBatchAt(ctx, 'Pending');
+    await expectThrow(() => pool.request().query(
+      `UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Sent', SentAt=SYSDATETIMEOFFSET(), SendAttemptCount=SendAttemptCount + 1 WHERE ID='${b.batchId}'`),
+      'send refused');
+  });
+
+  await test('INV batch status — allowed: Approved → Sent → Posted', async () => {
+    const b = await rawBatchAt(ctx, 'Approved');
+    await pool.request().query(`
+      UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Sent', SentAt=SYSDATETIMEOFFSET(), SendAttemptCount=SendAttemptCount + 1 WHERE ID='${b.batchId}';
+      UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Posted', PostedAt=SYSDATETIMEOFFSET() WHERE ID='${b.batchId}';`);
+    const res = await pool.request().query(`SELECT Status FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${b.batchId}'`);
+    assert((res.recordset[0] as { Status: string } | undefined)?.Status === 'Posted', 'batch should be Posted');
   });
 
   await test('INV batch audit — raw clear of a Failed batch\'s SentAt, or an attestation stamped without cancelling → rejected (50032)', async () => {
