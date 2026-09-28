@@ -782,7 +782,8 @@ and an `Approved`/`Failed` batch becomes `Cancelled` only with its summary point
 same update (#183). `Posted`, `Cancelled` and `Archived` are terminal, no batch returns to `Pending`,
 only a `Pending` batch is approved, a `Sent` batch is not archived, and a `Cancelled` batch's content, approval pair and
 cancel audit are frozen (50031 / 50009). The cancel audit and the ERP check are written only by the
-update that cancels the batch, and `SentAt` is never cleared once set (50032). The send stamp — `SentAt`,
+update that cancels the batch, and `SentAt` is never cleared once set (50032; `trg_JournalEntryBatch_SendOnce`
+fires first, so a caller clearing it sees 50030). The send stamp — `SentAt`,
 `SentByUserID`, `SendAttemptCount` — changes only on a send, which must start from `Approved` or `Failed`
 and advance the count by one (50030). `Archived` keeps the members
 locked for good. Summary is excluded from netting/count/sweep via its type's `IsJournalEntryBatchSummary` flag (the

@@ -50,7 +50,9 @@
 -- and Cancelled -> Sent, with ROLLBACK + THROW. SQL Server does not define the
 -- order of AFTER triggers; if that one fires first, the caller gets 3915 in
 -- place of 50030 and the refused send is not recognised as one. Section 4 sets
--- this trigger First for UPDATE.
+-- this trigger First for UPDATE. SQL Server drops that setting when this trigger
+-- itself is altered or dropped and recreated, so any later migration that does
+-- either must run sp_settriggerorder again. Recreating other triggers keeps it.
 --
 -- THROW with no ROLLBACK TRANSACTION first. The entity's save runs spUpdate
 -- inside INSERT-EXEC, where a ROLLBACK is itself an error (3915) and the caller
