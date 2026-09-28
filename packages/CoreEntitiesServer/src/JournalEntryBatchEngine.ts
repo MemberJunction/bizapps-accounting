@@ -661,12 +661,14 @@ async function setSummaryPointerAndTotals(
  * Resolve a local GL account to the identifier the ERP receives — the ACCOUNT NUMBER wire format
  * ("the ERP knows nothing of our IDs"). Precedence: the inline GLAccount.ExternalAccountID (when
  * its ExternalSystem matches or is unset) → the account's own Code (the account number — the
- * default; per-company charts mirror the ERP's numbers, so resolution never fails).
+ * default; per-company charts mirror the ERP's numbers). `requireExternalAccountID` drops the Code
+ * fallback and throws instead, for an ERP that knows accounts only by its own id (QuickBooks Online).
  * ⚠ OPEN with Amith: whether dispatch snapshots this resolution or re-resolves at post time
  * (the retired batch-line-item snapshot column has no successor yet).
  */
 export async function resolveExternalAccount(
   glAccountId: string, targetSystem: JournalEntryBatchTargetSystem, contextUser: UserInfo, provider: IMetadataProvider,
+  requireExternalAccountID = false,
 ): Promise<string> {
   const p = resolveProviders(provider);
   const glRes = await p.rv.RunView<{ Code: string; ExternalSystem: string | null; ExternalAccountID: string | null }>(
@@ -676,6 +678,13 @@ export async function resolveExternalAccount(
   const gl = glRes.Results?.[0];
   if (!gl) throw new Error(`resolveExternalAccount: GL account ${glAccountId} not found`);
   if (gl.ExternalAccountID && (!gl.ExternalSystem || gl.ExternalSystem === targetSystem)) return gl.ExternalAccountID;
+  // An ERP that knows accounts only by its own id would read the Code as an id, and could match another account.
+  if (requireExternalAccountID) {
+    throw new Error(
+      `GL account ${gl.Code} has no ${targetSystem} account ID. Before posting, set its External Account ID to the ${targetSystem} account's ID on the GL account's record, ` +
+      `with External System blank or ${targetSystem}; an ID recorded for another system is not used.`,
+    );
+  }
   return gl.Code; // the account number IS the wire identity
 }
 

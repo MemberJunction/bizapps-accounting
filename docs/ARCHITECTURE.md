@@ -127,8 +127,10 @@ balance **overall and per company** (AM-4), and writes atomically. Hooks on the 
   (#182): a Failed batch the ERP holds line for line is recorded `Posted` without a second send; a
   first send whose number is already there is refused. The operator's confirmation that the number
   has not posted is needed only when the lookup cannot settle it: a mismatch, a failed lookup, or an
-  ERP with no lookup. Business Central posting also refuses a journal that already holds unposted
-  lines. Its content is frozen like an Approved batch's, and the dispatch check compares it with the
+  ERP with no lookup. Business Central is looked up by document number on any date; QuickBooks
+  Online, whose verb cannot filter by number, among the posting date's journal entries. Business
+  Central posting also refuses a journal that already holds unposted lines, and QuickBooks Online
+  posting refuses a GL account with no QBO account id. Its content is frozen like an Approved batch's, and the dispatch check compares it with the
   `ApprovedContentHash` seal written at approval (#183). A `Failed` or `Approved` batch whose content
   is wrong is cancelled instead (`Accounting.CancelJournalEntryBatch`: the company's CFO or the
   batch's approver only, reason required and written to the approval Task), which releases its

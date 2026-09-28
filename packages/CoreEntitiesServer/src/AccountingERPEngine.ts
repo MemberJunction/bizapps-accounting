@@ -190,7 +190,7 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
         EntryDate: entryDateOf(batch),
         DocNumber: batch.JournalEntryBatchNumber,
         PrivateNote: `Accounting batch ${batch.JournalEntryBatchNumber}`,
-        Lines: await erpLinesFor(batch, summaryLines, target, user, provider),
+        Lines: await erpLinesFor(batch, summaryLines, target, plugin.RequiresExternalAccountID, user, provider),
       }, user);
     } catch (e) {
       posted = { success: false, error: e instanceof Error ? e.message : String(e) };
@@ -236,18 +236,19 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
       return { status: 'Error', error: `batch ${batch.ID} has no number to look up in the ERP.` };
     }
 
+    // The day the post sends: the verb writes EntryDate from the same Date's UTC parts.
+    const postingDate = ToCalendarDay(entryDateOf(batch));
+    if (!postingDate) return { status: 'Error', error: `batch ${batch.JournalEntryBatchNumber} has an unreadable posting date.` };
+
     try {
-      const found = await plugin.FindJournalEntry({ CompanyID: batch.CompanyID, DocNumber: batch.JournalEntryBatchNumber }, user);
+      const found = await plugin.FindJournalEntry({ CompanyID: batch.CompanyID, DocNumber: batch.JournalEntryBatchNumber, PostingDate: postingDate }, user);
       if (found.status !== 'Ok') return found;
       if (found.lines.length === 0) return { status: 'NotFound' };
       const tokens = postedBatchTokens(found.lines, batch.ID);
       if (tokens.own === 0 && tokens.others.length > 0) {
         return { status: 'Foreign', detail: `its lines carry the token of batch ${tokens.others.join(', ')}, not this batch's ${batch.ID}.` };
       }
-      const expected = await erpLinesFor(batch, summaryLines, target, user, provider);
-      // The day the post sends: the verb writes EntryDate from the same Date's UTC parts.
-      const postingDate = ToCalendarDay(entryDateOf(batch));
-      if (!postingDate) return { status: 'Error', error: `batch ${batch.JournalEntryBatchNumber} has an unreadable posting date.` };
+      const expected = await erpLinesFor(batch, summaryLines, target, plugin.RequiresExternalAccountID, user, provider);
       const detail = tokenMismatch(tokens, found.lines.length, batch.ID, postedJournalMismatch(expected, postingDate, found.lines));
       return detail
         ? { status: 'Mismatch', detail }
@@ -564,6 +565,7 @@ async function erpLinesFor(
   batch: mjBizAppsAccountingJournalEntryBatchEntity,
   summaryLines: mjBizAppsAccountingJournalEntryLineEntity[],
   target: JournalEntryBatchTargetSystem,
+  requireExternalAccountID: boolean,
   user: UserInfo,
   provider: IMetadataProvider,
 ): Promise<CreateERPJournalInput['Lines']> {
@@ -572,7 +574,7 @@ async function erpLinesFor(
   const dimensionsByLine = await resolveExternalDimensions(summaryLines.map((l) => l.ID), user, provider);
   const lines: CreateERPJournalInput['Lines'] = [];
   for (const line of summaryLines) {
-    const accountNumber = await resolveExternalAccount(line.GLAccountID, target, user, provider);
+    const accountNumber = await resolveExternalAccount(line.GLAccountID, target, user, provider, requireExternalAccountID);
     lines.push({
       accountNumber,
       debit: line.DebitAmount ?? undefined,
@@ -588,7 +590,8 @@ async function erpLinesFor(
  * The batch's ID, stamped on every line it sends (#206). The batch number restarts at BATCH-000001 in
  * every database, so another environment's journal can sit under the same number in the same ERP
  * company; the ID is a GUID no other database issues. Business Central carries a journal line's
- * description onto its G/L entries, and has no other free-text field the connector writes.
+ * description onto its G/L entries, and has no other free-text field the connector writes; QuickBooks
+ * Online keeps each journal line's description as sent.
  */
 function batchToken(batchId: string): string {
   return `JEB ${batchId.toLowerCase()}`;
