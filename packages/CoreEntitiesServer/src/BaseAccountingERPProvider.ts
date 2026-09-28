@@ -3,7 +3,7 @@
  * The base calls MJ verbs; subclasses only override what is actually different.
  */
 import { RegisterClass, RequiresSubclass } from '@memberjunction/global';
-import { UserInfo } from '@memberjunction/core';
+import { LogError, LogStatus, UserInfo } from '@memberjunction/core';
 import { ToCalendarDay } from '@mj-biz-apps/common-entities';
 import type { AccountingVerbResult, AccountingVerbRunner } from './AccountingVerbRunner.js';
 import type { ErpPostResult, ExternalDimensionRef } from './JournalEntryBatchEngine.js';
@@ -25,6 +25,19 @@ export interface CreateERPJournalInput {
   DocNumber?: string;
   PrivateNote?: string;
   Lines: ERPJournalLine[];
+  /** How to find the posting if the ERP renumbers it (#205). */
+  RenumberedSearch?: RenumberedJournalSearch;
+}
+
+/**
+ * What still identifies a posting after the ERP gave it a document number of its own (#205): the
+ * batch token every line carries, on one account the batch sends to. The posting date narrows it.
+ */
+export interface RenumberedJournalSearch {
+  /** The batch token, as it appears in each line's description. */
+  Token: string;
+  /** An account the batch sends a line to, which narrows the search. */
+  AccountNumber: string;
 }
 
 export interface FindERPJournalInput {
@@ -33,6 +46,8 @@ export interface FindERPJournalInput {
   DocNumber: string;
   /** `YYYY-MM-DD`: the batch's posting date. A provider that can look up by number alone ignores it. */
   PostingDate: string;
+  /** Searched, on `PostingDate`, when nothing has posted under `DocNumber`. */
+  RenumberedSearch?: RenumberedJournalSearch;
 }
 
 /** One posted ledger line, in the terms `CreateERPJournalInput.Lines` is sent in. */
@@ -50,7 +65,8 @@ export interface ERPPostedJournalLine {
  * What the ERP holds under a document number (#182).
  *   · `Unavailable` — this ERP offers no lookup.
  *   · `Error`       — the lookup ran and could not answer.
- *   · `Ok`          — the lines posted under the number; empty when nothing has posted.
+ *   · `Ok`          — the lines posted under the number; empty when nothing has posted. The ref is
+ *                     the document they posted under, the ERP's own number when it renumbered (#205).
  */
 export type FindERPJournalResult =
   | { status: 'Unavailable' }
@@ -121,20 +137,107 @@ export class BusinessCentralERPProvider extends BaseAccountingERPProvider {
   }
 
   /**
+   * Posts the journal, then reads it back for the document number BC posted it under: a journal batch
+   * with a Posting No. Series renumbers the document at posting (#205). The readback never turns the
+   * post into a failure, since BC has accepted the journal.
+   */
+  async CreateJournalEntry(input: CreateERPJournalInput, user: UserInfo): Promise<ErpPostResult> {
+    const posted = await super.CreateJournalEntry(input, user);
+    const sentAs = posted.externalJournalEntryBatchRef;
+    if (!posted.success || !sentAs || !input.RenumberedSearch) return posted;
+    try {
+      const found = await this.FindJournalEntry({
+        CompanyID: input.CompanyID,
+        DocNumber: sentAs,
+        // The day the post just sent, from the same UTC parts.
+        PostingDate: input.EntryDate.toISOString().slice(0, 10),
+        RenumberedSearch: input.RenumberedSearch,
+      }, user);
+      if (found.status === 'Ok' && found.lines.length > 0) return { ...posted, externalJournalEntryBatchRef: found.externalJournalEntryBatchRef };
+      const why = found.status === 'Error' ? found.error : `no G/L entries carry document ${sentAs} or token ${input.RenumberedSearch.Token}.`;
+      LogError(`BusinessCentralERPProvider: journal ${sentAs} posted, but reading it back failed: ${why} It is recorded under ${sentAs}.`);
+    } catch (e) {
+      LogError(`BusinessCentralERPProvider: journal ${sentAs} posted, but reading it back threw. It is recorded under ${sentAs}.`, null, e);
+    }
+    return posted;
+  }
+
+  /**
    * The G/L entries posted under the document number. Deliberately not filtered by date: a posting
    * under this batch's number on another date still carries this batch's number, and the engine
    * reports it as a mismatch instead of letting the send post a second one.
+   *
+   * When nothing has posted under the number, the posting may carry a number BC assigned (#205). It is
+   * then found by the batch token on the posting date, and read in full under BC's number. That
+   * search is filtered by date: a renumbered posting on another date is not found.
    */
   async FindJournalEntry(input: FindERPJournalInput, user: UserInfo): Promise<FindERPJournalResult> {
-    // The verb writes the number into an OData string literal without escaping it.
-    if (input.DocNumber.includes("'")) {
-      return { status: 'Error', error: `document number ${input.DocNumber} cannot be looked up: it contains a quote.` };
+    const byNumber = await this.entriesUnderDocument(input.CompanyID, input.DocNumber, user);
+    if (byNumber.status !== 'Ok' || byNumber.lines.length > 0 || !input.RenumberedSearch) return byNumber;
+    const renumbered = await this.renumberedDocument(input.CompanyID, input.PostingDate, input.RenumberedSearch, user);
+    if (renumbered.status === 'Error') return renumbered;
+    if (renumbered.status === 'None') return byNumber;
+    LogStatus(`BusinessCentralERPProvider: document ${input.DocNumber} posted in BC as ${renumbered.docNumber}; its journal batch renumbers at posting.`);
+    return this.entriesUnderDocument(input.CompanyID, renumbered.docNumber, user);
+  }
+
+  /**
+   * The document BC posted the batch's token under, on the posting date and account. More than one
+   * document carrying the token is an error, not a guess.
+   */
+  private async renumberedDocument(
+    companyId: string, postingDate: string, search: RenumberedJournalSearch, user: UserInfo,
+  ): Promise<{ status: 'Error'; error: string } | { status: 'None' } | { status: 'Found'; docNumber: string }> {
+    // The verb writes the account number into an OData string literal without escaping it.
+    if (search.AccountNumber.includes("'")) {
+      return { status: 'Error', error: `account ${search.AccountNumber} cannot be searched: it contains a quote.` };
     }
+    const read = await this.readGLEntries(companyId, user, {
+      StartDate: postingDate, EndDate: postingDate, AccountNumber: search.AccountNumber,
+    }, `account ${search.AccountNumber} on ${postingDate}`);
+    if (read.status === 'Error') return read;
+    const token = search.Token.toLowerCase();
+    const docNumbers = new Set<string>();
+    for (const entry of read.entries) {
+      const row = entry as Record<string, unknown>;
+      if (typeof row.description !== 'string' || !row.description.toLowerCase().includes(token)) continue;
+      if (typeof row.documentNumber !== 'string' || !row.documentNumber) {
+        return { status: 'Error', error: `a G/L entry carrying token ${search.Token} has no document number.` };
+      }
+      docNumbers.add(row.documentNumber);
+    }
+    if (docNumbers.size === 0) return { status: 'None' };
+    if (docNumbers.size > 1) {
+      return { status: 'Error', error: `token ${search.Token} is on G/L entries of ${docNumbers.size} documents: ${[...docNumbers].join(', ')}.` };
+    }
+    return { status: 'Found', docNumber: [...docNumbers][0] };
+  }
+
+  private async entriesUnderDocument(companyId: string, docNumber: string, user: UserInfo): Promise<FindERPJournalResult> {
+    // The verb writes the number into an OData string literal without escaping it.
+    if (docNumber.includes("'")) {
+      return { status: 'Error', error: `document number ${docNumber} cannot be looked up: it contains a quote.` };
+    }
+    const read = await this.readGLEntries(companyId, user, { DocumentNumber: docNumber }, `document ${docNumber}`);
+    if (read.status === 'Error') return read;
+    const lines: ERPPostedJournalLine[] = [];
+    for (const entry of read.entries) {
+      const line = parseBCGLEntry(entry);
+      if (!line) return { status: 'Error', error: `GetGLEntries returned an entry for document ${docNumber} without an account, date or amounts.` };
+      lines.push(line);
+    }
+    return { status: 'Ok', lines, externalJournalEntryBatchRef: docNumber };
+  }
+
+  /** The raw GetGLEntries rows for `filter`. `subject` names what was read, for the errors. */
+  private async readGLEntries(
+    companyId: string, user: UserInfo, filter: Record<string, string>, subject: string,
+  ): Promise<{ status: 'Error'; error: string } | { status: 'Ok'; entries: unknown[] }> {
     const result = await this.runVerb({
       Verb: 'GetGLEntries',
-      CompanyID: input.CompanyID,
+      CompanyID: companyId,
       User: user,
-      Params: { DocumentNumber: input.DocNumber, MaxResults: BC_LOOKUP_MAX_RESULTS },
+      Params: { ...filter, MaxResults: BC_LOOKUP_MAX_RESULTS },
     });
     if (!result.Success) {
       return { status: 'Error', error: result.Message ?? result.ResultCode ?? 'GetGLEntries failed.' };
@@ -144,15 +247,9 @@ export class BusinessCentralERPProvider extends BaseAccountingERPProvider {
       return { status: 'Error', error: 'GetGLEntries returned no GLEntries output.' };
     }
     if (entries.length >= BC_LOOKUP_MAX_RESULTS) {
-      return { status: 'Error', error: `document ${input.DocNumber} has ${BC_LOOKUP_MAX_RESULTS} or more G/L entries, more than one lookup reads.` };
+      return { status: 'Error', error: `${subject} has ${BC_LOOKUP_MAX_RESULTS} or more G/L entries, more than one lookup reads.` };
     }
-    const lines: ERPPostedJournalLine[] = [];
-    for (const entry of entries) {
-      const line = parseBCGLEntry(entry);
-      if (!line) return { status: 'Error', error: `GetGLEntries returned an entry for document ${input.DocNumber} without an account, date or amounts.` };
-      lines.push(line);
-    }
-    return { status: 'Ok', lines, externalJournalEntryBatchRef: input.DocNumber };
+    return { status: 'Ok', entries };
   }
 
   /**

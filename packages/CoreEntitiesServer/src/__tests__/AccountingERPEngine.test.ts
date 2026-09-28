@@ -863,6 +863,103 @@ describe('QuickBooks Online — FindPostedJournalBatch', () => {
   });
 });
 
+// ── #205: a BC journal batch with a Posting No. Series renumbers the document at posting ────────
+
+const BC_NUMBER = 'GJ-000123';
+
+/**
+ * A runVerb for a BC that posted the batch as BC_NUMBER: nothing under the batch number, the
+ * batch's entries under BC's own, and those same entries on the posting date's search.
+ */
+function renumberingVerb(entries: unknown[]) {
+  return vi.fn(async (call: { Verb: string; Params: Record<string, unknown> }) => {
+    if (call.Verb === 'CreateJournalEntry') {
+      return { Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'DocNumber', Value: call.Params.DocNumber, Type: 'Output' }] };
+    }
+    const byDate = call.Params.StartDate !== undefined;
+    const value = byDate || call.Params.DocumentNumber === BC_NUMBER ? entries : [];
+    return { Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'GLEntries', Value: value, Type: 'Output' }] };
+  });
+}
+
+function renumbered(entry: ReturnType<typeof glEntry>) {
+  return { ...entry, documentNumber: BC_NUMBER };
+}
+
+describe('Business Central renumbering a posting', () => {
+  beforeEach(() => {
+    vi.spyOn(AccountingEngine.Instance, 'Config').mockResolvedValue();
+  });
+
+  it('finds the batch under the number BC gave it, by its token on the posting date', async () => {
+    const runVerb = renumberingVerb([renumbered(glEntry(100, 0)), renumbered(glEntry(0, 100))]);
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+
+    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes()));
+
+    expect(result).toEqual({ status: 'Found', externalJournalEntryBatchRef: BC_NUMBER });
+    const params = runVerb.mock.calls.map((c) => (c[0] as { Params: Record<string, unknown> }).Params);
+    expect(params).toEqual([
+      { DocumentNumber: 'BATCH-1', MaxResults: 5000 },
+      { StartDate: '2026-08-01', EndDate: '2026-08-01', AccountNumber: '1000', MaxResults: 5000 },
+      { DocumentNumber: BC_NUMBER, MaxResults: 5000 },
+    ]);
+  });
+
+  it('reports nothing posted when the posting date holds only other batches\' entries', async () => {
+    const other = `Netted [${OTHER_TOKEN}]`;
+    AccountingERPEngine.Instance.UseSeams({
+      runVerb: renumberingVerb([renumbered(glEntry(100, 0, undefined, other)), renumbered(glEntry(0, 100, undefined, other))]),
+    });
+
+    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes()));
+
+    expect(result).toEqual({ status: 'NotFound' });
+  });
+
+  it('reports an error, never a guess, when the token is on entries of two documents', async () => {
+    AccountingERPEngine.Instance.UseSeams({
+      runVerb: renumberingVerb([renumbered(glEntry(100, 0)), { ...glEntry(0, 100), documentNumber: 'GJ-000124' }]),
+    });
+
+    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes()));
+
+    expect(result).toEqual({ status: 'Error', error: `token ${OWN_TOKEN} is on G/L entries of 2 documents: ${BC_NUMBER}, GJ-000124.` });
+  });
+
+  it('reports an error, never nothing posted, when the posting date\'s search fails', async () => {
+    AccountingERPEngine.Instance.UseSeams({
+      runVerb: vi.fn(async (call: { Params: Record<string, unknown> }) => call.Params.StartDate !== undefined
+        ? { Success: false, ResultCode: 'ERROR', Message: 'BC 503' }
+        : { Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'GLEntries', Value: [], Type: 'Output' }] }),
+    });
+
+    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes()));
+
+    expect(result).toEqual({ status: 'Error', error: 'BC 503' });
+  });
+
+  it('records a post under the number BC gave it', async () => {
+    AccountingERPEngine.Instance.UseSeams({ runVerb: renumberingVerb([renumbered(glEntry(100, 0)), renumbered(glEntry(0, 100))]) });
+
+    const result = await AccountingERPEngine.Instance.PostJournalBatch(taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes()));
+
+    expect(result).toEqual({ success: true, externalJournalEntryBatchRef: BC_NUMBER });
+  });
+
+  it('keeps a post a success, under the number it was sent with, when reading it back fails', async () => {
+    AccountingERPEngine.Instance.UseSeams({
+      runVerb: vi.fn(async (call: { Verb: string; Params: Record<string, unknown> }) => call.Verb === 'CreateJournalEntry'
+        ? { Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'DocNumber', Value: call.Params.DocNumber, Type: 'Output' }] }
+        : { Success: false, ResultCode: 'ERROR', Message: 'BC 503' }),
+    });
+
+    const result = await AccountingERPEngine.Instance.PostJournalBatch(taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes()));
+
+    expect(result).toEqual({ success: true, externalJournalEntryBatchRef: 'BATCH-1' });
+  });
+});
+
 // ── Real-schema filters and connector-named integrations ─────────────────────────────────────
 
 /**
@@ -922,7 +1019,8 @@ describe('AccountingERPEngine against the real entity-map schema', () => {
     const result = await AccountingERPEngine.Instance.PostJournalBatch(taggedBatch(), taggedLines(), user, providerWith(views));
 
     expect(result.success).toBe(true);
-    expect(runVerb).toHaveBeenCalledTimes(1);
+    // The post, then the Business Central provider's readback of it (#205).
+    expect(runVerb.mock.calls.map((c) => (c as unknown as [{ Verb: string }])[0].Verb)).toEqual(['CreateJournalEntry', 'GetGLEntries']);
   });
 });
 

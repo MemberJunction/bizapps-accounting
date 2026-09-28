@@ -208,7 +208,11 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   Every line the batch sends carries its token, `[JEB <batch ID>]`, after the line's description
   (#206): batch numbers restart at `BATCH-000001` in every database, so another environment's journal
   can sit under the same number in the same ERP company, and the batch ID is what tells them apart.
-  On a `Failed` retry, a posting whose every line carries the token and matches the batch line for
+  A Business Central journal batch with a Posting No. Series gives the posting a number of its own
+  (#205). When nothing has posted under the batch number, the lookup searches the posting date's
+  entries on the batch's first account for the token, and reads the posting under BC's number; a
+  post reads itself back the same way and records BC's number as the batch's reference. That search
+  covers the posting date only. On a `Failed` retry, a posting whose every line carries the token and matches the batch line for
   line (account, debit, credit, posting date) is recorded `Posted` with no second send. On a first
   send such a match means the database was copied from one that sent the batch: the send is refused
   and the batch stays `Approved`. A posting whose lines carry only other batches' tokens is another

@@ -34,6 +34,7 @@ import {
   BaseAccountingERPProvider,
   type CreateERPJournalInput,
   type ERPPostedJournalLine,
+  type RenumberedJournalSearch,
 } from './BaseAccountingERPProvider.js';
 import {
   resolveExternalAccount,
@@ -185,12 +186,14 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
 
     let posted: ErpPostResult;
     try {
+      const lines = await erpLinesFor(batch, summaryLines, target, plugin.RequiresExternalAccountID, user, provider);
       posted = await plugin.CreateJournalEntry({
         CompanyID: companyId,
         EntryDate: entryDateOf(batch),
         DocNumber: batch.JournalEntryBatchNumber,
         PrivateNote: `Accounting batch ${batch.JournalEntryBatchNumber}`,
-        Lines: await erpLinesFor(batch, summaryLines, target, plugin.RequiresExternalAccountID, user, provider),
+        Lines: lines,
+        RenumberedSearch: renumberedSearchFor(batch, lines),
       }, user);
     } catch (e) {
       posted = { success: false, error: e instanceof Error ? e.message : String(e) };
@@ -241,14 +244,19 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     if (!postingDate) return { status: 'Error', error: `batch ${batch.JournalEntryBatchNumber} has an unreadable posting date.` };
 
     try {
-      const found = await plugin.FindJournalEntry({ CompanyID: batch.CompanyID, DocNumber: batch.JournalEntryBatchNumber, PostingDate: postingDate }, user);
+      const expected = await erpLinesFor(batch, summaryLines, target, plugin.RequiresExternalAccountID, user, provider);
+      const found = await plugin.FindJournalEntry({
+        CompanyID: batch.CompanyID,
+        DocNumber: batch.JournalEntryBatchNumber,
+        PostingDate: postingDate,
+        RenumberedSearch: renumberedSearchFor(batch, expected),
+      }, user);
       if (found.status !== 'Ok') return found;
       if (found.lines.length === 0) return { status: 'NotFound' };
       const tokens = postedBatchTokens(found.lines, batch.ID);
       if (tokens.own === 0 && tokens.others.length > 0) {
         return { status: 'Foreign', detail: `its lines carry the token of batch ${tokens.others.join(', ')}, not this batch's ${batch.ID}.` };
       }
-      const expected = await erpLinesFor(batch, summaryLines, target, plugin.RequiresExternalAccountID, user, provider);
       const detail = tokenMismatch(tokens, found.lines.length, batch.ID, postedJournalMismatch(expected, postingDate, found.lines));
       return detail
         ? { status: 'Mismatch', detail }
@@ -610,6 +618,15 @@ async function erpLinesFor(
  */
 function batchToken(batchId: string): string {
   return `JEB ${batchId.toLowerCase()}`;
+}
+
+/**
+ * What finds the batch's posting if the ERP gave it a document number of its own (#205): its token,
+ * on the account of its first line. Undefined when there is no line to search on.
+ */
+function renumberedSearchFor(batch: mjBizAppsAccountingJournalEntryBatchEntity, lines: CreateERPJournalInput['Lines']): RenumberedJournalSearch | undefined {
+  const accountNumber = lines[0]?.accountNumber;
+  return accountNumber ? { Token: batchToken(batch.ID), AccountNumber: accountNumber } : undefined;
 }
 
 const BATCH_TOKEN_PATTERN = /\bJEB ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/i;
