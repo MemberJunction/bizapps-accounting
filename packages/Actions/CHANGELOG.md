@@ -1,5 +1,16 @@
 # @mj-biz-apps/accounting-actions
 
+## 0.16.0
+
+### Patch Changes
+
+- Updated dependencies [23a2473]
+- Updated dependencies [61da309]
+- Updated dependencies [12629ee]
+- Updated dependencies [abc01e3]
+- Updated dependencies [c595e57]
+  - @mj-biz-apps/accounting-core-entities-server@0.16.0
+
 ## 0.15.0
 
 ### Patch Changes
