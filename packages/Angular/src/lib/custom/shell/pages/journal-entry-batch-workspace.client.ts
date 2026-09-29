@@ -54,8 +54,12 @@ export interface AffectedAccount {
 export interface BatchPreview {
   Candidates: BatchPreviewEntry[];
   AffectedAccounts: AffectedAccount[];
+  /** Netted — what the batch will carry. */
   TotalDebits: number;
   TotalCredits: number;
+  /** Before netting — every line of every included entry. */
+  GrossDebits: number;
+  GrossCredits: number;
   PerCompany: Array<{ CompanyID: string; Debit: number; Credit: number }>;
   OutOfOrderSkipCount: number;
 }
