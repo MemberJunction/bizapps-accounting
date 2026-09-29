@@ -12,12 +12,17 @@ import type { ErpPostResult, ExternalDimensionRef } from './JournalEntryBatchEng
 export interface ERPJournalLine {
   /** The ERP's identity for the account: the GL account's `ExternalAccountID`, or its `Code`. */
   accountNumber: string;
+  /** Set, to the same value as `accountNumber`, when that identity is the GL account's `ExternalAccountID`. */
+  accountId?: string;
   debit?: number;
   credit?: number;
   description?: string;
   /** Dimension tags in ERP wire codes. Providers that cannot carry them ignore the field. */
   dimensions?: ExternalDimensionRef[];
 }
+
+/** One journal line as a CreateJournalEntry verb reads it: the account by number, by id, or both. */
+export type ERPVerbJournalLine = Omit<ERPJournalLine, 'accountNumber'> & { accountNumber?: string };
 
 export interface CreateERPJournalInput {
   CompanyID: string;
@@ -38,6 +43,8 @@ export interface FindERPJournalInput {
 /** One posted ledger line, in the terms `CreateERPJournalInput.Lines` is sent in. */
 export interface ERPPostedJournalLine {
   accountNumber: string;
+  /** The ERP's own id for the account, when the ERP returns one beside the number (Business Central). */
+  accountId?: string;
   /** `YYYY-MM-DD`. */
   postingDate: string;
   debit: number;
@@ -100,7 +107,7 @@ export abstract class BaseAccountingERPProvider {
   }
 
   /** The lines in the shape this ERP's CreateJournalEntry verb reads. */
-  protected verbLines(lines: ERPJournalLine[]): ERPJournalLine[] {
+  protected verbLines(lines: ERPJournalLine[]): ERPVerbJournalLine[] {
     return lines;
   }
 
@@ -153,6 +160,15 @@ export class BusinessCentralERPProvider extends BaseAccountingERPProvider {
       lines.push(line);
     }
     return { status: 'Ok', lines, externalJournalEntryBatchRef: input.DocNumber };
+  }
+
+  /**
+   * An account known by its BC id goes as `accountId` alone (bc-aidp-next-golive#282). BC's
+   * `accountNumber` is the account number, 20 characters at most, and the verb sends `accountNumber`
+   * whenever it is present, so the id must not travel there.
+   */
+  protected verbLines(lines: ERPJournalLine[]): ERPVerbJournalLine[] {
+    return lines.map(({ accountNumber, ...line }) => (line.accountId ? line : { ...line, accountNumber }));
   }
 
   /**
@@ -254,7 +270,8 @@ function parseBCGLEntry(entry: unknown): ERPPostedJournalLine | null {
   if (typeof row.accountNumber !== 'string' || !postingDate) return null;
   if (typeof row.debitAmount !== 'number' || typeof row.creditAmount !== 'number') return null;
   const description = typeof row.description === 'string' ? row.description : '';
-  return { accountNumber: row.accountNumber, postingDate, debit: row.debitAmount, credit: row.creditAmount, description };
+  const accountId = typeof row.accountId === 'string' && row.accountId ? row.accountId : undefined;
+  return { accountNumber: row.accountNumber, accountId, postingDate, debit: row.debitAmount, credit: row.creditAmount, description };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

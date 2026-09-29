@@ -36,7 +36,7 @@ import {
   type ERPPostedJournalLine,
 } from './BaseAccountingERPProvider.js';
 import {
-  resolveExternalAccount,
+  resolveExternalAccountRef,
   resolveExternalDimensions,
   type ErpJournalLookupResult,
   type ErpPostResult,
@@ -589,9 +589,9 @@ async function erpLinesFor(
   const dimensionsByLine = await resolveExternalDimensions(summaryLines.map((l) => l.ID), user, provider);
   const lines: CreateERPJournalInput['Lines'] = [];
   for (const line of summaryLines) {
-    const accountNumber = await resolveExternalAccount(line.GLAccountID, target, user, provider, requireExternalAccountID);
+    const account = await resolveExternalAccountRef(line.GLAccountID, target, user, provider, requireExternalAccountID);
     lines.push({
-      accountNumber,
+      ...account,
       debit: line.DebitAmount ?? undefined,
       credit: line.CreditAmount ?? undefined,
       description: withBatchToken(line.Description, batch.ID),
@@ -663,8 +663,12 @@ function postedJournalMismatch(expected: CreateERPJournalInput['Lines'], posting
   if (otherDates.length > 0) {
     return `it posted on ${otherDates.join(', ')}; the batch's posting date is ${postingDate}.`;
   }
-  const want = lineCounts(expected.map((l) => lineKey(l.accountNumber, l.debit ?? 0, l.credit ?? 0)));
-  const have = lineCounts(posted.map((l) => lineKey(l.accountNumber, l.debit, l.credit)));
+  // A line sent by the ERP's account id matches on that id when the ERP returns one: BC's posted entry
+  // carries BC's own number, which the batch never saw (bc-aidp-next-golive#282). Ids compare without case.
+  const sentIds = new Set(expected.flatMap((l) => (l.accountId ? [l.accountId.toLowerCase()] : [])));
+  const postedAccount = (l: ERPPostedJournalLine) => (l.accountId && sentIds.has(l.accountId.toLowerCase()) ? l.accountId.toLowerCase() : l.accountNumber);
+  const want = lineCounts(expected.map((l) => lineKey(l.accountId?.toLowerCase() ?? l.accountNumber, l.debit ?? 0, l.credit ?? 0)));
+  const have = lineCounts(posted.map((l) => lineKey(postedAccount(l), l.debit, l.credit)));
   const differing = [...new Set([...want.keys(), ...have.keys()])].filter((k) => want.get(k) !== have.get(k));
   if (differing.length === 0) return null;
   const shown = differing.slice(0, 5).map((k) => `${k} (batch ${want.get(k) ?? 0}, ERP ${have.get(k) ?? 0})`);

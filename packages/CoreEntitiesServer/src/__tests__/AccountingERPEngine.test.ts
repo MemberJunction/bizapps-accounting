@@ -645,6 +645,69 @@ describe('AccountingERPEngine.FindPostedJournalBatch', () => {
   });
 });
 
+// ── bc-aidp-next-golive#282: Business Central accounts pulled from BC carry BC's account id ──
+
+/** BC's own id for an account, as the BC GL pull stores it in ExternalAccountID (SQL Server returns it upper case). */
+const BC_ACCOUNT_ID = '9A1B2C3D-0000-0000-0000-000000000282';
+
+/** Tagged-post views whose GL account came from the BC pull: BC's number as the Code, BC's id as the ExternalAccountID. */
+function bcPulledAccountViews(): Record<string, unknown[]> {
+  return taggedViewsWithCodes({
+    'MJ_BizApps_Accounting: GL Accounts': [{ Code: '41507', ExternalSystem: 'BusinessCentral', ExternalAccountID: BC_ACCOUNT_ID }],
+  });
+}
+
+/** A BC G/L entry for the pulled account, as GetGLEntries maps it: BC returns both the id (lower case) and the number. */
+function bcPulledGLEntry(debitAmount: number, creditAmount: number, accountId = BC_ACCOUNT_ID.toLowerCase()) {
+  return { ...glEntry(debitAmount, creditAmount), accountId, accountNumber: '41507' };
+}
+
+describe('Business Central — accounts that carry BC\'s account id', () => {
+  beforeEach(() => {
+    vi.spyOn(AccountingEngine.Instance, 'Config').mockResolvedValue();
+  });
+
+  // BC's accountNumber is the account number (20 characters at most); the id goes in accountId.
+  it('sends a pulled account\'s BC id as accountId, and no accountNumber', async () => {
+    const runVerb = vi.fn(async () => ({ Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'DocNumber', Value: 'BATCH-1', Type: 'Output' }] }));
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+
+    await AccountingERPEngine.Instance.PostJournalBatch(taggedBatch(), taggedLines(), user, providerWith(bcPulledAccountViews()));
+
+    const sent = postedLines(runVerb) as Array<Record<string, unknown>>;
+    expect(sent.map((l) => l.accountId)).toEqual([BC_ACCOUNT_ID, BC_ACCOUNT_ID]);
+    expect(sent.every((l) => !('accountNumber' in l))).toBe(true);
+  });
+
+  it('sends an account with no BC id by its Code as accountNumber, as before', async () => {
+    const runVerb = vi.fn(async () => ({ Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'DocNumber', Value: 'BATCH-1', Type: 'Output' }] }));
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+
+    await AccountingERPEngine.Instance.PostJournalBatch(taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes()));
+
+    const sent = postedLines(runVerb) as Array<Record<string, unknown>>;
+    expect(sent.map((l) => l.accountNumber)).toEqual(['1000', '1000']);
+    expect(sent.every((l) => !('accountId' in l))).toBe(true);
+  });
+
+  it('finds a posting of lines sent by BC id, matching on the id BC returns in any case', async () => {
+    AccountingERPEngine.Instance.UseSeams({ runVerb: glEntriesVerb([bcPulledGLEntry(100, 0), bcPulledGLEntry(0, 100)]) });
+
+    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, providerWith(bcPulledAccountViews()));
+
+    expect(result).toEqual({ status: 'Found', externalJournalEntryBatchRef: 'BATCH-1' });
+  });
+
+  it('reports a mismatch when a line sent by BC id posted to another BC account', async () => {
+    const otherAccount = 'ffffffff-0000-0000-0000-000000000282';
+    AccountingERPEngine.Instance.UseSeams({ runVerb: glEntriesVerb([bcPulledGLEntry(100, 0), bcPulledGLEntry(0, 100, otherAccount)]) });
+
+    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, providerWith(bcPulledAccountViews()));
+
+    expect(result.status).toBe('Mismatch');
+  });
+});
+
 // ── #182: QuickBooks Online posts by QBO account id, and looks its journal up by day ─────────
 
 const QBO_ACCOUNT = '35';

@@ -670,6 +670,27 @@ export async function resolveExternalAccount(
   glAccountId: string, targetSystem: JournalEntryBatchTargetSystem, contextUser: UserInfo, provider: IMetadataProvider,
   requireExternalAccountID = false,
 ): Promise<string> {
+  return (await resolveExternalAccountRef(glAccountId, targetSystem, contextUser, provider, requireExternalAccountID)).accountNumber;
+}
+
+/**
+ * A GL account as the ERP receives it. `accountNumber` is the identity `resolveExternalAccount`
+ * returns; `accountId` is set, to the same value, when that identity is the ERP's own account id
+ * (the GL account's ExternalAccountID) rather than its Code.
+ */
+export interface ExternalAccountRef {
+  accountNumber: string;
+  accountId?: string;
+}
+
+/**
+ * `resolveExternalAccount`, saying which identity it chose, so a provider can send an ERP account
+ * id in the ERP's id field (bc-aidp-next-golive#282: BC's `accountNumber` holds the number, not the id).
+ */
+export async function resolveExternalAccountRef(
+  glAccountId: string, targetSystem: JournalEntryBatchTargetSystem, contextUser: UserInfo, provider: IMetadataProvider,
+  requireExternalAccountID = false,
+): Promise<ExternalAccountRef> {
   const p = resolveProviders(provider);
   const glRes = await p.rv.RunView<{ Code: string; ExternalSystem: string | null; ExternalAccountID: string | null }>(
     { EntityName: GL_ENTITY, ExtraFilter: `ID='${glAccountId}'`, Fields: ['Code', 'ExternalSystem', 'ExternalAccountID'], ResultType: 'simple', BypassCache: true },
@@ -677,7 +698,9 @@ export async function resolveExternalAccount(
   );
   const gl = glRes.Results?.[0];
   if (!gl) throw new Error(`resolveExternalAccount: GL account ${glAccountId} not found`);
-  if (gl.ExternalAccountID && (!gl.ExternalSystem || gl.ExternalSystem === targetSystem)) return gl.ExternalAccountID;
+  if (gl.ExternalAccountID && (!gl.ExternalSystem || gl.ExternalSystem === targetSystem)) {
+    return { accountNumber: gl.ExternalAccountID, accountId: gl.ExternalAccountID };
+  }
   // An ERP that knows accounts only by its own id would read the Code as an id, and could match another account.
   if (requireExternalAccountID) {
     throw new Error(
@@ -685,7 +708,7 @@ export async function resolveExternalAccount(
       `with External System blank or ${targetSystem}; an ID recorded for another system is not used.`,
     );
   }
-  return gl.Code; // the account number IS the wire identity
+  return { accountNumber: gl.Code }; // the account number IS the wire identity
 }
 
 /**

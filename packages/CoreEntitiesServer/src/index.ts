@@ -70,6 +70,7 @@ export {
   regenerateJournalEntryBatch,
   netLines,
   resolveExternalAccount,
+  resolveExternalAccountRef,
   resolveExternalDimensions,
   mockErpPoster,
   unavailableErpLookup,
@@ -80,6 +81,7 @@ export type {
   JournalEntryBatchTargetSystem,
   DimRef,
   ExternalDimensionRef,
+  ExternalAccountRef,
   NettableLine,
   NetGroup,
   BuildJournalEntryBatchResult,
@@ -136,6 +138,7 @@ export type {
   CreateERPJournalInput,
   FindERPJournalInput,
   ERPPostedJournalLine,
+  ERPVerbJournalLine,
   FindERPJournalResult,
 } from './BaseAccountingERPProvider.js';
 export { RunERPSyncOperation, LoadRunERPSyncOperation } from './RunERPSyncOperation.js';
