@@ -3402,7 +3402,7 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @MaxLength(36)
     BatchedByUserID?: string;
         
-    @Field({nullable: true, description: `Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled | Archived. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed triggers retry + escalation; Cancelled is terminal from Pending and RELEASES the member entries back to the candidate pool; Archived is terminal from Pending, Approved or Failed, makes no ERP call and KEEPS the member entries locked (trg_JournalEntryBatch_Immutability).`}) 
+    @Field({nullable: true, description: `Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled | Archived. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed is retried under the original approval and stays content-locked; Cancelled is terminal from Pending, Approved or Failed and RELEASES the member entries back to the candidate pool; Archived is terminal from Pending, Approved or Failed, makes no ERP call and KEEPS the member entries locked (trg_JournalEntryBatch_Immutability).`}) 
     @MaxLength(20)
     Status?: string;
         
@@ -3459,6 +3459,32 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @MaxLength(36)
     ArchivedByUserID?: string;
         
+    @Field({nullable: true, description: `Why this batch was cancelled. Required when an approved batch is cancelled (CK_JournalEntryBatch_CancelAudit); optional when a Pending batch is. Frozen once Cancelled.`}) 
+    @MaxLength(500)
+    CancelReason?: string;
+        
+    @Field({nullable: true, description: `When the batch was cancelled. Required when an approved batch is cancelled.`}) 
+    CancelledAt?: Date;
+        
+    @Field({nullable: true, description: `User who cancelled the batch. Required when an approved batch is cancelled.`}) 
+    @MaxLength(36)
+    CancelledByUserID?: string;
+        
+    @Field({nullable: true, description: `When this batch was established as NOT posted in the ERP before it was cancelled — by the ERP lookup finding nothing under its number, or by the canceller's attestation when the lookup could not settle it (see ERPNotPostedBasis). Required when a batch that had been sent is cancelled (CK_JournalEntryBatch_CancelERPCheck): a Failed batch may already be in the ERP, and cancelling releases its entries to be batched again.`}) 
+    ERPNotPostedConfirmedAt?: Date;
+        
+    @Field({nullable: true, description: `User whose cancel established this batch as NOT posted in the ERP — accountable for the cancel whether the ERP lookup or their own attestation settled it (see ERPNotPostedBasis). Required with ERPNotPostedConfirmedAt.`}) 
+    @MaxLength(36)
+    ERPNotPostedConfirmedByUserID?: string;
+        
+    @Field({nullable: true, description: `How this batch was established as NOT posted in the ERP before it was cancelled: ERPLookup (the ERP lookup found nothing under its number) or UserAttested (the lookup could not settle it and the canceller confirmed). Required with ERPNotPostedConfirmedAt (CK_JournalEntryBatch_CancelERPCheck).`}) 
+    @MaxLength(20)
+    ERPNotPostedBasis?: string;
+        
+    @Field({nullable: true, description: `SHA-256 of the approved content (batch header, summary entry and lines, member set), written at approval and frozen by trg_JournalEntryBatch_Immutability. Dispatch recomputes and compares it. NULL on batches approved before the seal existed.`}) 
+    @MaxLength(64)
+    ApprovedContentHash?: string;
+        
     @Field({nullable: true}) 
     @MaxLength(50)
     Company?: string;
@@ -3482,6 +3508,14 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @Field({nullable: true}) 
     @MaxLength(100)
     ArchivedByUser?: string;
+        
+    @Field({nullable: true}) 
+    @MaxLength(100)
+    CancelledByUser?: string;
+        
+    @Field({nullable: true}) 
+    @MaxLength(100)
+    ERPNotPostedConfirmedByUser?: string;
         
     @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
     ReadableFields___?: string[];
@@ -3562,6 +3596,27 @@ export class CreatemjBizAppsAccountingJournalEntryBatchInput {
     @Field({ nullable: true })
     ArchivedByUserID: string | null;
 
+    @Field({ nullable: true })
+    CancelReason: string | null;
+
+    @Field({ nullable: true })
+    CancelledAt: Date | null;
+
+    @Field({ nullable: true })
+    CancelledByUserID: string | null;
+
+    @Field({ nullable: true })
+    ERPNotPostedConfirmedAt: Date | null;
+
+    @Field({ nullable: true })
+    ERPNotPostedConfirmedByUserID: string | null;
+
+    @Field({ nullable: true })
+    ERPNotPostedBasis: string | null;
+
+    @Field({ nullable: true })
+    ApprovedContentHash: string | null;
+
     @Field(() => RestoreContextInput, { nullable: true })
     RestoreContext___?: RestoreContextInput;
 }
@@ -3640,6 +3695,27 @@ export class UpdatemjBizAppsAccountingJournalEntryBatchInput {
 
     @Field({ nullable: true })
     ArchivedByUserID?: string | null;
+
+    @Field({ nullable: true })
+    CancelReason?: string | null;
+
+    @Field({ nullable: true })
+    CancelledAt?: Date | null;
+
+    @Field({ nullable: true })
+    CancelledByUserID?: string | null;
+
+    @Field({ nullable: true })
+    ERPNotPostedConfirmedAt?: Date | null;
+
+    @Field({ nullable: true })
+    ERPNotPostedConfirmedByUserID?: string | null;
+
+    @Field({ nullable: true })
+    ERPNotPostedBasis?: string | null;
+
+    @Field({ nullable: true })
+    ApprovedContentHash?: string | null;
 
     @Field(() => [KeyValuePairInput], { nullable: true })
     OldValues___?: KeyValuePairInput[];

@@ -18,7 +18,7 @@ import { RegisterClass, MJGlobal } from '@memberjunction/global';
 import type { UserInfo } from '@memberjunction/core';
 import { BaseAccountingEngineExtension } from '@mj-biz-apps/accounting-engine-base';
 import { AccountingEngine } from '../AccountingEngine.js';
-import { AccountingERPEngine } from '../AccountingERPEngine.js';
+import { AccountingERPEngine, namesMatch } from '../AccountingERPEngine.js';
 import { BaseAccountingERPProvider } from '../BaseAccountingERPProvider.js';
 import type { ErpPostResult } from '../JournalEntryBatchEngine.js';
 
@@ -104,9 +104,14 @@ function dimensionTaggedViews(): Record<string, unknown[]> {
   };
 }
 
+/** A batch ID as SQL Server returns it, upper case. The token the poster stamps is lower case. */
+const TAGGED_BATCH_ID = 'AAAAAAAA-0000-0000-0000-000000000206';
+const OWN_TOKEN = 'JEB aaaaaaaa-0000-0000-0000-000000000206';
+const OTHER_TOKEN = 'JEB bbbbbbbb-0000-0000-0000-000000000206';
+
 function taggedBatch() {
   return {
-    ID: 'batch-1',
+    ID: TAGGED_BATCH_ID,
     CompanyID: COMPANY,
     TargetSystem: 'BusinessCentral',
     JournalEntryBatchNumber: 'BATCH-1',
@@ -397,9 +402,12 @@ function taggedViewsWithCodes(extra: Record<string, unknown[]> = {}): Record<str
   };
 }
 
-/** A BC G/L entry as the GetGLEntries verb maps it. The fixtures resolve every account to '1000'. */
-function glEntry(debitAmount: number, creditAmount: number, postingDate = new Date('2026-08-01')) {
-  return { entryNumber: 1, documentNumber: 'BATCH-1', accountNumber: '1000', postingDate, debitAmount, creditAmount };
+/**
+ * A BC G/L entry as the GetGLEntries verb maps it, carrying this batch's token unless told otherwise.
+ * The fixtures resolve every account to '1000'.
+ */
+function glEntry(debitAmount: number, creditAmount: number, postingDate = new Date('2026-08-01'), description = `Netted [${OWN_TOKEN}]`) {
+  return { entryNumber: 1, documentNumber: 'BATCH-1', accountNumber: '1000', postingDate, debitAmount, creditAmount, description };
 }
 
 /** A runVerb that answers GetGLEntries with `entries` and fails anything else. */
@@ -432,6 +440,17 @@ describe('AccountingERPEngine.PostJournalBatch — after the ERP accepts', () =>
   });
 
   // The verb's JournalEntryID is the BC general journal, shared by every batch posted through it.
+  it('stamps the batch token on every line it sends, after the line\'s own description', async () => {
+    const runVerb = vi.fn(async () => ({ Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'DocNumber', Value: 'BATCH-1', Type: 'Output' }] }));
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+    const lines = [...(taggedLines() as unknown as object[]), { ID: 'line-3', GLAccountID: 'gl-3', DebitAmount: 0, CreditAmount: null, Description: null }] as never;
+
+    await AccountingERPEngine.Instance.PostJournalBatch(taggedBatch(), lines, user, providerWith(taggedViewsWithCodes()));
+
+    const sent = (runVerb.mock.calls[0] as unknown as [{ Params: { Lines: Array<{ description?: string }> } }])[0].Params.Lines;
+    expect(sent.map((l) => l.description)).toEqual([`Debit side [${OWN_TOKEN}]`, `Credit side [${OWN_TOKEN}]`, `[${OWN_TOKEN}]`]);
+  });
+
   it('records a Business Central post under its document number, not the journal id', async () => {
     AccountingERPEngine.Instance.UseSeams({
       runVerb: async () => ({
@@ -500,7 +519,7 @@ describe('AccountingERPEngine.FindPostedJournalBatch', () => {
 
   // What the poster sends, as BC would book it and GetGLEntries would return it (dates as JSON strings).
   it('finds the journal the poster sent, round-tripped through BC\'s G/L entry shape', async () => {
-    let sent: Array<{ accountNumber: string; debit?: number; credit?: number }> = [];
+    let sent: Array<{ accountNumber: string; debit?: number; credit?: number; description?: string }> = [];
     let sentDate = '';
     const runVerb = vi.fn(async (call: { Verb: string; Params: Record<string, unknown> }) => {
       if (call.Verb === 'CreateJournalEntry') {
@@ -515,6 +534,7 @@ describe('AccountingERPEngine.FindPostedJournalBatch', () => {
         postingDate: `${sentDate}T00:00:00.000Z`,
         debitAmount: l.debit ?? 0,
         creditAmount: l.credit ?? 0,
+        description: l.description,
       }));
       return { Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'GLEntries', Value: JSON.parse(JSON.stringify(entries)), Type: 'Output' }] };
     });
@@ -526,6 +546,45 @@ describe('AccountingERPEngine.FindPostedJournalBatch', () => {
 
     expect(posted.success).toBe(true);
     expect(result).toEqual({ status: 'Found', externalJournalEntryBatchRef: posted.externalJournalEntryBatchRef });
+  });
+
+  // #206: the batch number restarts in every database, so another environment's journal can sit under
+  // it with the same round amounts. Its token says it is not this batch.
+  it('reports another batch\'s journal when every line carries another batch\'s token, even if the lines match', async () => {
+    const other = `Netted [${OTHER_TOKEN}]`;
+    AccountingERPEngine.Instance.UseSeams({ runVerb: glEntriesVerb([glEntry(100, 0, undefined, other), glEntry(0, 100, undefined, other)]) });
+
+    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes()));
+
+    expect(result).toEqual({
+      status: 'Foreign',
+      detail: `its lines carry the token of batch bbbbbbbb-0000-0000-0000-000000000206, not this batch's ${TAGGED_BATCH_ID}.`,
+    });
+  });
+
+  // A batch posted before tagging carries no token; so does a journal from an environment that does not
+  // tag. Only the operator can tell them apart, so it is a mismatch, never a match.
+  it('reports a mismatch, never a match, when matching lines carry no token', async () => {
+    AccountingERPEngine.Instance.UseSeams({ runVerb: glEntriesVerb([glEntry(100, 0, undefined, 'Netted'), glEntry(0, 100, undefined, 'Netted')]) });
+
+    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes()));
+
+    expect(result.status).toBe('Mismatch');
+    expect(result.status === 'Mismatch' && result.detail).toBe(
+      `none of its 2 line(s) carries this batch's token (${OWN_TOKEN}): it was posted before batches were tagged, or from somewhere that does not tag them; its lines otherwise match this batch.`,
+    );
+  });
+
+  it.each([
+    ['one line carries no token', [glEntry(100, 0), glEntry(0, 100, undefined, 'Netted')], /^1 of its 2 line\(s\) carry no batch token; its lines otherwise match/],
+    ['one line carries another batch\'s token', [glEntry(100, 0), glEntry(0, 100, undefined, OTHER_TOKEN)], /^it also holds lines of batch bbbbbbbb-0000-0000-0000-000000000206; /],
+  ])('reports a mismatch when %s', async (_case, entries, detail) => {
+    AccountingERPEngine.Instance.UseSeams({ runVerb: glEntriesVerb(entries) });
+
+    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes()));
+
+    expect(result.status).toBe('Mismatch');
+    expect(result.status === 'Mismatch' && result.detail).toMatch(detail);
   });
 
   it('reports an error when the number reaches the lookup cap, since the answer may be partial', async () => {
@@ -577,5 +636,85 @@ describe('AccountingERPEngine.FindPostedJournalBatch', () => {
 
     expect(result).toEqual({ status: 'Unavailable' });
     expect(runVerb).not.toHaveBeenCalled();
+  });
+});
+
+// ── Real-schema filters and connector-named integrations ─────────────────────────────────────
+
+/**
+ * Like providerWith, but it behaves like SQL Server for entity maps: that entity has Status and SyncEnabled and no
+ * IsActive column, so a filter naming IsActive fails the query instead of being ignored.
+ */
+function providerWithMapSchema(views: Record<string, unknown[]>, filters: string[]) {
+  return {
+    RunView: async (params: { EntityName: string; ExtraFilter?: string }) => {
+      if (params.EntityName === 'MJ: Company Integration Entity Maps') {
+        filters.push(params.ExtraFilter ?? '');
+        if (/\bIsActive\b/.test(params.ExtraFilter ?? '')) return { Success: false, ErrorMessage: "Invalid column name 'IsActive'." };
+      }
+      return { Success: true, Results: views[params.EntityName] ?? [] };
+    },
+  } as never;
+}
+
+describe('AccountingERPEngine against the real entity-map schema', () => {
+  beforeEach(() => {
+    AccountingERPEngine.Instance.UseSeams({});
+    vi.spyOn(AccountingEngine.Instance, 'Config').mockResolvedValue();
+  });
+
+  it('finds entity maps by Status and SyncEnabled, so a configured sync actually runs', async () => {
+    const syncCalls: string[][] = [];
+    AccountingERPEngine.Instance.UseSeams({ runSync: async (_id, _u, mapIds) => { syncCalls.push(mapIds); return { Success: true }; } });
+    const filters: string[] = [];
+    const p = providerWithMapSchema({
+      'MJ: Company Integrations': [
+        { ID: CI, CompanyID: COMPANY, IntegrationID: 'int-1', Integration: 'business-central', IsActive: true },
+      ],
+      'MJ: Company Integration Entity Maps': [
+        { ID: 'map-1', CompanyIntegrationID: CI, Entity: 'MJ_BizApps_Accounting: GL Accounts', Status: 'Active', SyncEnabled: true },
+      ],
+      'MJ_BizApps_Accounting: Accounting Engine Extensions': [],
+    }, filters);
+
+    const out = await AccountingERPEngine.Instance.SyncMasterData({ Objects: ['accounts'] }, user, p);
+
+    expect(filters).toHaveLength(1);
+    expect(filters[0]).toContain("Status = 'Active'");
+    expect(filters[0]).toContain('SyncEnabled = 1');
+    expect(filters[0]).not.toMatch(/IsActive/);
+    expect(syncCalls).toEqual([['map-1']]);
+    expect(out.Results[0]?.Message ?? '').not.toMatch(/No entity maps/);
+  });
+
+  it('posts through the Business Central provider when the Integration is named business-central', async () => {
+    const runVerb = vi.fn(async () => ({ Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'DocNumber', Value: 'BATCH-1', Type: 'Output' }] }));
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+    const views = taggedViewsWithCodes();
+    views['MJ: Company Integrations'] = [
+      { ID: CI, CompanyID: COMPANY, IntegrationID: 'int-1', Integration: 'business-central', IsActive: true },
+    ];
+
+    const result = await AccountingERPEngine.Instance.PostJournalBatch(taggedBatch(), taggedLines(), user, providerWith(views));
+
+    expect(result.success).toBe(true);
+    expect(runVerb).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('namesMatch', () => {
+  it('ignores case, spaces and punctuation', () => {
+    expect(namesMatch('business-central', 'BusinessCentral')).toBe(true);
+    expect(namesMatch('business-central', 'Microsoft Dynamics 365 Business Central')).toBe(true);
+    expect(namesMatch('Business Central', 'BC')).toBe(true);
+    expect(namesMatch('quickbooks-online', 'QuickBooks Online')).toBe(true);
+    expect(namesMatch('QuickBooks Online', 'QuickBooks Online')).toBe(true);
+  });
+
+  it('keeps different systems apart', () => {
+    expect(namesMatch('business-central', 'QuickBooks Online')).toBe(false);
+    expect(namesMatch('QuickBooks Online', 'BusinessCentral')).toBe(false);
+    expect(namesMatch('HubSpot', 'BusinessCentral')).toBe(false);
+    expect(namesMatch('business-central', null)).toBe(false);
   });
 });

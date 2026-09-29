@@ -16,7 +16,7 @@
 export { AccountingCompanyProfileEntityServer } from './AccountingCompanyProfileEntityServer.js';
 export { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 export { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
-export { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
+export { JournalEntryBatchEntityServer, type ERPNotPostedBasis, type JournalEntryBatchCancelOptions } from './JournalEntryBatchEntityServer.js';
 export { GLAccountEntityServer } from './GLAccountEntityServer.js';
 export { GLAccountLinkEntityServer, LoadGLAccountLinkEntityServer } from './GLAccountLinkEntityServer.js';
 export { IntercompanyAccountMatchEntityServer } from './IntercompanyAccountMatchEntityServer.js';
@@ -94,6 +94,9 @@ export type {
   ErpJournalLookupResult,
   ErpPostingUnconfirmedKind,
   JournalEntryBatchApprovalGate,
+  JournalEntryBatchCancelGate,
+  CancelJournalEntryBatchOptions,
+  RecordedCancellation,
   SendJournalEntryBatchOptions,
   DispatchFailureRecord,
   ResumeJournalEntryBatchPostingResult,
@@ -145,6 +148,14 @@ export {
   type GenerateReversalOutput,
 } from './GenerateReversalOperation.js';
 export {
+  GetJournalEntryStatesOperation,
+  LoadGetJournalEntryStatesOperation,
+  MAX_JOURNAL_ENTRY_STATE_IDS,
+  type GetJournalEntryStatesInput,
+  type GetJournalEntryStatesOutput,
+  type JournalEntryState,
+} from './GetJournalEntryStatesOperation.js';
+export {
   BuildJournalEntryBatchOperation,
   PreviewJournalEntryBatchOperation,
   RegenerateJournalEntryBatchOperation,
@@ -152,6 +163,7 @@ export {
   RecordJournalEntryBatchDecisionOperation,
   GetJournalEntryBatchApprovalStateOperation,
   ArchiveJournalEntryBatchOperation,
+  CancelJournalEntryBatchOperation,
   ResumeJournalEntryBatchPostingOperation,
   GetStrandedJournalEntriesOperation,
   LoadJournalEntryBatchOperations,
@@ -169,6 +181,8 @@ export {
   type GetJournalEntryBatchApprovalStateOutput,
   type ArchiveJournalEntryBatchInput,
   type ArchiveJournalEntryBatchOutput,
+  type CancelJournalEntryBatchInput,
+  type CancelJournalEntryBatchOutput,
   type ResumeJournalEntryBatchPostingInput,
   type ResumeJournalEntryBatchPostingOutput,
   type GetStrandedJournalEntriesOutput,

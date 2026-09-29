@@ -190,7 +190,7 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
         EntryDate: entryDateOf(batch),
         DocNumber: batch.JournalEntryBatchNumber,
         PrivateNote: `Accounting batch ${batch.JournalEntryBatchNumber}`,
-        Lines: await erpLinesFor(summaryLines, target, user, provider),
+        Lines: await erpLinesFor(batch, summaryLines, target, user, provider),
       }, user);
     } catch (e) {
       posted = { success: false, error: e instanceof Error ? e.message : String(e) };
@@ -214,9 +214,10 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
 
   /**
    * What the batch's target ERP holds under the batch's number, compared with what the batch would
-   * send (#182). A posting counts as this batch only when every line matches on account, debit and
-   * credit, and every line carries the batch's posting date. Runs no extension hooks: it posts
-   * nothing.
+   * send (#182). A posting counts as this batch only when every line carries the batch's token
+   * (#206), matches on account, debit and credit, and carries the batch's posting date. Lines whose
+   * tokens name only other batches are another journal under the same number. Runs no extension
+   * hooks: it posts nothing.
    */
   public async FindPostedJournalBatch(
     batch: mjBizAppsAccountingJournalEntryBatchEntity,
@@ -239,11 +240,15 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
       const found = await plugin.FindJournalEntry({ CompanyID: batch.CompanyID, DocNumber: batch.JournalEntryBatchNumber }, user);
       if (found.status !== 'Ok') return found;
       if (found.lines.length === 0) return { status: 'NotFound' };
-      const expected = await erpLinesFor(summaryLines, target, user, provider);
+      const tokens = postedBatchTokens(found.lines, batch.ID);
+      if (tokens.own === 0 && tokens.others.length > 0) {
+        return { status: 'Foreign', detail: `its lines carry the token of batch ${tokens.others.join(', ')}, not this batch's ${batch.ID}.` };
+      }
+      const expected = await erpLinesFor(batch, summaryLines, target, user, provider);
       // The day the post sends: the verb writes EntryDate from the same Date's UTC parts.
       const postingDate = ToCalendarDay(entryDateOf(batch));
       if (!postingDate) return { status: 'Error', error: `batch ${batch.JournalEntryBatchNumber} has an unreadable posting date.` };
-      const detail = postedJournalMismatch(expected, postingDate, found.lines);
+      const detail = tokenMismatch(tokens, found.lines.length, batch.ID, postedJournalMismatch(expected, postingDate, found.lines));
       return detail
         ? { status: 'Mismatch', detail }
         : { status: 'Found', externalJournalEntryBatchRef: found.externalJournalEntryBatchRef };
@@ -254,13 +259,19 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
 
   private providerFor(integrationName: string | undefined): BaseAccountingERPProvider | null {
     if (!integrationName) return null;
+    // Providers register under their full product name ('Microsoft Dynamics 365 Business Central'), while an
+    // Integration row may be named differently (the MJ connector's is 'business-central'). Try the name as given,
+    // then the registered provider key it matches under the same rule PostJournalBatch uses to pick the connection.
+    const key = ERP_PROVIDER_KEYS.includes(integrationName)
+      ? integrationName
+      : ERP_PROVIDER_KEYS.find((k) => namesMatch(integrationName, k)) ?? integrationName;
     const res = MJGlobal.Instance.ClassFactory.TryCreateInstance<BaseAccountingERPProvider>(
       BaseAccountingERPProvider,
-      integrationName,
+      key,
       this.seams.runVerb ?? defaultAccountingVerbRunner,
     );
     if (!res.Resolved || !res.Instance) {
-      LogStatus(`AccountingERPEngine: no provider for '${integrationName}': ${res.Reason}`);
+      LogStatus(`AccountingERPEngine: no provider for '${integrationName}'${key !== integrationName ? ` (tried '${key}')` : ''}: ${res.Reason}`);
       return null;
     }
     return res.Instance;
@@ -360,7 +371,9 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     const rv = provider as unknown as IRunViewProvider;
     const res = await rv.RunView<Record<string, unknown>>({
       EntityName: CI_MAP_ENTITY,
-      ExtraFilter: `CompanyIntegrationID = '${EscapeSQLString(companyIntegrationID)}' AND IsActive = 1`,
+      // Company Integration Entity Maps have no IsActive column (they carry Status and SyncEnabled). Filtering on
+      // IsActive made this RunView fail, so every sync reported "No entity maps" however the maps were set up.
+      ExtraFilter: `CompanyIntegrationID = '${EscapeSQLString(companyIntegrationID)}' AND Status = 'Active' AND SyncEnabled = 1`,
       ResultType: 'simple',
     }, user);
     if (!res.Success) return [];
@@ -520,10 +533,17 @@ function extensionParticipates(
   }
 }
 
-function namesMatch(integrationName: string, targetSystem: string | null | undefined): boolean {
+/** Keys the built-in ERP providers register under (see BaseAccountingERPProvider.ts). */
+const ERP_PROVIDER_KEYS: readonly string[] = ['Microsoft Dynamics 365 Business Central', 'QuickBooks Online'];
+
+/**
+ * Whether an Integration name and an ERP name (a batch's TargetSystem, or a provider key) mean the same system.
+ * Compares letters and digits only, so 'business-central', 'Business Central' and 'BusinessCentral' all match.
+ */
+export function namesMatch(integrationName: string, targetSystem: string | null | undefined): boolean {
   if (!targetSystem) return false;
-  const a = integrationName.toLowerCase().replace(/\s+/g, '');
-  const b = targetSystem.toLowerCase().replace(/\s+/g, '');
+  const a = integrationName.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const b = targetSystem.toLowerCase().replace(/[^a-z0-9]/g, '');
   if (a.includes('quickbooks') && b.includes('quickbooks')) return true;
   if (a.includes('businesscentral') && (b.includes('businesscentral') || b === 'bc')) return true;
   return a === b;
@@ -551,8 +571,12 @@ function entryDateOf(batch: mjBizAppsAccountingJournalEntryBatchEntity): Date {
   return batch.PostingDate ? new Date(batch.PostingDate) : new Date();
 }
 
-/** The summary lines in the terms the ERP receives them: external account numbers and dimension codes. */
+/**
+ * The summary lines in the terms the ERP receives them: external account numbers and dimension codes,
+ * and each description stamped with the batch token.
+ */
 async function erpLinesFor(
+  batch: mjBizAppsAccountingJournalEntryBatchEntity,
   summaryLines: mjBizAppsAccountingJournalEntryLineEntity[],
   target: JournalEntryBatchTargetSystem,
   user: UserInfo,
@@ -568,11 +592,63 @@ async function erpLinesFor(
       accountNumber,
       debit: line.DebitAmount ?? undefined,
       credit: line.CreditAmount ?? undefined,
-      description: line.Description ?? undefined,
+      description: withBatchToken(line.Description, batch.ID),
       dimensions: dimensionsByLine.get(line.ID),
     });
   }
   return lines;
+}
+
+/**
+ * The batch's ID, stamped on every line it sends (#206). The batch number restarts at BATCH-000001 in
+ * every database, so another environment's journal can sit under the same number in the same ERP
+ * company; the ID is a GUID no other database issues. Business Central carries a journal line's
+ * description onto its G/L entries, and has no other free-text field the connector writes.
+ */
+function batchToken(batchId: string): string {
+  return `JEB ${batchId.toLowerCase()}`;
+}
+
+const BATCH_TOKEN_PATTERN = /\bJEB ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/i;
+
+function withBatchToken(description: string | null, batchId: string): string {
+  return description ? `${description} [${batchToken(batchId)}]` : `[${batchToken(batchId)}]`;
+}
+
+interface PostedBatchTokens {
+  /** Lines carrying this batch's token. */
+  own: number;
+  /** Lines carrying no token: posted before batches were tagged, or by the ERP itself. */
+  untagged: number;
+  /** The other batch IDs whose tokens the lines carry. */
+  others: string[];
+}
+
+function postedBatchTokens(posted: ERPPostedJournalLine[], batchId: string): PostedBatchTokens {
+  const own = batchId.toLowerCase();
+  const tally: PostedBatchTokens = { own: 0, untagged: 0, others: [] };
+  for (const line of posted) {
+    const token = BATCH_TOKEN_PATTERN.exec(line.description)?.[1]?.toLowerCase();
+    if (!token) tally.untagged++;
+    else if (token === own) tally.own++;
+    else if (!tally.others.includes(token)) tally.others.push(token);
+  }
+  return tally;
+}
+
+/**
+ * Why a posting that is not another batch's still cannot count as this one, or `lineDetail` when
+ * only the lines decide. A posting with no token at all may be this batch sent before batches were
+ * tagged, so it is a mismatch the operator settles, never a match.
+ */
+function tokenMismatch(tokens: PostedBatchTokens, lineCount: number, batchId: string, lineDetail: string | null): string | null {
+  const lines = lineDetail ?? 'its lines otherwise match this batch.';
+  if (tokens.own === 0) {
+    return `none of its ${lineCount} line(s) carries this batch's token (${batchToken(batchId)}): it was posted before batches were tagged, or from somewhere that does not tag them; ${lines}`;
+  }
+  if (tokens.others.length > 0) return `it also holds lines of batch ${tokens.others.join(', ')}; ${lines}`;
+  if (tokens.untagged > 0) return `${tokens.untagged} of its ${lineCount} line(s) carry no batch token; ${lines}`;
+  return lineDetail;
 }
 
 /**
