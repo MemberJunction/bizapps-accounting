@@ -10,9 +10,9 @@ import type { ErpPostResult, ExternalDimensionRef } from './JournalEntryBatchEng
 
 /** One journal line as the engine sends it. */
 export interface ERPJournalLine {
-  /** The ERP's identity for the account: the GL account's `ExternalAccountID`, or its `Code`. */
+  /** The account number: the GL account's `Code`. */
   accountNumber: string;
-  /** Set, to the same value as `accountNumber`, when that identity is the GL account's `ExternalAccountID`. */
+  /** The ERP's own id for the account: the GL account's `ExternalAccountID`, when it is recorded for this ERP. */
   accountId?: string;
   debit?: number;
   credit?: number;
@@ -42,8 +42,9 @@ export interface FindERPJournalInput {
 
 /** One posted ledger line, in the terms `CreateERPJournalInput.Lines` is sent in. */
 export interface ERPPostedJournalLine {
-  accountNumber: string;
-  /** The ERP's own id for the account, when the ERP returns one beside the number (Business Central). */
+  /** The account number, when the ERP returns one (Business Central). */
+  accountNumber?: string;
+  /** The ERP's own id for the account, when the ERP returns one (Business Central, QuickBooks Online). */
   accountId?: string;
   /** `YYYY-MM-DD`. */
   postingDate: string;
@@ -163,9 +164,9 @@ export class BusinessCentralERPProvider extends BaseAccountingERPProvider {
   }
 
   /**
-   * An account known by its BC id goes as `accountId` alone (bc-aidp-next-golive#282). BC's
-   * `accountNumber` is the account number, 20 characters at most, and the verb sends `accountNumber`
-   * whenever it is present, so the id must not travel there.
+   * An account with a BC id goes by `accountId` alone (bc-aidp-next-golive#282). The verb sends
+   * `accountNumber` whenever it is present, so both would post by the number; the id is the one
+   * the BC pull recorded, and does not depend on the Code matching BC's number.
    */
   protected verbLines(lines: ERPJournalLine[]): ERPVerbJournalLine[] {
     return lines.map(({ accountNumber, ...line }) => (line.accountId ? line : { ...line, accountNumber }));
@@ -252,9 +253,16 @@ export class QuickBooksERPProvider extends BaseAccountingERPProvider {
     };
   }
 
-  /** The verb requires `accountId`, the QBO account id, which is what `accountNumber` carries for QBO. */
+  /**
+   * The verb requires `accountId`, the QBO account id, and ignores `accountNumber`. The engine refuses
+   * an account without one before calling (`RequiresExternalAccountID`), so a line reaching here without
+   * it is a caller bug.
+   */
   protected verbLines(lines: ERPJournalLine[]): QuickBooksJournalLine[] {
-    return lines.map((line) => ({ ...line, accountId: line.accountNumber }));
+    return lines.map((line) => {
+      if (!line.accountId) throw new Error(`GL account ${line.accountNumber} has no QuickBooks Online account ID.`);
+      return { ...line, accountId: line.accountId };
+    });
   }
 }
 
@@ -307,8 +315,8 @@ function parseQBOJournalLine(rawLine: unknown, postingDate: string): ERPPostedJo
   const accountId = isRecord(detail.AccountRef) ? detail.AccountRef.value : undefined;
   if (typeof accountId !== 'string') return null;
   const description = typeof rawLine.Description === 'string' ? rawLine.Description : '';
-  if (detail.PostingType === 'Debit') return { accountNumber: accountId, postingDate, debit: rawLine.Amount, credit: 0, description };
-  if (detail.PostingType === 'Credit') return { accountNumber: accountId, postingDate, debit: 0, credit: rawLine.Amount, description };
+  if (detail.PostingType === 'Debit') return { accountId, postingDate, debit: rawLine.Amount, credit: 0, description };
+  if (detail.PostingType === 'Credit') return { accountId, postingDate, debit: 0, credit: rawLine.Amount, description };
   return null;
 }
 

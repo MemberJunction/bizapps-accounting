@@ -670,22 +670,22 @@ export async function resolveExternalAccount(
   glAccountId: string, targetSystem: JournalEntryBatchTargetSystem, contextUser: UserInfo, provider: IMetadataProvider,
   requireExternalAccountID = false,
 ): Promise<string> {
-  return (await resolveExternalAccountRef(glAccountId, targetSystem, contextUser, provider, requireExternalAccountID)).accountNumber;
+  const ref = await resolveExternalAccountRef(glAccountId, targetSystem, contextUser, provider, requireExternalAccountID);
+  return ref.accountId ?? ref.accountNumber;
 }
 
-/**
- * A GL account as the ERP receives it. `accountNumber` is the identity `resolveExternalAccount`
- * returns; `accountId` is set, to the same value, when that identity is the ERP's own account id
- * (the GL account's ExternalAccountID) rather than its Code.
- */
+/** A GL account's two ERP identifiers, kept apart (bc-aidp-next-golive#282). */
 export interface ExternalAccountRef {
+  /** The account number: the GL account's Code. */
   accountNumber: string;
+  /** The ERP's own id for the account: the GL account's ExternalAccountID, when it is recorded for this ERP. */
   accountId?: string;
 }
 
 /**
- * `resolveExternalAccount`, saying which identity it chose, so a provider can send an ERP account
- * id in the ERP's id field (bc-aidp-next-golive#282: BC's `accountNumber` holds the number, not the id).
+ * Both identifiers of a GL account, for a provider to send in the ERP's own fields: BC's
+ * `accountNumber` holds the number and `accountId` the id (bc-aidp-next-golive#282). Precedence and
+ * `requireExternalAccountID` are as for `resolveExternalAccount`.
  */
 export async function resolveExternalAccountRef(
   glAccountId: string, targetSystem: JournalEntryBatchTargetSystem, contextUser: UserInfo, provider: IMetadataProvider,
@@ -699,7 +699,7 @@ export async function resolveExternalAccountRef(
   const gl = glRes.Results?.[0];
   if (!gl) throw new Error(`resolveExternalAccount: GL account ${glAccountId} not found`);
   if (gl.ExternalAccountID && (!gl.ExternalSystem || gl.ExternalSystem === targetSystem)) {
-    return { accountNumber: gl.ExternalAccountID, accountId: gl.ExternalAccountID };
+    return { accountNumber: gl.Code, accountId: gl.ExternalAccountID };
   }
   // An ERP that knows accounts only by its own id would read the Code as an id, and could match another account.
   if (requireExternalAccountID) {

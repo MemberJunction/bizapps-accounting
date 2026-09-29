@@ -20,7 +20,7 @@ import { BaseAccountingEngineExtension } from '@mj-biz-apps/accounting-engine-ba
 import { AccountingEngine } from '../AccountingEngine.js';
 import { AccountingERPEngine, namesMatch } from '../AccountingERPEngine.js';
 import { BaseAccountingERPProvider } from '../BaseAccountingERPProvider.js';
-import type { ErpPostResult } from '../JournalEntryBatchEngine.js';
+import { resolveExternalAccount, resolveExternalAccountRef, type ErpPostResult } from '../JournalEntryBatchEngine.js';
 
 const user = { ID: 'user-1', Name: 'Test' } as unknown as UserInfo;
 const COMPANY = 'aaaaaaaa-0000-0000-0000-000000000001';
@@ -662,6 +662,35 @@ function bcPulledGLEntry(debitAmount: number, creditAmount: number, accountId = 
   return { ...glEntry(debitAmount, creditAmount), accountId, accountNumber: '41507' };
 }
 
+describe('resolveExternalAccountRef', () => {
+  const gl = (row: Record<string, unknown>) => providerWith({ 'MJ_BizApps_Accounting: GL Accounts': [row] });
+
+  // Two identifiers, two fields: the number is always the Code, the id only when the account has one for this ERP.
+  it('returns the Code as accountNumber and the BC id as accountId for an account pulled from BC', async () => {
+    const ref = await resolveExternalAccountRef('gl-1', 'BusinessCentral', user, gl({ Code: '41507', ExternalSystem: 'BusinessCentral', ExternalAccountID: BC_ACCOUNT_ID }));
+
+    expect(ref).toEqual({ accountNumber: '41507', accountId: BC_ACCOUNT_ID });
+  });
+
+  it('returns only the Code for an account with no ERP id', async () => {
+    const ref = await resolveExternalAccountRef('gl-1', 'BusinessCentral', user, gl({ Code: '1000', ExternalSystem: null, ExternalAccountID: null }));
+
+    expect(ref).toEqual({ accountNumber: '1000' });
+  });
+
+  it('ignores an id recorded for another ERP', async () => {
+    const ref = await resolveExternalAccountRef('gl-1', 'BusinessCentral', user, gl({ Code: '1000', ExternalSystem: 'QuickBooks', ExternalAccountID: '35' }));
+
+    expect(ref).toEqual({ accountNumber: '1000' });
+  });
+
+  it('leaves resolveExternalAccount answering the ERP identity, id first, for existing callers', async () => {
+    const identity = await resolveExternalAccount('gl-1', 'BusinessCentral', user, gl({ Code: '41507', ExternalSystem: 'BusinessCentral', ExternalAccountID: BC_ACCOUNT_ID }));
+
+    expect(identity).toBe(BC_ACCOUNT_ID);
+  });
+});
+
 describe('Business Central — accounts that carry BC\'s account id', () => {
   beforeEach(() => {
     vi.spyOn(AccountingEngine.Instance, 'Config').mockResolvedValue();
@@ -779,8 +808,8 @@ describe('QuickBooks Online — PostJournalBatch', () => {
 
     expect(result).toEqual({ success: true, externalJournalEntryBatchRef: '146' });
     expect(postedLines(runVerb)).toEqual([
-      expect.objectContaining({ accountNumber: QBO_ACCOUNT, accountId: QBO_ACCOUNT, debit: 100 }),
-      expect.objectContaining({ accountNumber: QBO_ACCOUNT, accountId: QBO_ACCOUNT, credit: 100 }),
+      expect.objectContaining({ accountNumber: '1000', accountId: QBO_ACCOUNT, debit: 100 }),
+      expect.objectContaining({ accountNumber: '1000', accountId: QBO_ACCOUNT, credit: 100 }),
     ]);
   });
 

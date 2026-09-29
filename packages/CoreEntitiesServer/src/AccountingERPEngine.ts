@@ -663,10 +663,11 @@ function postedJournalMismatch(expected: CreateERPJournalInput['Lines'], posting
   if (otherDates.length > 0) {
     return `it posted on ${otherDates.join(', ')}; the batch's posting date is ${postingDate}.`;
   }
-  // A line sent by the ERP's account id matches on that id when the ERP returns one: BC's posted entry
-  // carries BC's own number, which the batch never saw (bc-aidp-next-golive#282). Ids compare without case.
+  // Each line is compared on the identifier it was sent by: the ERP's account id when it has one, else the
+  // account number (bc-aidp-next-golive#282). Ids compare without case: SQL Server stores BC's in upper case, BC returns lower.
   const sentIds = new Set(expected.flatMap((l) => (l.accountId ? [l.accountId.toLowerCase()] : [])));
-  const postedAccount = (l: ERPPostedJournalLine) => (l.accountId && sentIds.has(l.accountId.toLowerCase()) ? l.accountId.toLowerCase() : l.accountNumber);
+  const postedAccount = (l: ERPPostedJournalLine) =>
+    (l.accountId && sentIds.has(l.accountId.toLowerCase()) ? l.accountId.toLowerCase() : l.accountNumber ?? l.accountId?.toLowerCase() ?? '');
   const want = lineCounts(expected.map((l) => lineKey(l.accountId?.toLowerCase() ?? l.accountNumber, l.debit ?? 0, l.credit ?? 0)));
   const have = lineCounts(posted.map((l) => lineKey(postedAccount(l), l.debit, l.credit)));
   const differing = [...new Set([...want.keys(), ...have.keys()])].filter((k) => want.get(k) !== have.get(k));
@@ -677,8 +678,8 @@ function postedJournalMismatch(expected: CreateERPJournalInput['Lines'], posting
 }
 
 /** Account and amounts, rounded to the cent so float noise from either side cannot split a match. */
-function lineKey(accountNumber: string, debit: number, credit: number): string {
-  return `${accountNumber} ${debit.toFixed(2)}/${credit.toFixed(2)}`;
+function lineKey(account: string, debit: number, credit: number): string {
+  return `${account} ${debit.toFixed(2)}/${credit.toFixed(2)}`;
 }
 
 function lineCounts(keys: string[]): Map<string, number> {
