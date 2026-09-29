@@ -74,6 +74,7 @@ import {
 } from '@mj-biz-apps/accounting-engine-base';
 import { BusinessTimeZoneEngine } from '@mj-biz-apps/common-entities';
 import { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
+import { BusinessCentralAccountNumberError } from './GLAccountEntityServer.js';
 import { JournalEntryBatchEntityServer, type ERPNotPostedBasis, type JournalEntryBatchCancelOptions } from './JournalEntryBatchEntityServer.js';
 import { GetJournalEntryBatchSummaryEntryType } from './JournalEntryTypes.js';
 import { sqlGuidLiteral } from './SqlGuards.js';
@@ -670,27 +671,6 @@ export async function resolveExternalAccount(
   glAccountId: string, targetSystem: JournalEntryBatchTargetSystem, contextUser: UserInfo, provider: IMetadataProvider,
   requireExternalAccountID = false,
 ): Promise<string> {
-  const ref = await resolveExternalAccountRef(glAccountId, targetSystem, contextUser, provider, requireExternalAccountID);
-  return ref.accountId ?? ref.accountNumber;
-}
-
-/** A GL account's two ERP identifiers, kept apart (bc-aidp-next-golive#282). */
-export interface ExternalAccountRef {
-  /** The account number: the GL account's Code. */
-  accountNumber: string;
-  /** The ERP's own id for the account: the GL account's ExternalAccountID, when it is recorded for this ERP. */
-  accountId?: string;
-}
-
-/**
- * Both identifiers of a GL account, for a provider to send in the ERP's own fields: BC's
- * `accountNumber` holds the number and `accountId` the id (bc-aidp-next-golive#282). Precedence and
- * `requireExternalAccountID` are as for `resolveExternalAccount`.
- */
-export async function resolveExternalAccountRef(
-  glAccountId: string, targetSystem: JournalEntryBatchTargetSystem, contextUser: UserInfo, provider: IMetadataProvider,
-  requireExternalAccountID = false,
-): Promise<ExternalAccountRef> {
   const p = resolveProviders(provider);
   const glRes = await p.rv.RunView<{ Code: string; ExternalSystem: string | null; ExternalAccountID: string | null }>(
     { EntityName: GL_ENTITY, ExtraFilter: `ID='${glAccountId}'`, Fields: ['Code', 'ExternalSystem', 'ExternalAccountID'], ResultType: 'simple', BypassCache: true },
@@ -699,7 +679,10 @@ export async function resolveExternalAccountRef(
   const gl = glRes.Results?.[0];
   if (!gl) throw new Error(`resolveExternalAccount: GL account ${glAccountId} not found`);
   if (gl.ExternalAccountID && (!gl.ExternalSystem || gl.ExternalSystem === targetSystem)) {
-    return { accountNumber: gl.Code, accountId: gl.ExternalAccountID };
+    // BC takes the account number; an id there (the usual mistake: BC's GUID) would fail in BC (bc-aidp-next-golive#282).
+    const bcError = targetSystem === 'BusinessCentral' ? BusinessCentralAccountNumberError(gl.Code, gl.ExternalAccountID) : null;
+    if (bcError) throw new Error(bcError);
+    return gl.ExternalAccountID;
   }
   // An ERP that knows accounts only by its own id would read the Code as an id, and could match another account.
   if (requireExternalAccountID) {
@@ -708,7 +691,7 @@ export async function resolveExternalAccountRef(
       `with External System blank or ${targetSystem}; an ID recorded for another system is not used.`,
     );
   }
-  return { accountNumber: gl.Code }; // the account number IS the wire identity
+  return gl.Code; // the account number IS the wire identity
 }
 
 /**

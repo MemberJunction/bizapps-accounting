@@ -10,19 +10,14 @@ import type { ErpPostResult, ExternalDimensionRef } from './JournalEntryBatchEng
 
 /** One journal line as the engine sends it. */
 export interface ERPJournalLine {
-  /** The account number: the GL account's `Code`. */
+  /** The ERP's identity for the account: the GL account's `ExternalAccountID`, or its `Code`. */
   accountNumber: string;
-  /** The ERP's own id for the account: the GL account's `ExternalAccountID`, when it is recorded for this ERP. */
-  accountId?: string;
   debit?: number;
   credit?: number;
   description?: string;
   /** Dimension tags in ERP wire codes. Providers that cannot carry them ignore the field. */
   dimensions?: ExternalDimensionRef[];
 }
-
-/** One journal line as a CreateJournalEntry verb reads it: the account by number, by id, or both. */
-export type ERPVerbJournalLine = Omit<ERPJournalLine, 'accountNumber'> & { accountNumber?: string };
 
 export interface CreateERPJournalInput {
   CompanyID: string;
@@ -42,10 +37,7 @@ export interface FindERPJournalInput {
 
 /** One posted ledger line, in the terms `CreateERPJournalInput.Lines` is sent in. */
 export interface ERPPostedJournalLine {
-  /** The account number, when the ERP returns one (Business Central). */
-  accountNumber?: string;
-  /** The ERP's own id for the account, when the ERP returns one (Business Central, QuickBooks Online). */
-  accountId?: string;
+  accountNumber: string;
   /** `YYYY-MM-DD`. */
   postingDate: string;
   debit: number;
@@ -108,7 +100,7 @@ export abstract class BaseAccountingERPProvider {
   }
 
   /** The lines in the shape this ERP's CreateJournalEntry verb reads. */
-  protected verbLines(lines: ERPJournalLine[]): ERPVerbJournalLine[] {
+  protected verbLines(lines: ERPJournalLine[]): ERPJournalLine[] {
     return lines;
   }
 
@@ -161,15 +153,6 @@ export class BusinessCentralERPProvider extends BaseAccountingERPProvider {
       lines.push(line);
     }
     return { status: 'Ok', lines, externalJournalEntryBatchRef: input.DocNumber };
-  }
-
-  /**
-   * An account with a BC id goes by `accountId` alone (bc-aidp-next-golive#282). The verb sends
-   * `accountNumber` whenever it is present, so both would post by the number; the id is the one
-   * the BC pull recorded, and does not depend on the Code matching BC's number.
-   */
-  protected verbLines(lines: ERPJournalLine[]): ERPVerbJournalLine[] {
-    return lines.map(({ accountNumber, ...line }) => (line.accountId ? line : { ...line, accountNumber }));
   }
 
   /**
@@ -253,16 +236,9 @@ export class QuickBooksERPProvider extends BaseAccountingERPProvider {
     };
   }
 
-  /**
-   * The verb requires `accountId`, the QBO account id, and ignores `accountNumber`. The engine refuses
-   * an account without one before calling (`RequiresExternalAccountID`), so a line reaching here without
-   * it is a caller bug.
-   */
+  /** The verb requires `accountId`, the QBO account id, which is what `accountNumber` carries for QBO. */
   protected verbLines(lines: ERPJournalLine[]): QuickBooksJournalLine[] {
-    return lines.map((line) => {
-      if (!line.accountId) throw new Error(`GL account ${line.accountNumber} has no QuickBooks Online account ID.`);
-      return { ...line, accountId: line.accountId };
-    });
+    return lines.map((line) => ({ ...line, accountId: line.accountNumber }));
   }
 }
 
@@ -278,8 +254,7 @@ function parseBCGLEntry(entry: unknown): ERPPostedJournalLine | null {
   if (typeof row.accountNumber !== 'string' || !postingDate) return null;
   if (typeof row.debitAmount !== 'number' || typeof row.creditAmount !== 'number') return null;
   const description = typeof row.description === 'string' ? row.description : '';
-  const accountId = typeof row.accountId === 'string' && row.accountId ? row.accountId : undefined;
-  return { accountNumber: row.accountNumber, accountId, postingDate, debit: row.debitAmount, credit: row.creditAmount, description };
+  return { accountNumber: row.accountNumber, postingDate, debit: row.debitAmount, credit: row.creditAmount, description };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -315,8 +290,8 @@ function parseQBOJournalLine(rawLine: unknown, postingDate: string): ERPPostedJo
   const accountId = isRecord(detail.AccountRef) ? detail.AccountRef.value : undefined;
   if (typeof accountId !== 'string') return null;
   const description = typeof rawLine.Description === 'string' ? rawLine.Description : '';
-  if (detail.PostingType === 'Debit') return { accountId, postingDate, debit: rawLine.Amount, credit: 0, description };
-  if (detail.PostingType === 'Credit') return { accountId, postingDate, debit: 0, credit: rawLine.Amount, description };
+  if (detail.PostingType === 'Debit') return { accountNumber: accountId, postingDate, debit: rawLine.Amount, credit: 0, description };
+  if (detail.PostingType === 'Credit') return { accountNumber: accountId, postingDate, debit: 0, credit: rawLine.Amount, description };
   return null;
 }
 

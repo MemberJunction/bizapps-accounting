@@ -20,7 +20,7 @@ import { BaseAccountingEngineExtension } from '@mj-biz-apps/accounting-engine-ba
 import { AccountingEngine } from '../AccountingEngine.js';
 import { AccountingERPEngine, namesMatch } from '../AccountingERPEngine.js';
 import { BaseAccountingERPProvider } from '../BaseAccountingERPProvider.js';
-import { resolveExternalAccount, resolveExternalAccountRef, type ErpPostResult } from '../JournalEntryBatchEngine.js';
+import type { ErpPostResult } from '../JournalEntryBatchEngine.js';
 
 const user = { ID: 'user-1', Name: 'Test' } as unknown as UserInfo;
 const COMPANY = 'aaaaaaaa-0000-0000-0000-000000000001';
@@ -645,95 +645,67 @@ describe('AccountingERPEngine.FindPostedJournalBatch', () => {
   });
 });
 
-// ── bc-aidp-next-golive#282: Business Central accounts pulled from BC carry BC's account id ──
+// ── bc-aidp-next-golive#282: Business Central posts by account number ─────────────────────
+// For BC, ExternalAccountID holds a remapped BC account number (Code is immutable); blank posts by Code.
+// A BC account id (a GUID) there is refused: BC's accountNumber allows 20 characters.
 
-/** BC's own id for an account, as the BC GL pull stores it in ExternalAccountID (SQL Server returns it upper case). */
 const BC_ACCOUNT_ID = '9A1B2C3D-0000-0000-0000-000000000282';
 
-/** Tagged-post views whose GL account came from the BC pull: BC's number as the Code, BC's id as the ExternalAccountID. */
-function bcPulledAccountViews(): Record<string, unknown[]> {
-  return taggedViewsWithCodes({
-    'MJ_BizApps_Accounting: GL Accounts': [{ Code: '41507', ExternalSystem: 'BusinessCentral', ExternalAccountID: BC_ACCOUNT_ID }],
-  });
+function bcViewsWithAccount(glAccount: Record<string, unknown>): Record<string, unknown[]> {
+  return taggedViewsWithCodes({ 'MJ_BizApps_Accounting: GL Accounts': [glAccount] });
 }
 
-/** A BC G/L entry for the pulled account, as GetGLEntries maps it: BC returns both the id (lower case) and the number. */
-function bcPulledGLEntry(debitAmount: number, creditAmount: number, accountId = BC_ACCOUNT_ID.toLowerCase()) {
-  return { ...glEntry(debitAmount, creditAmount), accountId, accountNumber: '41507' };
-}
-
-describe('resolveExternalAccountRef', () => {
-  const gl = (row: Record<string, unknown>) => providerWith({ 'MJ_BizApps_Accounting: GL Accounts': [row] });
-
-  // Two identifiers, two fields: the number is always the Code, the id only when the account has one for this ERP.
-  it('returns the Code as accountNumber and the BC id as accountId for an account pulled from BC', async () => {
-    const ref = await resolveExternalAccountRef('gl-1', 'BusinessCentral', user, gl({ Code: '41507', ExternalSystem: 'BusinessCentral', ExternalAccountID: BC_ACCOUNT_ID }));
-
-    expect(ref).toEqual({ accountNumber: '41507', accountId: BC_ACCOUNT_ID });
-  });
-
-  it('returns only the Code for an account with no ERP id', async () => {
-    const ref = await resolveExternalAccountRef('gl-1', 'BusinessCentral', user, gl({ Code: '1000', ExternalSystem: null, ExternalAccountID: null }));
-
-    expect(ref).toEqual({ accountNumber: '1000' });
-  });
-
-  it('ignores an id recorded for another ERP', async () => {
-    const ref = await resolveExternalAccountRef('gl-1', 'BusinessCentral', user, gl({ Code: '1000', ExternalSystem: 'QuickBooks', ExternalAccountID: '35' }));
-
-    expect(ref).toEqual({ accountNumber: '1000' });
-  });
-
-  it('leaves resolveExternalAccount answering the ERP identity, id first, for existing callers', async () => {
-    const identity = await resolveExternalAccount('gl-1', 'BusinessCentral', user, gl({ Code: '41507', ExternalSystem: 'BusinessCentral', ExternalAccountID: BC_ACCOUNT_ID }));
-
-    expect(identity).toBe(BC_ACCOUNT_ID);
-  });
-});
-
-describe('Business Central — accounts that carry BC\'s account id', () => {
+describe('Business Central — account numbers', () => {
   beforeEach(() => {
     vi.spyOn(AccountingEngine.Instance, 'Config').mockResolvedValue();
   });
 
-  // BC's accountNumber is the account number (20 characters at most); the id goes in accountId.
-  it('sends a pulled account\'s BC id as accountId, and no accountNumber', async () => {
+  it('sends a remapped account under its External Account ID as the account number', async () => {
     const runVerb = vi.fn(async () => ({ Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'DocNumber', Value: 'BATCH-1', Type: 'Output' }] }));
     AccountingERPEngine.Instance.UseSeams({ runVerb });
 
-    await AccountingERPEngine.Instance.PostJournalBatch(taggedBatch(), taggedLines(), user, providerWith(bcPulledAccountViews()));
+    await AccountingERPEngine.Instance.PostJournalBatch(
+      taggedBatch(), taggedLines(), user, providerWith(bcViewsWithAccount({ Code: '41500', ExternalSystem: 'BusinessCentral', ExternalAccountID: '41507' })),
+    );
 
-    const sent = postedLines(runVerb) as Array<Record<string, unknown>>;
-    expect(sent.map((l) => l.accountId)).toEqual([BC_ACCOUNT_ID, BC_ACCOUNT_ID]);
-    expect(sent.every((l) => !('accountNumber' in l))).toBe(true);
+    expect(postedLines(runVerb).map((l) => (l as { accountNumber?: string }).accountNumber)).toEqual(['41507', '41507']);
   });
 
-  it('sends an account with no BC id by its Code as accountNumber, as before', async () => {
-    const runVerb = vi.fn(async () => ({ Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'DocNumber', Value: 'BATCH-1', Type: 'Output' }] }));
+  it('refuses to post, without calling BC, when an External Account ID is a BC account id', async () => {
+    const runVerb = vi.fn();
     AccountingERPEngine.Instance.UseSeams({ runVerb });
 
-    await AccountingERPEngine.Instance.PostJournalBatch(taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes()));
+    const result = await AccountingERPEngine.Instance.PostJournalBatch(
+      taggedBatch(), taggedLines(), user, providerWith(bcViewsWithAccount({ Code: '41507', ExternalSystem: 'BusinessCentral', ExternalAccountID: BC_ACCOUNT_ID })),
+    );
 
-    const sent = postedLines(runVerb) as Array<Record<string, unknown>>;
-    expect(sent.map((l) => l.accountNumber)).toEqual(['1000', '1000']);
-    expect(sent.every((l) => !('accountId' in l))).toBe(true);
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/GL account 41507: External Account ID .* is 36 characters; Business Central account numbers allow 20/);
+    expect(runVerb).not.toHaveBeenCalled();
   });
 
-  it('finds a posting of lines sent by BC id, matching on the id BC returns in any case', async () => {
-    AccountingERPEngine.Instance.UseSeams({ runVerb: glEntriesVerb([bcPulledGLEntry(100, 0), bcPulledGLEntry(0, 100)]) });
+  // An External System left blank applies to every ERP, so the same id is refused when the batch targets BC.
+  it('refuses an over-long External Account ID with External System blank, too', async () => {
+    const runVerb = vi.fn();
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
 
-    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, providerWith(bcPulledAccountViews()));
+    const result = await AccountingERPEngine.Instance.PostJournalBatch(
+      taggedBatch(), taggedLines(), user, providerWith(bcViewsWithAccount({ Code: '41507', ExternalSystem: null, ExternalAccountID: BC_ACCOUNT_ID })),
+    );
 
-    expect(result).toEqual({ status: 'Found', externalJournalEntryBatchRef: 'BATCH-1' });
+    expect(result.success).toBe(false);
+    expect(runVerb).not.toHaveBeenCalled();
   });
 
-  it('reports a mismatch when a line sent by BC id posted to another BC account', async () => {
-    const otherAccount = 'ffffffff-0000-0000-0000-000000000282';
-    AccountingERPEngine.Instance.UseSeams({ runVerb: glEntriesVerb([bcPulledGLEntry(100, 0), bcPulledGLEntry(0, 100, otherAccount)]) });
+  // The lookup builds the same lines; it must say it cannot answer, never report a mismatch it made up.
+  it('reports a lookup error, not a mismatch, when an External Account ID is a BC account id', async () => {
+    AccountingERPEngine.Instance.UseSeams({ runVerb: glEntriesVerb([glEntry(100, 0), glEntry(0, 100)]) });
 
-    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, providerWith(bcPulledAccountViews()));
+    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(
+      taggedBatch(), taggedLines(), user, providerWith(bcViewsWithAccount({ Code: '41507', ExternalSystem: 'BusinessCentral', ExternalAccountID: BC_ACCOUNT_ID })),
+    );
 
-    expect(result.status).toBe('Mismatch');
+    expect(result.status).toBe('Error');
   });
 });
 
@@ -808,8 +780,8 @@ describe('QuickBooks Online — PostJournalBatch', () => {
 
     expect(result).toEqual({ success: true, externalJournalEntryBatchRef: '146' });
     expect(postedLines(runVerb)).toEqual([
-      expect.objectContaining({ accountNumber: '1000', accountId: QBO_ACCOUNT, debit: 100 }),
-      expect.objectContaining({ accountNumber: '1000', accountId: QBO_ACCOUNT, credit: 100 }),
+      expect.objectContaining({ accountNumber: QBO_ACCOUNT, accountId: QBO_ACCOUNT, debit: 100 }),
+      expect.objectContaining({ accountNumber: QBO_ACCOUNT, accountId: QBO_ACCOUNT, credit: 100 }),
     ]);
   });
 
