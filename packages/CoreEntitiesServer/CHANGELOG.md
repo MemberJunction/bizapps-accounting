@@ -1,5 +1,23 @@
 # @mj-biz-apps/accounting-core-entities-server
 
+## 0.16.0
+
+### Patch Changes
+
+- 23a2473: Cancelling a journal entry batch past approval now refuses a user with no linked Person before any work starts (#212). The cancel is recorded on the approval Task as a comment, which requires the canceller's Person; that was checked only inside the cancel's transaction, after the authorization, the ERP lookup and the member release, so the whole cancel rolled back. `TasksAppApprovalGate.assertMayCancelApproved` now makes the check when the batch has an approval Task, after authorization, and the refusal says an administrator must link the user to a Person.
+- 61da309: `AccountingERPEngine` could never sync ERP master data and could not post to a Business Central connection named the way the MJ connector names it. Three fixes:
+
+  - `SyncMasterData` looked up a connection's entity maps with `IsActive = 1`, but `MJ: Company Integration Entity Maps` has no `IsActive` column (it has `Status` and `SyncEnabled`). The RunView failed, the lookup returned nothing, and every run reported "No entity maps for accounts, dimensions, dimensionValues" however the maps were configured. It now filters on `Status = 'Active' AND SyncEnabled = 1`.
+  - `namesMatch` compared names with only whitespace removed, so the MJ connector's `business-central` Integration never matched a `BusinessCentral` / `BC` TargetSystem. It now compares letters and digits only.
+  - `providerFor` resolved the ERP provider by the Integration's exact name, so `business-central` found no provider (they register as `Microsoft Dynamics 365 Business Central` and `QuickBooks Online`). It now falls back to the registered provider key the name matches under the same rule.
+
+- 12629ee: The pre-send ERP lookup no longer takes another environment's journal for this batch (#206). Batch numbers restart at `BATCH-000001` in every database, and the lookup matched on document number, account, amounts and posting date only, so a Failed retry could record another environment's matching journal as `Posted` without sending the batch. Every line the batch sends now carries its token, `[JEB <batch ID>]`, after the line's description, and Business Central's G/L entries carry it back. A posting counts as this batch only when every line carries the token. A posting whose lines carry only other batches' tokens is a new `Foreign` lookup result: the send or retry is refused with no override, and a Failed cancel treats the batch as not posted. A posting with no tokens, including one this batch made before tagging, is a `Mismatch` the operator settles.
+- abc01e3: New read-only remote operation `Accounting.GetJournalEntryStates { JournalEntryIDs }` (#193). For each id it returns `Found`, `Status`, `EffectiveDate` (a `YYYY-MM-DD` calendar day), `JournalEntryBatchID` and the owning batch's `JournalEntryBatchStatus` (null when unbatched), in request order, from two reads: the entries, then their batches. An unknown id is reported `Found: false`. Every id is validated as a UUID before it reaches a filter, and one malformed id refuses the whole call; at most 500 ids per call.
+- c595e57: `metadata/.mj-sync.json` now lists `record-processes`, `ml-training-pipelines`, `ml-models` and `ml-model-scoring-bindings` in `directoryOrder`. Folders left out of the list are pushed afterwards in alphabetical order, so on a fresh database `ml-model-scoring-bindings` was pushed before the models and record process it references, and `mj sync push --dir metadata` rolled back on `FK_MLModelScoringBinding_MLModel`. The new order follows the foreign keys: a model references its pipeline, and a scoring binding references its model and record process.
+- Updated dependencies [844cb02]
+  - @mj-biz-apps/accounting-entities@0.16.0
+  - @mj-biz-apps/accounting-engine-base@0.16.0
+
 ## 0.15.0
 
 ### Minor Changes
