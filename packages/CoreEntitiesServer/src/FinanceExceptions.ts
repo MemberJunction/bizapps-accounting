@@ -12,21 +12,30 @@
  * the raiser names the source record's creator, and a clearance records its reviewer in
  * ReviewedByUserID.
  *
+ * WHO MAY RAISE. The raise names the source record's creator, and that decides who may clear the
+ * row, so a raise is trusted input. `Accounting.RaiseFinanceExceptions` is marked RequiresSystemUser:
+ * the API refuses it to anyone but the system user. The consuming apps' detectors call it in-process
+ * (server code, through the provider), which that gate does not apply to.
+ *
+ * CONCURRENCY. Both writes read under an update lock inside their transaction, so two callers on
+ * the same row run one after the other: a second raise of an item finds the first one's row instead
+ * of failing on UQ_FinanceException_Type_DedupeKey, and a second clear of a row finds it no longer
+ * Open instead of overwriting the first reviewer.
+ *
  * FAILURE MODEL. Logical failures come back inside the output as `Success: false` with coded
  * `Errors`; the operations never throw for them.
  */
 import {
   AuthorizationEvaluator,
-  DatabaseProviderBase,
   EntityInfo,
   IMetadataProvider,
   IRunViewProvider,
   LogError,
-  RunViewParams,
   UserInfo,
 } from '@memberjunction/core';
 import { UUIDsEqual } from '@memberjunction/global';
 import { UserCache } from '@memberjunction/generic-database-provider';
+import type { SQLServerDataProvider } from '@memberjunction/sqlserver-dataprovider';
 import { FromCalendarDay, IsCalendarDay } from '@mj-biz-apps/common-entities';
 import type {
   AccountingClearFinanceExceptionInput,
@@ -48,6 +57,7 @@ import {
 } from './FinanceExceptionEntityServer.js';
 import { isSqlGuid } from './SqlGuards.js';
 
+const FINANCE_EXCEPTION_TABLE = '__mj_BizAppsAccounting.FinanceException';
 export const FINANCE_EXCEPTION_TYPE_ENTITY = 'MJ_BizApps_Accounting: Finance Exception Types';
 /** Held by the Finance role. Fails closed: an authorization missing from the catalog is held by nobody. */
 export const FINANCE_EXCEPTIONS_CLEAR_AUTH = 'MJ.BizApps.Accounting.FinanceExceptions.Clear';
@@ -92,6 +102,36 @@ export function FinanceLedgerUser(): UserInfo {
 
 function runViewProvider(provider: IMetadataProvider): IRunViewProvider {
   return provider as unknown as IRunViewProvider;
+}
+
+/** The server provider: transactions, and ExecuteSQL with named parameters (see SequenceService). */
+function database(provider: IMetadataProvider): SQLServerDataProvider {
+  return provider as unknown as SQLServerDataProvider;
+}
+
+/**
+ * Runs `work` in the caller's transaction when there is one, otherwise in its own — the same
+ * join rule as AccountingEngine.CreateJournalEntries. A joined transaction is the caller's to
+ * commit or roll back: a failure here is reported, and the caller decides.
+ */
+async function inTransaction<T>(provider: IMetadataProvider, operation: string, work: () => Promise<T>): Promise<T> {
+  const db = database(provider);
+  const joined = db.TransactionDepth > 0;
+  if (!joined) await db.BeginTransaction();
+  try {
+    const result = await work();
+    if (!joined) await db.CommitTransaction();
+    return result;
+  } catch (e) {
+    if (!joined) {
+      try {
+        await db.RollbackTransaction();
+      } catch (rollbackError) {
+        LogError(`${operation} rollback failed: ${rollbackError}`);
+      }
+    }
+    throw e;
+  }
 }
 
 async function loadFinanceExceptionTypes(provider: IMetadataProvider, ledger: UserInfo): Promise<FinanceExceptionTypeRow[]> {
@@ -203,7 +243,12 @@ function sqlNString(value: string): string {
   return `N'${value.replace(/'/g, "''")}'`;
 }
 
-function existingLookup(chunk: ResolvedRaise[]): RunViewParams {
+/**
+ * The locking existence read for one chunk. UPDLOCK + HOLDLOCK take key-range locks on
+ * UQ_FinanceException_Type_DedupeKey, found or not, until the transaction ends, so a concurrent
+ * raise of the same item waits and then reads this one's row.
+ */
+function existingLookupSql(chunk: ResolvedRaise[]): string {
   const byType = new Map<string, string[]>();
   for (const r of chunk) {
     byType.set(r.Type.ID, [...(byType.get(r.Type.ID) ?? []), r.Input.DedupeKey]);
@@ -213,26 +258,22 @@ function existingLookup(chunk: ResolvedRaise[]): RunViewParams {
   const clauses = [...byType.entries()].map(
     ([typeID, keys]) => `(FinanceExceptionTypeID = '${typeID}' AND DedupeKey IN (${keys.map(sqlNString).join(', ')}))`,
   );
-  return {
-    EntityName: FINANCE_EXCEPTION_ENTITY,
-    ExtraFilter: clauses.join(' OR '),
-    Fields: ['ID', 'FinanceExceptionTypeID', 'DedupeKey', 'Status', 'SourceCreatedByUserID', 'CreatorUnresolved'],
-    ResultType: 'simple',
-  };
+  return `SELECT ID, FinanceExceptionTypeID, DedupeKey, Status, SourceCreatedByUserID, CreatorUnresolved
+    FROM ${FINANCE_EXCEPTION_TABLE} WITH (UPDLOCK, HOLDLOCK)
+    WHERE ${clauses.join(' OR ')}`;
 }
 
-/** Existing rows for the raises, keyed by dedupeIdentity. */
+/** Existing rows for the raises, keyed by dedupeIdentity. Call inside the raise's transaction. */
 async function loadExisting(raises: ResolvedRaise[], provider: IMetadataProvider, ledger: UserInfo): Promise<Map<string, ExistingExceptionRow>> {
   const existing = new Map<string, ExistingExceptionRow>();
-  if (raises.length === 0) return existing;
-  const params: RunViewParams[] = [];
   for (let i = 0; i < raises.length; i += EXISTING_LOOKUP_CHUNK) {
-    params.push(existingLookup(raises.slice(i, i + EXISTING_LOOKUP_CHUNK)));
-  }
-  const results = await runViewProvider(provider).RunViews<ExistingExceptionRow>(params, ledger);
-  for (const result of results) {
-    if (!result.Success) throw new Error(`Could not read existing finance exceptions: ${result.ErrorMessage}`);
-    for (const row of result.Results ?? []) existing.set(dedupeIdentity(row.FinanceExceptionTypeID, row.DedupeKey), row);
+    const rows: ExistingExceptionRow[] = await database(provider).ExecuteSQL(
+      existingLookupSql(raises.slice(i, i + EXISTING_LOOKUP_CHUNK)),
+      null,
+      { description: 'Accounting.RaiseFinanceExceptions: existing rows (locking read)' },
+      ledger,
+    );
+    for (const row of rows ?? []) existing.set(dedupeIdentity(row.FinanceExceptionTypeID, row.DedupeKey), row);
   }
   return existing;
 }
@@ -325,31 +366,6 @@ async function writeRaises(
   return results;
 }
 
-/**
- * Runs `work` in the caller's transaction when there is one, otherwise in its own — the same
- * join rule as AccountingEngine.CreateJournalEntries. A joined transaction is the caller's to
- * commit or roll back: a failure here is reported, and the caller decides.
- */
-async function inTransaction<T>(provider: IMetadataProvider, work: () => Promise<T>): Promise<T> {
-  const db = provider as unknown as DatabaseProviderBase;
-  const joined = db.TransactionDepth > 0;
-  if (!joined) await db.BeginTransaction();
-  try {
-    const result = await work();
-    if (!joined) await db.CommitTransaction();
-    return result;
-  } catch (e) {
-    if (!joined) {
-      try {
-        await db.RollbackTransaction();
-      } catch (rollbackError) {
-        LogError(`RaiseFinanceExceptions rollback failed: ${rollbackError}`);
-      }
-    }
-    throw e;
-  }
-}
-
 export async function RaiseFinanceExceptions(
   input: AccountingRaiseFinanceExceptionsInput | null | undefined,
   provider: IMetadataProvider,
@@ -365,8 +381,10 @@ export async function RaiseFinanceExceptions(
   if (errors.length > 0) return { Success: false, Results: [], Errors: errors };
 
   try {
-    const existing = await loadExisting(resolved.filter(r => r.Type.IsActive), provider, ledger);
-    const Results = await inTransaction(provider, () => writeRaises(resolved, existing, provider, ledger));
+    const Results = await inTransaction(provider, 'Accounting.RaiseFinanceExceptions', async () => {
+      const existing = await loadExisting(resolved.filter(r => r.Type.IsActive), provider, ledger);
+      return writeRaises(resolved, existing, provider, ledger);
+    });
     return { Success: true, Results };
   } catch (e) {
     const Message = e instanceof Error ? e.message : String(e);
@@ -437,7 +455,33 @@ export async function ClearFinanceException(
   const invalid = inputRefusal(input);
   if (invalid || !input) return { Success: false, Errors: [invalid ?? { Code: 'MALFORMED_INPUT', Message: 'Input is required.' }] };
 
-  const record = await provider.GetEntityObject<FinanceExceptionEntityServer>(FINANCE_EXCEPTION_ENTITY, FinanceLedgerUser());
+  try {
+    return await inTransaction(provider, 'Accounting.ClearFinanceException', () => clearLocked(input, provider, reviewer));
+  } catch (e) {
+    const Message = e instanceof Error ? e.message : String(e);
+    LogError(`Accounting.ClearFinanceException failed: ${Message}`);
+    return { Success: false, Status: 'Open', Errors: [{ Code: 'SAVE_FAILED', Message }] };
+  }
+}
+
+/**
+ * Locks the row, then reads, checks and saves it. The lock makes a concurrent clear of the same
+ * row wait and then see it no longer Open (NOT_OPEN), rather than both saves succeeding and the
+ * second overwriting the first reviewer and note. A failed save throws, so the transaction rolls back.
+ */
+async function clearLocked(
+  input: AccountingClearFinanceExceptionInput,
+  provider: IMetadataProvider,
+  reviewer: UserInfo,
+): Promise<AccountingClearFinanceExceptionOutput> {
+  const ledger = FinanceLedgerUser();
+  await database(provider).ExecuteSQL(
+    `SELECT ID FROM ${FINANCE_EXCEPTION_TABLE} WITH (UPDLOCK, ROWLOCK) WHERE ID = @ID`,
+    { ID: input.FinanceExceptionID },
+    { description: 'Accounting.ClearFinanceException: lock the row' },
+    ledger,
+  );
+  const record = await provider.GetEntityObject<FinanceExceptionEntityServer>(FINANCE_EXCEPTION_ENTITY, ledger);
   if (!(await record.Load(input.FinanceExceptionID))) {
     return { Success: false, Errors: [{ Code: 'NOT_FOUND', Message: `No finance exception has the ID ${input.FinanceExceptionID}.` }] };
   }
@@ -449,8 +493,7 @@ export async function ClearFinanceException(
   record.ReviewedAt = new Date();
   record.ReviewNote = input.Note.trim();
   if (!(await SaveFinanceExceptionClearance(record))) {
-    const Message = record.LatestResult?.CompleteMessage ?? 'save failed';
-    return { Success: false, Status: 'Open', Errors: [{ Code: 'SAVE_FAILED', Message: `Could not clear finance exception ${record.ID}: ${Message}` }] };
+    throw new Error(`Could not clear finance exception ${record.ID}: ${record.LatestResult?.CompleteMessage ?? 'save failed'}`);
   }
   return { Success: true, Status: record.Status };
 }

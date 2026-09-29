@@ -1,7 +1,7 @@
 /**
  * golive #279 — the finance exception operations. No database: the provider is a stub that
- * answers the type catalog, the existence lookup and entity creation, and records what was
- * written and whether a transaction was opened.
+ * answers the type catalog, the locking reads and entity creation, and records what was written,
+ * whether a transaction was opened, and the order of transaction and SQL calls.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AuthorizationInfo, EntityInfo, IMetadataProvider, RemoteOpServerContext, UserInfo } from '@memberjunction/core';
@@ -66,7 +66,16 @@ interface StubOptions {
 
 function stubProvider(options: StubOptions = {}) {
   const saved: WrittenRow[] = [];
-  const tx = { begin: vi.fn(), commit: vi.fn(), rollback: vi.fn() };
+  const calls: string[] = [];
+  const tx = {
+    begin: vi.fn(async () => void calls.push('begin')),
+    commit: vi.fn(async () => void calls.push('commit')),
+    rollback: vi.fn(async () => void calls.push('rollback')),
+  };
+  const executeSQL = vi.fn(async (sql: string) => {
+    calls.push('sql');
+    return /FinanceExceptionTypeID/.test(sql) ? (options.existing ?? []) : [];
+  });
   const getEntityObject = vi.fn(async () => {
     const row: WrittenRow = {
       ID: '',
@@ -98,10 +107,10 @@ function stubProvider(options: StubOptions = {}) {
     CommitTransaction: tx.commit,
     RollbackTransaction: tx.rollback,
     RunView: vi.fn(async () => ({ Success: true, Results: TYPES })),
-    RunViews: vi.fn(async () => [{ Success: true, Results: options.existing ?? [] }]),
+    ExecuteSQL: executeSQL,
     GetEntityObject: getEntityObject,
   };
-  return { provider: provider as unknown as IMetadataProvider, raw: provider, saved, tx, getEntityObject };
+  return { provider: provider as unknown as IMetadataProvider, raw: provider, saved, tx, getEntityObject, executeSQL, calls };
 }
 
 function raise(overrides: Partial<AccountingFinanceExceptionToRaise> = {}): AccountingFinanceExceptionToRaise {
@@ -174,6 +183,21 @@ describe('Accounting.RaiseFinanceExceptions', () => {
     expect(result.Output?.Results).toEqual([{ Index: 0, FinanceExceptionID: 'EXISTING-1', Created: false }]);
     expect(s.saved).toHaveLength(0);
     expect(s.getEntityObject).not.toHaveBeenCalled();
+  });
+
+  it('reads existing rows under a key-range update lock inside its transaction', async () => {
+    const s = stubProvider();
+    await new RaiseFinanceExceptionsOperation().ExecuteServer({ Exceptions: [raise()] }, context(s.provider));
+    expect(s.calls).toEqual(['begin', 'sql', 'commit']);
+    const [sql] = s.executeSQL.mock.calls[0];
+    expect(sql).toMatch(/FROM __mj_BizAppsAccounting\.FinanceException WITH \(UPDLOCK, HOLDLOCK\)/);
+    expect(sql).toContain(`FinanceExceptionTypeID = '${TYPES[0].ID}' AND DedupeKey IN (N'77777777-7777-4777-8777-777777777777')`);
+  });
+
+  it('is limited to the system user when called through the API; the other two operations are not', () => {
+    expect(new RaiseFinanceExceptionsOperation().RequiresSystemUser).toBe(true);
+    expect(new ClearFinanceExceptionOperation().RequiresSystemUser).toBe(false);
+    expect(new GetFinanceExceptionTypesOperation().RequiresSystemUser).toBe(false);
   });
 
   it("joins the caller's transaction instead of opening one", async () => {
@@ -291,6 +315,23 @@ describe('Accounting.ClearFinanceException', () => {
     expect(result.Output).toEqual({ Success: true, Status: 'Corrected' });
     expect(s.saved[0]).toMatchObject({ Status: 'Corrected', ReviewedByUserID: REVIEWER.ID, ReviewNote: 'Price corrected on the order.' });
     expect(s.saved[0].ReviewedAt).toBeInstanceOf(Date);
+  });
+
+  it('locks the row inside its transaction before reading it', async () => {
+    const s = stubProvider({ stored: openRow() });
+    await clear(s, {});
+    expect(s.calls).toEqual(['begin', 'sql', 'commit']);
+    const [sql, params] = s.executeSQL.mock.calls[0] as unknown as [string, Record<string, unknown>];
+    expect(sql).toMatch(/FROM __mj_BizAppsAccounting\.FinanceException WITH \(UPDLOCK, ROWLOCK\) WHERE ID = @ID/);
+    expect(params).toEqual({ ID: EXCEPTION_ID });
+  });
+
+  it('rolls back and reports SAVE_FAILED when the save fails', async () => {
+    const s = stubProvider({ stored: openRow(), saveSucceeds: false });
+    const result = await clear(s, {});
+    expect(result.Output).toEqual({ Success: false, Status: 'Open', Errors: [expect.objectContaining({ Code: 'SAVE_FAILED' })] });
+    expect(s.tx.rollback).toHaveBeenCalledTimes(1);
+    expect(s.tx.commit).not.toHaveBeenCalled();
   });
 });
 

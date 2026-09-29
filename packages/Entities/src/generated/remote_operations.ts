@@ -181,7 +181,7 @@ export class AccountingGetFinanceExceptionTypesOperation extends BaseRemotableOp
 // ============================================================
 /**
  * Raise Finance Exceptions
- * Raise finance exceptions from a consuming app's detector. Idempotent on (TypeCode, DedupeKey): an existing row is returned with Created false. On an Open row the creator fields (SourceCreatedByUserID, CreatorUnresolved) and the summary are refreshed from the raise, so a creator identified later (for example a login linked afterwards) unlocks it; nothing else changes, and Reviewed or Corrected rows are never touched. An inactive type is skipped. An unknown type code or entity name, or a malformed entry, fails the whole call and writes nothing. Joins the caller's transaction when there is one, so a raise made during a save commits or rolls back with it.
+ * Raise finance exceptions from a consuming app's detector. Idempotent on (TypeCode, DedupeKey): an existing row is returned with Created false. On an Open row the creator fields (SourceCreatedByUserID, CreatorUnresolved) and the summary are refreshed from the raise, so a creator identified later (for example a login linked afterwards) unlocks it; nothing else changes, and Reviewed or Corrected rows are never touched. An inactive type is skipped. An unknown type code or entity name, or a malformed entry, fails the whole call and writes nothing. Joins the caller's transaction when there is one, so a raise made during a save commits or rolls back with it. Requires the system user when called through the API: the raise names who created the source record, which decides who may clear it, so only server code (the consuming apps' in-process detectors) may raise.
  * GenerationType=Manual — the server body is supplied by a hand-authored subclass registered
  * under 'Accounting.RaiseFinanceExceptions'. This generated base provides the typed contract only (client-safe).
  */
@@ -189,6 +189,6 @@ export class AccountingRaiseFinanceExceptionsOperation extends BaseRemotableOper
     public readonly OperationKey = "Accounting.RaiseFinanceExceptions";
     public readonly ExecutionMode = 'Sync' as const;
     public readonly RequiredScope = "accounting:write";
-    public readonly RequiresSystemUser = false;
+    public readonly RequiresSystemUser = true;
 }
 
