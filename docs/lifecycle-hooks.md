@@ -183,7 +183,9 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
 - **Batch recovery (#145).** *Retry* — `sendJournalEntryBatch` on a `Failed` batch reuses its approval.
   `Failed` does not prove the ERP rejected the journal: the post can succeed with the response lost, or
   succeed and then fail to save `Posted`. So every send, first or retry, looks the batch number up in
-  the ERP first (#182; `AccountingERPEngine.FindPostedJournalBatch`, Business Central via `GetGLEntries`).
+  the ERP first (#182; `AccountingERPEngine.FindPostedJournalBatch`, both ERPs via `GetGLEntries`:
+  Business Central by document number on any date, QuickBooks Online by the batch number among the
+  posting date's journal entries, since its verb cannot filter by number).
   Every line the batch sends carries its token, `[JEB <batch ID>]`, after the line's description
   (#206): batch numbers restart at `BATCH-000001` in every database, so another environment's journal
   can sit under the same number in the same ERP company, and the batch ID is what tells them apart.
@@ -196,12 +198,14 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   a `Failed` cancel treats it as not posted. A posting with no tokens (sent before tagging, or from an
   environment that does not tag) or only some is a mismatch. A posting that differs, or a failed lookup, refuses the send unless
   `confirmNotAlreadyPostedInERP` (`ConfirmNotAlreadyPostedInERP` on `Accounting.DispatchJournalEntryBatch`),
-  which also stays required on a `Failed` retry to an ERP with no lookup (QuickBooks Online today). A
+  which also stays required on a `Failed` retry to an ERP with no lookup. A
   refused retry stays `Failed` and the op answers `ConfirmationRequired` with the reason and its kind
   (`Unavailable`, `Error` or `Mismatch`; the Dispatch status page gives `Mismatch` a stronger dialog,
   since it is often this very batch); any other refused first send goes `Sent → Failed`. The lookup
   reads posted G/L entries only, so Business Central posting refuses to write into a journal that
   already holds unposted lines, which `Microsoft.NAV.post` would otherwise post along with the batch.
+  QuickBooks Online posts each account by its QBO id (`ExternalAccountID`); a line whose GL account
+  has none is refused before the call, since QBO would read the `Code` as an id.
   An `afterPost` extension hook that throws never overturns a post the ERP accepted. *Resume* —
   `resumeJournalEntryBatchPosting` (`Accounting.ResumeJournalEntryBatchPosting`) finishes a `Posted`
   batch's member `Batched → GLPosted` flip with no ERP call. *Visibility* — `findStrandedJournalEntries`

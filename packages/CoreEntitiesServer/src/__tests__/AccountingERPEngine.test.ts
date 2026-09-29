@@ -64,6 +64,12 @@ class ThrowingAfterPostExt extends BaseAccountingEngineExtension {
   async AfterPostJournalBatchFailure(): Promise<void> { extensionCalls.push('afterPostFailure'); }
 }
 
+// An ERP provider with no lookup, now that QuickBooks Online has one.
+@RegisterClass(BaseAccountingERPProvider, 'Xero')
+class NoLookupERPProvider extends BaseAccountingERPProvider {
+  get IntegrationName(): string { return 'Xero'; }
+}
+
 function providerWith(views: Record<string, unknown[]>) {
   return {
     RunView: async (params: { EntityName: string }) => ({
@@ -627,15 +633,233 @@ describe('AccountingERPEngine.FindPostedJournalBatch', () => {
     AccountingERPEngine.Instance.UseSeams({ runVerb });
     const p = providerWith({
       'MJ: Company Integrations': [
-        { ID: CI, CompanyID: COMPANY, IntegrationID: 'int-1', Integration: 'QuickBooks Online', IsActive: true },
+        { ID: CI, CompanyID: COMPANY, IntegrationID: 'int-1', Integration: 'Xero', IsActive: true },
       ],
     });
-    const batch = { ID: 'batch-1', CompanyID: COMPANY, TargetSystem: 'QuickBooks', JournalEntryBatchNumber: 'BATCH-1', PostingDate: new Date('2026-08-01') } as never;
+    const batch = { ID: 'batch-1', CompanyID: COMPANY, TargetSystem: 'Xero', JournalEntryBatchNumber: 'BATCH-1', PostingDate: new Date('2026-08-01') } as never;
 
     const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(batch, [], user, p);
 
     expect(result).toEqual({ status: 'Unavailable' });
     expect(runVerb).not.toHaveBeenCalled();
+  });
+});
+
+// ── #182: QuickBooks Online posts by QBO account id, and looks its journal up by day ─────────
+
+const QBO_ACCOUNT = '35';
+
+function qboViews(glAccounts: unknown[] = [{ Code: '1000', ExternalSystem: 'QuickBooks', ExternalAccountID: QBO_ACCOUNT }]): Record<string, unknown[]> {
+  return {
+    'MJ: Company Integrations': [
+      { ID: CI, CompanyID: COMPANY, IntegrationID: 'int-1', Integration: 'QuickBooks Online', IsActive: true },
+    ],
+    'MJ: Company Integration Entity Maps': [],
+    'MJ_BizApps_Accounting: Accounting Engine Extensions': [],
+    'MJ_BizApps_Accounting: GL Accounts': glAccounts,
+    'MJ_BizApps_Accounting: Journal Entry Line Dimensions': [],
+  };
+}
+
+function qboBatch() {
+  return { ID: TAGGED_BATCH_ID, CompanyID: COMPANY, TargetSystem: 'QuickBooks', JournalEntryBatchNumber: 'BATCH-1', PostingDate: new Date('2026-08-01') } as never;
+}
+
+type QBOSide = 'Debit' | 'Credit';
+
+/**
+ * A QBO JournalEntry as GetGLEntries returns it: the mapped transaction, with the QBO record as
+ * `metadata`. Each line's Description carries this batch's token unless `description` says otherwise.
+ */
+function qboJournal(id: string, docNumber: string, lines: Array<[QBOSide, number]>, txnDate = '2026-08-01', description = `Netted [${OWN_TOKEN}]`) {
+  return {
+    id,
+    transactionType: 'JournalEntry',
+    transactionNumber: docNumber,
+    transactionDate: new Date(`${txnDate}T00:00:00Z`),
+    amount: lines.filter(([side]) => side === 'Debit').reduce((sum, [, amount]) => sum + amount, 0),
+    lines: [],
+    metadata: {
+      Id: id,
+      DocNumber: docNumber,
+      TxnDate: txnDate,
+      Line: lines.map(([side, amount], i) => ({
+        Id: String(i),
+        Description: description,
+        Amount: amount,
+        DetailType: 'JournalEntryLineDetail',
+        JournalEntryLineDetail: { PostingType: side, AccountRef: { value: QBO_ACCOUNT, name: 'Accounts Receivable' } },
+      })),
+    },
+  };
+}
+
+/** A runVerb that answers GetGLEntries with `transactions` and fails anything else. */
+function qboTransactionsVerb(transactions: unknown[]) {
+  return vi.fn(async (call: { Verb: string }) => call.Verb === 'GetGLEntries'
+    ? { Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'Transactions', Value: transactions, Type: 'Output' }] }
+    : { Success: false, ResultCode: 'ERROR', Message: `unexpected verb ${call.Verb}` });
+}
+
+const BALANCED: Array<[QBOSide, number]> = [['Debit', 100], ['Credit', 100]];
+
+describe('QuickBooks Online — PostJournalBatch', () => {
+  beforeEach(() => {
+    vi.spyOn(AccountingEngine.Instance, 'Config').mockResolvedValue();
+  });
+
+  it('sends each line\'s QBO account id as accountId and records the post under the QBO entry id', async () => {
+    const runVerb = vi.fn(async () => ({ Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'JournalEntryID', Value: '146', Type: 'Output' }] }));
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+
+    const result = await AccountingERPEngine.Instance.PostJournalBatch(qboBatch(), taggedLines(), user, providerWith(qboViews()));
+
+    expect(result).toEqual({ success: true, externalJournalEntryBatchRef: '146' });
+    expect(postedLines(runVerb)).toEqual([
+      expect.objectContaining({ accountNumber: QBO_ACCOUNT, accountId: QBO_ACCOUNT, debit: 100 }),
+      expect.objectContaining({ accountNumber: QBO_ACCOUNT, accountId: QBO_ACCOUNT, credit: 100 }),
+    ]);
+  });
+
+  // QBO would read the Code as an account id, and could post to whichever account has that id.
+  it('refuses to post, without calling QBO, when a GL account has no QBO account id', async () => {
+    const runVerb = vi.fn();
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+
+    const result = await AccountingERPEngine.Instance.PostJournalBatch(
+      qboBatch(), taggedLines(), user, providerWith(qboViews([{ Code: '1000', ExternalSystem: null, ExternalAccountID: null }])),
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/GL account 1000 has no QuickBooks account ID/);
+    expect(runVerb).not.toHaveBeenCalled();
+  });
+});
+
+describe('QuickBooks Online — FindPostedJournalBatch', () => {
+  beforeEach(() => {
+    vi.spyOn(AccountingEngine.Instance, 'Config').mockResolvedValue();
+  });
+
+  const find = () => AccountingERPEngine.Instance.FindPostedJournalBatch(qboBatch(), taggedLines(), user, providerWith(qboViews()));
+
+  it('reads the posting date\'s journal entries and finds the one under the batch number', async () => {
+    const runVerb = qboTransactionsVerb([qboJournal('145', 'BATCH-0', [['Debit', 5], ['Credit', 5]]), qboJournal('146', 'BATCH-1', BALANCED)]);
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+
+    const result = await find();
+
+    expect(result).toEqual({ status: 'Found', externalJournalEntryBatchRef: '146' });
+    const call = runVerb.mock.calls[0][0] as unknown as { Params: Record<string, unknown> };
+    expect(call.Params).toEqual({ TransactionType: 'JournalEntry', StartDate: '2026-08-01', EndDate: '2026-08-01', MaxResults: 1000 });
+  });
+
+  // #206: a QBO sandbox company is often shared by more than one environment, each issuing BATCH-1.
+  it('reports another batch\'s journal when every line carries another batch\'s token, even if the lines match', async () => {
+    AccountingERPEngine.Instance.UseSeams({ runVerb: qboTransactionsVerb([qboJournal('146', 'BATCH-1', BALANCED, undefined, `Netted [${OTHER_TOKEN}]`)]) });
+
+    expect(await find()).toEqual({
+      status: 'Foreign',
+      detail: `its lines carry the token of batch bbbbbbbb-0000-0000-0000-000000000206, not this batch's ${TAGGED_BATCH_ID}.`,
+    });
+  });
+
+  it('reports a mismatch, never a match, when matching lines carry no token', async () => {
+    AccountingERPEngine.Instance.UseSeams({ runVerb: qboTransactionsVerb([qboJournal('146', 'BATCH-1', BALANCED, undefined, 'Netted')]) });
+
+    const result = await find();
+
+    expect(result.status).toBe('Mismatch');
+    expect(result.status === 'Mismatch' && result.detail).toMatch(/^none of its 2 line\(s\) carries this batch's token/);
+  });
+
+  it('reports a mismatch when a line has no description', async () => {
+    const journal = qboJournal('146', 'BATCH-1', BALANCED);
+    delete (journal.metadata.Line[1] as { Description?: string }).Description;
+    AccountingERPEngine.Instance.UseSeams({ runVerb: qboTransactionsVerb([journal]) });
+
+    const result = await find();
+
+    expect(result.status).toBe('Mismatch');
+    expect(result.status === 'Mismatch' && result.detail).toMatch(/^1 of its 2 line\(s\) carry no batch token/);
+  });
+
+  it('reports nothing posted when the day holds only other documents', async () => {
+    AccountingERPEngine.Instance.UseSeams({ runVerb: qboTransactionsVerb([qboJournal('145', 'BATCH-0', BALANCED)]) });
+
+    expect(await find()).toEqual({ status: 'NotFound' });
+  });
+
+  it('reports a mismatch when an amount differs', async () => {
+    AccountingERPEngine.Instance.UseSeams({ runVerb: qboTransactionsVerb([qboJournal('146', 'BATCH-1', [['Debit', 100], ['Credit', 90], ['Credit', 10]])]) });
+
+    const result = await find();
+
+    expect(result.status).toBe('Mismatch');
+    expect(result.status === 'Mismatch' && result.detail).toMatch(/35 0.00\/100.00 \(batch 1, ERP 0\)/);
+  });
+
+  it('reports a mismatch when two QBO entries carry the batch number', async () => {
+    AccountingERPEngine.Instance.UseSeams({ runVerb: qboTransactionsVerb([qboJournal('146', 'BATCH-1', BALANCED), qboJournal('147', 'BATCH-1', BALANCED)]) });
+
+    const result = await find();
+
+    expect(result.status).toBe('Mismatch');
+    expect(result.status === 'Mismatch' && result.detail).toMatch(/4 ERP line\(s\) against 2/);
+  });
+
+  it('reports an error when the day reaches the lookup cap, since the answer may be partial', async () => {
+    AccountingERPEngine.Instance.UseSeams({ runVerb: qboTransactionsVerb(Array.from({ length: 1000 }, (_, i) => qboJournal(String(i), `OTHER-${i}`, BALANCED))) });
+
+    expect(await find()).toEqual({ status: 'Error', error: 'QuickBooks Online has 1000 or more journal entries on 2026-08-01, more than one lookup reads.' });
+  });
+
+  it.each([
+    ['a line has no posting type', (j: ReturnType<typeof qboJournal>) => { delete (j.metadata.Line[0].JournalEntryLineDetail as { PostingType?: string }).PostingType; }],
+    ['a line has no account', (j: ReturnType<typeof qboJournal>) => { delete (j.metadata.Line[0].JournalEntryLineDetail as { AccountRef?: unknown }).AccountRef; }],
+    ['the entry has no date', (j: ReturnType<typeof qboJournal>) => { delete (j.metadata as { TxnDate?: string }).TxnDate; }],
+  ])('reports an error when %s', async (_case, damage) => {
+    const journal = qboJournal('146', 'BATCH-1', BALANCED);
+    damage(journal);
+    AccountingERPEngine.Instance.UseSeams({ runVerb: qboTransactionsVerb([journal]) });
+
+    expect((await find()).status).toBe('Error');
+  });
+
+  it('reports an error when a transaction comes back without its QBO record', async () => {
+    AccountingERPEngine.Instance.UseSeams({ runVerb: qboTransactionsVerb([{ id: '146', transactionNumber: 'BATCH-1' }]) });
+
+    expect((await find()).status).toBe('Error');
+  });
+
+  it('reports an error, never nothing posted, when the lookup verb fails', async () => {
+    AccountingERPEngine.Instance.UseSeams({ runVerb: async () => ({ Success: false, ResultCode: 'ERROR', Message: 'QBO 503' }) });
+
+    expect(await find()).toEqual({ status: 'Error', error: 'QBO 503' });
+  });
+
+  // What the poster sends, as QBO would store it and GetGLEntries would return it.
+  it('finds the journal the poster sent, round-tripped through QBO\'s JournalEntry shape', async () => {
+    let sent: Array<{ accountId: string; debit?: number; credit?: number; description: string }> = [];
+    let sentDate = '';
+    const runVerb = vi.fn(async (call: { Verb: string; Params: Record<string, unknown> }) => {
+      if (call.Verb === 'CreateJournalEntry') {
+        sent = call.Params.Lines as typeof sent;
+        sentDate = call.Params.EntryDate as string;
+        return { Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'JournalEntryID', Value: '146', Type: 'Output' }] };
+      }
+      const journal = qboJournal('146', 'BATCH-1', sent.map((l): [QBOSide, number] => (l.debit ? ['Debit', l.debit] : ['Credit', l.credit ?? 0])), sentDate);
+      journal.metadata.Line.forEach((line, i) => { line.Description = sent[i].description; });
+      return { Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'Transactions', Value: JSON.parse(JSON.stringify([journal])), Type: 'Output' }] };
+    });
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+    const p = providerWith(qboViews());
+
+    const posted = await AccountingERPEngine.Instance.PostJournalBatch(qboBatch(), taggedLines(), user, p);
+    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(qboBatch(), taggedLines(), user, p);
+
+    expect(posted.success).toBe(true);
+    expect(result).toEqual({ status: 'Found', externalJournalEntryBatchRef: posted.externalJournalEntryBatchRef });
   });
 });
 
