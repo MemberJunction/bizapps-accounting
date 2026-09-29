@@ -19,6 +19,8 @@
  *   assertMayCancelApproved(batchId) / recordCancellation(batchId, cancellation) (#183): only the company's
  *     CFO or the batch's recorded approver may cancel a batch past approval, and the cancel is
  *     written to the approval Task as a comment, so the approver's record shows what became of it.
+ *     The comment needs the canceller's linked Person, so the authorization refuses a cancel
+ *     without one before any work starts (#212).
  *
  * PROVIDER: the gate is a plain helper with no provider of its own, so the correct
  * IMetadataProvider is INJECTED at construction — required, no global fallback (the system
@@ -188,37 +190,40 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
    * entries to the next build, so it is theirs to decide — before this, the only cancel path was a
    * CFO rejection through recordDecision. Unlike recordDecision this does not hard-fail when no CFO
    * is configured, because the recorded approver is enough.
+   *
+   * It also refuses an authorized user who has no linked Person when the batch has an approval Task
+   * (#212): recordCancellation writes the cancel there as a TaskComment, which requires a Person.
+   * Checked here, the refusal comes before the ERP lookup and the member release instead of rolling
+   * them back. Authorization is checked first, so a user who may not cancel learns only that.
    */
   async assertMayCancelApproved(batchId: string, contextUser: UserInfo): Promise<void> {
     const batch = await this.loadBatch(batchId, contextUser);
     const cfoUserId = await this.readCFOUserIdForCompany(batch.CompanyID, contextUser);
     const allowed = [cfoUserId, batch.ApprovedByUserID].filter((id): id is string => !!id);
-    if (allowed.some(id => UUIDsEqual(id, contextUser.ID))) return;
-    throw new Error(
-      `Batch ${batch.JournalEntryBatchNumber ?? batchId}: only the company's configured approver ` +
-      `(AccountingCompanyProfile.ApprovalCFOUserID) or the user who approved this batch may cancel it after approval.`,
-    );
+    if (!allowed.some(id => UUIDsEqual(id, contextUser.ID))) {
+      throw new Error(
+        `Batch ${batch.JournalEntryBatchNumber ?? batchId}: only the company's configured approver ` +
+        `(AccountingCompanyProfile.ApprovalCFOUserID) or the user who approved this batch may cancel it after approval.`,
+      );
+    }
+    if (!(await this.resolveBatchTask(batchId, contextUser))) return;
+    if (!(await this.resolvePersonIdForUser(contextUser))) throw this.noLinkedPersonError(batch, contextUser);
   }
 
   /**
    * Record a cancel past approval on the batch's approval Task, as a comment by the cancelling user's
    * Person. The Task keeps its approved decision — the comment is what tells the approver the batch
    * they signed was cancelled, and why. A batch with no approval Task (approved without the tasks
-   * workflow) has nothing to annotate. Refuses when the user has no linked Person, because
-   * TaskComment requires one; the caller runs this inside the cancel's transaction, so the cancel
-   * rolls back with it rather than going unrecorded.
+   * workflow) has nothing to annotate. assertMayCancelApproved has already refused a user with no
+   * linked Person; this refuses again in case the link was removed since, and the caller runs this
+   * inside the cancel's transaction, so the cancel rolls back rather than going unrecorded.
    */
   async recordCancellation(batchId: string, cancellation: RecordedCancellation, contextUser: UserInfo): Promise<void> {
     const task = await this.resolveBatchTask(batchId, contextUser);
     if (!task) return;
     const batch = await this.loadBatch(batchId, contextUser);
     const personId = await this.resolvePersonIdForUser(contextUser);
-    if (!personId) {
-      throw new Error(
-        `Batch ${batch.JournalEntryBatchNumber ?? batchId}: the cancel cannot be recorded on its approval Task because user ` +
-        `${contextUser.Email ?? contextUser.ID} has no linked Person (MJ_BizApps_Common: People.LinkedUserID).`,
-      );
-    }
+    if (!personId) throw this.noLinkedPersonError(batch, contextUser);
     const comment = await this.provider.GetEntityObject<mjBizAppsTasksTaskCommentEntity>(TASK_COMMENT_ENTITY, contextUser);
     comment.NewRecord();
     comment.TaskID = task.ID;
@@ -233,6 +238,15 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
   }
 
   // ─── helpers ───────────────────────────────────────────────────────────────
+
+  /** Why a cancel past approval is refused for a user with no linked Person (#212). */
+  private noLinkedPersonError(batch: mjBizAppsAccountingJournalEntryBatchEntity, contextUser: UserInfo): Error {
+    return new Error(
+      `Batch ${batch.JournalEntryBatchNumber ?? batch.ID}: the cancel cannot be recorded on its approval Task because user ` +
+      `${contextUser.Email ?? contextUser.ID} has no linked Person (MJ_BizApps_Common: People.LinkedUserID). ` +
+      'An administrator must link this user to a Person before the batch can be cancelled.',
+    );
+  }
 
   /** The company's CFO User, or null when none is configured (no hard-fail — see assertMayCancelApproved). */
   private async readCFOUserIdForCompany(companyId: string, contextUser: UserInfo): Promise<string | null> {
