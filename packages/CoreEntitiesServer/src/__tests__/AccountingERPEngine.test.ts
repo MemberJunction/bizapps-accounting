@@ -18,7 +18,7 @@ import { RegisterClass, MJGlobal } from '@memberjunction/global';
 import type { UserInfo } from '@memberjunction/core';
 import { BaseAccountingEngineExtension } from '@mj-biz-apps/accounting-engine-base';
 import { AccountingEngine } from '../AccountingEngine.js';
-import { AccountingERPEngine } from '../AccountingERPEngine.js';
+import { AccountingERPEngine, namesMatch } from '../AccountingERPEngine.js';
 import { BaseAccountingERPProvider } from '../BaseAccountingERPProvider.js';
 import type { ErpPostResult } from '../JournalEntryBatchEngine.js';
 
@@ -636,5 +636,85 @@ describe('AccountingERPEngine.FindPostedJournalBatch', () => {
 
     expect(result).toEqual({ status: 'Unavailable' });
     expect(runVerb).not.toHaveBeenCalled();
+  });
+});
+
+// ── Real-schema filters and connector-named integrations ─────────────────────────────────────
+
+/**
+ * Like providerWith, but it behaves like SQL Server for entity maps: that entity has Status and SyncEnabled and no
+ * IsActive column, so a filter naming IsActive fails the query instead of being ignored.
+ */
+function providerWithMapSchema(views: Record<string, unknown[]>, filters: string[]) {
+  return {
+    RunView: async (params: { EntityName: string; ExtraFilter?: string }) => {
+      if (params.EntityName === 'MJ: Company Integration Entity Maps') {
+        filters.push(params.ExtraFilter ?? '');
+        if (/\bIsActive\b/.test(params.ExtraFilter ?? '')) return { Success: false, ErrorMessage: "Invalid column name 'IsActive'." };
+      }
+      return { Success: true, Results: views[params.EntityName] ?? [] };
+    },
+  } as never;
+}
+
+describe('AccountingERPEngine against the real entity-map schema', () => {
+  beforeEach(() => {
+    AccountingERPEngine.Instance.UseSeams({});
+    vi.spyOn(AccountingEngine.Instance, 'Config').mockResolvedValue();
+  });
+
+  it('finds entity maps by Status and SyncEnabled, so a configured sync actually runs', async () => {
+    const syncCalls: string[][] = [];
+    AccountingERPEngine.Instance.UseSeams({ runSync: async (_id, _u, mapIds) => { syncCalls.push(mapIds); return { Success: true }; } });
+    const filters: string[] = [];
+    const p = providerWithMapSchema({
+      'MJ: Company Integrations': [
+        { ID: CI, CompanyID: COMPANY, IntegrationID: 'int-1', Integration: 'business-central', IsActive: true },
+      ],
+      'MJ: Company Integration Entity Maps': [
+        { ID: 'map-1', CompanyIntegrationID: CI, Entity: 'MJ_BizApps_Accounting: GL Accounts', Status: 'Active', SyncEnabled: true },
+      ],
+      'MJ_BizApps_Accounting: Accounting Engine Extensions': [],
+    }, filters);
+
+    const out = await AccountingERPEngine.Instance.SyncMasterData({ Objects: ['accounts'] }, user, p);
+
+    expect(filters).toHaveLength(1);
+    expect(filters[0]).toContain("Status = 'Active'");
+    expect(filters[0]).toContain('SyncEnabled = 1');
+    expect(filters[0]).not.toMatch(/IsActive/);
+    expect(syncCalls).toEqual([['map-1']]);
+    expect(out.Results[0]?.Message ?? '').not.toMatch(/No entity maps/);
+  });
+
+  it('posts through the Business Central provider when the Integration is named business-central', async () => {
+    const runVerb = vi.fn(async () => ({ Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'DocNumber', Value: 'BATCH-1', Type: 'Output' }] }));
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+    const views = taggedViewsWithCodes();
+    views['MJ: Company Integrations'] = [
+      { ID: CI, CompanyID: COMPANY, IntegrationID: 'int-1', Integration: 'business-central', IsActive: true },
+    ];
+
+    const result = await AccountingERPEngine.Instance.PostJournalBatch(taggedBatch(), taggedLines(), user, providerWith(views));
+
+    expect(result.success).toBe(true);
+    expect(runVerb).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('namesMatch', () => {
+  it('ignores case, spaces and punctuation', () => {
+    expect(namesMatch('business-central', 'BusinessCentral')).toBe(true);
+    expect(namesMatch('business-central', 'Microsoft Dynamics 365 Business Central')).toBe(true);
+    expect(namesMatch('Business Central', 'BC')).toBe(true);
+    expect(namesMatch('quickbooks-online', 'QuickBooks Online')).toBe(true);
+    expect(namesMatch('QuickBooks Online', 'QuickBooks Online')).toBe(true);
+  });
+
+  it('keeps different systems apart', () => {
+    expect(namesMatch('business-central', 'QuickBooks Online')).toBe(false);
+    expect(namesMatch('QuickBooks Online', 'BusinessCentral')).toBe(false);
+    expect(namesMatch('HubSpot', 'BusinessCentral')).toBe(false);
+    expect(namesMatch('business-central', null)).toBe(false);
   });
 });
