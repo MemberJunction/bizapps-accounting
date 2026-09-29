@@ -1,5 +1,11 @@
 # @mj-biz-apps/accounting-entities
 
+## 0.16.0
+
+### Minor Changes
+
+- 844cb02: Ships the Customer Deposits and Unbilled Receivable GL account roles to hosts. Until now they existed only in `metadata/`, so no install had them. bizapps-orders 5.20 posts to both, and without Customer Deposits it refuses payments on scheduled orders. The seed covers these two roles and nothing else, and it skips a role a host already has.
+
 ## 0.15.0
 
 ### Minor Changes
