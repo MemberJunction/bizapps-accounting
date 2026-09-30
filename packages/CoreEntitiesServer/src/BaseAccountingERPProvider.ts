@@ -21,6 +21,12 @@ export interface ERPJournalLine {
 
 export interface CreateERPJournalInput {
   CompanyID: string;
+  /**
+   * The Company Integration the engine chose to post through (#256). Sent to the verb as
+   * `CompanyIntegrationID`, so the verb uses exactly that connection (MemberJunction/MJ#4867)
+   * instead of resolving one of its own from `CompanyID`.
+   */
+  CompanyIntegrationID: string;
   EntryDate: Date;
   DocNumber?: string;
   PrivateNote?: string;
@@ -29,6 +35,11 @@ export interface CreateERPJournalInput {
 
 export interface FindERPJournalInput {
   CompanyID: string;
+  /**
+   * The Company Integration the engine chose, the same one the post goes through (#256). Sent to
+   * the lookup verb as `CompanyIntegrationID`.
+   */
+  CompanyIntegrationID: string;
   /** The document number the journal was, or would be, posted under: the batch number. */
   DocNumber: string;
   /** `YYYY-MM-DD`: the batch's posting date. A provider that can look up by number alone ignores it. */
@@ -73,16 +84,11 @@ export abstract class BaseAccountingERPProvider {
   }
 
   async CreateJournalEntry(input: CreateERPJournalInput, user: UserInfo): Promise<ErpPostResult> {
-    const result = await this.runVerb({
-      Verb: 'CreateJournalEntry',
-      CompanyID: input.CompanyID,
-      User: user,
-      Params: {
-        EntryDate: input.EntryDate.toISOString().slice(0, 10),
-        DocNumber: input.DocNumber,
-        PrivateNote: input.PrivateNote,
-        Lines: this.verbLines(input.Lines),
-      },
+    const result = await this.runConnectionVerb('CreateJournalEntry', input, user, {
+      EntryDate: input.EntryDate.toISOString().slice(0, 10),
+      DocNumber: input.DocNumber,
+      PrivateNote: input.PrivateNote,
+      Lines: this.verbLines(input.Lines),
     });
     if (!result.Success) {
       return { success: false, error: result.Message ?? result.ResultCode };
@@ -97,6 +103,26 @@ export abstract class BaseAccountingERPProvider {
    */
   async FindJournalEntry(_input: FindERPJournalInput, _user: UserInfo): Promise<FindERPJournalResult> {
     return { status: 'Unavailable' };
+  }
+
+  /**
+   * Run a verb against the connection the engine chose: `CompanyID` plus a `CompanyIntegrationID`
+   * param (#256, MemberJunction/MJ#4867). Every verb call a provider makes goes through here, so the
+   * lookup and the post cannot reach different connections. The connection is added last, so a
+   * verb param of the same name cannot override it.
+   */
+  protected async runConnectionVerb(
+    verb: string,
+    connection: { CompanyID: string; CompanyIntegrationID: string },
+    user: UserInfo,
+    params: Record<string, unknown>,
+  ): Promise<AccountingVerbResult> {
+    return this.runVerb({
+      Verb: verb,
+      CompanyID: connection.CompanyID,
+      User: user,
+      Params: { ...params, CompanyIntegrationID: connection.CompanyIntegrationID },
+    });
   }
 
   /** The lines in the shape this ERP's CreateJournalEntry verb reads. */
@@ -130,11 +156,9 @@ export class BusinessCentralERPProvider extends BaseAccountingERPProvider {
     if (input.DocNumber.includes("'")) {
       return { status: 'Error', error: `document number ${input.DocNumber} cannot be looked up: it contains a quote.` };
     }
-    const result = await this.runVerb({
-      Verb: 'GetGLEntries',
-      CompanyID: input.CompanyID,
-      User: user,
-      Params: { DocumentNumber: input.DocNumber, MaxResults: BC_LOOKUP_MAX_RESULTS },
+    const result = await this.runConnectionVerb('GetGLEntries', input, user, {
+      DocumentNumber: input.DocNumber,
+      MaxResults: BC_LOOKUP_MAX_RESULTS,
     });
     if (!result.Success) {
       return { status: 'Error', error: result.Message ?? result.ResultCode ?? 'GetGLEntries failed.' };
@@ -199,11 +223,11 @@ export class QuickBooksERPProvider extends BaseAccountingERPProvider {
    * not found; the batch's posting date is frozen once it is sent, so a retry posts on the same day.
    */
   async FindJournalEntry(input: FindERPJournalInput, user: UserInfo): Promise<FindERPJournalResult> {
-    const result = await this.runVerb({
-      Verb: 'GetGLEntries',
-      CompanyID: input.CompanyID,
-      User: user,
-      Params: { TransactionType: 'JournalEntry', StartDate: input.PostingDate, EndDate: input.PostingDate, MaxResults: QBO_LOOKUP_MAX_RESULTS },
+    const result = await this.runConnectionVerb('GetGLEntries', input, user, {
+      TransactionType: 'JournalEntry',
+      StartDate: input.PostingDate,
+      EndDate: input.PostingDate,
+      MaxResults: QBO_LOOKUP_MAX_RESULTS,
     });
     if (!result.Success) {
       return { status: 'Error', error: result.Message ?? result.ResultCode ?? 'GetGLEntries failed.' };
