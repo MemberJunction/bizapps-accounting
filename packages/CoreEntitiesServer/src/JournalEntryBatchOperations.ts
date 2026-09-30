@@ -62,7 +62,6 @@ import {
   type StrandedJournalEntryBatch,
   type ErpPostingUnconfirmedKind,
 } from './JournalEntryBatchEngine.js';
-import { createAccountingERPLookup, createAccountingERPPoster } from './AccountingERPEngine.js';
 import { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
 import { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
 import { requireSqlGuid } from './SqlGuards.js';
@@ -251,7 +250,7 @@ export interface DispatchJournalEntryBatchOutput {
  * Every send first asks the ERP what it holds under the batch's number: a matching posting is recorded
  * as this batch's instead of being sent again, and `ConfirmNotAlreadyPostedInERP` overrides a lookup
  * that cannot settle it (see sendJournalEntryBatch). A send the ERP rejects returns normally with
- * `Status: 'Failed'`.
+ * `Status: 'Failed'`. The engine resolves the gate, the ERP poster and the lookup itself (#233).
  */
 @RegisterClass(BaseRemotableOperation, 'Accounting.DispatchJournalEntryBatch')
 export class DispatchJournalEntryBatchOperation extends BaseRemotableOperation<DispatchJournalEntryBatchInput, DispatchJournalEntryBatchOutput> {
@@ -262,9 +261,6 @@ export class DispatchJournalEntryBatchOperation extends BaseRemotableOperation<D
     requireSqlGuid(input.JournalEntryBatchID, 'DispatchJournalEntryBatch');
     try {
       const batch = await sendJournalEntryBatch(input.JournalEntryBatchID, user, {
-        gate: new TasksAppApprovalGate(provider),
-        poster: createAccountingERPPoster(provider),
-        lookup: createAccountingERPLookup(provider),
         provider,
         confirmNotAlreadyPostedInERP: input.ConfirmNotAlreadyPostedInERP === true,
       });

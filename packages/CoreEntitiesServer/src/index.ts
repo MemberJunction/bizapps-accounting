@@ -64,6 +64,9 @@ export {
   JournalEntryBatchFromViewError,
   approveJournalEntryBatch,
   sendJournalEntryBatch,
+  autoPostJournalEntryBatch,
+  assertAutoPostPolicy,
+  AutoPostDispatchError,
   resumeJournalEntryBatchPosting,
   findStrandedJournalEntries,
   recordDispatchFailure,
@@ -99,6 +102,7 @@ export type {
   CancelJournalEntryBatchOptions,
   RecordedCancellation,
   SendJournalEntryBatchOptions,
+  AutoPostJournalEntryBatchResult,
   DispatchFailureRecord,
   ResumeJournalEntryBatchPostingResult,
   StrandedJournalEntryBatch,
@@ -109,7 +113,7 @@ export type {
 // production). See TasksAppApprovalGate.ts.
 export { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
 
-// Where cancelJournalEntryBatch gets its gate and ERP lookup (#233). Register a subclass at a higher
+// Where sendJournalEntryBatch and cancelJournalEntryBatch get their gate, ERP poster and lookup (#233). Register a subclass at a higher
 // priority to replace them; callers can no longer pass their own.
 export { JournalEntryBatchDispatchServices } from './JournalEntryBatchDispatchServices.js';
 
