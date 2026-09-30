@@ -1431,8 +1431,16 @@ export interface JournalEntryBatchPreviewResult {
   Candidates: JournalEntryBatchPreviewEntry[];
   /** The netted summary the included selection would produce. */
   AffectedAccounts: AffectedAccount[];
+  /**
+   * The NETTED totals — what the batch's summary JE and control totals will carry. Lines on the
+   * same company, account and dimensions cancel first, so a booking's Cr Deferred Revenue and its
+   * recognition's Dr Deferred Revenue reduce each other here.
+   */
   TotalDebits: number;
   TotalCredits: number;
+  /** Σ debits / Σ credits across the included entries' own lines, before netting (#284). */
+  GrossDebits: number;
+  GrossCredits: number;
   /** Per-company subtotals for the workspace footer (a sweep builds one batch per company, D7). */
   PerCompany: Array<{ CompanyID: string; Debit: number; Credit: number }>;
   /**
@@ -1462,6 +1470,19 @@ export function outOfOrderSkipCount(
     if (!includedIds.has(candidatesOldestFirst[i].ID)) skipped++;
   }
   return skipped;
+}
+
+/**
+ * Σ debits and Σ credits over the source lines, before netting — pure. The preview shows these
+ * beside the netted totals so an entry whose lines cancel inside the batch is still visibly counted.
+ */
+export function grossTotals(lines: NettableLine[]): { grossDebits: number; grossCredits: number } {
+  let grossDebits = 0, grossCredits = 0;
+  for (const l of lines) {
+    grossDebits += l.debit;
+    grossCredits += l.credit;
+  }
+  return { grossDebits: Math.round(grossDebits * 100) / 100, grossCredits: Math.round(grossCredits * 100) / 100 };
 }
 
 /** Per-company Dr/Cr subtotals over the netted groups — pure. */
@@ -1521,6 +1542,7 @@ export async function previewBatch(
   const lines = includedRows.length > 0 ? await loadNettableLinesUnscoped(includedRows.map(r => r.ID), contextUser, p) : [];
   const groups = NetLines(lines);
   const { totalDebits, totalCredits } = summaryTotals(groups);
+  const gross = grossTotals(lines);
 
   // Σ debits per entry — the preview grid's money column.
   const amountByJE = new Map<string, number>();
@@ -1547,6 +1569,8 @@ export async function previewBatch(
     AffectedAccounts: await summarizeAffectedAccounts(groups, contextUser, p),
     TotalDebits: totalDebits,
     TotalCredits: totalCredits,
+    GrossDebits: gross.grossDebits,
+    GrossCredits: gross.grossCredits,
     PerCompany: perCompanySubtotals(groups),
     OutOfOrderSkipCount: outOfOrderSkipCount(rows, included),
   };
