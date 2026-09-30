@@ -1230,43 +1230,35 @@ export const mjBizAppsAccountingJournalEntrySchema = z.object({
     AnomalyOutcome: z.string().describe(`
         * * Field Name: AnomalyOutcome
         * * Display Name: Anomaly Outcome
-        * * SQL Data Type: varchar(9)
-        * * Description: Calculated outcome indicating if journal entry is anomalous or normal.`),
+        * * SQL Data Type: varchar(9)`),
     TotalDebitAmount: z.number().describe(`
         * * Field Name: TotalDebitAmount
         * * Display Name: Total Debit Amount
-        * * SQL Data Type: decimal(38, 2)
-        * * Description: Sum of debit amounts across all lines for this journal entry.`),
+        * * SQL Data Type: decimal(38, 2)`),
     LineCount: z.number().describe(`
         * * Field Name: LineCount
         * * Display Name: Line Count
-        * * SQL Data Type: int
-        * * Description: Total count of lines in this journal entry.`),
+        * * SQL Data Type: int`),
     EffectiveMonth: z.number().nullable().describe(`
         * * Field Name: EffectiveMonth
         * * Display Name: Effective Month
-        * * SQL Data Type: int
-        * * Description: Calendar month of the journal entry effective date (1-12).`),
+        * * SQL Data Type: int`),
     EffectiveDayOfWeek: z.number().nullable().describe(`
         * * Field Name: EffectiveDayOfWeek
         * * Display Name: Effective Day Of Week
-        * * SQL Data Type: int
-        * * Description: Day of week for the effective date (1=Sunday, 7=Saturday).`),
+        * * SQL Data Type: int`),
     IsWeekend: z.number().describe(`
         * * Field Name: IsWeekend
         * * Display Name: Is Weekend
-        * * SQL Data Type: int
-        * * Description: Binary indicator if the effective date falls on a weekend (1) or weekday (0).`),
+        * * SQL Data Type: int`),
     HasLinkedRecord: z.number().describe(`
         * * Field Name: HasLinkedRecord
         * * Display Name: Has Linked Record
-        * * SQL Data Type: int
-        * * Description: Binary indicator if the journal entry has a linked source record ID.`),
+        * * SQL Data Type: int`),
     HasFile: z.number().describe(`
         * * Field Name: HasFile
         * * Display Name: Has File
-        * * SQL Data Type: int
-        * * Description: Binary indicator if the journal entry has an attached file.`),
+        * * SQL Data Type: int`),
 });
 
 export type mjBizAppsAccountingJournalEntryEntityType = z.infer<typeof mjBizAppsAccountingJournalEntrySchema>;
@@ -5703,7 +5695,6 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     * * Field Name: AnomalyOutcome
     * * Display Name: Anomaly Outcome
     * * SQL Data Type: varchar(9)
-    * * Description: Calculated outcome indicating if journal entry is anomalous or normal.
     */
     get AnomalyOutcome(): string {
         return this.Get('AnomalyOutcome');
@@ -5713,7 +5704,6 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     * * Field Name: TotalDebitAmount
     * * Display Name: Total Debit Amount
     * * SQL Data Type: decimal(38, 2)
-    * * Description: Sum of debit amounts across all lines for this journal entry.
     */
     get TotalDebitAmount(): number {
         return this.Get('TotalDebitAmount');
@@ -5723,7 +5713,6 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     * * Field Name: LineCount
     * * Display Name: Line Count
     * * SQL Data Type: int
-    * * Description: Total count of lines in this journal entry.
     */
     get LineCount(): number {
         return this.Get('LineCount');
@@ -5733,7 +5722,6 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     * * Field Name: EffectiveMonth
     * * Display Name: Effective Month
     * * SQL Data Type: int
-    * * Description: Calendar month of the journal entry effective date (1-12).
     */
     get EffectiveMonth(): number | null {
         return this.Get('EffectiveMonth');
@@ -5743,7 +5731,6 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     * * Field Name: EffectiveDayOfWeek
     * * Display Name: Effective Day Of Week
     * * SQL Data Type: int
-    * * Description: Day of week for the effective date (1=Sunday, 7=Saturday).
     */
     get EffectiveDayOfWeek(): number | null {
         return this.Get('EffectiveDayOfWeek');
@@ -5753,7 +5740,6 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     * * Field Name: IsWeekend
     * * Display Name: Is Weekend
     * * SQL Data Type: int
-    * * Description: Binary indicator if the effective date falls on a weekend (1) or weekday (0).
     */
     get IsWeekend(): number {
         return this.Get('IsWeekend');
@@ -5763,7 +5749,6 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     * * Field Name: HasLinkedRecord
     * * Display Name: Has Linked Record
     * * SQL Data Type: int
-    * * Description: Binary indicator if the journal entry has a linked source record ID.
     */
     get HasLinkedRecord(): number {
         return this.Get('HasLinkedRecord');
@@ -5773,7 +5758,6 @@ export class mjBizAppsAccountingJournalEntryEntity extends BaseEntity<mjBizAppsA
     * * Field Name: HasFile
     * * Display Name: Has File
     * * SQL Data Type: int
-    * * Description: Binary indicator if the journal entry has an attached file.
     */
     get HasFile(): number {
         return this.Get('HasFile');
@@ -5964,9 +5948,6 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     /**
     * Validate() method override for MJ_BizApps_Accounting: Journal Entry Batches entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
     * * Table-Level: Both the approval task and the time it was raised must either be set together, or both must be empty.
-    * * Table-Level: When a record's status is set to 'Archived', an archive reason, an archive date, and the archiving user's ID must all be provided.
-    * * Table-Level: If an approved journal entry batch is cancelled, a cancellation reason, cancellation date, and the user who cancelled it must all be provided.
-    * * Table-Level: If a journal entry batch has already been sent and is subsequently cancelled, the ERP non-posting confirmation details (date, user, and basis) must be provided to ensure proper audit tracking.
     * * Table-Level: Total debits, total credits, and total entries must all be greater than or equal to zero to ensure valid financial accounting records.
     * @public
     * @method
@@ -5975,9 +5956,6 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     public override Validate(): ValidationResult {
         const result = super.Validate();
         this.ValidateApprovalTaskAndRaisedAtCoexistence(result);
-        this.ValidateArchivedFieldsWhenStatusIsArchived(result);
-        this.ValidateCancellationDetailsForApprovedBatch(result);
-        this.ValidateERPNotPostedConfirmationForCancelledSentBatches(result);
         this.ValidateTotalsAreNonNegative(result);
         result.Success = result.Success && (result.Errors.length === 0);
 
@@ -6001,103 +5979,6 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     			this.ApprovalTaskID,
     			ValidationErrorType.Failure
     		));
-    	}
-    }
-
-    /**
-    * When a record's status is set to 'Archived', an archive reason, an archive date, and the archiving user's ID must all be provided.
-    * @param result - the ValidationResult object to add any errors or warnings to
-    * @public
-    * @method
-    */
-    public ValidateArchivedFieldsWhenStatusIsArchived(result: ValidationResult) {
-    	if (this.Status === "Archived") {
-    		const hasArchiveReason = this.ArchiveReason != null && this.ArchiveReason.trim().length > 0;
-    		const hasArchivedAt = this.ArchivedAt != null;
-    		const hasArchivedByUserID = this.ArchivedByUserID != null;
-    
-    		if (!hasArchiveReason) {
-    			result.Errors.push(new ValidationErrorInfo(
-    				"ArchiveReason",
-    				"An archive reason is required when the status is set to 'Archived'.",
-    				this.ArchiveReason,
-    				ValidationErrorType.Failure
-    			));
-    		}
-    		if (!hasArchivedAt) {
-    			result.Errors.push(new ValidationErrorInfo(
-    				"ArchivedAt",
-    				"The archive date and time are required when the status is set to 'Archived'.",
-    				this.ArchivedAt,
-    				ValidationErrorType.Failure
-    			));
-    		}
-    		if (!hasArchivedByUserID) {
-    			result.Errors.push(new ValidationErrorInfo(
-    				"ArchivedByUserID",
-    				"The user who archived the record is required when the status is set to 'Archived'.",
-    				this.ArchivedByUserID,
-    				ValidationErrorType.Failure
-    			));
-    		}
-    	}
-    }
-
-    /**
-    * If an approved journal entry batch is cancelled, a cancellation reason, cancellation date, and the user who cancelled it must all be provided.
-    * @param result - the ValidationResult object to add any errors or warnings to
-    * @public
-    * @method
-    */
-    public ValidateCancellationDetailsForApprovedBatch(result: ValidationResult) {
-        if (this.Status === 'Cancelled' && this.ApprovedAt != null) {
-            const hasCancelReason = this.CancelReason != null && this.CancelReason.trim().length > 0;
-            const hasCancelledAt = this.CancelledAt != null;
-            const hasCancelledBy = this.CancelledByUserID != null;
-    
-            if (!hasCancelReason) {
-                result.Errors.push(new ValidationErrorInfo(
-                    "CancelReason",
-                    "A cancellation reason is required when cancelling an approved batch.",
-                    this.CancelReason,
-                    ValidationErrorType.Failure
-                ));
-            }
-            if (!hasCancelledAt) {
-                result.Errors.push(new ValidationErrorInfo(
-                    "CancelledAt",
-                    "Cancellation date is required when cancelling an approved batch.",
-                    this.CancelledAt,
-                    ValidationErrorType.Failure
-                ));
-            }
-            if (!hasCancelledBy) {
-                result.Errors.push(new ValidationErrorInfo(
-                    "CancelledByUserID",
-                    "The user who cancelled the batch must be specified when cancelling an approved batch.",
-                    this.CancelledByUserID,
-                    ValidationErrorType.Failure
-                ));
-            }
-        }
-    }
-
-    /**
-    * If a journal entry batch has already been sent and is subsequently cancelled, the ERP non-posting confirmation details (date, user, and basis) must be provided to ensure proper audit tracking.
-    * @param result - the ValidationResult object to add any errors or warnings to
-    * @public
-    * @method
-    */
-    public ValidateERPNotPostedConfirmationForCancelledSentBatches(result: ValidationResult) {
-    	if (this.Status === 'Cancelled' && this.SentAt != null) {
-    		if (this.ERPNotPostedConfirmedAt == null || this.ERPNotPostedConfirmedByUserID == null || this.ERPNotPostedBasis == null) {
-    			result.Errors.push(new ValidationErrorInfo(
-    				'Status',
-    				'If a sent journal entry batch is cancelled, the ERP non-posting confirmation date, user, and basis must all be provided.',
-    				this.Status,
-    				ValidationErrorType.Failure
-    			));
-    		}
     	}
     }
 
