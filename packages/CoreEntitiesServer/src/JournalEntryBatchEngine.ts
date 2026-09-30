@@ -72,11 +72,11 @@ import {
   type NetGroup,
   type NettableLine,
 } from '@mj-biz-apps/accounting-engine-base';
-import { BusinessTimeZoneEngine } from '@mj-biz-apps/common-entities';
 import { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 import { JournalEntryBatchEntityServer, type ERPNotPostedBasis, type JournalEntryBatchCancelOptions } from './JournalEntryBatchEntityServer.js';
 import { GetJournalEntryBatchSummaryEntryType } from './JournalEntryTypes.js';
 import { sqlGuidLiteral } from './SqlGuards.js';
+import { loadTodayBusiness } from './BusinessDay.js';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
@@ -563,26 +563,18 @@ async function loadDimensionsByLine(lineIds: string[], contextUser: UserInfo, p:
   return byLine;
 }
 
-/**
- * Today as a date-only value in the BUSINESS zone, UTC midnight of that day. PostingDate selection
- * is a UI-port item. Exported (not module-private) so the pinned business-day-semantics test in
- * `__tests__/JournalEntryBatchEngine.test.ts` can call it directly without a full provider mock.
- */
-export function todayBusiness(): Date {
-  return BusinessTimeZoneEngine.Instance.TodayAsDate();
-}
-
 async function createBatchHeader(
   companyId: string, targetSystem: JournalEntryBatchTargetSystem, batchedByUserId: string, jeCount: number, contextUser: UserInfo, p: Providers,
 ): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
-  await BusinessTimeZoneEngine.Instance.Config(false, contextUser, p.md);
+  // PostingDate is today's business day (see BusinessDay.ts); PostingDate selection is a UI-port item.
+  const postingDate = await loadTodayBusiness(contextUser, p.md);
   const batch = await p.md.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, contextUser);
   batch.NewRecord();
   // The one sanctioned create. Everything else that saves a new batch — Explorer's generic New
   // form included — is refused by the entity's create guard (#193).
   batch.MarkBuiltByBatchingProcess();
   batch.CompanyID = companyId;
-  batch.PostingDate = todayBusiness();
+  batch.PostingDate = postingDate;
   batch.TargetSystem = targetSystem;
   batch.BatchedAt = new Date();
   batch.BatchedByUserID = batchedByUserId;
