@@ -1,8 +1,8 @@
 /**
  * #183 — Accounting.CancelJournalEntryBatch. It refuses a Pending batch (that cancel is a rejection,
- * recorded through the CFO's decision) and hands the engine the reason, the ERP confirmation and the
- * tasks-backed gate that authorizes and records a cancel past approval. The engine is mocked: its
- * own rules are covered in CancelJournalEntryBatch.test.ts.
+ * recorded through the CFO's decision) and hands the engine the reason and the ERP confirmation. The
+ * engine resolves the gate and the ERP lookup itself (#233). The engine is mocked: its own rules are
+ * covered in CancelJournalEntryBatch.test.ts.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { IMetadataProvider, RemoteOpServerContext, UserInfo } from '@memberjunction/core';
@@ -15,7 +15,6 @@ vi.mock('../JournalEntryBatchEngine.js', async (importOriginal) => ({
 
 import { CancelJournalEntryBatchOperation } from '../JournalEntryBatchOperations.js';
 import { ErpPostingUnconfirmedError } from '../JournalEntryBatchEngine.js';
-import { TasksAppApprovalGate } from '../TasksAppApprovalGate.js';
 
 const USER = { ID: 'USER-1' } as UserInfo;
 const BATCH_ID = 'bbbbbbbb-0000-4000-8000-000000000183';
@@ -43,20 +42,11 @@ describe('Accounting.CancelJournalEntryBatch', () => {
     expect(engineCancel).not.toHaveBeenCalled();
   });
 
-  it('passes the reason, the ERP confirmation and the tasks-backed gate to the engine', async () => {
+  // #233: the engine resolves the gate and the ERP lookup itself; the operation passes neither.
+  it('passes the reason and the ERP confirmation to the engine, and no gate or lookup', async () => {
     const result = await run('Failed', { Reason: 'Wrong period', ConfirmNotAlreadyPostedInERP: true });
     expect(result.Success).toBe(true);
-    const options = engineCancel.mock.calls[0][3] as { reason: string; confirmNotAlreadyPostedInERP: boolean; gate: unknown };
-    expect(options.reason).toBe('Wrong period');
-    expect(options.confirmNotAlreadyPostedInERP).toBe(true);
-    expect(options.gate).toBeInstanceOf(TasksAppApprovalGate);
-  });
-
-  // #207: a Failed cancel checks the ERP first, so the operation must hand the engine a real lookup.
-  it('hands the engine the ERP lookup', async () => {
-    await run('Failed', { Reason: 'Wrong period' });
-    const options = engineCancel.mock.calls[0][3] as { lookup?: unknown };
-    expect(typeof options.lookup).toBe('function');
+    expect(engineCancel.mock.calls[0][3]).toEqual({ reason: 'Wrong period', confirmNotAlreadyPostedInERP: true });
   });
 
   it('answers with the confirmation the operator must give when the lookup cannot settle it', async () => {
