@@ -31,8 +31,17 @@ export class RunERPSyncAction extends BaseAction {
     return {
       Success: output.Success,
       ResultCode: output.Success ? 'SUCCESS' : 'ERROR',
-      Message: output.Results.map((r) => `${r.CompanyID}: ${r.Success ? 'ok' : r.Message}`).join('; '),
+      Message: output.Results.map(resultSummary).join('; '),
       Params: [...params.Params, { Name: 'Results', Type: 'Output', Value: output.Results }],
     };
   }
+}
+
+/**
+ * One connection's line in the run message. A skipped connection (no entity maps, such as a
+ * posting-only connection) is not a failure, and its message says it was skipped and why.
+ */
+function resultSummary(r: { CompanyID: string; Success: boolean; Skipped?: boolean; Message: string }): string {
+  const outcome = r.Skipped || !r.Success ? r.Message : 'ok';
+  return `${r.CompanyID}: ${outcome}`;
 }

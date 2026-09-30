@@ -16,10 +16,11 @@ vi.mock('@memberjunction/actions', () => ({
 
 import { RegisterClass, MJGlobal } from '@memberjunction/global';
 import type { UserInfo } from '@memberjunction/core';
-import { BaseAccountingEngineExtension } from '@mj-biz-apps/accounting-engine-base';
+import { BaseAccountingEngineExtension, type AccountingEngineExtensionContext } from '@mj-biz-apps/accounting-engine-base';
 import { AccountingEngine } from '../AccountingEngine.js';
 import { AccountingERPEngine, namesMatch } from '../AccountingERPEngine.js';
 import { BaseAccountingERPProvider } from '../BaseAccountingERPProvider.js';
+import type { AccountingVerbResult } from '../AccountingVerbRunner.js';
 import type { ErpPostResult } from '../JournalEntryBatchEngine.js';
 
 const user = { ID: 'user-1', Name: 'Test' } as unknown as UserInfo;
@@ -62,6 +63,17 @@ class ThrowingAfterPostExt extends BaseAccountingEngineExtension {
   get RunAfterPostJournalBatchFailure(): boolean { return true; }
   async AfterPostJournalBatch(): Promise<void> { extensionCalls.push('afterPost'); throw new Error('afterPost boom'); }
   async AfterPostJournalBatchFailure(): Promise<void> { extensionCalls.push('afterPostFailure'); }
+}
+
+/** Records each posting hook with the connection it saw, or the error it was given. */
+@RegisterClass(BaseAccountingEngineExtension, 'RecordingPostExt')
+class RecordingPostExt extends BaseAccountingEngineExtension {
+  get Code(): string { return 'RecordingPost'; }
+  get RunAfterPostJournalBatch(): boolean { return true; }
+  get RunAfterPostJournalBatchFailure(): boolean { return true; }
+  async BeforePostJournalBatch(ctx: AccountingEngineExtensionContext): Promise<void> { extensionCalls.push(`beforePost:${ctx.CompanyIntegrationID}`); }
+  async AfterPostJournalBatch(ctx: AccountingEngineExtensionContext): Promise<void> { extensionCalls.push(`afterPost:${ctx.CompanyIntegrationID}`); }
+  async AfterPostJournalBatchFailure(ctx: AccountingEngineExtensionContext): Promise<void> { extensionCalls.push(`afterPostFailure:${ctx.ErrorMessage}`); }
 }
 
 // An ERP provider with no lookup, now that QuickBooks Online has one.
@@ -751,7 +763,7 @@ describe('QuickBooks Online — FindPostedJournalBatch', () => {
 
     expect(result).toEqual({ status: 'Found', externalJournalEntryBatchRef: '146' });
     const call = runVerb.mock.calls[0][0] as unknown as { Params: Record<string, unknown> };
-    expect(call.Params).toEqual({ TransactionType: 'JournalEntry', StartDate: '2026-08-01', EndDate: '2026-08-01', MaxResults: 1000 });
+    expect(call.Params).toEqual({ TransactionType: 'JournalEntry', StartDate: '2026-08-01', EndDate: '2026-08-01', MaxResults: 1000, CompanyIntegrationID: CI });
   });
 
   // #206: a QBO sandbox company is often shared by more than one environment, each issuing BATCH-1.
@@ -923,6 +935,273 @@ describe('AccountingERPEngine against the real entity-map schema', () => {
 
     expect(result.success).toBe(true);
     expect(runVerb).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── #256: which connection a batch posts through, and what master-data sync reads ──────────────
+
+const CI_PROD = 'bbbbbbbb-0000-0000-0000-000000000256';
+const CI_UAT = 'bbbbbbbb-0000-0000-0000-000000000257';
+const POSTING_FLAG = '{"environmentName":"AIDP_Next_UAT","postJournalEntries":true}';
+
+/** An active Company Integration row, as the Company Integrations view returns it. */
+function connection(id: string, name: string, integration: string, configuration: string | null = null) {
+  return { ID: id, CompanyID: COMPANY, IntegrationID: `int-${integration}`, Integration: integration, Name: name, Configuration: configuration, IsActive: true };
+}
+
+function bcConnection(id: string, name: string, configuration: string | null = null) {
+  return connection(id, name, 'business-central', configuration);
+}
+
+const RECORDING_EXTENSION = [
+  { Code: 'RecordingPost', DriverClass: 'RecordingPostExt', Status: 'Active', Sequence: 0, CompanyID: null, ConfigurationObject: null },
+];
+
+/** The tagged-batch views, with these connections and the recording posting extension. */
+function postingViews(connections: unknown[]) {
+  return providerWith(taggedViewsWithCodes({
+    'MJ: Company Integrations': connections,
+    'MJ_BizApps_Accounting: Accounting Engine Extensions': RECORDING_EXTENSION,
+  }));
+}
+
+/** A runVerb that accepts a post and answers a lookup with nothing posted, recording every call. */
+function connectionVerb() {
+  return vi.fn(async (call: { Verb: string; Params: Record<string, unknown> }) => call.Verb === 'CreateJournalEntry'
+    ? { Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'DocNumber', Value: 'BATCH-1', Type: 'Output' }] }
+    : { Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'GLEntries', Value: [], Type: 'Output' }] });
+}
+
+/** The CompanyIntegrationID param of each verb call, by verb. */
+function connectionParams(runVerb: { mock: { calls: unknown[][] } }): Array<[string, unknown]> {
+  return runVerb.mock.calls.map((args) => {
+    const call = args[0] as { Verb: string; Params: Record<string, unknown> };
+    return [call.Verb, call.Params.CompanyIntegrationID];
+  });
+}
+
+describe('AccountingERPEngine — choosing the posting connection (#256)', () => {
+  beforeEach(() => {
+    extensionCalls.length = 0;
+    vi.spyOn(AccountingEngine.Instance, 'Config').mockResolvedValue();
+  });
+
+  /** Post, then look up, the tagged batch against these connections. */
+  async function postAndFind(connections: unknown[]) {
+    const runVerb = connectionVerb();
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+    const p = postingViews(connections);
+    const posted = await AccountingERPEngine.Instance.PostJournalBatch(taggedBatch(), taggedLines(), user, p);
+    const found = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, p);
+    return { runVerb, posted, found };
+  }
+
+  it('refuses as before when the company has no connection for the target, running only afterPostFailure', async () => {
+    const { runVerb, posted, found } = await postAndFind([connection(CI_PROD, 'HubSpot', 'HubSpot')]);
+
+    const error = `No active 'BusinessCentral' integration for company ${COMPANY}.`;
+    expect(posted).toEqual({ success: false, error });
+    expect(found).toEqual({ status: 'Unavailable' });
+    expect(runVerb).not.toHaveBeenCalled();
+    expect(extensionCalls).toEqual([`afterPostFailure:${error}`]);
+  });
+
+  it('posts and looks up through the only matching connection, sending its ID to both verbs', async () => {
+    const { runVerb, posted, found } = await postAndFind([
+      bcConnection(CI_PROD, 'Business Central'),
+      connection(CI_UAT, 'QuickBooks', 'QuickBooks Online', POSTING_FLAG),
+    ]);
+
+    expect(posted).toEqual({ success: true, externalJournalEntryBatchRef: 'BATCH-1' });
+    expect(found).toEqual({ status: 'NotFound' });
+    expect(connectionParams(runVerb)).toEqual([['CreateJournalEntry', CI_PROD], ['GetGLEntries', CI_PROD]]);
+    expect(extensionCalls).toEqual([`beforePost:${CI_PROD}`, `afterPost:${CI_PROD}`]);
+  });
+
+  it('uses the one connection marked "postJournalEntries": true when several match, for the post and the lookup alike', async () => {
+    const { runVerb, posted, found } = await postAndFind([
+      bcConnection(CI_PROD, 'Business Central', '{"environmentName":"Production"}'),
+      bcConnection(CI_UAT, 'BC UAT', POSTING_FLAG),
+    ]);
+
+    expect(posted.success).toBe(true);
+    expect(found).toEqual({ status: 'NotFound' });
+    expect(connectionParams(runVerb)).toEqual([['CreateJournalEntry', CI_UAT], ['GetGLEntries', CI_UAT]]);
+    expect(extensionCalls).toEqual([`beforePost:${CI_UAT}`, `afterPost:${CI_UAT}`]);
+  });
+
+  it.each([
+    ['none is marked', null, null, /None has "postJournalEntries": true in its Configuration/],
+    ['two are marked', POSTING_FLAG, POSTING_FLAG, /2 of them \('BC UAT' \(\S+\), 'Business Central' \(\S+\)\) have "postJournalEntries": true/],
+    ['the mark is the string "true", not the boolean', '{"postJournalEntries":"true"}', null, /None has "postJournalEntries": true/],
+  ])('refuses to post or look up when several match and %s, naming the connections', async (_case, prodConfig, uatConfig, why) => {
+    const { runVerb, posted, found } = await postAndFind([
+      bcConnection(CI_PROD, 'Business Central', prodConfig),
+      bcConnection(CI_UAT, 'BC UAT', uatConfig),
+    ]);
+
+    expect(posted.success).toBe(false);
+    expect(posted.error).toContain(`Company ${COMPANY} has 2 active 'BusinessCentral' connections: 'BC UAT' (${CI_UAT}), 'Business Central' (${CI_PROD}).`);
+    expect(posted.error).toMatch(why);
+    expect(posted.error).toMatch(/Mark exactly one with "postJournalEntries": true in its Configuration, or deactivate the others\.$/);
+    // The lookup refuses for the same reason, so a send never reaches the post with the lookup unsettled.
+    expect(found).toEqual({ status: 'Error', error: posted.error });
+    expect(runVerb).not.toHaveBeenCalled();
+    expect(extensionCalls).toEqual([`afterPostFailure:${posted.error}`]);
+  });
+
+  it('treats a Configuration that is not JSON as unmarked, and logs it', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const chosen = await postAndFind([bcConnection(CI_PROD, 'Business Central', '{not json'), bcConnection(CI_UAT, 'BC UAT', POSTING_FLAG)]);
+      expect(connectionParams(chosen.runVerb)).toEqual([['CreateJournalEntry', CI_UAT], ['GetGLEntries', CI_UAT]]);
+
+      const refused = await postAndFind([bcConnection(CI_PROD, 'Business Central', '{not json'), bcConnection(CI_UAT, 'BC UAT')]);
+      expect(refused.posted.error).toMatch(/None has "postJournalEntries": true/);
+      expect(refused.runVerb).not.toHaveBeenCalled();
+
+      const messages = logged.mock.calls.map((args) => String(args[0]));
+      expect(messages.some((m) => m.includes(`'Business Central' (${CI_PROD})`) && m.includes('not valid JSON'))).toBe(true);
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
+  it('sends the chosen connection to the QuickBooks Online post and lookup too', async () => {
+    const runVerb = vi.fn(async (call: { Verb: string }): Promise<AccountingVerbResult> => call.Verb === 'CreateJournalEntry'
+      ? { Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'JournalEntryID', Value: '146', Type: 'Output' }] }
+      : { Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'Transactions', Value: [], Type: 'Output' }] });
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+    const p = providerWith({
+      ...qboViews(),
+      'MJ: Company Integrations': [
+        connection(CI_PROD, 'QBO live', 'QuickBooks Online'),
+        connection(CI_UAT, 'QBO sandbox', 'QuickBooks Online', '{"postJournalEntries":true}'),
+      ],
+    });
+
+    await AccountingERPEngine.Instance.PostJournalBatch(qboBatch(), taggedLines(), user, p);
+    await AccountingERPEngine.Instance.FindPostedJournalBatch(qboBatch(), taggedLines(), user, p);
+
+    expect(connectionParams(runVerb)).toEqual([['CreateJournalEntry', CI_UAT], ['GetGLEntries', CI_UAT]]);
+  });
+});
+
+describe('AccountingERPEngine.SyncMasterData — ERP connections only (#256)', () => {
+  const MAP_VIEW = 'MJ: Company Integration Entity Maps';
+
+  beforeEach(() => {
+    AccountingERPEngine.Instance.UseSeams({});
+    vi.spyOn(AccountingEngine.Instance, 'Config').mockResolvedValue();
+  });
+
+  /** Entity maps for GL accounts on each of these connections; the stub provider ignores the filter, so each is checked by ID. */
+  function mapsFor(...connectionIds: string[]) {
+    return connectionIds.map((id, i) => ({ ID: `map-${i}`, CompanyIntegrationID: id, Entity: 'MJ_BizApps_Accounting: GL Accounts', Status: 'Active', SyncEnabled: true }));
+  }
+
+  /** Like providerWith, but entity maps are answered per connection, as the real filter would. */
+  function providerWithMapsByConnection(views: Record<string, unknown[]>, failMaps = false) {
+    return {
+      RunView: async (params: { EntityName: string; ExtraFilter?: string }) => {
+        if (params.EntityName === MAP_VIEW) {
+          if (failMaps) return { Success: false, ErrorMessage: 'timeout reading entity maps' };
+          const rows = (views[MAP_VIEW] ?? []) as Array<{ CompanyIntegrationID: string }>;
+          return { Success: true, Results: rows.filter((r) => (params.ExtraFilter ?? '').includes(r.CompanyIntegrationID)) };
+        }
+        return { Success: true, Results: views[params.EntityName] ?? [] };
+      },
+    } as never;
+  }
+
+  it('leaves out connections to systems that are not ERPs', async () => {
+    const synced: string[] = [];
+    AccountingERPEngine.Instance.UseSeams({ runSync: async (id) => { synced.push(id); return { Success: true }; } });
+    const p = providerWithMapsByConnection({
+      'MJ: Company Integrations': [
+        connection('ci-hubspot', 'HubSpot', 'HubSpot'),
+        connection('ci-irs', 'IRS 990', 'IRS'),
+        connection('ci-asana', 'Asana', 'Asana'),
+        bcConnection(CI_PROD, 'Business Central'),
+      ],
+      [MAP_VIEW]: mapsFor('ci-hubspot', 'ci-irs', 'ci-asana', CI_PROD),
+      'MJ_BizApps_Accounting: Accounting Engine Extensions': [],
+    });
+
+    const out = await AccountingERPEngine.Instance.SyncMasterData({ Objects: ['accounts'] }, user, p);
+
+    expect(synced).toEqual([CI_PROD]);
+    expect(out.Results.map((r) => r.CompanyIntegrationID)).toEqual([CI_PROD]);
+    expect(out.Success).toBe(true);
+  });
+
+  it('reports an ERP connection with no entity maps as skipped, which does not fail the run', async () => {
+    const synced: string[] = [];
+    AccountingERPEngine.Instance.UseSeams({ runSync: async (id) => { synced.push(id); return { Success: true }; } });
+    const p = providerWithMapsByConnection({
+      'MJ: Company Integrations': [bcConnection(CI_PROD, 'Business Central'), bcConnection(CI_UAT, 'Sidecar posting')],
+      [MAP_VIEW]: mapsFor(CI_PROD),
+      'MJ_BizApps_Accounting: Accounting Engine Extensions': [],
+    });
+
+    const out = await AccountingERPEngine.Instance.SyncMasterData({ Objects: ['accounts', 'dimensions'] }, user, p);
+
+    expect(synced).toEqual([CI_PROD]);
+    expect(out.Success).toBe(true);
+    const skipped = out.Results.find((r) => r.CompanyIntegrationID === CI_UAT);
+    expect(skipped).toMatchObject({ Success: true, Skipped: true, Objects: ['accounts', 'dimensions'] });
+    expect(skipped?.Message).toMatch(/^Skipped: no active, sync-enabled entity maps for accounts, dimensions/);
+    expect(out.Results.find((r) => r.CompanyIntegrationID === CI_PROD)?.Skipped).toBeUndefined();
+  });
+
+  it('still fails the run when a sync fails, beside a skipped connection', async () => {
+    AccountingERPEngine.Instance.UseSeams({ runSync: async () => ({ Success: false, Message: 'BC 401' }) });
+    const p = providerWithMapsByConnection({
+      'MJ: Company Integrations': [bcConnection(CI_PROD, 'Business Central'), bcConnection(CI_UAT, 'Sidecar posting')],
+      [MAP_VIEW]: mapsFor(CI_PROD),
+      'MJ_BizApps_Accounting: Accounting Engine Extensions': [],
+    });
+
+    const out = await AccountingERPEngine.Instance.SyncMasterData({ Objects: ['accounts'] }, user, p);
+
+    expect(out.Success).toBe(false);
+    expect(out.Results.find((r) => r.CompanyIntegrationID === CI_PROD)).toMatchObject({ Success: false, Message: 'BC 401' });
+    expect(out.Results.find((r) => r.CompanyIntegrationID === CI_UAT)).toMatchObject({ Success: true, Skipped: true });
+  });
+
+  it('fails, never skips, a connection whose entity maps cannot be read', async () => {
+    const synced: string[] = [];
+    AccountingERPEngine.Instance.UseSeams({ runSync: async (id) => { synced.push(id); return { Success: true }; } });
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const p = providerWithMapsByConnection({
+        'MJ: Company Integrations': [bcConnection(CI_PROD, 'Business Central')],
+        'MJ_BizApps_Accounting: Accounting Engine Extensions': [],
+      }, true);
+
+      const out = await AccountingERPEngine.Instance.SyncMasterData({ Objects: ['accounts'] }, user, p);
+
+      expect(synced).toEqual([]);
+      expect(out.Success).toBe(false);
+      expect(out.Results[0]).toMatchObject({ Success: false, CompanyIntegrationID: CI_PROD });
+      expect(out.Results[0].Skipped).toBeUndefined();
+      expect(out.Results[0].Message).toMatch(/Entity maps for Company Integration .* failed to load: timeout reading entity maps/);
+    } finally {
+      logged.mockRestore();
+    }
+  });
+
+  it('reports nothing to sync, as before, when a company has only non-ERP connections', async () => {
+    AccountingERPEngine.Instance.UseSeams({ runSync: async () => ({ Success: true }) });
+    const p = providerWithMapsByConnection({
+      'MJ: Company Integrations': [connection('ci-hubspot', 'HubSpot', 'HubSpot')],
+      [MAP_VIEW]: mapsFor('ci-hubspot'),
+      'MJ_BizApps_Accounting: Accounting Engine Extensions': [],
+    });
+
+    const out = await AccountingERPEngine.Instance.SyncMasterData({ Objects: ['accounts'], CompanyIDs: [COMPANY] }, user, p);
+
+    expect(out).toEqual({ Success: false, Results: [] });
   });
 });
 

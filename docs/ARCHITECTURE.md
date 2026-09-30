@@ -35,7 +35,7 @@ Batching (CoreEntitiesServer)        GLOBAL multi-company buildJournalEntryBatch
 DB invariants (migrations)           12 triggers (incl. AM-4 per-company balance 50019/50023/50022)
                                      + 2 GLOBAL numbering sprocs  ◄── the un-bypassable floor
 ```
-ERP master data travels: Explorer / nightly job → **`Accounting.RunERPSync`** → `AccountingERPEngine.SyncMasterData` → `IntegrationEngine.RunSync` (entity maps, per-company isolation) → registered `BaseAccountingEngineExtension` subclasses (FP&A cash import first). Journal dispatch: approved batch → `PostJournalBatch` → MJ verb `CreateJournalEntry` (account **numbers**, AM-4). Accounting never writes `CashBalance`.
+ERP master data travels: Explorer / nightly job → **`Accounting.RunERPSync`** → `AccountingERPEngine.SyncMasterData` → `IntegrationEngine.RunSync` (entity maps, per-company isolation) → registered `BaseAccountingEngineExtension` subclasses (FP&A cash import first). Only ERP connections (Business Central, QuickBooks Online) are synced; one with no entity maps, such as a posting-only connection, is reported skipped, not failed (#256). Journal dispatch: approved batch → `PostJournalBatch` → MJ verb `CreateJournalEntry` (account **numbers**, AM-4). The pre-flight lookup and the post choose the same connection: the batch company's one active connection for the target, or among several the one whose Configuration has `"postJournalEntries": true`, else refuse. Its `CompanyIntegrationID` is sent to the verb (#256, MJ#4867). Accounting never writes `CashBalance`.
 
 How a write travels: caller (Orders, browser, script) → **`Accounting.CreateJournalEntry`** →
 engine pipeline → `BaseEntity.Save()` in one TransactionGroup (hooks number; triggers enforce;
