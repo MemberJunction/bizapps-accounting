@@ -119,7 +119,16 @@ export interface BuildJournalEntryBatchResult {
   approvalTaskId: string | null;
 }
 
-export interface ErpPostResult { success: boolean; externalJournalEntryBatchRef?: string; error?: string }
+export interface ErpPostResult {
+  success: boolean;
+  externalJournalEntryBatchRef?: string;
+  error?: string;
+  /**
+   * Set on a success the provider could not read back from the ERP (#205): why. The post stands, but
+   * the reference may not be the ERP's own number for it.
+   */
+  readbackError?: string;
+}
 
 /** ERP-post seam. The REAL poster posts the summary JE's lines by account NUMBER
  *  (resolve via resolveExternalAccount at dispatch time), all-or-nothing per batch.
@@ -146,7 +155,8 @@ export const mockErpPoster: ErpPoster = async (batch) => ({
  *                     journal under the same number, from another environment. Not this batch.
  *   · `Mismatch`    — something posted under the number that is not this batch as it stands.
  *   · `Error`       — the lookup ran and could not answer.
- *   · `Unavailable` — the target ERP offers no lookup.
+ *   · `Unavailable` — the target ERP offers no lookup, or its lookup cannot be trusted to find a
+ *                     posting (`reason` says why).
  */
 export type ErpJournalLookupResult =
   | { status: 'NotFound' }
@@ -154,7 +164,7 @@ export type ErpJournalLookupResult =
   | { status: 'Foreign'; detail: string }
   | { status: 'Mismatch'; detail: string }
   | { status: 'Error'; error: string }
-  | { status: 'Unavailable' };
+  | { status: 'Unavailable'; reason?: string };
 
 /** ERP-lookup seam, the pre-flight partner of {@link ErpPoster}. */
 export type ErpJournalLookup = (
@@ -883,6 +893,11 @@ async function checkFailedBatchBeforeCancel(
   return { basis: 'UserAttested', description: `The canceller confirmed document ${doc} had not posted; the ERP lookup could not settle it (${refusal.kind}).` };
 }
 
+/** Why an `Unavailable` lookup cannot settle whether the batch posted, as the end of a sentence. */
+function unavailableBecause(found: { status: 'Unavailable'; reason?: string }): string {
+  return found.reason ? `and the ERP lookup cannot be trusted to find it: ${found.reason}` : 'which offers no lookup to check.';
+}
+
 /** Why a Failed cancel needs the operator's word: the lookup ran and could not say "not posted". */
 function cancelRefusal(
   found: Exclude<ErpJournalLookupResult, { status: 'Found' } | { status: 'NotFound' } | { status: 'Foreign' }>, doc: string,
@@ -890,7 +905,7 @@ function cancelRefusal(
   const confirmHint = `Confirm in the ERP that document ${doc} has not posted, then cancel with that confirmation; otherwise its entries post again in the next batch.`;
   switch (found.status) {
     case 'Unavailable':
-      return { kind: 'Unavailable', reason: `batch ${doc} is Failed and may already be in the ERP, which offers no lookup to check. ${confirmHint}` };
+      return { kind: 'Unavailable', reason: `batch ${doc} is Failed and may already be in the ERP, ${unavailableBecause(found)} ${confirmHint}` };
     case 'Error':
       return { kind: 'Error', reason: `could not check the ERP for document ${doc} before cancelling: ${found.error} Try again once the ERP answers, or: ${confirmHint}` };
     case 'Mismatch':
@@ -1056,6 +1071,8 @@ const SENDABLE_FROM: ReadonlyArray<string> = ['Approved', 'Failed'];
  *   · a posting that differs → refuse, unless `confirmNotAlreadyPostedInERP`.
  *   · the lookup failed      → refuse, unless `confirmNotAlreadyPostedInERP`.
  *   · no lookup for this ERP → a first send posts; a Failed retry needs `confirmNotAlreadyPostedInERP`.
+ *                              So does a lookup that finds nothing while the company has an Open
+ *                              ERP_POSTING_NOT_READ_BACK finance exception (#205): it may be blind there.
  * A refused Failed retry throws {@link ErpPostingUnconfirmedError} and stays Failed. Any other refused
  * first send goes Sent→Failed with the reason, so it surfaces as a stranded batch to retry rather
  * than sitting at Approved unseen. The matched first send is the exception: marked Failed, its retry
@@ -1157,7 +1174,7 @@ function preflightRefusal(
       return null;
     case 'Unavailable':
       return fromStatus === 'Failed'
-        ? { kind: 'Unavailable', reason: `batch ${doc} is Failed, and a Failed batch may already be in the ERP, which offers no lookup to check. ${confirmHint}` }
+        ? { kind: 'Unavailable', reason: `batch ${doc} is Failed, and a Failed batch may already be in the ERP, ${unavailableBecause(preflight)} ${confirmHint}` }
         : null;
     case 'Error':
       return { kind: 'Error', reason: `could not check the ERP for document ${doc} before sending: ${preflight.error} Retry once the ERP answers, or: ${confirmHint}` };

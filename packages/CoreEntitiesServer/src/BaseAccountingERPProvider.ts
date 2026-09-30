@@ -139,7 +139,8 @@ export class BusinessCentralERPProvider extends BaseAccountingERPProvider {
   /**
    * Posts the journal, then reads it back for the document number BC posted it under: a journal batch
    * with a Posting No. Series renumbers the document at posting (#205). The readback never turns the
-   * post into a failure, since BC has accepted the journal.
+   * post into a failure, since BC has accepted the journal. A readback that fails says why in
+   * `readbackError`, and the engine raises it as a finance exception on the batch.
    */
   async CreateJournalEntry(input: CreateERPJournalInput, user: UserInfo): Promise<ErpPostResult> {
     const posted = await super.CreateJournalEntry(input, user);
@@ -155,11 +156,17 @@ export class BusinessCentralERPProvider extends BaseAccountingERPProvider {
       }, user);
       if (found.status === 'Ok' && found.lines.length > 0) return { ...posted, externalJournalEntryBatchRef: found.externalJournalEntryBatchRef };
       const why = found.status === 'Error' ? found.error : `no G/L entries carry document ${sentAs} or token ${input.RenumberedSearch.Token}.`;
-      LogError(`BusinessCentralERPProvider: journal ${sentAs} posted, but reading it back failed: ${why} It is recorded under ${sentAs}.`);
+      return this.unreadPost(posted, sentAs, why);
     } catch (e) {
-      LogError(`BusinessCentralERPProvider: journal ${sentAs} posted, but reading it back threw. It is recorded under ${sentAs}.`, null, e);
+      LogError(`BusinessCentralERPProvider: journal ${sentAs} posted, but reading it back threw.`, null, e);
+      return this.unreadPost(posted, sentAs, `reading it back threw: ${e instanceof Error ? e.message : String(e)}`);
     }
-    return posted;
+  }
+
+  /** The post as sent, marked as one that could not be read back. */
+  private unreadPost(posted: ErpPostResult, sentAs: string, why: string): ErpPostResult {
+    LogError(`BusinessCentralERPProvider: journal ${sentAs} posted, but reading it back failed: ${why} It is recorded under ${sentAs}.`);
+    return { ...posted, readbackError: why };
   }
 
   /**

@@ -343,6 +343,29 @@ describe('sendJournalEntryBatch — the pre-flight ERP lookup (#182)', () => {
         expect(result.Status).toBe('Posted');
     });
 
+    // A lookup that finds nothing while the company has an unread post is not trusted (#205).
+    const blind: ErpJournalLookupResult = { status: 'Unavailable', reason: 'the ERP accepted 1 batch(es) in this company that could not then be read back (batch-earlier).' };
+
+    it('refuses a Failed retry the lookup cannot be trusted on, and says why', async () => {
+        const { batch, provider } = world('Failed', { 'je-1': batched() });
+        const poster = acceptingPoster();
+
+        await expect(sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, lookup: lookupReturning(blind), provider }))
+            .rejects.toThrow(/may already be in the ERP, and the ERP lookup cannot be trusted to find it: the ERP accepted 1 batch\(es\) .* Confirm in the ERP that document JEB-0001 has not posted/);
+        expect(poster).not.toHaveBeenCalled();
+        expect(batch.Status).toBe('Failed');
+    });
+
+    it('sends a first send the lookup cannot be trusted on: it has never posted from here', async () => {
+        const { provider } = world('Approved', { 'je-1': batched() });
+        const poster = acceptingPoster();
+
+        const result = await sendJournalEntryBatch(BATCH_ID, USER, { gate: approvedGate(), poster, lookup: lookupReturning(blind), provider });
+
+        expect(poster).toHaveBeenCalledOnce();
+        expect(result.Status).toBe('Posted');
+    });
+
     it('treats a lookup that throws as a failed lookup', async () => {
         const { provider } = world('Failed', { 'je-1': batched() });
         const poster = acceptingPoster();

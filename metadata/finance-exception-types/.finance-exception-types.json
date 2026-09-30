@@ -63,5 +63,18 @@
     "primaryKey": {
       "ID": "FFB49A2A-2041-46D9-B634-A93E95AE8271"
     }
+  },
+  {
+    "fields": {
+      "Code": "ERP_POSTING_NOT_READ_BACK",
+      "Name": "ERP Posting Not Read Back",
+      "Description": "A journal batch the ERP accepted that could not then be read back from the ERP, so the reference recorded on the batch may not be the ERP's own number for it, and the ERP lookup may not see this company's postings. While one is Open for a company, a Failed batch in that company whose ERP lookup finds nothing needs the operator's confirmation before it is sent again or cancelled. Raised by accounting when a batch posts, against the batch.",
+      "OwningApp": "accounting",
+      "IsActive": true,
+      "Configuration": "{}"
+    },
+    "primaryKey": {
+      "ID": "4EAA070C-7A17-4181-A8AE-D6C5D8316C62"
+    }
   }
 ]
