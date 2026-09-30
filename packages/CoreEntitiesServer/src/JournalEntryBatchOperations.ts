@@ -21,7 +21,8 @@
  *                                                            lookup that cannot settle it (#182)
  *   Accounting.ResumeJournalEntryBatchPosting    → resumeJournalEntryBatchPosting(...) finish a Posted batch's Batched→GLPosted flip; NO ERP call (#145)
  *   Accounting.GetStrandedJournalEntries         → findStrandedJournalEntries(...)  read-only: Failed / partly-flipped Posted batches holding entries (#145)
- *   Accounting.RecordJournalEntryBatchDecision   → gate.recordDecision + approveJournalEntryBatch | cancelJournalEntryBatch (in-app CFO approve/reject)
+ *   Accounting.RecordJournalEntryBatchDecision   → gate.recordDecision + approveJournalEntryBatch | cancelJournalEntryBatch (in-app CFO approve/reject;
+ *                                                            the cancel requires the rejection this records first, #233)
  *   Accounting.GetJournalEntryBatchApprovalState → gate.assertApproved probe (read-only: is this batch dispatchable?)
  *   Accounting.ArchiveJournalEntryBatch          → batch.Archive(reason)             terminal close with NO ERP call; members stay locked (#214)
  *   Accounting.CancelJournalEntryBatch           → cancelJournalEntryBatch(...)     Approved|Failed→Cancelled; members return to the
@@ -452,7 +453,8 @@ export interface CancelJournalEntryBatchOutput {
  * the entries locked for good. A Pending batch is refused here: its cancel is a rejection, which
  * goes through RecordJournalEntryBatchDecision so the CFO's decision is recorded on the Task.
  * Who may cancel (the CFO or the batch's approver), the required reason and the ERP confirmation
- * are enforced by the engine, the gate and the entity; this operation only marshals.
+ * are enforced by the engine, the gate and the entity; the engine resolves the gate and the ERP
+ * lookup itself (#233). This operation only marshals.
  */
 @RegisterClass(BaseRemotableOperation, 'Accounting.CancelJournalEntryBatch')
 export class CancelJournalEntryBatchOperation extends BaseRemotableOperation<CancelJournalEntryBatchInput, CancelJournalEntryBatchOutput> {
@@ -466,8 +468,6 @@ export class CancelJournalEntryBatchOperation extends BaseRemotableOperation<Can
       const batch = await cancelJournalEntryBatch(input.JournalEntryBatchID, user, provider, {
         reason: input.Reason ?? null,
         confirmNotAlreadyPostedInERP: input.ConfirmNotAlreadyPostedInERP === true,
-        gate: new TasksAppApprovalGate(provider),
-        lookup: createAccountingERPLookup(provider),
       });
       return { Status: batch.Status, CancelledAt: batch.CancelledAt?.toISOString() ?? null };
     } catch (e) {

@@ -24,6 +24,8 @@
  *   cancelJournalEntryBatch(): Pending | Approved | Failed → Cancelled, releasing the member JEs to
  *     the candidate pool (#183: a reason from Approved/Failed). From Failed the ERP is looked up first
  *     (#207): a posting it holds refuses the cancel, and the operator confirms only when it cannot say.
+ *     A Pending cancel needs a rejection recorded on the approval Task. The gate and the ERP lookup
+ *     are resolved here, through JournalEntryBatchDispatchServices, not taken from the caller (#233).
  *   resumeJournalEntryBatchPosting(): finish a Posted batch's Batched→GLPosted flip, no ERP call.
  *   findStrandedJournalEntries(): the entries Failed / partly-flipped Posted batches hold.
  *
@@ -75,6 +77,7 @@ import {
 import { BusinessTimeZoneEngine } from '@mj-biz-apps/common-entities';
 import { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 import { JournalEntryBatchEntityServer, type ERPNotPostedBasis, type JournalEntryBatchCancelOptions } from './JournalEntryBatchEntityServer.js';
+import { JournalEntryBatchDispatchServices } from './JournalEntryBatchDispatchServices.js';
 import { GetJournalEntryBatchSummaryEntryType } from './JournalEntryTypes.js';
 import { sqlGuidLiteral } from './SqlGuards.js';
 
@@ -770,11 +773,14 @@ async function lockJournalEntries(jeIds: string[], batchId: string, contextUser:
 // ─── cancelJournalEntryBatch / regenerateJournalEntryBatch — reverse a batch's lock ──
 
 /**
- * Who may cancel a batch past approval, and where that cancel is recorded (#183). Implemented by
- * TasksAppApprovalGate: the company's CFO or the batch's recorded approver, with the cancel written
- * to the approval Task.
+ * Who may cancel a batch, and where a cancel past approval is recorded (#183). Implemented by
+ * TasksAppApprovalGate: a Pending batch only once its approval Task records a rejection (#233); past
+ * approval, the company's CFO or the batch's recorded approver, with the cancel written to the
+ * approval Task. The engine resolves it through {@link JournalEntryBatchDispatchServices}.
  */
 export interface JournalEntryBatchCancelGate {
+  /** Throw unless the batch's approval Task carries a terminal rejection — a Pending cancel IS that rejection. */
+  assertRejected(batchId: string, contextUser: UserInfo): Promise<void>;
   assertMayCancelApproved(batchId: string, contextUser: UserInfo): Promise<void>;
   recordCancellation(batchId: string, cancellation: RecordedCancellation, contextUser: UserInfo): Promise<void>;
 }
@@ -798,23 +804,21 @@ interface FailedCancelErpCheck {
   description: string;
 }
 
-/** {@link cancelJournalEntryBatch}'s options: the entity's, plus the gate a cancel past approval requires. */
-export interface CancelJournalEntryBatchOptions extends Omit<JournalEntryBatchCancelOptions, 'onCancelled'> {
-  /** Required to cancel an Approved or Failed batch; a Pending cancel (a CFO rejection, already gated) needs none. */
-  gate?: JournalEntryBatchCancelGate;
-  /**
-   * The ERP lookup a Failed cancel runs first (#207). Omitted, the ERP counts as offering none, so a
-   * Failed cancel needs the operator's confirmation — the behaviour before the lookup existed.
-   */
-  lookup?: ErpJournalLookup;
-}
+/**
+ * {@link cancelJournalEntryBatch}'s options: the entity's. The gate and the ERP lookup are not
+ * options — the engine resolves them (#233), so a caller cannot replace the authorization.
+ */
+export type CancelJournalEntryBatchOptions = Omit<JournalEntryBatchCancelOptions, 'onCancelled'>;
 
 /**
  * Cancel a Pending, Approved or Failed batch: mark it Cancelled, return its member journal entries
- * to the candidate pool and delete its JournalEntryBatchSummary JE. From Approved or Failed (#183)
- * the caller must be allowed to cancel (`options.gate`) and `options.reason` is required; the cancel
- * is recorded on the approval Task in the same transaction. A Pending cancel (a CFO rejection, gated
- * by recordDecision) needs none of it.
+ * to the candidate pool and delete its JournalEntryBatchSummary JE. The gate and the ERP lookup come
+ * from {@link JournalEntryBatchDispatchServices}, never from the caller (#233).
+ *
+ * A Pending cancel is a CFO rejection: it needs the rejection recorded on the approval Task first
+ * (RecordJournalEntryBatchDecision records it, then cancels). From Approved or Failed (#183) the
+ * gate must allow the caller and `options.reason` is required; the cancel is recorded on the
+ * approval Task in the same transaction.
  *
  * From Failed the ERP is checked first (#207), because a Failed batch may already have posted and a
  * cancel releases its entries to be batched again under a NEW number that no later lookup can
@@ -824,31 +828,29 @@ export async function cancelJournalEntryBatch(
   batchId: string, contextUser: UserInfo, provider: IMetadataProvider, options: CancelJournalEntryBatchOptions = {},
 ): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
   // The mechanics are single-aggregate (the batch reversing ITS OWN lock) and live on the entity
-  // (JournalEntryBatchEntityServer.Cancel — one transaction). Authorizing a cancel past approval and
-  // recording it on the Task reach other aggregates, so they are composed here.
+  // (JournalEntryBatchEntityServer.Cancel — one transaction). Authorizing the cancel and recording
+  // it on the Task reach other aggregates, so they are composed here.
   const p = resolveProviders(provider);
   const batch = await p.md.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, contextUser);
   if (!(await batch.Load(batchId))) throw new Error(`cancelJournalEntryBatch: batch ${batchId} not found`);
-  const { gate, ...cancelOptions } = options;
+  const services = JournalEntryBatchDispatchServices.Resolve();
+  const gate = services.CreateCancelGate(p.md);
   if (batch.Status === 'Pending') {
-    await batch.Cancel(contextUser, cancelOptions);
+    await gate.assertRejected(batch.ID, contextUser);
+    await batch.Cancel(contextUser, options);
     return batch;
   }
-  if (!gate) {
-    throw new Error(`cancelJournalEntryBatch: batch ${batch.JournalEntryBatchNumber ?? batchId} is ${batch.Status}; cancelling past approval needs the approval gate to authorize and record it.`);
-  }
   await gate.assertMayCancelApproved(batch.ID, contextUser);
-  const { lookup, ...entityOptions } = cancelOptions;
   const fromStatus = batch.Status;
   // Authorized first, so an unauthorized caller learns nothing from the ERP.
   const erpCheck = fromStatus === 'Failed'
-    ? await checkFailedBatchBeforeCancel(batch, contextUser, p, lookup ?? unavailableErpLookup, entityOptions.confirmNotAlreadyPostedInERP === true)
+    ? await checkFailedBatchBeforeCancel(batch, contextUser, p, services.CreateLookup(p.md), options.confirmNotAlreadyPostedInERP === true)
     : undefined;
   await batch.Cancel(contextUser, {
-    ...entityOptions,
+    ...options,
     // A lookup that found nothing IS the ERP check; the entity persists it, and on what basis, either way.
     ...(erpCheck ? { confirmNotAlreadyPostedInERP: true, erpNotPostedBasis: erpCheck.basis } : {}),
-    onCancelled: () => gate.recordCancellation(batch.ID, { reason: entityOptions.reason ?? '', fromStatus, erpCheck: erpCheck?.description }, contextUser),
+    onCancelled: () => gate.recordCancellation(batch.ID, { reason: options.reason ?? '', fromStatus, erpCheck: erpCheck?.description }, contextUser),
   });
   return batch;
 }

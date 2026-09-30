@@ -161,6 +161,12 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   operator confirmed. The operation returns that refusal as `ConfirmationRequired` /
   `ConfirmationKind`; which way "not posted" was established is persisted as `ERPNotPostedBasis`
   and repeated in the approval Task comment.
+  **The engine resolves the gate and the ERP lookup itself (#233)**, through
+  `JournalEntryBatchDispatchServices` (MJ ClassFactory; the defaults are `TasksAppApprovalGate` and
+  the AccountingERPEngine lookup). A caller cannot pass them, so it cannot swap in a gate that allows
+  everything or leave the lookup out. A higher-priority registration replaces them (unit tests do).
+  A **Pending** cancel requires a terminal rejection on the approval Task (`assertRejected`);
+  `RecordJournalEntryBatchDecision` records it before cancelling.
 - **`TasksAppApprovalGate.recordDecision`** — now requires `contextUser` to BE the batch company's
   `AccountingCompanyProfile.ApprovalCFOUserID` (no CFO configured ⇒ hard-fail). Previously any
   authenticated user could approve any batch, including their own.

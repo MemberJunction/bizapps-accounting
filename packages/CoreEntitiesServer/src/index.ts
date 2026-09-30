@@ -109,6 +109,10 @@ export type {
 // production). See TasksAppApprovalGate.ts.
 export { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
 
+// Where cancelJournalEntryBatch gets its gate and ERP lookup (#233). Register a subclass at a higher
+// priority to replace them; callers can no longer pass their own.
+export { JournalEntryBatchDispatchServices } from './JournalEntryBatchDispatchServices.js';
+
 // (ScheduledJournalEntryService retired 2026-07-23 — the schedule tables were dropped in the
 //  rewritten baseline (plan D15: rev-rec is REAL forward-dated JEs written at booking).
 //  ChartOfAccountsMappingService retired 2026-07-23 — the mapping table was dropped; the account
