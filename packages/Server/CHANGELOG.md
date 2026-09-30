@@ -1,5 +1,28 @@
 # @mj-biz-apps/accounting-server
 
+## 0.17.0
+
+### Minor Changes
+
+- a36297a: Adds a finance exception list for month-end review (golive #279). New tables `FinanceExceptionType` (the catalog of exception kinds: a stable `Code`, the owning app, `IsActive`, and a JSON `Configuration` of detector thresholds) and `FinanceException` (one row per record a reviewer must look at, unique on type and `DedupeKey`, with `Status` `Open` → `Reviewed` | `Corrected` and a review audit that `CK_FinanceException_Review` keeps consistent with it). Five types are seeded as metadata: `PROGRESS_JUDGMENT_CALL`, `PROGRESS_UNATTESTED`, `WON_DEAL_ORDER_NOT_CONFIRMED`, `PRICE_BELOW_ENGINE_UNAPPROVED` and `OVERLAPPING_SUBSCRIPTION`. Three remote operations: `Accounting.GetFinanceExceptionTypes` returns each type's parsed thresholds; `Accounting.RaiseFinanceExceptions` raises exceptions idempotently (an existing row is returned rather than duplicated, and a repeat raise of an Open row refreshes its creator fields and summary; an inactive type is skipped; an unknown type or entity fails the whole call and writes nothing), joins the caller's transaction, reads under an update lock so a concurrent raise of the same item returns the first one's row, and requires the system user when called through the API, so only server code raises; `Accounting.ClearFinanceException` clears an Open exception with a required note, locking the row so a concurrent clear finds it no longer Open, and requires the new `MJ.BizApps.Accounting.FinanceExceptions.Clear` authorization, held by a new `Finance` role, while refusing the source record's creator and any exception whose creator has no linked login. `FinanceExceptionEntityServer` refuses a status or review change made outside that operation, any change to a cleared exception, and any delete. A saved query, "Finance Exceptions Ready To Close", groups the list by company and month; a month is ready when it has no Open exceptions. Remote operation typed bases are now emitted into `@mj-biz-apps/accounting-entities` (`generated/remote_operations.ts`).
+
+### Patch Changes
+
+- be40504: Accounting Company Profiles, Tax Authorities and Tax Jurisdictions open and save again on hosts where a record has no geocode (MemberJunction/bc-aidp-next-golive#295). Their GraphQL output types declared `_mj__Latitude` / `_mj__Longitude` non-null, but on a host those view columns come from a LEFT JOIN to the geocode cache and are NULL for any record that isn't geocoded, which is every Company Profile on AIDP. GraphQL answered with "Cannot return null for non-nullable field", so every single-record load failed, and every save committed and then reported failure, because the mutation returns the record through the same type. The six fields are now `@Field(() => Float, {nullable: true})` / `?: number`. Input types are unchanged.
+
+  The root cause is MemberJunction's GraphQL generator. On 6.1.x, including the 6.1.0-edge.7 CodeGen this repo pins, `isNonNullableServerField` returns `IsUnrestrictableField` and ignores `AllowsNull`, so an unrestrictable `__mj_` field comes out non-null even when it allows NULL. MJ `next` fixed it in #4635 (`!AllowsNull && IsUnrestrictableField`); `lts/6.1` does not have the fix yet. The generated file was edited by hand to match the fixed generator's output exactly. Until the fix reaches the CodeGen this repo runs, a regeneration puts the non-null declarations back, and a new test in the server package fails if it does: it checks every entity output field declared non-null against the generated entity class's nullability.
+
+- Updated dependencies [7210151]
+- Updated dependencies [c46af6c]
+- Updated dependencies [12b1513]
+- Updated dependencies [3af15bb]
+- Updated dependencies [a36297a]
+- Updated dependencies [39ca6d0]
+- Updated dependencies [972696b]
+  - @mj-biz-apps/accounting-entities@0.17.0
+  - @mj-biz-apps/accounting-core-entities-server@0.17.0
+  - @mj-biz-apps/accounting-actions@0.17.0
+
 ## 0.16.0
 
 ### Patch Changes
