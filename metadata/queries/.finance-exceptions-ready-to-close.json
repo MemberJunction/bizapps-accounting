@@ -1,0 +1,20 @@
+[
+  {
+    "fields": {
+      "Name": "Finance Exceptions Ready To Close",
+      "CategoryID": "@lookup:MJ: Query Categories.Name=Accounting",
+      "UserQuestion": "Which company months still have open finance exceptions, and which are ready to close?",
+      "Description": "Open finance exceptions grouped by company and month of ExceptionDate, with the open amount and how many have been cleared. A month is ready to close when it has no Open exceptions.",
+      "SQL": "@file:SQL/finance-exceptions-ready-to-close.sql",
+      "TechnicalDescription": "Aggregates __mj_BizAppsAccounting.vwFinanceExceptions by CompanyID and DATEFROMPARTS(YEAR(ExceptionDate), MONTH(ExceptionDate), 1). OpenCount / OpenAmount count Status = Open; ClearedCount counts Reviewed and Corrected; IsReadyToClose is 1 when OpenCount is 0. A company month with no exceptions has no row and is ready.",
+      "Status": "Approved",
+      "QualityRank": 8,
+      "ExecutionCostRank": 2,
+      "UsesTemplate": false
+    },
+    "relatedEntities": {},
+    "primaryKey": {
+      "ID": "D9AC1C70-41B2-4CD4-8E12-35443312B0E3"
+    }
+  }
+]

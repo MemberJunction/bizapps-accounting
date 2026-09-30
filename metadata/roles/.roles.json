@@ -1,0 +1,12 @@
+[
+  {
+    "fields": {
+      "Name": "Finance",
+      "Description": "Finance month-end work: reviews and clears the finance exception list (MJ.BizApps.Accounting.FinanceExceptions.Clear) and receives the finance review and acknowledgment tasks that precede a close. Several people may hold it; separation of duties is checked per record, not by the role.",
+      "SQLName": null
+    },
+    "primaryKey": {
+      "ID": "76ABD76E-3FCE-474B-84B8-18F5188E2AB9"
+    }
+  }
+]
