@@ -8,25 +8,42 @@ import { ToCalendarDay } from '@mj-biz-apps/common-entities';
 import type { AccountingVerbResult, AccountingVerbRunner } from './AccountingVerbRunner.js';
 import type { ErpPostResult, ExternalDimensionRef } from './JournalEntryBatchEngine.js';
 
+/** One journal line as the engine sends it. */
+export interface ERPJournalLine {
+  /** The ERP's identity for the account: the GL account's `ExternalAccountID`, or its `Code`. */
+  accountNumber: string;
+  debit?: number;
+  credit?: number;
+  description?: string;
+  /** Dimension tags in ERP wire codes. Providers that cannot carry them ignore the field. */
+  dimensions?: ExternalDimensionRef[];
+}
+
 export interface CreateERPJournalInput {
   CompanyID: string;
+  /**
+   * The Company Integration the engine chose to post through (#256). Sent to the verb as
+   * `CompanyIntegrationID`, so the verb uses exactly that connection (MemberJunction/MJ#4867)
+   * instead of resolving one of its own from `CompanyID`.
+   */
+  CompanyIntegrationID: string;
   EntryDate: Date;
   DocNumber?: string;
   PrivateNote?: string;
-  Lines: Array<{
-    accountNumber: string;
-    debit?: number;
-    credit?: number;
-    description?: string;
-    /** Dimension tags in ERP wire codes. Providers that cannot carry them ignore the field. */
-    dimensions?: ExternalDimensionRef[];
-  }>;
+  Lines: ERPJournalLine[];
 }
 
 export interface FindERPJournalInput {
   CompanyID: string;
+  /**
+   * The Company Integration the engine chose, the same one the post goes through (#256). Sent to
+   * the lookup verb as `CompanyIntegrationID`.
+   */
+  CompanyIntegrationID: string;
   /** The document number the journal was, or would be, posted under: the batch number. */
   DocNumber: string;
+  /** `YYYY-MM-DD`: the batch's posting date. A provider that can look up by number alone ignores it. */
+  PostingDate: string;
 }
 
 /** One posted ledger line, in the terms `CreateERPJournalInput.Lines` is sent in. */
@@ -36,6 +53,8 @@ export interface ERPPostedJournalLine {
   postingDate: string;
   debit: number;
   credit: number;
+  /** The line's description as the ERP holds it, which carries the batch token (#206). */
+  description: string;
 }
 
 /**
@@ -56,17 +75,20 @@ export abstract class BaseAccountingERPProvider {
 
   constructor(protected readonly runVerb: AccountingVerbRunner) {}
 
+  /**
+   * True when the ERP identifies accounts only by its own id, so a GL account's `Code` is no
+   * substitute for its `ExternalAccountID`. The engine then refuses a line whose account has none.
+   */
+  get RequiresExternalAccountID(): boolean {
+    return false;
+  }
+
   async CreateJournalEntry(input: CreateERPJournalInput, user: UserInfo): Promise<ErpPostResult> {
-    const result = await this.runVerb({
-      Verb: 'CreateJournalEntry',
-      CompanyID: input.CompanyID,
-      User: user,
-      Params: {
-        EntryDate: input.EntryDate.toISOString().slice(0, 10),
-        DocNumber: input.DocNumber,
-        PrivateNote: input.PrivateNote,
-        Lines: input.Lines,
-      },
+    const result = await this.runConnectionVerb('CreateJournalEntry', input, user, {
+      EntryDate: input.EntryDate.toISOString().slice(0, 10),
+      DocNumber: input.DocNumber,
+      PrivateNote: input.PrivateNote,
+      Lines: this.verbLines(input.Lines),
     });
     if (!result.Success) {
       return { success: false, error: result.Message ?? result.ResultCode };
@@ -81,6 +103,31 @@ export abstract class BaseAccountingERPProvider {
    */
   async FindJournalEntry(_input: FindERPJournalInput, _user: UserInfo): Promise<FindERPJournalResult> {
     return { status: 'Unavailable' };
+  }
+
+  /**
+   * Run a verb against the connection the engine chose: `CompanyID` plus a `CompanyIntegrationID`
+   * param (#256, MemberJunction/MJ#4867). Every verb call a provider makes goes through here, so the
+   * lookup and the post cannot reach different connections. The connection is added last, so a
+   * verb param of the same name cannot override it.
+   */
+  protected async runConnectionVerb(
+    verb: string,
+    connection: { CompanyID: string; CompanyIntegrationID: string },
+    user: UserInfo,
+    params: Record<string, unknown>,
+  ): Promise<AccountingVerbResult> {
+    return this.runVerb({
+      Verb: verb,
+      CompanyID: connection.CompanyID,
+      User: user,
+      Params: { ...params, CompanyIntegrationID: connection.CompanyIntegrationID },
+    });
+  }
+
+  /** The lines in the shape this ERP's CreateJournalEntry verb reads. */
+  protected verbLines(lines: ERPJournalLine[]): ERPJournalLine[] {
+    return lines;
   }
 
   /** The reference a successful post is recorded under: the ERP's own id for the journal entry. */
@@ -109,11 +156,9 @@ export class BusinessCentralERPProvider extends BaseAccountingERPProvider {
     if (input.DocNumber.includes("'")) {
       return { status: 'Error', error: `document number ${input.DocNumber} cannot be looked up: it contains a quote.` };
     }
-    const result = await this.runVerb({
-      Verb: 'GetGLEntries',
-      CompanyID: input.CompanyID,
-      User: user,
-      Params: { DocumentNumber: input.DocNumber, MaxResults: BC_LOOKUP_MAX_RESULTS },
+    const result = await this.runConnectionVerb('GetGLEntries', input, user, {
+      DocumentNumber: input.DocNumber,
+      MaxResults: BC_LOOKUP_MAX_RESULTS,
     });
     if (!result.Success) {
       return { status: 'Error', error: result.Message ?? result.ResultCode ?? 'GetGLEntries failed.' };
@@ -146,10 +191,78 @@ export class BusinessCentralERPProvider extends BaseAccountingERPProvider {
   }
 }
 
+/** QBO answers at most this many rows per query. A full page means the answer may be partial. */
+const QBO_LOOKUP_MAX_RESULTS = 1000;
+
+/** A QBO journal line as the CreateJournalEntry verb reads it: the account by QBO id. */
+interface QuickBooksJournalLine extends ERPJournalLine {
+  accountId: string;
+}
+
+/** A QBO journal entry under the batch's number, as the GetGLEntries verb returns it. */
+interface QuickBooksJournalEntry {
+  id: string;
+  lines: ERPPostedJournalLine[];
+}
+
 @RegisterClass(BaseAccountingERPProvider, 'QuickBooks Online')
 export class QuickBooksERPProvider extends BaseAccountingERPProvider {
   get IntegrationName(): string {
     return 'QuickBooks Online';
+  }
+
+  /** QBO accounts are referenced by QBO id only. */
+  get RequiresExternalAccountID(): boolean {
+    return true;
+  }
+
+  /**
+   * The journal entries QBO holds under the document number on the batch's posting date. QBO's
+   * GetGLEntries verb cannot filter by document number, so the lookup reads the day's journal
+   * entries and keeps the ones carrying the number. A posting under the number on another day is
+   * not found; the batch's posting date is frozen once it is sent, so a retry posts on the same day.
+   */
+  async FindJournalEntry(input: FindERPJournalInput, user: UserInfo): Promise<FindERPJournalResult> {
+    const result = await this.runConnectionVerb('GetGLEntries', input, user, {
+      TransactionType: 'JournalEntry',
+      StartDate: input.PostingDate,
+      EndDate: input.PostingDate,
+      MaxResults: QBO_LOOKUP_MAX_RESULTS,
+    });
+    if (!result.Success) {
+      return { status: 'Error', error: result.Message ?? result.ResultCode ?? 'GetGLEntries failed.' };
+    }
+    const transactions = outputParam(result, 'Transactions');
+    if (!Array.isArray(transactions)) {
+      return { status: 'Error', error: 'GetGLEntries returned no Transactions output.' };
+    }
+    if (transactions.length >= QBO_LOOKUP_MAX_RESULTS) {
+      return { status: 'Error', error: `QuickBooks Online has ${QBO_LOOKUP_MAX_RESULTS} or more journal entries on ${input.PostingDate}, more than one lookup reads.` };
+    }
+    return this.entriesUnder(input.DocNumber, transactions);
+  }
+
+  /** The lines of every entry carrying the number, combined: two entries under one number cannot both be this batch. */
+  private entriesUnder(docNumber: string, transactions: unknown[]): FindERPJournalResult {
+    const entries: QuickBooksJournalEntry[] = [];
+    for (const transaction of transactions) {
+      const raw = rawQBOJournalEntry(transaction);
+      if (!raw) return { status: 'Error', error: 'GetGLEntries returned a journal entry without its QuickBooks Online record.' };
+      if (raw.DocNumber !== docNumber) continue;
+      const entry = parseQBOJournalEntry(raw);
+      if (!entry) return { status: 'Error', error: `GetGLEntries returned a journal entry for document ${docNumber} without an id, date, account or amounts.` };
+      entries.push(entry);
+    }
+    return {
+      status: 'Ok',
+      lines: entries.flatMap((e) => e.lines),
+      externalJournalEntryBatchRef: entries.length > 0 ? entries.map((e) => e.id).join(', ') : docNumber,
+    };
+  }
+
+  /** The verb requires `accountId`, the QBO account id, which is what `accountNumber` carries for QBO. */
+  protected verbLines(lines: ERPJournalLine[]): QuickBooksJournalLine[] {
+    return lines.map((line) => ({ ...line, accountId: line.accountNumber }));
   }
 }
 
@@ -164,7 +277,46 @@ function parseBCGLEntry(entry: unknown): ERPPostedJournalLine | null {
   const postingDate = ToCalendarDay(row.postingDate);
   if (typeof row.accountNumber !== 'string' || !postingDate) return null;
   if (typeof row.debitAmount !== 'number' || typeof row.creditAmount !== 'number') return null;
-  return { accountNumber: row.accountNumber, postingDate, debit: row.debitAmount, credit: row.creditAmount };
+  const description = typeof row.description === 'string' ? row.description : '';
+  return { accountNumber: row.accountNumber, postingDate, debit: row.debitAmount, credit: row.creditAmount, description };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/** The QBO JournalEntry record a GetGLEntries transaction carries as `metadata`, or null. */
+function rawQBOJournalEntry(transaction: unknown): Record<string, unknown> | null {
+  if (!isRecord(transaction) || !isRecord(transaction.metadata)) return null;
+  return transaction.metadata;
+}
+
+/** A QBO JournalEntry record's id and lines, or null when a field the match needs is missing. */
+function parseQBOJournalEntry(raw: Record<string, unknown>): QuickBooksJournalEntry | null {
+  const postingDate = ToCalendarDay(raw.TxnDate);
+  if (typeof raw.Id !== 'string' || !postingDate || !Array.isArray(raw.Line)) return null;
+  const lines: ERPPostedJournalLine[] = [];
+  for (const rawLine of raw.Line) {
+    const line = parseQBOJournalLine(rawLine, postingDate);
+    if (!line) return null;
+    lines.push(line);
+  }
+  return { id: raw.Id, lines };
+}
+
+/**
+ * One QBO `JournalEntryLineDetail` line: QBO carries a positive amount and says which side it posts
+ * to. Its `Description` is the one the line was sent with, batch token included.
+ */
+function parseQBOJournalLine(rawLine: unknown, postingDate: string): ERPPostedJournalLine | null {
+  if (!isRecord(rawLine) || typeof rawLine.Amount !== 'number' || !isRecord(rawLine.JournalEntryLineDetail)) return null;
+  const detail = rawLine.JournalEntryLineDetail;
+  const accountId = isRecord(detail.AccountRef) ? detail.AccountRef.value : undefined;
+  if (typeof accountId !== 'string') return null;
+  const description = typeof rawLine.Description === 'string' ? rawLine.Description : '';
+  if (detail.PostingType === 'Debit') return { accountNumber: accountId, postingDate, debit: rawLine.Amount, credit: 0, description };
+  if (detail.PostingType === 'Credit') return { accountNumber: accountId, postingDate, debit: 0, credit: rawLine.Amount, description };
+  return null;
 }
 
 export function LoadAccountingERPProviders(): void {}

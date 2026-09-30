@@ -158,13 +158,17 @@
   {
     "fields": {
       "Name": "Unbilled Receivable",
-      "Description": "Contract-asset account for revenue earned ahead of billing (orders D92). It is debited when revenue is recognised beyond what an order line has been billed, and credited when a later instalment invoice bills that amount down — so it holds service already delivered that the contract does not yet allow us to bill, while Accounts Receivable means billed and unpaid. Maps to 11300 Unbilled Revenue (Contract Asset), one company-level link per company; with no link the contract asset is folded into Deferred Revenue and a warning is logged, so the position is still correct and balanced but cannot be told apart from unearned billing.",
+      "Description": "Contract-asset account for revenue earned ahead of billing (orders D92). It is debited when revenue is recognised beyond what an order line has been billed, and credited when a later instalment invoice bills that amount down — so it holds service already delivered that the contract does not yet allow us to bill, while Accounts Receivable means billed and unpaid. Maps to 11300 Unbilled Revenue (Contract Asset), one company-level link per company. With no link, orders refuses an entry that needs this leg and names the role and the company; nothing is posted.",
       "Status": "Active",
       "Cardinality": "One",
       "Sequence": 100
     },
     "primaryKey": {
       "ID": "3EFC77F3-2468-463F-9197-D0A8A6762A36"
+    },
+    "sync": {
+      "lastModified": "2026-09-29T02:14:27.903Z",
+      "checksum": "da154497d7aff58b4dba1db79501c9219bfcdd480b61b6de1577983ef6aa1f65"
     }
   },
   {
@@ -177,6 +181,10 @@
     },
     "primaryKey": {
       "ID": "30F23B36-3BEB-4687-BF49-A5607A9B268A"
+    },
+    "sync": {
+      "lastModified": "2026-09-29T00:01:41.013Z",
+      "checksum": "6dc3eb935ef79d294795a6063baf4871490fcaa96cb5334077855902dfc52567"
     }
   }
 ]

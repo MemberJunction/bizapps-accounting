@@ -228,7 +228,7 @@ erDiagram
     Company ||--o{ JournalEntryBatch : "single-company (D7)"
     JournalEntryBatch ||--o{ JournalEntry : "JournalEntryBatchID (members + summary, by IsJournalEntryBatchSummary type)"
     JournalEntryBatch |o--o| JournalEntry : "SummaryJournalEntryID"
-    User ||--o{ JournalEntryBatch : "BatchedBy / ApprovedBy"
+    User ||--o{ JournalEntryBatch : "BatchedBy / ApprovedBy / ArchivedBy / CancelledBy / ERPNotPostedConfirmedBy"
     Company ||--o{ JournalEntrySequence : "per-company per-FY numbering"
     %% ---- tax ----
     TaxAuthority ||--o{ TaxJurisdiction : ""
@@ -389,11 +389,21 @@ erDiagram
         date PostingDate "must match the GL (D8)"
         uuid SummaryJournalEntryID FK "summary JE (type flagged IsJournalEntryBatchSummary)"
         string TargetSystem
-        string Status "Pending | Approved | Sent | Posted | Failed | Cancelled"
+        string Status "Pending | Approved | Sent | Posted | Failed | Cancelled | Archived"
         datetimeoffset BatchedAt
         uuid BatchedByUserID FK
         datetimeoffset ApprovedAt
         uuid ApprovedByUserID FK
+        string ApprovedContentHash "SHA-256 seal written at approval (#183)"
+        string ArchiveReason
+        datetimeoffset ArchivedAt
+        uuid ArchivedByUserID FK
+        string CancelReason
+        datetimeoffset CancelledAt
+        uuid CancelledByUserID FK
+        datetimeoffset ERPNotPostedConfirmedAt
+        uuid ERPNotPostedConfirmedByUserID FK
+        string ERPNotPostedBasis "ERPLookup | UserAttested"
         int TotalEntries
         decimal TotalDebits
         decimal TotalCredits
@@ -723,7 +733,7 @@ erDiagram
     Company ||--o{ JournalEntryBatch : "CompanyID NOT NULL - single-company (D7)"
     JournalEntryBatch ||--o{ JournalEntry : "JournalEntryBatchID - members AND the summary (discriminated by the type IsJournalEntryBatchSummary flag)"
     JournalEntryBatch |o--o| JournalEntry : "SummaryJournalEntryID - coherence trigger 50023"
-    User ||--o{ JournalEntryBatch : "BatchedBy / ApprovedBy"
+    User ||--o{ JournalEntryBatch : "BatchedBy / ApprovedBy / ArchivedBy / CancelledBy / ERPNotPostedConfirmedBy"
 
     JournalEntryBatch {
         uuid ID PK
@@ -732,11 +742,21 @@ erDiagram
         date PostingDate "singular, accountant-set - must match the GL (D8)"
         uuid SummaryJournalEntryID FK "type IsJournalEntryBatchSummary, EffectiveDate=PostingDate, same JournalEntryBatchID"
         string TargetSystem "BusinessCentral | QuickBooks | NetSuite | Sage | Xero | Other"
-        string Status "Pending | Approved | Sent | Posted | Failed | Cancelled"
+        string Status "Pending | Approved | Sent | Posted | Failed | Cancelled | Archived"
         datetimeoffset BatchedAt
         uuid BatchedByUserID FK
         datetimeoffset ApprovedAt "nullable"
         uuid ApprovedByUserID FK "nullable"
+        string ApprovedContentHash "nullable - SHA-256 of the approved content, frozen; dispatch compares it (#183)"
+        string ArchiveReason "nullable - required when Archived (CK_JournalEntryBatch_ArchiveAudit)"
+        datetimeoffset ArchivedAt "nullable"
+        uuid ArchivedByUserID FK "nullable"
+        string CancelReason "nullable - required when cancelled after approval (CK_JournalEntryBatch_CancelAudit)"
+        datetimeoffset CancelledAt "nullable"
+        uuid CancelledByUserID FK "nullable"
+        datetimeoffset ERPNotPostedConfirmedAt "nullable - required when a batch that was sent is cancelled (CK_JournalEntryBatch_CancelERPCheck)"
+        uuid ERPNotPostedConfirmedByUserID FK "nullable"
+        string ERPNotPostedBasis "nullable - ERPLookup | UserAttested; how not-posted was established (CK_JournalEntryBatch_ERPNotPostedBasis)"
         int TotalEntries "control totals"
         decimal TotalDebits
         decimal TotalCredits
@@ -750,8 +770,16 @@ erDiagram
 ```
 
 **Lock model (derived, one machinery):** member + summary JEs lock preliminarily at build
-(`Batched`, batch still `Pending` — reversible unlock sanctioned), permanently at approval,
-`GLPosted` at post. Summary is excluded from netting/count/sweep via its type's `IsJournalEntryBatchSummary` flag (the
+(`Batched`, batch still `Pending` — reversible unlock sanctioned), and at approval for as long as
+the batch stays approved, `GLPosted` at post. Batch content is frozen (trg_JournalEntryBatch_Immutability)
+from `Approved` on, `Failed` included. `Cancelled` — from `Pending`, `Approved` or `Failed` —
+releases the members: the unlock is sanctioned while the owning batch is `Pending` or `Cancelled`,
+and an `Approved`/`Failed` batch becomes `Cancelled` only with its summary pointer cleared in the
+same update (#183). `Posted`, `Cancelled` and `Archived` are terminal, no batch returns to `Pending`,
+only a `Pending` batch is approved, a `Sent` batch is not archived, and a `Cancelled` batch's content, approval pair and
+cancel audit are frozen (50031 / 50009). The cancel audit and the ERP check are written only by the
+update that cancels the batch, and `SentAt` is never cleared once set (50032). `Archived` keeps the members
+locked for good. Summary is excluded from netting/count/sweep via its type's `IsJournalEntryBatchSummary` flag (the
 discriminator); footing-trigger successor = pending Amith.
 
 ---
@@ -914,3 +942,52 @@ erDiagram
     }
 ```
 
+
+---
+
+## 10. Finance exceptions (golive #279)
+
+The month-end review list. Detectors in consuming apps raise rows through
+`Accounting.RaiseFinanceExceptions` (idempotent on type + `DedupeKey`; a repeat refreshes an Open
+row's creator fields and summary); a holder of
+`MJ.BizApps.Accounting.FinanceExceptions.Clear` (the Finance role) who did not create the source
+record clears them through `Accounting.ClearFinanceException`. `Open → Reviewed | Corrected`, both
+terminal; `FinanceExceptionEntityServer` refuses any other status change and any delete. A company's
+month is ready to close when it has no Open rows (saved query "Finance Exceptions Ready To Close").
+The five types and their thresholds are seeded by `metadata/finance-exception-types`.
+
+```mermaid
+erDiagram
+    FinanceExceptionType ||--o{ FinanceException : "FinanceExceptionTypeID"
+    Entity ||--o{ FinanceException : "SourceEntityID (polymorphic source pair)"
+    Company ||--o{ FinanceException : "CompanyID"
+    User |o--o{ FinanceException : "SourceCreatedByUserID / ReviewedByUserID"
+
+    FinanceExceptionType {
+        uuid ID PK
+        string Code UK "PROGRESS_JUDGMENT_CALL | PROGRESS_UNATTESTED | WON_DEAL_ORDER_NOT_CONFIRMED | PRICE_BELOW_ENGINE_UNAPPROVED | OVERLAPPING_SUBSCRIPTION"
+        string Name
+        string Description "nullable"
+        string OwningApp "orders | sales"
+        bool IsActive "inactive = detector and raise skip"
+        string Configuration "JSON object (ISJSON check) - detector thresholds"
+    }
+    FinanceException {
+        uuid ID PK
+        uuid FinanceExceptionTypeID FK "UQ with DedupeKey"
+        uuid SourceEntityID FK
+        string SourceRecordID "source record PK"
+        uuid CompanyID FK
+        decimal Amount "nullable, 19,4"
+        date ExceptionDate "its month is the close it blocks"
+        datetimeoffset DetectedAt
+        string Summary
+        string DedupeKey "UQ with FinanceExceptionTypeID"
+        uuid SourceCreatedByUserID FK "nullable - may not clear"
+        bool CreatorUnresolved "creator has no linked login"
+        string Status "Open | Reviewed | Corrected"
+        uuid ReviewedByUserID FK "nullable; required once terminal"
+        datetimeoffset ReviewedAt "nullable; required once terminal"
+        string ReviewNote "nullable; NULL while Open"
+    }
+```

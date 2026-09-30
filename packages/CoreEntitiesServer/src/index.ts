@@ -16,13 +16,14 @@
 export { AccountingCompanyProfileEntityServer } from './AccountingCompanyProfileEntityServer.js';
 export { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 export { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
-export { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
+export { JournalEntryBatchEntityServer, type ERPNotPostedBasis, type JournalEntryBatchCancelOptions } from './JournalEntryBatchEntityServer.js';
 export { GLAccountEntityServer } from './GLAccountEntityServer.js';
 export { DimensionEntityServer, LoadDimensionEntityServer } from './DimensionEntityServer.js';
 export { DimensionValueEntityServer, LoadDimensionValueEntityServer } from './DimensionValueEntityServer.js';
 export { GLAccountLinkEntityServer, LoadGLAccountLinkEntityServer } from './GLAccountLinkEntityServer.js';
 export { IntercompanyAccountMatchEntityServer } from './IntercompanyAccountMatchEntityServer.js';
 export { JournalEntryTypeEntityServer, LoadJournalEntryTypeEntityServer } from './JournalEntryTypeEntityServer.js';
+export { FinanceExceptionEntityServer, LoadFinanceExceptionEntityServer } from './FinanceExceptionEntityServer.js';
 // (AccountingPeriodEntityServer removed 2026-07-06 — AccountingPeriod retired, CH-1.)
 
 // Internal helpers exported for use by future EntityServer classes (period
@@ -96,6 +97,9 @@ export type {
   ErpJournalLookupResult,
   ErpPostingUnconfirmedKind,
   JournalEntryBatchApprovalGate,
+  JournalEntryBatchCancelGate,
+  CancelJournalEntryBatchOptions,
+  RecordedCancellation,
   SendJournalEntryBatchOptions,
   DispatchFailureRecord,
   ResumeJournalEntryBatchPostingResult,
@@ -147,6 +151,14 @@ export {
   type GenerateReversalOutput,
 } from './GenerateReversalOperation.js';
 export {
+  GetJournalEntryStatesOperation,
+  LoadGetJournalEntryStatesOperation,
+  MAX_JOURNAL_ENTRY_STATE_IDS,
+  type GetJournalEntryStatesInput,
+  type GetJournalEntryStatesOutput,
+  type JournalEntryState,
+} from './GetJournalEntryStatesOperation.js';
+export {
   BuildJournalEntryBatchOperation,
   PreviewJournalEntryBatchOperation,
   RegenerateJournalEntryBatchOperation,
@@ -154,6 +166,7 @@ export {
   RecordJournalEntryBatchDecisionOperation,
   GetJournalEntryBatchApprovalStateOperation,
   ArchiveJournalEntryBatchOperation,
+  CancelJournalEntryBatchOperation,
   ResumeJournalEntryBatchPostingOperation,
   GetStrandedJournalEntriesOperation,
   LoadJournalEntryBatchOperations,
@@ -171,7 +184,27 @@ export {
   type GetJournalEntryBatchApprovalStateOutput,
   type ArchiveJournalEntryBatchInput,
   type ArchiveJournalEntryBatchOutput,
+  type CancelJournalEntryBatchInput,
+  type CancelJournalEntryBatchOutput,
   type ResumeJournalEntryBatchPostingInput,
   type ResumeJournalEntryBatchPostingOutput,
   type GetStrandedJournalEntriesOutput,
 } from './JournalEntryBatchOperations.js';
+
+// Finance exceptions (golive #279): the month-end review list. Three remote operations —
+// Accounting.GetFinanceExceptionTypes / RaiseFinanceExceptions / ClearFinanceException — over the
+// typed bases CodeGen emits into @mj-biz-apps/accounting-entities. Registered via
+// LoadFinanceExceptionOperations. The status guard on FinanceException is FinanceExceptionEntityServer.
+export {
+  GetFinanceExceptionTypesOperation,
+  RaiseFinanceExceptionsOperation,
+  ClearFinanceExceptionOperation,
+  LoadFinanceExceptionOperations,
+} from './FinanceExceptionOperations.js';
+export {
+  FINANCE_EXCEPTION_TYPE_ENTITY,
+  FINANCE_EXCEPTIONS_CLEAR_AUTH,
+  UserCanClearFinanceExceptions,
+  ParseFinanceExceptionConfiguration,
+} from './FinanceExceptions.js';
+export { FINANCE_EXCEPTION_ENTITY } from './FinanceExceptionEntityServer.js';

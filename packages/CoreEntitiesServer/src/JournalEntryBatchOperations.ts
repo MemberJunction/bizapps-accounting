@@ -24,6 +24,9 @@
  *   Accounting.RecordJournalEntryBatchDecision   → gate.recordDecision + approveJournalEntryBatch | cancelJournalEntryBatch (in-app CFO approve/reject)
  *   Accounting.GetJournalEntryBatchApprovalState → gate.assertApproved probe (read-only: is this batch dispatchable?)
  *   Accounting.ArchiveJournalEntryBatch          → batch.Archive(reason)             terminal close with NO ERP call; members stay locked (#214)
+ *   Accounting.CancelJournalEntryBatch           → cancelJournalEntryBatch(...)     Approved|Failed→Cancelled; members return to the
+ *                                                            candidate pool (#183: CFO or approver only, Reason required,
+ *                                                            ConfirmNotAlreadyPostedInERP from Failed; Pending uses Reject)
  *
  * These are thin by design — every rule (netting, the one-transaction build incl. the approval
  * Task + ApprovalTaskID stamp (D10 rev. 2026-07-29), the CFO precondition, EmptyJournalEntryBatchError) lives
@@ -418,6 +421,68 @@ export class ArchiveJournalEntryBatchOperation extends BaseRemotableOperation<Ar
     if (!(await batch.Load(input.JournalEntryBatchID))) throw new Error(`ArchiveJournalEntryBatch: batch ${input.JournalEntryBatchID} not found.`);
     await batch.Archive(input.Reason, user);
     return { Status: batch.Status, ArchivedAt: batch.ArchivedAt?.toISOString() ?? null };
+  }
+}
+
+// ─── Accounting.CancelJournalEntryBatch ──────────────────────────────────────────────────
+
+export interface CancelJournalEntryBatchInput {
+  JournalEntryBatchID: string;
+  /** Required when the batch is Approved or Failed: cancelling discards a summary the approver signed. */
+  Reason?: string | null;
+  /** Required `true` to cancel a Failed batch: the caller checked the ERP and the batch number has not posted. */
+  ConfirmNotAlreadyPostedInERP?: boolean;
+}
+export interface CancelJournalEntryBatchOutput {
+  Status: string;
+  CancelledAt: string | null;
+  /**
+   * Set, with the batch untouched, when a Failed cancel was refused because the ERP lookup could not
+   * settle whether the batch already posted (#207): why, for the operator to check before cancelling
+   * again with `ConfirmNotAlreadyPostedInERP`. A lookup that FOUND the posting refuses outright.
+   */
+  ConfirmationRequired?: string;
+  /** Which way the lookup could not settle it; `Mismatch` is most likely this batch, already posted. */
+  ConfirmationKind?: ErpPostingUnconfirmedKind;
+}
+
+/**
+ * Cancel an Approved or Failed batch and return its journal entries to the candidate pool (#183) —
+ * the correction path for a batch whose frozen content is wrong, as opposed to Archive, which keeps
+ * the entries locked for good. A Pending batch is refused here: its cancel is a rejection, which
+ * goes through RecordJournalEntryBatchDecision so the CFO's decision is recorded on the Task.
+ * Who may cancel (the CFO or the batch's approver), the required reason and the ERP confirmation
+ * are enforced by the engine, the gate and the entity; this operation only marshals.
+ */
+@RegisterClass(BaseRemotableOperation, 'Accounting.CancelJournalEntryBatch')
+export class CancelJournalEntryBatchOperation extends BaseRemotableOperation<CancelJournalEntryBatchInput, CancelJournalEntryBatchOutput> {
+  public readonly OperationKey = 'Accounting.CancelJournalEntryBatch';
+
+  protected async InternalExecute(input: CancelJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<CancelJournalEntryBatchOutput> {
+    if (!input?.JournalEntryBatchID) throw new Error('CancelJournalEntryBatch: JournalEntryBatchID is required.');
+    requireSqlGuid(input.JournalEntryBatchID, 'CancelJournalEntryBatch');
+    await this.refusePending(input.JournalEntryBatchID, provider, user);
+    try {
+      const batch = await cancelJournalEntryBatch(input.JournalEntryBatchID, user, provider, {
+        reason: input.Reason ?? null,
+        confirmNotAlreadyPostedInERP: input.ConfirmNotAlreadyPostedInERP === true,
+        gate: new TasksAppApprovalGate(provider),
+        lookup: createAccountingERPLookup(provider),
+      });
+      return { Status: batch.Status, CancelledAt: batch.CancelledAt?.toISOString() ?? null };
+    } catch (e) {
+      // An answer for the operator, not a failure of the call: the batch is untouched and still Failed.
+      if (e instanceof ErpPostingUnconfirmedError) return { Status: 'Failed', CancelledAt: null, ConfirmationRequired: e.Reason, ConfirmationKind: e.Kind };
+      throw e;
+    }
+  }
+
+  private async refusePending(batchId: string, provider: IMetadataProvider, user: UserInfo): Promise<void> {
+    const batch = await provider.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, user);
+    if (!(await batch.Load(batchId))) throw new Error(`CancelJournalEntryBatch: batch ${batchId} not found.`);
+    if (batch.Status === 'Pending') {
+      throw new Error(`CancelJournalEntryBatch: batch ${batch.JournalEntryBatchNumber} is Pending — reject it from Batch approvals instead, so the decision is recorded on its approval Task.`);
+    }
   }
 }
 

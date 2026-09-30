@@ -126,10 +126,41 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   member-count check is now a public method shared with the engine: `sendJournalEntryBatch` re-runs
   it **before** every `→Sent` (`Approved→Sent`, and `Failed→Sent` on a retry), so a batch whose member
   set / totals drifted after approval is refused at dispatch instead of shipping under a stale
-  signature. It is a self-consistency check, not a seal: both sides are read at check time and no
-  snapshot of the approved content is stored. On `Approved` the immutability trigger freezes the
-  content; on `Failed` it does not, so fields the check never reads (`PostingDate`, the journal date
-  the ERP receives) can change before a retry (#183).
+  signature. It also checks that the summary entry carries the batch's date and company, and (#183)
+  compares the content with **`ApprovedContentHash`**, the SHA-256 seal `Save()` writes on
+  Pending→Approved over the batch header, summary entry and lines (with dimension tags) and member
+  set — so it now means "unchanged since approval", not only "coherent right now". A batch approved
+  before the seal existed has no hash and gets the other checks. The immutability trigger freezes
+  `Failed` content as well as `Approved`, so the seal is the second line of defence.
+- **`JournalEntryBatchEntityServer.Cancel(contextUser, { reason, confirmNotAlreadyPostedInERP, onCancelled })`**
+  (#183) — legal from `Pending`, `Approved` and `Failed`, and the ONLY way an `Approved`/`Failed`
+  batch reaches `Cancelled`: a transient flag set by `Cancel()` is what lets `Validate()` pass that
+  edge, so the generic form or GraphQL update cannot take it. It saves `Cancelled` with the summary
+  pointer cleared and the cancel audit triple in ONE update, then releases the members, deletes the
+  summary and runs `onCancelled`, in one transaction; the triggers key on that order (a member
+  unlocks only while its batch is `Pending` or `Cancelled`; an Approved/Failed batch becomes
+  Cancelled only with its pointer cleared in the same update). From `Approved`/`Failed` a reason is
+  required; from `Failed` so is `confirmNotAlreadyPostedInERP`, persisted as `ERPNotPostedConfirmedAt` /
+  `ERPNotPostedConfirmedByUserID` / `ERPNotPostedBasis` (`ERPLookup` when the engine's lookup found
+  nothing, `UserAttested` when the canceller confirmed). Calling `Cancel()` directly skips the ERP lookup below, so the
+  engine is the way in. A rolled-back cancel reloads the instance. `Save()` stamps
+  `CancelledAt` / `CancelledByUserID` on the transition, as it does for the approval and archive pairs.
+- **`cancelJournalEntryBatch` + `TasksAppApprovalGate`** (#183) — a cancel past approval must pass
+  `assertMayCancelApproved` (the company's `ApprovalCFOUserID` or the batch's `ApprovedByUserID`) and
+  records itself on the approval Task as a comment (`recordCancellation`, run as `onCancelled`, so it
+  commits or rolls back with the cancel; it refuses when the user has no linked Person). The engine
+  passes the status the batch was cancelled FROM, because when the comment is written the batch
+  already reads Cancelled. The `Accounting.CancelJournalEntryBatch` operation refuses a Pending batch — that cancel is a CFO
+  rejection through `RecordJournalEntryBatchDecision`.
+  **From `Failed` it looks the batch number up in the ERP first (#207)**, after authorizing and
+  before writing anything. A cancel releases the entries to be batched again under a NEW number that
+  no later lookup can connect to this journal, so this is the last point a posted batch is caught:
+  a matching posting refuses the cancel with no override (a retry records it `Posted` instead);
+  nothing found cancels, the lookup standing as the ERP check the attestation columns record; a
+  mismatch, a failed lookup or no lookup refuses with `ErpPostingUnconfirmedError` unless the
+  operator confirmed. The operation returns that refusal as `ConfirmationRequired` /
+  `ConfirmationKind`; which way "not posted" was established is persisted as `ERPNotPostedBasis`
+  and repeated in the approval Task comment.
 - **`TasksAppApprovalGate.recordDecision`** — now requires `contextUser` to BE the batch company's
   `AccountingCompanyProfile.ApprovalCFOUserID` (no CFO configured ⇒ hard-fail). Previously any
   authenticated user could approve any batch, including their own.
@@ -137,6 +168,25 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   (extracted from the engine's private `sqlGuid`) now guard every client-supplied id that is
   interpolated into an `ExtraFilter`: the batch remote ops, the gate's Task-Link lookups, W9's
   `FileID`, JE line `GLAccountID`s, `GLAccountLink` / `IntercompanyAccountMatch` FK checks.
+
+## 2c. Finance exception status guard (golive #279)
+
+- **`FinanceExceptionEntityServer`** — a new row is `Open` with no review; on a saved row `Status`,
+  `ReviewedByUserID`, `ReviewedAt` and `ReviewNote` change only inside `SaveFinanceExceptionClearance`,
+  which `Accounting.ClearFinanceException` calls after its checks (authorization, not the source
+  record's creator, creator resolved, still Open, note given). A sanctioned save moves `Open` to
+  `Reviewed` or `Corrected` only; a terminal row cannot change; `Delete()` always throws, because
+  deleting an Open exception would unblock its month without a review.
+- **`Accounting.RaiseFinanceExceptions`** writes as the system user and joins the caller's transaction
+  when one is open (same rule as `CreateJournalEntries`), so a raise made during a save commits or
+  rolls back with it. A repeat raise of a row that is still Open refreshes its creator fields and summary (an
+  ordinary save: they are not guarded), so a creator identified later unlocks a row raised as
+  unresolved; a terminal row is never touched. It is marked `RequiresSystemUser`, so through the API
+  only the system user may raise; the consuming apps' detectors call it in-process, where that gate
+  does not apply. It reads existing rows with `UPDLOCK, HOLDLOCK`, so a concurrent raise of the same
+  item waits and returns the first one's row.
+- **`Accounting.ClearFinanceException`** locks the row (`UPDLOCK`) in its transaction before reading
+  it, so of two concurrent clears the second finds the row no longer Open (`NOT_OPEN`).
 
 ## 3. Related (not `Save()` hooks)
 
@@ -147,23 +197,34 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   (`TasksAppApprovalGate` — per-company CFO **union**: one Task assigned to every involved company's CFO) → Sent →
   **Posted** + JEs→GLPosted. A send the ERP rejects, or whose poster throws, returns normally with the batch `Failed`;
   the summary lines load before the `→Sent` save, so a failed load leaves the batch where it was.
-  Lifecycle (`LEGAL_TRANSITIONS`): `Pending → Approved | Cancelled | Archived`, `Approved → Sent | Archived`,
-  `Sent → Posted | Failed`, `Failed → Sent | Archived`; `Posted`, `Cancelled` and `Archived` are terminal.
+  Lifecycle (`LEGAL_TRANSITIONS`): `Pending → Approved | Cancelled | Archived`, `Approved → Sent | Cancelled | Archived`,
+  `Sent → Posted | Failed`, `Failed → Sent | Cancelled | Archived`; `Posted`, `Cancelled` and `Archived` are terminal.
 - **Batch recovery (#145).** *Retry* — `sendJournalEntryBatch` on a `Failed` batch reuses its approval.
   `Failed` does not prove the ERP rejected the journal: the post can succeed with the response lost, or
   succeed and then fail to save `Posted`. So every send, first or retry, looks the batch number up in
-  the ERP first (#182; `AccountingERPEngine.FindPostedJournalBatch`, Business Central via `GetGLEntries`).
-  On a `Failed` retry, a posting that matches the batch line for line (account, debit, credit, posting
-  date) is recorded `Posted` with no second send. On a first send the batch never reached the ERP, so
-  a match is another journal under the same number: the send is refused and the batch stays
-  `Approved`. A posting that differs, or a failed lookup, refuses the send unless
+  the ERP first (#182; `AccountingERPEngine.FindPostedJournalBatch`, both ERPs via `GetGLEntries`:
+  Business Central by document number on any date, QuickBooks Online by the batch number among the
+  posting date's journal entries, since its verb cannot filter by number).
+  Every line the batch sends carries its token, `[JEB <batch ID>]`, after the line's description
+  (#206): batch numbers restart at `BATCH-000001` in every database, so another environment's journal
+  can sit under the same number in the same ERP company, and the batch ID is what tells them apart.
+  On a `Failed` retry, a posting whose every line carries the token and matches the batch line for
+  line (account, debit, credit, posting date) is recorded `Posted` with no second send. On a first
+  send such a match means the database was copied from one that sent the batch: the send is refused
+  and the batch stays `Approved`. A posting whose lines carry only other batches' tokens is another
+  environment's journal: the send or retry is refused with no override and the batch stays where it
+  was, to be archived (`Approved`) or cancelled (`Failed`) so its entries rebatch under a new number;
+  a `Failed` cancel treats it as not posted. A posting with no tokens (sent before tagging, or from an
+  environment that does not tag) or only some is a mismatch. A posting that differs, or a failed lookup, refuses the send unless
   `confirmNotAlreadyPostedInERP` (`ConfirmNotAlreadyPostedInERP` on `Accounting.DispatchJournalEntryBatch`),
-  which also stays required on a `Failed` retry to an ERP with no lookup (QuickBooks Online today). A
+  which also stays required on a `Failed` retry to an ERP with no lookup. A
   refused retry stays `Failed` and the op answers `ConfirmationRequired` with the reason and its kind
   (`Unavailable`, `Error` or `Mismatch`; the Dispatch status page gives `Mismatch` a stronger dialog,
   since it is often this very batch); any other refused first send goes `Sent → Failed`. The lookup
   reads posted G/L entries only, so Business Central posting refuses to write into a journal that
   already holds unposted lines, which `Microsoft.NAV.post` would otherwise post along with the batch.
+  QuickBooks Online posts each account by its QBO id (`ExternalAccountID`); a line whose GL account
+  has none is refused before the call, since QBO would read the `Code` as an id.
   An `afterPost` extension hook that throws never overturns a post the ERP accepted. *Resume* —
   `resumeJournalEntryBatchPosting` (`Accounting.ResumeJournalEntryBatchPosting`) finishes a `Posted`
   batch's member `Batched → GLPosted` flip with no ERP call. *Visibility* — `findStrandedJournalEntries`

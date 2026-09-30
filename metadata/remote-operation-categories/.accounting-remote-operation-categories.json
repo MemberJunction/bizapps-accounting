@@ -1,0 +1,12 @@
+[
+  {
+    "fields": {
+      "Name": "Finance Exceptions",
+      "Description": "The month-end finance exception list: read the detector thresholds, raise exceptions from consuming apps, and clear them after review.",
+      "ParentID": null
+    },
+    "primaryKey": {
+      "ID": "BF08299C-0F79-466A-97DC-9ECA2F28760A"
+    }
+  }
+]

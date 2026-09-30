@@ -612,6 +612,192 @@ export const mjBizAppsAccountingDimensionSchema = z.object({
 export type mjBizAppsAccountingDimensionEntityType = z.infer<typeof mjBizAppsAccountingDimensionSchema>;
 
 /**
+ * zod schema definition for the entity MJ_BizApps_Accounting: Finance Exception Types
+ */
+export const mjBizAppsAccountingFinanceExceptionTypeSchema = z.object({
+    ID: z.string().describe(`
+        * * Field Name: ID
+        * * Display Name: ID
+        * * SQL Data Type: uniqueidentifier
+        * * Default Value: newsequentialid()`),
+    Code: z.string().describe(`
+        * * Field Name: Code
+        * * Display Name: Code
+        * * SQL Data Type: nvarchar(60)
+        * * Description: Stable machine code the detectors raise against (e.g. PROGRESS_JUDGMENT_CALL). Unique. Never rename: raising apps key on it.`),
+    Name: z.string().describe(`
+        * * Field Name: Name
+        * * Display Name: Name
+        * * SQL Data Type: nvarchar(100)
+        * * Description: Display name for the exception kind.`),
+    Description: z.string().nullable().describe(`
+        * * Field Name: Description
+        * * Display Name: Description
+        * * SQL Data Type: nvarchar(MAX)
+        * * Description: What the detector looks for and why a reviewer should look at it.`),
+    OwningApp: z.string().describe(`
+        * * Field Name: OwningApp
+        * * Display Name: Owning App
+        * * SQL Data Type: nvarchar(100)
+        * * Description: The app whose detector raises this kind (e.g. orders, sales). Informational; accounting does not run the detector.`),
+    IsActive: z.boolean().describe(`
+        * * Field Name: IsActive
+        * * Display Name: Is Active
+        * * SQL Data Type: bit
+        * * Default Value: 1
+        * * Description: Whether the detector raises this kind. An inactive type is skipped by Accounting.RaiseFinanceExceptions and by the detector itself; existing rows stay on the list.`),
+    Configuration: z.string().describe(`
+        * * Field Name: Configuration
+        * * Display Name: Configuration
+        * * SQL Data Type: nvarchar(MAX)
+        * * Default Value: {}
+        * * Description: JSON object of the detector's thresholds (e.g. {"MinDaysSinceClose":7}). Read by the detector through Accounting.GetFinanceExceptionTypes. Must be valid JSON.`),
+    __mj_CreatedAt: z.date().describe(`
+        * * Field Name: __mj_CreatedAt
+        * * Display Name: Created At
+        * * SQL Data Type: datetimeoffset
+        * * Default Value: getutcdate()`),
+    __mj_UpdatedAt: z.date().describe(`
+        * * Field Name: __mj_UpdatedAt
+        * * Display Name: Updated At
+        * * SQL Data Type: datetimeoffset
+        * * Default Value: getutcdate()`),
+});
+
+export type mjBizAppsAccountingFinanceExceptionTypeEntityType = z.infer<typeof mjBizAppsAccountingFinanceExceptionTypeSchema>;
+
+/**
+ * zod schema definition for the entity MJ_BizApps_Accounting: Finance Exceptions
+ */
+export const mjBizAppsAccountingFinanceExceptionSchema = z.object({
+    ID: z.string().describe(`
+        * * Field Name: ID
+        * * Display Name: ID
+        * * SQL Data Type: uniqueidentifier
+        * * Default Value: newsequentialid()`),
+    FinanceExceptionTypeID: z.string().describe(`
+        * * Field Name: FinanceExceptionTypeID
+        * * Display Name: Finance Exception Type ID
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Finance Exception Types (vwFinanceExceptionTypes.ID)
+        * * Description: The kind of exception.`),
+    SourceEntityID: z.string().describe(`
+        * * Field Name: SourceEntityID
+        * * Display Name: Source Entity ID
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ: Entities (vwEntities.ID)
+        * * Description: MJ entity of the record that raised the exception. With SourceRecordID, names the source record.`),
+    SourceRecordID: z.string().describe(`
+        * * Field Name: SourceRecordID
+        * * Display Name: Source Record ID
+        * * SQL Data Type: nvarchar(450)
+        * * Description: Primary key of the source record, in the entity named by SourceEntityID.`),
+    CompanyID: z.string().describe(`
+        * * Field Name: CompanyID
+        * * Display Name: Company ID
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
+        * * Description: The company whose books the exception affects. Ready-to-close is judged per company and month.`),
+    Amount: z.number().nullable().describe(`
+        * * Field Name: Amount
+        * * Display Name: Amount
+        * * SQL Data Type: decimal(19, 4)
+        * * Description: The amount at stake, in the source record's currency. NULL when the detector cannot state one.`),
+    ExceptionDate: z.date().describe(`
+        * * Field Name: ExceptionDate
+        * * Display Name: Exception Date
+        * * SQL Data Type: date
+        * * Description: The business day the exception belongs to. Its month is the close it blocks.`),
+    DetectedAt: z.date().describe(`
+        * * Field Name: DetectedAt
+        * * Display Name: Detected At
+        * * SQL Data Type: datetimeoffset
+        * * Default Value: sysdatetimeoffset()
+        * * Description: When the exception was raised (UTC).`),
+    Summary: z.string().describe(`
+        * * Field Name: Summary
+        * * Display Name: Summary
+        * * SQL Data Type: nvarchar(1000)
+        * * Description: Plain description of what the detector found in the data.`),
+    DedupeKey: z.string().describe(`
+        * * Field Name: DedupeKey
+        * * Display Name: Dedupe Key
+        * * SQL Data Type: nvarchar(400)
+        * * Description: The detector's identity for this occurrence (e.g. the source record ID, or record ID and month). Unique per type: raising the same key again returns the existing row unchanged.`),
+    SourceCreatedByUserID: z.string().nullable().describe(`
+        * * Field Name: SourceCreatedByUserID
+        * * Display Name: Source Created By User ID
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+        * * Description: The login whose judgement is under review — the attester, booker or deal owner. This user may not clear the exception. NULL when there is none or it could not be resolved.`),
+    CreatorUnresolved: z.boolean().describe(`
+        * * Field Name: CreatorUnresolved
+        * * Display Name: Creator Unresolved
+        * * SQL Data Type: bit
+        * * Default Value: 0
+        * * Description: 1 = the source record has a creator who has no linked login, so separation of duties cannot be checked and the exception cannot be cleared until that is resolved.`),
+    Status: z.union([z.literal('Corrected'), z.literal('Open'), z.literal('Reviewed')]).describe(`
+        * * Field Name: Status
+        * * Display Name: Status
+        * * SQL Data Type: nvarchar(20)
+        * * Default Value: Open
+    * * Value List Type: List
+    * * Possible Values 
+    *   * Corrected
+    *   * Open
+    *   * Reviewed
+        * * Description: Open until cleared. Reviewed: the judgement stands. Corrected: the data was fixed. Both are terminal and reachable only through Accounting.ClearFinanceException.`),
+    ReviewedByUserID: z.string().nullable().describe(`
+        * * Field Name: ReviewedByUserID
+        * * Display Name: Reviewed By User ID
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+        * * Description: Who cleared the exception. Required once Reviewed or Corrected; NULL while Open.`),
+    ReviewedAt: z.date().nullable().describe(`
+        * * Field Name: ReviewedAt
+        * * Display Name: Reviewed At
+        * * SQL Data Type: datetimeoffset
+        * * Description: When the exception was cleared (UTC). Required once Reviewed or Corrected; NULL while Open.`),
+    ReviewNote: z.string().nullable().describe(`
+        * * Field Name: ReviewNote
+        * * Display Name: Review Note
+        * * SQL Data Type: nvarchar(MAX)
+        * * Description: The reviewer's note on what they checked or changed. Required by Accounting.ClearFinanceException; NULL while Open.`),
+    __mj_CreatedAt: z.date().describe(`
+        * * Field Name: __mj_CreatedAt
+        * * Display Name: Created At
+        * * SQL Data Type: datetimeoffset
+        * * Default Value: getutcdate()`),
+    __mj_UpdatedAt: z.date().describe(`
+        * * Field Name: __mj_UpdatedAt
+        * * Display Name: Updated At
+        * * SQL Data Type: datetimeoffset
+        * * Default Value: getutcdate()`),
+    FinanceExceptionType: z.string().describe(`
+        * * Field Name: FinanceExceptionType
+        * * Display Name: Finance Exception Type
+        * * SQL Data Type: nvarchar(100)`),
+    SourceEntity: z.string().describe(`
+        * * Field Name: SourceEntity
+        * * Display Name: Source Entity
+        * * SQL Data Type: nvarchar(255)`),
+    Company: z.string().describe(`
+        * * Field Name: Company
+        * * Display Name: Company
+        * * SQL Data Type: nvarchar(50)`),
+    SourceCreatedByUser: z.string().nullable().describe(`
+        * * Field Name: SourceCreatedByUser
+        * * Display Name: Source Created By User
+        * * SQL Data Type: nvarchar(100)`),
+    ReviewedByUser: z.string().nullable().describe(`
+        * * Field Name: ReviewedByUser
+        * * Display Name: Reviewed By User
+        * * SQL Data Type: nvarchar(100)`),
+});
+
+export type mjBizAppsAccountingFinanceExceptionEntityType = z.infer<typeof mjBizAppsAccountingFinanceExceptionSchema>;
+
+/**
  * zod schema definition for the entity MJ_BizApps_Accounting: GL Account Link Dimensions
  */
 export const mjBizAppsAccountingGLAccountLinkDimensionSchema = z.object({
@@ -1370,7 +1556,7 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
     *   * Pending
     *   * Posted
     *   * Sent
-        * * Description: Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled | Archived. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed triggers retry + escalation; Cancelled is terminal from Pending and RELEASES the member entries back to the candidate pool; Archived is terminal from Pending, Approved or Failed, makes no ERP call and KEEPS the member entries locked (trg_JournalEntryBatch_Immutability).`),
+        * * Description: Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled | Archived. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed is retried under the original approval and stays content-locked; Cancelled is terminal from Pending, Approved or Failed and RELEASES the member entries back to the candidate pool; Archived is terminal from Pending, Approved or Failed, makes no ERP call and KEEPS the member entries locked (trg_JournalEntryBatch_Immutability).`),
     TotalEntries: z.number().describe(`
         * * Field Name: TotalEntries
         * * Display Name: Total Entries
@@ -1457,6 +1643,47 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
         * * Description: User who archived the batch. Required when Status = Archived.`),
+    CancelReason: z.string().nullable().describe(`
+        * * Field Name: CancelReason
+        * * Display Name: Cancel Reason
+        * * SQL Data Type: nvarchar(500)
+        * * Description: Why this batch was cancelled. Required when an approved batch is cancelled (CK_JournalEntryBatch_CancelAudit); optional when a Pending batch is. Frozen once Cancelled.`),
+    CancelledAt: z.date().nullable().describe(`
+        * * Field Name: CancelledAt
+        * * Display Name: Cancelled At
+        * * SQL Data Type: datetimeoffset
+        * * Description: When the batch was cancelled. Required when an approved batch is cancelled.`),
+    CancelledByUserID: z.string().nullable().describe(`
+        * * Field Name: CancelledByUserID
+        * * Display Name: Cancelled By User
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+        * * Description: User who cancelled the batch. Required when an approved batch is cancelled.`),
+    ERPNotPostedConfirmedAt: z.date().nullable().describe(`
+        * * Field Name: ERPNotPostedConfirmedAt
+        * * Display Name: ERP Not Posted Confirmed At
+        * * SQL Data Type: datetimeoffset
+        * * Description: When this batch was established as NOT posted in the ERP before it was cancelled — by the ERP lookup finding nothing under its number, or by the canceller's attestation when the lookup could not settle it (see ERPNotPostedBasis). Required when a batch that had been sent is cancelled (CK_JournalEntryBatch_CancelERPCheck): a Failed batch may already be in the ERP, and cancelling releases its entries to be batched again.`),
+    ERPNotPostedConfirmedByUserID: z.string().nullable().describe(`
+        * * Field Name: ERPNotPostedConfirmedByUserID
+        * * Display Name: ERP Not Posted Confirmed By User
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+        * * Description: User whose cancel established this batch as NOT posted in the ERP — accountable for the cancel whether the ERP lookup or their own attestation settled it (see ERPNotPostedBasis). Required with ERPNotPostedConfirmedAt.`),
+    ERPNotPostedBasis: z.union([z.literal('ERPLookup'), z.literal('UserAttested')]).nullable().describe(`
+        * * Field Name: ERPNotPostedBasis
+        * * Display Name: ERP Not Posted Basis
+        * * SQL Data Type: nvarchar(20)
+    * * Value List Type: List
+    * * Possible Values 
+    *   * ERPLookup
+    *   * UserAttested
+        * * Description: How this batch was established as NOT posted in the ERP before it was cancelled: ERPLookup (the ERP lookup found nothing under its number) or UserAttested (the lookup could not settle it and the canceller confirmed). Required with ERPNotPostedConfirmedAt (CK_JournalEntryBatch_CancelERPCheck).`),
+    ApprovedContentHash: z.string().nullable().describe(`
+        * * Field Name: ApprovedContentHash
+        * * Display Name: Approved Content Hash
+        * * SQL Data Type: nvarchar(64)
+        * * Description: SHA-256 of the approved content (batch header, summary entry and lines, member set), written at approval and frozen by trg_JournalEntryBatch_Immutability. Dispatch recomputes and compares it. NULL on batches approved before the seal existed.`),
     Company: z.string().describe(`
         * * Field Name: Company
         * * Display Name: Company
@@ -1480,6 +1707,14 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
     ArchivedByUser: z.string().nullable().describe(`
         * * Field Name: ArchivedByUser
         * * Display Name: Archived By User
+        * * SQL Data Type: nvarchar(100)`),
+    CancelledByUser: z.string().nullable().describe(`
+        * * Field Name: CancelledByUser
+        * * Display Name: Cancelled By User Name
+        * * SQL Data Type: nvarchar(100)`),
+    ERPNotPostedConfirmedByUser: z.string().nullable().describe(`
+        * * Field Name: ERPNotPostedConfirmedByUser
+        * * Display Name: ERP Not Posted Confirmed By User Name
         * * SQL Data Type: nvarchar(100)`),
 });
 
@@ -3885,6 +4120,469 @@ export class mjBizAppsAccountingDimensionEntity extends BaseEntity<mjBizAppsAcco
 
 
 /**
+ * MJ_BizApps_Accounting: Finance Exception Types - strongly typed entity sub-class
+ * * Schema: __mj_BizAppsAccounting
+ * * Base Table: FinanceExceptionType
+ * * Base View: vwFinanceExceptionTypes
+ * * @description Catalog of finance exception kinds (golive #279). Each row is one detector's rule: its stable Code, the app that raises it, whether it is active, and its thresholds in Configuration. Seeded by metadata; a type can be deactivated, or its Configuration changed, without a release.
+ * * Primary Key: ID
+ * @extends {BaseEntity}
+ * @class
+ * @public
+ */
+@RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Finance Exception Types')
+export class mjBizAppsAccountingFinanceExceptionTypeEntity extends BaseEntity<mjBizAppsAccountingFinanceExceptionTypeEntityType> {
+    /**
+    * Loads the MJ_BizApps_Accounting: Finance Exception Types record from the database
+    * @param ID: string - primary key value to load the MJ_BizApps_Accounting: Finance Exception Types record.
+    * @param EntityRelationshipsToLoad - (optional) the relationships to load
+    * @returns {Promise<boolean>} - true if successful, false otherwise
+    * @public
+    * @async
+    * @memberof mjBizAppsAccountingFinanceExceptionTypeEntity
+    * @method
+    * @override
+    */
+    public async Load(ID: string, EntityRelationshipsToLoad?: string[]) : Promise<boolean> {
+        const compositeKey: CompositeKey = new CompositeKey();
+        compositeKey.KeyValuePairs.push({ FieldName: 'ID', Value: ID });
+        return await super.InnerLoad(compositeKey, EntityRelationshipsToLoad);
+    }
+
+    /**
+    * * Field Name: ID
+    * * Display Name: ID
+    * * SQL Data Type: uniqueidentifier
+    * * Default Value: newsequentialid()
+    */
+    get ID(): string {
+        return this.Get('ID');
+    }
+    set ID(value: string) {
+        this.Set('ID', value);
+    }
+
+    /**
+    * * Field Name: Code
+    * * Display Name: Code
+    * * SQL Data Type: nvarchar(60)
+    * * Description: Stable machine code the detectors raise against (e.g. PROGRESS_JUDGMENT_CALL). Unique. Never rename: raising apps key on it.
+    */
+    get Code(): string {
+        return this.Get('Code');
+    }
+    set Code(value: string) {
+        this.Set('Code', value);
+    }
+
+    /**
+    * * Field Name: Name
+    * * Display Name: Name
+    * * SQL Data Type: nvarchar(100)
+    * * Description: Display name for the exception kind.
+    */
+    get Name(): string {
+        return this.Get('Name');
+    }
+    set Name(value: string) {
+        this.Set('Name', value);
+    }
+
+    /**
+    * * Field Name: Description
+    * * Display Name: Description
+    * * SQL Data Type: nvarchar(MAX)
+    * * Description: What the detector looks for and why a reviewer should look at it.
+    */
+    get Description(): string | null {
+        return this.Get('Description');
+    }
+    set Description(value: string | null) {
+        this.Set('Description', value);
+    }
+
+    /**
+    * * Field Name: OwningApp
+    * * Display Name: Owning App
+    * * SQL Data Type: nvarchar(100)
+    * * Description: The app whose detector raises this kind (e.g. orders, sales). Informational; accounting does not run the detector.
+    */
+    get OwningApp(): string {
+        return this.Get('OwningApp');
+    }
+    set OwningApp(value: string) {
+        this.Set('OwningApp', value);
+    }
+
+    /**
+    * * Field Name: IsActive
+    * * Display Name: Is Active
+    * * SQL Data Type: bit
+    * * Default Value: 1
+    * * Description: Whether the detector raises this kind. An inactive type is skipped by Accounting.RaiseFinanceExceptions and by the detector itself; existing rows stay on the list.
+    */
+    get IsActive(): boolean {
+        return this.Get('IsActive');
+    }
+    set IsActive(value: boolean) {
+        this.Set('IsActive', value);
+    }
+
+    /**
+    * * Field Name: Configuration
+    * * Display Name: Configuration
+    * * SQL Data Type: nvarchar(MAX)
+    * * Default Value: {}
+    * * Description: JSON object of the detector's thresholds (e.g. {"MinDaysSinceClose":7}). Read by the detector through Accounting.GetFinanceExceptionTypes. Must be valid JSON.
+    */
+    get Configuration(): string {
+        return this.Get('Configuration');
+    }
+    set Configuration(value: string) {
+        this.Set('Configuration', value);
+    }
+
+    /**
+    * * Field Name: __mj_CreatedAt
+    * * Display Name: Created At
+    * * SQL Data Type: datetimeoffset
+    * * Default Value: getutcdate()
+    */
+    get __mj_CreatedAt(): Date {
+        return this.Get('__mj_CreatedAt');
+    }
+
+    /**
+    * * Field Name: __mj_UpdatedAt
+    * * Display Name: Updated At
+    * * SQL Data Type: datetimeoffset
+    * * Default Value: getutcdate()
+    */
+    get __mj_UpdatedAt(): Date {
+        return this.Get('__mj_UpdatedAt');
+    }
+}
+
+
+/**
+ * MJ_BizApps_Accounting: Finance Exceptions - strongly typed entity sub-class
+ * * Schema: __mj_BizAppsAccounting
+ * * Base Table: FinanceException
+ * * Base View: vwFinanceExceptions
+ * * @description Records a finance reviewer must look at before a month is closed (golive #279). Raised by detectors in consuming apps through Accounting.RaiseFinanceExceptions, idempotent on (FinanceExceptionTypeID, DedupeKey). Cleared only through Accounting.ClearFinanceException, by a holder of MJ.BizApps.Accounting.FinanceExceptions.Clear who is not the source record's creator. A company's month is ready to close when it has no Open rows.
+ * * Primary Key: ID
+ * @extends {BaseEntity}
+ * @class
+ * @public
+ */
+@RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Finance Exceptions')
+export class mjBizAppsAccountingFinanceExceptionEntity extends BaseEntity<mjBizAppsAccountingFinanceExceptionEntityType> {
+    /**
+    * Loads the MJ_BizApps_Accounting: Finance Exceptions record from the database
+    * @param ID: string - primary key value to load the MJ_BizApps_Accounting: Finance Exceptions record.
+    * @param EntityRelationshipsToLoad - (optional) the relationships to load
+    * @returns {Promise<boolean>} - true if successful, false otherwise
+    * @public
+    * @async
+    * @memberof mjBizAppsAccountingFinanceExceptionEntity
+    * @method
+    * @override
+    */
+    public async Load(ID: string, EntityRelationshipsToLoad?: string[]) : Promise<boolean> {
+        const compositeKey: CompositeKey = new CompositeKey();
+        compositeKey.KeyValuePairs.push({ FieldName: 'ID', Value: ID });
+        return await super.InnerLoad(compositeKey, EntityRelationshipsToLoad);
+    }
+
+    /**
+    * * Field Name: ID
+    * * Display Name: ID
+    * * SQL Data Type: uniqueidentifier
+    * * Default Value: newsequentialid()
+    */
+    get ID(): string {
+        return this.Get('ID');
+    }
+    set ID(value: string) {
+        this.Set('ID', value);
+    }
+
+    /**
+    * * Field Name: FinanceExceptionTypeID
+    * * Display Name: Finance Exception Type ID
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Finance Exception Types (vwFinanceExceptionTypes.ID)
+    * * Description: The kind of exception.
+    */
+    get FinanceExceptionTypeID(): string {
+        return this.Get('FinanceExceptionTypeID');
+    }
+    set FinanceExceptionTypeID(value: string) {
+        this.Set('FinanceExceptionTypeID', value);
+    }
+
+    /**
+    * * Field Name: SourceEntityID
+    * * Display Name: Source Entity ID
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ: Entities (vwEntities.ID)
+    * * Description: MJ entity of the record that raised the exception. With SourceRecordID, names the source record.
+    */
+    get SourceEntityID(): string {
+        return this.Get('SourceEntityID');
+    }
+    set SourceEntityID(value: string) {
+        this.Set('SourceEntityID', value);
+    }
+
+    /**
+    * * Field Name: SourceRecordID
+    * * Display Name: Source Record ID
+    * * SQL Data Type: nvarchar(450)
+    * * Description: Primary key of the source record, in the entity named by SourceEntityID.
+    */
+    get SourceRecordID(): string {
+        return this.Get('SourceRecordID');
+    }
+    set SourceRecordID(value: string) {
+        this.Set('SourceRecordID', value);
+    }
+
+    /**
+    * * Field Name: CompanyID
+    * * Display Name: Company ID
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
+    * * Description: The company whose books the exception affects. Ready-to-close is judged per company and month.
+    */
+    get CompanyID(): string {
+        return this.Get('CompanyID');
+    }
+    set CompanyID(value: string) {
+        this.Set('CompanyID', value);
+    }
+
+    /**
+    * * Field Name: Amount
+    * * Display Name: Amount
+    * * SQL Data Type: decimal(19, 4)
+    * * Description: The amount at stake, in the source record's currency. NULL when the detector cannot state one.
+    */
+    get Amount(): number | null {
+        return this.Get('Amount');
+    }
+    set Amount(value: number | null) {
+        this.Set('Amount', value);
+    }
+
+    /**
+    * * Field Name: ExceptionDate
+    * * Display Name: Exception Date
+    * * SQL Data Type: date
+    * * Description: The business day the exception belongs to. Its month is the close it blocks.
+    */
+    get ExceptionDate(): Date {
+        return this.Get('ExceptionDate');
+    }
+    set ExceptionDate(value: Date) {
+        this.Set('ExceptionDate', value);
+    }
+
+    /**
+    * * Field Name: DetectedAt
+    * * Display Name: Detected At
+    * * SQL Data Type: datetimeoffset
+    * * Default Value: sysdatetimeoffset()
+    * * Description: When the exception was raised (UTC).
+    */
+    get DetectedAt(): Date {
+        return this.Get('DetectedAt');
+    }
+    set DetectedAt(value: Date) {
+        this.Set('DetectedAt', value);
+    }
+
+    /**
+    * * Field Name: Summary
+    * * Display Name: Summary
+    * * SQL Data Type: nvarchar(1000)
+    * * Description: Plain description of what the detector found in the data.
+    */
+    get Summary(): string {
+        return this.Get('Summary');
+    }
+    set Summary(value: string) {
+        this.Set('Summary', value);
+    }
+
+    /**
+    * * Field Name: DedupeKey
+    * * Display Name: Dedupe Key
+    * * SQL Data Type: nvarchar(400)
+    * * Description: The detector's identity for this occurrence (e.g. the source record ID, or record ID and month). Unique per type: raising the same key again returns the existing row unchanged.
+    */
+    get DedupeKey(): string {
+        return this.Get('DedupeKey');
+    }
+    set DedupeKey(value: string) {
+        this.Set('DedupeKey', value);
+    }
+
+    /**
+    * * Field Name: SourceCreatedByUserID
+    * * Display Name: Source Created By User ID
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+    * * Description: The login whose judgement is under review — the attester, booker or deal owner. This user may not clear the exception. NULL when there is none or it could not be resolved.
+    */
+    get SourceCreatedByUserID(): string | null {
+        return this.Get('SourceCreatedByUserID');
+    }
+    set SourceCreatedByUserID(value: string | null) {
+        this.Set('SourceCreatedByUserID', value);
+    }
+
+    /**
+    * * Field Name: CreatorUnresolved
+    * * Display Name: Creator Unresolved
+    * * SQL Data Type: bit
+    * * Default Value: 0
+    * * Description: 1 = the source record has a creator who has no linked login, so separation of duties cannot be checked and the exception cannot be cleared until that is resolved.
+    */
+    get CreatorUnresolved(): boolean {
+        return this.Get('CreatorUnresolved');
+    }
+    set CreatorUnresolved(value: boolean) {
+        this.Set('CreatorUnresolved', value);
+    }
+
+    /**
+    * * Field Name: Status
+    * * Display Name: Status
+    * * SQL Data Type: nvarchar(20)
+    * * Default Value: Open
+    * * Value List Type: List
+    * * Possible Values 
+    *   * Corrected
+    *   * Open
+    *   * Reviewed
+    * * Description: Open until cleared. Reviewed: the judgement stands. Corrected: the data was fixed. Both are terminal and reachable only through Accounting.ClearFinanceException.
+    */
+    get Status(): 'Corrected' | 'Open' | 'Reviewed' {
+        return this.Get('Status');
+    }
+    set Status(value: 'Corrected' | 'Open' | 'Reviewed') {
+        this.Set('Status', value);
+    }
+
+    /**
+    * * Field Name: ReviewedByUserID
+    * * Display Name: Reviewed By User ID
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+    * * Description: Who cleared the exception. Required once Reviewed or Corrected; NULL while Open.
+    */
+    get ReviewedByUserID(): string | null {
+        return this.Get('ReviewedByUserID');
+    }
+    set ReviewedByUserID(value: string | null) {
+        this.Set('ReviewedByUserID', value);
+    }
+
+    /**
+    * * Field Name: ReviewedAt
+    * * Display Name: Reviewed At
+    * * SQL Data Type: datetimeoffset
+    * * Description: When the exception was cleared (UTC). Required once Reviewed or Corrected; NULL while Open.
+    */
+    get ReviewedAt(): Date | null {
+        return this.Get('ReviewedAt');
+    }
+    set ReviewedAt(value: Date | null) {
+        this.Set('ReviewedAt', value);
+    }
+
+    /**
+    * * Field Name: ReviewNote
+    * * Display Name: Review Note
+    * * SQL Data Type: nvarchar(MAX)
+    * * Description: The reviewer's note on what they checked or changed. Required by Accounting.ClearFinanceException; NULL while Open.
+    */
+    get ReviewNote(): string | null {
+        return this.Get('ReviewNote');
+    }
+    set ReviewNote(value: string | null) {
+        this.Set('ReviewNote', value);
+    }
+
+    /**
+    * * Field Name: __mj_CreatedAt
+    * * Display Name: Created At
+    * * SQL Data Type: datetimeoffset
+    * * Default Value: getutcdate()
+    */
+    get __mj_CreatedAt(): Date {
+        return this.Get('__mj_CreatedAt');
+    }
+
+    /**
+    * * Field Name: __mj_UpdatedAt
+    * * Display Name: Updated At
+    * * SQL Data Type: datetimeoffset
+    * * Default Value: getutcdate()
+    */
+    get __mj_UpdatedAt(): Date {
+        return this.Get('__mj_UpdatedAt');
+    }
+
+    /**
+    * * Field Name: FinanceExceptionType
+    * * Display Name: Finance Exception Type
+    * * SQL Data Type: nvarchar(100)
+    */
+    get FinanceExceptionType(): string {
+        return this.Get('FinanceExceptionType');
+    }
+
+    /**
+    * * Field Name: SourceEntity
+    * * Display Name: Source Entity
+    * * SQL Data Type: nvarchar(255)
+    */
+    get SourceEntity(): string {
+        return this.Get('SourceEntity');
+    }
+
+    /**
+    * * Field Name: Company
+    * * Display Name: Company
+    * * SQL Data Type: nvarchar(50)
+    */
+    get Company(): string {
+        return this.Get('Company');
+    }
+
+    /**
+    * * Field Name: SourceCreatedByUser
+    * * Display Name: Source Created By User
+    * * SQL Data Type: nvarchar(100)
+    */
+    get SourceCreatedByUser(): string | null {
+        return this.Get('SourceCreatedByUser');
+    }
+
+    /**
+    * * Field Name: ReviewedByUser
+    * * Display Name: Reviewed By User
+    * * SQL Data Type: nvarchar(100)
+    */
+    get ReviewedByUser(): string | null {
+        return this.Get('ReviewedByUser');
+    }
+}
+
+
+/**
  * MJ_BizApps_Accounting: GL Account Link Dimensions - strongly typed entity sub-class
  * * Schema: __mj_BizAppsAccounting
  * * Base Table: GLAccountLinkDimension
@@ -5916,6 +6614,8 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     * Validate() method override for MJ_BizApps_Accounting: Journal Entry Batches entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
     * * Table-Level: Both the approval task and the time it was raised must either be set together, or both must be empty.
     * * Table-Level: When a record's status is set to 'Archived', an archive reason, an archive date, and the archiving user's ID must all be provided.
+    * * Table-Level: If an approved journal entry batch is cancelled, a cancellation reason, cancellation date, and the user who cancelled it must all be provided.
+    * * Table-Level: If a journal entry batch has already been sent and is subsequently cancelled, the ERP non-posting confirmation details (date, user, and basis) must be provided to ensure proper audit tracking.
     * * Table-Level: Total debits, total credits, and total entries must all be greater than or equal to zero to ensure valid financial accounting records.
     * @public
     * @method
@@ -5925,6 +6625,8 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
         const result = super.Validate();
         this.ValidateApprovalTaskAndRaisedAtCoexistence(result);
         this.ValidateArchivedFieldsWhenStatusIsArchived(result);
+        this.ValidateCancellationDetailsForApprovedBatch(result);
+        this.ValidateERPNotPostedConfirmationForCancelledSentBatches(result);
         this.ValidateTotalsAreNonNegative(result);
         result.Success = result.Success && (result.Errors.length === 0);
 
@@ -5984,6 +6686,64 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     				"ArchivedByUserID",
     				"The user who archived the record is required when the status is set to 'Archived'.",
     				this.ArchivedByUserID,
+    				ValidationErrorType.Failure
+    			));
+    		}
+    	}
+    }
+
+    /**
+    * If an approved journal entry batch is cancelled, a cancellation reason, cancellation date, and the user who cancelled it must all be provided.
+    * @param result - the ValidationResult object to add any errors or warnings to
+    * @public
+    * @method
+    */
+    public ValidateCancellationDetailsForApprovedBatch(result: ValidationResult) {
+        if (this.Status === 'Cancelled' && this.ApprovedAt != null) {
+            const hasCancelReason = this.CancelReason != null && this.CancelReason.trim().length > 0;
+            const hasCancelledAt = this.CancelledAt != null;
+            const hasCancelledBy = this.CancelledByUserID != null;
+    
+            if (!hasCancelReason) {
+                result.Errors.push(new ValidationErrorInfo(
+                    "CancelReason",
+                    "A cancellation reason is required when cancelling an approved batch.",
+                    this.CancelReason,
+                    ValidationErrorType.Failure
+                ));
+            }
+            if (!hasCancelledAt) {
+                result.Errors.push(new ValidationErrorInfo(
+                    "CancelledAt",
+                    "Cancellation date is required when cancelling an approved batch.",
+                    this.CancelledAt,
+                    ValidationErrorType.Failure
+                ));
+            }
+            if (!hasCancelledBy) {
+                result.Errors.push(new ValidationErrorInfo(
+                    "CancelledByUserID",
+                    "The user who cancelled the batch must be specified when cancelling an approved batch.",
+                    this.CancelledByUserID,
+                    ValidationErrorType.Failure
+                ));
+            }
+        }
+    }
+
+    /**
+    * If a journal entry batch has already been sent and is subsequently cancelled, the ERP non-posting confirmation details (date, user, and basis) must be provided to ensure proper audit tracking.
+    * @param result - the ValidationResult object to add any errors or warnings to
+    * @public
+    * @method
+    */
+    public ValidateERPNotPostedConfirmationForCancelledSentBatches(result: ValidationResult) {
+    	if (this.Status === 'Cancelled' && this.SentAt != null) {
+    		if (this.ERPNotPostedConfirmedAt == null || this.ERPNotPostedConfirmedByUserID == null || this.ERPNotPostedBasis == null) {
+    			result.Errors.push(new ValidationErrorInfo(
+    				'Status',
+    				'If a sent journal entry batch is cancelled, the ERP non-posting confirmation date, user, and basis must all be provided.',
+    				this.Status,
     				ValidationErrorType.Failure
     			));
     		}
@@ -6154,7 +6914,7 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     *   * Pending
     *   * Posted
     *   * Sent
-    * * Description: Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled | Archived. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed triggers retry + escalation; Cancelled is terminal from Pending and RELEASES the member entries back to the candidate pool; Archived is terminal from Pending, Approved or Failed, makes no ERP call and KEEPS the member entries locked (trg_JournalEntryBatch_Immutability).
+    * * Description: Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled | Archived. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed is retried under the original approval and stays content-locked; Cancelled is terminal from Pending, Approved or Failed and RELEASES the member entries back to the candidate pool; Archived is terminal from Pending, Approved or Failed, makes no ERP call and KEEPS the member entries locked (trg_JournalEntryBatch_Immutability).
     */
     get Status(): 'Approved' | 'Archived' | 'Cancelled' | 'Failed' | 'Pending' | 'Posted' | 'Sent' {
         return this.Get('Status');
@@ -6372,6 +7132,103 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     }
 
     /**
+    * * Field Name: CancelReason
+    * * Display Name: Cancel Reason
+    * * SQL Data Type: nvarchar(500)
+    * * Description: Why this batch was cancelled. Required when an approved batch is cancelled (CK_JournalEntryBatch_CancelAudit); optional when a Pending batch is. Frozen once Cancelled.
+    */
+    get CancelReason(): string | null {
+        return this.Get('CancelReason');
+    }
+    set CancelReason(value: string | null) {
+        this.Set('CancelReason', value);
+    }
+
+    /**
+    * * Field Name: CancelledAt
+    * * Display Name: Cancelled At
+    * * SQL Data Type: datetimeoffset
+    * * Description: When the batch was cancelled. Required when an approved batch is cancelled.
+    */
+    get CancelledAt(): Date | null {
+        return this.Get('CancelledAt');
+    }
+    set CancelledAt(value: Date | null) {
+        this.Set('CancelledAt', value);
+    }
+
+    /**
+    * * Field Name: CancelledByUserID
+    * * Display Name: Cancelled By User
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+    * * Description: User who cancelled the batch. Required when an approved batch is cancelled.
+    */
+    get CancelledByUserID(): string | null {
+        return this.Get('CancelledByUserID');
+    }
+    set CancelledByUserID(value: string | null) {
+        this.Set('CancelledByUserID', value);
+    }
+
+    /**
+    * * Field Name: ERPNotPostedConfirmedAt
+    * * Display Name: ERP Not Posted Confirmed At
+    * * SQL Data Type: datetimeoffset
+    * * Description: When this batch was established as NOT posted in the ERP before it was cancelled — by the ERP lookup finding nothing under its number, or by the canceller's attestation when the lookup could not settle it (see ERPNotPostedBasis). Required when a batch that had been sent is cancelled (CK_JournalEntryBatch_CancelERPCheck): a Failed batch may already be in the ERP, and cancelling releases its entries to be batched again.
+    */
+    get ERPNotPostedConfirmedAt(): Date | null {
+        return this.Get('ERPNotPostedConfirmedAt');
+    }
+    set ERPNotPostedConfirmedAt(value: Date | null) {
+        this.Set('ERPNotPostedConfirmedAt', value);
+    }
+
+    /**
+    * * Field Name: ERPNotPostedConfirmedByUserID
+    * * Display Name: ERP Not Posted Confirmed By User
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+    * * Description: User whose cancel established this batch as NOT posted in the ERP — accountable for the cancel whether the ERP lookup or their own attestation settled it (see ERPNotPostedBasis). Required with ERPNotPostedConfirmedAt.
+    */
+    get ERPNotPostedConfirmedByUserID(): string | null {
+        return this.Get('ERPNotPostedConfirmedByUserID');
+    }
+    set ERPNotPostedConfirmedByUserID(value: string | null) {
+        this.Set('ERPNotPostedConfirmedByUserID', value);
+    }
+
+    /**
+    * * Field Name: ERPNotPostedBasis
+    * * Display Name: ERP Not Posted Basis
+    * * SQL Data Type: nvarchar(20)
+    * * Value List Type: List
+    * * Possible Values 
+    *   * ERPLookup
+    *   * UserAttested
+    * * Description: How this batch was established as NOT posted in the ERP before it was cancelled: ERPLookup (the ERP lookup found nothing under its number) or UserAttested (the lookup could not settle it and the canceller confirmed). Required with ERPNotPostedConfirmedAt (CK_JournalEntryBatch_CancelERPCheck).
+    */
+    get ERPNotPostedBasis(): 'ERPLookup' | 'UserAttested' | null {
+        return this.Get('ERPNotPostedBasis');
+    }
+    set ERPNotPostedBasis(value: 'ERPLookup' | 'UserAttested' | null) {
+        this.Set('ERPNotPostedBasis', value);
+    }
+
+    /**
+    * * Field Name: ApprovedContentHash
+    * * Display Name: Approved Content Hash
+    * * SQL Data Type: nvarchar(64)
+    * * Description: SHA-256 of the approved content (batch header, summary entry and lines, member set), written at approval and frozen by trg_JournalEntryBatch_Immutability. Dispatch recomputes and compares it. NULL on batches approved before the seal existed.
+    */
+    get ApprovedContentHash(): string | null {
+        return this.Get('ApprovedContentHash');
+    }
+    set ApprovedContentHash(value: string | null) {
+        this.Set('ApprovedContentHash', value);
+    }
+
+    /**
     * * Field Name: Company
     * * Display Name: Company
     * * SQL Data Type: nvarchar(50)
@@ -6423,6 +7280,24 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     */
     get ArchivedByUser(): string | null {
         return this.Get('ArchivedByUser');
+    }
+
+    /**
+    * * Field Name: CancelledByUser
+    * * Display Name: Cancelled By User Name
+    * * SQL Data Type: nvarchar(100)
+    */
+    get CancelledByUser(): string | null {
+        return this.Get('CancelledByUser');
+    }
+
+    /**
+    * * Field Name: ERPNotPostedConfirmedByUser
+    * * Display Name: ERP Not Posted Confirmed By User Name
+    * * SQL Data Type: nvarchar(100)
+    */
+    get ERPNotPostedConfirmedByUser(): string | null {
+        return this.Get('ERPNotPostedConfirmedByUser');
     }
 }
 

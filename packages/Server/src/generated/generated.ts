@@ -17,7 +17,7 @@ import { MaxLength } from 'class-validator';
 import * as mj_core_schema_server_object_types from '@memberjunction/server'
 
 
-import { mjBizAppsAccountingAccountingCompanyProfileEntity, mjBizAppsAccountingAccountingEngineExtensionEntity, mjBizAppsAccountingCompanyTaxNexusEntity, mjBizAppsAccountingCurrencyEntity, mjBizAppsAccountingCurrencySpotRateEntity, mjBizAppsAccountingDimensionValueEntity, mjBizAppsAccountingDimensionEntity, mjBizAppsAccountingGLAccountLinkDimensionEntity, mjBizAppsAccountingGLAccountLinkEntity, mjBizAppsAccountingGLAccountRoleEntity, mjBizAppsAccountingGLAccountEntity, mjBizAppsAccountingIntercompanyAccountMatchDimensionEntity, mjBizAppsAccountingIntercompanyAccountMatchEntity, mjBizAppsAccountingJournalEntryEntity, mjBizAppsAccountingJournalEntryBatchSequenceEntity, mjBizAppsAccountingJournalEntryBatchEntity, mjBizAppsAccountingJournalEntryLineDimensionEntity, mjBizAppsAccountingJournalEntryLineEntity, mjBizAppsAccountingJournalEntrySequenceEntity, mjBizAppsAccountingJournalEntryTypeEntity, mjBizAppsAccountingTaxAuthorityEntity, mjBizAppsAccountingTaxJurisdictionEntity, mjBizAppsAccountingTaxLiabilityEntity, mjBizAppsAccountingTaxRateEntity } from '@mj-biz-apps/accounting-entities';
+import { mjBizAppsAccountingAccountingCompanyProfileEntity, mjBizAppsAccountingAccountingEngineExtensionEntity, mjBizAppsAccountingCompanyTaxNexusEntity, mjBizAppsAccountingCurrencyEntity, mjBizAppsAccountingCurrencySpotRateEntity, mjBizAppsAccountingDimensionValueEntity, mjBizAppsAccountingDimensionEntity, mjBizAppsAccountingFinanceExceptionTypeEntity, mjBizAppsAccountingFinanceExceptionEntity, mjBizAppsAccountingGLAccountLinkDimensionEntity, mjBizAppsAccountingGLAccountLinkEntity, mjBizAppsAccountingGLAccountRoleEntity, mjBizAppsAccountingGLAccountEntity, mjBizAppsAccountingIntercompanyAccountMatchDimensionEntity, mjBizAppsAccountingIntercompanyAccountMatchEntity, mjBizAppsAccountingJournalEntryEntity, mjBizAppsAccountingJournalEntryBatchSequenceEntity, mjBizAppsAccountingJournalEntryBatchEntity, mjBizAppsAccountingJournalEntryLineDimensionEntity, mjBizAppsAccountingJournalEntryLineEntity, mjBizAppsAccountingJournalEntrySequenceEntity, mjBizAppsAccountingJournalEntryTypeEntity, mjBizAppsAccountingTaxAuthorityEntity, mjBizAppsAccountingTaxJurisdictionEntity, mjBizAppsAccountingTaxLiabilityEntity, mjBizAppsAccountingTaxRateEntity } from '@mj-biz-apps/accounting-entities';
     
 
 //****************************************************************************
@@ -1610,6 +1610,495 @@ export class mjBizAppsAccountingDimensionResolver extends ResolverBase {
         const provider = GetReadWriteProvider(providers);
         const key = new CompositeKey([{FieldName: 'ID', Value: ID}]);
         return this.DeleteRecord('MJ_BizApps_Accounting: Dimensions', key, options, provider, userPayload, pubSub);
+    }
+    
+}
+
+//****************************************************************************
+// ENTITY CLASS for MJ_BizApps_Accounting: Finance Exception Types
+//****************************************************************************
+@ObjectType({ description: `Catalog of finance exception kinds (golive #279). Each row is one detector\'s rule: its stable Code, the app that raises it, whether it is active, and its thresholds in Configuration. Seeded by metadata; a type can be deactivated, or its Configuration changed, without a release.` })
+export class mjBizAppsAccountingFinanceExceptionType_ {
+    @Field() 
+    @MaxLength(36)
+    ID: string;
+        
+    @Field({nullable: true, description: `Stable machine code the detectors raise against (e.g. PROGRESS_JUDGMENT_CALL). Unique. Never rename: raising apps key on it.`}) 
+    @MaxLength(60)
+    Code?: string;
+        
+    @Field({nullable: true, description: `Display name for the exception kind.`}) 
+    @MaxLength(100)
+    Name?: string;
+        
+    @Field({nullable: true, description: `What the detector looks for and why a reviewer should look at it.`}) 
+    Description?: string;
+        
+    @Field({nullable: true, description: `The app whose detector raises this kind (e.g. orders, sales). Informational; accounting does not run the detector.`}) 
+    @MaxLength(100)
+    OwningApp?: string;
+        
+    @Field(() => Boolean, {nullable: true, description: `Whether the detector raises this kind. An inactive type is skipped by Accounting.RaiseFinanceExceptions and by the detector itself; existing rows stay on the list.`}) 
+    IsActive?: boolean;
+        
+    @Field({nullable: true, description: `JSON object of the detector's thresholds (e.g. {"MinDaysSinceClose":7}). Read by the detector through Accounting.GetFinanceExceptionTypes. Must be valid JSON.`}) 
+    Configuration?: string;
+        
+    @Field() 
+    _mj__CreatedAt: Date;
+        
+    @Field() 
+    _mj__UpdatedAt: Date;
+        
+    @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
+    ReadableFields___?: string[];
+        
+}
+
+//****************************************************************************
+// INPUT TYPE for MJ_BizApps_Accounting: Finance Exception Types
+//****************************************************************************
+@InputType()
+export class CreatemjBizAppsAccountingFinanceExceptionTypeInput {
+    @Field({ nullable: true })
+    ID?: string;
+
+    @Field({ nullable: true })
+    Code?: string;
+
+    @Field({ nullable: true })
+    Name?: string;
+
+    @Field({ nullable: true })
+    Description: string | null;
+
+    @Field({ nullable: true })
+    OwningApp?: string;
+
+    @Field(() => Boolean, { nullable: true })
+    IsActive?: boolean;
+
+    @Field({ nullable: true })
+    Configuration?: string;
+
+    @Field(() => RestoreContextInput, { nullable: true })
+    RestoreContext___?: RestoreContextInput;
+}
+    
+
+//****************************************************************************
+// INPUT TYPE for MJ_BizApps_Accounting: Finance Exception Types
+//****************************************************************************
+@InputType()
+export class UpdatemjBizAppsAccountingFinanceExceptionTypeInput {
+    @Field()
+    ID: string;
+
+    @Field({ nullable: true })
+    Code?: string;
+
+    @Field({ nullable: true })
+    Name?: string;
+
+    @Field({ nullable: true })
+    Description?: string | null;
+
+    @Field({ nullable: true })
+    OwningApp?: string;
+
+    @Field(() => Boolean, { nullable: true })
+    IsActive?: boolean;
+
+    @Field({ nullable: true })
+    Configuration?: string;
+
+    @Field(() => [KeyValuePairInput], { nullable: true })
+    OldValues___?: KeyValuePairInput[];
+
+    @Field(() => RestoreContextInput, { nullable: true })
+    RestoreContext___?: RestoreContextInput;
+}
+    
+//****************************************************************************
+// RESOLVER for MJ_BizApps_Accounting: Finance Exception Types
+//****************************************************************************
+@ObjectType()
+export class RunmjBizAppsAccountingFinanceExceptionTypeViewResult {
+    @Field(() => [mjBizAppsAccountingFinanceExceptionType_])
+    Results: mjBizAppsAccountingFinanceExceptionType_[];
+
+    @Field(() => String, {nullable: true})
+    UserViewRunID?: string;
+
+    @Field(() => Int, {nullable: true})
+    RowCount: number;
+
+    @Field(() => Int, {nullable: true})
+    TotalRowCount: number;
+
+    @Field(() => Int, {nullable: true})
+    ExecutionTime: number;
+
+    @Field({nullable: true})
+    ErrorMessage?: string;
+
+    @Field(() => Boolean, {nullable: false})
+    Success: boolean;
+}
+
+@Resolver(mjBizAppsAccountingFinanceExceptionType_)
+export class mjBizAppsAccountingFinanceExceptionTypeResolver extends ResolverBase {
+    @Query(() => RunmjBizAppsAccountingFinanceExceptionTypeViewResult)
+    async RunmjBizAppsAccountingFinanceExceptionTypeViewByID(@Arg('input', () => RunViewByIDInput) input: RunViewByIDInput, @Ctx() { providers, userPayload }: AppContext, @PubSub() pubSub: PubSubEngine) {
+        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
+        return super.RunViewByIDGeneric(input, provider, userPayload, pubSub);
+    }
+
+    @Query(() => RunmjBizAppsAccountingFinanceExceptionTypeViewResult)
+    async RunmjBizAppsAccountingFinanceExceptionTypeViewByName(@Arg('input', () => RunViewByNameInput) input: RunViewByNameInput, @Ctx() { providers, userPayload }: AppContext, @PubSub() pubSub: PubSubEngine) {
+        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
+        return super.RunViewByNameGeneric(input, provider, userPayload, pubSub);
+    }
+
+    @Query(() => RunmjBizAppsAccountingFinanceExceptionTypeViewResult)
+    async RunmjBizAppsAccountingFinanceExceptionTypeDynamicView(@Arg('input', () => RunDynamicViewInput) input: RunDynamicViewInput, @Ctx() { providers, userPayload }: AppContext, @PubSub() pubSub: PubSubEngine) {
+        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
+        input.EntityName = 'MJ_BizApps_Accounting: Finance Exception Types';
+        return super.RunDynamicViewGeneric(input, provider, userPayload, pubSub);
+    }
+    @Query(() => mjBizAppsAccountingFinanceExceptionType_, { nullable: true })
+    async mjBizAppsAccountingFinanceExceptionType(@Arg('ID', () => String) ID: string, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine): Promise<mjBizAppsAccountingFinanceExceptionType_ | null> {
+        this.CheckUserReadPermissions('MJ_BizApps_Accounting: Finance Exception Types', userPayload);
+        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
+        const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwFinanceExceptionTypes')} WHERE ${provider.QuoteIdentifier('ID')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: Finance Exception Types', userPayload, EntityPermissionType.Read, 'AND');
+        const rows = await provider.ExecuteSQL(sSQL, [ID], undefined, this.GetUserFromPayload(userPayload));
+        const result = await this.MapFieldNamesToCodeNames('MJ_BizApps_Accounting: Finance Exception Types', rows && rows.length > 0 ? rows[0] : null, this.GetUserFromPayload(userPayload));
+        return result;
+    }
+    
+    @Mutation(() => mjBizAppsAccountingFinanceExceptionType_)
+    async CreatemjBizAppsAccountingFinanceExceptionType(
+        @Arg('input', () => CreatemjBizAppsAccountingFinanceExceptionTypeInput) input: CreatemjBizAppsAccountingFinanceExceptionTypeInput,
+        @Ctx() { providers, userPayload }: AppContext,
+        @PubSub() pubSub: PubSubEngine
+    ) {
+        const provider = GetReadWriteProvider(providers);
+        return this.CreateRecord('MJ_BizApps_Accounting: Finance Exception Types', input, provider, userPayload, pubSub)
+    }
+        
+    @Mutation(() => mjBizAppsAccountingFinanceExceptionType_)
+    async UpdatemjBizAppsAccountingFinanceExceptionType(
+        @Arg('input', () => UpdatemjBizAppsAccountingFinanceExceptionTypeInput) input: UpdatemjBizAppsAccountingFinanceExceptionTypeInput,
+        @Ctx() { providers, userPayload }: AppContext,
+        @PubSub() pubSub: PubSubEngine
+    ) {
+        const provider = GetReadWriteProvider(providers);
+        return this.UpdateRecord('MJ_BizApps_Accounting: Finance Exception Types', input, provider, userPayload, pubSub);
+    }
+    
+    @Mutation(() => mjBizAppsAccountingFinanceExceptionType_)
+    async DeletemjBizAppsAccountingFinanceExceptionType(@Arg('ID', () => String) ID: string, @Arg('options___', () => DeleteOptionsInput) options: DeleteOptionsInput, @Ctx() { providers, userPayload }: AppContext, @PubSub() pubSub: PubSubEngine) {
+        const provider = GetReadWriteProvider(providers);
+        const key = new CompositeKey([{FieldName: 'ID', Value: ID}]);
+        return this.DeleteRecord('MJ_BizApps_Accounting: Finance Exception Types', key, options, provider, userPayload, pubSub);
+    }
+    
+}
+
+//****************************************************************************
+// ENTITY CLASS for MJ_BizApps_Accounting: Finance Exceptions
+//****************************************************************************
+@ObjectType({ description: `Records a finance reviewer must look at before a month is closed (golive #279). Raised by detectors in consuming apps through Accounting.RaiseFinanceExceptions, idempotent on (FinanceExceptionTypeID, DedupeKey). Cleared only through Accounting.ClearFinanceException, by a holder of MJ.BizApps.Accounting.FinanceExceptions.Clear who is not the source record\'s creator. A company\'s month is ready to close when it has no Open rows.` })
+export class mjBizAppsAccountingFinanceException_ {
+    @Field() 
+    @MaxLength(36)
+    ID: string;
+        
+    @Field({nullable: true, description: `The kind of exception.`}) 
+    @MaxLength(36)
+    FinanceExceptionTypeID?: string;
+        
+    @Field({nullable: true, description: `MJ entity of the record that raised the exception. With SourceRecordID, names the source record.`}) 
+    @MaxLength(36)
+    SourceEntityID?: string;
+        
+    @Field({nullable: true, description: `Primary key of the source record, in the entity named by SourceEntityID.`}) 
+    @MaxLength(450)
+    SourceRecordID?: string;
+        
+    @Field({nullable: true, description: `The company whose books the exception affects. Ready-to-close is judged per company and month.`}) 
+    @MaxLength(36)
+    CompanyID?: string;
+        
+    @Field(() => Float, {nullable: true, description: `The amount at stake, in the source record's currency. NULL when the detector cannot state one.`}) 
+    Amount?: number;
+        
+    @Field({nullable: true, description: `The business day the exception belongs to. Its month is the close it blocks.`}) 
+    ExceptionDate?: Date;
+        
+    @Field({nullable: true, description: `When the exception was raised (UTC).`}) 
+    DetectedAt?: Date;
+        
+    @Field({nullable: true, description: `Plain description of what the detector found in the data.`}) 
+    @MaxLength(1000)
+    Summary?: string;
+        
+    @Field({nullable: true, description: `The detector's identity for this occurrence (e.g. the source record ID, or record ID and month). Unique per type: raising the same key again returns the existing row unchanged.`}) 
+    @MaxLength(400)
+    DedupeKey?: string;
+        
+    @Field({nullable: true, description: `The login whose judgement is under review — the attester, booker or deal owner. This user may not clear the exception. NULL when there is none or it could not be resolved.`}) 
+    @MaxLength(36)
+    SourceCreatedByUserID?: string;
+        
+    @Field(() => Boolean, {nullable: true, description: `1 = the source record has a creator who has no linked login, so separation of duties cannot be checked and the exception cannot be cleared until that is resolved.`}) 
+    CreatorUnresolved?: boolean;
+        
+    @Field({nullable: true, description: `Open until cleared. Reviewed: the judgement stands. Corrected: the data was fixed. Both are terminal and reachable only through Accounting.ClearFinanceException.`}) 
+    @MaxLength(20)
+    Status?: string;
+        
+    @Field({nullable: true, description: `Who cleared the exception. Required once Reviewed or Corrected; NULL while Open.`}) 
+    @MaxLength(36)
+    ReviewedByUserID?: string;
+        
+    @Field({nullable: true, description: `When the exception was cleared (UTC). Required once Reviewed or Corrected; NULL while Open.`}) 
+    ReviewedAt?: Date;
+        
+    @Field({nullable: true, description: `The reviewer's note on what they checked or changed. Required by Accounting.ClearFinanceException; NULL while Open.`}) 
+    ReviewNote?: string;
+        
+    @Field() 
+    _mj__CreatedAt: Date;
+        
+    @Field() 
+    _mj__UpdatedAt: Date;
+        
+    @Field({nullable: true}) 
+    @MaxLength(100)
+    FinanceExceptionType?: string;
+        
+    @Field({nullable: true}) 
+    @MaxLength(255)
+    SourceEntity?: string;
+        
+    @Field({nullable: true}) 
+    @MaxLength(50)
+    Company?: string;
+        
+    @Field({nullable: true}) 
+    @MaxLength(100)
+    SourceCreatedByUser?: string;
+        
+    @Field({nullable: true}) 
+    @MaxLength(100)
+    ReviewedByUser?: string;
+        
+    @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
+    ReadableFields___?: string[];
+        
+}
+
+//****************************************************************************
+// INPUT TYPE for MJ_BizApps_Accounting: Finance Exceptions
+//****************************************************************************
+@InputType()
+export class CreatemjBizAppsAccountingFinanceExceptionInput {
+    @Field({ nullable: true })
+    ID?: string;
+
+    @Field({ nullable: true })
+    FinanceExceptionTypeID?: string;
+
+    @Field({ nullable: true })
+    SourceEntityID?: string;
+
+    @Field({ nullable: true })
+    SourceRecordID?: string;
+
+    @Field({ nullable: true })
+    CompanyID?: string;
+
+    @Field(() => Float, { nullable: true })
+    Amount: number | null;
+
+    @Field({ nullable: true })
+    ExceptionDate?: Date;
+
+    @Field({ nullable: true })
+    DetectedAt?: Date;
+
+    @Field({ nullable: true })
+    Summary?: string;
+
+    @Field({ nullable: true })
+    DedupeKey?: string;
+
+    @Field({ nullable: true })
+    SourceCreatedByUserID: string | null;
+
+    @Field(() => Boolean, { nullable: true })
+    CreatorUnresolved?: boolean;
+
+    @Field({ nullable: true })
+    Status?: string;
+
+    @Field({ nullable: true })
+    ReviewedByUserID: string | null;
+
+    @Field({ nullable: true })
+    ReviewedAt: Date | null;
+
+    @Field({ nullable: true })
+    ReviewNote: string | null;
+
+    @Field(() => RestoreContextInput, { nullable: true })
+    RestoreContext___?: RestoreContextInput;
+}
+    
+
+//****************************************************************************
+// INPUT TYPE for MJ_BizApps_Accounting: Finance Exceptions
+//****************************************************************************
+@InputType()
+export class UpdatemjBizAppsAccountingFinanceExceptionInput {
+    @Field()
+    ID: string;
+
+    @Field({ nullable: true })
+    FinanceExceptionTypeID?: string;
+
+    @Field({ nullable: true })
+    SourceEntityID?: string;
+
+    @Field({ nullable: true })
+    SourceRecordID?: string;
+
+    @Field({ nullable: true })
+    CompanyID?: string;
+
+    @Field(() => Float, { nullable: true })
+    Amount?: number | null;
+
+    @Field({ nullable: true })
+    ExceptionDate?: Date;
+
+    @Field({ nullable: true })
+    DetectedAt?: Date;
+
+    @Field({ nullable: true })
+    Summary?: string;
+
+    @Field({ nullable: true })
+    DedupeKey?: string;
+
+    @Field({ nullable: true })
+    SourceCreatedByUserID?: string | null;
+
+    @Field(() => Boolean, { nullable: true })
+    CreatorUnresolved?: boolean;
+
+    @Field({ nullable: true })
+    Status?: string;
+
+    @Field({ nullable: true })
+    ReviewedByUserID?: string | null;
+
+    @Field({ nullable: true })
+    ReviewedAt?: Date | null;
+
+    @Field({ nullable: true })
+    ReviewNote?: string | null;
+
+    @Field(() => [KeyValuePairInput], { nullable: true })
+    OldValues___?: KeyValuePairInput[];
+
+    @Field(() => RestoreContextInput, { nullable: true })
+    RestoreContext___?: RestoreContextInput;
+}
+    
+//****************************************************************************
+// RESOLVER for MJ_BizApps_Accounting: Finance Exceptions
+//****************************************************************************
+@ObjectType()
+export class RunmjBizAppsAccountingFinanceExceptionViewResult {
+    @Field(() => [mjBizAppsAccountingFinanceException_])
+    Results: mjBizAppsAccountingFinanceException_[];
+
+    @Field(() => String, {nullable: true})
+    UserViewRunID?: string;
+
+    @Field(() => Int, {nullable: true})
+    RowCount: number;
+
+    @Field(() => Int, {nullable: true})
+    TotalRowCount: number;
+
+    @Field(() => Int, {nullable: true})
+    ExecutionTime: number;
+
+    @Field({nullable: true})
+    ErrorMessage?: string;
+
+    @Field(() => Boolean, {nullable: false})
+    Success: boolean;
+}
+
+@Resolver(mjBizAppsAccountingFinanceException_)
+export class mjBizAppsAccountingFinanceExceptionResolver extends ResolverBase {
+    @Query(() => RunmjBizAppsAccountingFinanceExceptionViewResult)
+    async RunmjBizAppsAccountingFinanceExceptionViewByID(@Arg('input', () => RunViewByIDInput) input: RunViewByIDInput, @Ctx() { providers, userPayload }: AppContext, @PubSub() pubSub: PubSubEngine) {
+        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
+        return super.RunViewByIDGeneric(input, provider, userPayload, pubSub);
+    }
+
+    @Query(() => RunmjBizAppsAccountingFinanceExceptionViewResult)
+    async RunmjBizAppsAccountingFinanceExceptionViewByName(@Arg('input', () => RunViewByNameInput) input: RunViewByNameInput, @Ctx() { providers, userPayload }: AppContext, @PubSub() pubSub: PubSubEngine) {
+        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
+        return super.RunViewByNameGeneric(input, provider, userPayload, pubSub);
+    }
+
+    @Query(() => RunmjBizAppsAccountingFinanceExceptionViewResult)
+    async RunmjBizAppsAccountingFinanceExceptionDynamicView(@Arg('input', () => RunDynamicViewInput) input: RunDynamicViewInput, @Ctx() { providers, userPayload }: AppContext, @PubSub() pubSub: PubSubEngine) {
+        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
+        input.EntityName = 'MJ_BizApps_Accounting: Finance Exceptions';
+        return super.RunDynamicViewGeneric(input, provider, userPayload, pubSub);
+    }
+    @Query(() => mjBizAppsAccountingFinanceException_, { nullable: true })
+    async mjBizAppsAccountingFinanceException(@Arg('ID', () => String) ID: string, @Ctx() { userPayload, providers }: AppContext, @PubSub() pubSub: PubSubEngine): Promise<mjBizAppsAccountingFinanceException_ | null> {
+        this.CheckUserReadPermissions('MJ_BizApps_Accounting: Finance Exceptions', userPayload);
+        const provider = GetReadOnlyProvider(providers, { allowFallbackToReadWrite: true });
+        const sSQL = `SELECT * FROM ${provider.QuoteSchemaAndView('__mj_BizAppsAccounting', 'vwFinanceExceptions')} WHERE ${provider.QuoteIdentifier('ID')}=${provider.BuildParameterPlaceholder(0)} ` + this.getRowLevelSecurityWhereClause(provider, 'MJ_BizApps_Accounting: Finance Exceptions', userPayload, EntityPermissionType.Read, 'AND');
+        const rows = await provider.ExecuteSQL(sSQL, [ID], undefined, this.GetUserFromPayload(userPayload));
+        const result = await this.MapFieldNamesToCodeNames('MJ_BizApps_Accounting: Finance Exceptions', rows && rows.length > 0 ? rows[0] : null, this.GetUserFromPayload(userPayload));
+        return result;
+    }
+    
+    @Mutation(() => mjBizAppsAccountingFinanceException_)
+    async CreatemjBizAppsAccountingFinanceException(
+        @Arg('input', () => CreatemjBizAppsAccountingFinanceExceptionInput) input: CreatemjBizAppsAccountingFinanceExceptionInput,
+        @Ctx() { providers, userPayload }: AppContext,
+        @PubSub() pubSub: PubSubEngine
+    ) {
+        const provider = GetReadWriteProvider(providers);
+        return this.CreateRecord('MJ_BizApps_Accounting: Finance Exceptions', input, provider, userPayload, pubSub)
+    }
+        
+    @Mutation(() => mjBizAppsAccountingFinanceException_)
+    async UpdatemjBizAppsAccountingFinanceException(
+        @Arg('input', () => UpdatemjBizAppsAccountingFinanceExceptionInput) input: UpdatemjBizAppsAccountingFinanceExceptionInput,
+        @Ctx() { providers, userPayload }: AppContext,
+        @PubSub() pubSub: PubSubEngine
+    ) {
+        const provider = GetReadWriteProvider(providers);
+        return this.UpdateRecord('MJ_BizApps_Accounting: Finance Exceptions', input, provider, userPayload, pubSub);
+    }
+    
+    @Mutation(() => mjBizAppsAccountingFinanceException_)
+    async DeletemjBizAppsAccountingFinanceException(@Arg('ID', () => String) ID: string, @Arg('options___', () => DeleteOptionsInput) options: DeleteOptionsInput, @Ctx() { providers, userPayload }: AppContext, @PubSub() pubSub: PubSubEngine) {
+        const provider = GetReadWriteProvider(providers);
+        const key = new CompositeKey([{FieldName: 'ID', Value: ID}]);
+        return this.DeleteRecord('MJ_BizApps_Accounting: Finance Exceptions', key, options, provider, userPayload, pubSub);
     }
     
 }
@@ -3402,7 +3891,7 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @MaxLength(36)
     BatchedByUserID?: string;
         
-    @Field({nullable: true, description: `Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled | Archived. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed triggers retry + escalation; Cancelled is terminal from Pending and RELEASES the member entries back to the candidate pool; Archived is terminal from Pending, Approved or Failed, makes no ERP call and KEEPS the member entries locked (trg_JournalEntryBatch_Immutability).`}) 
+    @Field({nullable: true, description: `Lifecycle: Pending | Approved | Sent | Posted | Failed | Cancelled | Archived. Pending is mutable/deletable; Approved locks content (human sign-off); Posted = the ERP confirmed posting; Failed is retried under the original approval and stays content-locked; Cancelled is terminal from Pending, Approved or Failed and RELEASES the member entries back to the candidate pool; Archived is terminal from Pending, Approved or Failed, makes no ERP call and KEEPS the member entries locked (trg_JournalEntryBatch_Immutability).`}) 
     @MaxLength(20)
     Status?: string;
         
@@ -3459,6 +3948,32 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @MaxLength(36)
     ArchivedByUserID?: string;
         
+    @Field({nullable: true, description: `Why this batch was cancelled. Required when an approved batch is cancelled (CK_JournalEntryBatch_CancelAudit); optional when a Pending batch is. Frozen once Cancelled.`}) 
+    @MaxLength(500)
+    CancelReason?: string;
+        
+    @Field({nullable: true, description: `When the batch was cancelled. Required when an approved batch is cancelled.`}) 
+    CancelledAt?: Date;
+        
+    @Field({nullable: true, description: `User who cancelled the batch. Required when an approved batch is cancelled.`}) 
+    @MaxLength(36)
+    CancelledByUserID?: string;
+        
+    @Field({nullable: true, description: `When this batch was established as NOT posted in the ERP before it was cancelled — by the ERP lookup finding nothing under its number, or by the canceller's attestation when the lookup could not settle it (see ERPNotPostedBasis). Required when a batch that had been sent is cancelled (CK_JournalEntryBatch_CancelERPCheck): a Failed batch may already be in the ERP, and cancelling releases its entries to be batched again.`}) 
+    ERPNotPostedConfirmedAt?: Date;
+        
+    @Field({nullable: true, description: `User whose cancel established this batch as NOT posted in the ERP — accountable for the cancel whether the ERP lookup or their own attestation settled it (see ERPNotPostedBasis). Required with ERPNotPostedConfirmedAt.`}) 
+    @MaxLength(36)
+    ERPNotPostedConfirmedByUserID?: string;
+        
+    @Field({nullable: true, description: `How this batch was established as NOT posted in the ERP before it was cancelled: ERPLookup (the ERP lookup found nothing under its number) or UserAttested (the lookup could not settle it and the canceller confirmed). Required with ERPNotPostedConfirmedAt (CK_JournalEntryBatch_CancelERPCheck).`}) 
+    @MaxLength(20)
+    ERPNotPostedBasis?: string;
+        
+    @Field({nullable: true, description: `SHA-256 of the approved content (batch header, summary entry and lines, member set), written at approval and frozen by trg_JournalEntryBatch_Immutability. Dispatch recomputes and compares it. NULL on batches approved before the seal existed.`}) 
+    @MaxLength(64)
+    ApprovedContentHash?: string;
+        
     @Field({nullable: true}) 
     @MaxLength(50)
     Company?: string;
@@ -3482,6 +3997,14 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @Field({nullable: true}) 
     @MaxLength(100)
     ArchivedByUser?: string;
+        
+    @Field({nullable: true}) 
+    @MaxLength(100)
+    CancelledByUser?: string;
+        
+    @Field({nullable: true}) 
+    @MaxLength(100)
+    ERPNotPostedConfirmedByUser?: string;
         
     @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
     ReadableFields___?: string[];
@@ -3562,6 +4085,27 @@ export class CreatemjBizAppsAccountingJournalEntryBatchInput {
     @Field({ nullable: true })
     ArchivedByUserID: string | null;
 
+    @Field({ nullable: true })
+    CancelReason: string | null;
+
+    @Field({ nullable: true })
+    CancelledAt: Date | null;
+
+    @Field({ nullable: true })
+    CancelledByUserID: string | null;
+
+    @Field({ nullable: true })
+    ERPNotPostedConfirmedAt: Date | null;
+
+    @Field({ nullable: true })
+    ERPNotPostedConfirmedByUserID: string | null;
+
+    @Field({ nullable: true })
+    ERPNotPostedBasis: string | null;
+
+    @Field({ nullable: true })
+    ApprovedContentHash: string | null;
+
     @Field(() => RestoreContextInput, { nullable: true })
     RestoreContext___?: RestoreContextInput;
 }
@@ -3640,6 +4184,27 @@ export class UpdatemjBizAppsAccountingJournalEntryBatchInput {
 
     @Field({ nullable: true })
     ArchivedByUserID?: string | null;
+
+    @Field({ nullable: true })
+    CancelReason?: string | null;
+
+    @Field({ nullable: true })
+    CancelledAt?: Date | null;
+
+    @Field({ nullable: true })
+    CancelledByUserID?: string | null;
+
+    @Field({ nullable: true })
+    ERPNotPostedConfirmedAt?: Date | null;
+
+    @Field({ nullable: true })
+    ERPNotPostedConfirmedByUserID?: string | null;
+
+    @Field({ nullable: true })
+    ERPNotPostedBasis?: string | null;
+
+    @Field({ nullable: true })
+    ApprovedContentHash?: string | null;
 
     @Field(() => [KeyValuePairInput], { nullable: true })
     OldValues___?: KeyValuePairInput[];
