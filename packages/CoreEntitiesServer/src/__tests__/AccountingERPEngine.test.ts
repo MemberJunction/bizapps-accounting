@@ -434,6 +434,29 @@ describe('AccountingERPEngine.PostJournalBatch', () => {
     expect(result.error).toMatch(/Dimension value code is 21 characters; .* dimensionValues\.code allows 20/);
     expect(runVerb).not.toHaveBeenCalled();
   });
+
+  // The batch token (` [JEB <batch ID>]`, 43 characters) is part of what BC receives, so it counts.
+  it('counts the batch token in a line description: one that fits alone but not with the token is refused', async () => {
+    const token = ` [${OWN_TOKEN}]`;
+    const fitsWithToken = 'F'.repeat(100 - token.length);
+    const overWithToken = 'O'.repeat(100 - token.length + 1);
+    const runVerb = vi.fn(async () => ({ Success: true, ResultCode: 'SUCCESS' }));
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+    const lines = [
+      { ID: LINE_1, GLAccountID: 'gl-1', DebitAmount: 100, CreditAmount: null, Description: fitsWithToken },
+      { ID: LINE_2, GLAccountID: 'gl-2', DebitAmount: null, CreditAmount: 100, Description: overWithToken },
+    ] as never;
+
+    const result: ErpPostResult = await AccountingERPEngine.Instance.PostJournalBatch(
+      taggedBatch(), lines, user, providerWith(taggedViewsWithCodes()),
+    );
+
+    expect(token.length).toBe(43);
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Journal line description is 101 characters; .* journalLines\.description allows 100/);
+    expect(result.error).not.toMatch(/is 100 characters/);
+    expect(runVerb).not.toHaveBeenCalled();
+  });
 });
 
 describe('BaseAccountingERPProvider plugins', () => {
