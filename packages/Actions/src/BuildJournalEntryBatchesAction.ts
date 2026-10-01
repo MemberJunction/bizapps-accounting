@@ -3,19 +3,16 @@ import { ActionResultSimple, RunActionParams } from '@memberjunction/actions-bas
 import { BaseAction } from '@memberjunction/actions';
 import { RegisterClass } from '@memberjunction/global';
 import {
-  approveJournalEntryBatch,
+  assertAutoPostPolicy,
+  autoPostJournalEntryBatch,
   buildJournalEntryBatch,
-  createAccountingERPLookup,
-  createAccountingERPPoster,
   findStrandedJournalEntries,
   pendingCompanies,
   recordDispatchFailure,
-  sendJournalEntryBatch,
-  AutoApproveGate,
+  AutoPostDispatchError,
   EmptyJournalEntryBatchError,
   TasksAppApprovalGate,
   type BuildJournalEntryBatchResult,
-  type JournalEntryBatchApprovalGate,
   type StrandedJournalEntryBatch,
   type JournalEntryBatchTargetSystem,
   type BuildJournalEntryBatchOptions,
@@ -31,9 +28,10 @@ import { AddDays, BusinessTimeZoneEngine, CalendarDayIn, FromCalendarDay, LastDa
  * Two modes:
  *   - DEFAULT (attended, A-US7): build only, behind the bizapps-tasks CFO approval gate. Batches
  *     land `Pending` and wait for a human decision. Nothing about this path changed.
- *   - AutoPost (unattended, A-US5/A-US6): build → approve → dispatch to the ERP per company, behind
- *     `AutoApproveGate` per the scheduled-posting approval waiver. Requires an explicit
- *     `EntryTypeCodes` include-list — see {@link assertAutoPostPolicy}.
+ *   - AutoPost (unattended, A-US5/A-US6): build → approve → dispatch to the ERP per company through
+ *     the engine's `autoPostJournalEntryBatch`, which holds the scheduled-posting approval waiver and
+ *     its include-list policy (`assertAutoPostPolicy`, also checked here before any company is read).
+ *     No caller passes a gate into a send (#233).
  *
  * `CutoffMode` exists because scheduled-job action params are Static or SQL-Statement only, with no
  * relative-date value type, and the driver's SQL path returns a row set and swallows errors as
@@ -54,8 +52,7 @@ export class BuildJournalEntryBatchesAction extends BaseAction {
     const options = readBatchOptions(params);
     if (autoPost) assertAutoPostPolicy(options);
 
-    const gate: JournalEntryBatchApprovalGate = autoPost ? AutoApproveGate : new TasksAppApprovalGate(provider);
-    const outcomes = await sweep({ user, provider, gate, targetSystem, options, autoPost });
+    const outcomes = await sweep({ user, provider, targetSystem, options, autoPost });
 
     return withStrandedNote(summarize(params, outcomes, autoPost), await strandedNote(user, provider));
   }
@@ -104,20 +101,6 @@ export function resolveCutoff(explicitCutoff: string | undefined, mode: string |
   throw new Error(`Accounting.BuildJournalEntryBatches: unknown CutoffMode '${mode}' — expected 'PriorDay' or 'PriorMonth'.`);
 }
 
-/**
- * Auto-posting is INCLUDE-LIST ONLY, by policy (Craig, AIDP-1). A blacklist would silently
- * auto-post any JournalEntryType added later; a financial control has to default the other way, so
- * a new entry type requires approval until an admin names it here.
- */
-function assertAutoPostPolicy(options: BuildJournalEntryBatchOptions): void {
-  if (!options.entryTypeCodes?.length) {
-    throw new Error('Accounting.BuildJournalEntryBatches: AutoPost requires an explicit EntryTypeCodes include-list — auto-posting is include-list only, so an entry type never posts unattended unless it is named.');
-  }
-  if (options.excludeEntryTypeCodes?.length) {
-    throw new Error('Accounting.BuildJournalEntryBatches: AutoPost does not accept ExcludeEntryTypeCodes — the auto-post policy is an include-list, not a blacklist. Name the types that may post in EntryTypeCodes.');
-  }
-}
-
 // ─── The sweep ───────────────────────────────────────────────────────────────────────────
 
 /** One company's result. `status` is the batch's real end state, or BUILD_FAILED if none exists. */
@@ -139,7 +122,6 @@ const BUILD_FAILED = 'BuildFailed';
 interface SweepContext {
   user: UserInfo;
   provider: IMetadataProvider;
-  gate: JournalEntryBatchApprovalGate;
   targetSystem: JournalEntryBatchTargetSystem;
   options: BuildJournalEntryBatchOptions;
   autoPost: boolean;
@@ -149,7 +131,7 @@ interface SweepContext {
  * One batch per company (D7), each company independent under AutoPost.
  *
  * A build failure aborts the ATTENDED run, as it always has — those batches carry approval Tasks, so
- * they are visible and a human can act on them. It must NOT abort an UNATTENDED run: `AutoApproveGate`
+ * they are visible and a human can act on them. It must NOT abort an UNATTENDED run: the auto-post waiver
  * raises no Task, so every batch already built in this sweep would be stranded `Pending` with no Task,
  * where nothing can approve it, dispatch it (the manual op needs a Task), or re-sweep it (its entries
  * are `Batched`, so the next night skips them). Dispatching each company as it is built keeps that
@@ -161,13 +143,10 @@ async function sweep(ctx: SweepContext): Promise<CompanyOutcome[]> {
 
   for (const companyId of companies) {
     try {
-      const batch = await buildJournalEntryBatch(
-        companyId, ctx.targetSystem, ctx.user.ID, ctx.user, ctx.provider, ctx.gate, ctx.options,
-      );
-      // dispatchOne resolves its own failures into an outcome, so nothing below throws from here.
+      // autoPostOne resolves its dispatch failures into an outcome, so only a build failure throws from here.
       outcomes.push(ctx.autoPost
-        ? await dispatchOne(companyId, batch, ctx.user, ctx.provider)
-        : { companyId, batch, status: 'Pending', error: null, needsAttention: false });
+        ? await autoPostOne(companyId, ctx)
+        : { companyId, batch: await buildForApproval(companyId, ctx), status: 'Pending', error: null, needsAttention: false });
     } catch (e) {
       if (e instanceof EmptyJournalEntryBatchError) continue; // this company's candidates netted to zero
       if (!ctx.autoPost) throw e;
@@ -179,31 +158,32 @@ async function sweep(ctx: SweepContext): Promise<CompanyOutcome[]> {
   return outcomes;
 }
 
+/** The attended build: a Pending batch behind the bizapps-tasks CFO gate, with its approval Task. */
+function buildForApproval(companyId: string, ctx: SweepContext): Promise<BuildJournalEntryBatchResult> {
+  return buildJournalEntryBatch(
+    companyId, ctx.targetSystem, ctx.user.ID, ctx.user, ctx.provider, new TasksAppApprovalGate(ctx.provider), ctx.options,
+  );
+}
+
 // ─── Dispatch (AutoPost only) ────────────────────────────────────────────────────────────
 
 /**
- * Build → Approved → Sent → Posted for one batch. `ApprovedByUserID` is stamped with the context
- * user, which in a scheduled run IS the MJ System user the scheduler resolves — the waiver removes
- * the approval STEP, not the audit trail, so this is never null (Craig, AIDP-1).
+ * Build → Approved → Sent → Posted for one company, through the engine's waiver. `ApprovedByUserID`
+ * is stamped with the context user, which in a scheduled run IS the MJ System user the scheduler
+ * resolves — the waiver removes the approval STEP, not the audit trail, so this is never null.
+ * A build failure throws; a failure once the batch exists becomes an outcome.
  */
-async function dispatchOne(
-  companyId: string, batch: BuildJournalEntryBatchResult, user: UserInfo, provider: IMetadataProvider,
-): Promise<CompanyOutcome> {
+async function autoPostOne(companyId: string, ctx: SweepContext): Promise<CompanyOutcome> {
   try {
-    await approveJournalEntryBatch(batch.batchId, user.ID, user, provider);
-    const sent = await sendJournalEntryBatch(batch.batchId, user, {
-      gate: AutoApproveGate,
-      poster: createAccountingERPPoster(provider),
-      lookup: createAccountingERPLookup(provider),
-      provider,
-    });
-    return { companyId, batch, status: sent.Status, error: sent.ErrorMessage ?? null, needsAttention: sent.Status !== 'Posted' };
+    const { build, batch: sent } = await autoPostJournalEntryBatch(companyId, ctx.targetSystem, ctx.user, ctx.provider, ctx.options);
+    return { companyId, batch: build, status: sent.Status, error: sent.ErrorMessage ?? null, needsAttention: sent.Status !== 'Posted' };
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    LogError(`Accounting.BuildJournalEntryBatches: dispatch of batch ${batch.batchId} failed: ${message}`);
+    if (!(e instanceof AutoPostDispatchError)) throw e;
+    const batchId = e.Build.batchId;
+    LogError(`Accounting.BuildJournalEntryBatches: dispatch of batch ${batchId} failed: ${e.message}`);
     // Every route through triage began with a throw, so every one of them needs a human — including
     // the `Posted` one, where the ERP has the journal but the member JE flip did not finish.
-    return { companyId, batch, needsAttention: true, ...(await triage(batch.batchId, message, user, provider)) };
+    return { companyId, batch: e.Build, needsAttention: true, ...(await triage(batchId, e.message, ctx.user, ctx.provider)) };
   }
 }
 

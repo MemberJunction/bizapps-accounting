@@ -942,3 +942,52 @@ erDiagram
     }
 ```
 
+
+---
+
+## 10. Finance exceptions (golive #279)
+
+The month-end review list. Detectors in consuming apps raise rows through
+`Accounting.RaiseFinanceExceptions` (idempotent on type + `DedupeKey`; a repeat refreshes an Open
+row's creator fields and summary); a holder of
+`MJ.BizApps.Accounting.FinanceExceptions.Clear` (the Finance role) who did not create the source
+record clears them through `Accounting.ClearFinanceException`. `Open → Reviewed | Corrected`, both
+terminal; `FinanceExceptionEntityServer` refuses any other status change and any delete. A company's
+month is ready to close when it has no Open rows (saved query "Finance Exceptions Ready To Close").
+The five types and their thresholds are seeded by `metadata/finance-exception-types`.
+
+```mermaid
+erDiagram
+    FinanceExceptionType ||--o{ FinanceException : "FinanceExceptionTypeID"
+    Entity ||--o{ FinanceException : "SourceEntityID (polymorphic source pair)"
+    Company ||--o{ FinanceException : "CompanyID"
+    User |o--o{ FinanceException : "SourceCreatedByUserID / ReviewedByUserID"
+
+    FinanceExceptionType {
+        uuid ID PK
+        string Code UK "PROGRESS_JUDGMENT_CALL | PROGRESS_UNATTESTED | WON_DEAL_ORDER_NOT_CONFIRMED | PRICE_BELOW_ENGINE_UNAPPROVED | OVERLAPPING_SUBSCRIPTION"
+        string Name
+        string Description "nullable"
+        string OwningApp "orders | sales"
+        bool IsActive "inactive = detector and raise skip"
+        string Configuration "JSON object (ISJSON check) - detector thresholds"
+    }
+    FinanceException {
+        uuid ID PK
+        uuid FinanceExceptionTypeID FK "UQ with DedupeKey"
+        uuid SourceEntityID FK
+        string SourceRecordID "source record PK"
+        uuid CompanyID FK
+        decimal Amount "nullable, 19,4"
+        date ExceptionDate "its month is the close it blocks"
+        datetimeoffset DetectedAt
+        string Summary
+        string DedupeKey "UQ with FinanceExceptionTypeID"
+        uuid SourceCreatedByUserID FK "nullable - may not clear"
+        bool CreatorUnresolved "creator has no linked login"
+        string Status "Open | Reviewed | Corrected"
+        uuid ReviewedByUserID FK "nullable; required once terminal"
+        datetimeoffset ReviewedAt "nullable; required once terminal"
+        string ReviewNote "nullable; NULL while Open"
+    }
+```

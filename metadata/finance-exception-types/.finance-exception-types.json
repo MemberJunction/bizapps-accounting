@@ -1,0 +1,87 @@
+[
+  {
+    "fields": {
+      "Code": "PROGRESS_JUDGMENT_CALL",
+      "Name": "Progress Judgment Call",
+      "Description": "A progress observation on a percentage-of-completion order line whose revenue rests on the attester's judgement: a single catch-up above MaxSingleObservationAmount, a backward slide (FlagBackwardSlide), or the line's first observation (FlagFirstObservation). Raised by orders inside Orders.RecordProgress, in the same transaction as the observation.",
+      "OwningApp": "orders",
+      "IsActive": true,
+      "Configuration": "{\"MaxSingleObservationAmount\":10000,\"FlagBackwardSlide\":true,\"FlagFirstObservation\":true}"
+    },
+    "primaryKey": {
+      "ID": "D3C643FE-8A09-40BF-B523-F8D4818887D4"
+    },
+    "sync": {
+      "lastModified": "2026-09-30T19:18:03.342Z",
+      "checksum": "02fd102ddfd8d41c18544d47460f50e241da71ecd7f998ec981a92bcd6461611"
+    }
+  },
+  {
+    "fields": {
+      "Code": "PROGRESS_UNATTESTED",
+      "Name": "Progress Not Attested",
+      "Description": "A booked percentage-of-completion order line with no progress attestation for more than MaxDaysWithoutAttestation days, so the month's revenue on it has not been judged at all. Raised by a nightly orders job, once per line per month.",
+      "OwningApp": "orders",
+      "IsActive": true,
+      "Configuration": "{\"MaxDaysWithoutAttestation\":35}"
+    },
+    "primaryKey": {
+      "ID": "16FA9F2B-8CE8-4338-AA5E-DFE9FB6EF91C"
+    },
+    "sync": {
+      "lastModified": "2026-09-30T19:18:03.398Z",
+      "checksum": "215cd8a660069ae547c617ac7e4014dd24592399fed90e040800abc171e1cc21"
+    }
+  },
+  {
+    "fields": {
+      "Code": "WON_DEAL_ORDER_NOT_CONFIRMED",
+      "Name": "Won Deal Without Confirmed Order",
+      "Description": "A deal marked won at least MinDaysSinceClose days ago with no confirmed order behind it, so revenue the pipeline counts as won has not been booked. Raised by a nightly sales job.",
+      "OwningApp": "sales",
+      "IsActive": true,
+      "Configuration": "{\"MinDaysSinceClose\":7}"
+    },
+    "primaryKey": {
+      "ID": "80DB6293-A7AB-4786-AD35-61344BFC7248"
+    },
+    "sync": {
+      "lastModified": "2026-09-30T19:18:03.431Z",
+      "checksum": "5f5ce02678e5e1fdc48e1cc02b27ae0aab506b34c259a5793adf34e616676df8"
+    }
+  },
+  {
+    "fields": {
+      "Code": "PRICE_BELOW_ENGINE_UNAPPROVED",
+      "Name": "Unapproved Price Below Engine",
+      "Description": "An order line booked at a unit price below the pricing engine's result with no approval behind the shortfall. Raised by orders at booking, in the same transaction as the confirm.",
+      "OwningApp": "orders",
+      "IsActive": true,
+      "Configuration": "{}"
+    },
+    "primaryKey": {
+      "ID": "A3BCB23C-6076-4005-80B7-F58BCD3DC71F"
+    },
+    "sync": {
+      "lastModified": "2026-09-30T19:18:03.468Z",
+      "checksum": "fa6b18de382ecf97630697050ab639ad80945595d848d74384270c695918c665"
+    }
+  },
+  {
+    "fields": {
+      "Code": "OVERLAPPING_SUBSCRIPTION",
+      "Name": "Overlapping Subscription",
+      "Description": "A subscription whose term overlaps an earlier subscription for the same holder and product (or the same product category, when IncludeSameCategory is set), so the same entitlement may be billed twice. Raised by a nightly orders job against the later subscription.",
+      "OwningApp": "orders",
+      "IsActive": true,
+      "Configuration": "{\"IncludeSameCategory\":true}"
+    },
+    "primaryKey": {
+      "ID": "FFB49A2A-2041-46D9-B634-A93E95AE8271"
+    },
+    "sync": {
+      "lastModified": "2026-09-30T19:18:03.518Z",
+      "checksum": "ea9c87ec76e47ec693f5a33dd1804768bb4fbed1e0720fda37741c443ea8bfbd"
+    }
+  }
+]

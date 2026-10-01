@@ -5,7 +5,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { NetLines } from '@mj-biz-apps/accounting-engine-base';
 import { BusinessTimeZoneEngine, type InstanceConfigurationRow } from '@mj-biz-apps/common-entities';
-import { netLines, todayBusiness, type NettableLine } from '../JournalEntryBatchEngine.js';
+import { netLines, type NettableLine } from '../JournalEntryBatchEngine.js';
+import { todayBusiness } from '../BusinessDay.js';
 
 const line = (glAccountId: string, debit: number, credit: number): NettableLine => ({
     companyId: '11111111-0000-0000-0000-000000000001',
