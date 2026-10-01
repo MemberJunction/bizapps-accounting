@@ -1,5 +1,20 @@
 # @mj-biz-apps/accounting-engine-base
 
+## 0.17.0
+
+### Patch Changes
+
+- 3af15bb: A batch now posts through one chosen connection, and the ERP verb is told which one (#256).
+
+  - **The chosen connection reaches the ERP.** `CreateERPJournalInput` and `FindERPJournalInput` carry `CompanyIntegrationID`, and every verb call a provider makes (`CreateJournalEntry`, and the Business Central and QuickBooks Online `GetGLEntries` lookups) sends it as a `CompanyIntegrationID` param. It takes effect once MJ's accounting verbs accept that param (MemberJunction/MJ#4867); until then they ignore it and resolve their own connection as before.
+  - **One rule chooses the connection for the post and for the pre-flight lookup**, so the two always agree. The candidates are the batch company's active Company Integrations whose Integration matches the batch's target. None: the batch is refused as before. One: it is used. Several: the one whose Configuration JSON has `"postJournalEntries": true` is used when it is the only one marked; otherwise the post is refused and the lookup reports an error, naming the connections and saying how to fix it (mark exactly one, or deactivate the others). Before, a company with two active connections for its target (production plus a sandbox, say) posted through whichever row the database returned first. A Configuration that is not JSON does not mark its connection, and is logged.
+  - **One posting connection per company works** (option A in #256): a Company Integration owned by the company, on the shared ERP Credential and carrying that company's ERP company, with no entity maps and no schedule, posts the company's batches and is skipped by the master-data sync.
+  - **The nightly master-data sync reads ERP connections only, and skips a connection with nothing to pull.** `SyncMasterData` no longer tries a company's HubSpot, IRS or Asana connection, which reported a false failure every night. An ERP connection with no entity maps for the requested objects, such as a posting-only connection, is reported with `Skipped: true` and `Success: true`, and does not fail the run. A failed entity-map query is now a failure rather than being read as "no maps". `RunERPSyncCompanyResult` gains the optional `Skipped` field, and the `Accounting.RunERPSync` action's message gives a skipped connection's reason.
+
+- Updated dependencies [7210151]
+- Updated dependencies [a36297a]
+  - @mj-biz-apps/accounting-entities@0.17.0
+
 ## 0.16.0
 
 ### Patch Changes
