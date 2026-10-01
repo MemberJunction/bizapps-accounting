@@ -1,7 +1,0 @@
----
-"@mj-biz-apps/accounting-server": patch
----
-
-Accounting Company Profiles, Tax Authorities and Tax Jurisdictions open and save again on hosts where a record has no geocode (MemberJunction/bc-aidp-next-golive#295). Their GraphQL output types declared `_mj__Latitude` / `_mj__Longitude` non-null, but on a host those view columns come from a LEFT JOIN to the geocode cache and are NULL for any record that isn't geocoded, which is every Company Profile on AIDP. GraphQL answered with "Cannot return null for non-nullable field", so every single-record load failed, and every save committed and then reported failure, because the mutation returns the record through the same type. The six fields are now `@Field(() => Float, {nullable: true})` / `?: number`. Input types are unchanged.
-
-The root cause is MemberJunction's GraphQL generator. On 6.1.x, including the 6.1.0-edge.7 CodeGen this repo pins, `isNonNullableServerField` returns `IsUnrestrictableField` and ignores `AllowsNull`, so an unrestrictable `__mj_` field comes out non-null even when it allows NULL. MJ `next` fixed it in #4635 (`!AllowsNull && IsUnrestrictableField`); `lts/6.1` does not have the fix yet. The generated file was edited by hand to match the fixed generator's output exactly. Until the fix reaches the CodeGen this repo runs, a regeneration puts the non-null declarations back, and a new test in the server package fails if it does: it checks every entity output field declared non-null against the generated entity class's nullability.
