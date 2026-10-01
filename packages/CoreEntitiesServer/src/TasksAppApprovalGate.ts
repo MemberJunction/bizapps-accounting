@@ -16,6 +16,8 @@
  *   recordDecision(batchId, outcome, decidedByPersonId, notes): resolve the batch's Task and record
  *     the decision via TaskOrchestrationService. The shared entry point for BOTH the in-app approve
  *     control and the Tasks inbox.
+ *   assertRejected(batchId) (#233): a Pending batch is cancelled only once its Task carries a terminal
+ *     rejection, which recordDecision writes first.
  *   assertMayCancelApproved(batchId) / recordCancellation(batchId, cancellation) (#183): only the company's
  *     CFO or the batch's recorded approver may cancel a batch past approval, and the cancel is
  *     written to the approval Task as a comment, so the approver's record shows what became of it.
@@ -149,7 +151,7 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     // a missing value fails closed.
     const task = await this.resolveStampedApprovalTask(batchId, contextUser);
     if (!task) throw new Error(`Batch ${batchId} has no stamped approval Task — it was not raised through TasksAppApprovalGate.onBatchBuilt.`);
-    if (!(await this.hasApprovedDecision(task.ID, contextUser))) {
+    if (!(await this.hasTerminalDecision(task.ID, 'Approval', contextUser))) {
       throw new Error(`Batch ${batchId} is not approved — no terminal Approved/ApprovedWithConditions decision on its approval Task.`);
     }
   }
@@ -161,6 +163,19 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     if (!(await batch.Load(batchId)) || !batch.ApprovalTaskID) return null;
     const task = await this.provider.GetEntityObject<mjBizAppsTasksTaskEntity>('MJ_BizApps_Tasks: Tasks', contextUser);
     return (await task.Load(batch.ApprovalTaskID)) ? task : null;
+  }
+
+  /**
+   * Block a Pending cancel unless the batch's Task carries a terminal rejection (#233). A Pending
+   * cancel IS the CFO's rejection, so recordDecision must have written it first; without this, a
+   * server caller could cancel a batch awaiting approval that nobody rejected.
+   */
+  async assertRejected(batchId: string, contextUser: UserInfo): Promise<void> {
+    const task = await this.resolveBatchTask(batchId, contextUser);
+    if (!task) throw new Error(`Batch ${batchId} has no approval Task, so no rejection is recorded — a Pending batch is cancelled only by rejecting it.`);
+    if (!(await this.hasTerminalDecision(task.ID, 'Rejection', contextUser))) {
+      throw new Error(`Batch ${batchId} is not rejected — no terminal rejection decision on its approval Task. Reject it from Batch approvals to cancel it.`);
+    }
   }
 
   /**
@@ -351,31 +366,32 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
   }
 
   /**
-   * True when the Task has at least one terminal decision whose outcome code is Approved/ApprovedWithConditions.
+   * True when the Task has at least one terminal decision of the given kind: an approval
+   * (Approved/ApprovedWithConditions) or a rejection (any other terminal outcome).
    * WHO decided is enforced at the WRITE (recordDecision requires contextUser to be the company's
-   * ApprovalCFOUserID); this read deliberately stays "any terminal approval on the task" because
-   * decisions can legitimately carry no DecidedByPersonID (an approver User with no linked Person).
+   * ApprovalCFOUserID); this read deliberately stays "any terminal decision of that kind on the task"
+   * because decisions can legitimately carry no DecidedByPersonID (an approver User with no linked Person).
    */
-  private async hasApprovedDecision(taskId: string, contextUser: UserInfo): Promise<boolean> {
-    requireSqlGuid(taskId, 'TasksAppApprovalGate.hasApprovedDecision');
+  private async hasTerminalDecision(taskId: string, kind: 'Approval' | 'Rejection', contextUser: UserInfo): Promise<boolean> {
+    requireSqlGuid(taskId, 'TasksAppApprovalGate.hasTerminalDecision');
     const decRes = await this.viewProvider.RunView<mjBizAppsTasksTaskDecisionEntity>(
       { EntityName: TASK_DECISION_ENTITY, ExtraFilter: `TaskID='${taskId}'`, ResultType: 'entity_object', BypassCache: true },
       contextUser,
     );
     const decisions = decRes.Results ?? [];
     if (decisions.length === 0) return false;
-    const outcomes = await this.loadApprovedTerminalOutcomeIds(contextUser);
+    const outcomes = await this.loadTerminalOutcomeIds(kind, contextUser);
     return decisions.some(d => outcomes.some(oid => UUIDsEqual(oid, d.OutcomeID)));
   }
 
-  /** The TaskDecisionOutcome IDs that are BOTH terminal AND an approval (Approved / ApprovedWithConditions). */
-  private async loadApprovedTerminalOutcomeIds(contextUser: UserInfo): Promise<string[]> {
+  /** The terminal TaskDecisionOutcome IDs that are an approval, or that are not (a rejection). */
+  private async loadTerminalOutcomeIds(kind: 'Approval' | 'Rejection', contextUser: UserInfo): Promise<string[]> {
     const res = await this.viewProvider.RunView<mjBizAppsTasksTaskDecisionOutcomeEntity>(
       { EntityName: TASK_DECISION_OUTCOME_ENTITY, ExtraFilter: `IsTerminal=1`, ResultType: 'entity_object', BypassCache: true },
       contextUser,
     );
     return (res.Results ?? [])
-      .filter(o => IsTaskDecisionOutcomeCode(o.Code) && IsApprovalOutcome(o.Code))
+      .filter(o => IsTaskDecisionOutcomeCode(o.Code) && IsApprovalOutcome(o.Code) === (kind === 'Approval'))
       .map(o => o.ID);
   }
 }

@@ -38,6 +38,7 @@ import {
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 
 import { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
+import { loadTodayBusiness } from './BusinessDay.js';
 import { LookupJournalEntryTypeByID, RequireJournalEntryTypeID } from './JournalEntryTypes.js';
 import { getNextJournalEntryNumber } from './SequenceService.js';
 import { isSqlGuid, sqlGuidLiteral } from './SqlGuards.js';
@@ -567,6 +568,8 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
    * Create a new Pending JE that reverses this one (Dr/Cr swapped, dimension tags carried),
    * back-referenced both ways. Uses the encapsulated pattern: the reversal is assembled as a
    * JournalEntryEntityServer with Lines + Dimensions and persisted in ONE transactional Save().
+   * The reversal's EffectiveDate is today's BUSINESS day (`BusinessTimeZoneEngine`), not the
+   * server clock's calendar day (issue #230).
    */
   public async GenerateReversal(
     reason: string,
@@ -597,7 +600,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
     const reversal = await provider.GetEntityObject<JournalEntryEntityServer>(JE_ENTITY, user);
     reversal.NewRecord();
     reversal.CompanyID = this.CompanyID;
-    reversal.EffectiveDate = new Date();
+    reversal.EffectiveDate = await loadTodayBusiness(user, provider, this.CompanyID);
     reversal.EntryTypeID = reversalTypeId;
     reversal.Status = 'Pending';
     reversal.Description = `Reversal of ${this.EntryNumber}: ${reason}`;

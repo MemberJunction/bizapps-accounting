@@ -8,6 +8,9 @@
     "currencies",
     "journal-entry-types",
     "gl-account-roles",
+    "finance-exception-types",
+    "remote-operation-categories",
+    "remote-operations",
     "applications",
     "action-categories",
     "actions",
@@ -17,7 +20,13 @@
     "record-processes",
     "ml-training-pipelines",
     "ml-models",
-    "ml-model-scoring-bindings"
+    "ml-model-scoring-bindings",
+    "query-categories",
+    "queries",
+    "authorizations",
+    "roles",
+    "entity-permissions",
+    "authorization-roles"
   ],
   "sqlLogging": {
     "enabled": true,

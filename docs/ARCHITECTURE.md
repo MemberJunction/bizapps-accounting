@@ -35,7 +35,7 @@ Batching (CoreEntitiesServer)        GLOBAL multi-company buildJournalEntryBatch
 DB invariants (migrations)           12 triggers (incl. AM-4 per-company balance 50019/50023/50022)
                                      + 2 GLOBAL numbering sprocs  ◄── the un-bypassable floor
 ```
-ERP master data travels: Explorer / nightly job → **`Accounting.RunERPSync`** → `AccountingERPEngine.SyncMasterData` → `IntegrationEngine.RunSync` (entity maps, per-company isolation) → registered `BaseAccountingEngineExtension` subclasses (FP&A cash import first). Journal dispatch: approved batch → `PostJournalBatch` → MJ verb `CreateJournalEntry` (account **numbers**, AM-4). Accounting never writes `CashBalance`.
+ERP master data travels: Explorer / nightly job → **`Accounting.RunERPSync`** → `AccountingERPEngine.SyncMasterData` → `IntegrationEngine.RunSync` (entity maps, per-company isolation) → registered `BaseAccountingEngineExtension` subclasses (FP&A cash import first). Only ERP connections (Business Central, QuickBooks Online) are synced; one with no entity maps, such as a posting-only connection, is reported skipped, not failed (#256). Journal dispatch: approved batch → `PostJournalBatch` → MJ verb `CreateJournalEntry` (account **numbers**, AM-4). The pre-flight lookup and the post choose the same connection: the batch company's one active connection for the target, or among several the one whose Configuration has `"postJournalEntries": true`, else refuse. Its `CompanyIntegrationID` is sent to the verb (#256, MJ#4867). Accounting never writes `CashBalance`.
 
 How a write travels: caller (Orders, browser, script) → **`Accounting.CreateJournalEntry`** →
 engine pipeline → `BaseEntity.Save()` in one TransactionGroup (hooks number; triggers enforce;
@@ -127,8 +127,10 @@ balance **overall and per company** (AM-4), and writes atomically. Hooks on the 
   (#182): a Failed batch the ERP holds line for line is recorded `Posted` without a second send; a
   first send whose number is already there is refused. The operator's confirmation that the number
   has not posted is needed only when the lookup cannot settle it: a mismatch, a failed lookup, or an
-  ERP with no lookup. Business Central posting also refuses a journal that already holds unposted
-  lines. Its content is frozen like an Approved batch's, and the dispatch check compares it with the
+  ERP with no lookup. Business Central is looked up by document number on any date; QuickBooks
+  Online, whose verb cannot filter by number, among the posting date's journal entries. Business
+  Central posting also refuses a journal that already holds unposted lines, and QuickBooks Online
+  posting refuses a GL account with no QBO account id. Its content is frozen like an Approved batch's, and the dispatch check compares it with the
   `ApprovedContentHash` seal written at approval (#183). A `Failed` or `Approved` batch whose content
   is wrong is cancelled instead (`Accounting.CancelJournalEntryBatch`: the company's CFO or the
   batch's approver only, reason required and written to the approval Task), which releases its
@@ -141,6 +143,11 @@ balance **overall and per company** (AM-4), and writes atomically. Hooks on the 
   ERP call. `findStrandedJournalEntries` reports the entries both states hold; the scheduled
   action and the Dispatch status page surface it. Scheduled runs never retry on their own.
 - **W5** realized-FX auto-emit: retired — Orders/Payments computes + posts the FX line (§C1).
+- **Finance exceptions (golive #279):** `FinanceExceptions.ts` holds the logic behind
+  `Accounting.GetFinanceExceptionTypes` / `RaiseFinanceExceptions` / `ClearFinanceException`
+  (`FinanceExceptionOperations.ts`, over the CodeGen-emitted bases in `accounting-entities`);
+  `FinanceExceptionEntityServer.ts` makes the clear operation the only way a status changes. Orders
+  and sales resolve the operations by key through the ClassFactory, with no build-time dependency.
 
 ## 6. Connection map
 Hand-written, cross-layer files carry a top-of-file `CONNECTS TO:` block (CALLED BY / CALLS /

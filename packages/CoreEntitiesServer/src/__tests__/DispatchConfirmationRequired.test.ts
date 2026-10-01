@@ -54,15 +54,13 @@ describe('DispatchJournalEntryBatchOperation — a retry the lookup could not se
       .rejects.toThrow(/no longer matches its approved content/);
   });
 
-  it('passes the lookup to the engine alongside the poster', async () => {
+  // #233: the engine resolves the gate, the poster and the lookup; the operation passes none of them.
+  it('passes the provider and the confirmation to the engine, and no gate, poster or lookup', async () => {
     sendSpy.mockResolvedValue({ Status: 'Posted', ExternalJournalEntryBatchRef: 'JEB-0001' } as never);
 
     const out = await new ProbeOperation().Run({ JournalEntryBatchID: BATCH_ID, ConfirmNotAlreadyPostedInERP: true }, provider, user);
 
     expect(out).toEqual({ Status: 'Posted', ExternalJournalEntryBatchRef: 'JEB-0001' });
-    const options = sendSpy.mock.calls[0][2] as { lookup?: unknown; poster?: unknown; confirmNotAlreadyPostedInERP?: boolean };
-    expect(typeof options.lookup).toBe('function');
-    expect(typeof options.poster).toBe('function');
-    expect(options.confirmNotAlreadyPostedInERP).toBe(true);
+    expect(sendSpy.mock.calls[0][2]).toEqual({ provider, confirmNotAlreadyPostedInERP: true });
   });
 });

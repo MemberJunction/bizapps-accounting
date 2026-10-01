@@ -62,7 +62,22 @@ interface CredentialedIntegration {
   CompanyID: string;
   IntegrationID: string;
   IntegrationName: string;
+  /** The Company Integration's own name, which error messages name the connection by. */
+  Name: string;
+  /** The Company Integration's Configuration JSON, as stored. */
+  Configuration: string | null;
 }
+
+/**
+ * The connection a batch posts through (#256), or why there is none:
+ *   · `Chosen`    — exactly one connection qualifies.
+ *   · `Missing`   — the company has no active connection for the batch's target.
+ *   · `Ambiguous` — several do, and not exactly one is marked `"postJournalEntries": true`.
+ */
+type PostingConnectionChoice =
+  | { Kind: 'Chosen'; Connection: CredentialedIntegration }
+  | { Kind: 'Missing'; Error: string }
+  | { Kind: 'Ambiguous'; Error: string };
 
 export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
   public static get Instance(): AccountingERPEngine {
@@ -80,10 +95,17 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     await AccountingEngine.Instance.Config(forceRefresh, contextUser, provider);
   }
 
+  /**
+   * Pull chart of accounts, dimensions and dimension values from every active ERP connection (or
+   * those of `input.CompanyIDs`). Connections to other systems (HubSpot, IRS, Asana, …) are not
+   * ERPs and are left out. An ERP connection with no entity maps for the requested objects, such as
+   * a posting-only connection (#256), is reported as skipped with `Success` true; only a real sync
+   * error fails the run.
+   */
   public async SyncMasterData(input: RunERPSyncInput, user: UserInfo, provider: IMetadataProvider): Promise<RunERPSyncOutput> {
     await this.Config(false, user, provider);
     const objects = normalizeObjects(input.Objects);
-    const integrations = await this.loadCredentialedIntegrations(user, provider, input.CompanyIDs);
+    const integrations = await this.loadERPIntegrations(user, provider, input.CompanyIDs);
     if (integrations.length === 0) {
       return {
         Success: false,
@@ -91,55 +113,41 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
       };
     }
     const results: RunERPSyncCompanyResult[] = [];
-
     for (const ci of integrations) {
-      const ctx = await this.extensionContext(ci, objects, user, provider);
-      const extensions = await this.loadExtensions(provider, user, ci.CompanyID);
-      await this.invokeExtensions(extensions, ctx, 'beforeSync');
-      try {
-        const mapIds = await this.entityMapIDsForObjects(ci.CompanyIntegrationID, objects, user, provider);
-        if (mapIds.length === 0) {
-          results.push({
-            CompanyID: ci.CompanyID,
-            CompanyIntegrationID: ci.CompanyIntegrationID,
-            ProviderName: ci.IntegrationName,
-            Success: false,
-            Message: `No entity maps for ${objects.join(', ')} on this Company Integration.`,
-            Objects: objects,
-          });
-          continue;
-        }
-        const sync = await this.runSync(ci.CompanyIntegrationID, user, mapIds, provider);
-        const row: RunERPSyncCompanyResult = {
-          CompanyID: ci.CompanyID,
-          CompanyIntegrationID: ci.CompanyIntegrationID,
-          ProviderName: ci.IntegrationName,
-          Success: sync.Success,
-          Message: sync.Message ?? (sync.Success ? 'Synced' : 'Sync failed'),
-          Objects: objects,
-        };
-        results.push(row);
-        if (sync.Success) {
-          for (const obj of objects) {
-            await this.invokeExtensions(extensions, ctx, afterHookFor(obj));
-          }
-          await this.invokeExtensions(extensions, ctx, 'afterSync');
-        }
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        LogError(`AccountingERPEngine.SyncMasterData company ${ci.CompanyID}: ${msg}`);
-        results.push({
-          CompanyID: ci.CompanyID,
-          CompanyIntegrationID: ci.CompanyIntegrationID,
-          ProviderName: ci.IntegrationName,
-          Success: false,
-          Message: msg,
-          Objects: objects,
-        });
-      }
+      results.push(await this.syncConnection(ci, objects, user, provider));
     }
-
+    // A skipped connection's row carries Success true, so it cannot fail the run.
     return { Success: results.every((r) => r.Success), Results: results };
+  }
+
+  /** One connection's master-data pull, with its sync extension hooks. */
+  private async syncConnection(
+    ci: CredentialedIntegration,
+    objects: AccountingERPSyncObject[],
+    user: UserInfo,
+    provider: IMetadataProvider,
+  ): Promise<RunERPSyncCompanyResult> {
+    const ctx = await this.extensionContext(ci, objects, user, provider);
+    const extensions = await this.loadExtensions(provider, user, ci.CompanyID);
+    await this.invokeExtensions(extensions, ctx, 'beforeSync');
+    try {
+      const mapIds = await this.entityMapIDsForObjects(ci.CompanyIntegrationID, objects, user, provider);
+      if (mapIds.length === 0) {
+        return syncResult(ci, objects, { Success: true, Skipped: true, Message: noEntityMapsReason(objects) });
+      }
+      const sync = await this.runSync(ci.CompanyIntegrationID, user, mapIds, provider);
+      if (sync.Success) {
+        for (const obj of objects) {
+          await this.invokeExtensions(extensions, ctx, afterHookFor(obj));
+        }
+        await this.invokeExtensions(extensions, ctx, 'afterSync');
+      }
+      return syncResult(ci, objects, { Success: sync.Success, Message: sync.Message ?? (sync.Success ? 'Synced' : 'Sync failed') });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      LogError(`AccountingERPEngine.SyncMasterData company ${ci.CompanyID}, connection ${ci.CompanyIntegrationID}: ${msg}`);
+      return syncResult(ci, objects, { Success: false, Message: msg });
+    }
   }
 
   public async PostJournalBatch(
@@ -151,26 +159,14 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     await this.Config(false, user, provider);
     const companyId = batch.CompanyID;
     const target = batch.TargetSystem as JournalEntryBatchTargetSystem;
-    const integrations = await this.loadCredentialedIntegrations(user, provider, [companyId]);
-    const ci = integrations.find((row) => namesMatch(row.IntegrationName, target));
+    const choice = await this.choosePostingConnection(batch, user, provider);
     const extensions = await this.loadExtensions(provider, user, companyId);
 
-    if (!ci) {
-      const error = target
-        ? `No active '${target}' integration for company ${companyId}.`
-        : `No active accounting ERP integration for company ${companyId}.`;
-      const ctx = await this.extensionContext(
-        { CompanyID: companyId, CompanyIntegrationID: '', IntegrationID: '', IntegrationName: target ?? '' },
-        [],
-        user,
-        provider,
-      );
-      ctx.JournalEntryBatchID = batch.ID;
-      ctx.ErrorMessage = error;
-      await this.invokeExtensions(extensions, ctx, 'afterPostFailure');
-      return { success: false, error };
+    if (choice.Kind !== 'Chosen') {
+      return this.failWithoutConnection(batch, target, choice.Error, extensions, user, provider);
     }
 
+    const ci = choice.Connection;
     const plugin = this.providerFor(ci.IntegrationName);
     const ctx = await this.extensionContext(ci, [], user, provider);
     ctx.JournalEntryBatchID = batch.ID;
@@ -183,19 +179,7 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
       return { success: false, error };
     }
 
-    let posted: ErpPostResult;
-    try {
-      posted = await plugin.CreateJournalEntry({
-        CompanyID: companyId,
-        EntryDate: entryDateOf(batch),
-        DocNumber: batch.JournalEntryBatchNumber,
-        PrivateNote: `Accounting batch ${batch.JournalEntryBatchNumber}`,
-        Lines: await erpLinesFor(batch, summaryLines, target, user, provider),
-      }, user);
-    } catch (e) {
-      posted = { success: false, error: e instanceof Error ? e.message : String(e) };
-    }
-
+    const posted = await this.sendThroughConnection(plugin, ci, batch, summaryLines, user, provider);
     if (!posted.success) {
       ctx.ErrorMessage = posted.error ?? 'ERP post failed';
       await this.invokeExtensions(extensions, ctx, 'afterPostFailure');
@@ -213,6 +197,73 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
   }
 
   /**
+   * Send the batch through the chosen connection: the connection's ID travels to the verb, so the
+   * ERP posts through exactly that connection. A throw is a failed post.
+   */
+  private async sendThroughConnection(
+    plugin: BaseAccountingERPProvider,
+    ci: CredentialedIntegration,
+    batch: mjBizAppsAccountingJournalEntryBatchEntity,
+    summaryLines: mjBizAppsAccountingJournalEntryLineEntity[],
+    user: UserInfo,
+    provider: IMetadataProvider,
+  ): Promise<ErpPostResult> {
+    const target = batch.TargetSystem as JournalEntryBatchTargetSystem;
+    try {
+      return await plugin.CreateJournalEntry({
+        CompanyID: batch.CompanyID,
+        CompanyIntegrationID: ci.CompanyIntegrationID,
+        EntryDate: entryDateOf(batch),
+        DocNumber: batch.JournalEntryBatchNumber,
+        PrivateNote: `Accounting batch ${batch.JournalEntryBatchNumber}`,
+        Lines: await erpLinesFor(batch, summaryLines, target, plugin.RequiresExternalAccountID, user, provider),
+      }, user);
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
+  /** The post's failure when no connection could be chosen: `afterPostFailure` runs, as it always has. */
+  private async failWithoutConnection(
+    batch: mjBizAppsAccountingJournalEntryBatchEntity,
+    target: JournalEntryBatchTargetSystem,
+    error: string,
+    extensions: BaseAccountingEngineExtension[],
+    user: UserInfo,
+    provider: IMetadataProvider,
+  ): Promise<ErpPostResult> {
+    const ctx = await this.extensionContext(
+      { CompanyID: batch.CompanyID, CompanyIntegrationID: '', IntegrationID: '', IntegrationName: target ?? '' },
+      [],
+      user,
+      provider,
+    );
+    ctx.JournalEntryBatchID = batch.ID;
+    ctx.ErrorMessage = error;
+    await this.invokeExtensions(extensions, ctx, 'afterPostFailure');
+    return { success: false, error };
+  }
+
+  /**
+   * The connection a batch posts through (#256). The pre-flight lookup and the post both choose
+   * here, so they always reach the same connection, and the chosen `CompanyIntegrationID` travels
+   * to the ERP verb. Candidates are the company's active Company Integrations whose Integration
+   * matches the batch's `TargetSystem`. One candidate is used as it is. Of several, the one whose
+   * Configuration has `"postJournalEntries": true` is used when it is the only one so marked;
+   * otherwise nothing is chosen, and the error names the connections.
+   */
+  private async choosePostingConnection(
+    batch: mjBizAppsAccountingJournalEntryBatchEntity,
+    user: UserInfo,
+    provider: IMetadataProvider,
+  ): Promise<PostingConnectionChoice> {
+    const target = batch.TargetSystem as JournalEntryBatchTargetSystem;
+    const integrations = await this.loadCredentialedIntegrations(user, provider, [batch.CompanyID]);
+    const candidates = integrations.filter((row) => namesMatch(row.IntegrationName, target));
+    return pickPostingConnection(candidates, batch.CompanyID, target);
+  }
+
+  /**
    * What the batch's target ERP holds under the batch's number, compared with what the batch would
    * send (#182). A posting counts as this batch only when every line carries the batch's token
    * (#206), matches on account, debit and credit, and carries the batch's posting date. Lines whose
@@ -227,27 +278,36 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
   ): Promise<ErpJournalLookupResult> {
     await this.Config(false, user, provider);
     const target = batch.TargetSystem as JournalEntryBatchTargetSystem;
-    const integrations = await this.loadCredentialedIntegrations(user, provider, [batch.CompanyID]);
-    const ci = integrations.find((row) => namesMatch(row.IntegrationName, target));
+    const choice = await this.choosePostingConnection(batch, user, provider);
+    // Several connections and none chosen: the lookup cannot say which ERP company to read, and the
+    // post refuses for the same reason.
+    if (choice.Kind === 'Ambiguous') return { status: 'Error', error: choice.Error };
     // No integration or no provider: the post cannot run either, and says why when it is attempted.
+    const ci = choice.Kind === 'Chosen' ? choice.Connection : null;
     const plugin = ci ? this.providerFor(ci.IntegrationName) : null;
-    if (!plugin) return { status: 'Unavailable' };
+    if (!ci || !plugin) return { status: 'Unavailable' };
     if (!batch.JournalEntryBatchNumber) {
       return { status: 'Error', error: `batch ${batch.ID} has no number to look up in the ERP.` };
     }
 
+    // The day the post sends: the verb writes EntryDate from the same Date's UTC parts.
+    const postingDate = ToCalendarDay(entryDateOf(batch));
+    if (!postingDate) return { status: 'Error', error: `batch ${batch.JournalEntryBatchNumber} has an unreadable posting date.` };
+
     try {
-      const found = await plugin.FindJournalEntry({ CompanyID: batch.CompanyID, DocNumber: batch.JournalEntryBatchNumber }, user);
+      const found = await plugin.FindJournalEntry({
+        CompanyID: batch.CompanyID,
+        CompanyIntegrationID: ci.CompanyIntegrationID,
+        DocNumber: batch.JournalEntryBatchNumber,
+        PostingDate: postingDate,
+      }, user);
       if (found.status !== 'Ok') return found;
       if (found.lines.length === 0) return { status: 'NotFound' };
       const tokens = postedBatchTokens(found.lines, batch.ID);
       if (tokens.own === 0 && tokens.others.length > 0) {
         return { status: 'Foreign', detail: `its lines carry the token of batch ${tokens.others.join(', ')}, not this batch's ${batch.ID}.` };
       }
-      const expected = await erpLinesFor(batch, summaryLines, target, user, provider);
-      // The day the post sends: the verb writes EntryDate from the same Date's UTC parts.
-      const postingDate = ToCalendarDay(entryDateOf(batch));
-      if (!postingDate) return { status: 'Error', error: `batch ${batch.JournalEntryBatchNumber} has an unreadable posting date.` };
+      const expected = await erpLinesFor(batch, summaryLines, target, plugin.RequiresExternalAccountID, user, provider);
       const detail = tokenMismatch(tokens, found.lines.length, batch.ID, postedJournalMismatch(expected, postingDate, found.lines));
       return detail
         ? { status: 'Mismatch', detail }
@@ -259,13 +319,19 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
 
   private providerFor(integrationName: string | undefined): BaseAccountingERPProvider | null {
     if (!integrationName) return null;
+    // Providers register under their full product name ('Microsoft Dynamics 365 Business Central'), while an
+    // Integration row may be named differently (the MJ connector's is 'business-central'). Try the name as given,
+    // then the registered provider key it matches under the same rule PostJournalBatch uses to pick the connection.
+    const key = ERP_PROVIDER_KEYS.includes(integrationName)
+      ? integrationName
+      : ERP_PROVIDER_KEYS.find((k) => namesMatch(integrationName, k)) ?? integrationName;
     const res = MJGlobal.Instance.ClassFactory.TryCreateInstance<BaseAccountingERPProvider>(
       BaseAccountingERPProvider,
-      integrationName,
+      key,
       this.seams.runVerb ?? defaultAccountingVerbRunner,
     );
     if (!res.Resolved || !res.Instance) {
-      LogStatus(`AccountingERPEngine: no provider for '${integrationName}': ${res.Reason}`);
+      LogStatus(`AccountingERPEngine: no provider for '${integrationName}'${key !== integrationName ? ` (tried '${key}')` : ''}: ${res.Reason}`);
       return null;
     }
     return res.Instance;
@@ -326,9 +392,25 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
         CompanyID: String(row.CompanyID),
         IntegrationID: String(row.IntegrationID),
         IntegrationName: integrationName,
+        Name: typeof row.Name === 'string' ? row.Name : '',
+        Configuration: typeof row.Configuration === 'string' ? row.Configuration : null,
       });
     }
     return out;
+  }
+
+  /**
+   * The active connections master-data sync reads: those whose Integration is an ERP this engine
+   * has a provider for. A company's HubSpot, IRS or Asana connection has no chart of accounts to
+   * pull, and trying it only reported a false failure every night.
+   */
+  private async loadERPIntegrations(
+    user: UserInfo,
+    provider: IMetadataProvider,
+    companyIds?: string[],
+  ): Promise<CredentialedIntegration[]> {
+    const integrations = await this.loadCredentialedIntegrations(user, provider, companyIds);
+    return integrations.filter((ci) => isERPIntegration(ci.IntegrationName));
   }
 
   private async integrationNamesById(
@@ -365,10 +447,16 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     const rv = provider as unknown as IRunViewProvider;
     const res = await rv.RunView<Record<string, unknown>>({
       EntityName: CI_MAP_ENTITY,
-      ExtraFilter: `CompanyIntegrationID = '${EscapeSQLString(companyIntegrationID)}' AND IsActive = 1`,
+      // Company Integration Entity Maps have no IsActive column (they carry Status and SyncEnabled). Filtering on
+      // IsActive made this RunView fail, so every sync reported "No entity maps" however the maps were set up.
+      ExtraFilter: `CompanyIntegrationID = '${EscapeSQLString(companyIntegrationID)}' AND Status = 'Active' AND SyncEnabled = 1`,
       ResultType: 'simple',
     }, user);
-    if (!res.Success) return [];
+    // A failed query is an error, not "no maps": no maps is reported as skipped, and a broken map
+    // query must fail the run instead of passing as a posting-only connection.
+    if (!res.Success) {
+      throw new Error(`Entity maps for Company Integration ${companyIntegrationID} failed to load: ${res.ErrorMessage ?? 'unknown error'}`);
+    }
     const wanted = new Set(objects.map((o) => ERP_SYNC_OBJECT_ENTITY[o]));
     const ids: string[] = [];
     for (const row of res.Results ?? []) {
@@ -481,6 +569,27 @@ function afterHookFor(obj: AccountingERPSyncObject): 'afterAccounts' | 'afterDim
   return 'afterDimensionValues';
 }
 
+/** One connection's row in the sync output. */
+function syncResult(
+  ci: CredentialedIntegration,
+  objects: AccountingERPSyncObject[],
+  outcome: Pick<RunERPSyncCompanyResult, 'Success' | 'Message' | 'Skipped'>,
+): RunERPSyncCompanyResult {
+  return {
+    CompanyID: ci.CompanyID,
+    CompanyIntegrationID: ci.CompanyIntegrationID,
+    ProviderName: ci.IntegrationName,
+    ...outcome,
+    Objects: objects,
+  };
+}
+
+/** Why an ERP connection with no entity maps for the requested objects is skipped rather than failed. */
+function noEntityMapsReason(objects: AccountingERPSyncObject[]): string {
+  return `Skipped: no active, sync-enabled entity maps for ${objects.join(', ')} on this Company Integration, so there is nothing to pull. ` +
+    'A posting-only connection has none.';
+}
+
 function objectsAllowed(ext: BaseAccountingEngineExtension, ran: AccountingERPSyncObject[]): boolean {
   const wanted = ext.Configuration?.Objects;
   if (!wanted || wanted.length === 0) return true;
@@ -525,13 +634,95 @@ function extensionParticipates(
   }
 }
 
-function namesMatch(integrationName: string, targetSystem: string | null | undefined): boolean {
+/** Keys the built-in ERP providers register under (see BaseAccountingERPProvider.ts). */
+const ERP_PROVIDER_KEYS: readonly string[] = ['Microsoft Dynamics 365 Business Central', 'QuickBooks Online'];
+
+/**
+ * Whether an Integration name and an ERP name (a batch's TargetSystem, or a provider key) mean the same system.
+ * Compares letters and digits only, so 'business-central', 'Business Central' and 'BusinessCentral' all match.
+ */
+export function namesMatch(integrationName: string, targetSystem: string | null | undefined): boolean {
   if (!targetSystem) return false;
-  const a = integrationName.toLowerCase().replace(/\s+/g, '');
-  const b = targetSystem.toLowerCase().replace(/\s+/g, '');
+  const a = integrationName.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const b = targetSystem.toLowerCase().replace(/[^a-z0-9]/g, '');
   if (a.includes('quickbooks') && b.includes('quickbooks')) return true;
   if (a.includes('businesscentral') && (b.includes('businesscentral') || b === 'bc')) return true;
   return a === b;
+}
+
+/** Whether an Integration is one of the ERPs a built-in provider serves, by the rule {@link namesMatch} applies. */
+function isERPIntegration(integrationName: string): boolean {
+  return ERP_PROVIDER_KEYS.some((key) => namesMatch(integrationName, key));
+}
+
+/** The Configuration key that marks the posting connection among several for one target (#256). */
+const POST_JOURNAL_ENTRIES_FLAG = 'postJournalEntries';
+
+/** See {@link AccountingERPEngine.choosePostingConnection}: the rule, over the matching connections. */
+function pickPostingConnection(
+  candidates: CredentialedIntegration[],
+  companyId: string,
+  target: JournalEntryBatchTargetSystem,
+): PostingConnectionChoice {
+  if (candidates.length === 0) {
+    const error = target
+      ? `No active '${target}' integration for company ${companyId}.`
+      : `No active accounting ERP integration for company ${companyId}.`;
+    return { Kind: 'Missing', Error: error };
+  }
+  if (candidates.length === 1) return { Kind: 'Chosen', Connection: candidates[0] };
+  const marked = candidates.filter(isMarkedForPosting);
+  if (marked.length === 1) return { Kind: 'Chosen', Connection: marked[0] };
+  return { Kind: 'Ambiguous', Error: ambiguousPostingConnection(candidates, marked, companyId, target) };
+}
+
+/**
+ * Whether a connection's Configuration marks it as the posting connection. Configuration that is not
+ * JSON cannot mark it, and is logged so the operator can see why the mark was not honoured.
+ */
+function isMarkedForPosting(ci: CredentialedIntegration): boolean {
+  if (!ci.Configuration?.trim()) return false;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(ci.Configuration);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    LogError(`AccountingERPEngine: the Configuration of Company Integration ${connectionLabel(ci)} is not valid JSON (${msg}), so it cannot mark the connection with "${POST_JOURNAL_ENTRIES_FLAG}": true.`);
+    return false;
+  }
+  return hasPostJournalEntriesFlag(parsed);
+}
+
+/** True only for a JSON object carrying `"postJournalEntries": true` (the boolean, not the string). */
+function hasPostJournalEntriesFlag(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  return POST_JOURNAL_ENTRIES_FLAG in value && value[POST_JOURNAL_ENTRIES_FLAG] === true;
+}
+
+/** A connection as an operator finds it: its name and its ID. */
+function connectionLabel(ci: CredentialedIntegration): string {
+  return ci.Name ? `'${ci.Name}' (${ci.CompanyIntegrationID})` : ci.CompanyIntegrationID;
+}
+
+/** Connections named in a stable order: the query that loads them has none. */
+function connectionLabels(connections: CredentialedIntegration[]): string {
+  return connections.map(connectionLabel).sort((a, b) => a.localeCompare(b)).join(', ');
+}
+
+/** Why no connection was chosen among several, naming them and saying how to fix it. */
+function ambiguousPostingConnection(
+  candidates: CredentialedIntegration[],
+  marked: CredentialedIntegration[],
+  companyId: string,
+  target: JournalEntryBatchTargetSystem,
+): string {
+  const flag = `"${POST_JOURNAL_ENTRIES_FLAG}": true`;
+  const found = `Company ${companyId} has ${candidates.length} active '${target}' connections: ${connectionLabels(candidates)}.`;
+  const why = marked.length === 0
+    ? `None has ${flag} in its Configuration`
+    : `${marked.length} of them (${connectionLabels(marked)}) have ${flag} in their Configuration`;
+  return `${found} ${why}, so it is not known which one to post through, and the batch was not sent. ` +
+    `Mark exactly one with ${flag} in its Configuration, or deactivate the others.`;
 }
 
 export function createAccountingERPPoster(provider: IMetadataProvider) {
@@ -564,6 +755,7 @@ async function erpLinesFor(
   batch: mjBizAppsAccountingJournalEntryBatchEntity,
   summaryLines: mjBizAppsAccountingJournalEntryLineEntity[],
   target: JournalEntryBatchTargetSystem,
+  requireExternalAccountID: boolean,
   user: UserInfo,
   provider: IMetadataProvider,
 ): Promise<CreateERPJournalInput['Lines']> {
@@ -572,7 +764,7 @@ async function erpLinesFor(
   const dimensionsByLine = await resolveExternalDimensions(summaryLines.map((l) => l.ID), user, provider);
   const lines: CreateERPJournalInput['Lines'] = [];
   for (const line of summaryLines) {
-    const accountNumber = await resolveExternalAccount(line.GLAccountID, target, user, provider);
+    const accountNumber = await resolveExternalAccount(line.GLAccountID, target, user, provider, requireExternalAccountID);
     lines.push({
       accountNumber,
       debit: line.DebitAmount ?? undefined,
@@ -588,7 +780,8 @@ async function erpLinesFor(
  * The batch's ID, stamped on every line it sends (#206). The batch number restarts at BATCH-000001 in
  * every database, so another environment's journal can sit under the same number in the same ERP
  * company; the ID is a GUID no other database issues. Business Central carries a journal line's
- * description onto its G/L entries, and has no other free-text field the connector writes.
+ * description onto its G/L entries, and has no other free-text field the connector writes; QuickBooks
+ * Online keeps each journal line's description as sent.
  */
 function batchToken(batchId: string): string {
   return `JEB ${batchId.toLowerCase()}`;
