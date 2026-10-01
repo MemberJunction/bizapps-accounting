@@ -161,6 +161,15 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   operator confirmed. The operation returns that refusal as `ConfirmationRequired` /
   `ConfirmationKind`; which way "not posted" was established is persisted as `ERPNotPostedBasis`
   and repeated in the approval Task comment.
+  **The engine resolves the gate and the ERP lookup itself (#233)**, through
+  `JournalEntryBatchDispatchServices` (MJ ClassFactory; the defaults are `TasksAppApprovalGate` and
+  the AccountingERPEngine lookup). A caller cannot pass them, so it cannot swap in a gate that allows
+  everything or leave the lookup out. A higher-priority registration replaces them (unit tests do).
+  A **Pending** cancel requires a terminal rejection on the approval Task (`assertRejected`);
+  `RecordJournalEntryBatchDecision` records it before cancelling. A Pending batch with **no** approval
+  Task (built with `AutoApproveGate`, e.g. an auto-post whose approve step failed) has nothing to
+  reject, so it cannot be cancelled; archive it instead. `regenerateJournalEntryBatch`'s empty-cancel
+  is unaffected.
 - **`TasksAppApprovalGate.recordDecision`** — now requires `contextUser` to BE the batch company's
   `AccountingCompanyProfile.ApprovalCFOUserID` (no CFO configured ⇒ hard-fail). Previously any
   authenticated user could approve any batch, including their own.
@@ -197,6 +206,13 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   (`TasksAppApprovalGate` — per-company CFO **union**: one Task assigned to every involved company's CFO) → Sent →
   **Posted** + JEs→GLPosted. A send the ERP rejects, or whose poster throws, returns normally with the batch `Failed`;
   the summary lines load before the `→Sent` save, so a failed load leaves the batch where it was.
+  **The gate, the ERP poster and the ERP lookup are resolved by the engine (#233)** through
+  `JournalEntryBatchDispatchServices`; `SendJournalEntryBatchOptions` carries only the provider and
+  `confirmNotAlreadyPostedInERP`. The one send without an approval Task is
+  `autoPostJournalEntryBatch`, the scheduled-posting waiver: it enforces the include-list policy
+  (`assertAutoPostPolicy`), builds with `AutoApproveGate`, approves as the context user and sends;
+  `Accounting.BuildJournalEntryBatches` with `AutoPost` calls it per company. A failure after the build
+  throws `AutoPostDispatchError`, carrying the build so the caller can report the batch's real state.
   Lifecycle (`LEGAL_TRANSITIONS`): `Pending → Approved | Cancelled | Archived`, `Approved → Sent | Cancelled | Archived`,
   `Sent → Posted | Failed`, `Failed → Sent | Cancelled | Archived`; `Posted`, `Cancelled` and `Archived` are terminal.
 - **Batch recovery (#145).** *Retry* — `sendJournalEntryBatch` on a `Failed` batch reuses its approval.

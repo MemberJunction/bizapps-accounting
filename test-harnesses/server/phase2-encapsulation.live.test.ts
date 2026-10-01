@@ -35,12 +35,12 @@ import {
   sendJournalEntryBatch,
   AutoApproveGate,
   TasksAppApprovalGate,
-  mockErpPoster,
   type JournalEntryBatchApprovalGate,
 } from '@mj-biz-apps/accounting-core-entities-server';
 import type { mjBizAppsAccountingAccountingCompanyProfileEntity } from '@mj-biz-apps/accounting-entities';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import { bootstrapLive, teardownLive, scalar, SCHEMA, type LiveCtx } from './live-bootstrap.js';
+import { RegisterHarnessDispatchServices } from './harness-dispatch-services.js';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
@@ -77,6 +77,7 @@ async function createJE(withDim: boolean, amount: number, description: string): 
 
 beforeAll(async () => {
   ctx = await bootstrapLive();
+  RegisterHarnessDispatchServices(); // the send's gate and poster: always approved, mock ERP (#233)
   // The harness is the composition root: bootstrapLive() created this provider via
   // setupSQLServerClient, so reading the global HERE (and injecting it everywhere below)
   // is the sanctioned pattern — the code under test never touches a global itself.
@@ -187,9 +188,9 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     const pendingLeft = Number(await scalar(ctx.pool, `SELECT COUNT(*) FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${ctx.company.id}' AND Status='Pending'`));
     expect(pendingLeft).toBe(0);
 
-    // Approve → dispatch (mock poster) → Posted; members + summary GLPosted.
+    // Approve → dispatch (mock poster, via the harness dispatch services) → Posted; members + summary GLPosted.
     await approveJournalEntryBatch(result!.batchId, ctx.user.ID, ctx.user, provider);
-    const batch = await sendJournalEntryBatch(result!.batchId, ctx.user, { gate: AutoApproveGate, poster: mockErpPoster, provider });
+    const batch = await sendJournalEntryBatch(result!.batchId, ctx.user, { provider });
     expect(batch.Status).toBe('Posted');
     const notPosted = Number(await scalar(ctx.pool, `SELECT COUNT(*) FROM ${SCHEMA}.JournalEntry WHERE JournalEntryBatchID='${result!.batchId}' AND Status<>'GLPosted'`));
     expect(notPosted).toBe(0);

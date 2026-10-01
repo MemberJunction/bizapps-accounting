@@ -21,6 +21,12 @@ export interface ERPJournalLine {
 
 export interface CreateERPJournalInput {
   CompanyID: string;
+  /**
+   * The Company Integration the engine chose to post through (#256). Sent to the verb as
+   * `CompanyIntegrationID`, so the verb uses exactly that connection (MemberJunction/MJ#4867)
+   * instead of resolving one of its own from `CompanyID`.
+   */
+  CompanyIntegrationID: string;
   EntryDate: Date;
   DocNumber?: string;
   PrivateNote?: string;
@@ -42,6 +48,11 @@ export interface RenumberedJournalSearch {
 
 export interface FindERPJournalInput {
   CompanyID: string;
+  /**
+   * The Company Integration the engine chose, the same one the post goes through (#256). Sent to
+   * the lookup verb as `CompanyIntegrationID`.
+   */
+  CompanyIntegrationID: string;
   /** The document number the journal was, or would be, posted under: the batch number. */
   DocNumber: string;
   /** `YYYY-MM-DD`: the batch's posting date. A provider that can look up by number alone ignores it. */
@@ -89,16 +100,11 @@ export abstract class BaseAccountingERPProvider {
   }
 
   async CreateJournalEntry(input: CreateERPJournalInput, user: UserInfo): Promise<ErpPostResult> {
-    const result = await this.runVerb({
-      Verb: 'CreateJournalEntry',
-      CompanyID: input.CompanyID,
-      User: user,
-      Params: {
-        EntryDate: input.EntryDate.toISOString().slice(0, 10),
-        DocNumber: input.DocNumber,
-        PrivateNote: input.PrivateNote,
-        Lines: this.verbLines(input.Lines),
-      },
+    const result = await this.runConnectionVerb('CreateJournalEntry', input, user, {
+      EntryDate: input.EntryDate.toISOString().slice(0, 10),
+      DocNumber: input.DocNumber,
+      PrivateNote: input.PrivateNote,
+      Lines: this.verbLines(input.Lines),
     });
     if (!result.Success) {
       return { success: false, error: result.Message ?? result.ResultCode };
@@ -113,6 +119,26 @@ export abstract class BaseAccountingERPProvider {
    */
   async FindJournalEntry(_input: FindERPJournalInput, _user: UserInfo): Promise<FindERPJournalResult> {
     return { status: 'Unavailable' };
+  }
+
+  /**
+   * Run a verb against the connection the engine chose: `CompanyID` plus a `CompanyIntegrationID`
+   * param (#256, MemberJunction/MJ#4867). Every verb call a provider makes goes through here, so the
+   * lookup and the post cannot reach different connections. The connection is added last, so a
+   * verb param of the same name cannot override it.
+   */
+  protected async runConnectionVerb(
+    verb: string,
+    connection: { CompanyID: string; CompanyIntegrationID: string },
+    user: UserInfo,
+    params: Record<string, unknown>,
+  ): Promise<AccountingVerbResult> {
+    return this.runVerb({
+      Verb: verb,
+      CompanyID: connection.CompanyID,
+      User: user,
+      Params: { ...params, CompanyIntegrationID: connection.CompanyIntegrationID },
+    });
   }
 
   /** The lines in the shape this ERP's CreateJournalEntry verb reads. */
@@ -149,6 +175,7 @@ export class BusinessCentralERPProvider extends BaseAccountingERPProvider {
     try {
       const found = await this.FindJournalEntry({
         CompanyID: input.CompanyID,
+        CompanyIntegrationID: input.CompanyIntegrationID,
         DocNumber: sentAs,
         // The day the post just sent, from the same UTC parts.
         PostingDate: input.EntryDate.toISOString().slice(0, 10),
@@ -179,13 +206,13 @@ export class BusinessCentralERPProvider extends BaseAccountingERPProvider {
    * search is filtered by date: a renumbered posting on another date is not found.
    */
   async FindJournalEntry(input: FindERPJournalInput, user: UserInfo): Promise<FindERPJournalResult> {
-    const byNumber = await this.entriesUnderDocument(input.CompanyID, input.DocNumber, user);
+    const byNumber = await this.entriesUnderDocument(input, input.DocNumber, user);
     if (byNumber.status !== 'Ok' || byNumber.lines.length > 0 || !input.RenumberedSearch) return byNumber;
-    const renumbered = await this.renumberedDocument(input.CompanyID, input.PostingDate, input.RenumberedSearch, user);
+    const renumbered = await this.renumberedDocument(input, input.PostingDate, input.RenumberedSearch, user);
     if (renumbered.status === 'Error') return renumbered;
     if (renumbered.status === 'None') return byNumber;
     LogStatus(`BusinessCentralERPProvider: document ${input.DocNumber} posted in BC as ${renumbered.docNumber}; its journal batch renumbers at posting.`);
-    return this.entriesUnderDocument(input.CompanyID, renumbered.docNumber, user);
+    return this.entriesUnderDocument(input, renumbered.docNumber, user);
   }
 
   /**
@@ -193,13 +220,13 @@ export class BusinessCentralERPProvider extends BaseAccountingERPProvider {
    * document carrying the token is an error, not a guess.
    */
   private async renumberedDocument(
-    companyId: string, postingDate: string, search: RenumberedJournalSearch, user: UserInfo,
+    connection: { CompanyID: string; CompanyIntegrationID: string }, postingDate: string, search: RenumberedJournalSearch, user: UserInfo,
   ): Promise<{ status: 'Error'; error: string } | { status: 'None' } | { status: 'Found'; docNumber: string }> {
     // The verb writes the account number into an OData string literal without escaping it.
     if (search.AccountNumber.includes("'")) {
       return { status: 'Error', error: `account ${search.AccountNumber} cannot be searched: it contains a quote.` };
     }
-    const read = await this.readGLEntries(companyId, user, {
+    const read = await this.readGLEntries(connection, user, {
       StartDate: postingDate, EndDate: postingDate, AccountNumber: search.AccountNumber,
     }, `account ${search.AccountNumber} on ${postingDate}`);
     if (read.status === 'Error') return read;
@@ -220,12 +247,12 @@ export class BusinessCentralERPProvider extends BaseAccountingERPProvider {
     return { status: 'Found', docNumber: [...docNumbers][0] };
   }
 
-  private async entriesUnderDocument(companyId: string, docNumber: string, user: UserInfo): Promise<FindERPJournalResult> {
+  private async entriesUnderDocument(connection: { CompanyID: string; CompanyIntegrationID: string }, docNumber: string, user: UserInfo): Promise<FindERPJournalResult> {
     // The verb writes the number into an OData string literal without escaping it.
     if (docNumber.includes("'")) {
       return { status: 'Error', error: `document number ${docNumber} cannot be looked up: it contains a quote.` };
     }
-    const read = await this.readGLEntries(companyId, user, { DocumentNumber: docNumber }, `document ${docNumber}`);
+    const read = await this.readGLEntries(connection, user, { DocumentNumber: docNumber }, `document ${docNumber}`);
     if (read.status === 'Error') return read;
     const lines: ERPPostedJournalLine[] = [];
     for (const entry of read.entries) {
@@ -238,14 +265,9 @@ export class BusinessCentralERPProvider extends BaseAccountingERPProvider {
 
   /** The raw GetGLEntries rows for `filter`. `subject` names what was read, for the errors. */
   private async readGLEntries(
-    companyId: string, user: UserInfo, filter: Record<string, string>, subject: string,
+    connection: { CompanyID: string; CompanyIntegrationID: string }, user: UserInfo, filter: Record<string, string>, subject: string,
   ): Promise<{ status: 'Error'; error: string } | { status: 'Ok'; entries: unknown[] }> {
-    const result = await this.runVerb({
-      Verb: 'GetGLEntries',
-      CompanyID: companyId,
-      User: user,
-      Params: { ...filter, MaxResults: BC_LOOKUP_MAX_RESULTS },
-    });
+    const result = await this.runConnectionVerb('GetGLEntries', connection, user, { ...filter, MaxResults: BC_LOOKUP_MAX_RESULTS });
     if (!result.Success) {
       return { status: 'Error', error: result.Message ?? result.ResultCode ?? 'GetGLEntries failed.' };
     }
@@ -303,11 +325,11 @@ export class QuickBooksERPProvider extends BaseAccountingERPProvider {
    * not found; the batch's posting date is frozen once it is sent, so a retry posts on the same day.
    */
   async FindJournalEntry(input: FindERPJournalInput, user: UserInfo): Promise<FindERPJournalResult> {
-    const result = await this.runVerb({
-      Verb: 'GetGLEntries',
-      CompanyID: input.CompanyID,
-      User: user,
-      Params: { TransactionType: 'JournalEntry', StartDate: input.PostingDate, EndDate: input.PostingDate, MaxResults: QBO_LOOKUP_MAX_RESULTS },
+    const result = await this.runConnectionVerb('GetGLEntries', input, user, {
+      TransactionType: 'JournalEntry',
+      StartDate: input.PostingDate,
+      EndDate: input.PostingDate,
+      MaxResults: QBO_LOOKUP_MAX_RESULTS,
     });
     if (!result.Success) {
       return { status: 'Error', error: result.Message ?? result.ResultCode ?? 'GetGLEntries failed.' };
