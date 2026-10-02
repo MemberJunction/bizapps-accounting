@@ -51,7 +51,8 @@
  *     pass one (#233). Build still takes one.
  *
  * THE §7.2 BATCH-REWORK SLICE LANDED 2026-07-29 (S-D of the donor port): criteria-driven
- * candidate filtering (cutoff/startDate/companies/type-codes — pendingCandidateFilter),
+ * candidate filtering (cutoff/startDate/companies/type-codes — pendingCandidateFilter, plus every
+ * company's PostingStartDate floor on every build, preview and sweep),
  * explicit-ID builds (buildJournalEntryBatchFromExplicitIds — re-verifies Pending, one batch per company),
  * view-defined batches (buildJournalEntryBatchFromView — snapshot + classify + loud rejects), and the
  * read-only previewBatch that runs the SAME filter/order/netting as the build. The
@@ -85,6 +86,7 @@ import { JournalEntryBatchDispatchServices } from './JournalEntryBatchDispatchSe
 import { GetJournalEntryBatchSummaryEntryType } from './JournalEntryTypes.js';
 import { sqlGuidLiteral } from './SqlGuards.js';
 import { loadTodayBusiness } from './BusinessDay.js';
+import { ToCalendarDay } from '@mj-biz-apps/common-entities';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
@@ -94,6 +96,7 @@ const DIMVAL_ENTITY = 'MJ_BizApps_Accounting: Dimension Values';
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
 const JET_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Types';
+const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 
 /** The ERP targets the schema's CK_JournalEntryBatch_TargetSystem accepts. */
 export type JournalEntryBatchTargetSystem = 'BusinessCentral' | 'NetSuite' | 'Other' | 'QuickBooks' | 'Sage' | 'Xero';
@@ -329,7 +332,8 @@ export interface BuildJournalEntryBatchOptions {
   /** Upper bound. A DATE-only cutoff (midnight UTC) is INCLUSIVE of that whole day
    *  (EffectiveDate < cutoff + 1 day); a datetime cutoff is exact (EffectiveDate <= cutoff). */
   cutoff?: Date | null;
-  /** Optional lower bound (EffectiveDate >= startDate); omit for the standard oldest-forward flow. */
+  /** Optional lower bound (EffectiveDate >= startDate); omit for the standard oldest-forward flow.
+   *  Composes with each company's PostingStartDate, which always applies: the later of the two wins. */
   startDate?: Date | null;
   /** Restrict the candidate pool to these companies. Omit/empty = all companies. (Builds are
    *  per-company either way, D7 — this narrows which companies participate in a sweep/preview.) */
@@ -341,8 +345,32 @@ export interface BuildJournalEntryBatchOptions {
   excludeEntryTypeCodes?: string[] | null;
 }
 
-/** Build the Pending + non-summary + date-window + scope ExtraFilter (inclusive date-only cutoff). */
+/**
+ * Build the Pending + non-summary + date-window + scope + posting-start ExtraFilter (inclusive
+ * date-only cutoff). Every build, preview and scheduled sweep selects through this, so a company's
+ * PostingStartDate keeps the entries dated before it out of every batch.
+ */
 export async function pendingCandidateFilter(options: BuildJournalEntryBatchOptions, contextUser: UserInfo, p: Providers): Promise<string> {
+  const { criteria, postingStart } = await candidateFilterParts(options, contextUser, p);
+  return [...criteria, ...postingStart].join(' AND ');
+}
+
+/**
+ * The candidate filter in its two halves: `criteria` (status, type, date window, scope) and
+ * `postingStart` (one clause per company whose PostingStartDate is later than the per-call
+ * startDate). The preview counts what the second half removes from the first.
+ */
+async function candidateFilterParts(
+  options: BuildJournalEntryBatchOptions,
+  contextUser: UserInfo,
+  p: Providers,
+): Promise<{ criteria: string[]; postingStart: string[] }> {
+  const [criteria, floors] = await Promise.all([criteriaClauses(options, contextUser, p), loadPostingStartDates(contextUser, p)]);
+  const startDay = options.startDate ? isoDate(options.startDate) : null;
+  return { criteria, postingStart: postingStartClauses(floors, startDay) };
+}
+
+async function criteriaClauses(options: BuildJournalEntryBatchOptions, contextUser: UserInfo, p: Providers): Promise<string[]> {
   const summaryType = await GetJournalEntryBatchSummaryEntryType(contextUser, p.md);
   const clauses = [`Status='Pending'`, `EntryTypeID<>'${summaryType.ID}'`];
   if (options.startDate) clauses.push(`EffectiveDate >= '${isoDate(options.startDate)}'`);
@@ -366,7 +394,65 @@ export async function pendingCandidateFilter(options: BuildJournalEntryBatchOpti
     const excludeTypeIds = await resolveEntryTypeIds(options.excludeEntryTypeCodes, contextUser, p);
     clauses.push(`EntryTypeID NOT IN (${excludeTypeIds.map(sqlGuid).join(',')})`);
   }
-  return clauses.join(' AND ');
+  return clauses;
+}
+
+// ─── Posting start date (per-company floor) ──────────────────────────────────
+
+/** A company's PostingStartDate as a calendar day ('YYYY-MM-DD'). */
+export interface PostingStartFloor {
+  CompanyID: string;
+  PostingStartDate: string;
+}
+
+/**
+ * Every company whose profile sets a PostingStartDate. A company with no profile row, or a NULL
+ * date, has no floor. A failed read throws: answering "no floors" would batch the very entries the
+ * floor exists to hold back.
+ */
+async function loadPostingStartDates(contextUser: UserInfo, p: Providers): Promise<PostingStartFloor[]> {
+  const res = await p.rv.RunView<{ ID: string; PostingStartDate: Date | string | null }>(
+    { EntityName: ACP_ENTITY, ExtraFilter: 'PostingStartDate IS NOT NULL', Fields: ['ID', 'PostingStartDate'], ResultType: 'simple', BypassCache: true },
+    contextUser,
+  );
+  if (!res.Success) throw new Error(`buildJournalEntryBatch: could not load company posting start dates: ${res.ErrorMessage ?? 'unknown'}`);
+  const floors: PostingStartFloor[] = [];
+  for (const row of res.Results ?? []) {
+    const day = ToCalendarDay(row.PostingStartDate);
+    if (day) floors.push({ CompanyID: row.ID, PostingStartDate: day });
+  }
+  return floors;
+}
+
+/**
+ * One clause per floor: an entry of that company qualifies only on or after its PostingStartDate;
+ * other companies' entries are untouched. A floor on or before the per-call `startDay` adds nothing
+ * (the startDate clause already bounds every company), so the later of the two wins — pure.
+ */
+export function postingStartClauses(floors: PostingStartFloor[], startDay: string | null): string[] {
+  return floors
+    .filter(f => !startDay || f.PostingStartDate > startDay)
+    .map(f => `(CompanyID<>${sqlGuid(f.CompanyID)} OR EffectiveDate >= '${f.PostingStartDate}')`);
+}
+
+/**
+ * Split entries into those on/after their own company's PostingStartDate and those before it — pure.
+ * The explicit-ID and view builds use it, since they select by id rather than through the filter.
+ */
+export function partitionByPostingStart<T extends { ID: string; CompanyID: string; EffectiveDate: Date | string }>(
+  rows: T[],
+  floors: PostingStartFloor[],
+): { onOrAfter: T[]; before: T[] } {
+  const floorByCompany = new Map(floors.map(f => [f.CompanyID.toLowerCase(), f.PostingStartDate]));
+  const onOrAfter: T[] = [];
+  const before: T[] = [];
+  for (const row of rows) {
+    const floor = floorByCompany.get(row.CompanyID.toLowerCase());
+    const day = ToCalendarDay(row.EffectiveDate);
+    if (floor && day && day < floor) before.push(row);
+    else onOrAfter.push(row);
+  }
+  return { onOrAfter, before };
 }
 
 /** Resolve JournalEntryType CODES to IDs for the criteria filter — unknown codes fail loudly. */
@@ -434,8 +520,8 @@ export async function buildJournalEntryBatchFromExplicitIds(
   if (jeIds.length === 0) throw new EmptyJournalEntryBatchError('Nothing to batch: no journal entries were selected.');
   const p = resolveProviders(provider);
   const inList = jeIds.map(sqlGuid).join(',');
-  const res = await p.rv.RunView<{ ID: string; Status: string; CompanyID: string }>(
-    { EntityName: JE_ENTITY, ExtraFilter: `ID IN (${inList})`, Fields: ['ID', 'Status', 'CompanyID'], ResultType: 'simple', BypassCache: true },
+  const res = await p.rv.RunView<{ ID: string; Status: string; CompanyID: string; EffectiveDate: string }>(
+    { EntityName: JE_ENTITY, ExtraFilter: `ID IN (${inList})`, Fields: ['ID', 'Status', 'CompanyID', 'EffectiveDate'], ResultType: 'simple', BypassCache: true },
     contextUser,
   );
   if (!res.Success) throw new Error(`buildJournalEntryBatchFromExplicitIds: could not validate the selection: ${res.ErrorMessage ?? 'unknown'}`);
@@ -448,6 +534,7 @@ export async function buildJournalEntryBatchFromExplicitIds(
       `(batched or posted since the preview): ${stale.join(', ')}. Refresh the preview and rebuild.`,
     );
   }
+  await assertOnOrAfterPostingStart(rows, contextUser, p);
   const byCompany = new Map<string, string[]>();
   for (const id of jeIds) {
     const companyId = byId.get(id.toLowerCase())!.CompanyID;
@@ -460,6 +547,23 @@ export async function buildJournalEntryBatchFromExplicitIds(
     results.push(await buildJournalEntryBatchCore(companyId, ids, targetSystem, batchedByUserId, contextUser, provider, gate));
   }
   return results;
+}
+
+/**
+ * Refuse a selection holding an entry dated before its company's PostingStartDate. The preview never
+ * offers one, so reaching here means a stale or hand-built selection: loud, naming the offenders.
+ */
+async function assertOnOrAfterPostingStart(
+  rows: Array<{ ID: string; CompanyID: string; EffectiveDate: string }>,
+  contextUser: UserInfo,
+  p: Providers,
+): Promise<void> {
+  const { before } = partitionByPostingStart(rows, await loadPostingStartDates(contextUser, p));
+  if (before.length === 0) return;
+  throw new JournalEntryBatchFromViewError(
+    `buildJournalEntryBatchFromExplicitIds: ${before.length} selected entr${before.length === 1 ? 'y is' : 'ies are'} dated before ` +
+    `${before.length === 1 ? 'its' : 'their'} company's posting start date and cannot be batched: ${before.map(r => r.ID).join(', ')}.`,
+  );
 }
 
 /**
@@ -485,8 +589,8 @@ export async function buildJournalEntryBatchFromView(
   options: BuildJournalEntryBatchFromViewOptions = {},
 ): Promise<BuildJournalEntryBatchResult[]> {
   const p = resolveProviders(provider);
-  const viewRes = await p.rv.RunView<{ ID: string; Status: string }>(
-    { ViewID: viewId, Fields: ['ID', 'Status'], ResultType: 'simple', BypassCache: true },
+  const viewRes = await p.rv.RunView<{ ID: string; Status: string; CompanyID: string; EffectiveDate: string }>(
+    { ViewID: viewId, Fields: ['ID', 'Status', 'CompanyID', 'EffectiveDate'], ResultType: 'simple', BypassCache: true },
     contextUser,
   );
   if (!viewRes.Success) throw new JournalEntryBatchFromViewError(`Batch-from-view: could not resolve view ${viewId}: ${viewRes.ErrorMessage ?? 'unknown'}`);
@@ -500,17 +604,37 @@ export async function buildJournalEntryBatchFromView(
   if (excluded.length > 0) {
     console.warn(`buildJournalEntryBatchFromView: excluded ${excluded.length} non-Pending entr${excluded.length === 1 ? 'y' : 'ies'} (overlap-safe): ${excluded.join(', ')}`);
   }
-  if (pending.length === 0) throw new EmptyJournalEntryBatchError('Batch-from-view: the view resolves to no batchable Pending entries.');
-  let inWindow = pending;
+  const batchable = await dropBeforePostingStart(pending, viewRes.Results ?? [], contextUser, p);
+  if (batchable.length === 0) throw new EmptyJournalEntryBatchError('Batch-from-view: the view resolves to no batchable Pending entries.');
+  let inWindow = batchable;
   if (options.cutoff || options.startDate) {
     const winRes = await p.rv.RunView<{ ID: string }>(
-      { EntityName: JE_ENTITY, ExtraFilter: `ID IN (${pending.map(sqlGuid).join(',')}) AND ${await pendingCandidateFilter(options, contextUser, p)}`, Fields: ['ID'], ResultType: 'simple', BypassCache: true },
+      { EntityName: JE_ENTITY, ExtraFilter: `ID IN (${batchable.map(sqlGuid).join(',')}) AND ${await pendingCandidateFilter(options, contextUser, p)}`, Fields: ['ID'], ResultType: 'simple', BypassCache: true },
       contextUser,
     );
     inWindow = (winRes.Results ?? []).map(r => r.ID);
     if (inWindow.length === 0) throw new EmptyJournalEntryBatchError('Batch-from-view: no view entries fall inside the date window.');
   }
   return buildJournalEntryBatchFromExplicitIds(inWindow, targetSystem, batchedByUserId, contextUser, provider, gate);
+}
+
+/**
+ * A view's Pending ids less those dated before their company's PostingStartDate. Dropped with a
+ * warning, as non-Pending view entries are: a view spanning a company's cutover is ordinary.
+ */
+async function dropBeforePostingStart(
+  pendingIds: string[],
+  viewRows: Array<{ ID: string; CompanyID: string; EffectiveDate: string }>,
+  contextUser: UserInfo,
+  p: Providers,
+): Promise<string[]> {
+  const pendingSet = new Set(pendingIds);
+  const rows = viewRows.filter(r => pendingSet.has(r.ID));
+  const { onOrAfter, before } = partitionByPostingStart(rows, await loadPostingStartDates(contextUser, p));
+  if (before.length > 0) {
+    console.warn(`buildJournalEntryBatchFromView: excluded ${before.length} entr${before.length === 1 ? 'y' : 'ies'} dated before the company's posting start date: ${before.map(r => r.ID).join(', ')}`);
+  }
+  return onOrAfter.map(r => r.ID);
 }
 
 /**
@@ -1687,6 +1811,11 @@ export interface JournalEntryBatchPreviewResult {
    * would batch ahead of older ones — allowed, but the workspace must SAY so.
    */
   OutOfOrderSkipCount: number;
+  /**
+   * How many entries matching the other criteria were left out because they are dated before
+   * their company's PostingStartDate. They are not in `Candidates` and no build takes them.
+   */
+  BeforePostingStartCount: number;
 }
 
 /**
@@ -1756,10 +1885,11 @@ export async function previewBatch(
   includedIds?: ReadonlySet<string>,
 ): Promise<JournalEntryBatchPreviewResult> {
   const p = resolveProviders(provider);
+  const filter = await candidateFilterParts(options, contextUser, p);
   const res = await p.rv.RunView<{ ID: string; EntryNumber: string; EffectiveDate: string; EntryTypeID: string; CompanyID: string; Description: string | null }>(
     {
       EntityName: JE_ENTITY,
-      ExtraFilter: await pendingCandidateFilter(options, contextUser, p),
+      ExtraFilter: [...filter.criteria, ...filter.postingStart].join(' AND '),
       OrderBy: 'EffectiveDate ASC, EntryNumber ASC', // the same oldest-first order the build uses
       Fields: ['ID', 'EntryNumber', 'EffectiveDate', 'EntryTypeID', 'CompanyID', 'Description'],
       ResultType: 'simple',
@@ -1813,7 +1943,23 @@ export async function previewBatch(
     GrossCredits: gross.grossCredits,
     PerCompany: perCompanySubtotals(groups),
     OutOfOrderSkipCount: outOfOrderSkipCount(rows, included),
+    BeforePostingStartCount: await countBeforePostingStart(filter, contextUser, p),
   };
+}
+
+/** Entries the criteria match but a PostingStartDate removes: criteria AND NOT (every floor). */
+async function countBeforePostingStart(
+  filter: { criteria: string[]; postingStart: string[] },
+  contextUser: UserInfo,
+  p: Providers,
+): Promise<number> {
+  if (filter.postingStart.length === 0) return 0;
+  const res = await p.rv.RunView(
+    { EntityName: JE_ENTITY, ExtraFilter: `${filter.criteria.join(' AND ')} AND NOT (${filter.postingStart.join(' AND ')})`, ResultType: 'count_only', BypassCache: true },
+    contextUser,
+  );
+  if (!res.Success) throw new Error(`previewBatch: could not count entries before posting start dates: ${res.ErrorMessage ?? 'unknown'}`);
+  return res.TotalRowCount ?? 0;
 }
 
 /** Line loading for a MIXED-company id set (preview only — the build stays per company). */
