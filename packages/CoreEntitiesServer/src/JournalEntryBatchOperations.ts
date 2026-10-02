@@ -65,6 +65,7 @@ import {
 import { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
 import { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
 import { requireSqlGuid } from './SqlGuards.js';
+import { requireDateBound } from './BusinessDay.js';
 import {
   IsApprovalOutcome,
   IsTaskDecisionOutcomeCode,
@@ -79,10 +80,12 @@ const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 
 /** The workspace criteria panel, on the wire. Dates are ISO strings; everything else optional. */
 export interface JournalEntryBatchCriteriaInput {
-  /** ISO date or datetime. Every cutoff is a whole DAY, INCLUSIVE of it (EffectiveDate is a DATE
-   *  column): a date-only value is that day; a datetime resolves to the BUSINESS day it falls on. */
+  /** `YYYY-MM-DD`, or an ISO datetime WITH an offset. Every cutoff is a whole DAY, INCLUSIVE of it
+   *  (EffectiveDate is a DATE column): a date-only value is that day; a datetime resolves to the
+   *  BUSINESS day it falls on. Anything else is refused with an error naming the field. */
   Cutoff?: string | null;
-  /** ISO date. Optional lower bound; omit for the standard oldest-forward flow. */
+  /** Optional lower bound, same shapes and resolution as `Cutoff`; omit for the standard
+   *  oldest-forward flow. */
   StartDate?: string | null;
   /** Omit/empty = all companies (each still builds its OWN single-company batch, D7). */
   CompanyIDs?: string[] | null;
@@ -92,10 +95,15 @@ export interface JournalEntryBatchCriteriaInput {
   ExcludeEntryTypeCodes?: string[] | null;
 }
 
+/**
+ * The strings travel to the engine AS STRINGS: their shape is what says whether a value is a day or
+ * an instant. Parsing to a `Date` here would lose that — `2026-09-30T19:00:00-05:00` is UTC midnight
+ * and would read as 1 October (golive #168). Validated here so a bad value fails at the boundary.
+ */
 function toOptions(input: JournalEntryBatchCriteriaInput | undefined): BuildJournalEntryBatchOptions {
   return {
-    cutoff: input?.Cutoff ? new Date(input.Cutoff) : null,
-    startDate: input?.StartDate ? new Date(input.StartDate) : null,
+    cutoff: input?.Cutoff ? requireDateBound(input.Cutoff, 'Batch criteria Cutoff') : null,
+    startDate: input?.StartDate ? requireDateBound(input.StartDate, 'Batch criteria StartDate') : null,
     companyIds: input?.CompanyIDs?.length ? input.CompanyIDs : null,
     entryTypeCodes: input?.EntryTypeCodes?.length ? input.EntryTypeCodes : null,
     excludeEntryTypeCodes: input?.ExcludeEntryTypeCodes?.length ? input.ExcludeEntryTypeCodes : null,
