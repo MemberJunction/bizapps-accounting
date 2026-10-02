@@ -91,6 +91,9 @@ export class mjBizAppsAccountingAccountingCompanyProfile_ {
     @Field() 
     _mj__UpdatedAt: Date;
         
+    @Field({nullable: true, description: `The first EffectiveDate this company posts to the ERP. Journal entries dated before it never enter a posting batch (for example, history brought in at cutover that the ERP already holds). NULL means no floor: every Pending entry is a candidate.`}) 
+    PostingStartDate?: Date;
+        
     @Field({nullable: true}) 
     @MaxLength(50)
     Name?: string;
@@ -204,6 +207,9 @@ export class CreatemjBizAppsAccountingAccountingCompanyProfileInput {
     IsActive?: boolean;
 
     @Field({ nullable: true })
+    PostingStartDate: Date | null;
+
+    @Field({ nullable: true })
     Name?: string;
 
     @Field({ nullable: true })
@@ -275,6 +281,9 @@ export class UpdatemjBizAppsAccountingAccountingCompanyProfileInput {
 
     @Field(() => Boolean, { nullable: true })
     IsActive?: boolean;
+
+    @Field({ nullable: true })
+    PostingStartDate?: Date | null;
 
     @Field({ nullable: true })
     Name?: string;
