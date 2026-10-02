@@ -28,7 +28,7 @@
  * package's shared journal helpers are reused rather than copied.
  */
 import { RegisterClass } from '@memberjunction/global';
-import { LogError } from '@memberjunction/core';
+import { LogError, Metadata } from '@memberjunction/core';
 import { ActionParam, ActionResultSimple, RunActionParams } from '@memberjunction/actions-base';
 import { BaseAction } from '@memberjunction/actions';
 import {
@@ -41,6 +41,7 @@ import {
   totalDebits,
   type JournalEntryLine,
 } from '@memberjunction/actions-bizapps-accounting';
+import { loadTodayBusiness } from '@mj-biz-apps/accounting-core-entities-server';
 
 /** The subset of BC's `journal` resource this action reads. */
 interface BCJournal {
@@ -110,7 +111,7 @@ export class CreateBusinessCentralJournalEntryWithDimensionsAction extends Creat
     params: RunActionParams,
     contextUser: AccountingContextUser,
   ): Promise<ActionResultSimple> {
-    const postingDate = this.formatBCDate(this.entryDateOf(params));
+    const postingDate = this.formatBCDate(await this.entryDateOf(params, contextUser));
     const docNumber = this.getParamValue(params.Params, 'DocNumber');
     const description = this.getParamValue(params.Params, 'PrivateNote')
       || this.getParamValue(params.Params, 'Description');
@@ -274,9 +275,15 @@ export class CreateBusinessCentralJournalEntryWithDimensionsAction extends Creat
     }
   }
 
-  private entryDateOf(params: RunActionParams): Date {
+  /**
+   * The journal's posting date. With no EntryDate it is today's BUSINESS day (golive #168): `new Date()`
+   * formatted by its UTC day is already tomorrow every evening from ~7 PM Central, and on a month's
+   * last evening that is next month's period. `formatBCDate` reads UTC parts, and `loadTodayBusiness`
+   * returns the business day at UTC midnight, so the two agree.
+   */
+  private async entryDateOf(params: RunActionParams, contextUser: AccountingContextUser): Promise<Date> {
     const raw = this.getParamValue(params.Params, 'EntryDate');
-    return raw ? new Date(raw) : new Date();
+    return raw ? new Date(raw) : loadTodayBusiness(contextUser, Metadata.Provider);
   }
 
   private successResult(

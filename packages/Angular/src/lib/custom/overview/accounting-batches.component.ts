@@ -7,6 +7,7 @@ import { NavigationService } from '@memberjunction/ng-shared';
 import { MJButtonDirective, MJDialogComponent, MJDialogActionsComponent, MJDropdownComponent } from '@memberjunction/ng-ui-components';
 import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
 import { BusinessTimeZoneEngine } from '@mj-biz-apps/common-entities';
+import { calendarDaySpan, formatJournalDate } from '../form-panels/journal-entry-panel.helpers';
 import {
     DispatchConfirmationKind,
     JournalEntryBatchDispatchClient,
@@ -211,7 +212,7 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                                 <i class="fa-solid fa-server"></i> {{ batch.TargetSystem }}
                                             </span>
                                         </td>
-                                        <td>{{ batch.PostingDate | date:'mediumDate' }}</td>
+                                        <td>{{ batch.PostingDate | date:'mediumDate':'UTC' }}</td>
                                         <td>{{ batch.Company || '—' }}</td>
                                         <td>
                                             <span class="mja-status-pill" [attr.data-status]="batch.Status">
@@ -285,6 +286,9 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                 [(ngModel)]="BuildCutoffDate"
                                 (ngModelChange)="OnBuildPreviewFilterChange()"
                                 aria-label="Effective Date Cutoff" />
+                            @if (!BuildCutoffDate) {
+                                <span class="mja-modal-hint">No cutoff — includes future-dated entries.</span>
+                            }
                         </div>
                     </div>
 
@@ -314,8 +318,8 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                         <div class="mja-fact-item">
                             <span class="mja-fact-lbl">Date Range</span>
                             <strong class="mja-fact-val">
-                                {{ PreviewCoveredStartDate ? (PreviewCoveredStartDate | date:'mediumDate') : '—' }} &rarr;
-                                {{ PreviewCoveredEndDate ? (PreviewCoveredEndDate | date:'mediumDate') : '—' }}
+                                {{ FormatCoveredDay(PreviewCoveredStartDate) }} &rarr;
+                                {{ FormatCoveredDay(PreviewCoveredEndDate) }}
                             </strong>
                         </div>
                     </div>
@@ -386,7 +390,7 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                                     [attr.aria-label]="'Include ' + e.EntryNumber" />
                                             </td>
                                             <td><strong>{{ e.EntryNumber }}</strong></td>
-                                            <td>{{ e.EffectiveDate | date:'mediumDate' }}</td>
+                                            <td>{{ e.EffectiveDate | date:'mediumDate':'UTC' }}</td>
                                             <td><span class="mja-type-tag">{{ e.EntryTypeCode }}</span></td>
                                             <td class="mja-desc-cell">{{ e.Description || '—' }}</td>
                                             <td class="mja-td-right">{{ e.Amount | currency }}</td>
@@ -956,6 +960,10 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
             gap: 6px;
             min-width: 0;
         }
+        .mja-modal-hint {
+            font-size: 12px;
+            color: var(--mj-status-warning);
+        }
         .mja-modal-label {
             font-size: 11px;
             font-weight: 700;
@@ -1139,6 +1147,7 @@ export class AccountingBatchesPageComponent implements OnInit {
     public PreviewGrossDebits = 0;
     public PreviewGrossCredits = 0;
     public PreviewCandidateCount = 0;
+    /** Calendar days (`YYYY-MM-DD`) — the EffectiveDate span of the ticked entries. */
     public PreviewCoveredStartDate: string | null = null;
     public PreviewCoveredEndDate: string | null = null;
     /**
@@ -1546,17 +1555,14 @@ export class AccountingBatchesPageComponent implements OnInit {
     /** The effective-date span the ticked entries cover — the modal's fourth fact. */
     private setCoveredDateRange(entries: PreviewEntryWire[]): void {
         const excluded = new Set(this.ExcludedEntryIDs);
-        const dates = entries
-            .filter(e => !excluded.has(e.ID))
-            .map(e => new Date(e.EffectiveDate).getTime())
-            .filter(t => !isNaN(t));
-        if (dates.length === 0) {
-            this.PreviewCoveredStartDate = null;
-            this.PreviewCoveredEndDate = null;
-            return;
-        }
-        this.PreviewCoveredStartDate = new Date(Math.min(...dates)).toISOString();
-        this.PreviewCoveredEndDate = new Date(Math.max(...dates)).toISOString();
+        const span = calendarDaySpan(entries.filter(e => !excluded.has(e.ID)).map(e => e.EffectiveDate));
+        this.PreviewCoveredStartDate = span?.First ?? null;
+        this.PreviewCoveredEndDate = span?.Last ?? null;
+    }
+
+    /** A covered-range end (a calendar day) for display — UTC-anchored, never the browser's day. */
+    public FormatCoveredDay(day: string | null): string {
+        return formatJournalDate(day);
     }
 
     private clearPreview(): void {
