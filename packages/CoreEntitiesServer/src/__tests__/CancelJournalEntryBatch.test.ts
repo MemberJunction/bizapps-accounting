@@ -259,6 +259,15 @@ describe('cancelJournalEntryBatch — the ERP check before cancelling a Failed b
     expect(g.recordCancellation).not.toHaveBeenCalled();
   });
 
+  it('says why a lookup that cannot be trusted refuses the cancel (#205)', async () => {
+    const { batch, provider } = world('Failed');
+    use(gate({ allowed: true }), lookupOf({ status: 'Unavailable', reason: 'the ERP accepted 1 batch(es) in this company that could not then be read back (batch-earlier).' }));
+
+    await expect(cancelJournalEntryBatch(BATCH_ID, USER, provider, { reason: 'Wrong period' }))
+      .rejects.toThrow(/the ERP lookup cannot be trusted to find it: the ERP accepted 1 batch\(es\)/);
+    expect(batch.Cancel).not.toHaveBeenCalled();
+  });
+
   it.each(unsettled)('cancels a $status lookup once the operator confirms, and records why on the Task', async (result) => {
     const { batch, provider } = world('Failed');
     const g = use(gate({ allowed: true }), lookupOf(result));
