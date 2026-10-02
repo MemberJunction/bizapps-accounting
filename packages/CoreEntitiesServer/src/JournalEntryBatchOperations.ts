@@ -79,7 +79,8 @@ const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 
 /** The workspace criteria panel, on the wire. Dates are ISO strings; everything else optional. */
 export interface JournalEntryBatchCriteriaInput {
-  /** ISO date or datetime. A DATE-only value is INCLUSIVE of that whole day. */
+  /** ISO date or datetime. Every cutoff is a whole DAY, INCLUSIVE of it (EffectiveDate is a DATE
+   *  column): a date-only value is that day; a datetime resolves to the BUSINESS day it falls on. */
   Cutoff?: string | null;
   /** ISO date. Optional lower bound; omit for the standard oldest-forward flow. */
   StartDate?: string | null;

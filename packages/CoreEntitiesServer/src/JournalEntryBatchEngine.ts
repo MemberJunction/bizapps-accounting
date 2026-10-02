@@ -358,11 +358,13 @@ export async function pendingCandidateFilter(options: BuildJournalEntryBatchOpti
 }
 
 /**
- * The calendar day a cutoff means. A midnight-UTC value is already a calendar day (a date input,
- * `resolveCutoff`'s PriorDay/PriorMonth). Any other instant — the batch workspace's "now" — is the
- * day it falls on in the BUSINESS zone; its UTC day would be tomorrow every evening from ~7 PM
- * Central, and the preview would admit tomorrow's JEs into the batch. With exactly one company in
- * scope its zone is used; otherwise the app-wide zone.
+ * The calendar day a cutoff means. A midnight-UTC value is already a calendar day (a date input —
+ * the batch workspace and Batches modal both send YYYY-MM-DD — or `resolveCutoff`'s
+ * PriorDay/PriorMonth). Any other instant — a datetime from an API or Action caller — is the day it
+ * falls on in the BUSINESS zone; its UTC day would be tomorrow every evening from ~7 PM Central, and
+ * the preview would admit tomorrow's JEs into the batch. With exactly one company in scope that
+ * company is passed to the zone lookup, so its zone applies once the engine carries per-company
+ * zones; today every company resolves to the app-wide `BizApps.BusinessTimeZone`.
  */
 async function cutoffBusinessDay(cutoff: Date, companyIds: string[] | null | undefined, contextUser: UserInfo, p: Providers): Promise<CalendarDay> {
   if (isMidnightUTC(cutoff)) return isoDate(cutoff);

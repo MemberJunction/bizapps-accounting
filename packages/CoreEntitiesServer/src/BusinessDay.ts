@@ -23,7 +23,8 @@ export async function loadTodayBusiness(contextUser: UserInfo, provider: IMetada
 }
 
 /**
- * The BUSINESS day an instant falls on — e.g. a batch cutoff sent as "now" from a datetime picker.
+ * The BUSINESS day an instant falls on — e.g. a batch cutoff an API or Action caller sends as a
+ * datetime (the batch workspace sends a plain YYYY-MM-DD day and never reaches this).
  * Compared against a DATE column, the instant itself would be read as its UTC day, which from
  * ~7 PM Central onward is already tomorrow. Configures `BusinessTimeZoneEngine` first (a no-op once
  * loaded); `companyID` picks that company's zone once the engine carries one (today it is the

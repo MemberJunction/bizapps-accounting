@@ -142,11 +142,12 @@ describe('pendingCandidateFilter', () => {
         afterEach(() => {
             engine._configurations = original.rows;
             engine._loaded = original.loaded;
+            vi.restoreAllMocks();
         });
 
         it('resolves a non-midnight cutoff instant to the business day it falls on, inclusive of that whole day', async () => {
             // 2026-10-01T02:30:00Z is 30 September, 9:30 PM in Chicago (CDT, UTC-5) — the batch
-            // workspace's default "now" cutoff in the evening. The retired branch emitted
+            // datetime an API or Action caller might send in the evening. The retired branch emitted
             // `EffectiveDate <= '2026-10-01T02:30:00.000Z'`, which against a DATE column admits
             // every JE dated 1 October (tomorrow, in Chicago) into the preview pool and the batch.
             const filter = await pendingCandidateFilter({ cutoff: new Date('2026-10-01T02:30:00.000Z') }, mockUser, mockProviders);
@@ -155,12 +156,26 @@ describe('pendingCandidateFilter', () => {
         });
 
         it('uses the single company in scope when resolving the business day', async () => {
+            // Resolve ignores its company today (one app-wide zone), so the filter alone cannot tell
+            // whether the company was passed; the spy pins that it is, for when per-company zones land.
+            const resolve = vi.spyOn(BusinessTimeZoneEngine.Instance, 'Resolve');
             const filter = await pendingCandidateFilter(
                 { cutoff: new Date('2026-10-01T02:30:00.000Z'), companyIds: ['11111111-0000-0000-0000-000000000001'] },
                 mockUser,
                 mockProviders,
             );
             expect(filter).toContain("EffectiveDate < '2026-10-01'");
+            expect(resolve).toHaveBeenCalledWith('11111111-0000-0000-0000-000000000001');
+        });
+
+        it('uses the app-wide zone when more than one company is in scope', async () => {
+            const resolve = vi.spyOn(BusinessTimeZoneEngine.Instance, 'Resolve');
+            await pendingCandidateFilter(
+                { cutoff: new Date('2026-10-01T02:30:00.000Z'), companyIds: ['11111111-0000-0000-0000-000000000001', '11111111-0000-0000-0000-000000000002'] },
+                mockUser,
+                mockProviders,
+            );
+            expect(resolve).toHaveBeenCalledWith(undefined);
         });
 
         it('moves to the next day only once the business day has turned', async () => {
