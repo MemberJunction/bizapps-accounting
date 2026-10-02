@@ -174,7 +174,13 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   and the batch is recorded `Posted` the way a retry records one the ERP holds (`Failed → Sent →
   Posted`, no ERP call, `recordFailedBatchPosted`). `JournalEntryBatchPostedDuringCancelError` says
   so, with the status the batch now reads (`Failed` if recording it Posted failed, for a retry to
-  finish). Any other answer lets the cancel commit. The second lookup runs inside the transaction,
+  finish). If it finds a posting under the number that does not match the batch, and the first lookup
+  had not reported one, the cancel is refused: the transaction rolls back, the batch stays `Failed`
+  and is not recorded `Posted` (the ERP's content does not match it), and
+  `JournalEntryBatchMismatchDuringCancelError` says the operator must investigate that posting before
+  cancelling or retrying. `confirmNotAlreadyPostedInERP` does not override it: the confirmation covered
+  the first lookup's answer. A second `Mismatch` the first lookup already reported, and confirmed past,
+  lets the cancel commit. Any other answer lets the cancel commit. The second lookup runs inside the transaction,
   so the released entries cannot be batched again before it answers, and the batch and its entries
   stay locked while the ERP answers. This narrows the window but does not close it: a post that lands
   after the second lookup still posts the entries twice.

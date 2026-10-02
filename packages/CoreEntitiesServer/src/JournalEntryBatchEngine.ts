@@ -816,6 +816,11 @@ export interface FailedCancelErpCheck {
    * by then the cancel has deleted them. A lookup that throws answers `Error`.
    */
   recheck: () => Promise<ErpJournalLookupResult>;
+  /**
+   * What the first lookup answered. A second `Mismatch` refuses the cancel only when it is new: one
+   * the first lookup already reported is what the operator confirmed past.
+   */
+  firstStatus: Exclude<ErpJournalLookupResult['status'], 'Found'>;
 }
 
 /** {@link cancelJournalEntryBatch}'s options: the entity's. */
@@ -832,7 +837,7 @@ export type CancelJournalEntryBatchOptions = JournalEntryBatchCancelOptions;
  * `options.reason` is required and the cancel is recorded on the approval Task in the same
  * transaction; from Failed the ERP is checked first (#207), see {@link checkFailedBatchBeforeCancel},
  * and again before the cancel commits (#215): a posting found then means the cancel does not stand,
- * see {@link JournalEntryBatchPostedDuringCancelError}. The gate and the ERP lookup come from {@link JournalEntryBatchDispatchServices}, never from the
+ * see {@link JournalEntryBatchPostedDuringCancelError} and {@link JournalEntryBatchMismatchDuringCancelError}. The gate and the ERP lookup come from {@link JournalEntryBatchDispatchServices}, never from the
  * caller (#233).
  */
 export async function cancelJournalEntryBatch(
@@ -875,13 +880,37 @@ export async function checkFailedBatchBeforeCancel(
       'Cancelling would release its entries to post again under a new number. Retry it from Dispatch status instead: the retry records it Posted without sending it again.',
     );
   }
-  if (found.status === 'NotFound') return { basis: 'ERPLookup', description: `The ERP lookup found nothing posted under document ${doc}.`, recheck };
+  const firstStatus = found.status;
+  if (found.status === 'NotFound') return { basis: 'ERPLookup', description: `The ERP lookup found nothing posted under document ${doc}.`, recheck, firstStatus };
   if (found.status === 'Foreign') {
-    return { basis: 'ERPLookup', description: `The ERP lookup found only another batch's journal under document ${doc}: ${found.detail}`, recheck };
+    return { basis: 'ERPLookup', description: `The ERP lookup found only another batch's journal under document ${doc}: ${found.detail}`, recheck, firstStatus };
   }
   const refusal = cancelRefusal(found, doc);
   if (!confirmed) throw new ErpPostingUnconfirmedError(refusal.kind, refusal.reason, 'cancelJournalEntryBatch');
-  return { basis: 'UserAttested', description: `The canceller confirmed document ${doc} had not posted; the ERP lookup could not settle it (${refusal.kind}).`, recheck };
+  return { basis: 'UserAttested', description: `The canceller confirmed document ${doc} had not posted; the ERP lookup could not settle it (${refusal.kind}).`, recheck, firstStatus };
+}
+
+/**
+ * A Failed cancel refused because the ERP came to hold a posting under the batch's number, one that
+ * does not match the batch, while the cancel ran (#215): the first lookup did not report it, the
+ * second, run before the cancel committed, did. The cancel was rolled back, so the batch stays Failed
+ * and its entries were not released. It is not recorded Posted, because the posting does not match.
+ * `confirmNotAlreadyPostedInERP` does not override it: the operator confirmed past the first answer,
+ * not this one.
+ */
+export class JournalEntryBatchMismatchDuringCancelError extends Error {
+  constructor(
+    public readonly JournalEntryBatchID: string,
+    public readonly Detail: string,
+    doc: string,
+  ) {
+    super(
+      `cancelJournalEntryBatch: the ERP now holds a posting under document ${doc} that does not match this batch: ${Detail} ` +
+      'It appeared while the cancel was running, so the cancel was undone: the batch is still Failed and its journal entries were not released. ' +
+      'Investigate that posting in the ERP before cancelling or retrying the batch.',
+    );
+    this.name = 'JournalEntryBatchMismatchDuringCancelError';
+  }
 }
 
 /**

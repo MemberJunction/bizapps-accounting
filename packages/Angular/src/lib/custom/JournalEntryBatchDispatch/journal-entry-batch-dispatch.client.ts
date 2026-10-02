@@ -335,7 +335,8 @@ export class JournalEntryBatchDispatchClient {
    * the cancel (an error); nothing found lets it through; otherwise it answers `ConfirmationRequired`,
    * and the caller sends `confirmNotAlreadyPostedInERP` only once the operator has checked. The server
    * looks again before the cancel commits (#215); a posting found then undoes the cancel, records the
-   * batch Posted and comes back as an error saying so.
+   * batch Posted and comes back as an error saying so; a new posting that does not match undoes it,
+   * leaves the batch Failed and comes back as an error saying to investigate it.
    */
   public async CancelBatch(batchID: string, reason: string, confirmNotAlreadyPostedInERP = false): Promise<CancelJournalEntryBatchResult> {
     try {

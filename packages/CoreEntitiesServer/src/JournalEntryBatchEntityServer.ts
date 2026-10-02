@@ -41,9 +41,10 @@ import { ToCalendarDay } from '@mj-biz-apps/common-entities';
 import { JournalEntryBatchDispatchServices } from './JournalEntryBatchDispatchServices.js';
 import {
   checkFailedBatchBeforeCancel,
+  JournalEntryBatchMismatchDuringCancelError,
   JournalEntryBatchPostedDuringCancelError,
   recordFailedBatchPosted,
-  type ErpJournalLookupResult,
+  type FailedCancelErpCheck,
 } from './JournalEntryBatchEngine.js';
 import { getNextJournalEntryBatchNumber } from './SequenceService.js';
 import { sqlGuidLiteral } from './SqlGuards.js';
@@ -134,8 +135,8 @@ interface AuthorizedCancel {
   erpNotPostedBasis?: ERPNotPostedBasis;
   /** Records a cancel past approval on the approval Task; runs inside the cancel's transaction. */
   record?: () => Promise<void>;
-  /** For a Failed batch, the ERP lookup run again before the cancel commits (#215). */
-  recheck?: () => Promise<ErpJournalLookupResult>;
+  /** For a Failed batch, the first ERP lookup's answer and the lookup to run again before the cancel commits (#215). */
+  erpCheck?: Pick<FailedCancelErpCheck, 'recheck' | 'firstStatus'>;
 }
 
 /** One summary line, as the footing check and the seal read it. */
@@ -549,7 +550,11 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
    *     landed it after the first lookup. If the second lookup finds this batch's posting, the cancel
    *     does not stand: the transaction rolls back, so the entries are never released, the batch is
    *     recorded Posted the way a retry records it, and {@link JournalEntryBatchPostedDuringCancelError}
-   *     says so. Any other answer lets the cancel commit; the first lookup already settled it. The
+   *     says so. If it finds a posting under the number that does not match the batch, and the first
+   *     lookup had not reported one, the cancel is refused: the transaction rolls back, the batch
+   *     stays Failed and is not recorded Posted, and {@link JournalEntryBatchMismatchDuringCancelError}
+   *     says to investigate it. `confirmNotAlreadyPostedInERP` does not override that; it covered the
+   *     first answer. Any other answer lets the cancel commit; the first lookup already settled it. The
    *     second lookup runs inside the transaction so the released entries cannot be batched again
    *     before it answers; the batch and its entries stay locked for as long as the ERP takes.
    * If anything fails the transaction rolls back and the instance is reloaded, so it never claims a
@@ -569,7 +574,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
       await this.markCancelled(options, authorized.erpNotPostedBasis, user);
       await this.ReleaseMembersAndDeleteSummary(summaryId, user);
       if (authorized.record) await authorized.record();
-      postedRef = authorized.recheck ? await this.postingFoundOnRecheck(authorized.recheck) : null;
+      postedRef = authorized.erpCheck ? await this.postingFoundOnRecheck(authorized.erpCheck) : null;
       if (postedRef === null) {
         await dbProvider.CommitTransaction();
         return true;
@@ -588,9 +593,16 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     return await this.recordPostedDuringCancel(postedRef, user);
   }
 
-  /** The ERP reference when the second lookup finds this batch's posting (#215), otherwise null. */
-  private async postingFoundOnRecheck(recheck: () => Promise<ErpJournalLookupResult>): Promise<string | null> {
-    const again = await recheck();
+  /**
+   * The ERP reference when the second lookup finds this batch's posting (#215), otherwise null.
+   * Throws {@link JournalEntryBatchMismatchDuringCancelError}, for Cancel to roll back, when it finds a
+   * posting that does not match and the first lookup had not reported one.
+   */
+  private async postingFoundOnRecheck(erpCheck: Pick<FailedCancelErpCheck, 'recheck' | 'firstStatus'>): Promise<string | null> {
+    const again = await erpCheck.recheck();
+    if (again.status === 'Mismatch' && erpCheck.firstStatus !== 'Mismatch') {
+      throw new JournalEntryBatchMismatchDuringCancelError(this.ID, again.detail, this.JournalEntryBatchNumber ?? this.ID);
+    }
     return again.status === 'Found' ? again.externalJournalEntryBatchRef : null;
   }
 
@@ -638,7 +650,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     return {
       erpNotPostedBasis: erpCheck?.basis,
       record: () => gate.recordCancellation(this.ID, cancellation, user),
-      recheck: erpCheck?.recheck,
+      erpCheck,
     };
   }
 

@@ -82,6 +82,7 @@ export {
   ErpPostingUnconfirmedError,
   JournalEntryBatchSendRefusedError,
   JournalEntryBatchPostedDuringCancelError,
+  JournalEntryBatchMismatchDuringCancelError,
   AutoApproveGate,
 } from './JournalEntryBatchEngine.js';
 export type {

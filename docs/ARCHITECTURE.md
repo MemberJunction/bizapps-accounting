@@ -142,7 +142,8 @@ balance **overall and per company** (AM-4), and writes atomically. Hooks on the 
   entries get a new number no later lookup can connect: a posting it holds refuses the cancel, nothing
   found lets it through, and the operator confirms, persisted, only when the lookup cannot settle it.
   Nothing found means nothing posted yet, so the cancel looks again after its writes and before it
-  commits (#215): a posting found then rolls the cancel back and records the batch `Posted`.
+  commits (#215): a posting found then rolls the cancel back and records the batch `Posted`; a new posting that does not
+  match rolls it back and leaves the batch `Failed` for investigation.
   A
   `Posted` batch whose member `Batched → GLPosted` flip stopped partway is finished by
   `resumeJournalEntryBatchPosting` (`Accounting.ResumeJournalEntryBatchPosting`), which makes no

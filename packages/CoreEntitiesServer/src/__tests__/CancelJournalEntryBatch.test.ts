@@ -22,6 +22,7 @@ import { MJGlobal } from '@memberjunction/global';
 import {
   cancelJournalEntryBatch,
   ErpPostingUnconfirmedError,
+  JournalEntryBatchMismatchDuringCancelError,
   JournalEntryBatchPostedDuringCancelError,
   type ErpJournalLookup,
   type ErpJournalLookupResult,
@@ -490,7 +491,6 @@ describe('cancelJournalEntryBatch — the second ERP check before a Failed cance
     { status: 'Foreign', detail: 'its lines carry the token of batch other-batch.' },
     { status: 'Error', error: 'BC timed out.' },
     { status: 'Unavailable' },
-    { status: 'Mismatch', detail: 'BC holds 3 lines, the batch has 2.' },
   ])('lets the cancel commit when the second lookup answers $status', async (second) => {
     const w = world('Failed');
     const lookup = lookupThen({ status: 'NotFound' }, second);
@@ -504,6 +504,49 @@ describe('cancelJournalEntryBatch — the second ERP check before a Failed cance
     expect(db.RollbackTransaction).not.toHaveBeenCalled();
     expect(w.batch.Status).toBe('Cancelled');
     expect(w.batch.ERPNotPostedBasis).toBe('ERPLookup');
+  });
+
+  it.each<{ first: ErpJournalLookupResult; confirmed: boolean }>([
+    { first: { status: 'NotFound' }, confirmed: false },
+    { first: { status: 'Foreign', detail: 'its lines carry the token of batch other-batch.' }, confirmed: false },
+    { first: { status: 'Error', error: 'BC timed out.' }, confirmed: true },
+    { first: { status: 'Unavailable' }, confirmed: true },
+  ])('refuses the cancel, leaving the batch Failed and not Posted, when a mismatched posting appears after a $first.status first lookup', async ({ first, confirmed }) => {
+    const w = world('Failed');
+    persisting(w);
+    const lookup = lookupThen(first, { status: 'Mismatch', detail: 'BC holds 3 lines, the batch has 2.' });
+    const g = use(gate({ allowed: true }), lookup);
+
+    const error = await cancelJournalEntryBatch(BATCH_ID, USER, w.provider, { reason: 'Wrong period', confirmNotAlreadyPostedInERP: confirmed })
+      .then(() => null, (e: unknown) => e);
+
+    expect(error).toBeInstanceOf(JournalEntryBatchMismatchDuringCancelError);
+    expect((error as JournalEntryBatchMismatchDuringCancelError).Detail).toBe('BC holds 3 lines, the batch has 2.');
+    expect((error as Error).message).toMatch(
+      /^cancelJournalEntryBatch: the ERP now holds a posting under document JEB-0183 that does not match this batch: BC holds 3 lines.*still Failed.*Investigate that posting in the ERP before cancelling or retrying/);
+    expect(lookup).toHaveBeenCalledTimes(2);
+    expect(lookup.mock.invocationCallOrder[1]).toBeGreaterThan(g.recordCancellation.mock.invocationCallOrder[0]);
+    const db = w.provider as unknown as { CommitTransaction: Mock; RollbackTransaction: Mock };
+    expect(db.CommitTransaction).not.toHaveBeenCalled();
+    expect(db.RollbackTransaction).toHaveBeenCalledTimes(1);
+    expect(w.batch.Status).toBe('Failed');
+    expect(w.batch.ExternalJournalEntryBatchRef).toBeNull();
+    expect(w.batch.CancelledAt).toBeNull();
+    expect(w.batch.ERPNotPostedBasis).toBeNull();
+    expect(w.batch.SummaryJournalEntryID).toBe('SUM1');
+  });
+
+  it('lets a confirmed cancel commit when the second lookup reports the same mismatch the first did', async () => {
+    const w = world('Failed');
+    const mismatch: ErpJournalLookupResult = { status: 'Mismatch', detail: 'BC holds 3 lines, the batch has 2.' };
+    const lookup = lookupThen(mismatch, mismatch);
+    use(gate({ allowed: true }), lookup);
+
+    await cancelJournalEntryBatch(BATCH_ID, USER, w.provider, { reason: 'Wrong period', confirmNotAlreadyPostedInERP: true });
+
+    expect(lookup).toHaveBeenCalledTimes(2);
+    expect(w.batch.Status).toBe('Cancelled');
+    expect(w.batch.ERPNotPostedBasis).toBe('UserAttested');
   });
 
   it('commits when the second lookup throws', async () => {
