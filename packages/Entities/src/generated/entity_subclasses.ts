@@ -136,6 +136,11 @@ export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
         * * Display Name: Updated At
         * * SQL Data Type: datetimeoffset
         * * Default Value: getutcdate()`),
+    PostingStartDate: z.date().nullable().describe(`
+        * * Field Name: PostingStartDate
+        * * Display Name: Posting Start Date
+        * * SQL Data Type: date
+        * * Description: The first EffectiveDate this company posts to the ERP. Journal entries dated before it never enter a posting batch (for example, history brought in at cutover that the ERP already holds). NULL means no floor: every Pending entry is a candidate.`),
     Name: z.string().describe(`
         * * Field Name: Name
         * * Display Name: Company Name
@@ -2693,6 +2698,19 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
     */
     get __mj_UpdatedAt(): Date {
         return this.Get('__mj_UpdatedAt');
+    }
+
+    /**
+    * * Field Name: PostingStartDate
+    * * Display Name: Posting Start Date
+    * * SQL Data Type: date
+    * * Description: The first EffectiveDate this company posts to the ERP. Journal entries dated before it never enter a posting batch (for example, history brought in at cutover that the ERP already holds). NULL means no floor: every Pending entry is a candidate.
+    */
+    get PostingStartDate(): Date | null {
+        return this.Get('PostingStartDate');
+    }
+    set PostingStartDate(value: Date | null) {
+        this.Set('PostingStartDate', value);
     }
 
     /**
