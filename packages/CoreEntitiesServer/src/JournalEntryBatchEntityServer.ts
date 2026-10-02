@@ -17,7 +17,9 @@
  *   - `Cancel()`: reverse a Pending, Approved or Failed batch — delete the summary JE, return the
  *     member JEs to the candidate pool, mark Cancelled — in ONE provider transaction. The member
  *     unlock is the batch releasing ITS OWN locks (the reversible Batched→Pending transition the
- *     DB triggers sanction exactly for this), so it is legitimately batch-owned.
+ *     DB triggers sanction exactly for this), so it is legitimately batch-owned. Cancel also runs
+ *     the cancel's authorization, the Failed batch's ERP lookup and the approval-Task record itself
+ *     (#214), resolved through JournalEntryBatchDispatchServices, so no caller can skip them.
  *
  * WHAT DELIBERATELY STAYS IN THE ENGINE (multi-aggregate orchestration — JournalEntryBatchEngine.ts):
  *   build/regenerate (gather candidates → net → create summary → lock N independent JEs → raise
@@ -36,6 +38,8 @@ import {
 } from '@mj-biz-apps/accounting-entities';
 import { ToCalendarDay } from '@mj-biz-apps/common-entities';
 
+import { JournalEntryBatchDispatchServices } from './JournalEntryBatchDispatchServices.js';
+import { checkFailedBatchBeforeCancel } from './JournalEntryBatchEngine.js';
 import { getNextJournalEntryBatchNumber } from './SequenceService.js';
 import { sqlGuidLiteral } from './SqlGuards.js';
 
@@ -103,31 +107,28 @@ export type ERPNotPostedBasis = NonNullable<mjBizAppsAccountingJournalEntryBatch
 /**
  * Options for {@link JournalEntryBatchEntityServer.Cancel}. Both matter only once the batch has
  * been approved; a Pending cancel (a CFO rejection) needs neither.
+ *
+ * Neither can authorize the cancel or stand in for the ERP check: Cancel runs those itself (#214).
  */
 export interface JournalEntryBatchCancelOptions {
   /** Why the batch is being cancelled. Required from Approved or Failed (CK_JournalEntryBatch_CancelAudit). */
   reason?: string | null;
   /**
-   * Required `true` to cancel a Failed batch: this batch's number has NOT posted in the ERP. Cancel
-   * releases the members, the next build batches them again under a NEW document number, and a
-   * journal that did post would then post twice. The attestation is persisted
-   * (ERPNotPostedConfirmedAt / ERPNotPostedConfirmedByUserID). `cancelJournalEntryBatch` looks the
-   * number up in the ERP before calling this (#207): it sets `true` itself when the lookup found
-   * nothing, refuses when the lookup found the posting, and otherwise passes on the operator's
-   * confirmation. Calling `Cancel()` directly skips that lookup, so go through the engine.
+   * The canceller has checked the ERP and this Failed batch's number has NOT posted there. Cancel
+   * looks the number up in the ERP first (#207) and this counts only when that lookup cannot settle
+   * it: the ERP offers no lookup, the lookup failed, or the ERP holds something under the number that
+   * does not match. It never overrides a matching posting, and it is not needed when the lookup finds
+   * nothing. Ignored for a Pending or Approved batch, which has not been sent.
    */
   confirmNotAlreadyPostedInERP?: boolean;
-  /**
-   * How "not posted" was established, persisted as ERPNotPostedBasis with the attestation. The engine
-   * passes 'ERPLookup' when its lookup found nothing; otherwise it is the canceller's word,
-   * 'UserAttested' (the default).
-   */
+}
+
+/** What {@link JournalEntryBatchEntityServer.Cancel}'s authorization settled, for the cancel's single transaction. */
+interface AuthorizedCancel {
+  /** How "not posted in the ERP" was established, for a batch that had been sent. */
   erpNotPostedBasis?: ERPNotPostedBasis;
-  /**
-   * Runs inside Cancel's transaction, after the members are released — for work that must commit
-   * or roll back with the cancel, such as recording it on the batch's approval Task.
-   */
-  onCancelled?: () => Promise<void>;
+  /** Records a cancel past approval on the approval Task; runs inside the cancel's transaction. */
+  record?: () => Promise<void>;
 }
 
 /** One summary line, as the footing check and the seal read it. */
@@ -529,24 +530,29 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
    * trg_JournalEntryBatch_Immutability lets an Approved or Failed batch clear its summary pointer only
    * in the update that cancels it.
    *
-   * From Approved or Failed a reason is required, since the cancel discards a summary the approver
-   * signed. From Failed the caller must also confirm the batch has not posted in the ERP (see
-   * {@link JournalEntryBatchCancelOptions.confirmNotAlreadyPostedInERP}). WHO may cancel past approval
-   * is the engine's check (cancelJournalEntryBatch), which knows the approver; this method is the
-   * mechanics. If anything fails the transaction rolls back and the instance is reloaded, so it never
-   * claims a Cancelled state the database does not hold.
+   * Before anything is written it authorizes the cancel as `contextUser` (#214), through the gate
+   * {@link JournalEntryBatchDispatchServices} resolves, never one a caller passes:
+   *   · Pending — a CFO rejection: the approval Task must already record it (#233).
+   *   · Approved / Failed — a reason is required, and the gate must allow the user (the company's
+   *     CFO or the batch's approver). The cancel is recorded on the approval Task in the same
+   *     transaction (#183).
+   *   · Failed — the ERP is looked up after authorizing (#207); see {@link JournalEntryBatchCancelOptions.confirmNotAlreadyPostedInERP}.
+   * If anything fails the transaction rolls back and the instance is reloaded, so it never claims a
+   * Cancelled state the database does not hold.
    */
   public async Cancel(contextUser?: UserInfo, options: JournalEntryBatchCancelOptions = {}): Promise<boolean> {
     if (!this.IsSaved) throw new Error('JournalEntryBatchEntityServer.Cancel: the batch must be saved.');
     this.assertCancellable(options);
     const user = contextUser ?? this.ContextCurrentUser;
+    if (!user) throw new Error('JournalEntryBatchEntityServer.Cancel: a context user is required; the cancel is authorized as that user.');
+    const authorized = await this.authorizeCancel(user, options);
     const summaryId = this.SummaryJournalEntryID;
     const dbProvider = this.ProviderToUse as unknown as DatabaseProviderBase;
     await dbProvider.BeginTransaction();
     try {
-      await this.markCancelled(options, user);
+      await this.markCancelled(options, authorized.erpNotPostedBasis, user);
       await this.ReleaseMembersAndDeleteSummary(summaryId, user);
-      if (options.onCancelled) await options.onCancelled();
+      if (authorized.record) await authorized.record();
       await dbProvider.CommitTransaction();
       return true;
     } catch (e) {
@@ -554,6 +560,32 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
       await this.reloadAfterRollback();
       throw e;
     }
+  }
+
+  /**
+   * Who may cancel, and for a Failed batch what the ERP holds (#214). Throws when the cancel must not
+   * go ahead; writes nothing. Authorizes before the ERP lookup, so an unauthorized caller learns
+   * nothing from the ERP.
+   */
+  private async authorizeCancel(user: UserInfo, options: JournalEntryBatchCancelOptions): Promise<AuthorizedCancel> {
+    const provider = this.ProviderToUse as unknown as IMetadataProvider;
+    const services = JournalEntryBatchDispatchServices.Resolve();
+    const gate = services.CreateCancelGate(provider);
+    if (this.Status === 'Pending') {
+      await gate.assertRejected(this.ID, user);
+      return {};
+    }
+    await gate.assertMayCancelApproved(this.ID, user);
+    // Captured now: the record runs after the batch was saved Cancelled.
+    const fromStatus = this.Status;
+    const erpCheck = fromStatus === 'Failed'
+      ? await checkFailedBatchBeforeCancel(this, user, provider, services.CreateLookup(provider), options.confirmNotAlreadyPostedInERP === true)
+      : undefined;
+    const cancellation = { reason: options.reason ?? '', fromStatus, erpCheck: erpCheck?.description };
+    return {
+      erpNotPostedBasis: erpCheck?.basis,
+      record: () => gate.recordCancellation(this.ID, cancellation, user),
+    };
   }
 
   /** Put the instance back to what the database holds after a rolled-back Cancel. Best-effort: the original error is what the caller needs. */
@@ -574,30 +606,25 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     if (this.Status !== 'Pending' && !options.reason?.trim()) {
       throw new Error(`JournalEntryBatchEntityServer.Cancel: batch ${label} is ${this.Status}; cancelling it discards an approved summary, so a reason is required.`);
     }
-    if (this.Status === 'Failed' && options.confirmNotAlreadyPostedInERP !== true) {
-      throw new Error(
-        `JournalEntryBatchEntityServer.Cancel: batch ${label} is Failed, and a Failed batch may already be in the ERP. ` +
-          `Confirm in the ERP that document ${label} has not posted, then cancel with that confirmation — otherwise its entries would post again in the next batch.`,
-      );
-    }
   }
 
   /**
    * The single update that commits the batch to cancelling: status, cleared summary pointer, the
    * audit triple and — for a batch that had been sent — the ERP check: when, by whose cancel, and
-   * whether the lookup or the canceller's attestation established it.
+   * whether the lookup or the canceller's attestation established it. The basis comes only from
+   * {@link authorizeCancel}'s ERP check.
    */
-  private async markCancelled(options: JournalEntryBatchCancelOptions, user: UserInfo | undefined): Promise<void> {
+  private async markCancelled(options: JournalEntryBatchCancelOptions, erpNotPostedBasis: ERPNotPostedBasis | undefined, user: UserInfo): Promise<void> {
     const fromStatus = this.Status;
     const now = new Date();
     this.SummaryJournalEntryID = null;
     this.CancelReason = options.reason?.trim() || null;
     this.CancelledAt = now;
-    this.CancelledByUserID = user?.ID ?? null;
-    if (this.SentAt && options.confirmNotAlreadyPostedInERP === true) {
+    this.CancelledByUserID = user.ID;
+    if (this.SentAt && erpNotPostedBasis) {
       this.ERPNotPostedConfirmedAt = now;
-      this.ERPNotPostedConfirmedByUserID = user?.ID ?? null;
-      this.ERPNotPostedBasis = options.erpNotPostedBasis ?? 'UserAttested';
+      this.ERPNotPostedConfirmedByUserID = user.ID;
+      this.ERPNotPostedBasis = erpNotPostedBasis;
     }
     this.Status = 'Cancelled';
     await this.saveCancelled(`Cancel: ${fromStatus}→Cancelled`);

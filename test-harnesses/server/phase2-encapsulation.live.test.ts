@@ -50,6 +50,7 @@ import {
   type ErpJournalLookup,
   type ErpPoster,
   type JournalEntryBatchApprovalGate,
+  type JournalEntryBatchCancelGate,
 } from '@mj-biz-apps/accounting-core-entities-server';
 import type { mjBizAppsAccountingAccountingCompanyProfileEntity } from '@mj-biz-apps/accounting-entities';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
@@ -105,7 +106,22 @@ class PerSendDispatchServices extends JournalEntryBatchDispatchServices {
   public override CreateApprovalGate(): JournalEntryBatchApprovalGate { return this.services.gate; }
   public override CreatePoster(): ErpPoster { return this.services.poster; }
   public override CreateLookup(): ErpJournalLookup { return unavailableErpLookup; }
+  public override CreateCancelGate(): JournalEntryBatchCancelGate { return PendingRejectedCancelGate; }
 }
+
+/** The batch IDs the cancel gate was asked to confirm a Pending rejection for (L19). */
+const rejectionChecks: string[] = [];
+
+/**
+ * The cancel gate for this file. Batches here are built with AutoApproveGate, so they have no approval
+ * Task to record a rejection on; Cancel() authorizes itself through this gate (#214), which counts a
+ * Pending batch as rejected. Nothing here cancels past approval.
+ */
+const PendingRejectedCancelGate: JournalEntryBatchCancelGate = {
+  async assertRejected(batchId) { rejectionChecks.push(batchId.toLowerCase()); },
+  async assertMayCancelApproved() { throw new Error('phase2 harness: no test cancels past approval'); },
+  async recordCancellation() { throw new Error('phase2 harness: no test cancels past approval'); },
+};
 
 /** Send a batch with this gate and poster. The queue push and the send's resolve happen in one tick. */
 function sendWith(batchId: string, services: Partial<SendServices>, confirmNotAlreadyPostedInERP = false) {
@@ -542,8 +558,9 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     const summary = await batch.LoadSummaryJournalEntry();
     expect(summary?.ID?.toLowerCase()).toBe(result.summaryJournalEntryId.toLowerCase());
 
-    // Entity-owned Cancel: one call reverses the preliminary lock (this is now the cancel path).
+    // Entity-owned Cancel: one call reverses the preliminary lock, after authorizing itself (#214).
     expect(await batch.Cancel(ctx.user)).toBe(true);
+    expect(rejectionChecks).toContain(result.batchId.toLowerCase());
     const fuelRow = (await ctx.pool.request().query(
       `SELECT Status, JournalEntryBatchID FROM ${SCHEMA}.JournalEntry WHERE ID='${fuel.ID}'`)).recordset[0];
     expect(fuelRow.Status).toBe('Pending');

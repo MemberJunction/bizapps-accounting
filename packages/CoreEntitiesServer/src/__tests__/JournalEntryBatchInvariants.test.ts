@@ -8,7 +8,10 @@
  */
 import { describe, it, expect, beforeEach, vi, afterEach, type Mock } from 'vitest';
 import { BaseEntity, Metadata, EntityInfo, UserInfo } from '@memberjunction/core';
+import { MJGlobal } from '@memberjunction/global';
 import { JournalEntryBatchEntityServer } from '../JournalEntryBatchEntityServer.js';
+import { JournalEntryBatchDispatchServices } from '../JournalEntryBatchDispatchServices.js';
+import type { ErpJournalLookup, JournalEntryBatchCancelGate } from '../JournalEntryBatchEngine.js';
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 
@@ -226,19 +229,37 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
   describe('Archive() keeps the member entries locked; Cancel() releases them', () => {
     let teardown: Mock<JournalEntryBatchEntityServer['ReleaseMembersAndDeleteSummary']>;
     let save: ReturnType<typeof vi.spyOn>;
+    const USER = { ID: 'U-CANCELLER' } as UserInfo;
+
+    // Cancel() authorizes itself through JournalEntryBatchDispatchServices (#214). These cases are
+    // about the mechanics, so the gate allows everything and the ERP offers no lookup; the rules
+    // themselves are covered in CancelJournalEntryBatch.test.ts.
+    const cancelGate = {
+      assertRejected: vi.fn(async () => undefined),
+      assertMayCancelApproved: vi.fn(async () => undefined),
+      recordCancellation: vi.fn(async () => undefined),
+    } satisfies JournalEntryBatchCancelGate;
+    class PermissiveDispatchServices extends JournalEntryBatchDispatchServices {
+      public override CreateCancelGate(): JournalEntryBatchCancelGate { return cancelGate; }
+      public override CreateLookup(): ErpJournalLookup { return async () => ({ status: 'Unavailable' }); }
+    }
+    MJGlobal.Instance.ClassFactory.Register(JournalEntryBatchDispatchServices, PermissiveDispatchServices, null, 1000, true);
 
     beforeEach(() => {
+      cancelGate.recordCancellation.mockReset().mockResolvedValue(undefined);
       save = vi.spyOn(BaseEntity.prototype, 'Save').mockResolvedValue(true);
       teardown = vi.fn<JournalEntryBatchEntityServer['ReleaseMembersAndDeleteSummary']>().mockResolvedValue(undefined);
       batch.ReleaseMembersAndDeleteSummary = teardown;
       // Cancel() opens a provider transaction; the mock harness has no data provider, so give the
-      // instance one that only knows the three transaction verbs Cancel actually calls.
+      // instance one that only knows the transaction verbs Cancel calls, and the summary-line read
+      // a Failed batch's ERP lookup makes.
       Object.defineProperty(batch, 'ProviderToUse', {
         configurable: true,
         get: () => ({
           BeginTransaction: vi.fn().mockResolvedValue(undefined),
           CommitTransaction: vi.fn().mockResolvedValue(undefined),
           RollbackTransaction: vi.fn().mockResolvedValue(undefined),
+          RunView: vi.fn().mockResolvedValue({ Success: true, Results: [] }),
         }),
       });
     });
@@ -257,10 +278,10 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
 
     it('Cancel() still runs the teardown — archiving did not change cancelling', async () => {
       asSaved('Pending', { SummaryJournalEntryID: 'SUM1' });
-      await batch.Cancel();
+      await batch.Cancel(USER);
 
       expect(teardown).toHaveBeenCalledTimes(1);
-      expect(teardown).toHaveBeenCalledWith('SUM1', null);
+      expect(teardown).toHaveBeenCalledWith('SUM1', USER);
       expect(batch.Status).toBe('Cancelled');
     });
 
@@ -282,7 +303,7 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
       teardown.mockImplementation(async () => { seenAtRelease.push({ status: batch.Status, pointer: batch.SummaryJournalEntryID }); });
       asSaved('Approved', { SummaryJournalEntryID: 'SUM1', ApprovedAt: new Date(), ApprovedByUserID: 'U1' });
 
-      await batch.Cancel({ ID: 'U-CANCELLER' } as never, { reason: 'Posting date belongs in October' });
+      await batch.Cancel(USER, { reason: 'Posting date belongs in October' });
 
       expect(save).toHaveBeenCalledTimes(1);
       expect(seenAtRelease).toEqual([{ status: 'Cancelled', pointer: null }]);
@@ -294,14 +315,14 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
 
     it.each(['Approved', 'Failed'])('Cancel() refuses a %s batch without a reason', async (from) => {
       asSaved(from, { SummaryJournalEntryID: 'SUM1' });
-      await expect(batch.Cancel(undefined, { reason: '  ', confirmNotAlreadyPostedInERP: true })).rejects.toThrow(/reason is required/);
+      await expect(batch.Cancel(USER, { reason: '  ', confirmNotAlreadyPostedInERP: true })).rejects.toThrow(/reason is required/);
       expect(save).not.toHaveBeenCalled();
       expect(teardown).not.toHaveBeenCalled();
     });
 
-    it.each([undefined, false])('Cancel() refuses a Failed batch without the ERP confirmation (%s)', async (confirm) => {
+    it.each([undefined, false])('Cancel() refuses a Failed batch the ERP cannot vouch for without the confirmation (%s)', async (confirm) => {
       asSaved('Failed', { SummaryJournalEntryID: 'SUM1' });
-      await expect(batch.Cancel(undefined, { reason: 'Wrong period', confirmNotAlreadyPostedInERP: confirm }))
+      await expect(batch.Cancel(USER, { reason: 'Wrong period', confirmNotAlreadyPostedInERP: confirm }))
         .rejects.toThrow(/Confirm in the ERP that document JEB-000001 has not posted/);
       expect(save).not.toHaveBeenCalled();
       expect(teardown).not.toHaveBeenCalled();
@@ -317,18 +338,20 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
       expect(batch.ERPNotPostedBasis).toBe('UserAttested'); // the canceller's word, absent a lookup
     });
 
-    it('Cancel() persists ERPLookup as the basis when the engine\'s lookup found nothing', async () => {
-      asSaved('Failed', { SummaryJournalEntryID: 'SUM1', SentAt: new Date('2026-09-30T12:00:00Z') });
-      await batch.Cancel({ ID: 'U-CFO' } as never, { reason: 'Wrong period', confirmNotAlreadyPostedInERP: true, erpNotPostedBasis: 'ERPLookup' });
-      expect(batch.ERPNotPostedBasis).toBe('ERPLookup');
-    });
-
-    it('Cancel() runs onCancelled inside the transaction, after the release', async () => {
+    it('Cancel() records the cancel on the approval Task inside the transaction, after the release', async () => {
       const order: string[] = [];
       teardown.mockImplementation(async () => { order.push('release'); });
+      cancelGate.recordCancellation.mockImplementation(async () => { order.push('record'); });
       asSaved('Approved', { SummaryJournalEntryID: 'SUM1' });
-      await batch.Cancel(undefined, { reason: 'Wrong period', onCancelled: async () => { order.push('onCancelled'); } });
-      expect(order).toEqual(['release', 'onCancelled']);
+      await batch.Cancel(USER, { reason: 'Wrong period' });
+      expect(order).toEqual(['release', 'record']);
+    });
+
+    it('Cancel() refuses without a context user — the cancel is authorized as someone', async () => {
+      asSaved('Pending', { SummaryJournalEntryID: 'SUM1' });
+      await expect(batch.Cancel()).rejects.toThrow(/context user is required/);
+      expect(save).not.toHaveBeenCalled();
+      expect(teardown).not.toHaveBeenCalled();
     });
 
     it('a failed Cancel() rolls back and reloads the instance instead of claiming Cancelled', async () => {
@@ -337,13 +360,13 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
       teardown.mockRejectedValue(new Error('member save failed'));
       asSaved('Approved', { SummaryJournalEntryID: 'SUM1' });
 
-      await expect(batch.Cancel(undefined, { reason: 'Wrong period' })).rejects.toThrow('member save failed');
+      await expect(batch.Cancel(USER, { reason: 'Wrong period' })).rejects.toThrow('member save failed');
       expect(load).toHaveBeenCalledWith('B1');
     });
 
     it('Cancel() needs no ERP confirmation from Approved — an Approved batch was never sent', async () => {
       asSaved('Approved', { SummaryJournalEntryID: 'SUM1' });
-      await batch.Cancel(undefined, { reason: 'Wrong period' });
+      await batch.Cancel(USER, { reason: 'Wrong period' });
       expect(batch.Status).toBe('Cancelled');
     });
 
@@ -384,7 +407,7 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
 
     it.each(['Sent', 'Posted', 'Archived', 'Cancelled'])('Cancel() refuses a %s batch, naming the actual status', async (from) => {
       asSaved(from);
-      await expect(batch.Cancel(undefined, { reason: 'x', confirmNotAlreadyPostedInERP: true })).rejects.toThrow(new RegExp(`is ${from}`));
+      await expect(batch.Cancel(USER, { reason: 'x', confirmNotAlreadyPostedInERP: true })).rejects.toThrow(new RegExp(`is ${from}`));
       expect(teardown).not.toHaveBeenCalled();
     });
 

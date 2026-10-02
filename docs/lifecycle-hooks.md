@@ -132,46 +132,50 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   set — so it now means "unchanged since approval", not only "coherent right now". A batch approved
   before the seal existed has no hash and gets the other checks. The immutability trigger freezes
   `Failed` content as well as `Approved`, so the seal is the second line of defence.
-- **`JournalEntryBatchEntityServer.Cancel(contextUser, { reason, confirmNotAlreadyPostedInERP, onCancelled })`**
+- **`JournalEntryBatchEntityServer.Cancel(contextUser, { reason, confirmNotAlreadyPostedInERP })`**
   (#183) — legal from `Pending`, `Approved` and `Failed`, and the way a batch reaches `Cancelled`
   (#213): a transient flag set by `Cancel()` is what lets `Validate()` pass that edge, so the generic
   form or GraphQL update cannot take it. The one other path is regenerate's empty cancel,
   `CancelAfterTeardown()`, which sets the same flag for a Pending batch that `TearDownSummaryAndUnlock`
   has already emptied, and refuses one whose summary pointer is still set. It saves `Cancelled` with the summary
   pointer cleared and the cancel audit triple in ONE update, then releases the members, deletes the
-  summary and runs `onCancelled`, in one transaction; the triggers key on that order (a member
+  summary and records the cancel on the approval Task, in one transaction; the triggers key on that order (a member
   unlocks only while its batch is `Pending` or `Cancelled`; a batch becomes Cancelled only with its
-  pointer cleared). From `Approved`/`Failed` a reason is
-  required; from `Failed` so is `confirmNotAlreadyPostedInERP`, persisted as `ERPNotPostedConfirmedAt` /
-  `ERPNotPostedConfirmedByUserID` / `ERPNotPostedBasis` (`ERPLookup` when the engine's lookup found
-  nothing, `UserAttested` when the canceller confirmed). Calling `Cancel()` directly skips the ERP lookup below, so the
-  engine is the way in. A rolled-back cancel reloads the instance. `Save()` stamps
-  `CancelledAt` / `CancelledByUserID` on the transition, as it does for the approval and archive pairs.
-- **`cancelJournalEntryBatch` + `TasksAppApprovalGate`** (#183) — a cancel past approval must pass
+  pointer cleared). From `Approved`/`Failed` a reason is required. A rolled-back cancel reloads the
+  instance. `Save()` stamps `CancelledAt` / `CancelledByUserID` on the transition, as it does for the
+  approval and archive pairs.
+  **`Cancel()` authorizes itself (#214)**, before anything is written, so a server caller that loads the
+  entity and calls it directly meets the same rules as the engine. It requires a context user and
+  resolves its gate and ERP lookup through `JournalEntryBatchDispatchServices` (below). The options
+  carry no ERP basis and no hook: `ERPNotPostedBasis` comes only from the lookup's result, and
+  `confirmNotAlreadyPostedInERP` counts only when the lookup cannot settle it.
+- **`cancelJournalEntryBatch` + `TasksAppApprovalGate`** (#183) — the engine loads the batch and calls
+  `Cancel()`; the rules below run inside it. A cancel past approval must pass
   `assertMayCancelApproved` (the company's `ApprovalCFOUserID` or the batch's `ApprovedByUserID`) and
-  records itself on the approval Task as a comment (`recordCancellation`, run as `onCancelled`, so it
-  commits or rolls back with the cancel; it refuses when the user has no linked Person). The engine
-  passes the status the batch was cancelled FROM, because when the comment is written the batch
+  records itself on the approval Task as a comment (`recordCancellation`, run inside `Cancel()`'s
+  transaction, so it commits or rolls back with the cancel; it refuses when the user has no linked
+  Person). `Cancel()` passes the status the batch was cancelled FROM, because when the comment is written the batch
   already reads Cancelled. The `Accounting.CancelJournalEntryBatch` operation refuses a Pending batch — that cancel is a CFO
   rejection through `RecordJournalEntryBatchDecision`.
   **From `Failed` it looks the batch number up in the ERP first (#207)**, after authorizing and
   before writing anything. A cancel releases the entries to be batched again under a NEW number that
   no later lookup can connect to this journal, so this is the last point a posted batch is caught:
   a matching posting refuses the cancel with no override (a retry records it `Posted` instead);
-  nothing found cancels, the lookup standing as the ERP check the attestation columns record; a
-  mismatch, a failed lookup or no lookup refuses with `ErpPostingUnconfirmedError` unless the
-  operator confirmed. The operation returns that refusal as `ConfirmationRequired` /
-  `ConfirmationKind`; which way "not posted" was established is persisted as `ERPNotPostedBasis`
-  and repeated in the approval Task comment.
-  **The engine resolves the gate and the ERP lookup itself (#233)**, through
+  nothing found cancels, the lookup standing as the ERP check the attestation columns record
+  (`ERPNotPostedBasis = 'ERPLookup'`); a mismatch, a failed lookup or no lookup refuses with
+  `ErpPostingUnconfirmedError` unless the operator confirmed (`'UserAttested'`). The operation returns
+  that refusal as `ConfirmationRequired` / `ConfirmationKind`; which way "not posted" was established is
+  persisted as `ERPNotPostedBasis` and repeated in the approval Task comment.
+  **The gate and the ERP lookup are resolved, never passed (#233)**, through
   `JournalEntryBatchDispatchServices` (MJ ClassFactory; the defaults are `TasksAppApprovalGate` and
   the AccountingERPEngine lookup). A caller cannot pass them, so it cannot swap in a gate that allows
-  everything or leave the lookup out. A higher-priority registration replaces them (unit tests do).
+  everything or leave the lookup out. A higher-priority ClassFactory registration in the same process
+  does replace them; unit tests rely on that, and it is the one way around the check.
   A **Pending** cancel requires a terminal rejection on the approval Task (`assertRejected`);
   `RecordJournalEntryBatchDecision` records it before cancelling. A Pending batch with **no** approval
   Task (built with `AutoApproveGate`, e.g. an auto-post whose approve step failed) has nothing to
   reject, so it cannot be cancelled; archive it instead. `regenerateJournalEntryBatch`'s empty-cancel
-  is unaffected.
+  (`CancelAfterTeardown()`) needs no rejection: it is limited to a Pending batch whose teardown has run.
 - **`TasksAppApprovalGate.recordDecision`** — now requires `contextUser` to BE the batch company's
   `AccountingCompanyProfile.ApprovalCFOUserID` (no CFO configured ⇒ hard-fail). Previously any
   authenticated user could approve any batch, including their own.
