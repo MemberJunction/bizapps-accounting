@@ -4,6 +4,7 @@ import { UserInfo, type IMetadataProvider, type IRemoteOperationProvider, type R
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import { JournalEntryBatchWorkspacePageComponent } from './journal-entry-batch-workspace.page';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
+import { AccountingShellModule } from '../shell.module';
 import { AUGUST_CLOSE_IN_CHICAGO, useBusinessClock } from '../../../../__tests__/support/business-clock';
 
 /**
@@ -14,8 +15,9 @@ import { AUGUST_CLOSE_IN_CHICAGO, useBusinessClock } from '../../../../__tests__
  * with EffectiveDate — a DATE column — so the preview admitted entries dated 1 September, and the
  * operator's ticked list then went into the batch.
  *
- * The page's template is not under test (it needs the whole shell's module graph); the default
- * and what reaches the wire are component state.
+ * The first suite blanks the template: the default and what reaches the wire are component state.
+ * The second renders the real template through AccountingShellModule, so the input's `type="date"`
+ * (a `datetime-local` would hold an instant) is pinned too.
  */
 const BUSINESS_DAY = '2026-08-31';
 
@@ -73,5 +75,31 @@ describe('JournalEntryBatchWorkspacePageComponent — default cutoff (DOM)', () 
 
     expect(calls[0].Name).toBe('Accounting.PreviewJournalEntryBatch');
     expect(calls[0].Payload['Cutoff']).toBe(BUSINESS_DAY);
+  });
+});
+
+describe('JournalEntryBatchWorkspacePageComponent — cutoff input (DOM, real template)', () => {
+  useBusinessClock(AUGUST_CLOSE_IN_CHICAGO);
+  let calls: RecordedCall[];
+
+  beforeEach(async () => {
+    calls = [];
+    vi.spyOn(AccountingEngineBase.prototype, 'Config').mockResolvedValue(undefined);
+    await TestBed.configureTestingModule({ imports: [AccountingShellModule], providers: [PageRefreshService] }).compileComponents();
+  });
+
+  it('renders the cutoff as a date input holding the business day', async () => {
+    const fixture = TestBed.createComponent(JournalEntryBatchWorkspacePageComponent);
+    fixture.componentRef.setInput('Provider', recordingProvider(calls));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const label = [...fixture.nativeElement.querySelectorAll('label.bw-field')].find(
+      (el: Element) => el.querySelector('span')?.textContent?.trim() === 'Include unbatched through',
+    );
+    const input = label?.querySelector('input') as HTMLInputElement | null;
+    expect(input, 'the cutoff input rendered').not.toBeNull();
+    expect(input!.type).toBe('date');
+    await vi.waitFor(() => expect(input!.value).toBe(BUSINESS_DAY));
   });
 });
