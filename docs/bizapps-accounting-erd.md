@@ -258,6 +258,7 @@ erDiagram
         string ReportingCurrencyCode FK
         int FiscalYearStartMonth
         int FiscalYearStartDay
+        date PostingStartDate "nullable - entries dated before it never batch"
         uuid ParentAccountingCompanyID FK
         uuid ApprovalCFOUserID FK
         bool IsActive
@@ -507,6 +508,7 @@ erDiagram
         string ReportingCurrencyCode FK "nullable"
         int FiscalYearStartMonth
         int FiscalYearStartDay
+        date PostingStartDate "nullable - entries dated before it never batch"
         uuid ParentAccountingCompanyID FK "nullable"
         uuid ApprovalCFOUserID FK "batch approver - a security identity"
         bool IsActive

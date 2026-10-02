@@ -388,3 +388,73 @@ describe('BuildJournalEntryBatchesAction', () => {
         expect(result.Message).toContain('Could not count stranded journal entries: scan timeout');
     });
 });
+
+/**
+ * The scheduled sweep selects companies through the engine's real `pendingCompanies`, so a
+ * company's PostingStartDate must keep its pre-floor entries out of the nightly run. The provider
+ * here answers the sweep's reads from memory; only the per-company build/dispatch is stubbed.
+ */
+describe('BuildJournalEntryBatchesAction — company posting start dates', () => {
+    const CO_HISTORY_ONLY = 'aaaaaaaa-0000-0000-0000-000000000001';
+    const CO_LIVE = 'bbbbbbbb-0000-0000-0000-000000000002';
+    const SUMMARY_TYPE = 'e9521aa3-f4ef-4ec5-a899-d9dd59f320b7';
+    const ORDER_TYPE = '684c06d4-55da-49d7-8453-e046fc82b895';
+    const journals = [
+        { ID: 'je-1', CompanyID: CO_HISTORY_ONLY, EffectiveDate: '2025-05-01', Status: 'Pending', EntryTypeID: ORDER_TYPE },
+        { ID: 'je-2', CompanyID: CO_LIVE, EffectiveDate: '2025-05-01', Status: 'Pending', EntryTypeID: ORDER_TYPE },
+        { ID: 'je-3', CompanyID: CO_LIVE, EffectiveDate: '2025-06-15', Status: 'Pending', EntryTypeID: ORDER_TYPE },
+    ];
+
+    /** Evaluates the engine's ExtraFilter subset (=, <>, >=, <, IN, AND, OR, NOT) over the rows. */
+    const matches = (filter: string) => new Function('r', `return (${filter
+        .replace(/\b(\w+) IN \(([^)]*)\)/g, '[$2].includes(r.$1)')
+        .replace(/\b(\w+)\s*(<>|>=|<=|<|>|=)\s*'/g, (_m, col: string, op: string) => `r.${col} ${op === '=' ? '===' : op === '<>' ? '!==' : op} '`)
+        .replace(/\bAND\b/g, '&&').replace(/\bOR\b/g, '||').replace(/\bNOT\b/g, '!')});`) as (row: object) => boolean;
+
+    const sweepProvider = (floors: Array<{ ID: string; PostingStartDate: Date | null }>) => {
+        const read = async (params: { EntityName?: string; ExtraFilter?: string }) => {
+            if (params.EntityName === 'MJ_BizApps_Accounting: Journal Entry Types') {
+                return params.ExtraFilter === 'IsJournalEntryBatchSummary=1'
+                    ? { Success: true, Results: [{ ID: SUMMARY_TYPE, Code: 'JournalEntryBatchSummary' }] }
+                    : { Success: true, Results: [{ ID: ORDER_TYPE, Code: 'OrderBooking' }] };
+            }
+            if (params.EntityName === 'MJ_BizApps_Accounting: Accounting Company Profiles') {
+                return { Success: true, Results: floors.filter(f => f.PostingStartDate !== null) };
+            }
+            if (params.EntityName === 'MJ_BizApps_Accounting: Journal Entries') {
+                return { Success: true, Results: journals.filter(matches(params.ExtraFilter ?? 'true')) };
+            }
+            return { Success: true, Results: [] };
+        };
+        return { Config: { ActiveStatusAssertions: false }, RunView: read, RunViews: (all: Array<{ EntityName?: string; ExtraFilter?: string }>) => Promise.all(all.map(read)) };
+    };
+
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        vi.spyOn(serverEngine, 'findStrandedJournalEntries').mockResolvedValue([]);
+    });
+
+    const autoPostedCompanies = async (floors: Array<{ ID: string; PostingStartDate: Date | null }>): Promise<string[]> => {
+        Metadata.Provider = sweepProvider(floors) as never;
+        const autoPostSpy = vi.spyOn(serverEngine, 'autoPostJournalEntryBatch').mockImplementation(async (companyId) => ({
+            build: buildResult(companyId),
+            batch: { ID: `BATCH-${companyId}`, Status: 'Posted', ErrorMessage: null } as never,
+        }));
+        await new BuildJournalEntryBatchesAction().Run(runParams([
+            { Name: 'AutoPost', Value: true },
+            { Name: 'Cutoff', Value: '2025-12-31' },
+            { Name: 'EntryTypeCodes', Value: ['OrderBooking'] },
+        ]));
+        return autoPostSpy.mock.calls.map(c => c[0]).sort();
+    };
+
+    it('the nightly sweep skips a company whose only Pending entries predate its posting start date', async () => {
+        const floor = new Date('2025-06-01T00:00:00.000Z');
+        expect(await autoPostedCompanies([{ ID: CO_HISTORY_ONLY, PostingStartDate: floor }, { ID: CO_LIVE, PostingStartDate: floor }]))
+            .toEqual([CO_LIVE]);
+    });
+
+    it('with no posting start date set, the sweep is unchanged', async () => {
+        expect(await autoPostedCompanies([{ ID: CO_HISTORY_ONLY, PostingStartDate: null }])).toEqual([CO_HISTORY_ONLY, CO_LIVE]);
+    });
+});

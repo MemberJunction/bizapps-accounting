@@ -121,6 +121,10 @@ balance **overall and per company** (AM-4), and writes atomically. Hooks on the 
   *(The period-close trigger + W4 routing were retired with the period tables.)*
 - **Batch lifecycle (CH-3):** `Pending → Approved → Sent → Posted | Failed | Cancelled` — see
   `JournalEntryBatchEngine.ts`; the ERP wire is **account numbers, split per company** (AM-4).
+- **Posting start date:** `AccountingCompanyProfile.PostingStartDate` is a per-company floor on the
+  batch candidate pool. Entries dated before it (e.g. history brought in at cutover) never enter a
+  batch: `pendingCandidateFilter` applies it to every build, preview and scheduled sweep, and the
+  explicit-ID and view builds check it too. NULL, or no profile row, means no floor.
 - **Recovery past Approved (#145):** a `Failed` batch is retried by dispatching it again
   (`Failed → Sent`; the gate and the coherence check re-run, the original approval is reused). A
   `Failed` batch may already be in the ERP, so every send first looks the batch number up there
