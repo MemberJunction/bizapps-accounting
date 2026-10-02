@@ -209,8 +209,10 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   **The gate, the ERP poster and the ERP lookup are resolved by the engine (#233)** through
   `JournalEntryBatchDispatchServices`; `SendJournalEntryBatchOptions` carries only the provider and
   `confirmNotAlreadyPostedInERP`. The one send without an approval Task is
-  `autoPostJournalEntryBatch`, the scheduled-posting waiver: it enforces the include-list policy
-  (`assertAutoPostPolicy`), builds with `AutoApproveGate`, approves as the context user and sends;
+  `autoPostJournalEntryBatch`, the scheduled-posting waiver: it refuses any context user but the MJ
+  system user (`assertAutoPostCaller`, #269; also refused when the user cache does not hold it),
+  enforces the include-list policy (`assertAutoPostPolicy`), builds with `AutoApproveGate`, approves
+  as the context user and sends;
   `Accounting.BuildJournalEntryBatches` with `AutoPost` calls it per company. A failure after the build
   throws `AutoPostDispatchError`, carrying the build so the caller can report the batch's real state.
   Lifecycle (`LEGAL_TRANSITIONS`): `Pending → Approved | Cancelled | Archived`, `Approved → Sent | Cancelled | Archived`,
