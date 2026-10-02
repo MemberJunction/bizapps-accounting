@@ -17,7 +17,7 @@ export { AccountingCompanyProfileEntityServer } from './AccountingCompanyProfile
 export { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 export { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
 export { JournalEntryBatchEntityServer, type ERPNotPostedBasis, type JournalEntryBatchCancelOptions } from './JournalEntryBatchEntityServer.js';
-export { GLAccountEntityServer } from './GLAccountEntityServer.js';
+export { GLAccountEntityServer, BusinessCentralAccountNumberError, BUSINESS_CENTRAL_ACCOUNT_NUMBER_MAX_LENGTH } from './GLAccountEntityServer.js';
 export { GLAccountLinkEntityServer, LoadGLAccountLinkEntityServer } from './GLAccountLinkEntityServer.js';
 export { IntercompanyAccountMatchEntityServer } from './IntercompanyAccountMatchEntityServer.js';
 export { JournalEntryTypeEntityServer, LoadJournalEntryTypeEntityServer } from './JournalEntryTypeEntityServer.js';
