@@ -81,6 +81,7 @@ export {
   unavailableErpLookup,
   ErpPostingUnconfirmedError,
   JournalEntryBatchSendRefusedError,
+  JournalEntryBatchPostedDuringCancelError,
   AutoApproveGate,
 } from './JournalEntryBatchEngine.js';
 export type {

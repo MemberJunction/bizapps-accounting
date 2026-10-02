@@ -141,6 +141,8 @@ balance **overall and per company** (AM-4), and writes atomically. Hooks on the 
   entries to the next build. From `Failed` the ERP is looked up first (#207), because the released
   entries get a new number no later lookup can connect: a posting it holds refuses the cancel, nothing
   found lets it through, and the operator confirms, persisted, only when the lookup cannot settle it.
+  Nothing found means nothing posted yet, so the cancel looks again after its writes and before it
+  commits (#215): a posting found then rolls the cancel back and records the batch `Posted`.
   A
   `Posted` batch whose member `Batched → GLPosted` flip stopped partway is finished by
   `resumeJournalEntryBatchPosting` (`Accounting.ResumeJournalEntryBatchPosting`), which makes no

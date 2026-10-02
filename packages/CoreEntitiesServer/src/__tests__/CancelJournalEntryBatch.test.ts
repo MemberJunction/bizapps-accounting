@@ -10,6 +10,8 @@
  *     transaction.
  *   · a Failed cancel looks the batch number up in the ERP first (#207): a posting it holds refuses
  *     the cancel outright, nothing found lets it through, and anything else needs the operator.
+ *   · and again before the cancel commits (#215): a posting found then undoes the cancel, and the
+ *     batch is recorded Posted.
  *   The remote operation is covered in CancelJournalEntryBatchOperation.test.ts; the cancel's
  *   mechanics (order, rollback) in JournalEntryBatchInvariants.test.ts.
  */
@@ -20,6 +22,7 @@ import { MJGlobal } from '@memberjunction/global';
 import {
   cancelJournalEntryBatch,
   ErpPostingUnconfirmedError,
+  JournalEntryBatchPostedDuringCancelError,
   type ErpJournalLookup,
   type ErpJournalLookupResult,
   type JournalEntryBatchCancelGate,
@@ -39,7 +42,7 @@ const BATCH_FIELDS = [
   'ApprovedAt', 'ApprovedByUserID', 'ArchiveReason', 'ArchivedAt', 'ArchivedByUserID',
   'CancelReason', 'CancelledAt', 'CancelledByUserID', 'ApprovedContentHash',
   'ERPNotPostedConfirmedAt', 'ERPNotPostedConfirmedByUserID', 'ERPNotPostedBasis',
-  'SentAt', 'SentByUserID', 'SendAttemptCount', 'ErrorMessage',
+  'SentAt', 'SentByUserID', 'SendAttemptCount', 'ErrorMessage', 'ExternalJournalEntryBatchRef', 'PostedAt',
 ];
 
 /** EntityInfo for the batch, enough for a real entity to read and write its fields with no database. */
@@ -405,5 +408,138 @@ describe('JournalEntryBatchEntityServer.Cancel() called directly runs the same c
 
     expect(w.batch.ERPNotPostedBasis).toBe('UserAttested');
     expect(onCancelled).not.toHaveBeenCalled();
+  });
+});
+
+// #215: "nothing posted" from the first lookup means nothing has posted YET. The ERP can still be
+// processing a post it received before the failure was recorded, so the cancel looks again once its
+// writes are done and before they commit; a posting found then means the cancel does not stand.
+describe('cancelJournalEntryBatch — the second ERP check before a Failed cancel commits (#215)', () => {
+  /** A lookup that answers `first`, then `second` on every later call. */
+  function lookupThen(first: ErpJournalLookupResult, second: ErpJournalLookupResult) {
+    return vi.fn<ErpJournalLookup>().mockResolvedValueOnce(first).mockResolvedValue(second);
+  }
+
+  /**
+   * Saves that persist: a save that passes Validate() becomes what the batch was loaded with, and
+   * Load() reads back what was last persisted outside a rolled-back transaction. That lets a
+   * rollback and the Failed → Sent → Posted recording run as they would against the database.
+   */
+  function persisting(w: World): void {
+    let committed = w.batch.GetAll();
+    let inTransaction = false;
+    let beforeTransaction = committed;
+    const db = w.provider as unknown as { BeginTransaction: Mock; CommitTransaction: Mock; RollbackTransaction: Mock };
+    db.BeginTransaction.mockImplementation(async () => { inTransaction = true; beforeTransaction = committed; });
+    db.CommitTransaction.mockImplementation(async () => { inTransaction = false; });
+    db.RollbackTransaction.mockImplementation(async () => { inTransaction = false; committed = beforeTransaction; });
+    save.mockImplementation(function (this: BaseEntity) {
+      if (!this.Validate().Success) return Promise.resolve(false);
+      this.SetMany(this.GetAll(), true, true);
+      committed = this.GetAll();
+      return Promise.resolve(true);
+    });
+    w.batch.Load = vi.fn(async () => {
+      if (inTransaction) throw new Error('test: Load inside the transaction');
+      w.batch.SetMany(committed, true, true);
+      return true;
+    }) as never;
+  }
+
+  it('undoes the cancel and records the batch Posted when the second lookup finds the posting', async () => {
+    const w = world('Failed');
+    persisting(w);
+    const lookup = lookupThen({ status: 'NotFound' }, { status: 'Found', externalJournalEntryBatchRef: 'ERP-JEB-0183' });
+    const g = use(gate({ allowed: true }), lookup);
+
+    const error = await cancelJournalEntryBatch(BATCH_ID, USER, w.provider, { reason: 'Wrong period' }).then(() => null, (e: unknown) => e);
+
+    expect(error).toBeInstanceOf(JournalEntryBatchPostedDuringCancelError);
+    const posted = error as JournalEntryBatchPostedDuringCancelError;
+    expect(posted.Status).toBe('Posted');
+    expect(posted.ExternalJournalEntryBatchRef).toBe('ERP-JEB-0183');
+    expect(posted.message).toMatch(/ERP posted document JEB-0183 \(ERP-JEB-0183\) while the cancel was running.*recorded Posted/);
+    expect(lookup).toHaveBeenCalledTimes(2);
+    // The second lookup ran after every write of the cancel, and the cancel was rolled back.
+    expect(lookup.mock.invocationCallOrder[1]).toBeGreaterThan(g.recordCancellation.mock.invocationCallOrder[0]);
+    expect(lookup.mock.invocationCallOrder[1]).toBeGreaterThan(w.teardown.mock.invocationCallOrder[0]);
+    const db = w.provider as unknown as { CommitTransaction: Mock; RollbackTransaction: Mock };
+    expect(db.CommitTransaction).not.toHaveBeenCalled();
+    expect(db.RollbackTransaction).toHaveBeenCalledTimes(1);
+    // Recorded the way a retry records a batch the ERP holds: Failed → Sent → Posted, no cancel left on it.
+    expect(w.batch.Status).toBe('Posted');
+    expect(w.batch.ExternalJournalEntryBatchRef).toBe('ERP-JEB-0183');
+    expect(w.batch.SendAttemptCount).toBe(2);
+    expect(w.batch.CancelledAt).toBeNull();
+    expect(w.batch.ERPNotPostedBasis).toBeNull();
+    expect(w.batch.SummaryJournalEntryID).toBe('SUM1');
+  });
+
+  it('applies the same rule when the canceller attested because the first lookup could not settle it', async () => {
+    const w = world('Failed');
+    persisting(w);
+    use(gate({ allowed: true }), lookupThen({ status: 'Error', error: 'BC timed out.' }, { status: 'Found', externalJournalEntryBatchRef: 'ERP-JEB-0183' }));
+
+    await expect(cancelJournalEntryBatch(BATCH_ID, USER, w.provider, { reason: 'Wrong period', confirmNotAlreadyPostedInERP: true }))
+      .rejects.toBeInstanceOf(JournalEntryBatchPostedDuringCancelError);
+    expect(w.batch.Status).toBe('Posted');
+  });
+
+  it.each<ErpJournalLookupResult>([
+    { status: 'NotFound' },
+    { status: 'Foreign', detail: 'its lines carry the token of batch other-batch.' },
+    { status: 'Error', error: 'BC timed out.' },
+    { status: 'Unavailable' },
+    { status: 'Mismatch', detail: 'BC holds 3 lines, the batch has 2.' },
+  ])('lets the cancel commit when the second lookup answers $status', async (second) => {
+    const w = world('Failed');
+    const lookup = lookupThen({ status: 'NotFound' }, second);
+    use(gate({ allowed: true }), lookup);
+
+    await cancelJournalEntryBatch(BATCH_ID, USER, w.provider, { reason: 'Wrong period' });
+
+    expect(lookup).toHaveBeenCalledTimes(2);
+    const db = w.provider as unknown as { CommitTransaction: Mock; RollbackTransaction: Mock };
+    expect(db.CommitTransaction).toHaveBeenCalledTimes(1);
+    expect(db.RollbackTransaction).not.toHaveBeenCalled();
+    expect(w.batch.Status).toBe('Cancelled');
+    expect(w.batch.ERPNotPostedBasis).toBe('ERPLookup');
+  });
+
+  it('commits when the second lookup throws', async () => {
+    const w = world('Failed');
+    const lookup = vi.fn<ErpJournalLookup>().mockResolvedValueOnce({ status: 'NotFound' }).mockRejectedValue(new Error('socket hang up'));
+    use(gate({ allowed: true }), lookup);
+
+    await cancelJournalEntryBatch(BATCH_ID, USER, w.provider, { reason: 'Wrong period' });
+    expect(w.batch.Status).toBe('Cancelled');
+  });
+
+  it('still reports the posting, and leaves the batch Failed for a retry, when recording it Posted is refused', async () => {
+    const w = world('Failed');
+    persisting(w);
+    const persist = save.getMockImplementation()!;
+    save.mockImplementation(function (this: BaseEntity) {
+      return (this as JournalEntryBatchEntityServer).Status === 'Sent' ? Promise.resolve(false) : persist.call(this);
+    });
+    use(gate({ allowed: true }), lookupThen({ status: 'NotFound' }, { status: 'Found', externalJournalEntryBatchRef: 'ERP-JEB-0183' }));
+
+    const error = await cancelJournalEntryBatch(BATCH_ID, USER, w.provider, { reason: 'Wrong period' }).then(() => null, (e: unknown) => e);
+
+    expect(error).toBeInstanceOf(JournalEntryBatchPostedDuringCancelError);
+    expect((error as JournalEntryBatchPostedDuringCancelError).Status).toBe('Failed');
+    expect((error as Error).message).toMatch(/recording the batch Posted failed: .*Failed→Sent failed.*Retry it from Dispatch status.*Do not cancel it/);
+    expect(w.batch.Status).toBe('Failed');
+    expect(w.batch.CancelledAt).toBeNull();
+  });
+
+  it('never runs a second lookup for an Approved batch', async () => {
+    const w = world('Approved');
+    const lookup = lookupOf({ status: 'Found', externalJournalEntryBatchRef: 'X' });
+    use(gate({ allowed: true }), lookup);
+
+    await cancelJournalEntryBatch(BATCH_ID, USER, w.provider, { reason: 'Wrong period' });
+    expect(lookup).not.toHaveBeenCalled();
+    expect(w.batch.Status).toBe('Cancelled');
   });
 });

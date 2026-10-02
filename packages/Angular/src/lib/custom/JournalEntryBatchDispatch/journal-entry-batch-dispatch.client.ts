@@ -333,7 +333,9 @@ export class JournalEntryBatchDispatchClient {
    * the opposite of Archive, which keeps them locked. The server requires a reason. A Failed batch may
    * already be in the ERP, so the server looks its number up first (#207): a posting it finds refuses
    * the cancel (an error); nothing found lets it through; otherwise it answers `ConfirmationRequired`,
-   * and the caller sends `confirmNotAlreadyPostedInERP` only once the operator has checked.
+   * and the caller sends `confirmNotAlreadyPostedInERP` only once the operator has checked. The server
+   * looks again before the cancel commits (#215); a posting found then undoes the cancel, records the
+   * batch Posted and comes back as an error saying so.
    */
   public async CancelBatch(batchID: string, reason: string, confirmNotAlreadyPostedInERP = false): Promise<CancelJournalEntryBatchResult> {
     try {

@@ -166,6 +166,18 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   `ErpPostingUnconfirmedError` unless the operator confirmed (`'UserAttested'`). The operation returns
   that refusal as `ConfirmationRequired` / `ConfirmationKind`; which way "not posted" was established is
   persisted as `ERPNotPostedBasis` and repeated in the approval Task comment.
+  **And again before it commits (#215).** "Nothing posted" means nothing has posted yet: the ERP can
+  still be processing a post it received before the failure was recorded. So once the cancel has
+  written everything (status, released entries, deleted summary, Task comment) and before it commits,
+  `Cancel()` runs the same lookup again, on the summary lines the first one read. If it finds this
+  batch's posting, the cancel does not stand: the transaction rolls back, so no entry is released,
+  and the batch is recorded `Posted` the way a retry records one the ERP holds (`Failed → Sent →
+  Posted`, no ERP call, `recordFailedBatchPosted`). `JournalEntryBatchPostedDuringCancelError` says
+  so, with the status the batch now reads (`Failed` if recording it Posted failed, for a retry to
+  finish). Any other answer lets the cancel commit. The second lookup runs inside the transaction,
+  so the released entries cannot be batched again before it answers, and the batch and its entries
+  stay locked while the ERP answers. This narrows the window but does not close it: a post that lands
+  after the second lookup still posts the entries twice.
   **The gate and the ERP lookup are resolved, never passed (#233)**, through
   `JournalEntryBatchDispatchServices` (MJ ClassFactory; the defaults are `TasksAppApprovalGate` and
   the AccountingERPEngine lookup). A caller cannot pass them, so it cannot swap in a gate that allows

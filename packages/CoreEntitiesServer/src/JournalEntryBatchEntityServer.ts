@@ -29,7 +29,7 @@
 
 import { createHash } from 'node:crypto';
 
-import { BaseEntity, DatabaseProviderBase, EntitySaveOptions, IMetadataProvider, IRunViewProvider, LogStatus, UserInfo, ValidationErrorInfo, ValidationResult } from '@memberjunction/core';
+import { BaseEntity, DatabaseProviderBase, EntitySaveOptions, IMetadataProvider, IRunViewProvider, LogError, LogStatus, UserInfo, ValidationErrorInfo, ValidationResult } from '@memberjunction/core';
 import { RegisterClass } from '@memberjunction/global';
 import {
   mjBizAppsAccountingJournalEntryBatchEntity,
@@ -39,7 +39,12 @@ import {
 import { ToCalendarDay } from '@mj-biz-apps/common-entities';
 
 import { JournalEntryBatchDispatchServices } from './JournalEntryBatchDispatchServices.js';
-import { checkFailedBatchBeforeCancel } from './JournalEntryBatchEngine.js';
+import {
+  checkFailedBatchBeforeCancel,
+  JournalEntryBatchPostedDuringCancelError,
+  recordFailedBatchPosted,
+  type ErpJournalLookupResult,
+} from './JournalEntryBatchEngine.js';
 import { getNextJournalEntryBatchNumber } from './SequenceService.js';
 import { sqlGuidLiteral } from './SqlGuards.js';
 
@@ -129,6 +134,8 @@ interface AuthorizedCancel {
   erpNotPostedBasis?: ERPNotPostedBasis;
   /** Records a cancel past approval on the approval Task; runs inside the cancel's transaction. */
   record?: () => Promise<void>;
+  /** For a Failed batch, the ERP lookup run again before the cancel commits (#215). */
+  recheck?: () => Promise<ErpJournalLookupResult>;
 }
 
 /** One summary line, as the footing check and the seal read it. */
@@ -537,6 +544,14 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
    *     CFO or the batch's approver). The cancel is recorded on the approval Task in the same
    *     transaction (#183).
    *   · Failed — the ERP is looked up after authorizing (#207); see {@link JournalEntryBatchCancelOptions.confirmNotAlreadyPostedInERP}.
+   *     Then, once every write is done and before the commit, it is looked up again (#215): the ERP
+   *     may still have been processing a post it received before the failure was recorded, and
+   *     landed it after the first lookup. If the second lookup finds this batch's posting, the cancel
+   *     does not stand: the transaction rolls back, so the entries are never released, the batch is
+   *     recorded Posted the way a retry records it, and {@link JournalEntryBatchPostedDuringCancelError}
+   *     says so. Any other answer lets the cancel commit; the first lookup already settled it. The
+   *     second lookup runs inside the transaction so the released entries cannot be batched again
+   *     before it answers; the batch and its entries stay locked for as long as the ERP takes.
    * If anything fails the transaction rolls back and the instance is reloaded, so it never claims a
    * Cancelled state the database does not hold.
    */
@@ -548,18 +563,56 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     const authorized = await this.authorizeCancel(user, options);
     const summaryId = this.SummaryJournalEntryID;
     const dbProvider = this.ProviderToUse as unknown as DatabaseProviderBase;
+    let postedRef: string | null;
     await dbProvider.BeginTransaction();
     try {
       await this.markCancelled(options, authorized.erpNotPostedBasis, user);
       await this.ReleaseMembersAndDeleteSummary(summaryId, user);
       if (authorized.record) await authorized.record();
-      await dbProvider.CommitTransaction();
-      return true;
+      postedRef = authorized.recheck ? await this.postingFoundOnRecheck(authorized.recheck) : null;
+      if (postedRef === null) {
+        await dbProvider.CommitTransaction();
+        return true;
+      }
     } catch (e) {
       try { await dbProvider.RollbackTransaction(); } catch { /* rollback best-effort */ }
       await this.reloadAfterRollback();
       throw e;
     }
+    // Not best-effort: the batch is recorded Posted only once the cancel is known to be gone.
+    try {
+      await dbProvider.RollbackTransaction();
+    } finally {
+      await this.reloadAfterRollback();
+    }
+    return await this.recordPostedDuringCancel(postedRef, user);
+  }
+
+  /** The ERP reference when the second lookup finds this batch's posting (#215), otherwise null. */
+  private async postingFoundOnRecheck(recheck: () => Promise<ErpJournalLookupResult>): Promise<string | null> {
+    const again = await recheck();
+    return again.status === 'Found' ? again.externalJournalEntryBatchRef : null;
+  }
+
+  /**
+   * The cancel has been rolled back because the ERP posted the batch while it ran: record the batch
+   * Posted and throw {@link JournalEntryBatchPostedDuringCancelError}. A failure to record it is
+   * carried in that error rather than thrown in its place, so the finding is never lost.
+   */
+  private async recordPostedDuringCancel(externalRef: string, user: UserInfo): Promise<never> {
+    const doc = this.JournalEntryBatchNumber ?? this.ID;
+    LogError(`JournalEntryBatchEntityServer.Cancel: the ERP posted batch ${doc} as ${externalRef} while it was being cancelled; the cancel was rolled back.`);
+    let recordError: string | undefined;
+    try {
+      await recordFailedBatchPosted(this, externalRef, user, this.ProviderToUse as unknown as IMetadataProvider);
+      if (this.Status !== 'Posted') recordError = this.ErrorMessage ?? 'the Posted save did not persist.';
+    } catch (e) {
+      recordError = e instanceof Error ? e.message : String(e);
+      LogError(`JournalEntryBatchEntityServer.Cancel: recording batch ${doc} Posted failed: ${recordError}`);
+      // A refused save leaves the unsaved status on the instance; the error reports what the database holds.
+      try { await this.Load(this.ID); } catch { /* the status then reads as the instance last held it */ }
+    }
+    throw new JournalEntryBatchPostedDuringCancelError(this.ID, this.Status, externalRef, doc, recordError);
   }
 
   /**
@@ -585,6 +638,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     return {
       erpNotPostedBasis: erpCheck?.basis,
       record: () => gate.recordCancellation(this.ID, cancellation, user),
+      recheck: erpCheck?.recheck,
     };
   }
 

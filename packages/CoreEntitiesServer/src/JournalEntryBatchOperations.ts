@@ -450,7 +450,9 @@ export interface CancelJournalEntryBatchOutput {
  * goes through RecordJournalEntryBatchDecision so the CFO's decision is recorded on the Task.
  * Who may cancel (the CFO or the batch's approver), the required reason and the ERP confirmation
  * are enforced by the engine, the gate and the entity; the engine resolves the gate and the ERP
- * lookup itself (#233). This operation only marshals.
+ * lookup itself (#233). This operation only marshals. A Failed cancel undone because the ERP posted
+ * the batch while it ran (#215) throws JournalEntryBatchPostedDuringCancelError, whose message says
+ * the batch is now recorded Posted.
  */
 @RegisterClass(BaseRemotableOperation, 'Accounting.CancelJournalEntryBatch')
 export class CancelJournalEntryBatchOperation extends BaseRemotableOperation<CancelJournalEntryBatchInput, CancelJournalEntryBatchOutput> {
