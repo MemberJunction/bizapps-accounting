@@ -35,7 +35,8 @@ import {
   mjBizAppsAccountingJournalEntryLineDimensionEntity,
 } from '@mj-biz-apps/accounting-entities';
 
-import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
+import { AccountingEngineBase, FiscalYearOf } from '@mj-biz-apps/accounting-engine-base';
+import { ToCalendarDay } from '@mj-biz-apps/common-entities';
 
 import { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
 import { loadTodayBusiness } from './BusinessDay.js';
@@ -476,7 +477,8 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
   /**
    * Fiscal year from the company's ACP settings: the FY containing EffectiveDate,
    * labeled by the calendar year the fiscal year STARTS in. For the default Jan-1
-   * start this equals the calendar year. All date-part math in UTC (repo convention).
+   * start this equals the calendar year. The rule is `FiscalYearOf` (accounting-engine-base),
+   * shared with the deferred-revenue waterfall's year-to-date figure.
    */
   private async deriveFiscalYear(): Promise<number> {
     const effectiveDate = this.EffectiveDate;
@@ -489,15 +491,11 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
       throw new Error(`JournalEntryEntityServer.deriveFiscalYear: invalid EffectiveDate value: ${String(effectiveDate)}`);
     }
     await AccountingEngineBase.Instance.ConfigEx({ contextUser: this.ContextCurrentUser, provider: this.ProviderToUse as unknown as IMetadataProvider });
-    const acp = AccountingEngineBase.Instance.CompanyProfiles.find(
-      p => p.ID?.toLowerCase() === this.CompanyID?.toLowerCase()
-    );
-    const startMonth = acp?.FiscalYearStartMonth ?? 1;
-    const startDay = acp?.FiscalYearStartDay ?? 1;
-    const beforeFYStart =
-      d.getUTCMonth() + 1 < startMonth ||
-      (d.getUTCMonth() + 1 === startMonth && d.getUTCDate() < startDay);
-    return beforeFYStart ? d.getUTCFullYear() - 1 : d.getUTCFullYear();
+    const day = ToCalendarDay(d);
+    if (day === null) {
+      throw new Error(`JournalEntryEntityServer.deriveFiscalYear: EffectiveDate has no calendar day: ${String(effectiveDate)}`);
+    }
+    return FiscalYearOf(day, AccountingEngineBase.Instance.FiscalYearStartFor(this.CompanyID));
   }
 
   // ─── Status-graph hardening (data-driven half) ────────────────────────────
