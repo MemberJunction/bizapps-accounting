@@ -14,7 +14,7 @@
  * AccountingERPEngine lookup already routes to each ERP's `BaseAccountingERPProvider`.
  *
  * CONNECTS TO:
- *   RESOLVED BY: JournalEntryBatchEngine (sendJournalEntryBatch · autoPostJournalEntryBatch · cancelJournalEntryBatch)
+ *   RESOLVED BY: JournalEntryBatchEngine (sendJournalEntryBatch · autoPostJournalEntryBatch) · JournalEntryBatchEntityServer.Cancel (#214)
  *   DEFAULTS:    ./TasksAppApprovalGate · ./AccountingERPEngine (createAccountingERPPoster · createAccountingERPLookup)
  */
 import type { IMetadataProvider } from '@memberjunction/core';

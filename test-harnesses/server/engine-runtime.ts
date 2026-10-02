@@ -432,7 +432,7 @@ async function main(): Promise<void> {
   // ─── Teardown (db_owner pool) ──────────────────────────────────────────────
   const exec = async (q: string) => { try { await ctx.teardownPool.request().query(q); } catch (e) { console.log(`      teardown warn: ${(e instanceof Error ? e.message : String(e)).split('\n')[0]}`); } };
   const jeIdList = createdJEIds.map(id => `'${id}'`).join(',');
-  const toggled = ['JournalEntryLine', 'JournalEntry'];
+  const toggled = ['JournalEntryLineDimension', 'JournalEntryLine', 'JournalEntry'];
   try {
     for (const t of toggled) await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
     if (jeIdList) {

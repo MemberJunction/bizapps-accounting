@@ -1,0 +1,5 @@
+---
+"@mj-biz-apps/accounting-core-entities-server": patch
+---
+
+Cancelling a Failed batch now looks its number up in the ERP a second time, after the cancel's writes and before they commit (#215). The first lookup's "nothing posted" means nothing has posted yet; a post the ERP was still processing can land after it. If the second lookup finds this batch's posting, the cancel is rolled back, so its entries are never released, the batch is recorded Posted the way a retry records it (no second ERP post), and `Cancel()` throws the new `JournalEntryBatchPostedDuringCancelError`. If it finds a posting under the number that does not match the batch, one the first lookup had not reported, the cancel is refused: it is rolled back, the batch stays Failed and is not recorded Posted, and `Cancel()` throws the new `JournalEntryBatchMismatchDuringCancelError`, telling the operator to investigate that posting before cancelling or retrying. `confirmNotAlreadyPostedInERP` does not override it. Any other answer lets the cancel commit.

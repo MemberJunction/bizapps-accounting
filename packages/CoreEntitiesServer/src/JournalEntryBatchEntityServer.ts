@@ -17,7 +17,9 @@
  *   - `Cancel()`: reverse a Pending, Approved or Failed batch — delete the summary JE, return the
  *     member JEs to the candidate pool, mark Cancelled — in ONE provider transaction. The member
  *     unlock is the batch releasing ITS OWN locks (the reversible Batched→Pending transition the
- *     DB triggers sanction exactly for this), so it is legitimately batch-owned.
+ *     DB triggers sanction exactly for this), so it is legitimately batch-owned. Cancel also runs
+ *     the cancel's authorization, the Failed batch's ERP lookup and the approval-Task record itself
+ *     (#214), resolved through JournalEntryBatchDispatchServices, so no caller can skip them.
  *
  * WHAT DELIBERATELY STAYS IN THE ENGINE (multi-aggregate orchestration — JournalEntryBatchEngine.ts):
  *   build/regenerate (gather candidates → net → create summary → lock N independent JEs → raise
@@ -27,7 +29,7 @@
 
 import { createHash } from 'node:crypto';
 
-import { BaseEntity, DatabaseProviderBase, EntitySaveOptions, IMetadataProvider, IRunViewProvider, LogStatus, UserInfo, ValidationErrorInfo, ValidationResult } from '@memberjunction/core';
+import { BaseEntity, DatabaseProviderBase, EntitySaveOptions, IMetadataProvider, IRunViewProvider, LogError, LogStatus, UserInfo, ValidationErrorInfo, ValidationResult } from '@memberjunction/core';
 import { RegisterClass } from '@memberjunction/global';
 import {
   mjBizAppsAccountingJournalEntryBatchEntity,
@@ -36,6 +38,14 @@ import {
 } from '@mj-biz-apps/accounting-entities';
 import { ToCalendarDay } from '@mj-biz-apps/common-entities';
 
+import { JournalEntryBatchDispatchServices } from './JournalEntryBatchDispatchServices.js';
+import {
+  checkFailedBatchBeforeCancel,
+  JournalEntryBatchMismatchDuringCancelError,
+  JournalEntryBatchPostedDuringCancelError,
+  recordFailedBatchPosted,
+  type FailedCancelErpCheck,
+} from './JournalEntryBatchEngine.js';
 import { getNextJournalEntryBatchNumber } from './SequenceService.js';
 import { sqlGuidLiteral } from './SqlGuards.js';
 
@@ -84,15 +94,14 @@ function legalFrom(target: string): string[] {
 /** The statuses an operator may archive from — the `→ Archived` edges of LEGAL_TRANSITIONS. */
 const ARCHIVABLE_FROM = legalFrom('Archived');
 
-/** The statuses a batch may be cancelled from — the `→ Cancelled` edges of LEGAL_TRANSITIONS. */
-const CANCELLABLE_FROM = legalFrom('Cancelled');
-
 /**
- * The `→ Cancelled` edges that only {@link JournalEntryBatchEntityServer.Cancel} may take. Cancelling
- * past approval must run the teardown, the ERP check and the approver's authorization together; a
- * plain save that sets Status would skip all three.
+ * The statuses a batch may be cancelled from — the `→ Cancelled` edges of LEGAL_TRANSITIONS. Every one
+ * of them is taken only by {@link JournalEntryBatchEntityServer.Cancel} or, for regenerate's empty
+ * cancel, {@link JournalEntryBatchEntityServer.CancelAfterTeardown}: cancelling deletes the summary
+ * and releases the members (and past approval also runs the ERP check and the approver's
+ * authorization), and a plain save that sets Status would skip all of it (#213).
  */
-const CANCEL_ONLY_FROM: ReadonlyArray<string> = ['Approved', 'Failed'];
+const CANCELLABLE_FROM = legalFrom('Cancelled');
 
 /**
  * How a sent batch was established as not posted in the ERP before it was cancelled (#183): the ERP
@@ -104,31 +113,30 @@ export type ERPNotPostedBasis = NonNullable<mjBizAppsAccountingJournalEntryBatch
 /**
  * Options for {@link JournalEntryBatchEntityServer.Cancel}. Both matter only once the batch has
  * been approved; a Pending cancel (a CFO rejection) needs neither.
+ *
+ * Neither can authorize the cancel or stand in for the ERP check: Cancel runs those itself (#214).
  */
 export interface JournalEntryBatchCancelOptions {
   /** Why the batch is being cancelled. Required from Approved or Failed (CK_JournalEntryBatch_CancelAudit). */
   reason?: string | null;
   /**
-   * Required `true` to cancel a Failed batch: this batch's number has NOT posted in the ERP. Cancel
-   * releases the members, the next build batches them again under a NEW document number, and a
-   * journal that did post would then post twice. The attestation is persisted
-   * (ERPNotPostedConfirmedAt / ERPNotPostedConfirmedByUserID). `cancelJournalEntryBatch` looks the
-   * number up in the ERP before calling this (#207): it sets `true` itself when the lookup found
-   * nothing, refuses when the lookup found the posting, and otherwise passes on the operator's
-   * confirmation. Calling `Cancel()` directly skips that lookup, so go through the engine.
+   * The canceller has checked the ERP and this Failed batch's number has NOT posted there. Cancel
+   * looks the number up in the ERP first (#207) and this counts only when that lookup cannot settle
+   * it: the ERP offers no lookup, the lookup failed, or the ERP holds something under the number that
+   * does not match. It never overrides a matching posting, and it is not needed when the lookup finds
+   * nothing. Ignored for a Pending or Approved batch, which has not been sent.
    */
   confirmNotAlreadyPostedInERP?: boolean;
-  /**
-   * How "not posted" was established, persisted as ERPNotPostedBasis with the attestation. The engine
-   * passes 'ERPLookup' when its lookup found nothing; otherwise it is the canceller's word,
-   * 'UserAttested' (the default).
-   */
+}
+
+/** What {@link JournalEntryBatchEntityServer.Cancel}'s authorization settled, for the cancel's single transaction. */
+interface AuthorizedCancel {
+  /** How "not posted in the ERP" was established, for a batch that had been sent. */
   erpNotPostedBasis?: ERPNotPostedBasis;
-  /**
-   * Runs inside Cancel's transaction, after the members are released — for work that must commit
-   * or roll back with the cancel, such as recording it on the batch's approval Task.
-   */
-  onCancelled?: () => Promise<void>;
+  /** Records a cancel past approval on the approval Task; runs inside the cancel's transaction. */
+  record?: () => Promise<void>;
+  /** For a Failed batch, the first ERP lookup's answer and the lookup to run again before the cancel commits (#215). */
+  erpCheck?: Pick<FailedCancelErpCheck, 'recheck' | 'firstStatus'>;
 }
 
 /** One summary line, as the footing check and the seal read it. */
@@ -144,6 +152,14 @@ interface SummaryLineDimensionContent {
   JournalEntryLineID: string;
   DimensionID: string;
   DimensionValueID: string;
+}
+
+/** What {@link JournalEntryBatchEntityServer.CheckApprovedContent} found; both empty = unchanged since approval. */
+export interface ApprovedContentCheck {
+  /** The batch disagrees with itself: footing, member count, summary header, or no summary entry at all. */
+  CoherenceProblems: string[];
+  /** The content no longer hashes to the seal written at approval. */
+  SealProblems: string[];
 }
 
 /** Everything the approver signs, read from the database. */
@@ -175,9 +191,9 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
   private _builtByBatchingProcess = false;
 
   /**
-   * Set only while {@link Cancel} is saving the cancel update. Transient, like
-   * `_builtByBatchingProcess`: it is what lets the Approved/Failed → Cancelled edge through
-   * {@link Validate}, so the generic form or the GraphQL update cannot take that edge on its own.
+   * Set only while {@link Cancel} or {@link CancelAfterTeardown} is saving the cancel update.
+   * Transient, like `_builtByBatchingProcess`: it is what lets a → Cancelled edge through
+   * {@link Validate}, so the generic form or the GraphQL update cannot take one on its own.
    */
   private _cancelling = false;
 
@@ -227,7 +243,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
 
   /**
    * WHO and WHEN belong to the transition, not the caller: the approval, archive and cancel audit
-   * fields are filled from context when the caller didn't supply them.
+   * fields are filled from context when the caller didn't supply them, and a send is stamped.
    */
   private stampTransitionAudit(): void {
     if (!this.IsSaved || this.Status === this.loadedStatus) return;
@@ -241,7 +257,24 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     } else if (this.Status === 'Cancelled') {
       if (!this.CancelledAt) this.CancelledAt = new Date();
       if (!this.CancelledByUserID && userId) this.CancelledByUserID = userId;
+    } else if (this.Status === 'Sent') {
+      this.stampSend();
     }
+  }
+
+  /**
+   * The send audit (#184), stamped on every transition into Sent — a retry included, so unlike the
+   * approval and archive pairs it overwrites. SendAttemptCount is a version token: the send must
+   * come from Approved or Failed and write exactly the loaded count plus one, which is what
+   * trg_JournalEntryBatch_SendOnce checks. Of two concurrent sends from the same loaded state, the
+   * second save is refused before its ERP call. __mj.RecordChange keeps every earlier SentAt, sender
+   * and ErrorMessage.
+   */
+  private stampSend(): void {
+    const loadedCount = (this.GetFieldByName('SendAttemptCount')?.OldValue as number | null | undefined) ?? 0;
+    this.SentAt = new Date();
+    this.SentByUserID = this.ContextCurrentUser?.ID ?? null;
+    this.SendAttemptCount = loadedCount + 1;
   }
 
   /** Always-applies batch invariants: legal status transitions + the audit fields each transition carries. */
@@ -299,8 +332,8 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
   }
 
   /**
-   * A SAVED batch: the status change, if any, is an edge of LEGAL_TRANSITIONS — and a cancel past
-   * approval comes through {@link Cancel}, never a plain save.
+   * A SAVED batch: the status change, if any, is an edge of LEGAL_TRANSITIONS — and a cancel comes
+   * through {@link Cancel}, never a plain save.
    */
   private transitionProblems(): string[] {
     const oldStatus = this.loadedStatus;
@@ -309,10 +342,10 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
       const legal = (LEGAL_TRANSITIONS[oldStatus] ?? []).filter(s => s !== oldStatus).join(', ') || '(terminal)';
       return [`Illegal batch status transition '${oldStatus}' → '${this.Status}'. Legal from '${oldStatus}': ${legal}.`];
     }
-    if (this.Status === 'Cancelled' && CANCEL_ONLY_FROM.includes(oldStatus) && !this._cancelling) {
+    if (this.Status === 'Cancelled' && !this._cancelling) {
       return [
-        `A ${oldStatus} batch is cancelled only through Cancel (the Cancel action), which releases its journal entries, ` +
-          `deletes its summary and records who may cancel and why — setting Status directly would skip all of that.`,
+        `A ${oldStatus} batch is cancelled only through Cancel (the Cancel action), which deletes its summary and releases its ` +
+          `journal entries, and past approval also records who may cancel and why — setting Status directly would skip all of that.`,
       ];
     }
     return [];
@@ -349,14 +382,26 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
    * The last is what makes it mean "unchanged since approval" rather than "coherent right now".
    */
   public async CheckControlTotalCoherence(contextUser?: UserInfo): Promise<string[]> {
+    const check = await this.CheckApprovedContent(contextUser);
+    return [...check.CoherenceProblems, ...check.SealProblems];
+  }
+
+  /**
+   * {@link CheckControlTotalCoherence}, with the seal comparison kept apart from the rest. Dispatch
+   * needs the split (#216): a Failed retry whose only problem is a broken seal is still recorded
+   * Posted when the ERP already holds the batch, because nothing is sent.
+   */
+  public async CheckApprovedContent(contextUser?: UserInfo): Promise<ApprovedContentCheck> {
     const content = await this.loadApprovedContent(contextUser);
-    if (!content) return ['The batch has no summary journal entry — regenerate or cancel it.'];
-    return [
-      ...this.footingProblems(content.lines),
-      ...this.memberCountProblems(content.memberIds),
-      ...this.summaryHeaderProblems(content.summary),
-      ...this.sealProblems(content),
-    ];
+    if (!content) return { CoherenceProblems: ['The batch has no summary journal entry — regenerate or cancel it.'], SealProblems: [] };
+    return {
+      CoherenceProblems: [
+        ...this.footingProblems(content.lines),
+        ...this.memberCountProblems(content.memberIds),
+        ...this.summaryHeaderProblems(content.summary),
+      ],
+      SealProblems: this.sealProblems(content),
+    };
   }
 
   private footingProblems(lines: SummaryLineContent[]): string[] {
@@ -513,31 +558,120 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
    * trg_JournalEntryBatch_Immutability lets an Approved or Failed batch clear its summary pointer only
    * in the update that cancels it.
    *
-   * From Approved or Failed a reason is required, since the cancel discards a summary the approver
-   * signed. From Failed the caller must also confirm the batch has not posted in the ERP (see
-   * {@link JournalEntryBatchCancelOptions.confirmNotAlreadyPostedInERP}). WHO may cancel past approval
-   * is the engine's check (cancelJournalEntryBatch), which knows the approver; this method is the
-   * mechanics. If anything fails the transaction rolls back and the instance is reloaded, so it never
-   * claims a Cancelled state the database does not hold.
+   * Before anything is written it authorizes the cancel as `contextUser` (#214), through the gate
+   * {@link JournalEntryBatchDispatchServices} resolves, never one a caller passes:
+   *   · Pending — a CFO rejection: the approval Task must already record it (#233).
+   *   · Approved / Failed — a reason is required, and the gate must allow the user (the company's
+   *     CFO or the batch's approver). The cancel is recorded on the approval Task in the same
+   *     transaction (#183).
+   *   · Failed — the ERP is looked up after authorizing (#207); see {@link JournalEntryBatchCancelOptions.confirmNotAlreadyPostedInERP}.
+   *     Then, once every write is done and before the commit, it is looked up again (#215): the ERP
+   *     may still have been processing a post it received before the failure was recorded, and
+   *     landed it after the first lookup. If the second lookup finds this batch's posting, the cancel
+   *     does not stand: the transaction rolls back, so the entries are never released, the batch is
+   *     recorded Posted the way a retry records it, and {@link JournalEntryBatchPostedDuringCancelError}
+   *     says so. If it finds a posting under the number that does not match the batch, and the first
+   *     lookup had not reported one, the cancel is refused: the transaction rolls back, the batch
+   *     stays Failed and is not recorded Posted, and {@link JournalEntryBatchMismatchDuringCancelError}
+   *     says to investigate it. `confirmNotAlreadyPostedInERP` does not override that; it covered the
+   *     first answer. Any other answer lets the cancel commit; the first lookup already settled it. The
+   *     second lookup runs inside the transaction so the released entries cannot be batched again
+   *     before it answers; the batch and its entries stay locked for as long as the ERP takes.
+   * If anything fails the transaction rolls back and the instance is reloaded, so it never claims a
+   * Cancelled state the database does not hold.
    */
   public async Cancel(contextUser?: UserInfo, options: JournalEntryBatchCancelOptions = {}): Promise<boolean> {
     if (!this.IsSaved) throw new Error('JournalEntryBatchEntityServer.Cancel: the batch must be saved.');
     this.assertCancellable(options);
     const user = contextUser ?? this.ContextCurrentUser;
+    if (!user) throw new Error('JournalEntryBatchEntityServer.Cancel: a context user is required; the cancel is authorized as that user.');
+    const authorized = await this.authorizeCancel(user, options);
     const summaryId = this.SummaryJournalEntryID;
     const dbProvider = this.ProviderToUse as unknown as DatabaseProviderBase;
+    let postedRef: string | null;
     await dbProvider.BeginTransaction();
     try {
-      await this.markCancelled(options, user);
+      await this.markCancelled(options, authorized.erpNotPostedBasis, user);
       await this.ReleaseMembersAndDeleteSummary(summaryId, user);
-      if (options.onCancelled) await options.onCancelled();
-      await dbProvider.CommitTransaction();
-      return true;
+      if (authorized.record) await authorized.record();
+      postedRef = authorized.erpCheck ? await this.postingFoundOnRecheck(authorized.erpCheck) : null;
+      if (postedRef === null) {
+        await dbProvider.CommitTransaction();
+        return true;
+      }
     } catch (e) {
       try { await dbProvider.RollbackTransaction(); } catch { /* rollback best-effort */ }
       await this.reloadAfterRollback();
       throw e;
     }
+    // Not best-effort: the batch is recorded Posted only once the cancel is known to be gone.
+    try {
+      await dbProvider.RollbackTransaction();
+    } finally {
+      await this.reloadAfterRollback();
+    }
+    return await this.recordPostedDuringCancel(postedRef, user);
+  }
+
+  /**
+   * The ERP reference when the second lookup finds this batch's posting (#215), otherwise null.
+   * Throws {@link JournalEntryBatchMismatchDuringCancelError}, for Cancel to roll back, when it finds a
+   * posting that does not match and the first lookup had not reported one.
+   */
+  private async postingFoundOnRecheck(erpCheck: Pick<FailedCancelErpCheck, 'recheck' | 'firstStatus'>): Promise<string | null> {
+    const again = await erpCheck.recheck();
+    if (again.status === 'Mismatch' && erpCheck.firstStatus !== 'Mismatch') {
+      throw new JournalEntryBatchMismatchDuringCancelError(this.ID, again.detail, this.JournalEntryBatchNumber ?? this.ID);
+    }
+    return again.status === 'Found' ? again.externalJournalEntryBatchRef : null;
+  }
+
+  /**
+   * The cancel has been rolled back because the ERP posted the batch while it ran: record the batch
+   * Posted and throw {@link JournalEntryBatchPostedDuringCancelError}. A failure to record it is
+   * carried in that error rather than thrown in its place, so the finding is never lost.
+   */
+  private async recordPostedDuringCancel(externalRef: string, user: UserInfo): Promise<never> {
+    const doc = this.JournalEntryBatchNumber ?? this.ID;
+    LogError(`JournalEntryBatchEntityServer.Cancel: the ERP posted batch ${doc} as ${externalRef} while it was being cancelled; the cancel was rolled back.`);
+    let recordError: string | undefined;
+    try {
+      await recordFailedBatchPosted(this, externalRef, user, this.ProviderToUse as unknown as IMetadataProvider);
+      if (this.Status !== 'Posted') recordError = this.ErrorMessage ?? 'the Posted save did not persist.';
+    } catch (e) {
+      recordError = e instanceof Error ? e.message : String(e);
+      LogError(`JournalEntryBatchEntityServer.Cancel: recording batch ${doc} Posted failed: ${recordError}`);
+      // A refused save leaves the unsaved status on the instance; the error reports what the database holds.
+      try { await this.Load(this.ID); } catch { /* the status then reads as the instance last held it */ }
+    }
+    throw new JournalEntryBatchPostedDuringCancelError(this.ID, this.Status, externalRef, doc, recordError);
+  }
+
+  /**
+   * Who may cancel, and for a Failed batch what the ERP holds (#214). Throws when the cancel must not
+   * go ahead; writes nothing. Authorizes before the ERP lookup, so an unauthorized caller learns
+   * nothing from the ERP.
+   */
+  private async authorizeCancel(user: UserInfo, options: JournalEntryBatchCancelOptions): Promise<AuthorizedCancel> {
+    const provider = this.ProviderToUse as unknown as IMetadataProvider;
+    const services = JournalEntryBatchDispatchServices.Resolve();
+    const gate = services.CreateCancelGate(provider);
+    if (this.Status === 'Pending') {
+      await gate.assertRejected(this.ID, user);
+      return {};
+    }
+    await gate.assertMayCancelApproved(this.ID, user);
+    // Captured now: the record runs after the batch was saved Cancelled.
+    const fromStatus = this.Status;
+    const erpCheck = fromStatus === 'Failed'
+      ? await checkFailedBatchBeforeCancel(this, user, provider, services.CreateLookup(provider), options.confirmNotAlreadyPostedInERP === true)
+      : undefined;
+    const cancellation = { reason: options.reason ?? '', fromStatus, erpCheck: erpCheck?.description };
+    return {
+      erpNotPostedBasis: erpCheck?.basis,
+      record: () => gate.recordCancellation(this.ID, cancellation, user),
+      erpCheck,
+    };
   }
 
   /** Put the instance back to what the database holds after a rolled-back Cancel. Best-effort: the original error is what the caller needs. */
@@ -558,35 +692,35 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     if (this.Status !== 'Pending' && !options.reason?.trim()) {
       throw new Error(`JournalEntryBatchEntityServer.Cancel: batch ${label} is ${this.Status}; cancelling it discards an approved summary, so a reason is required.`);
     }
-    if (this.Status === 'Failed' && options.confirmNotAlreadyPostedInERP !== true) {
-      throw new Error(
-        `JournalEntryBatchEntityServer.Cancel: batch ${label} is Failed, and a Failed batch may already be in the ERP. ` +
-          `Confirm in the ERP that document ${label} has not posted, then cancel with that confirmation — otherwise its entries would post again in the next batch.`,
-      );
-    }
   }
 
   /**
    * The single update that commits the batch to cancelling: status, cleared summary pointer, the
    * audit triple and — for a batch that had been sent — the ERP check: when, by whose cancel, and
-   * whether the lookup or the canceller's attestation established it.
+   * whether the lookup or the canceller's attestation established it. The basis comes only from
+   * {@link authorizeCancel}'s ERP check.
    */
-  private async markCancelled(options: JournalEntryBatchCancelOptions, user: UserInfo | undefined): Promise<void> {
+  private async markCancelled(options: JournalEntryBatchCancelOptions, erpNotPostedBasis: ERPNotPostedBasis | undefined, user: UserInfo): Promise<void> {
     const fromStatus = this.Status;
     const now = new Date();
     this.SummaryJournalEntryID = null;
     this.CancelReason = options.reason?.trim() || null;
     this.CancelledAt = now;
-    this.CancelledByUserID = user?.ID ?? null;
-    if (this.SentAt && options.confirmNotAlreadyPostedInERP === true) {
+    this.CancelledByUserID = user.ID;
+    if (this.SentAt && erpNotPostedBasis) {
       this.ERPNotPostedConfirmedAt = now;
-      this.ERPNotPostedConfirmedByUserID = user?.ID ?? null;
-      this.ERPNotPostedBasis = options.erpNotPostedBasis ?? 'UserAttested';
+      this.ERPNotPostedConfirmedByUserID = user.ID;
+      this.ERPNotPostedBasis = erpNotPostedBasis;
     }
     this.Status = 'Cancelled';
+    await this.saveCancelled(`Cancel: ${fromStatus}→Cancelled`);
+  }
+
+  /** Save the → Cancelled update with the {@link _cancelling} flag up, so {@link Validate} lets the edge through. */
+  private async saveCancelled(label: string): Promise<void> {
     this._cancelling = true;
     try {
-      if (!(await this.Save())) throw new Error(`Cancel: ${fromStatus}→Cancelled failed: ${this.LatestResult?.CompleteMessage ?? 'unknown'}`);
+      if (!(await this.Save())) throw new Error(`${label} failed: ${this.LatestResult?.CompleteMessage ?? 'unknown'}`);
     } finally {
       this._cancelling = false;
     }
@@ -632,6 +766,25 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
       if (!(await this.Save())) throw new Error(`batch teardown: clearing SummaryJournalEntryID failed: ${this.LatestResult?.CompleteMessage ?? 'unknown'}`);
     }
     await this.ReleaseMembersAndDeleteSummary(summaryId, user);
+  }
+
+  /**
+   * Regenerate's empty cancel: mark a Pending batch Cancelled once {@link TearDownSummaryAndUnlock}
+   * has already deleted its summary and released its members, because nothing remained to rebuild.
+   * The teardown has run, so this is the status change only. Refused while the summary pointer is
+   * still set, which is the mark of a teardown that did not run. Owns NO transaction —
+   * regenerateJournalEntryBatch's does.
+   */
+  public async CancelAfterTeardown(): Promise<void> {
+    const label = this.JournalEntryBatchNumber ?? this.ID;
+    if (this.Status !== 'Pending') {
+      throw new Error(`JournalEntryBatchEntityServer.CancelAfterTeardown: batch ${label} is ${this.Status}; only a Pending batch is cancelled after its teardown.`);
+    }
+    if (this.SummaryJournalEntryID) {
+      throw new Error(`JournalEntryBatchEntityServer.CancelAfterTeardown: batch ${label} still points at its summary journal entry; run TearDownSummaryAndUnlock first, or cancel it with Cancel.`);
+    }
+    this.Status = 'Cancelled';
+    await this.saveCancelled('CancelAfterTeardown: Pending→Cancelled');
   }
 
   /**
