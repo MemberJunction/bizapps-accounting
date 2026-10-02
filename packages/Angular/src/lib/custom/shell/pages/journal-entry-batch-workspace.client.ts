@@ -75,8 +75,9 @@ export interface BuildOutcome {
 
 export class JournalEntryBatchWorkspaceClient {
   /**
-   * The cutoff goes on the wire as the calendar day itself. The engine reads `YYYY-MM-DD` as UTC
-   * midnight and includes that whole day — no browser zone is involved at any step.
+   * The cutoff goes on the wire as the calendar day itself. The engine reads a `YYYY-MM-DD` string
+   * as that day and includes the whole of it — no browser zone is involved at any step. An empty
+   * input sends no cutoff at all, which the page labels as including future-dated entries.
    */
   private toCutoffDay(day: string | null): string | null {
     return day && IsCalendarDay(day) ? day : null;

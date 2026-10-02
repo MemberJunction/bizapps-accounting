@@ -20,6 +20,7 @@ import { AUGUST_CLOSE_IN_CHICAGO, useBusinessClock } from '../../../../__tests__
  * (a `datetime-local` would hold an instant) is pinned too.
  */
 const BUSINESS_DAY = '2026-08-31';
+const NO_CUTOFF = 'no cutoff — includes future-dated entries';
 
 interface RecordedCall {
   Name: string;
@@ -68,6 +69,19 @@ describe('JournalEntryBatchWorkspacePageComponent — default cutoff (DOM)', () 
     expect(page.CriteriaChips).toContain(`through ${BUSINESS_DAY}`);
   });
 
+  it('says so when the cutoff is cleared — an empty cutoff previews entries dated in the future too', async () => {
+    // Clearing the date input sends no cutoff, so the preview includes every Pending entry,
+    // tomorrow's included. That was silent: the "through" chip simply vanished.
+    const page = (await render()).componentInstance;
+    page.Draft!.Criteria.Cutoff = '';
+    page.OnCriteriaChanged();
+    page.Apply();
+    await vi.waitFor(() => expect(calls).toHaveLength(1));
+
+    expect(calls[0].Payload['Cutoff']).toBeNull();
+    expect(page.CriteriaChips).toContain(NO_CUTOFF);
+  });
+
   it('sends the cutoff to the preview as that day, never an instant', async () => {
     const page = (await render()).componentInstance;
     page.Apply();
@@ -101,5 +115,13 @@ describe('JournalEntryBatchWorkspacePageComponent — cutoff input (DOM, real te
     expect(input, 'the cutoff input rendered').not.toBeNull();
     expect(input!.type).toBe('date');
     await vi.waitFor(() => expect(input!.value).toBe(BUSINESS_DAY));
+    expect(label!.querySelector('.bw-hint'), 'no warning while a cutoff is set').toBeNull();
+
+    input!.value = '';
+    input!.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(label!.querySelector('.bw-hint')?.textContent?.trim()).toBe('No cutoff — includes future-dated entries.');
   });
 });

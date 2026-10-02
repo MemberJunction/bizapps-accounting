@@ -89,6 +89,21 @@ describe('AccountingBatchesPageComponent — Build Batch modal cutoff (DOM)', ()
     expect(input.value).toBe(BUSINESS_DAY);
   });
 
+  it('says so when the cutoff is cleared — the preview then includes future-dated entries', async () => {
+    const fixture = await render();
+    const input = await openModal(fixture);
+    const hint = () => fixture.nativeElement.querySelector('.mja-modal-hint') as HTMLElement | null;
+    expect(hint(), 'no warning while a cutoff is set').toBeNull();
+
+    input.value = '';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(previewCalls.at(-1)?.Cutoff).toBeNull();
+    expect(hint()?.textContent?.trim()).toBe('No cutoff — includes future-dated entries.');
+  });
+
   it('keeps a cutoff the user chose when the modal is closed and reopened', async () => {
     const fixture = await render();
     const first = await openModal(fixture);

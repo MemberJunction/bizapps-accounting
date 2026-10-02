@@ -98,6 +98,9 @@
           [(ngModel)]="Draft.Criteria.Cutoff"
           (ngModelChange)="OnCriteriaChanged()"
           [disabled]="IsBuilt" />
+        @if (!Draft.Criteria.Cutoff) {
+          <span class="bw-hint">No cutoff — includes future-dated entries.</span>
+        }
       </label>
 
       <label class="bw-field">

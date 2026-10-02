@@ -298,7 +298,9 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
     const d = this.Draft;
     if (!d) return [];
     const chips: string[] = [];
-    if (d.Criteria.Cutoff) chips.push(`through ${d.Criteria.Cutoff}`);
+    // An empty cutoff is no date clause at all — the same as the Batches modal — so it is shown, not
+    // left to the absence of a chip: the preview then includes entries dated in the future.
+    chips.push(d.Criteria.Cutoff ? `through ${d.Criteria.Cutoff}` : 'no cutoff — includes future-dated entries');
     chips.push(this.companyChipLabel(d.Criteria.CompanyIDs));
     chips.push(this.EntryTypeScopes.find((s) => s.Id === d.Criteria.EntryTypeScope)?.Label ?? 'All');
     chips.push(d.Criteria.Source === 'View' ? 'from a saved view' : 'oldest-forward');

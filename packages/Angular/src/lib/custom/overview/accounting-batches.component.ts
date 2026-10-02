@@ -286,6 +286,9 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                 [(ngModel)]="BuildCutoffDate"
                                 (ngModelChange)="OnBuildPreviewFilterChange()"
                                 aria-label="Effective Date Cutoff" />
+                            @if (!BuildCutoffDate) {
+                                <span class="mja-modal-hint">No cutoff — includes future-dated entries.</span>
+                            }
                         </div>
                     </div>
 
@@ -956,6 +959,10 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
             flex-direction: column;
             gap: 6px;
             min-width: 0;
+        }
+        .mja-modal-hint {
+            font-size: 12px;
+            color: var(--mj-status-warning);
         }
         .mja-modal-label {
             font-size: 11px;
