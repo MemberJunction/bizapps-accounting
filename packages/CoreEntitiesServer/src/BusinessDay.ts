@@ -5,7 +5,7 @@
  * midnight differs from the business day and can move an entry into the wrong month or period.
  */
 import { IMetadataProvider, UserInfo } from '@memberjunction/core';
-import { BusinessTimeZoneEngine } from '@mj-biz-apps/common-entities';
+import { BusinessTimeZoneEngine, CalendarDayIn, type CalendarDay } from '@mj-biz-apps/common-entities';
 
 /**
  * Today as a date-only value in the business zone, UTC midnight of that day. Assumes
@@ -20,4 +20,16 @@ export function todayBusiness(companyID?: string): Date {
 export async function loadTodayBusiness(contextUser: UserInfo, provider: IMetadataProvider, companyID?: string): Promise<Date> {
   await BusinessTimeZoneEngine.Instance.Config(false, contextUser, provider);
   return todayBusiness(companyID);
+}
+
+/**
+ * The BUSINESS day an instant falls on — e.g. a batch cutoff sent as "now" from a datetime picker.
+ * Compared against a DATE column, the instant itself would be read as its UTC day, which from
+ * ~7 PM Central onward is already tomorrow. Configures `BusinessTimeZoneEngine` first (a no-op once
+ * loaded); `companyID` picks that company's zone once the engine carries one (today it is the
+ * app-wide `BizApps.BusinessTimeZone`).
+ */
+export async function loadBusinessDayOf(instant: Date, contextUser: UserInfo, provider: IMetadataProvider, companyID?: string): Promise<CalendarDay> {
+  await BusinessTimeZoneEngine.Instance.Config(false, contextUser, provider);
+  return CalendarDayIn(instant, BusinessTimeZoneEngine.Instance.Resolve(companyID));
 }

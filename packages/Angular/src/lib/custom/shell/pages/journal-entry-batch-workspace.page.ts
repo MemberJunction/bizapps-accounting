@@ -1,6 +1,7 @@
 import { Component, ChangeDetectionStrategy, ChangeDetectorRef, Input, inject, OnInit, OnDestroy } from '@angular/core';
 import { RunView, type IRemoteOperationProvider } from '@memberjunction/core';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
+import { BusinessTimeZoneEngine } from '@mj-biz-apps/common-entities';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
 import { CompanyScopeService } from '../../shared/company-scope.service';
@@ -262,8 +263,9 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
 
   private defaultCriteria(): JournalEntryBatchCriteria {
     return {
-      // "Include unbatched through [now]" — the §2 default flow.
-      Cutoff: this.toLocalInput(new Date()),
+      // "Include unbatched through [today]" — the §2 default flow. Today is the BUSINESS day, not
+      // the browser's: the cutoff is matched against EffectiveDate, a DATE column (golive #168).
+      Cutoff: BusinessTimeZoneEngine.Instance.Today(),
       // Seed from the app-wide company scope: the operator already told us which companies they
       // work in, so re-asking with a blank multi-select would be rude.
       CompanyIDs: [...this.Scope.SelectedIDs],
@@ -272,13 +274,6 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
       ViewID: null,
       TargetSystem: 'BusinessCentral',
     };
-  }
-
-  /** `datetime-local` wants `YYYY-MM-DDTHH:mm` in LOCAL time (the only place local time is right:
-   *  it is what the operator typed). Converted back to a UTC instant on the way out. */
-  private toLocalInput(d: Date): string {
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
   public OnCriteriaChanged(): void {
@@ -303,7 +298,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
     const d = this.Draft;
     if (!d) return [];
     const chips: string[] = [];
-    if (d.Criteria.Cutoff) chips.push(`through ${d.Criteria.Cutoff.replace('T', ' ')}`);
+    if (d.Criteria.Cutoff) chips.push(`through ${d.Criteria.Cutoff}`);
     chips.push(this.companyChipLabel(d.Criteria.CompanyIDs));
     chips.push(this.EntryTypeScopes.find((s) => s.Id === d.Criteria.EntryTypeScope)?.Label ?? 'All');
     chips.push(d.Criteria.Source === 'View' ? 'from a saved view' : 'oldest-forward');

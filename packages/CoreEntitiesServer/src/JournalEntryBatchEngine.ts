@@ -83,7 +83,8 @@ import { JournalEntryBatchEntityServer, type ERPNotPostedBasis, type JournalEntr
 import { JournalEntryBatchDispatchServices } from './JournalEntryBatchDispatchServices.js';
 import { GetJournalEntryBatchSummaryEntryType } from './JournalEntryTypes.js';
 import { sqlGuidLiteral } from './SqlGuards.js';
-import { loadTodayBusiness } from './BusinessDay.js';
+import { AddDays, type CalendarDay } from '@mj-biz-apps/common-entities';
+import { loadBusinessDayOf, loadTodayBusiness } from './BusinessDay.js';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
@@ -315,8 +316,9 @@ export async function pendingCompanies(contextUser: UserInfo, provider: IMetadat
  * on/before a date so an operator can batch "everything up to the end of the month".
  */
 export interface BuildJournalEntryBatchOptions {
-  /** Upper bound. A DATE-only cutoff (midnight UTC) is INCLUSIVE of that whole day
-   *  (EffectiveDate < cutoff + 1 day); a datetime cutoff is exact (EffectiveDate <= cutoff). */
+  /** Upper bound, always a whole DAY and INCLUSIVE of it (EffectiveDate < day + 1) — EffectiveDate
+   *  is a DATE column, so there is no time of day to compare against. A midnight-UTC cutoff is
+   *  that calendar day; any other instant is the BUSINESS day it falls on (golive #168). */
   cutoff?: Date | null;
   /** Optional lower bound (EffectiveDate >= startDate); omit for the standard oldest-forward flow. */
   startDate?: Date | null;
@@ -336,11 +338,8 @@ export async function pendingCandidateFilter(options: BuildJournalEntryBatchOpti
   const clauses = [`Status='Pending'`, `EntryTypeID<>'${summaryType.ID}'`];
   if (options.startDate) clauses.push(`EffectiveDate >= '${isoDate(options.startDate)}'`);
   if (options.cutoff) {
-    if (isMidnightUTC(options.cutoff)) {
-      clauses.push(`EffectiveDate < '${isoDate(addDaysUTC(options.cutoff, 1))}'`); // inclusive whole day
-    } else {
-      clauses.push(`EffectiveDate <= '${options.cutoff.toISOString()}'`); // exact datetime
-    }
+    const cutoffDay = await cutoffBusinessDay(options.cutoff, options.companyIds, contextUser, p);
+    clauses.push(`EffectiveDate < '${AddDays(cutoffDay, 1)}'`); // inclusive whole day
   }
   // Empty/omitted scope = NO clause (all companies / all types) — never `IN ()`, which is a SQL
   // syntax error AND would silently mean "nothing".
@@ -356,6 +355,19 @@ export async function pendingCandidateFilter(options: BuildJournalEntryBatchOpti
     clauses.push(`EntryTypeID NOT IN (${excludeTypeIds.map(sqlGuid).join(',')})`);
   }
   return clauses.join(' AND ');
+}
+
+/**
+ * The calendar day a cutoff means. A midnight-UTC value is already a calendar day (a date input,
+ * `resolveCutoff`'s PriorDay/PriorMonth). Any other instant — the batch workspace's "now" — is the
+ * day it falls on in the BUSINESS zone; its UTC day would be tomorrow every evening from ~7 PM
+ * Central, and the preview would admit tomorrow's JEs into the batch. With exactly one company in
+ * scope its zone is used; otherwise the app-wide zone.
+ */
+async function cutoffBusinessDay(cutoff: Date, companyIds: string[] | null | undefined, contextUser: UserInfo, p: Providers): Promise<CalendarDay> {
+  if (isMidnightUTC(cutoff)) return isoDate(cutoff);
+  const companyId = companyIds?.length === 1 ? companyIds[0] : undefined;
+  return loadBusinessDayOf(cutoff, contextUser, p.md, companyId);
 }
 
 /** Resolve JournalEntryType CODES to IDs for the criteria filter — unknown codes fail loudly. */
@@ -390,11 +402,6 @@ function sqlText(value: string): string {
 const isMidnightUTC = (d: Date): boolean =>
   d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0 && d.getUTCMilliseconds() === 0;
 const isoDate = (d: Date): string => new Date(d).toISOString().slice(0, 10);
-const addDaysUTC = (d: Date, n: number): Date => {
-  const r = new Date(d);
-  r.setUTCDate(r.getUTCDate() + n);
-  return r;
-};
 
 // ─── Explicit-ID + view builds (the workspace's include/exclude + B1.2) ──────
 
