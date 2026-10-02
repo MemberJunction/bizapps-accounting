@@ -148,7 +148,8 @@ The front door for external callers is **`Accounting.CreateJournalEntry`** (§2)
 validates shape/accounts/dimensions, merges duplicate lines (debits ordered first), checks
 balance **overall and per company** (AM-4), and writes atomically. Hooks on the entity path:
 - **W6** `generateReversal(reason)` — new Pending JE (`EntryType='Reversal'`, trg 50012), Dr/Cr
-  swapped, back-referenced both ways.
+  swapped, back-referenced both ways, dated the later of today's business day and the original's
+  `EffectiveDate`.
 - **W9** attachment validation — a non-null `FileID` must reference an existing `__mj.File`.
 - **F1** `validateJournalEntry()` — read-only guard: balance overall + per company, two-line
   minimum, GL-active.

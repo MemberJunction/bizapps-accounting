@@ -65,6 +65,8 @@ there is no company segment in the number anymore).
 **Does:** creates a **new Pending JE** — `EntryType='Reversal'` (required by `trg_JE_ReversalConsistency`
 50012), every line's **Dr/Cr swapped**, `ReversesJournalEntryID =` the original — then back-references the
 original's `ReversedByJournalEntryID` (the one field the immutability trigger lets change on a locked JE).
+The reversal's `EffectiveDate` is the later of today's business day (`BusinessTimeZoneEngine`) and the
+original's `EffectiveDate`, so a reversal never lands in a period before the entry it reverses (#266).
 
 ### W9 — JE attachment validation *(✅ `JournalEntryEntityServer.ts`)*
 **Fires:** whenever a JE is saved with a non-null `FileID`.
