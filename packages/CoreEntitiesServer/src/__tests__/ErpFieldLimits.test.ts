@@ -33,6 +33,7 @@ const fields: IntegrationObjectFieldRow[] = [
 
 const journal = (overrides: Partial<CreateERPJournalInput> = {}): CreateERPJournalInput => ({
   CompanyID: 'company-1',
+  CompanyIntegrationID: 'company-integration-1',
   EntryDate: new Date('2026-09-27T00:00:00Z'),
   DocNumber: 'BATCH-000001',
   Lines: [
