@@ -7,7 +7,7 @@
  * Same mock harness pattern as JournalEntryExtendedServer.test.ts.
  */
 import { describe, it, expect, beforeEach, vi, afterEach, type Mock } from 'vitest';
-import { BaseEntity, Metadata, EntityInfo } from '@memberjunction/core';
+import { BaseEntity, Metadata, EntityInfo, UserInfo } from '@memberjunction/core';
 import { JournalEntryBatchEntityServer } from '../JournalEntryBatchEntityServer.js';
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
@@ -45,8 +45,9 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
       'ID', 'JournalEntryBatchNumber', 'CompanyID', 'PostingDate', 'SummaryJournalEntryID', 'TargetSystem',
       'BatchedAt', 'BatchedByUserID', 'Status', 'TotalEntries', 'TotalDebits', 'TotalCredits',
       'ApprovedAt', 'ApprovedByUserID', 'ArchiveReason', 'ArchivedAt', 'ArchivedByUserID',
-      'CancelReason', 'CancelledAt', 'CancelledByUserID', 'ApprovedContentHash', 'SentAt',
+      'CancelReason', 'CancelledAt', 'CancelledByUserID', 'ApprovedContentHash',
       'ERPNotPostedConfirmedAt', 'ERPNotPostedConfirmedByUserID', 'ERPNotPostedBasis',
+      'SentAt', 'SentByUserID', 'SendAttemptCount', 'ErrorMessage',
     ]);
     Metadata.Provider = {
       Entities: [batchInfo],
@@ -396,6 +397,82 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
 
       expect(batch.ArchivedByUserID).toBe('U-ARCHIVER');
       expect(batch.ArchivedAt).toBeInstanceOf(Date);
+    });
+  });
+
+  // ─── the send audit (#184) ────────────────────────────────────────────────
+  describe('every transition into Sent stamps who sent it and which attempt it is', () => {
+    let save: ReturnType<typeof vi.spyOn>;
+    const earlier = new Date('2026-09-01T12:00:00Z');
+    /** A real UserInfo, built from its own init data: the stamp reads only its ID. */
+    const userWithID = (id: string): UserInfo => new UserInfo(undefined, { ID: id });
+
+    beforeEach(() => {
+      save = vi.spyOn(BaseEntity.prototype, 'Save').mockResolvedValue(true);
+    });
+
+    afterEach(() => save.mockRestore());
+
+    it('a first dispatch (Approved → Sent) is attempt 1, sent by the context user', async () => {
+      batch.ContextCurrentUser = userWithID('U-DISPATCHER');
+      asSaved('Approved', { SendAttemptCount: 0 });
+      batch.Status = 'Sent';
+      await batch.Save();
+
+      expect(batch.SendAttemptCount).toBe(1);
+      expect(batch.SentByUserID).toBe('U-DISPATCHER');
+      expect(batch.SentAt).toBeInstanceOf(Date);
+    });
+
+    it('a retry (Failed → Sent) counts on from the loaded attempt and overwrites the earlier stamp', async () => {
+      batch.ContextCurrentUser = userWithID('U-RETRIER');
+      asSaved('Failed', { SendAttemptCount: 2, SentAt: earlier, SentByUserID: 'U-FIRST' });
+      batch.Status = 'Sent';
+      await batch.Save();
+
+      expect(batch.SendAttemptCount).toBe(3);
+      expect(batch.SentByUserID).toBe('U-RETRIER');
+      expect(batch.SentAt).not.toEqual(earlier);
+    });
+
+    it('the count builds on the LOADED value, not one a caller set', async () => {
+      batch.ContextCurrentUser = userWithID('U-RETRIER');
+      asSaved('Failed', { SendAttemptCount: 1 });
+      batch.SendAttemptCount = 40;
+      batch.Status = 'Sent';
+      await batch.Save();
+
+      expect(batch.SendAttemptCount).toBe(2);
+    });
+
+    it('with no context user the sender is cleared, never left as the previous attempt\'s', async () => {
+      asSaved('Failed', { SendAttemptCount: 1, SentByUserID: 'U-FIRST' });
+      batch.Status = 'Sent';
+      await batch.Save();
+
+      expect(batch.SentByUserID).toBeNull();
+    });
+
+    it.each(['Posted', 'Failed'] as const)('leaving Sent (Sent → %s) does not restamp the send', async (to) => {
+      batch.ContextCurrentUser = userWithID('U-OTHER');
+      asSaved('Sent', { SendAttemptCount: 1, SentAt: earlier, SentByUserID: 'U-FIRST' });
+      batch.Status = to;
+      await batch.Save();
+
+      expect(batch.SendAttemptCount).toBe(1);
+      expect(batch.SentByUserID).toBe('U-FIRST');
+      expect(batch.SentAt).toEqual(earlier);
+    });
+
+    it('a save that keeps a batch Sent does not restamp the send', async () => {
+      batch.ContextCurrentUser = userWithID('U-OTHER');
+      asSaved('Sent', { SendAttemptCount: 1, SentAt: earlier, SentByUserID: 'U-FIRST' });
+      batch.ErrorMessage = 'annotated while Sent';
+      await batch.Save();
+
+      expect(batch.SendAttemptCount).toBe(1);
+      expect(batch.SentByUserID).toBe('U-FIRST');
+      expect(batch.SentAt).toEqual(earlier);
     });
   });
 });

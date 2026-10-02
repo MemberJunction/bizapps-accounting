@@ -226,7 +226,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
 
   /**
    * WHO and WHEN belong to the transition, not the caller: the approval, archive and cancel audit
-   * fields are filled from context when the caller didn't supply them.
+   * fields are filled from context when the caller didn't supply them, and a send is stamped.
    */
   private stampTransitionAudit(): void {
     if (!this.IsSaved || this.Status === this.loadedStatus) return;
@@ -240,7 +240,24 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     } else if (this.Status === 'Cancelled') {
       if (!this.CancelledAt) this.CancelledAt = new Date();
       if (!this.CancelledByUserID && userId) this.CancelledByUserID = userId;
+    } else if (this.Status === 'Sent') {
+      this.stampSend();
     }
+  }
+
+  /**
+   * The send audit (#184), stamped on every transition into Sent — a retry included, so unlike the
+   * approval and archive pairs it overwrites. SendAttemptCount is a version token: the send must
+   * come from Approved or Failed and write exactly the loaded count plus one, which is what
+   * trg_JournalEntryBatch_SendOnce checks. Of two concurrent sends from the same loaded state, the
+   * second save is refused before its ERP call. __mj.RecordChange keeps every earlier SentAt, sender
+   * and ErrorMessage.
+   */
+  private stampSend(): void {
+    const loadedCount = (this.GetFieldByName('SendAttemptCount')?.OldValue as number | null | undefined) ?? 0;
+    this.SentAt = new Date();
+    this.SentByUserID = this.ContextCurrentUser?.ID ?? null;
+    this.SendAttemptCount = loadedCount + 1;
   }
 
   /** Always-applies batch invariants: legal status transitions + the audit fields each transition carries. */

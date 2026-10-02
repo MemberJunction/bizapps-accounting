@@ -48,7 +48,7 @@ describe('AccountingBatchesPageComponent — Build Batch modal cutoff (DOM)', ()
     previewCalls = [];
     vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'PreviewJournalEntryBatch').mockImplementation(async (options) => {
       previewCalls.push(options ?? {});
-      return { Success: true, Candidates: [], TotalDebits: 0, TotalCredits: 0, OutOfOrderSkipCount: 0 };
+      return { Success: true, Candidates: [], TotalDebits: 0, TotalCredits: 0, GrossDebits: 0, GrossCredits: 0, OutOfOrderSkipCount: 0 };
     });
   });
 
@@ -103,6 +103,31 @@ describe('AccountingBatchesPageComponent — Build Batch modal cutoff (DOM)', ()
     expect(fixture.componentInstance.BuildCutoffDate).toBe('2026-07-15');
     expect(previewCalls.at(-1)?.Cutoff).toBe('2026-07-15');
     expect(reopened.value).toBe('2026-07-15');
+  });
+
+  it('shows entry totals beside the netted totals, and counts the excluded entries in the ordering warning (golive #284)', async () => {
+    vi.mocked(JournalEntryBatchDispatchClient.prototype.PreviewJournalEntryBatch).mockResolvedValue({
+      Success: true,
+      Candidates: [],
+      TotalDebits: 8000,
+      TotalCredits: 8000,
+      GrossDebits: 8666.63,
+      GrossCredits: 8666.63,
+      OutOfOrderSkipCount: 225,
+    });
+    const fixture = await render();
+    await openModal(fixture);
+
+    const facts = [...fixture.nativeElement.querySelectorAll('.mja-fact-item')].map((el: Element) =>
+      Array.from(el.querySelectorAll('.mja-fact-lbl, .mja-fact-val'), p => p.textContent?.trim()).join(' '),
+    );
+    expect(facts).toContain('Entry Totals Dr $8,666.63 Cr $8,666.63');
+    expect(facts).toContain('Net to Post Dr $8,000.00 Cr $8,000.00');
+    expect(fixture.nativeElement.querySelector('.mja-fact-note')?.textContent).toContain('Net to Post is what the batch carries');
+
+    const warning = fixture.nativeElement.querySelector('.mja-banner[role="status"]')?.textContent?.replace(/\s+/g, ' ');
+    expect(warning).toContain('225 excluded entries are older than an entry you included');
+    expect(warning).not.toContain('included entries will batch');
   });
 });
 

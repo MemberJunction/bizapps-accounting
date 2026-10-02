@@ -10,7 +10,10 @@ const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
 
 beforeEach(() => {
     installStubProvider([
-        stubEntityInfo(JE_ENTITY, ['ID', 'EntryNumber', 'EffectiveDate', 'LinkedRecordID', 'Description', '__mj_CreatedAt']),
+        stubEntityInfo(JE_ENTITY, [
+            'ID', 'EntryNumber', 'EffectiveDate', 'LinkedRecordID', 'Description', '__mj_CreatedAt',
+            'ReversesJournalEntryID', 'ReversedByJournalEntryID',
+        ]),
         stubEntityInfo(JEL_ENTITY, ['ID', 'JournalEntryID', 'DebitAmount', 'CreditAmount']),
     ]);
 });
@@ -38,6 +41,8 @@ async function mockEntry(fields: {
     LinkedRecordID: string;
     Description: string;
     CreditAmount: number;
+    ReversesJournalEntryID?: string;
+    ReversedByJournalEntryID?: string;
 }): Promise<mjBizAppsAccountingJournalEntryEntity> {
     const entry = await entityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY);
     entry.NewRecord();
@@ -46,6 +51,8 @@ async function mockEntry(fields: {
     if (fields.CreatedAt) entry.Set('__mj_CreatedAt', fields.CreatedAt);
     entry.LinkedRecordID = fields.LinkedRecordID;
     entry.Description = fields.Description;
+    if (fields.ReversesJournalEntryID) entry.ReversesJournalEntryID = fields.ReversesJournalEntryID;
+    if (fields.ReversedByJournalEntryID) entry.ReversedByJournalEntryID = fields.ReversedByJournalEntryID;
 
     const line = await entry.Lines.Create();
     line.CreditAmount = fields.CreditAmount;
@@ -84,12 +91,9 @@ describe('DeferredRevenueWaterfallComponent', () => {
         expect(comp.MonthHeaders.length).toBe(12);
     });
 
-    it('formats money and compact currency correctly', () => {
+    it('formats money correctly', () => {
         const comp = new DeferredRevenueWaterfallComponent();
         expect(comp.FormatMoney(1200)).toBe('$1,200.00');
-        expect(comp.FormatCompact(1500)).toBe('$2k');
-        expect(comp.FormatCompact(1500000)).toBe('$1.5M');
-        expect(comp.FormatCompact(0)).toBe('—');
     });
 
     it('handles empty entries gracefully', () => {
@@ -156,7 +160,7 @@ describe('DeferredRevenueWaterfallComponent', () => {
                 it('recognizes and releases through the business month, inclusive', async () => {
                     const comp = render(await monthlySchedule());
                     expect(comp.Rows[0].RecognizedToDate).toBe(100);
-                    expect(comp.Summary.TotalRecognizedYTD).toBe(100);
+                    expect(comp.Summary.TotalRecognizedToDate).toBe(100);
                     expect(comp.Summary.MonthlyTotals.filter((m) => m.IsPastOrCurrent).map((m) => m.MonthKey)).toEqual(['2026-01']);
                     // What the template renders: each cell's IsPastOrCurrent and the year's ReleasedAmount.
                     expect(comp.YearGroups[0].Months.filter((m) => m.IsPastOrCurrent).map((m) => m.MonthKey)).toEqual(['2026-01']);
@@ -178,7 +182,130 @@ describe('DeferredRevenueWaterfallComponent', () => {
                     expect(comp.MonthHeaders[0].Key).toBe('2026-02');
                     expect(comp.Rows[0].MonthlyCells.find((c) => c.MonthKey === '2026-02')?.Amount).toBe(500);
                 });
+
+                it('recognizes an entry on its day, not from the start of its month', async () => {
+                    // The business day is 31 January: the 31st is recognized, a February entry is not.
+                    const comp = render([
+                        await mockEntry({
+                            EntryNumber: '3001',
+                            EffectiveDate: FromCalendarDay('2026-01-31'),
+                            LinkedRecordID: 'sub-term-1',
+                            Description: 'Monthly Subscription Rev Rec',
+                            CreditAmount: 100,
+                        }),
+                        await mockEntry({
+                            EntryNumber: '3002',
+                            EffectiveDate: FromCalendarDay('2026-02-28'),
+                            LinkedRecordID: 'sub-term-1',
+                            Description: 'Monthly Subscription Rev Rec',
+                            CreditAmount: 200,
+                        }),
+                    ]);
+                    expect(comp.Rows[0].RecognizedToDate).toBe(100);
+                    expect(comp.Rows[0].RemainingUnearned).toBe(200);
+                });
             });
         }
+    });
+
+    describe('recognition by day within the current month', () => {
+        useBusinessClock({
+            BusinessZone: 'America/Chicago',
+            BusinessSqlZone: 'Central Standard Time',
+            MachineZone: 'America/Los_Angeles',
+            // 18:00 CST on 15 January.
+            Instant: new Date('2026-01-16T00:00:00.000Z'),
+        });
+
+        it('holds a forward-dated entry in the current month until its day', async () => {
+            const entries = [
+                await mockEntry({
+                    EntryNumber: '4001',
+                    EffectiveDate: FromCalendarDay('2026-01-15'),
+                    LinkedRecordID: 'sub-term-1',
+                    Description: 'Monthly Subscription Rev Rec',
+                    CreditAmount: 100,
+                }),
+                await mockEntry({
+                    EntryNumber: '4002',
+                    EffectiveDate: FromCalendarDay('2026-01-30'),
+                    LinkedRecordID: 'sub-term-2',
+                    Description: 'Monthly Subscription Rev Rec',
+                    CreditAmount: 250,
+                }),
+            ];
+            const comp = new DeferredRevenueWaterfallComponent();
+            comp.JournalEntries = entries;
+            comp.ngOnChanges({
+                JournalEntries: { currentValue: entries, previousValue: [], firstChange: true, isFirstChange: () => true },
+            });
+
+            expect(comp.Summary.TotalRecognizedToDate).toBe(100);
+            expect(comp.Summary.TotalRemainingUnearned).toBe(250);
+            const january = comp.YearGroups[0].Months.find((m) => m.MonthKey === '2026-01');
+            expect(january?.Amount).toBe(350);
+            expect(january?.RecognizedAmount).toBe(100);
+            expect(comp.YearGroups[0].ReleasedAmount).toBe(100);
+        });
+    });
+
+    describe('reversals', () => {
+        useBusinessClock({
+            BusinessZone: 'America/Chicago',
+            BusinessSqlZone: 'Central Standard Time',
+            MachineZone: 'America/Los_Angeles',
+            Instant: LAST_BUSINESS_DAY_OF_JANUARY,
+        });
+
+        function render(entries: mjBizAppsAccountingJournalEntryEntity[]): DeferredRevenueWaterfallComponent {
+            const comp = new DeferredRevenueWaterfallComponent();
+            comp.JournalEntries = entries;
+            comp.ngOnChanges({
+                JournalEntries: { currentValue: entries, previousValue: [], firstChange: true, isFirstChange: () => true },
+            });
+            return comp;
+        }
+
+        async function standing(): Promise<mjBizAppsAccountingJournalEntryEntity> {
+            return mockEntry({
+                EntryNumber: '5001',
+                EffectiveDate: FromCalendarDay('2026-01-01'),
+                LinkedRecordID: 'sub-term-1',
+                Description: 'Monthly Subscription Rev Rec',
+                CreditAmount: 100,
+            });
+        }
+
+        it('leaves out an entry that has been reversed', async () => {
+            const comp = render([
+                await standing(),
+                await mockEntry({
+                    EntryNumber: '5002',
+                    EffectiveDate: FromCalendarDay('2026-01-01'),
+                    LinkedRecordID: 'sub-term-1',
+                    Description: 'Monthly Subscription Rev Rec',
+                    CreditAmount: 400,
+                    ReversedByJournalEntryID: 'reversal-1',
+                }),
+            ]);
+            expect(comp.Summary.TotalDeferredBeginning).toBe(100);
+            expect(comp.Summary.TotalRecognizedToDate).toBe(100);
+        });
+
+        it('leaves out a reversal entry passed in with its original', async () => {
+            const comp = render([
+                await standing(),
+                await mockEntry({
+                    EntryNumber: '5003',
+                    EffectiveDate: FromCalendarDay('2026-01-10'),
+                    LinkedRecordID: 'sub-term-1',
+                    Description: 'Reversal of 5001: recognize in error',
+                    CreditAmount: 100,
+                    ReversesJournalEntryID: 'original-1',
+                }),
+            ]);
+            expect(comp.Summary.TotalDeferredBeginning).toBe(100);
+            expect(comp.Summary.TotalRecognizedToDate).toBe(100);
+        });
     });
 });

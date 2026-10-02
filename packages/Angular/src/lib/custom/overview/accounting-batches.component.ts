@@ -301,13 +301,15 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                             <span class="mja-fact-lbl">Including</span>
                             <strong class="mja-fact-val">{{ IncludedCount }} of {{ PreviewCandidateCount }} JEs</strong>
                         </div>
-                        <div class="mja-fact-item">
-                            <span class="mja-fact-lbl">Total Debits</span>
-                            <strong class="mja-fact-val">{{ PreviewTotalDebits | currency }}</strong>
+                        <div class="mja-fact-item" title="Every line of every ticked entry, before netting">
+                            <span class="mja-fact-lbl">Entry Totals</span>
+                            <strong class="mja-fact-val">Dr {{ PreviewGrossDebits | currency }}</strong>
+                            <strong class="mja-fact-val">Cr {{ PreviewGrossCredits | currency }}</strong>
                         </div>
-                        <div class="mja-fact-item">
-                            <span class="mja-fact-lbl">Total Credits</span>
-                            <strong class="mja-fact-val">{{ PreviewTotalCredits | currency }}</strong>
+                        <div class="mja-fact-item" title="The netted summary the batch will carry and post">
+                            <span class="mja-fact-lbl">Net to Post</span>
+                            <strong class="mja-fact-val">Dr {{ PreviewTotalDebits | currency }}</strong>
+                            <strong class="mja-fact-val">Cr {{ PreviewTotalCredits | currency }}</strong>
                         </div>
                         <div class="mja-fact-item">
                             <span class="mja-fact-lbl">Date Range</span>
@@ -318,14 +320,24 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                         </div>
                     </div>
 
+                    <!-- Netting is why the two pairs differ: a booking's Cr Deferred Revenue and its
+                         recognition's Dr Deferred Revenue cancel inside the batch (golive #284). -->
+                    @if (NetsBelowGross) {
+                        <p class="mja-fact-note">
+                            Lines on the same account net against each other inside the batch, so Net to Post is
+                            less than Entry Totals. Net to Post is what the batch carries.
+                        </p>
+                    }
+
                     <!-- Skipping an older entry while batching a newer one is ALLOWED, but it must
                          be visible: the entries reach the ERP out of their own date order. -->
                     @if (HasOutOfOrder) {
                         <div class="mja-banner" role="status">
                             <i class="fa-solid fa-triangle-exclamation"></i>
                             <span>
-                                {{ PreviewOutOfOrderSkipCount }} included entr{{ PreviewOutOfOrderSkipCount === 1 ? 'y' : 'ies' }}
-                                will batch ahead of an older entry you have excluded. That is allowed — the excluded
+                                {{ PreviewOutOfOrderSkipCount }} excluded entr{{ PreviewOutOfOrderSkipCount === 1 ? 'y is' : 'ies are' }}
+                                older than an entry you included, so newer entries will batch ahead of
+                                {{ PreviewOutOfOrderSkipCount === 1 ? 'it' : 'them' }}. That is allowed — the excluded
                                 entries stay Pending for a later batch.
                             </span>
                         </div>
@@ -1014,6 +1026,11 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
             font-weight: 700;
             color: var(--mj-text-primary);
         }
+        .mja-fact-note {
+            margin: 0;
+            font-size: 12px;
+            color: var(--mj-text-muted);
+        }
         .mja-modal-table-wrap {
             max-height: 240px;
             overflow-y: auto;
@@ -1119,12 +1136,14 @@ export class AccountingBatchesPageComponent implements OnInit {
     public PreviewEntries: PreviewEntryWire[] = [];
     public PreviewTotalDebits = 0;
     public PreviewTotalCredits = 0;
+    public PreviewGrossDebits = 0;
+    public PreviewGrossCredits = 0;
     public PreviewCandidateCount = 0;
     public PreviewCoveredStartDate: string | null = null;
     public PreviewCoveredEndDate: string | null = null;
     /**
-     * How many candidates the build would batch ahead of an older entry the operator unticked.
-     * Computed SERVER-side by the same code the build runs, so the warning cannot drift.
+     * How many unticked entries are older than the newest ticked one — the entries newer ones
+     * would batch ahead of. Computed SERVER-side by the same code the build runs, so the warning cannot drift.
      */
     public PreviewOutOfOrderSkipCount = 0;
 
@@ -1447,6 +1466,11 @@ export class AccountingBatchesPageComponent implements OnInit {
         return Math.abs(this.PreviewTotalDebits - this.PreviewTotalCredits) < 0.005;
     }
 
+    /** True when netting inside the batch removes some of the ticked entries' volume. */
+    public get NetsBelowGross(): boolean {
+        return this.PreviewGrossDebits - this.PreviewTotalDebits > 0.005;
+    }
+
     public get HasOutOfOrder(): boolean {
         return this.PreviewOutOfOrderSkipCount > 0;
     }
@@ -1503,6 +1527,8 @@ export class AccountingBatchesPageComponent implements OnInit {
                 this.PreviewCandidateCount = this.PreviewEntries.length;
                 this.PreviewTotalDebits = previewRes.TotalDebits;
                 this.PreviewTotalCredits = previewRes.TotalCredits;
+                this.PreviewGrossDebits = previewRes.GrossDebits;
+                this.PreviewGrossCredits = previewRes.GrossCredits;
                 this.PreviewOutOfOrderSkipCount = previewRes.OutOfOrderSkipCount;
                 this.setCoveredDateRange(this.PreviewEntries);
             } else {
@@ -1538,6 +1564,8 @@ export class AccountingBatchesPageComponent implements OnInit {
         this.PreviewCandidateCount = 0;
         this.PreviewTotalDebits = 0;
         this.PreviewTotalCredits = 0;
+        this.PreviewGrossDebits = 0;
+        this.PreviewGrossCredits = 0;
         this.PreviewOutOfOrderSkipCount = 0;
         this.PreviewCoveredStartDate = null;
         this.PreviewCoveredEndDate = null;
