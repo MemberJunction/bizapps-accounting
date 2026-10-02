@@ -1,5 +1,5 @@
 -- =============================================================================
--- Migration: V202609261200__v0.16.x__BatchSendOnce_SendAudit.sql
+-- Migration: V202610021200__v0.18.x__BatchSendOnce_SendAudit.sql
 -- Description: #184 — a batch can be sent only from Approved or Failed, one
 --              send at a time, and every send records who made it and which
 --              attempt it was.

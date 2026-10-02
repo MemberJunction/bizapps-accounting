@@ -1032,7 +1032,7 @@ export class ErpPostingUnconfirmedError extends Error {
 
 /**
  * The text every trg_JournalEntryBatch_SendOnce (50030) message starts with. Keep in sync with
- * migrations/V202609261200__v0.16.x__BatchSendOnce_SendAudit.sql.
+ * migrations/V202610021200__v0.18.x__BatchSendOnce_SendAudit.sql.
  */
 const SEND_REFUSED_MARKER = 'JournalEntryBatch send refused';
 
