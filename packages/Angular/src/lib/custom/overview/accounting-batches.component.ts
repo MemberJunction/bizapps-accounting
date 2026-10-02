@@ -1146,6 +1146,9 @@ export class AccountingBatchesPageComponent implements OnInit {
      * would batch ahead of. Computed SERVER-side by the same code the build runs, so the warning cannot drift.
      */
     public PreviewOutOfOrderSkipCount = 0;
+    /** Numbers each preview request. Only the latest one's response is applied (#254): ticking
+     *  fast fires overlapping previews, and a slower earlier one must not overwrite a newer one. */
+    private previewRequestSeq = 0;
 
     /**
      * The operator's unticked entries (golive #193). Held as an EXCLUSION set, not an inclusion
@@ -1500,6 +1503,9 @@ export class AccountingBatchesPageComponent implements OnInit {
 
     public CloseBuildBatchModal(): void {
         this.BuildModalVisible = false;
+        // Drop any preview still in flight — it answers a session that is over.
+        this.previewRequestSeq++;
+        this.IsPreviewLoading = false;
         this.ModalErrorMessage = null;
     }
 
@@ -1508,6 +1514,7 @@ export class AccountingBatchesPageComponent implements OnInit {
     }
 
     public async LoadBuildPreview(): Promise<void> {
+        const seq = ++this.previewRequestSeq;
         this.IsPreviewLoading = true;
         this.ModalErrorMessage = null;
         this.cdr.markForCheck();
@@ -1521,6 +1528,7 @@ export class AccountingBatchesPageComponent implements OnInit {
                 ExcludeEntryTypeCodes: this.ExcludeRevRec ? ['RevenueRecognition'] : null,
                 IncludedJournalEntryIDs: this.ExcludedEntryIDs.length > 0 ? this.IncludedEntryIDs : null,
             });
+            if (seq !== this.previewRequestSeq) return; // superseded by a newer request
 
             if (previewRes.Success) {
                 this.PreviewEntries = previewRes.Candidates ?? [];
@@ -1536,10 +1544,13 @@ export class AccountingBatchesPageComponent implements OnInit {
                 this.clearPreview();
             }
         } catch (e) {
+            if (seq !== this.previewRequestSeq) return;
             this.ModalErrorMessage = e instanceof Error ? e.message : String(e);
         } finally {
-            this.IsPreviewLoading = false;
-            this.cdr.markForCheck();
+            if (seq === this.previewRequestSeq) {
+                this.IsPreviewLoading = false;
+                this.cdr.markForCheck();
+            }
         }
     }
 
