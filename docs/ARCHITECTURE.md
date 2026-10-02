@@ -42,6 +42,45 @@ engine pipeline → `BaseEntity.Save()` in one TransactionGroup (hooks number; t
 `__mj.RecordChange` audits) → later swept into a multi-company batch → CFO-approved → posted to
 the ERP **by account number, split per company** (AM-4). Periods/close live in the ERP (CH-1).
 
+<a id="erp-master-data-contract"></a>
+### 2.1 ERP master-data mapping contract (#268)
+How an ERP's chart of accounts and dimensions land in this app's tables. It holds for every ERP;
+each Company Integration's entity maps and field maps implement it.
+
+| Target | Identity | Scope | A re-sync |
+|---|---|---|---|
+| `GL Accounts` | `CompanyID` + `Code`; `ExternalSystem` / `ExternalAccountID` carry the ERP's id | per company | updates the company's row |
+| `Dimensions` | `Code` | **shared by every company** | merges onto the existing row; never inserts a second |
+| `Dimension Values` | `DimensionID` + `Code` | shared, through its Dimension | merges onto the existing row |
+
+- **Code is the identity of a Dimension and a Dimension Value.** They have no external-id columns,
+  and multi-ERP sync is out of scope. An ERP's dimension ids are per company, so a shared row has no
+  single external id to hold. Journal posting already sends dimension tags by `Code`
+  (`resolveExternalDimensions`).
+- **Dimensions are instance-wide shared master data.** Two companies that both use `DEPT` mean the
+  same Dimension. The Integration Engine matches an incoming record on the field maps marked
+  `IsKeyField`, so the Dimensions map marks exactly `Code`, and the Dimension Values map exactly
+  `DimensionID` and `Code`. `SyncMasterData` checks this before it pulls, and fails a connection
+  whose maps key on anything else. A map without the key matches only through its own connection's
+  record maps, so a second company's sync would insert and collide on `UQ_Dimension_Code`. Company
+  scoping, if it is ever needed, revisits this together with the identity rule.
+- **`AccountType` is translated per integration**, by a `lookup` step in the `TransformPipeline` of
+  the field map onto `AccountType` (a child of the GL Accounts entity map). Cost of Goods Sold maps to
+  `Expense`. Give the lookup no `Default`: an ERP value it does not list then yields null, the
+  `NOT NULL` column refuses the row, and the gap shows as an errored record instead of a guessed
+  type. A generic example, for an ERP whose account category field is `category`:
+
+  ```json
+  [{ "Type": "lookup", "Config": { "Map": {
+      "Assets": "Asset", "Liabilities": "Liability", "Equity": "Equity",
+      "Income": "Revenue", "Cost of Goods Sold": "Expense", "Expense": "Expense"
+  } } }]
+  ```
+- **Non-postable ERP rows are skipped, not forced into the enum.** Heading, total and begin/end-total
+  rows are presentation structure, not accounts. The Integration Engine has no record-level filter
+  yet, so today this is the connector's or the integrator's job; it must not be done by giving the
+  `AccountType` lookup a `Default`.
+
 ## 3. Design patterns used
 - **Audit by construction (AD-2):** every ledger mutation goes through `BaseEntity.Save()`
   so `__mj.RecordChange` records it — no bare T-SQL INSERT, even for seeds.
