@@ -5,4 +5,6 @@ export const ACCT_ENTITIES = {
     JEType: 'MJ_BizApps_Accounting: Journal Entry Types',
     JE: 'MJ_BizApps_Accounting: Journal Entries',
     Company: 'MJ_BizApps_Accounting: Accounting Company Profiles',
+    /** MJ core's Company: the IS-A parent of `Company` (the accounting profile) above. */
+    MJCompany: 'MJ: Companies',
 } as const;
