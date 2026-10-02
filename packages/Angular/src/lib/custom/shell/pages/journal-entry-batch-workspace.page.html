@@ -192,8 +192,11 @@
     <div class="bw-sumstrip">
       <span>Included <b>{{ IncludedCount }}</b> / {{ Preview?.Candidates?.length ?? 0 }}</span>
       <span>Excluded <b>{{ ExcludedCount }}</b></span>
-      <span [class.bw-unbalanced]="!IsBalanced">
-        Dr <b>{{ Preview?.TotalDebits ?? 0 | currency }}</b>
+      <span title="Every line of every included entry, before netting">
+        Entries Dr <b>{{ Preview?.GrossDebits ?? 0 | currency }}</b> · Cr <b>{{ Preview?.GrossCredits ?? 0 | currency }}</b>
+      </span>
+      <span [class.bw-unbalanced]="!IsBalanced" title="The netted summary the batch will carry and post">
+        Net to post Dr <b>{{ Preview?.TotalDebits ?? 0 | currency }}</b>
         {{ IsBalanced ? '=' : '≠' }}
         Cr <b>{{ Preview?.TotalCredits ?? 0 | currency }}</b>
         {{ IsBalanced ? '✓' : '✗' }}

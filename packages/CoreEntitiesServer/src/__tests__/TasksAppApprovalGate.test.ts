@@ -115,6 +115,22 @@ describe('TasksAppApprovalGate — who may cancel past approval', () => {
     const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: null, hasTask: true, hasPerson: true }, world()));
     await expect(gate.assertMayCancelApproved(BATCH_ID, { ID: APPROVER_USER_ID } as UserInfo)).resolves.toBeUndefined();
   });
+
+  // #212: recordCancellation needs the canceller's Person, so the refusal comes before the cancel starts.
+  it('refuses an allowed user with no linked Person when the batch has an approval Task', async () => {
+    const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, hasTask: true, hasPerson: false }, world()));
+    await expect(gate.assertMayCancelApproved(BATCH_ID, cfo)).rejects.toThrow(/BATCH-0007: .*has no linked Person.*An administrator must link this user to a Person/);
+  });
+
+  it('lets an allowed user with no linked Person cancel a batch with no approval Task, which records nothing', async () => {
+    const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, hasTask: false, hasPerson: false }, world()));
+    await expect(gate.assertMayCancelApproved(BATCH_ID, cfo)).resolves.toBeUndefined();
+  });
+
+  it('tells a user who may not cancel only that, even when they also have no linked Person', async () => {
+    const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, hasTask: true, hasPerson: false }, world()));
+    await expect(gate.assertMayCancelApproved(BATCH_ID, { ID: OTHER_USER_ID } as UserInfo)).rejects.toThrow(/only the company's configured approver/);
+  });
 });
 
 describe('TasksAppApprovalGate.recordCancellation — the approval Task records the cancel', () => {
@@ -142,5 +158,59 @@ describe('TasksAppApprovalGate.recordCancellation — the approval Task records 
     const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, hasTask: true, hasPerson: false }, w));
     await expect(gate.recordCancellation(BATCH_ID, { reason: 'Wrong posting period', fromStatus: 'Approved' }, cfo)).rejects.toThrow(/has no linked Person/);
     expect(w.comments).toHaveLength(0);
+  });
+});
+
+// ─── a Pending cancel is a recorded rejection (#233) ─────────────────────────
+
+const APPROVED_OUTCOME_ID = '0a0a0a0a-0000-4000-8000-00000000a001';
+const CONDITIONS_OUTCOME_ID = '0a0a0a0a-0000-4000-8000-00000000a002';
+const REJECTED_OUTCOME_ID = '0a0a0a0a-0000-4000-8000-00000000a003';
+
+/** A provider serving a batch with (optionally) an approval Task carrying decisions of the given outcomes. */
+function decisionProvider(opts: { hasTask: boolean; outcomeIds: string[] }): IMetadataProvider {
+  return {
+    GetEntityObject: async (entityName: string) => {
+      if (entityName === 'MJ_BizApps_Tasks: Tasks') return { Load: async () => true, ID: TASK_ID };
+      throw new Error(`decisionProvider: unexpected entity '${entityName}'`);
+    },
+    EntityByName: (entityName: string) => (entityName === BATCH_ENTITY ? { ID: BATCH_ENTITY_ID } : undefined),
+    RunView: async (params: { EntityName: string }) => {
+      if (params.EntityName === 'MJ_BizApps_Tasks: Task Links') return { Success: true, Results: opts.hasTask ? [{ TaskID: TASK_ID }] : [] };
+      if (params.EntityName === 'MJ_BizApps_Tasks: Task Decisions') return { Success: true, Results: opts.outcomeIds.map(OutcomeID => ({ OutcomeID })) };
+      if (params.EntityName === 'MJ_BizApps_Tasks: Task Decision Outcomes') {
+        return {
+          Success: true,
+          Results: [
+            { ID: APPROVED_OUTCOME_ID, Code: 'Approved' },
+            { ID: CONDITIONS_OUTCOME_ID, Code: 'ApprovedWithConditions' },
+            { ID: REJECTED_OUTCOME_ID, Code: 'Rejected' },
+          ],
+        };
+      }
+      return { Success: true, Results: [] };
+    },
+  } as unknown as IMetadataProvider;
+}
+
+describe('TasksAppApprovalGate.assertRejected — a Pending cancel needs a recorded rejection', () => {
+  it('passes when the approval Task carries a rejection', async () => {
+    const gate = new TasksAppApprovalGate(decisionProvider({ hasTask: true, outcomeIds: [REJECTED_OUTCOME_ID] }));
+    await expect(gate.assertRejected(BATCH_ID, cfo)).resolves.toBeUndefined();
+  });
+
+  it.each([[[]], [[APPROVED_OUTCOME_ID]], [[CONDITIONS_OUTCOME_ID]]])('refuses a Task whose decisions are %j', async (outcomeIds) => {
+    const gate = new TasksAppApprovalGate(decisionProvider({ hasTask: true, outcomeIds }));
+    await expect(gate.assertRejected(BATCH_ID, cfo)).rejects.toThrow(/is not rejected/);
+  });
+
+  it('refuses a batch with no approval Task — nothing could have rejected it', async () => {
+    const gate = new TasksAppApprovalGate(decisionProvider({ hasTask: false, outcomeIds: [] }));
+    await expect(gate.assertRejected(BATCH_ID, cfo)).rejects.toThrow(/has no approval Task/);
+  });
+
+  it('does not count a rejection as an approval', async () => {
+    const gate = new TasksAppApprovalGate(decisionProvider({ hasTask: true, outcomeIds: [REJECTED_OUTCOME_ID] }));
+    await expect(gate.assertApproved(BATCH_ID, cfo)).rejects.toThrow(/is not approved/);
   });
 });
