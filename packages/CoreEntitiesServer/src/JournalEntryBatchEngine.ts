@@ -1687,11 +1687,12 @@ export async function previewBatch(
   const { totalDebits, totalCredits } = summaryTotals(groups);
   const gross = grossTotals(lines);
 
-  // Σ debits per entry — the preview grid's money column.
+  // Σ debits per entry — the preview grid's money column. Loaded for EVERY candidate, ticked or
+  // not: an unticked entry still shows its own value (#253); only the totals above follow the selection.
   const amountByJE = new Map<string, number>();
-  if (includedRows.length > 0) {
+  if (rows.length > 0) {
     const lineRes = await p.rv.RunView<{ JournalEntryID: string; DebitAmount: number | null }>(
-      { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID IN (${includedRows.map(r => `'${r.ID}'`).join(',')})`, Fields: ['JournalEntryID', 'DebitAmount'], ResultType: 'simple', BypassCache: true },
+      { EntityName: JEL_ENTITY, ExtraFilter: `JournalEntryID IN (${rows.map(r => `'${r.ID}'`).join(',')})`, Fields: ['JournalEntryID', 'DebitAmount'], ResultType: 'simple', BypassCache: true },
       contextUser,
     );
     for (const l of lineRes.Results ?? []) {
