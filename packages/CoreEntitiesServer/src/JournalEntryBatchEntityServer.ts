@@ -84,15 +84,14 @@ function legalFrom(target: string): string[] {
 /** The statuses an operator may archive from — the `→ Archived` edges of LEGAL_TRANSITIONS. */
 const ARCHIVABLE_FROM = legalFrom('Archived');
 
-/** The statuses a batch may be cancelled from — the `→ Cancelled` edges of LEGAL_TRANSITIONS. */
-const CANCELLABLE_FROM = legalFrom('Cancelled');
-
 /**
- * The `→ Cancelled` edges that only {@link JournalEntryBatchEntityServer.Cancel} may take. Cancelling
- * past approval must run the teardown, the ERP check and the approver's authorization together; a
- * plain save that sets Status would skip all three.
+ * The statuses a batch may be cancelled from — the `→ Cancelled` edges of LEGAL_TRANSITIONS. Every one
+ * of them is taken only by {@link JournalEntryBatchEntityServer.Cancel} or, for regenerate's empty
+ * cancel, {@link JournalEntryBatchEntityServer.CancelAfterTeardown}: cancelling deletes the summary
+ * and releases the members (and past approval also runs the ERP check and the approver's
+ * authorization), and a plain save that sets Status would skip all of it (#213).
  */
-const CANCEL_ONLY_FROM: ReadonlyArray<string> = ['Approved', 'Failed'];
+const CANCELLABLE_FROM = legalFrom('Cancelled');
 
 /**
  * How a sent batch was established as not posted in the ERP before it was cancelled (#183): the ERP
@@ -175,9 +174,9 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
   private _builtByBatchingProcess = false;
 
   /**
-   * Set only while {@link Cancel} is saving the cancel update. Transient, like
-   * `_builtByBatchingProcess`: it is what lets the Approved/Failed → Cancelled edge through
-   * {@link Validate}, so the generic form or the GraphQL update cannot take that edge on its own.
+   * Set only while {@link Cancel} or {@link CancelAfterTeardown} is saving the cancel update.
+   * Transient, like `_builtByBatchingProcess`: it is what lets a → Cancelled edge through
+   * {@link Validate}, so the generic form or the GraphQL update cannot take one on its own.
    */
   private _cancelling = false;
 
@@ -227,7 +226,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
 
   /**
    * WHO and WHEN belong to the transition, not the caller: the approval, archive and cancel audit
-   * fields are filled from context when the caller didn't supply them.
+   * fields are filled from context when the caller didn't supply them, and a send is stamped.
    */
   private stampTransitionAudit(): void {
     if (!this.IsSaved || this.Status === this.loadedStatus) return;
@@ -241,7 +240,24 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     } else if (this.Status === 'Cancelled') {
       if (!this.CancelledAt) this.CancelledAt = new Date();
       if (!this.CancelledByUserID && userId) this.CancelledByUserID = userId;
+    } else if (this.Status === 'Sent') {
+      this.stampSend();
     }
+  }
+
+  /**
+   * The send audit (#184), stamped on every transition into Sent — a retry included, so unlike the
+   * approval and archive pairs it overwrites. SendAttemptCount is a version token: the send must
+   * come from Approved or Failed and write exactly the loaded count plus one, which is what
+   * trg_JournalEntryBatch_SendOnce checks. Of two concurrent sends from the same loaded state, the
+   * second save is refused before its ERP call. __mj.RecordChange keeps every earlier SentAt, sender
+   * and ErrorMessage.
+   */
+  private stampSend(): void {
+    const loadedCount = (this.GetFieldByName('SendAttemptCount')?.OldValue as number | null | undefined) ?? 0;
+    this.SentAt = new Date();
+    this.SentByUserID = this.ContextCurrentUser?.ID ?? null;
+    this.SendAttemptCount = loadedCount + 1;
   }
 
   /** Always-applies batch invariants: legal status transitions + the audit fields each transition carries. */
@@ -299,8 +315,8 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
   }
 
   /**
-   * A SAVED batch: the status change, if any, is an edge of LEGAL_TRANSITIONS — and a cancel past
-   * approval comes through {@link Cancel}, never a plain save.
+   * A SAVED batch: the status change, if any, is an edge of LEGAL_TRANSITIONS — and a cancel comes
+   * through {@link Cancel}, never a plain save.
    */
   private transitionProblems(): string[] {
     const oldStatus = this.loadedStatus;
@@ -309,10 +325,10 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
       const legal = (LEGAL_TRANSITIONS[oldStatus] ?? []).filter(s => s !== oldStatus).join(', ') || '(terminal)';
       return [`Illegal batch status transition '${oldStatus}' → '${this.Status}'. Legal from '${oldStatus}': ${legal}.`];
     }
-    if (this.Status === 'Cancelled' && CANCEL_ONLY_FROM.includes(oldStatus) && !this._cancelling) {
+    if (this.Status === 'Cancelled' && !this._cancelling) {
       return [
-        `A ${oldStatus} batch is cancelled only through Cancel (the Cancel action), which releases its journal entries, ` +
-          `deletes its summary and records who may cancel and why — setting Status directly would skip all of that.`,
+        `A ${oldStatus} batch is cancelled only through Cancel (the Cancel action), which deletes its summary and releases its ` +
+          `journal entries, and past approval also records who may cancel and why — setting Status directly would skip all of that.`,
       ];
     }
     return [];
@@ -584,9 +600,14 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
       this.ERPNotPostedBasis = options.erpNotPostedBasis ?? 'UserAttested';
     }
     this.Status = 'Cancelled';
+    await this.saveCancelled(`Cancel: ${fromStatus}→Cancelled`);
+  }
+
+  /** Save the → Cancelled update with the {@link _cancelling} flag up, so {@link Validate} lets the edge through. */
+  private async saveCancelled(label: string): Promise<void> {
     this._cancelling = true;
     try {
-      if (!(await this.Save())) throw new Error(`Cancel: ${fromStatus}→Cancelled failed: ${this.LatestResult?.CompleteMessage ?? 'unknown'}`);
+      if (!(await this.Save())) throw new Error(`${label} failed: ${this.LatestResult?.CompleteMessage ?? 'unknown'}`);
     } finally {
       this._cancelling = false;
     }
@@ -632,6 +653,25 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
       if (!(await this.Save())) throw new Error(`batch teardown: clearing SummaryJournalEntryID failed: ${this.LatestResult?.CompleteMessage ?? 'unknown'}`);
     }
     await this.ReleaseMembersAndDeleteSummary(summaryId, user);
+  }
+
+  /**
+   * Regenerate's empty cancel: mark a Pending batch Cancelled once {@link TearDownSummaryAndUnlock}
+   * has already deleted its summary and released its members, because nothing remained to rebuild.
+   * The teardown has run, so this is the status change only. Refused while the summary pointer is
+   * still set, which is the mark of a teardown that did not run. Owns NO transaction —
+   * regenerateJournalEntryBatch's does.
+   */
+  public async CancelAfterTeardown(): Promise<void> {
+    const label = this.JournalEntryBatchNumber ?? this.ID;
+    if (this.Status !== 'Pending') {
+      throw new Error(`JournalEntryBatchEntityServer.CancelAfterTeardown: batch ${label} is ${this.Status}; only a Pending batch is cancelled after its teardown.`);
+    }
+    if (this.SummaryJournalEntryID) {
+      throw new Error(`JournalEntryBatchEntityServer.CancelAfterTeardown: batch ${label} still points at its summary journal entry; run TearDownSummaryAndUnlock first, or cancel it with Cancel.`);
+    }
+    this.Status = 'Cancelled';
+    await this.saveCancelled('CancelAfterTeardown: Pending→Cancelled');
   }
 
   /**

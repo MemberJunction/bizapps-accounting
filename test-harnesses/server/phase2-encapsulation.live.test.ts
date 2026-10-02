@@ -17,12 +17,20 @@
  *       process did not build is refused outright (#193).
  *   L8  GLAccount identity lock — Code change is rejected once JE lines reference the account;
  *       cosmetic Name change still saves.
+ *   L20 concurrent retry (#184) — two retries of one Failed batch race; the ERP is called once,
+ *       the loser is refused by trg_JournalEntryBatch_SendOnce, and the row and __mj.RecordChange
+ *       together record both sends, who made them, and the failure a later success cleared.
+ *   L21 the send-once trigger against raw SQL: every refusal, every edge it still allows, and the
+ *       send stamp frozen on a Posted row.
+ *   L22 the stale retry that lands AFTER the winner left Sent — winner Posted, or winner Failed
+ *       again — is refused too, and the ERP is still called once.
  *
  * Run from the app root:  npx vitest run --config test-harnesses/server/vitest.config.ts
  * Requires: the live instance DB (mj/.env creds); packages built (imports their dist).
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Metadata, IMetadataProvider } from '@memberjunction/core';
+import { MJGlobal } from '@memberjunction/global';
 import {
   JournalEntryEntityServer,
   JournalEntryBatchEntityServer,
@@ -35,6 +43,12 @@ import {
   sendJournalEntryBatch,
   AutoApproveGate,
   TasksAppApprovalGate,
+  mockErpPoster,
+  unavailableErpLookup,
+  JournalEntryBatchDispatchServices,
+  JournalEntryBatchSendRefusedError,
+  type ErpJournalLookup,
+  type ErpPoster,
   type JournalEntryBatchApprovalGate,
 } from '@mj-biz-apps/accounting-core-entities-server';
 import type { mjBizAppsAccountingAccountingCompanyProfileEntity } from '@mj-biz-apps/accounting-entities';
@@ -75,9 +89,34 @@ async function createJE(withDim: boolean, amount: number, description: string): 
   return je;
 }
 
+/** The gate and poster one send uses, for the races below that need a different pair per send. */
+interface SendServices { gate: JournalEntryBatchApprovalGate; poster: ErpPoster }
+
+/** Queued by {@link sendWith}; each send's services instance takes the next one when it is created. */
+const queuedSendServices: SendServices[] = [];
+
+/**
+ * The engine resolves its dispatch services once per send, synchronously as the send starts (#233).
+ * This subclass takes that send's gate and poster from the queue; with nothing queued it behaves
+ * like the harness services (approved, mock ERP, no lookup).
+ */
+class PerSendDispatchServices extends JournalEntryBatchDispatchServices {
+  private readonly services: SendServices = queuedSendServices.shift() ?? { gate: AutoApproveGate, poster: mockErpPoster };
+  public override CreateApprovalGate(): JournalEntryBatchApprovalGate { return this.services.gate; }
+  public override CreatePoster(): ErpPoster { return this.services.poster; }
+  public override CreateLookup(): ErpJournalLookup { return unavailableErpLookup; }
+}
+
+/** Send a batch with this gate and poster. The queue push and the send's resolve happen in one tick. */
+function sendWith(batchId: string, services: Partial<SendServices>, confirmNotAlreadyPostedInERP = false) {
+  queuedSendServices.push({ gate: services.gate ?? AutoApproveGate, poster: services.poster ?? mockErpPoster });
+  return sendJournalEntryBatch(batchId, ctx.user, { provider, confirmNotAlreadyPostedInERP });
+}
+
 beforeAll(async () => {
   ctx = await bootstrapLive();
   RegisterHarnessDispatchServices(); // the send's gate and poster: always approved, mock ERP (#233)
+  MJGlobal.Instance.ClassFactory.Register(JournalEntryBatchDispatchServices, PerSendDispatchServices, null, 1001, true);
   // The harness is the composition root: bootstrapLive() created this provider via
   // setupSQLServerClient, so reading the global HERE (and injecting it everywhere below)
   // is the sanctioned pattern — the code under test never touches a global itself.
@@ -514,5 +553,165 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     const batchRow = (await ctx.pool.request().query(
       `SELECT Status FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${result.batchId}'`)).recordset[0];
     expect(batchRow.Status).toBe('Cancelled');
+  });
+
+  it('L20 — two concurrent retries of one Failed batch: one ERP call, the loser refused, both sends on record', async () => {
+    await createJE(false, 60, 'L20');
+    const built = await buildJournalEntryBatch(ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, AutoApproveGate);
+    ctx.createdBatchIds.push(built.batchId);
+    await approveJournalEntryBatch(built.batchId, ctx.user.ID, ctx.user, provider);
+
+    const rejection = `${ctx.runTag} L20 simulated ERP rejection`;
+    const rejectingPoster: ErpPoster = async () => ({ success: false, error: rejection });
+    const failed = await sendWith(built.batchId, { poster: rejectingPoster });
+    expect(failed.Status).toBe('Failed');
+
+    // Hold both retries at the gate until both have loaded the batch as Failed — the race the
+    // issue describes, made deterministic instead of left to timing.
+    let arrived = 0;
+    let releaseBoth!: () => void;
+    const bothLoaded = new Promise<void>((resolve) => { releaseBoth = resolve; });
+    const barrierGate: JournalEntryBatchApprovalGate = {
+      async assertApproved() { if (++arrived === 2) releaseBoth(); await bothLoaded; },
+    };
+    let erpCalls = 0;
+    const countingPoster: ErpPoster = async (b) => { erpCalls++; return { success: true, externalJournalEntryBatchRef: `MOCK-${b.JournalEntryBatchNumber}` }; };
+    const retry = () => sendWith(built.batchId, { gate: barrierGate, poster: countingPoster }, true);
+
+    const outcomes = await Promise.allSettled([retry(), retry()]);
+
+    expect(erpCalls).toBe(1);
+    expect(outcomes.filter((o) => o.status === 'fulfilled')).toHaveLength(1);
+    const losers = outcomes.filter((o): o is PromiseRejectedResult => o.status === 'rejected');
+    expect(losers).toHaveLength(1);
+    // Refused whether it landed while the winner was still Sent or after it posted.
+    expect(losers[0].reason).toBeInstanceOf(JournalEntryBatchSendRefusedError);
+
+    // The row: Posted, the second send, by this user, with the failure cleared.
+    const row = (await ctx.pool.request().query(
+      `SELECT Status, SendAttemptCount, SentByUserID, ErrorMessage FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${built.batchId}'`)).recordset[0];
+    expect(row.Status).toBe('Posted');
+    expect(row.SendAttemptCount).toBe(2);
+    expect(String(row.SentByUserID).toLowerCase()).toBe(ctx.user.ID.toLowerCase());
+    expect(row.ErrorMessage).toBeNull();
+
+    // __mj.RecordChange: the failure the success cleared, and one Sent snapshot per send.
+    const changes = (await ctx.pool.request().query(
+      `SELECT rc.FullRecordJSON, rc.UserID FROM __mj.RecordChange rc
+       JOIN __mj.Entity e ON e.ID = rc.EntityID
+       WHERE e.Name='${BATCH_ENTITY}' AND LOWER(rc.RecordID)=LOWER('ID|${built.batchId}')`)).recordset as Array<{ FullRecordJSON: string; UserID: string }>;
+    const snapshots = changes.map((c) => JSON.parse(c.FullRecordJSON) as { Status: string; ErrorMessage: string | null; SendAttemptCount: number });
+    expect(snapshots.some((s) => s.Status === 'Failed' && s.ErrorMessage === rejection)).toBe(true);
+    expect(snapshots.filter((s) => s.Status === 'Sent').map((s) => s.SendAttemptCount).sort()).toEqual([1, 2]);
+    expect(changes.every((c) => c.UserID.toLowerCase() === ctx.user.ID.toLowerCase())).toBe(true);
+  });
+
+  /** Build, approve and fail a first send: a Failed batch at SendAttemptCount 1, ready to retry. */
+  async function failedBatch(tag: string): Promise<string> {
+    await createJE(false, 30, tag);
+    const built = await buildJournalEntryBatch(ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, AutoApproveGate);
+    ctx.createdBatchIds.push(built.batchId);
+    await approveJournalEntryBatch(built.batchId, ctx.user.ID, ctx.user, provider);
+    const rejectingPoster: ErpPoster = async () => ({ success: false, error: `${ctx.runTag} ${tag} first send rejected` });
+    const failed = await sendWith(built.batchId, { poster: rejectingPoster });
+    expect(failed.Status).toBe('Failed');
+    return built.batchId;
+  }
+
+  const batchRow = async (id: string) => (await ctx.pool.request().query(
+    `SELECT Status, SendAttemptCount, SentByUserID, SentAt, ErrorMessage FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${id}'`)).recordset[0];
+
+  it('L21 — the send-once trigger against raw SQL: refusals, the edges it allows, and a frozen stamp', async () => {
+    await createJE(false, 45, 'L21');
+    const built = await buildJournalEntryBatch(ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, AutoApproveGate);
+    ctx.createdBatchIds.push(built.batchId);
+    await approveJournalEntryBatch(built.batchId, ctx.user.ID, ctx.user, provider);
+    const id = built.batchId;
+    const run = (set: string) => ctx.pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET ${set} WHERE ID='${id}'`);
+    const notTheNextCount = /advance SendAttemptCount by one/;
+    const stillSent = /already Sent/;
+    const frozenStamp = /change only when the batch is sent/;
+
+    // Entering Sent must advance the count by exactly one.
+    await expect(run(`Status='Sent', SentAt=SYSDATETIMEOFFSET()`)).rejects.toThrow(notTheNextCount);
+    await run(`Status='Sent', SentAt=SYSDATETIMEOFFSET(), SendAttemptCount=1`);
+
+    // Nothing keeps a batch Sent: a stamp that changes nothing is refused as surely as a new one.
+    await expect(run(`ErrorMessage='L21 annotate'`)).rejects.toThrow(stillSent);
+    await expect(run(`SentAt=DATEADD(second, 1, SentAt)`)).rejects.toThrow(stillSent);
+    await expect(run(`SendAttemptCount=2`)).rejects.toThrow(stillSent);
+
+    // Leaving Sent is allowed; a stale retry that reuses the count it already has is not.
+    await run(`Status='Failed', ErrorMessage='L21 failed'`);
+    await expect(run(`Status='Sent', SentAt=SYSDATETIMEOFFSET(), SendAttemptCount=1`)).rejects.toThrow(notTheNextCount);
+    await run(`Status='Sent', SentAt=SYSDATETIMEOFFSET(), SendAttemptCount=2`);
+    await run(`Status='Posted', PostedAt=SYSDATETIMEOFFSET(), ErrorMessage=NULL`);
+
+    // A Posted batch cannot be sent again, and its stamp cannot be edited afterwards.
+    await expect(run(`Status='Sent', SentAt=SYSDATETIMEOFFSET(), SendAttemptCount=3`)).rejects.toThrow(notTheNextCount);
+    await expect(run(`SendAttemptCount=5`)).rejects.toThrow(frozenStamp);
+    await expect(run(`SentByUserID='${ctx.user.ID}'`)).rejects.toThrow(frozenStamp);
+    await expect(run(`SentAt=DATEADD(second, 1, SentAt)`)).rejects.toThrow(frozenStamp);
+    await expect(run(`SentAt=NULL`)).rejects.toThrow(frozenStamp);
+
+    // Precision only to the millisecond: a sub-ms difference is not an edit.
+    await run(`SentAt=DATEADD(microsecond, 400, SentAt)`);
+    const row = await batchRow(id);
+    expect(row.Status).toBe('Posted');
+    expect(row.SendAttemptCount).toBe(2);
+  });
+
+  /**
+   * A retry that loaded the batch as Failed, held at the gate until the winning send has finished,
+   * then released: the ordering where its UPDATE lands after the winner has already left Sent.
+   */
+  async function staleRetryAfterWinner(batchId: string, winnerPoster: ErpPoster) {
+    let signalLoaded!: () => void;
+    const loaded = new Promise<void>((resolve) => { signalLoaded = resolve; });
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => { release = resolve; });
+    const heldGate: JournalEntryBatchApprovalGate = { async assertApproved() { signalLoaded(); await released; } };
+    let loserErpCalls = 0;
+    const loserPoster: ErpPoster = async (b) => { loserErpCalls++; return { success: true, externalJournalEntryBatchRef: `MOCK-${b.JournalEntryBatchNumber}` }; };
+
+    const loserOutcome = sendWith(batchId, { gate: heldGate, poster: loserPoster }, true)
+      .then(() => null, (e: unknown) => e);
+    await loaded;
+    const winner = await sendWith(batchId, { poster: winnerPoster }, true);
+    release();
+    return { winner, loser: await loserOutcome, loserErpCalls: () => loserErpCalls };
+  }
+
+  it('L22a — a stale retry landing after the winner POSTED is refused, and the ERP is called once', async () => {
+    const id = await failedBatch('L22a');
+    let winnerErpCalls = 0;
+    const winnerPoster: ErpPoster = async (b) => { winnerErpCalls++; return { success: true, externalJournalEntryBatchRef: `MOCK-${b.JournalEntryBatchNumber}` }; };
+
+    const { winner, loser, loserErpCalls } = await staleRetryAfterWinner(id, winnerPoster);
+
+    expect(winner.Status).toBe('Posted');
+    expect(loser).toBeInstanceOf(JournalEntryBatchSendRefusedError);
+    expect((loser as JournalEntryBatchSendRefusedError).Status).toBe('Posted');
+    expect(winnerErpCalls + loserErpCalls()).toBe(1);
+    const row = await batchRow(id);
+    expect(row.Status).toBe('Posted');
+    expect(row.SendAttemptCount).toBe(2);
+  });
+
+  it('L22b — a stale retry landing after the winner FAILED AGAIN is refused, and keeps the winner\'s record', async () => {
+    const id = await failedBatch('L22b');
+    const winnerFailure = `${ctx.runTag} L22b winner rejected`;
+    const winnerPoster: ErpPoster = async () => ({ success: false, error: winnerFailure });
+
+    const { winner, loser, loserErpCalls } = await staleRetryAfterWinner(id, winnerPoster);
+
+    expect(winner.Status).toBe('Failed');
+    expect(loser).toBeInstanceOf(JournalEntryBatchSendRefusedError);
+    expect((loser as JournalEntryBatchSendRefusedError).Status).toBe('Failed');
+    expect(loserErpCalls()).toBe(0);
+    const row = await batchRow(id);
+    expect(row.Status).toBe('Failed');
+    expect(row.SendAttemptCount).toBe(2);
+    expect(row.ErrorMessage).toBe(winnerFailure);
   });
 });

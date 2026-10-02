@@ -118,6 +118,10 @@ balance **overall and per company** (AM-4), and writes atomically. Hooks on the 
   AM-4)**, JE immutability (50003/50004), JE-line immutability (50006). Batch side: summary
   foots overall (50014) **and per company (50023)**, batch immutability (50008/50009, `Failed`
   included since #183), the cancel-after-approval release and `CK_JournalEntryBatch_CancelAudit`.
+  Send-once (50030, #184) is validated by L21 and L22 in `test-harnesses/server/phase2-encapsulation.live.test.ts`:
+  a send must start from `Approved` or `Failed` and advance `SendAttemptCount` by one, no update keeps a
+  batch `Sent`, and the send stamp changes at no other time. Of two dispatches that loaded the same batch,
+  only one reaches the ERP, whether the loser's save lands while the winner is `Sent` or after it has left.
   *(The period-close trigger + W4 routing were retired with the period tables.)*
 - **Batch lifecycle (CH-3):** `Pending → Approved → Sent → Posted | Failed | Cancelled` — see
   `JournalEntryBatchEngine.ts`; the ERP wire is **account numbers, split per company** (AM-4).
@@ -142,6 +146,8 @@ balance **overall and per company** (AM-4), and writes atomically. Hooks on the 
   `resumeJournalEntryBatchPosting` (`Accounting.ResumeJournalEntryBatchPosting`), which makes no
   ERP call. `findStrandedJournalEntries` reports the entries both states hold; the scheduled
   action and the Dispatch status page surface it. Scheduled runs never retry on their own.
+  Each send stamps `SentAt`, `SentByUserID` and `SendAttemptCount` on the batch; `__mj.RecordChange`
+  keeps every earlier attempt, including the `ErrorMessage` a successful retry clears (#184).
 - **W5** realized-FX auto-emit: retired — Orders/Payments computes + posts the FX line (§C1).
 - **Finance exceptions (golive #279):** `FinanceExceptions.ts` holds the logic behind
   `Accounting.GetFinanceExceptionTypes` / `RaiseFinanceExceptions` / `ClearFinanceException`

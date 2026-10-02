@@ -411,6 +411,8 @@ erDiagram
         datetimeoffset ApprovalTaskRaisedAt
         string ExternalJournalEntryBatchRef
         datetimeoffset SentAt
+        uuid SentByUserID FK
+        int SendAttemptCount
         datetimeoffset PostedAt
         string ErrorMessage
     }
@@ -763,7 +765,9 @@ erDiagram
         uuid ApprovalTaskID "FK to __mj_BizAppsTasks.Task (#22) - both-or-neither with RaisedAt (CHECK)"
         datetimeoffset ApprovalTaskRaisedAt "nullable"
         string ExternalJournalEntryBatchRef "nullable"
-        datetimeoffset SentAt "nullable"
+        datetimeoffset SentAt "nullable - latest send; a retry overwrites it"
+        uuid SentByUserID FK "nullable - whose dispatch last entered Sent (#184)"
+        int SendAttemptCount "dispatch attempts that entered Sent; each send must advance it by one (trg_JournalEntryBatch_SendOnce, 50030)"
         datetimeoffset PostedAt "nullable"
         string ErrorMessage "nullable"
     }
@@ -774,11 +778,14 @@ erDiagram
 the batch stays approved, `GLPosted` at post. Batch content is frozen (trg_JournalEntryBatch_Immutability)
 from `Approved` on, `Failed` included. `Cancelled` — from `Pending`, `Approved` or `Failed` —
 releases the members: the unlock is sanctioned while the owning batch is `Pending` or `Cancelled`,
-and an `Approved`/`Failed` batch becomes `Cancelled` only with its summary pointer cleared in the
-same update (#183). `Posted`, `Cancelled` and `Archived` are terminal, no batch returns to `Pending`,
-only a `Pending` batch is approved, a `Sent` batch is not archived, and a `Cancelled` batch's content, approval pair and
+and a batch becomes `Cancelled` only with its summary pointer cleared — in the same update, or by
+regenerate's teardown before it (#183, #213). `Posted`, `Cancelled` and `Archived` are terminal, no batch returns to `Pending`,
+only a `Pending` batch is approved, only a `Sent` batch becomes `Posted` or `Failed` (#221), a `Sent` batch is not archived, and a `Cancelled` batch's content, approval pair and
 cancel audit are frozen (50031 / 50009). The cancel audit and the ERP check are written only by the
-update that cancels the batch, and `SentAt` is never cleared once set (50032). `Archived` keeps the members
+update that cancels the batch, and `SentAt` is never cleared once set (50032; `trg_JournalEntryBatch_SendOnce`
+fires first, so a caller clearing it sees 50030). The send stamp — `SentAt`,
+`SentByUserID`, `SendAttemptCount` — changes only on a send, which must start from `Approved` or `Failed`
+and advance the count by one (50030). `Archived` keeps the members
 locked for good. Summary is excluded from netting/count/sweep via its type's `IsJournalEntryBatchSummary` flag (the
 discriminator); footing-trigger successor = pending Amith.
 
@@ -965,7 +972,7 @@ erDiagram
 
     FinanceExceptionType {
         uuid ID PK
-        string Code UK "PROGRESS_JUDGMENT_CALL | PROGRESS_UNATTESTED | WON_DEAL_ORDER_NOT_CONFIRMED | PRICE_BELOW_ENGINE_UNAPPROVED | OVERLAPPING_SUBSCRIPTION"
+        string Code UK "PROGRESS_JUDGMENT_CALL | PROGRESS_UNATTESTED | WON_DEAL_ORDER_NOT_CONFIRMED | PRICE_BELOW_ENGINE_UNAPPROVED | OVERLAPPING_SUBSCRIPTION | ERP_POSTING_NOT_READ_BACK"
         string Name
         string Description "nullable"
         string OwningApp "orders | sales"

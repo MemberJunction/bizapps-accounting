@@ -133,13 +133,15 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   before the seal existed has no hash and gets the other checks. The immutability trigger freezes
   `Failed` content as well as `Approved`, so the seal is the second line of defence.
 - **`JournalEntryBatchEntityServer.Cancel(contextUser, { reason, confirmNotAlreadyPostedInERP, onCancelled })`**
-  (#183) — legal from `Pending`, `Approved` and `Failed`, and the ONLY way an `Approved`/`Failed`
-  batch reaches `Cancelled`: a transient flag set by `Cancel()` is what lets `Validate()` pass that
-  edge, so the generic form or GraphQL update cannot take it. It saves `Cancelled` with the summary
+  (#183) — legal from `Pending`, `Approved` and `Failed`, and the way a batch reaches `Cancelled`
+  (#213): a transient flag set by `Cancel()` is what lets `Validate()` pass that edge, so the generic
+  form or GraphQL update cannot take it. The one other path is regenerate's empty cancel,
+  `CancelAfterTeardown()`, which sets the same flag for a Pending batch that `TearDownSummaryAndUnlock`
+  has already emptied, and refuses one whose summary pointer is still set. It saves `Cancelled` with the summary
   pointer cleared and the cancel audit triple in ONE update, then releases the members, deletes the
   summary and runs `onCancelled`, in one transaction; the triggers key on that order (a member
-  unlocks only while its batch is `Pending` or `Cancelled`; an Approved/Failed batch becomes
-  Cancelled only with its pointer cleared in the same update). From `Approved`/`Failed` a reason is
+  unlocks only while its batch is `Pending` or `Cancelled`; a batch becomes Cancelled only with its
+  pointer cleared). From `Approved`/`Failed` a reason is
   required; from `Failed` so is `confirmNotAlreadyPostedInERP`, persisted as `ERPNotPostedConfirmedAt` /
   `ERPNotPostedConfirmedByUserID` / `ERPNotPostedBasis` (`ERPLookup` when the engine's lookup found
   nothing, `UserAttested` when the canceller confirmed). Calling `Cancel()` directly skips the ERP lookup below, so the
@@ -217,6 +219,8 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   throws `AutoPostDispatchError`, carrying the build so the caller can report the batch's real state.
   Lifecycle (`LEGAL_TRANSITIONS`): `Pending → Approved | Cancelled | Archived`, `Approved → Sent | Cancelled | Archived`,
   `Sent → Posted | Failed`, `Failed → Sent | Cancelled | Archived`; `Posted`, `Cancelled` and `Archived` are terminal.
+  The database enforces the same graph on raw SQL: `trg_JournalEntryBatch_Immutability` (50031) and, for `→ Sent`,
+  `trg_JournalEntryBatch_SendOnce` (50030).
 - **Batch recovery (#145).** *Retry* — `sendJournalEntryBatch` on a `Failed` batch reuses its approval.
   `Failed` does not prove the ERP rejected the journal: the post can succeed with the response lost, or
   succeed and then fail to save `Posted`. So every send, first or retry, looks the batch number up in
@@ -226,7 +230,11 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   Every line the batch sends carries its token, `[JEB <batch ID>]`, after the line's description
   (#206): batch numbers restart at `BATCH-000001` in every database, so another environment's journal
   can sit under the same number in the same ERP company, and the batch ID is what tells them apart.
-  On a `Failed` retry, a posting whose every line carries the token and matches the batch line for
+  A Business Central journal batch with a Posting No. Series gives the posting a number of its own
+  (#205). When nothing has posted under the batch number, the lookup searches the posting date's
+  entries on the batch's first account for the token, and reads the posting under BC's number; a
+  post reads itself back the same way and records BC's number as the batch's reference. That search
+  covers the posting date only. On a `Failed` retry, a posting whose every line carries the token and matches the batch line for
   line (account, debit, credit, posting date) is recorded `Posted` with no second send. On a first
   send such a match means the database was copied from one that sent the batch: the send is refused
   and the batch stays `Approved`. A posting whose lines carry only other batches' tokens is another
@@ -248,6 +256,17 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   batch's member `Batched → GLPosted` flip with no ERP call. *Visibility* — `findStrandedJournalEntries`
   (`Accounting.GetStrandedJournalEntries`) reports entries held at `Batched` by either state; the
   scheduled `Accounting.BuildJournalEntryBatches` appends the count to every run. Scheduled runs never retry.
+- **Send audit and send-once (#184).** `JournalEntryBatchEntityServer.Save` stamps `SentAt`, `SentByUserID` and
+  `SendAttemptCount` (the loaded count plus one) on every transition into `Sent`. `trg_JournalEntryBatch_SendOnce`
+  (50030) treats the count as a version token: a send must start from `Approved` or `Failed` and advance it by
+  exactly one, no update may keep a batch `Sent`, and the stamp changes at no other time. Of two sends that loaded
+  the same batch, the second save fails whether the first is still `Sent`, has `Posted` or has `Failed` again, and
+  `sendJournalEntryBatch` throws `JournalEntryBatchSendRefusedError` before its ERP call. The scheduled
+  `Accounting.BuildJournalEntryBatches` does not mark a batch `Failed` on that error: the batch belongs to the
+  dispatch that won. The count includes a retry adopted from the ERP and a first send the pre-flight refuses
+  (both enter `Sent` without an ERP call); a retry refused before `Sent` is not counted.
+  A successful retry still clears `ErrorMessage`; the earlier value, and every overwritten `SentAt` and sender, are
+  in `__mj.RecordChange` (the entity tracks record changes).
 - **S3 scheduled-JE schedules — ✅ creation only** (`ScheduledJournalEntryService.createScheduledEntries`:
   straight-line schedules with exact cent-remainder spread). **The central materializer is RETIRED (AM-6)**
   — *domain entity servers* (e.g. a future SubscriptionEntityServer) generate the real Pending JE when a row
