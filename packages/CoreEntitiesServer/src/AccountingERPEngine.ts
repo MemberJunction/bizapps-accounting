@@ -8,7 +8,7 @@
 import { IntegrationEngine } from '@memberjunction/integration-engine';
 import { IMetadataProvider, IRunViewProvider, LogError, LogStatus, UserInfo } from '@memberjunction/core';
 import { BaseSingleton, EscapeSQLString, MJGlobal } from '@memberjunction/global';
-import { ToCalendarDay } from '@mj-biz-apps/common-entities';
+import { ExternalFieldLimitEngine, ToCalendarDay } from '@mj-biz-apps/common-entities';
 import {
   ACCOUNTING_ENGINE_EXTENSION_ENTITY,
   ALL_ERP_SYNC_OBJECTS,
@@ -30,6 +30,7 @@ import type {
 } from '@mj-biz-apps/accounting-entities';
 import { AccountingEngine } from './AccountingEngine.js';
 import { FinanceLedgerUser, RaiseFinanceExceptions } from './FinanceExceptions.js';
+import { CheckErpJournalInput, HasErpFieldLimits, LimitCheckUser } from './ErpFieldLimits.js';
 import {
   defaultAccountingVerbRunner,
   type AccountingVerbRunner,
@@ -219,7 +220,8 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
 
   /**
    * Send the batch through the chosen connection: the connection's ID travels to the verb, so the
-   * ERP posts through exactly that connection. A throw is a failed post.
+   * ERP posts through exactly that connection. A value too long for the ERP's fields fails the post
+   * before the ERP is called. A throw is a failed post.
    */
   private async sendThroughConnection(
     plugin: BaseAccountingERPProvider,
@@ -232,7 +234,7 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     const target = batch.TargetSystem as JournalEntryBatchTargetSystem;
     try {
       const lines = await erpLinesFor(batch, summaryLines, target, plugin.RequiresExternalAccountID, user, provider);
-      return await plugin.CreateJournalEntry({
+      const input: CreateERPJournalInput = {
         CompanyID: batch.CompanyID,
         CompanyIntegrationID: ci.CompanyIntegrationID,
         EntryDate: entryDateOf(batch),
@@ -240,7 +242,9 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
         PrivateNote: `Accounting batch ${batch.JournalEntryBatchNumber}`,
         Lines: lines,
         RenumberedSearch: renumberedSearchFor(batch, lines),
-      }, user);
+      };
+      const tooLong = await this.checkFieldLengths(ci.IntegrationName, input, user, provider);
+      return tooLong ?? await plugin.CreateJournalEntry(input, user);
     } catch (e) {
       return { success: false, error: e instanceof Error ? e.message : String(e) };
     }
@@ -284,6 +288,23 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     const integrations = await this.loadCredentialedIntegrations(user, provider, [batch.CompanyID]);
     const candidates = integrations.filter((row) => namesMatch(row.IntegrationName, target));
     return pickPostingConnection(candidates, batch.CompanyID, target);
+  }
+
+  /**
+   * A failed post naming every value too long for the ERP's fields, or null when all fit
+   * (bc-aidp-next-golive#280). Runs before the ERP is called, so an over-long value fails here
+   * with the field and limit named instead of at the ERP; nothing is truncated.
+   */
+  private async checkFieldLengths(
+    integrationName: string,
+    input: CreateERPJournalInput,
+    user: UserInfo,
+    provider: IMetadataProvider,
+  ): Promise<ErpPostResult | null> {
+    if (!HasErpFieldLimits(integrationName)) return null;
+    await ExternalFieldLimitEngine.Instance.Config(false, LimitCheckUser(user), provider);
+    const problems = CheckErpJournalInput(integrationName, input);
+    return problems.length === 0 ? null : { success: false, error: `Not sent to ${integrationName}: ${problems.join(' ')}` };
   }
 
   /**
