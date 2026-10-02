@@ -6,6 +6,7 @@ import {
   CancelJournalEntryBatchResult,
   JournalEntryBatchDispatchClient,
   PreviewJournalEntryBatchOptionsInput,
+  PreviewJournalEntryBatchResult,
 } from '../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
 import { AUGUST_CLOSE_IN_CHICAGO, useBusinessClock, viewResult } from '../../../__tests__/support/business-clock';
 
@@ -128,6 +129,104 @@ describe('AccountingBatchesPageComponent — Build Batch modal cutoff (DOM)', ()
     const warning = fixture.nativeElement.querySelector('.mja-banner[role="status"]')?.textContent?.replace(/\s+/g, ' ');
     expect(warning).toContain('225 excluded entries are older than an entry you included');
     expect(warning).not.toContain('included entries will batch');
+  });
+});
+
+describe('AccountingBatchesPageComponent — overlapping Build Batch previews (#254)', () => {
+  useBusinessClock(AUGUST_CLOSE_IN_CHICAGO);
+  /** One deferred per preview call, settled by the spec in whatever order it chooses. */
+  let pending: Array<{ resolve: (r: PreviewJournalEntryBatchResult) => void; reject: (e: Error) => void }>;
+
+  const ENTRY_A = { ID: 'je-a', EntryNumber: 'JE-A', EffectiveDate: '2026-08-01', EntryTypeCode: 'Manual', CompanyID: 'co-1', Description: null, Amount: 100 };
+  const ENTRY_B = { ID: 'je-b', EntryNumber: 'JE-B', EffectiveDate: '2026-08-02', EntryTypeCode: 'Manual', CompanyID: 'co-1', Description: null, Amount: 200 };
+  const totals = (debits: number, skips: number): PreviewJournalEntryBatchResult => ({
+    Success: true,
+    Candidates: [ENTRY_A, ENTRY_B],
+    TotalDebits: debits,
+    TotalCredits: debits,
+    GrossDebits: debits,
+    GrossCredits: debits,
+    OutOfOrderSkipCount: skips,
+  });
+
+  beforeEach(() => {
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async () => viewResult([], 0));
+    pending = [];
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'PreviewJournalEntryBatch').mockImplementation(
+      () => new Promise<PreviewJournalEntryBatchResult>((resolve, reject) => pending.push({ resolve, reject })),
+    );
+  });
+
+  /** Renders the page and opens the modal with its first preview settled: both entries ticked. */
+  async function openModal(): Promise<AccountingBatchesPageComponent> {
+    const fixture = TestBed.createComponent(AccountingBatchesPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const page = fixture.componentInstance;
+    const opened = page.OpenBuildBatchModal();
+    pending[0].resolve(totals(300, 0));
+    await opened;
+    expect(page.PreviewTotalDebits).toBe(300);
+    return page;
+  }
+
+  it('applies only the latest response when an earlier one settles last', async () => {
+    const page = await openModal();
+    const untickA = page.ToggleEntry(ENTRY_A.ID); // previews B only
+    const untickB = page.ToggleEntry(ENTRY_B.ID); // previews nothing ticked
+    expect(pending).toHaveLength(3);
+
+    pending[2].resolve(totals(0, 0));
+    await untickB;
+    expect(page.PreviewTotalDebits).toBe(0);
+    expect(page.IsPreviewLoading).toBe(false);
+
+    pending[1].resolve(totals(200, 1)); // the stale answer arrives last
+    await untickA;
+    expect(page.PreviewTotalDebits).toBe(0);
+    expect(page.PreviewOutOfOrderSkipCount).toBe(0);
+    expect(page.IsPreviewLoading).toBe(false);
+  });
+
+  it('stays loading until the latest request settles, even when an earlier one settles first', async () => {
+    const page = await openModal();
+    const first = page.ToggleEntry(ENTRY_A.ID);
+    const second = page.ToggleEntry(ENTRY_B.ID);
+
+    pending[1].resolve(totals(200, 1));
+    await first;
+    expect(page.IsPreviewLoading, 'an older response does not end the loading state').toBe(true);
+    expect(page.PreviewTotalDebits, 'nor is it applied').toBe(300);
+
+    pending[2].resolve(totals(0, 0));
+    await second;
+    expect(page.IsPreviewLoading).toBe(false);
+    expect(page.PreviewTotalDebits).toBe(0);
+  });
+
+  it('ignores a failure from a superseded request', async () => {
+    const page = await openModal();
+    const first = page.ToggleEntry(ENTRY_A.ID);
+    const second = page.ToggleEntry(ENTRY_B.ID);
+
+    pending[2].resolve(totals(0, 0));
+    await second;
+    pending[1].reject(new Error('timeout'));
+    await first;
+    expect(page.ModalErrorMessage).toBeNull();
+    expect(page.PreviewTotalDebits).toBe(0);
+  });
+
+  it('drops a response that arrives after the modal is closed', async () => {
+    const page = await openModal();
+    const toggled = page.ToggleEntry(ENTRY_A.ID);
+    page.CloseBuildBatchModal();
+    expect(page.IsPreviewLoading).toBe(false);
+
+    pending[1].resolve(totals(200, 1));
+    await toggled;
+    expect(page.PreviewTotalDebits).toBe(300);
+    expect(page.IsPreviewLoading).toBe(false);
   });
 });
 

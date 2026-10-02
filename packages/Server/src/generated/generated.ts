@@ -3915,7 +3915,7 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @MaxLength(36)
     ApprovedByUserID?: string;
         
-    @Field({nullable: true, description: `When the batch was sent to the ERP.`}) 
+    @Field({nullable: true, description: `When the batch last entered Sent. A retry overwrites it; SendAttemptCount counts the sends, and __mj.RecordChange keeps each earlier value.`}) 
     SentAt?: Date;
         
     @Field({nullable: true, description: `When the ERP confirmed it posted the batch (Status=Posted; renames the old AcknowledgedAt).`}) 
@@ -3974,6 +3974,16 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @MaxLength(64)
     ApprovedContentHash?: string;
         
+    @Field({nullable: true, description: `User whose dispatch last moved the batch into Sent. Stamped on every send; changes at no other time. NULL for batches sent before this column existed.`}) 
+    @MaxLength(36)
+    SentByUserID?: string;
+        
+    @Field(() => Int, {nullable: true, description: `Dispatch attempts that moved the batch into Sent, including a retry that finds the batch already in the ERP and a first send the pre-flight lookup refuses; neither calls the ERP. A retry refused before Sent is not counted. Each send must advance it by one (trg_JournalEntryBatch_SendOnce). Batches sent before this column existed read 1.`}) 
+    SendAttemptCount?: number;
+        
+    @Field({nullable: true, description: `When a retry of this Failed batch found its journal already in the ERP and recorded it Posted, with no second post, although the batch no longer matched its approved-content seal (a summary line's dimension tags changed after approval). The local tags then differ from what the ERP holds; review them. NULL when the seal matched or the batch was never adopted this way.`}) 
+    SealMismatchDetectedAt?: Date;
+        
     @Field({nullable: true}) 
     @MaxLength(50)
     Company?: string;
@@ -4005,6 +4015,10 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @Field({nullable: true}) 
     @MaxLength(100)
     ERPNotPostedConfirmedByUser?: string;
+        
+    @Field({nullable: true}) 
+    @MaxLength(100)
+    SentByUser?: string;
         
     @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
     ReadableFields___?: string[];
@@ -4106,6 +4120,15 @@ export class CreatemjBizAppsAccountingJournalEntryBatchInput {
     @Field({ nullable: true })
     ApprovedContentHash: string | null;
 
+    @Field({ nullable: true })
+    SentByUserID: string | null;
+
+    @Field(() => Int, { nullable: true })
+    SendAttemptCount?: number;
+
+    @Field({ nullable: true })
+    SealMismatchDetectedAt: Date | null;
+
     @Field(() => RestoreContextInput, { nullable: true })
     RestoreContext___?: RestoreContextInput;
 }
@@ -4205,6 +4228,15 @@ export class UpdatemjBizAppsAccountingJournalEntryBatchInput {
 
     @Field({ nullable: true })
     ApprovedContentHash?: string | null;
+
+    @Field({ nullable: true })
+    SentByUserID?: string | null;
+
+    @Field(() => Int, { nullable: true })
+    SendAttemptCount?: number;
+
+    @Field({ nullable: true })
+    SealMismatchDetectedAt?: Date | null;
 
     @Field(() => [KeyValuePairInput], { nullable: true })
     OldValues___?: KeyValuePairInput[];

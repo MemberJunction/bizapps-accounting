@@ -3,6 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@memberjunction/integration-engine', () => ({
   IntegrationEngine: { Instance: { RunSync: vi.fn() } },
 }));
+// Finance exceptions are read and raised as the MJ system user.
+vi.mock('@memberjunction/generic-database-provider', () => ({
+  UserCache: { Instance: { GetSystemUser: () => ({ ID: 'system-user', Name: 'System' }) } },
+}));
 vi.mock('@memberjunction/actions', () => ({
   ActionEngineServer: {
     Instance: {
@@ -19,7 +23,7 @@ import type { UserInfo } from '@memberjunction/core';
 import { BaseAccountingEngineExtension, type AccountingEngineExtensionContext } from '@mj-biz-apps/accounting-engine-base';
 import { CheckExternalFieldLength, ExternalFieldLimitEngine, type ExternalFieldTarget } from '@mj-biz-apps/common-entities';
 import { AccountingEngine } from '../AccountingEngine.js';
-import { AccountingERPEngine, namesMatch } from '../AccountingERPEngine.js';
+import { AccountingERPEngine, ERP_POSTING_NOT_READ_BACK, namesMatch } from '../AccountingERPEngine.js';
 import { BaseAccountingERPProvider } from '../BaseAccountingERPProvider.js';
 import type { AccountingVerbResult } from '../AccountingVerbRunner.js';
 import type { ErpPostResult } from '../JournalEntryBatchEngine.js';
@@ -524,7 +528,8 @@ describe('AccountingERPEngine.PostJournalBatch — after the ERP accepts', () =>
 
     const result = await AccountingERPEngine.Instance.PostJournalBatch(taggedBatch(), taggedLines(), user, p);
 
-    expect(result).toEqual({ success: true, externalJournalEntryBatchRef: 'BATCH-1' });
+    // This verb answers no readback either, which the #205 cases cover.
+    expect(result).toMatchObject({ success: true, externalJournalEntryBatchRef: 'BATCH-1' });
     expect(extensionCalls).toEqual(['afterPost']);
   });
 
@@ -946,6 +951,205 @@ describe('QuickBooks Online — FindPostedJournalBatch', () => {
   });
 });
 
+// ── #205: a BC journal batch with a Posting No. Series renumbers the document at posting ────────
+
+const BC_NUMBER = 'GJ-000123';
+
+/**
+ * A runVerb for a BC that posted the batch as BC_NUMBER: nothing under the batch number, the
+ * batch's entries under BC's own, and those same entries on the posting date's search.
+ */
+function renumberingVerb(entries: unknown[]) {
+  return vi.fn(async (call: { Verb: string; Params: Record<string, unknown> }) => {
+    if (call.Verb === 'CreateJournalEntry') {
+      return { Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'DocNumber', Value: call.Params.DocNumber, Type: 'Output' }] };
+    }
+    const byDate = call.Params.StartDate !== undefined;
+    const value = byDate || call.Params.DocumentNumber === BC_NUMBER ? entries : [];
+    return { Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'GLEntries', Value: value, Type: 'Output' }] };
+  });
+}
+
+function renumbered(entry: ReturnType<typeof glEntry>) {
+  return { ...entry, documentNumber: BC_NUMBER };
+}
+
+describe('Business Central renumbering a posting', () => {
+  beforeEach(() => {
+    vi.spyOn(AccountingEngine.Instance, 'Config').mockResolvedValue();
+  });
+
+  it('finds the batch under the number BC gave it, by its token on the posting date', async () => {
+    const runVerb = renumberingVerb([renumbered(glEntry(100, 0)), renumbered(glEntry(0, 100))]);
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+
+    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes()));
+
+    expect(result).toEqual({ status: 'Found', externalJournalEntryBatchRef: BC_NUMBER });
+    const params = runVerb.mock.calls.map((c) => (c[0] as { Params: Record<string, unknown> }).Params);
+    expect(params).toEqual([
+      { DocumentNumber: 'BATCH-1', MaxResults: 5000, CompanyIntegrationID: CI },
+      { StartDate: '2026-08-01', EndDate: '2026-08-01', AccountNumber: '1000', MaxResults: 5000, CompanyIntegrationID: CI },
+      { DocumentNumber: BC_NUMBER, MaxResults: 5000, CompanyIntegrationID: CI },
+    ]);
+  });
+
+  it('reports nothing posted when the posting date holds only other batches\' entries', async () => {
+    const other = `Netted [${OTHER_TOKEN}]`;
+    AccountingERPEngine.Instance.UseSeams({
+      runVerb: renumberingVerb([renumbered(glEntry(100, 0, undefined, other)), renumbered(glEntry(0, 100, undefined, other))]),
+    });
+
+    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes()));
+
+    expect(result).toEqual({ status: 'NotFound' });
+  });
+
+  it('reports an error, never a guess, when the token is on entries of two documents', async () => {
+    AccountingERPEngine.Instance.UseSeams({
+      runVerb: renumberingVerb([renumbered(glEntry(100, 0)), { ...glEntry(0, 100), documentNumber: 'GJ-000124' }]),
+    });
+
+    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes()));
+
+    expect(result).toEqual({ status: 'Error', error: `token ${OWN_TOKEN} is on G/L entries of 2 documents: ${BC_NUMBER}, GJ-000124.` });
+  });
+
+  it('reports an error, never nothing posted, when the posting date\'s search fails', async () => {
+    AccountingERPEngine.Instance.UseSeams({
+      runVerb: vi.fn(async (call: { Params: Record<string, unknown> }) => call.Params.StartDate !== undefined
+        ? { Success: false, ResultCode: 'ERROR', Message: 'BC 503' }
+        : { Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'GLEntries', Value: [], Type: 'Output' }] }),
+    });
+
+    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes()));
+
+    expect(result).toEqual({ status: 'Error', error: 'BC 503' });
+  });
+
+  it('records a post under the number BC gave it', async () => {
+    AccountingERPEngine.Instance.UseSeams({ runVerb: renumberingVerb([renumbered(glEntry(100, 0)), renumbered(glEntry(0, 100))]) });
+
+    const result = await AccountingERPEngine.Instance.PostJournalBatch(taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes()));
+
+    expect(result).toEqual({ success: true, externalJournalEntryBatchRef: BC_NUMBER });
+  });
+
+  it('keeps a post a success, under the number it was sent with, when reading it back fails', async () => {
+    const raiseFinanceExceptions = vi.fn(async () => ({ Success: true, Results: [{ Index: 0, FinanceExceptionID: 'fx-1', Created: true }] }));
+    AccountingERPEngine.Instance.UseSeams({ runVerb: readbackFailingVerb(), raiseFinanceExceptions });
+
+    const result = await AccountingERPEngine.Instance.PostJournalBatch(taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes()));
+
+    expect(result).toEqual({ success: true, externalJournalEntryBatchRef: 'BATCH-1', readbackError: 'BC 503' });
+  });
+
+  it('raises ERP_POSTING_NOT_READ_BACK on the batch when reading a post back fails', async () => {
+    const raiseFinanceExceptions = vi.fn(async () => ({ Success: true, Results: [{ Index: 0, FinanceExceptionID: 'fx-1', Created: true }] }));
+    AccountingERPEngine.Instance.UseSeams({ runVerb: readbackFailingVerb(), raiseFinanceExceptions });
+    const p = providerWith(taggedViewsWithCodes());
+
+    await AccountingERPEngine.Instance.PostJournalBatch(taggedBatch(), taggedLines(), user, p);
+
+    expect(raiseFinanceExceptions).toHaveBeenCalledOnce();
+    const [input, provider] = raiseFinanceExceptions.mock.calls[0] as unknown as [{ Exceptions: Array<Record<string, unknown>> }, unknown];
+    expect(provider).toBe(p);
+    expect(input.Exceptions).toHaveLength(1);
+    const raised = input.Exceptions[0];
+    expect(raised).toMatchObject({
+      TypeCode: ERP_POSTING_NOT_READ_BACK,
+      SourceEntityName: 'MJ_BizApps_Accounting: Journal Entry Batches',
+      SourceRecordID: TAGGED_BATCH_ID,
+      CompanyID: COMPANY,
+      ExceptionDate: '2026-08-01',
+      DedupeKey: TAGGED_BATCH_ID.toLowerCase(),
+    });
+    expect(raised.Summary).toMatch(/^Batch BATCH-1 posted to Microsoft Dynamics 365 Business Central but could not be read back: BC 503 It is recorded under BATCH-1/);
+    expect(raised.Summary).toMatch(/needs the operator's confirmation/);
+  });
+
+  it('raises nothing when the post reads back', async () => {
+    const raiseFinanceExceptions = vi.fn();
+    AccountingERPEngine.Instance.UseSeams({ runVerb: renumberingVerb([renumbered(glEntry(100, 0)), renumbered(glEntry(0, 100))]), raiseFinanceExceptions });
+
+    await AccountingERPEngine.Instance.PostJournalBatch(taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes()));
+
+    expect(raiseFinanceExceptions).not.toHaveBeenCalled();
+  });
+
+  it.each<[string, () => Promise<unknown>]>([
+    ['fails', async () => ({ Success: false, Results: [], Errors: [{ Code: 'WRITE_FAILED', Message: 'deadlock' }] })],
+    ['throws', async () => { throw new Error('connection lost'); }],
+    ['is skipped because the type is inactive', async () => ({ Success: true, Results: [{ Index: 0, Created: false, Skipped: true }] })],
+  ])('keeps the post a success when the raise %s', async (_case, raise) => {
+    AccountingERPEngine.Instance.UseSeams({ runVerb: readbackFailingVerb(), raiseFinanceExceptions: raise as never });
+
+    const result = await AccountingERPEngine.Instance.PostJournalBatch(taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes()));
+
+    expect(result).toMatchObject({ success: true, externalJournalEntryBatchRef: 'BATCH-1' });
+  });
+
+  it('answers Unavailable, not nothing posted, while the company has an Open ERP_POSTING_NOT_READ_BACK', async () => {
+    AccountingERPEngine.Instance.UseSeams({ runVerb: glEntriesVerb([]) });
+    const filters: string[] = [];
+    const p = providerRecording(taggedViewsWithCodes({
+      'MJ_BizApps_Accounting: Finance Exceptions': [{ SourceRecordID: 'batch-earlier' }],
+    }), filters);
+
+    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, p);
+
+    expect(result).toEqual({ status: 'Unavailable', reason: expect.stringMatching(/1 batch\(es\) in this company that could not then be read back \(batch-earlier\)/) });
+    expect(filters).toEqual([
+      `CompanyID='${COMPANY}' AND Status='Open' AND FinanceExceptionTypeID IN ` +
+        `(SELECT ID FROM __mj_BizAppsAccounting.FinanceExceptionType WHERE Code='${ERP_POSTING_NOT_READ_BACK}')`,
+    ]);
+  });
+
+  it('does not read finance exceptions when the lookup finds the posting', async () => {
+    AccountingERPEngine.Instance.UseSeams({ runVerb: renumberingVerb([renumbered(glEntry(100, 0)), renumbered(glEntry(0, 100))]) });
+    const filters: string[] = [];
+    const p = providerRecording(taggedViewsWithCodes({
+      'MJ_BizApps_Accounting: Finance Exceptions': [{ SourceRecordID: 'batch-earlier' }],
+    }), filters);
+
+    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, p);
+
+    expect(result).toEqual({ status: 'Found', externalJournalEntryBatchRef: BC_NUMBER });
+    expect(filters).toEqual([]);
+  });
+
+  it('reports an error, never nothing posted, when the finance exceptions cannot be read', async () => {
+    AccountingERPEngine.Instance.UseSeams({ runVerb: glEntriesVerb([]) });
+    const views = taggedViewsWithCodes();
+    const p = {
+      RunView: async (params: { EntityName: string }) => params.EntityName === 'MJ_BizApps_Accounting: Finance Exceptions'
+        ? { Success: false, ErrorMessage: 'timeout' }
+        : { Success: true, Results: views[params.EntityName] ?? [] },
+    } as never;
+
+    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, p);
+
+    expect(result).toEqual({ status: 'Error', error: `could not check for Open ${ERP_POSTING_NOT_READ_BACK} finance exceptions: timeout` });
+  });
+});
+
+/** A runVerb whose post succeeds and whose every G/L entry read fails. */
+function readbackFailingVerb() {
+  return vi.fn(async (call: { Verb: string; Params: Record<string, unknown> }) => call.Verb === 'CreateJournalEntry'
+    ? { Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'DocNumber', Value: call.Params.DocNumber, Type: 'Output' }] }
+    : { Success: false, ResultCode: 'ERROR', Message: 'BC 503' });
+}
+
+/** providerWith, recording the ExtraFilter of every Finance Exceptions read. */
+function providerRecording(views: Record<string, unknown[]>, filters: string[]) {
+  return {
+    RunView: async (params: { EntityName: string; ExtraFilter?: string }) => {
+      if (params.EntityName === 'MJ_BizApps_Accounting: Finance Exceptions') filters.push(params.ExtraFilter ?? '');
+      return { Success: true, Results: views[params.EntityName] ?? [] };
+    },
+  } as never;
+}
+
 // ── Real-schema filters and connector-named integrations ─────────────────────────────────────
 
 /**
@@ -1005,7 +1209,8 @@ describe('AccountingERPEngine against the real entity-map schema', () => {
     const result = await AccountingERPEngine.Instance.PostJournalBatch(taggedBatch(), taggedLines(), user, providerWith(views));
 
     expect(result.success).toBe(true);
-    expect(runVerb).toHaveBeenCalledTimes(1);
+    // The post, then the Business Central provider's readback of it (#205).
+    expect(runVerb.mock.calls.map((c) => (c as unknown as [{ Verb: string }])[0].Verb)).toEqual(['CreateJournalEntry', 'GetGLEntries']);
   });
 });
 
@@ -1043,6 +1248,14 @@ function connectionVerb() {
     : { Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'GLEntries', Value: [], Type: 'Output' }] });
 }
 
+/**
+ * The verb calls of a BC post and lookup when the ERP holds nothing, through connection `ci`: the post,
+ * its readback by number and by token (#205), then the lookup by number and by token.
+ */
+function bcPostAndFindCalls(ci: string): Array<[string, unknown]> {
+  return [['CreateJournalEntry', ci], ['GetGLEntries', ci], ['GetGLEntries', ci], ['GetGLEntries', ci], ['GetGLEntries', ci]];
+}
+
 /** The CompanyIntegrationID param of each verb call, by verb. */
 function connectionParams(runVerb: { mock: { calls: unknown[][] } }): Array<[string, unknown]> {
   return runVerb.mock.calls.map((args) => {
@@ -1060,7 +1273,9 @@ describe('AccountingERPEngine — choosing the posting connection (#256)', () =>
   /** Post, then look up, the tagged batch against these connections. */
   async function postAndFind(connections: unknown[]) {
     const runVerb = connectionVerb();
-    AccountingERPEngine.Instance.UseSeams({ runVerb });
+    // The fake ERP holds nothing, so a BC post is not read back (#205); its finance exception goes nowhere.
+    const raiseFinanceExceptions = vi.fn(async () => ({ Success: true, Results: [{ Index: 0, FinanceExceptionID: 'fx-1', Created: true }] }));
+    AccountingERPEngine.Instance.UseSeams({ runVerb, raiseFinanceExceptions });
     const p = postingViews(connections);
     const posted = await AccountingERPEngine.Instance.PostJournalBatch(taggedBatch(), taggedLines(), user, p);
     const found = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, p);
@@ -1083,9 +1298,13 @@ describe('AccountingERPEngine — choosing the posting connection (#256)', () =>
       connection(CI_UAT, 'QuickBooks', 'QuickBooks Online', POSTING_FLAG),
     ]);
 
-    expect(posted).toEqual({ success: true, externalJournalEntryBatchRef: 'BATCH-1' });
+    expect(posted).toEqual({
+      success: true,
+      externalJournalEntryBatchRef: 'BATCH-1',
+      readbackError: `no G/L entries carry document BATCH-1 or token ${OWN_TOKEN}.`,
+    });
     expect(found).toEqual({ status: 'NotFound' });
-    expect(connectionParams(runVerb)).toEqual([['CreateJournalEntry', CI_PROD], ['GetGLEntries', CI_PROD]]);
+    expect(connectionParams(runVerb)).toEqual(bcPostAndFindCalls(CI_PROD));
     expect(extensionCalls).toEqual([`beforePost:${CI_PROD}`, `afterPost:${CI_PROD}`]);
   });
 
@@ -1097,7 +1316,7 @@ describe('AccountingERPEngine — choosing the posting connection (#256)', () =>
 
     expect(posted.success).toBe(true);
     expect(found).toEqual({ status: 'NotFound' });
-    expect(connectionParams(runVerb)).toEqual([['CreateJournalEntry', CI_UAT], ['GetGLEntries', CI_UAT]]);
+    expect(connectionParams(runVerb)).toEqual(bcPostAndFindCalls(CI_UAT));
     expect(extensionCalls).toEqual([`beforePost:${CI_UAT}`, `afterPost:${CI_UAT}`]);
   });
 
@@ -1125,7 +1344,7 @@ describe('AccountingERPEngine — choosing the posting connection (#256)', () =>
     const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     try {
       const chosen = await postAndFind([bcConnection(CI_PROD, 'Business Central', '{not json'), bcConnection(CI_UAT, 'BC UAT', POSTING_FLAG)]);
-      expect(connectionParams(chosen.runVerb)).toEqual([['CreateJournalEntry', CI_UAT], ['GetGLEntries', CI_UAT]]);
+      expect(connectionParams(chosen.runVerb)).toEqual(bcPostAndFindCalls(CI_UAT));
 
       const refused = await postAndFind([bcConnection(CI_PROD, 'Business Central', '{not json'), bcConnection(CI_UAT, 'BC UAT')]);
       expect(refused.posted.error).toMatch(/None has "postJournalEntries": true/);
