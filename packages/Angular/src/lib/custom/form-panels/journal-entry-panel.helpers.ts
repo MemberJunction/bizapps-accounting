@@ -1,4 +1,4 @@
-import { ToCalendarDay, FromCalendarDay } from '@mj-biz-apps/common-entities';
+import { ToCalendarDay, FromCalendarDay, type CalendarDay } from '@mj-biz-apps/common-entities';
 import type { mjBizAppsAccountingJournalEntryEntity } from '@mj-biz-apps/accounting-entities';
 import type { JEStatus } from '../shared/je-rules';
 
@@ -82,6 +82,21 @@ export function formatJournalDate(
         return '—';
     }
     return FromCalendarDay(day).toLocaleDateString('en-US', { ...options, timeZone: 'UTC' });
+}
+
+/**
+ * The `YYYY-MM` month a `DATE`-column value belongs to, read by UTC parts. The driver delivers a
+ * DATE as UTC midnight, so local getters put the 1st of a month into the PRIOR month for every
+ * viewer west of UTC.
+ */
+export function calendarMonthOf(value: Date | string | null | undefined): string | null {
+    return ToCalendarDay(value)?.slice(0, 7) ?? null;
+}
+
+/** The first and last calendar day among `DATE`-column values; null when none is a valid day. */
+export function calendarDaySpan(values: ReadonlyArray<Date | string | null | undefined>): { First: CalendarDay; Last: CalendarDay } | null {
+    const days = values.map((v) => ToCalendarDay(v)).filter((d): d is CalendarDay => d !== null).sort();
+    return days.length ? { First: days[0], Last: days[days.length - 1] } : null;
 }
 
 /**
