@@ -30,6 +30,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Metadata, IMetadataProvider } from '@memberjunction/core';
+import { MJGlobal } from '@memberjunction/global';
 import {
   JournalEntryEntityServer,
   JournalEntryBatchEntityServer,
@@ -43,13 +44,17 @@ import {
   AutoApproveGate,
   TasksAppApprovalGate,
   mockErpPoster,
+  unavailableErpLookup,
+  JournalEntryBatchDispatchServices,
   JournalEntryBatchSendRefusedError,
+  type ErpJournalLookup,
   type ErpPoster,
   type JournalEntryBatchApprovalGate,
 } from '@mj-biz-apps/accounting-core-entities-server';
 import type { mjBizAppsAccountingAccountingCompanyProfileEntity } from '@mj-biz-apps/accounting-entities';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import { bootstrapLive, teardownLive, scalar, SCHEMA, type LiveCtx } from './live-bootstrap.js';
+import { RegisterHarnessDispatchServices } from './harness-dispatch-services.js';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
@@ -84,8 +89,34 @@ async function createJE(withDim: boolean, amount: number, description: string): 
   return je;
 }
 
+/** The gate and poster one send uses, for the races below that need a different pair per send. */
+interface SendServices { gate: JournalEntryBatchApprovalGate; poster: ErpPoster }
+
+/** Queued by {@link sendWith}; each send's services instance takes the next one when it is created. */
+const queuedSendServices: SendServices[] = [];
+
+/**
+ * The engine resolves its dispatch services once per send, synchronously as the send starts (#233).
+ * This subclass takes that send's gate and poster from the queue; with nothing queued it behaves
+ * like the harness services (approved, mock ERP, no lookup).
+ */
+class PerSendDispatchServices extends JournalEntryBatchDispatchServices {
+  private readonly services: SendServices = queuedSendServices.shift() ?? { gate: AutoApproveGate, poster: mockErpPoster };
+  public override CreateApprovalGate(): JournalEntryBatchApprovalGate { return this.services.gate; }
+  public override CreatePoster(): ErpPoster { return this.services.poster; }
+  public override CreateLookup(): ErpJournalLookup { return unavailableErpLookup; }
+}
+
+/** Send a batch with this gate and poster. The queue push and the send's resolve happen in one tick. */
+function sendWith(batchId: string, services: Partial<SendServices>, confirmNotAlreadyPostedInERP = false) {
+  queuedSendServices.push({ gate: services.gate ?? AutoApproveGate, poster: services.poster ?? mockErpPoster });
+  return sendJournalEntryBatch(batchId, ctx.user, { provider, confirmNotAlreadyPostedInERP });
+}
+
 beforeAll(async () => {
   ctx = await bootstrapLive();
+  RegisterHarnessDispatchServices(); // the send's gate and poster: always approved, mock ERP (#233)
+  MJGlobal.Instance.ClassFactory.Register(JournalEntryBatchDispatchServices, PerSendDispatchServices, null, 1001, true);
   // The harness is the composition root: bootstrapLive() created this provider via
   // setupSQLServerClient, so reading the global HERE (and injecting it everywhere below)
   // is the sanctioned pattern — the code under test never touches a global itself.
@@ -196,9 +227,9 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     const pendingLeft = Number(await scalar(ctx.pool, `SELECT COUNT(*) FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${ctx.company.id}' AND Status='Pending'`));
     expect(pendingLeft).toBe(0);
 
-    // Approve → dispatch (mock poster) → Posted; members + summary GLPosted.
+    // Approve → dispatch (mock poster, via the harness dispatch services) → Posted; members + summary GLPosted.
     await approveJournalEntryBatch(result!.batchId, ctx.user.ID, ctx.user, provider);
-    const batch = await sendJournalEntryBatch(result!.batchId, ctx.user, { gate: AutoApproveGate, poster: mockErpPoster, provider });
+    const batch = await sendJournalEntryBatch(result!.batchId, ctx.user, { provider });
     expect(batch.Status).toBe('Posted');
     const notPosted = Number(await scalar(ctx.pool, `SELECT COUNT(*) FROM ${SCHEMA}.JournalEntry WHERE JournalEntryBatchID='${result!.batchId}' AND Status<>'GLPosted'`));
     expect(notPosted).toBe(0);
@@ -532,7 +563,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
 
     const rejection = `${ctx.runTag} L20 simulated ERP rejection`;
     const rejectingPoster: ErpPoster = async () => ({ success: false, error: rejection });
-    const failed = await sendJournalEntryBatch(built.batchId, ctx.user, { gate: AutoApproveGate, poster: rejectingPoster, provider });
+    const failed = await sendWith(built.batchId, { poster: rejectingPoster });
     expect(failed.Status).toBe('Failed');
 
     // Hold both retries at the gate until both have loaded the batch as Failed — the race the
@@ -545,7 +576,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     };
     let erpCalls = 0;
     const countingPoster: ErpPoster = async (b) => { erpCalls++; return { success: true, externalJournalEntryBatchRef: `MOCK-${b.JournalEntryBatchNumber}` }; };
-    const retry = () => sendJournalEntryBatch(built.batchId, ctx.user, { gate: barrierGate, poster: countingPoster, provider, confirmNotAlreadyPostedInERP: true });
+    const retry = () => sendWith(built.batchId, { gate: barrierGate, poster: countingPoster }, true);
 
     const outcomes = await Promise.allSettled([retry(), retry()]);
 
@@ -582,7 +613,7 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     ctx.createdBatchIds.push(built.batchId);
     await approveJournalEntryBatch(built.batchId, ctx.user.ID, ctx.user, provider);
     const rejectingPoster: ErpPoster = async () => ({ success: false, error: `${ctx.runTag} ${tag} first send rejected` });
-    const failed = await sendJournalEntryBatch(built.batchId, ctx.user, { gate: AutoApproveGate, poster: rejectingPoster, provider });
+    const failed = await sendWith(built.batchId, { poster: rejectingPoster });
     expect(failed.Status).toBe('Failed');
     return built.batchId;
   }
@@ -643,10 +674,10 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     let loserErpCalls = 0;
     const loserPoster: ErpPoster = async (b) => { loserErpCalls++; return { success: true, externalJournalEntryBatchRef: `MOCK-${b.JournalEntryBatchNumber}` }; };
 
-    const loserOutcome = sendJournalEntryBatch(batchId, ctx.user, { gate: heldGate, poster: loserPoster, provider, confirmNotAlreadyPostedInERP: true })
+    const loserOutcome = sendWith(batchId, { gate: heldGate, poster: loserPoster }, true)
       .then(() => null, (e: unknown) => e);
     await loaded;
-    const winner = await sendJournalEntryBatch(batchId, ctx.user, { gate: AutoApproveGate, poster: winnerPoster, provider, confirmNotAlreadyPostedInERP: true });
+    const winner = await sendWith(batchId, { poster: winnerPoster }, true);
     release();
     return { winner, loser: await loserOutcome, loserErpCalls: () => loserErpCalls };
   }

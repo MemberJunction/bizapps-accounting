@@ -1,7 +1,7 @@
 {
   "name": "@mj-biz-apps/accounting-server",
   "type": "module",
-  "version": "0.15.0",
+  "version": "0.17.0",
   "description": "BizApps Accounting server bootstrap - GraphQL resolvers and class registrations for the AR subledger and JE primitives Open App",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -13,17 +13,21 @@
   ],
   "scripts": {
     "build": "tsc && tsc-alias -f",
-    "test": "echo \"No tests configured yet\""
+    "test": "vitest run",
+    "test:types": "tsc --noEmit -p tsconfig.spec.json"
   },
   "author": "MemberJunction.com",
   "license": "BUSL-1.1",
   "devDependencies": {
-    "typescript": "^5.9.3"
+    "@types/node": "^24.10.11",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18",
+    "vite": "^7.1.5"
   },
   "dependencies": {
-    "@mj-biz-apps/accounting-core-entities-server": "0.15.0",
-    "@mj-biz-apps/accounting-entities": "0.15.0",
-    "@mj-biz-apps/accounting-actions": "0.15.0",
+    "@mj-biz-apps/accounting-core-entities-server": "0.17.0",
+    "@mj-biz-apps/accounting-entities": "0.17.0",
+    "@mj-biz-apps/accounting-actions": "0.17.0",
     "class-validator": "^0.14.3"
   },
   "peerDependencies": {

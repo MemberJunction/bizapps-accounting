@@ -612,6 +612,192 @@ export const mjBizAppsAccountingDimensionSchema = z.object({
 export type mjBizAppsAccountingDimensionEntityType = z.infer<typeof mjBizAppsAccountingDimensionSchema>;
 
 /**
+ * zod schema definition for the entity MJ_BizApps_Accounting: Finance Exception Types
+ */
+export const mjBizAppsAccountingFinanceExceptionTypeSchema = z.object({
+    ID: z.string().describe(`
+        * * Field Name: ID
+        * * Display Name: ID
+        * * SQL Data Type: uniqueidentifier
+        * * Default Value: newsequentialid()`),
+    Code: z.string().describe(`
+        * * Field Name: Code
+        * * Display Name: Code
+        * * SQL Data Type: nvarchar(60)
+        * * Description: Stable machine code the detectors raise against (e.g. PROGRESS_JUDGMENT_CALL). Unique. Never rename: raising apps key on it.`),
+    Name: z.string().describe(`
+        * * Field Name: Name
+        * * Display Name: Name
+        * * SQL Data Type: nvarchar(100)
+        * * Description: Display name for the exception kind.`),
+    Description: z.string().nullable().describe(`
+        * * Field Name: Description
+        * * Display Name: Description
+        * * SQL Data Type: nvarchar(MAX)
+        * * Description: What the detector looks for and why a reviewer should look at it.`),
+    OwningApp: z.string().describe(`
+        * * Field Name: OwningApp
+        * * Display Name: Owning App
+        * * SQL Data Type: nvarchar(100)
+        * * Description: The app whose detector raises this kind (e.g. orders, sales). Informational; accounting does not run the detector.`),
+    IsActive: z.boolean().describe(`
+        * * Field Name: IsActive
+        * * Display Name: Is Active
+        * * SQL Data Type: bit
+        * * Default Value: 1
+        * * Description: Whether the detector raises this kind. An inactive type is skipped by Accounting.RaiseFinanceExceptions and by the detector itself; existing rows stay on the list.`),
+    Configuration: z.string().describe(`
+        * * Field Name: Configuration
+        * * Display Name: Configuration
+        * * SQL Data Type: nvarchar(MAX)
+        * * Default Value: {}
+        * * Description: JSON object of the detector's thresholds (e.g. {"MinDaysSinceClose":7}). Read by the detector through Accounting.GetFinanceExceptionTypes. Must be valid JSON.`),
+    __mj_CreatedAt: z.date().describe(`
+        * * Field Name: __mj_CreatedAt
+        * * Display Name: Created At
+        * * SQL Data Type: datetimeoffset
+        * * Default Value: getutcdate()`),
+    __mj_UpdatedAt: z.date().describe(`
+        * * Field Name: __mj_UpdatedAt
+        * * Display Name: Updated At
+        * * SQL Data Type: datetimeoffset
+        * * Default Value: getutcdate()`),
+});
+
+export type mjBizAppsAccountingFinanceExceptionTypeEntityType = z.infer<typeof mjBizAppsAccountingFinanceExceptionTypeSchema>;
+
+/**
+ * zod schema definition for the entity MJ_BizApps_Accounting: Finance Exceptions
+ */
+export const mjBizAppsAccountingFinanceExceptionSchema = z.object({
+    ID: z.string().describe(`
+        * * Field Name: ID
+        * * Display Name: ID
+        * * SQL Data Type: uniqueidentifier
+        * * Default Value: newsequentialid()`),
+    FinanceExceptionTypeID: z.string().describe(`
+        * * Field Name: FinanceExceptionTypeID
+        * * Display Name: Finance Exception Type ID
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Finance Exception Types (vwFinanceExceptionTypes.ID)
+        * * Description: The kind of exception.`),
+    SourceEntityID: z.string().describe(`
+        * * Field Name: SourceEntityID
+        * * Display Name: Source Entity ID
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ: Entities (vwEntities.ID)
+        * * Description: MJ entity of the record that raised the exception. With SourceRecordID, names the source record.`),
+    SourceRecordID: z.string().describe(`
+        * * Field Name: SourceRecordID
+        * * Display Name: Source Record ID
+        * * SQL Data Type: nvarchar(450)
+        * * Description: Primary key of the source record, in the entity named by SourceEntityID.`),
+    CompanyID: z.string().describe(`
+        * * Field Name: CompanyID
+        * * Display Name: Company ID
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
+        * * Description: The company whose books the exception affects. Ready-to-close is judged per company and month.`),
+    Amount: z.number().nullable().describe(`
+        * * Field Name: Amount
+        * * Display Name: Amount
+        * * SQL Data Type: decimal(19, 4)
+        * * Description: The amount at stake, in the source record's currency. NULL when the detector cannot state one.`),
+    ExceptionDate: z.date().describe(`
+        * * Field Name: ExceptionDate
+        * * Display Name: Exception Date
+        * * SQL Data Type: date
+        * * Description: The business day the exception belongs to. Its month is the close it blocks.`),
+    DetectedAt: z.date().describe(`
+        * * Field Name: DetectedAt
+        * * Display Name: Detected At
+        * * SQL Data Type: datetimeoffset
+        * * Default Value: sysdatetimeoffset()
+        * * Description: When the exception was raised (UTC).`),
+    Summary: z.string().describe(`
+        * * Field Name: Summary
+        * * Display Name: Summary
+        * * SQL Data Type: nvarchar(1000)
+        * * Description: Plain description of what the detector found in the data.`),
+    DedupeKey: z.string().describe(`
+        * * Field Name: DedupeKey
+        * * Display Name: Dedupe Key
+        * * SQL Data Type: nvarchar(400)
+        * * Description: The detector's identity for this occurrence (e.g. the source record ID, or record ID and month). Unique per type: raising the same key again returns the existing row unchanged.`),
+    SourceCreatedByUserID: z.string().nullable().describe(`
+        * * Field Name: SourceCreatedByUserID
+        * * Display Name: Source Created By User ID
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+        * * Description: The login whose judgement is under review — the attester, booker or deal owner. This user may not clear the exception. NULL when there is none or it could not be resolved.`),
+    CreatorUnresolved: z.boolean().describe(`
+        * * Field Name: CreatorUnresolved
+        * * Display Name: Creator Unresolved
+        * * SQL Data Type: bit
+        * * Default Value: 0
+        * * Description: 1 = the source record has a creator who has no linked login, so separation of duties cannot be checked and the exception cannot be cleared until that is resolved.`),
+    Status: z.union([z.literal('Corrected'), z.literal('Open'), z.literal('Reviewed')]).describe(`
+        * * Field Name: Status
+        * * Display Name: Status
+        * * SQL Data Type: nvarchar(20)
+        * * Default Value: Open
+    * * Value List Type: List
+    * * Possible Values 
+    *   * Corrected
+    *   * Open
+    *   * Reviewed
+        * * Description: Open until cleared. Reviewed: the judgement stands. Corrected: the data was fixed. Both are terminal and reachable only through Accounting.ClearFinanceException.`),
+    ReviewedByUserID: z.string().nullable().describe(`
+        * * Field Name: ReviewedByUserID
+        * * Display Name: Reviewed By User ID
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+        * * Description: Who cleared the exception. Required once Reviewed or Corrected; NULL while Open.`),
+    ReviewedAt: z.date().nullable().describe(`
+        * * Field Name: ReviewedAt
+        * * Display Name: Reviewed At
+        * * SQL Data Type: datetimeoffset
+        * * Description: When the exception was cleared (UTC). Required once Reviewed or Corrected; NULL while Open.`),
+    ReviewNote: z.string().nullable().describe(`
+        * * Field Name: ReviewNote
+        * * Display Name: Review Note
+        * * SQL Data Type: nvarchar(MAX)
+        * * Description: The reviewer's note on what they checked or changed. Required by Accounting.ClearFinanceException; NULL while Open.`),
+    __mj_CreatedAt: z.date().describe(`
+        * * Field Name: __mj_CreatedAt
+        * * Display Name: Created At
+        * * SQL Data Type: datetimeoffset
+        * * Default Value: getutcdate()`),
+    __mj_UpdatedAt: z.date().describe(`
+        * * Field Name: __mj_UpdatedAt
+        * * Display Name: Updated At
+        * * SQL Data Type: datetimeoffset
+        * * Default Value: getutcdate()`),
+    FinanceExceptionType: z.string().describe(`
+        * * Field Name: FinanceExceptionType
+        * * Display Name: Finance Exception Type
+        * * SQL Data Type: nvarchar(100)`),
+    SourceEntity: z.string().describe(`
+        * * Field Name: SourceEntity
+        * * Display Name: Source Entity
+        * * SQL Data Type: nvarchar(255)`),
+    Company: z.string().describe(`
+        * * Field Name: Company
+        * * Display Name: Company
+        * * SQL Data Type: nvarchar(50)`),
+    SourceCreatedByUser: z.string().nullable().describe(`
+        * * Field Name: SourceCreatedByUser
+        * * Display Name: Source Created By User
+        * * SQL Data Type: nvarchar(100)`),
+    ReviewedByUser: z.string().nullable().describe(`
+        * * Field Name: ReviewedByUser
+        * * Display Name: Reviewed By User
+        * * SQL Data Type: nvarchar(100)`),
+});
+
+export type mjBizAppsAccountingFinanceExceptionEntityType = z.infer<typeof mjBizAppsAccountingFinanceExceptionSchema>;
+
+/**
  * zod schema definition for the entity MJ_BizApps_Accounting: GL Account Link Dimensions
  */
 export const mjBizAppsAccountingGLAccountLinkDimensionSchema = z.object({
@@ -3945,6 +4131,469 @@ export class mjBizAppsAccountingDimensionEntity extends BaseEntity<mjBizAppsAcco
     */
     get __mj_UpdatedAt(): Date {
         return this.Get('__mj_UpdatedAt');
+    }
+}
+
+
+/**
+ * MJ_BizApps_Accounting: Finance Exception Types - strongly typed entity sub-class
+ * * Schema: __mj_BizAppsAccounting
+ * * Base Table: FinanceExceptionType
+ * * Base View: vwFinanceExceptionTypes
+ * * @description Catalog of finance exception kinds (golive #279). Each row is one detector's rule: its stable Code, the app that raises it, whether it is active, and its thresholds in Configuration. Seeded by metadata; a type can be deactivated, or its Configuration changed, without a release.
+ * * Primary Key: ID
+ * @extends {BaseEntity}
+ * @class
+ * @public
+ */
+@RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Finance Exception Types')
+export class mjBizAppsAccountingFinanceExceptionTypeEntity extends BaseEntity<mjBizAppsAccountingFinanceExceptionTypeEntityType> {
+    /**
+    * Loads the MJ_BizApps_Accounting: Finance Exception Types record from the database
+    * @param ID: string - primary key value to load the MJ_BizApps_Accounting: Finance Exception Types record.
+    * @param EntityRelationshipsToLoad - (optional) the relationships to load
+    * @returns {Promise<boolean>} - true if successful, false otherwise
+    * @public
+    * @async
+    * @memberof mjBizAppsAccountingFinanceExceptionTypeEntity
+    * @method
+    * @override
+    */
+    public async Load(ID: string, EntityRelationshipsToLoad?: string[]) : Promise<boolean> {
+        const compositeKey: CompositeKey = new CompositeKey();
+        compositeKey.KeyValuePairs.push({ FieldName: 'ID', Value: ID });
+        return await super.InnerLoad(compositeKey, EntityRelationshipsToLoad);
+    }
+
+    /**
+    * * Field Name: ID
+    * * Display Name: ID
+    * * SQL Data Type: uniqueidentifier
+    * * Default Value: newsequentialid()
+    */
+    get ID(): string {
+        return this.Get('ID');
+    }
+    set ID(value: string) {
+        this.Set('ID', value);
+    }
+
+    /**
+    * * Field Name: Code
+    * * Display Name: Code
+    * * SQL Data Type: nvarchar(60)
+    * * Description: Stable machine code the detectors raise against (e.g. PROGRESS_JUDGMENT_CALL). Unique. Never rename: raising apps key on it.
+    */
+    get Code(): string {
+        return this.Get('Code');
+    }
+    set Code(value: string) {
+        this.Set('Code', value);
+    }
+
+    /**
+    * * Field Name: Name
+    * * Display Name: Name
+    * * SQL Data Type: nvarchar(100)
+    * * Description: Display name for the exception kind.
+    */
+    get Name(): string {
+        return this.Get('Name');
+    }
+    set Name(value: string) {
+        this.Set('Name', value);
+    }
+
+    /**
+    * * Field Name: Description
+    * * Display Name: Description
+    * * SQL Data Type: nvarchar(MAX)
+    * * Description: What the detector looks for and why a reviewer should look at it.
+    */
+    get Description(): string | null {
+        return this.Get('Description');
+    }
+    set Description(value: string | null) {
+        this.Set('Description', value);
+    }
+
+    /**
+    * * Field Name: OwningApp
+    * * Display Name: Owning App
+    * * SQL Data Type: nvarchar(100)
+    * * Description: The app whose detector raises this kind (e.g. orders, sales). Informational; accounting does not run the detector.
+    */
+    get OwningApp(): string {
+        return this.Get('OwningApp');
+    }
+    set OwningApp(value: string) {
+        this.Set('OwningApp', value);
+    }
+
+    /**
+    * * Field Name: IsActive
+    * * Display Name: Is Active
+    * * SQL Data Type: bit
+    * * Default Value: 1
+    * * Description: Whether the detector raises this kind. An inactive type is skipped by Accounting.RaiseFinanceExceptions and by the detector itself; existing rows stay on the list.
+    */
+    get IsActive(): boolean {
+        return this.Get('IsActive');
+    }
+    set IsActive(value: boolean) {
+        this.Set('IsActive', value);
+    }
+
+    /**
+    * * Field Name: Configuration
+    * * Display Name: Configuration
+    * * SQL Data Type: nvarchar(MAX)
+    * * Default Value: {}
+    * * Description: JSON object of the detector's thresholds (e.g. {"MinDaysSinceClose":7}). Read by the detector through Accounting.GetFinanceExceptionTypes. Must be valid JSON.
+    */
+    get Configuration(): string {
+        return this.Get('Configuration');
+    }
+    set Configuration(value: string) {
+        this.Set('Configuration', value);
+    }
+
+    /**
+    * * Field Name: __mj_CreatedAt
+    * * Display Name: Created At
+    * * SQL Data Type: datetimeoffset
+    * * Default Value: getutcdate()
+    */
+    get __mj_CreatedAt(): Date {
+        return this.Get('__mj_CreatedAt');
+    }
+
+    /**
+    * * Field Name: __mj_UpdatedAt
+    * * Display Name: Updated At
+    * * SQL Data Type: datetimeoffset
+    * * Default Value: getutcdate()
+    */
+    get __mj_UpdatedAt(): Date {
+        return this.Get('__mj_UpdatedAt');
+    }
+}
+
+
+/**
+ * MJ_BizApps_Accounting: Finance Exceptions - strongly typed entity sub-class
+ * * Schema: __mj_BizAppsAccounting
+ * * Base Table: FinanceException
+ * * Base View: vwFinanceExceptions
+ * * @description Records a finance reviewer must look at before a month is closed (golive #279). Raised by detectors in consuming apps through Accounting.RaiseFinanceExceptions, idempotent on (FinanceExceptionTypeID, DedupeKey). Cleared only through Accounting.ClearFinanceException, by a holder of MJ.BizApps.Accounting.FinanceExceptions.Clear who is not the source record's creator. A company's month is ready to close when it has no Open rows.
+ * * Primary Key: ID
+ * @extends {BaseEntity}
+ * @class
+ * @public
+ */
+@RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Finance Exceptions')
+export class mjBizAppsAccountingFinanceExceptionEntity extends BaseEntity<mjBizAppsAccountingFinanceExceptionEntityType> {
+    /**
+    * Loads the MJ_BizApps_Accounting: Finance Exceptions record from the database
+    * @param ID: string - primary key value to load the MJ_BizApps_Accounting: Finance Exceptions record.
+    * @param EntityRelationshipsToLoad - (optional) the relationships to load
+    * @returns {Promise<boolean>} - true if successful, false otherwise
+    * @public
+    * @async
+    * @memberof mjBizAppsAccountingFinanceExceptionEntity
+    * @method
+    * @override
+    */
+    public async Load(ID: string, EntityRelationshipsToLoad?: string[]) : Promise<boolean> {
+        const compositeKey: CompositeKey = new CompositeKey();
+        compositeKey.KeyValuePairs.push({ FieldName: 'ID', Value: ID });
+        return await super.InnerLoad(compositeKey, EntityRelationshipsToLoad);
+    }
+
+    /**
+    * * Field Name: ID
+    * * Display Name: ID
+    * * SQL Data Type: uniqueidentifier
+    * * Default Value: newsequentialid()
+    */
+    get ID(): string {
+        return this.Get('ID');
+    }
+    set ID(value: string) {
+        this.Set('ID', value);
+    }
+
+    /**
+    * * Field Name: FinanceExceptionTypeID
+    * * Display Name: Finance Exception Type ID
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Finance Exception Types (vwFinanceExceptionTypes.ID)
+    * * Description: The kind of exception.
+    */
+    get FinanceExceptionTypeID(): string {
+        return this.Get('FinanceExceptionTypeID');
+    }
+    set FinanceExceptionTypeID(value: string) {
+        this.Set('FinanceExceptionTypeID', value);
+    }
+
+    /**
+    * * Field Name: SourceEntityID
+    * * Display Name: Source Entity ID
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ: Entities (vwEntities.ID)
+    * * Description: MJ entity of the record that raised the exception. With SourceRecordID, names the source record.
+    */
+    get SourceEntityID(): string {
+        return this.Get('SourceEntityID');
+    }
+    set SourceEntityID(value: string) {
+        this.Set('SourceEntityID', value);
+    }
+
+    /**
+    * * Field Name: SourceRecordID
+    * * Display Name: Source Record ID
+    * * SQL Data Type: nvarchar(450)
+    * * Description: Primary key of the source record, in the entity named by SourceEntityID.
+    */
+    get SourceRecordID(): string {
+        return this.Get('SourceRecordID');
+    }
+    set SourceRecordID(value: string) {
+        this.Set('SourceRecordID', value);
+    }
+
+    /**
+    * * Field Name: CompanyID
+    * * Display Name: Company ID
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ: Companies (vwCompanies.ID)
+    * * Description: The company whose books the exception affects. Ready-to-close is judged per company and month.
+    */
+    get CompanyID(): string {
+        return this.Get('CompanyID');
+    }
+    set CompanyID(value: string) {
+        this.Set('CompanyID', value);
+    }
+
+    /**
+    * * Field Name: Amount
+    * * Display Name: Amount
+    * * SQL Data Type: decimal(19, 4)
+    * * Description: The amount at stake, in the source record's currency. NULL when the detector cannot state one.
+    */
+    get Amount(): number | null {
+        return this.Get('Amount');
+    }
+    set Amount(value: number | null) {
+        this.Set('Amount', value);
+    }
+
+    /**
+    * * Field Name: ExceptionDate
+    * * Display Name: Exception Date
+    * * SQL Data Type: date
+    * * Description: The business day the exception belongs to. Its month is the close it blocks.
+    */
+    get ExceptionDate(): Date {
+        return this.Get('ExceptionDate');
+    }
+    set ExceptionDate(value: Date) {
+        this.Set('ExceptionDate', value);
+    }
+
+    /**
+    * * Field Name: DetectedAt
+    * * Display Name: Detected At
+    * * SQL Data Type: datetimeoffset
+    * * Default Value: sysdatetimeoffset()
+    * * Description: When the exception was raised (UTC).
+    */
+    get DetectedAt(): Date {
+        return this.Get('DetectedAt');
+    }
+    set DetectedAt(value: Date) {
+        this.Set('DetectedAt', value);
+    }
+
+    /**
+    * * Field Name: Summary
+    * * Display Name: Summary
+    * * SQL Data Type: nvarchar(1000)
+    * * Description: Plain description of what the detector found in the data.
+    */
+    get Summary(): string {
+        return this.Get('Summary');
+    }
+    set Summary(value: string) {
+        this.Set('Summary', value);
+    }
+
+    /**
+    * * Field Name: DedupeKey
+    * * Display Name: Dedupe Key
+    * * SQL Data Type: nvarchar(400)
+    * * Description: The detector's identity for this occurrence (e.g. the source record ID, or record ID and month). Unique per type: raising the same key again returns the existing row unchanged.
+    */
+    get DedupeKey(): string {
+        return this.Get('DedupeKey');
+    }
+    set DedupeKey(value: string) {
+        this.Set('DedupeKey', value);
+    }
+
+    /**
+    * * Field Name: SourceCreatedByUserID
+    * * Display Name: Source Created By User ID
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+    * * Description: The login whose judgement is under review — the attester, booker or deal owner. This user may not clear the exception. NULL when there is none or it could not be resolved.
+    */
+    get SourceCreatedByUserID(): string | null {
+        return this.Get('SourceCreatedByUserID');
+    }
+    set SourceCreatedByUserID(value: string | null) {
+        this.Set('SourceCreatedByUserID', value);
+    }
+
+    /**
+    * * Field Name: CreatorUnresolved
+    * * Display Name: Creator Unresolved
+    * * SQL Data Type: bit
+    * * Default Value: 0
+    * * Description: 1 = the source record has a creator who has no linked login, so separation of duties cannot be checked and the exception cannot be cleared until that is resolved.
+    */
+    get CreatorUnresolved(): boolean {
+        return this.Get('CreatorUnresolved');
+    }
+    set CreatorUnresolved(value: boolean) {
+        this.Set('CreatorUnresolved', value);
+    }
+
+    /**
+    * * Field Name: Status
+    * * Display Name: Status
+    * * SQL Data Type: nvarchar(20)
+    * * Default Value: Open
+    * * Value List Type: List
+    * * Possible Values 
+    *   * Corrected
+    *   * Open
+    *   * Reviewed
+    * * Description: Open until cleared. Reviewed: the judgement stands. Corrected: the data was fixed. Both are terminal and reachable only through Accounting.ClearFinanceException.
+    */
+    get Status(): 'Corrected' | 'Open' | 'Reviewed' {
+        return this.Get('Status');
+    }
+    set Status(value: 'Corrected' | 'Open' | 'Reviewed') {
+        this.Set('Status', value);
+    }
+
+    /**
+    * * Field Name: ReviewedByUserID
+    * * Display Name: Reviewed By User ID
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+    * * Description: Who cleared the exception. Required once Reviewed or Corrected; NULL while Open.
+    */
+    get ReviewedByUserID(): string | null {
+        return this.Get('ReviewedByUserID');
+    }
+    set ReviewedByUserID(value: string | null) {
+        this.Set('ReviewedByUserID', value);
+    }
+
+    /**
+    * * Field Name: ReviewedAt
+    * * Display Name: Reviewed At
+    * * SQL Data Type: datetimeoffset
+    * * Description: When the exception was cleared (UTC). Required once Reviewed or Corrected; NULL while Open.
+    */
+    get ReviewedAt(): Date | null {
+        return this.Get('ReviewedAt');
+    }
+    set ReviewedAt(value: Date | null) {
+        this.Set('ReviewedAt', value);
+    }
+
+    /**
+    * * Field Name: ReviewNote
+    * * Display Name: Review Note
+    * * SQL Data Type: nvarchar(MAX)
+    * * Description: The reviewer's note on what they checked or changed. Required by Accounting.ClearFinanceException; NULL while Open.
+    */
+    get ReviewNote(): string | null {
+        return this.Get('ReviewNote');
+    }
+    set ReviewNote(value: string | null) {
+        this.Set('ReviewNote', value);
+    }
+
+    /**
+    * * Field Name: __mj_CreatedAt
+    * * Display Name: Created At
+    * * SQL Data Type: datetimeoffset
+    * * Default Value: getutcdate()
+    */
+    get __mj_CreatedAt(): Date {
+        return this.Get('__mj_CreatedAt');
+    }
+
+    /**
+    * * Field Name: __mj_UpdatedAt
+    * * Display Name: Updated At
+    * * SQL Data Type: datetimeoffset
+    * * Default Value: getutcdate()
+    */
+    get __mj_UpdatedAt(): Date {
+        return this.Get('__mj_UpdatedAt');
+    }
+
+    /**
+    * * Field Name: FinanceExceptionType
+    * * Display Name: Finance Exception Type
+    * * SQL Data Type: nvarchar(100)
+    */
+    get FinanceExceptionType(): string {
+        return this.Get('FinanceExceptionType');
+    }
+
+    /**
+    * * Field Name: SourceEntity
+    * * Display Name: Source Entity
+    * * SQL Data Type: nvarchar(255)
+    */
+    get SourceEntity(): string {
+        return this.Get('SourceEntity');
+    }
+
+    /**
+    * * Field Name: Company
+    * * Display Name: Company
+    * * SQL Data Type: nvarchar(50)
+    */
+    get Company(): string {
+        return this.Get('Company');
+    }
+
+    /**
+    * * Field Name: SourceCreatedByUser
+    * * Display Name: Source Created By User
+    * * SQL Data Type: nvarchar(100)
+    */
+    get SourceCreatedByUser(): string | null {
+        return this.Get('SourceCreatedByUser');
+    }
+
+    /**
+    * * Field Name: ReviewedByUser
+    * * Display Name: Reviewed By User
+    * * SQL Data Type: nvarchar(100)
+    */
+    get ReviewedByUser(): string | null {
+        return this.Get('ReviewedByUser');
     }
 }
 

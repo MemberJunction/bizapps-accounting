@@ -1,0 +1,16 @@
+[
+  {
+    "fields": {
+      "AuthorizationID": "@lookup:MJ: Authorizations.Name=MJ.BizApps.Accounting.FinanceExceptions.Clear",
+      "RoleID": "@lookup:MJ: Roles.Name=Finance",
+      "Type": "Allow"
+    },
+    "primaryKey": {
+      "ID": "DCE9A4DD-C9EF-4DA6-9C03-29D2BE3C1988"
+    },
+    "sync": {
+      "lastModified": "2026-09-30T19:18:14.543Z",
+      "checksum": "e8f0a3af2c6c1a8c9d934199bf58bfed2253e6920be452f2c08477a0d0312982"
+    }
+  }
+]
