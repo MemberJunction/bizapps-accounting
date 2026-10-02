@@ -1696,6 +1696,11 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * SQL Data Type: int
         * * Default Value: 0
         * * Description: Dispatch attempts that moved the batch into Sent, including a retry that finds the batch already in the ERP and a first send the pre-flight lookup refuses; neither calls the ERP. A retry refused before Sent is not counted. Each send must advance it by one (trg_JournalEntryBatch_SendOnce). Batches sent before this column existed read 1.`),
+    SealMismatchDetectedAt: z.date().nullable().describe(`
+        * * Field Name: SealMismatchDetectedAt
+        * * Display Name: Seal Mismatch Detected At
+        * * SQL Data Type: datetimeoffset
+        * * Description: When a retry of this Failed batch found its journal already in the ERP and recorded it Posted, with no second post, although the batch no longer matched its approved-content seal (a summary line's dimension tags changed after approval). The local tags then differ from what the ERP holds; review them. NULL when the seal matched or the batch was never adopted this way.`),
     Company: z.string().describe(`
         * * Field Name: Company
         * * Display Name: Company
@@ -7289,6 +7294,19 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     }
     set SendAttemptCount(value: number) {
         this.Set('SendAttemptCount', value);
+    }
+
+    /**
+    * * Field Name: SealMismatchDetectedAt
+    * * Display Name: Seal Mismatch Detected At
+    * * SQL Data Type: datetimeoffset
+    * * Description: When a retry of this Failed batch found its journal already in the ERP and recorded it Posted, with no second post, although the batch no longer matched its approved-content seal (a summary line's dimension tags changed after approval). The local tags then differ from what the ERP holds; review them. NULL when the seal matched or the batch was never adopted this way.
+    */
+    get SealMismatchDetectedAt(): Date | null {
+        return this.Get('SealMismatchDetectedAt');
+    }
+    set SealMismatchDetectedAt(value: Date | null) {
+        this.Set('SealMismatchDetectedAt', value);
     }
 
     /**

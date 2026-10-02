@@ -3981,6 +3981,9 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @Field(() => Int, {nullable: true, description: `Dispatch attempts that moved the batch into Sent, including a retry that finds the batch already in the ERP and a first send the pre-flight lookup refuses; neither calls the ERP. A retry refused before Sent is not counted. Each send must advance it by one (trg_JournalEntryBatch_SendOnce). Batches sent before this column existed read 1.`}) 
     SendAttemptCount?: number;
         
+    @Field({nullable: true, description: `When a retry of this Failed batch found its journal already in the ERP and recorded it Posted, with no second post, although the batch no longer matched its approved-content seal (a summary line's dimension tags changed after approval). The local tags then differ from what the ERP holds; review them. NULL when the seal matched or the batch was never adopted this way.`}) 
+    SealMismatchDetectedAt?: Date;
+        
     @Field({nullable: true}) 
     @MaxLength(50)
     Company?: string;
@@ -4123,6 +4126,9 @@ export class CreatemjBizAppsAccountingJournalEntryBatchInput {
     @Field(() => Int, { nullable: true })
     SendAttemptCount?: number;
 
+    @Field({ nullable: true })
+    SealMismatchDetectedAt: Date | null;
+
     @Field(() => RestoreContextInput, { nullable: true })
     RestoreContext___?: RestoreContextInput;
 }
@@ -4228,6 +4234,9 @@ export class UpdatemjBizAppsAccountingJournalEntryBatchInput {
 
     @Field(() => Int, { nullable: true })
     SendAttemptCount?: number;
+
+    @Field({ nullable: true })
+    SealMismatchDetectedAt?: Date | null;
 
     @Field(() => [KeyValuePairInput], { nullable: true })
     OldValues___?: KeyValuePairInput[];
