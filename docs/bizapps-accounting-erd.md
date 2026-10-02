@@ -414,6 +414,7 @@ erDiagram
         uuid SentByUserID FK
         int SendAttemptCount
         datetimeoffset PostedAt
+        datetimeoffset SealMismatchDetectedAt
         string ErrorMessage
     }
     JournalEntrySequence {
@@ -671,7 +672,7 @@ erDiagram
     }
     JournalEntryLineDimension {
         uuid ID PK
-        uuid JournalEntryLineID FK
+        uuid JournalEntryLineID FK "frozen once the JE is Batched/GLPosted (trg_JELD_Immutability, 50033)"
         uuid DimensionID FK "UNIQUE (line, dimension)"
         uuid DimensionValueID FK
     }
@@ -769,6 +770,7 @@ erDiagram
         uuid SentByUserID FK "nullable - whose dispatch last entered Sent (#184)"
         int SendAttemptCount "dispatch attempts that entered Sent; each send must advance it by one (trg_JournalEntryBatch_SendOnce, 50030)"
         datetimeoffset PostedAt "nullable"
+        datetimeoffset SealMismatchDetectedAt "nullable - a retry recorded it Posted from the ERP over a broken seal (#216)"
         string ErrorMessage "nullable"
     }
 ```
@@ -785,7 +787,9 @@ cancel audit are frozen (50031 / 50009). The cancel audit and the ERP check are 
 update that cancels the batch, and `SentAt` is never cleared once set (50032; `trg_JournalEntryBatch_SendOnce`
 fires first, so a caller clearing it sees 50030). The send stamp — `SentAt`,
 `SentByUserID`, `SendAttemptCount` — changes only on a send, which must start from `Approved` or `Failed`
-and advance the count by one (50030). `Archived` keeps the members
+and advance the count by one (50030). A locked entry's lines and their dimension tags are frozen too
+(50006, 50033, #216); a `Failed` retry that finds the batch already in the ERP is recorded `Posted`
+even over a broken seal, and `SealMismatchDetectedAt` flags it. `Archived` keeps the members
 locked for good. Summary is excluded from netting/count/sweep via its type's `IsJournalEntryBatchSummary` flag (the
 discriminator); footing-trigger successor = pending Amith.
 

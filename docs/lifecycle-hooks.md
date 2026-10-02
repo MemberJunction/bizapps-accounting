@@ -132,6 +132,11 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   set — so it now means "unchanged since approval", not only "coherent right now". A batch approved
   before the seal existed has no hash and gets the other checks. The immutability trigger freezes
   `Failed` content as well as `Approved`, so the seal is the second line of defence.
+  `CheckApprovedContent()` returns the same checks split into `CoherenceProblems` and
+  `SealProblems` (#216): dispatch refuses incoherent content, and a broken seal on an `Approved`
+  send, before the ERP lookup; on a `Failed` retry it runs the lookup first, and when the ERP
+  already holds the batch it records it `Posted` with no second post and sets
+  `SealMismatchDetectedAt`. Every other lookup outcome still refuses a retry with a broken seal.
 - **`JournalEntryBatchEntityServer.Cancel(contextUser, { reason, confirmNotAlreadyPostedInERP })`**
   (#183) — legal from `Pending`, `Approved` and `Failed`, and the way a batch reaches `Cancelled`
   (#213): a transient flag set by `Cancel()` is what lets `Validate()` pass that edge, so the generic

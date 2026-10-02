@@ -35,6 +35,10 @@
       @if (h.Status === 'Failed' && h.ErrorMessage) {
         <mj-alert Variant="error" [Message]="h.ErrorMessage"></mj-alert>
       }
+      @if (h.SealMismatchDetectedAt) {
+        <mj-alert Variant="warning" Title="Dimension tags changed after approval"
+          Message="A retry found this batch already posted in the ERP and recorded it Posted without sending it again. Its summary lines' dimension tags here no longer match what was approved and sent; review them against the ERP."></mj-alert>
+      }
 
       <!-- Identity + money. TotalDebits/Credits are the batch's own netted stored totals. -->
       <dl class="bdp__facts">
@@ -61,6 +65,9 @@
         }
         @if (h.PostedAt) {
           <div><dt>Posted</dt><dd>{{ h.PostedAt | date: 'medium' }}</dd></div>
+        }
+        @if (h.SealMismatchDetectedAt) {
+          <div><dt>Seal mismatch</dt><dd>{{ h.SealMismatchDetectedAt | date: 'medium' }}</dd></div>
         }
       </dl>
 

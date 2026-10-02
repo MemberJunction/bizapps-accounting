@@ -24,6 +24,8 @@
  *       send stamp frozen on a Posted row.
  *   L22 the stale retry that lands AFTER the winner left Sent — winner Posted, or winner Failed
  *       again — is refused too, and the ERP is still called once.
+ *   L23 dimension tags on a locked line (#216) — trg_JELD_Immutability refuses raw insert, update
+ *       and delete of a tag on a Batched member or summary line.
  *
  * Run from the app root:  npx vitest run --config test-harnesses/server/vitest.config.ts
  * Requires: the live instance DB (mj/.env creds); packages built (imports their dist).
@@ -730,5 +732,30 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
     expect(row.Status).toBe('Failed');
     expect(row.SendAttemptCount).toBe(2);
     expect(row.ErrorMessage).toBe(winnerFailure);
+  });
+
+  it('L23 — a dimension tag on a locked line cannot be inserted, changed or deleted (#216)', async () => {
+    const member = await createJE(true, 30, 'L23');
+    const built = await buildJournalEntryBatch(ctx.company.id, 'BusinessCentral', ctx.user.ID, ctx.user, provider, AutoApproveGate);
+    ctx.createdBatchIds.push(built.batchId);
+    const locked = /JournalEntryLineDimension on a locked JournalEntry/;
+    const tagsOf = (jeId: string) =>
+      `FROM ${SCHEMA}.JournalEntryLineDimension d JOIN ${SCHEMA}.JournalEntryLine l ON l.ID=d.JournalEntryLineID WHERE l.JournalEntryID='${jeId}'`;
+    const before = Number(await scalar(ctx.pool, `SELECT COUNT(*) ${tagsOf(built.summaryJournalEntryId)}`));
+    expect(before).toBeGreaterThan(0);
+
+    for (const jeId of [member.ID, built.summaryJournalEntryId]) {
+      await expect(ctx.pool.request().query(`UPDATE d SET DimensionValueID=DimensionValueID ${tagsOf(jeId)}`)).rejects.toThrow(locked);
+      await expect(ctx.pool.request().query(`DELETE d ${tagsOf(jeId)}`)).rejects.toThrow(locked);
+    }
+    const untaggedLine = await scalar(ctx.pool,
+      `SELECT TOP 1 l.ID FROM ${SCHEMA}.JournalEntryLine l WHERE l.JournalEntryID='${built.summaryJournalEntryId}' ` +
+      `AND NOT EXISTS (SELECT 1 FROM ${SCHEMA}.JournalEntryLineDimension d WHERE d.JournalEntryLineID=l.ID)`);
+    expect(untaggedLine).toBeTruthy();
+    await expect(ctx.pool.request().query(
+      `INSERT INTO ${SCHEMA}.JournalEntryLineDimension (JournalEntryLineID, DimensionID, DimensionValueID) VALUES ('${untaggedLine}', '${ctx.dimId}', '${ctx.dimValSales}')`,
+    )).rejects.toThrow(locked);
+
+    expect(Number(await scalar(ctx.pool, `SELECT COUNT(*) ${tagsOf(built.summaryJournalEntryId)}`))).toBe(before);
   });
 });

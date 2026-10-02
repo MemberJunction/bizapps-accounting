@@ -154,6 +154,14 @@ interface SummaryLineDimensionContent {
   DimensionValueID: string;
 }
 
+/** What {@link JournalEntryBatchEntityServer.CheckApprovedContent} found; both empty = unchanged since approval. */
+export interface ApprovedContentCheck {
+  /** The batch disagrees with itself: footing, member count, summary header, or no summary entry at all. */
+  CoherenceProblems: string[];
+  /** The content no longer hashes to the seal written at approval. */
+  SealProblems: string[];
+}
+
 /** Everything the approver signs, read from the database. */
 interface ApprovedContent {
   summary: mjBizAppsAccountingJournalEntryEntity;
@@ -374,14 +382,26 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
    * The last is what makes it mean "unchanged since approval" rather than "coherent right now".
    */
   public async CheckControlTotalCoherence(contextUser?: UserInfo): Promise<string[]> {
+    const check = await this.CheckApprovedContent(contextUser);
+    return [...check.CoherenceProblems, ...check.SealProblems];
+  }
+
+  /**
+   * {@link CheckControlTotalCoherence}, with the seal comparison kept apart from the rest. Dispatch
+   * needs the split (#216): a Failed retry whose only problem is a broken seal is still recorded
+   * Posted when the ERP already holds the batch, because nothing is sent.
+   */
+  public async CheckApprovedContent(contextUser?: UserInfo): Promise<ApprovedContentCheck> {
     const content = await this.loadApprovedContent(contextUser);
-    if (!content) return ['The batch has no summary journal entry — regenerate or cancel it.'];
-    return [
-      ...this.footingProblems(content.lines),
-      ...this.memberCountProblems(content.memberIds),
-      ...this.summaryHeaderProblems(content.summary),
-      ...this.sealProblems(content),
-    ];
+    if (!content) return { CoherenceProblems: ['The batch has no summary journal entry — regenerate or cancel it.'], SealProblems: [] };
+    return {
+      CoherenceProblems: [
+        ...this.footingProblems(content.lines),
+        ...this.memberCountProblems(content.memberIds),
+        ...this.summaryHeaderProblems(content.summary),
+      ],
+      SealProblems: this.sealProblems(content),
+    };
   }
 
   private footingProblems(lines: SummaryLineContent[]): string[] {

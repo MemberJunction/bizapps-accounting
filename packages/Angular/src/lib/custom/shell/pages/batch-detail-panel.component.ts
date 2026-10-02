@@ -33,6 +33,8 @@ export interface BatchDetailHeader {
   /** 1 for a first dispatch, one more per retry (#184). */
   SendAttemptCount: number;
   PostedAt: Date | null;
+  /** Set when a retry recorded the batch Posted from the ERP although its approved-content seal no longer matched (#216). */
+  SealMismatchDetectedAt: Date | null;
   ErrorMessage: string | null;
   ApprovalTaskID: string | null;
   ApprovalTaskRaisedAt: Date | null;
@@ -180,7 +182,7 @@ export class BatchDetailPanelComponent extends BaseAngularComponent {
             Fields: [
               'ID', 'JournalEntryBatchNumber', 'Status', 'TargetSystem', 'PostingDate', 'TotalEntries',
               'TotalDebits', 'TotalCredits', 'CompanyID', 'Company', 'ExternalJournalEntryBatchRef',
-              'ApprovedAt', 'SentAt', 'SentByUser', 'SendAttemptCount', 'PostedAt', 'ErrorMessage', 'ApprovalTaskID',
+              'ApprovedAt', 'SentAt', 'SentByUser', 'SendAttemptCount', 'PostedAt', 'SealMismatchDetectedAt', 'ErrorMessage', 'ApprovalTaskID',
               'ApprovalTaskRaisedAt', 'SummaryJournalEntryID', '__mj_CreatedAt',
             ],
             ResultType: 'simple',

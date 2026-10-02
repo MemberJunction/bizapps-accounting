@@ -39,6 +39,7 @@ const INVARIANT_TRIGGERS = [
   'trg_JEL_RecheckParentBalance',
   'trg_JournalEntry_Immutability',
   'trg_JEL_Immutability',
+  'trg_JELD_Immutability', // #216, not the baseline: without it a summary line's tags change under an approved batch
   'trg_JEL_CompanyMatch',
   'trg_JE_CompanyMatch',
   'trg_JournalEntryBatch_Immutability',
@@ -190,7 +191,7 @@ export async function teardownLive(ctx: LiveCtx): Promise<void> {
   const jeIds = ctx.createdJEIds.map(id => `'${id}'`).join(',');
   const batchIds = ctx.createdBatchIds.map(id => `'${id}'`).join(',');
   const companyIdList = [ctx.company.id, ctx.companyB.id].map(id => `'${id}'`).join(',');
-  const toggled = ['JournalEntryLine', 'JournalEntry', 'JournalEntryBatch'];
+  const toggled = ['JournalEntryLineDimension', 'JournalEntryLine', 'JournalEntry', 'JournalEntryBatch'];
   try {
     for (const t of toggled) await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
     // Also sweep by company: locked/summary JEs the tests didn't track individually.

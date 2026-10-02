@@ -34,6 +34,7 @@ export const INVARIANT_TRIGGERS = [
   'trg_JEL_RecheckParentBalance',
   'trg_JournalEntry_Immutability',
   'trg_JEL_Immutability',
+  'trg_JELD_Immutability', // #216, not the baseline: without it a summary line's tags change under an approved batch
   'trg_JEL_CompanyMatch',
   'trg_JE_CompanyMatch',
   'trg_JournalEntryBatch_Immutability',

@@ -16,7 +16,7 @@
 export { AccountingCompanyProfileEntityServer } from './AccountingCompanyProfileEntityServer.js';
 export { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
 export { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
-export { JournalEntryBatchEntityServer, type ERPNotPostedBasis, type JournalEntryBatchCancelOptions } from './JournalEntryBatchEntityServer.js';
+export { JournalEntryBatchEntityServer, type ApprovedContentCheck, type ERPNotPostedBasis, type JournalEntryBatchCancelOptions } from './JournalEntryBatchEntityServer.js';
 export { GLAccountEntityServer } from './GLAccountEntityServer.js';
 export { DimensionEntityServer, LoadDimensionEntityServer } from './DimensionEntityServer.js';
 export { DimensionValueEntityServer, LoadDimensionValueEntityServer } from './DimensionValueEntityServer.js';

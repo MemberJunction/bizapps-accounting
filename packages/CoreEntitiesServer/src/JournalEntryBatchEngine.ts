@@ -1136,7 +1136,8 @@ const SENDABLE_FROM: ReadonlyArray<string> = ['Approved', 'Failed'];
  * `ApprovedContentHash` written at approval (#183), so a batch whose header, summary or member set
  * changed after approval is refused. trg_JournalEntryBatch_Immutability also freezes Approved and
  * Failed content, so the seal is the second line of defence, not the first. A batch approved before
- * the seal existed has no hash and gets the other checks only.
+ * the seal existed has no hash and gets the other checks only. On a Failed retry a broken seal is
+ * judged after the lookup: it refuses the retry unless the ERP already holds the batch (#216).
  *
  * **Every send checks the ERP first (#182).** `Failed` does not prove the ERP rejected the journal:
  * the poster can succeed with the response lost, or succeed and then have the Sent→Posted save fail,
@@ -1144,7 +1145,8 @@ const SENDABLE_FROM: ReadonlyArray<string> = ['Approved', 'Failed'];
  * batch's number:
  *   · nothing                → post.
  *   · a matching posting     → on a Failed retry, the ERP already has this batch: record it Posted
- *                              with no second post. On a first send this database never sent it, so
+ *                              with no second post, even if the seal no longer matches, which sets
+ *                              SealMismatchDetectedAt (#216). On a first send this database never sent it, so
  *                              the database was copied from one that did: refuse, and leave the
  *                              batch Approved.
  *                              No confirmation overrides either outcome.
@@ -1184,17 +1186,17 @@ async function sendBatch(
   await gate.assertApproved(batchId, contextUser); // throws if not CFO-approved
 
   // Re-run the approval-time checks and the seal comparison against the database, right before
-  // the flip to Sent.
-  const drift = await batch.CheckControlTotalCoherence(contextUser);
-  if (drift.length > 0) {
-    throw new Error(
-      `sendJournalEntryBatch: batch ${batch.JournalEntryBatchNumber ?? batchId} no longer matches its approved content — refusing to dispatch. ${drift.join(' ')}`,
-    );
+  // the flip to Sent. A broken seal on a Failed retry waits for the lookup below (#216).
+  const check = await batch.CheckApprovedContent(contextUser);
+  if (check.CoherenceProblems.length > 0 || (check.SealProblems.length > 0 && fromStatus !== 'Failed')) {
+    throw contentDrift(batch, [...check.CoherenceProblems, ...check.SealProblems]);
   }
 
   // Before the →Sent save: a throw here must leave the batch where it was, not stranded at Sent.
   const summaryLines = await loadSummaryLines(batch, contextUser, p);
   const preflight = await lookupOrError(services.CreateLookup(p.md), batch, summaryLines, contextUser);
+  const sealBroken = check.SealProblems.length > 0;
+  if (sealBroken && preflight.status !== 'Found') throw contentDrift(batch, check.SealProblems);
   if (preflight.status === 'Foreign') throw new Error(`sendJournalEntryBatch: ${foreignJournal(batch, preflight.detail, fromStatus)}`);
   if (preflight.status === 'Found' && fromStatus !== 'Failed') throw new Error(`sendJournalEntryBatch: ${numberCollision(batch, preflight.externalJournalEntryBatchRef)}`);
   const refusal = preflightRefusal(preflight, batch, fromStatus, confirmed);
@@ -1206,15 +1208,38 @@ async function sendBatch(
   if (!(await batch.Save())) throw await sentSaveFailure(batch, fromStatus, contextUser, p);
 
   if (refusal) return await failBatch(batch, refusal.reason);
-  if (preflight.status === 'Found') {
-    LogStatus(`sendJournalEntryBatch: the ERP already holds batch ${batch.JournalEntryBatchNumber ?? batch.ID} as ${preflight.externalJournalEntryBatchRef}; recording it Posted without sending it again.`);
-    return await markBatchPosted(batch, preflight.externalJournalEntryBatchRef, contextUser, p);
-  }
+  if (preflight.status === 'Found') return await adoptErpPosting(batch, preflight.externalJournalEntryBatchRef, sealBroken, contextUser, p);
 
   const postResult = await postOrFail(services.CreatePoster(p.md), batch, summaryLines, contextUser);
   return postResult.success
     ? await markBatchPosted(batch, postResult.externalJournalEntryBatchRef ?? null, contextUser, p)
     : await failBatch(batch, postResult.error ?? 'ERP post failed');
+}
+
+/** The refusal for a batch whose content no longer matches what was approved. Thrown before →Sent, so the batch stays where it was. */
+function contentDrift(batch: mjBizAppsAccountingJournalEntryBatchEntity, problems: string[]): Error {
+  return new Error(
+    `sendJournalEntryBatch: batch ${batch.JournalEntryBatchNumber ?? batch.ID} no longer matches its approved content — refusing to dispatch. ${problems.join(' ')}`,
+  );
+}
+
+/**
+ * A Failed retry whose lookup found this batch's journal in the ERP: record it Posted with no second
+ * post. Done even when the batch no longer matches its approved-content seal (#216): the seal guards
+ * what is sent, and nothing is sent here. The lookup matched account, amount and date line for line,
+ * and the ERP holds the tags that were sent, so the local tags are left as they are and the batch is
+ * flagged with SealMismatchDetectedAt for review.
+ */
+async function adoptErpPosting(
+  batch: mjBizAppsAccountingJournalEntryBatchEntity, externalRef: string, sealBroken: boolean, contextUser: UserInfo, p: Providers,
+): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
+  const doc = batch.JournalEntryBatchNumber ?? batch.ID;
+  LogStatus(`sendJournalEntryBatch: the ERP already holds batch ${doc} as ${externalRef}; recording it Posted without sending it again.`);
+  if (sealBroken) {
+    LogStatus(`sendJournalEntryBatch: batch ${doc} no longer matches its approved-content seal; recording SealMismatchDetectedAt so its dimension tags can be reviewed against the ERP.`);
+    batch.SealMismatchDetectedAt = new Date();
+  }
+  return await markBatchPosted(batch, externalRef, contextUser, p);
 }
 
 /**
@@ -1420,6 +1445,8 @@ async function failAcceptedBatch(batch: mjBizAppsAccountingJournalEntryBatchEnti
   const ref = batch.ExternalJournalEntryBatchRef ? ` as ${batch.ExternalJournalEntryBatchRef}` : '';
   LogError(`sendJournalEntryBatch: the ERP accepted batch ${doc}${ref}, but Sent→Posted failed: ${saveError}`);
   batch.PostedAt = null;
+  // The flag belongs to the Posted record; the retry that records it Posted sets it again.
+  batch.SealMismatchDetectedAt = null;
   return await failBatch(
     batch,
     `The ERP accepted document ${doc}${ref}, but recording the batch Posted failed: ${saveError} ` +

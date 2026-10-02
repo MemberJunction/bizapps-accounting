@@ -27,6 +27,7 @@ function header(overrides: Partial<BatchDetailHeader>): BatchDetailHeader {
     SentByUser: null,
     SendAttemptCount: 1,
     PostedAt: new Date('2026-09-30T11:01:00Z'),
+    SealMismatchDetectedAt: null,
     ErrorMessage: null,
     ApprovalTaskID: null,
     ApprovalTaskRaisedAt: null,
@@ -82,5 +83,18 @@ describe('BatchDetailPanelComponent — send audit facts (DOM)', () => {
     expect(text).toContain('Sent');
     expect(text).not.toContain('Send attempts');
     expect(text).not.toContain(' by ');
+  });
+
+  // #216: a Failed retry adopted from the ERP over a broken seal is flagged for review.
+  it('flags a batch recorded Posted over a broken approved-content seal', async () => {
+    const text = await render(header({ SealMismatchDetectedAt: new Date('2026-09-30T11:01:00Z') }));
+
+    expect(text).toContain('Seal mismatch');
+  });
+
+  it('shows no seal-mismatch fact when the seal matched', async () => {
+    const text = await render(header({ SealMismatchDetectedAt: null }));
+
+    expect(text).not.toContain('Seal mismatch');
   });
 });
