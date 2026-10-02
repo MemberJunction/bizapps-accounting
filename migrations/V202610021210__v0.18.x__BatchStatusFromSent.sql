@@ -1,5 +1,5 @@
 -- =============================================================================
--- Migration: V202609281200__v0.15.x__BatchStatusFromSent.sql
+-- Migration: V202610021210__v0.18.x__BatchStatusFromSent.sql
 -- Description: #221 — Posted and Failed are reachable only from Sent, so the
 --              database refuses every status move the batch entity refuses.
 -- =============================================================================
@@ -17,9 +17,10 @@
 --
 -- One condition is added to the 50031 status check: a batch becomes Posted or
 -- Failed only from Sent. The rest of the trigger is unchanged from
--- V202609261000, with the 50009 message as V202609261200 left it.
+-- V202609261000, except that the 50009 message now says the send stamp changes
+-- only on a send (50030).
 --
--- -> Sent is not repeated here. trg_JournalEntryBatch_SendOnce (V202609261200,
+-- -> Sent is not repeated here. trg_JournalEntryBatch_SendOnce (V202610021200,
 -- 50030) already refuses it from anything but Approved or Failed, and fires
 -- first. Altering this trigger does not reset SendOnce's First order: SQL
 -- Server drops that attribute only when the ordered trigger itself is altered.
