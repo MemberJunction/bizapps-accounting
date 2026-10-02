@@ -43,7 +43,7 @@ function idsIn(filter: string, field: string): Set<string> {
 /** A RunView fake that answers each preview read from the fixtures above, honoring the IN lists. */
 function fakeProvider(): IMetadataProvider {
   const RunView = async (params: RunViewParams) => {
-    const filter = params.ExtraFilter ?? '';
+    const filter = typeof params.ExtraFilter === 'string' ? params.ExtraFilter : '';
     switch (params.EntityName) {
       case 'MJ_BizApps_Accounting: Journal Entries': {
         const ids = idsIn(filter, 'ID');
