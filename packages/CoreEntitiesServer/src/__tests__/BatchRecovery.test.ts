@@ -60,9 +60,29 @@ interface FakeBatch {
     CheckApprovedContent: () => Promise<{ CoherenceProblems: string[]; SealProblems: string[] }>;
 }
 
+/** What the database holds for the batch: the columns the SealMismatchDetectedAt rule reads. */
+interface StoredBatch { Status: string; SendAttemptCount: number; SealMismatchDetectedAt: Date | null }
+
+/**
+ * trg_JournalEntryBatch_Immutability's SealMismatchDetectedAt rule (50034, #216): set only by the save
+ * that records a retried batch Posted (Sent -> Posted, SendAttemptCount above 1), never changed or
+ * cleared after. The fake's Save applies it, so every test here also shows the engine never writes the
+ * flag where the database would refuse it.
+ */
+function sealFlagRefusal(before: StoredBatch, after: StoredBatch): string | null {
+    const was = before.SealMismatchDetectedAt;
+    const now = after.SealMismatchDetectedAt;
+    const changed = was !== null && (now === null || Math.abs(now.getTime() - was.getTime()) >= 1);
+    const setOutsideAdoption = was === null && now !== null
+        && !(before.Status === 'Sent' && after.Status === 'Posted' && after.SendAttemptCount > 1);
+    return changed || setOutsideAdoption ? 'JournalEntryBatch SealMismatchDetectedAt refused.' : null;
+}
+
 /** An in-memory world: one batch, its member entries, and which entry saves should fail. */
 function world(status: string, entries: Record<string, JournalEntryRow>, opts: { failingEntryIds?: string[]; missingEntryIds?: string[]; drift?: string[]; sealDrift?: string[]; summaryLinesScanFails?: boolean; failFirstSaveAt?: string; sentSaveMessage?: string; currentStatus?: string } = {}) {
     let saveFailed = false;
+    // Every batch past Approved was sent at least once (Posted and Failed are reachable only from Sent).
+    const stored: StoredBatch = { Status: status, SendAttemptCount: status === 'Approved' || status === 'Pending' ? 0 : 1, SealMismatchDetectedAt: null };
     const batch: FakeBatch = {
         ID: BATCH_ID,
         JournalEntryBatchNumber: 'JEB-0001',
@@ -79,6 +99,12 @@ function world(status: string, entries: Record<string, JournalEntryRow>, opts: {
         Save: vi.fn(async () => {
             if (opts.failFirstSaveAt === batch.Status && !saveFailed) { saveFailed = true; return false; }
             if (opts.sentSaveMessage && batch.Status === 'Sent') { batch.LatestResult = { CompleteMessage: opts.sentSaveMessage }; return false; }
+            // The entity stamps SendAttemptCount on every move into Sent.
+            const sendAttemptCount = batch.Status === 'Sent' && stored.Status !== 'Sent' ? stored.SendAttemptCount + 1 : stored.SendAttemptCount;
+            const next: StoredBatch = { Status: batch.Status, SendAttemptCount: sendAttemptCount, SealMismatchDetectedAt: batch.SealMismatchDetectedAt };
+            const refusal = sealFlagRefusal(stored, next);
+            if (refusal) { batch.LatestResult = { CompleteMessage: refusal }; return false; }
+            Object.assign(stored, next);
             batch.statusHistory.push(batch.Status);
             return true;
         }),
@@ -116,7 +142,7 @@ function world(status: string, entries: Record<string, JournalEntryRow>, opts: {
                 : { Success: true, Results: params.EntityName === JE_ENTITY ? batchedIds() : [] },
     } as unknown as IMetadataProvider;
 
-    return { batch, entries, provider };
+    return { batch, entries, provider, stored };
 }
 
 const batched = (): JournalEntryRow => ({ Status: 'Batched', JournalEntryBatchID: BATCH_ID, GLPostedAt: null, GLReferenceID: null });
@@ -647,6 +673,48 @@ describe('sendJournalEntryBatch — a Failed retry whose approved-content seal n
         expect(result.Status).toBe('Failed');
         expect(batch.statusHistory).toEqual(['Sent', 'Failed']);
         expect(batch.SealMismatchDetectedAt).toBeNull();
+    });
+
+    // The flag is frozen (trg_JournalEntryBatch_Immutability, 50034): the fake's Save applies the rule.
+    it('writes the flag in the save that records the retried batch Posted, which the database allows', async () => {
+        const { batch, provider, stored } = world('Failed', { 'je-1': batched() }, { sealDrift: SEAL });
+
+        await send({ lookup: found(), provider });
+
+        expect(stored.Status).toBe('Posted');
+        expect(stored.SendAttemptCount).toBe(2);
+        expect(stored.SealMismatchDetectedAt).toBe(batch.SealMismatchDetectedAt);
+        expect(stored.SealMismatchDetectedAt).toBeInstanceOf(Date);
+    });
+
+    it('persists no flag when recording the posting fails, and the next retry records it Posted and flags it', async () => {
+        const { batch, provider, stored } = world('Failed', { 'je-1': batched() }, { sealDrift: SEAL, failFirstSaveAt: 'Posted' });
+
+        await send({ lookup: found(), provider });
+        expect(stored).toEqual({ Status: 'Failed', SendAttemptCount: 2, SealMismatchDetectedAt: null });
+
+        const result = await send({ lookup: found(), provider });
+
+        expect(result.Status).toBe('Posted');
+        expect(batch.statusHistory).toEqual(['Sent', 'Failed', 'Sent', 'Posted']);
+        expect(stored.SendAttemptCount).toBe(3);
+        expect(stored.SealMismatchDetectedAt).toBeInstanceOf(Date);
+    });
+
+    it('cannot flag a batch outside that save, or change or clear the flag once set', async () => {
+        const failed = world('Failed', { 'je-1': batched() });
+        failed.batch.SealMismatchDetectedAt = new Date();
+        expect(await failed.batch.Save()).toBe(false);
+        expect(failed.stored.SealMismatchDetectedAt).toBeNull();
+
+        const adopted = world('Failed', { 'je-1': batched() }, { sealDrift: SEAL });
+        await send({ lookup: found(), provider: adopted.provider });
+        const flaggedAt = adopted.stored.SealMismatchDetectedAt;
+        adopted.batch.SealMismatchDetectedAt = null;
+        expect(await adopted.batch.Save()).toBe(false);
+        adopted.batch.SealMismatchDetectedAt = new Date((flaggedAt?.getTime() ?? 0) + 1000);
+        expect(await adopted.batch.Save()).toBe(false);
+        expect(adopted.stored.SealMismatchDetectedAt).toBe(flaggedAt);
     });
 });
 

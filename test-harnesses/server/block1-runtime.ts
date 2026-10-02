@@ -437,6 +437,29 @@ async function main(): Promise<void> {
     assert((res.recordset[0] as { Status: string } | undefined)?.Status === 'Posted', 'batch should be Posted');
   });
 
+  // ─── INV: SealMismatchDetectedAt is set once, by a retry's Sent → Posted, and frozen after (#216) ──
+  await test('INV seal-mismatch flag — raw set on a Failed batch, or on a first send\'s Sent → Posted → rejected (50034)', async () => {
+    const failed = await rawBatchAt(ctx, 'Failed');
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET SealMismatchDetectedAt=SYSDATETIMEOFFSET() WHERE ID='${failed.batchId}'`), 'SealMismatchDetectedAt refused');
+    const first = await rawBatchAt(ctx, 'Approved');
+    await pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Sent', SentAt=SYSDATETIMEOFFSET(), SendAttemptCount=SendAttemptCount + 1 WHERE ID='${first.batchId}'`);
+    await expectThrow(() => pool.request().query(
+      `UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Posted', PostedAt=SYSDATETIMEOFFSET(), SealMismatchDetectedAt=SYSDATETIMEOFFSET() WHERE ID='${first.batchId}'`),
+      'SealMismatchDetectedAt refused');
+  });
+
+  await test('INV seal-mismatch flag — allowed on a retry\'s Sent → Posted; a later change or clear → rejected (50034)', async () => {
+    const b = await rawBatchAt(ctx, 'Failed');
+    await pool.request().query(`
+      UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Sent', SentAt=SYSDATETIMEOFFSET(), SendAttemptCount=SendAttemptCount + 1 WHERE ID='${b.batchId}';
+      UPDATE ${SCHEMA}.JournalEntryBatch SET Status='Posted', PostedAt=SYSDATETIMEOFFSET(), ErrorMessage=NULL, SealMismatchDetectedAt=SYSDATETIMEOFFSET() WHERE ID='${b.batchId}';`);
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET SealMismatchDetectedAt=DATEADD(SECOND, 1, SealMismatchDetectedAt) WHERE ID='${b.batchId}'`), 'SealMismatchDetectedAt refused');
+    await expectThrow(() => pool.request().query(`UPDATE ${SCHEMA}.JournalEntryBatch SET SealMismatchDetectedAt=NULL WHERE ID='${b.batchId}'`), 'SealMismatchDetectedAt refused');
+    const res = await pool.request().query(`SELECT Status, SealMismatchDetectedAt FROM ${SCHEMA}.JournalEntryBatch WHERE ID='${b.batchId}'`);
+    const row = res.recordset[0] as { Status: string; SealMismatchDetectedAt: Date | null } | undefined;
+    assert(row?.Status === 'Posted' && row.SealMismatchDetectedAt !== null, `batch should be Posted and flagged, got ${row?.Status}/${String(row?.SealMismatchDetectedAt)}`);
+  });
+
   await test('INV batch audit — raw clear of a Failed batch\'s SentAt (50030), or an attestation stamped without cancelling (50032) → rejected', async () => {
     const b = await rawBatchAt(ctx, 'Failed');
     // trg_JournalEntryBatch_SendOnce fires first, so its send-stamp freeze refuses this before 50032 runs.

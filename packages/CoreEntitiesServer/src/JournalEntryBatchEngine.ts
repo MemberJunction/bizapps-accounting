@@ -1228,7 +1228,8 @@ function contentDrift(batch: mjBizAppsAccountingJournalEntryBatchEntity, problem
  * post. Done even when the batch no longer matches its approved-content seal (#216): the seal guards
  * what is sent, and nothing is sent here. The lookup matched account, amount and date line for line,
  * and the ERP holds the tags that were sent, so the local tags are left as they are and the batch is
- * flagged with SealMismatchDetectedAt for review.
+ * flagged with SealMismatchDetectedAt for review. The flag is written by the Sent→Posted save itself:
+ * trg_JournalEntryBatch_Immutability (50034) allows it only there, on a retry, and freezes it after.
  */
 async function adoptErpPosting(
   batch: mjBizAppsAccountingJournalEntryBatchEntity, externalRef: string, sealBroken: boolean, contextUser: UserInfo, p: Providers,
@@ -1445,7 +1446,9 @@ async function failAcceptedBatch(batch: mjBizAppsAccountingJournalEntryBatchEnti
   const ref = batch.ExternalJournalEntryBatchRef ? ` as ${batch.ExternalJournalEntryBatchRef}` : '';
   LogError(`sendJournalEntryBatch: the ERP accepted batch ${doc}${ref}, but Sent→Posted failed: ${saveError}`);
   batch.PostedAt = null;
-  // The flag belongs to the Posted record; the retry that records it Posted sets it again.
+  // The failed Posted save persisted nothing, so the flag must not ride on the Sent→Failed save:
+  // trg_JournalEntryBatch_Immutability (50034) refuses it there, which would strand the batch at
+  // Sent. The retry that records it Posted sets it again.
   batch.SealMismatchDetectedAt = null;
   return await failBatch(
     batch,

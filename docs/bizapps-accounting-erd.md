@@ -770,7 +770,7 @@ erDiagram
         uuid SentByUserID FK "nullable - whose dispatch last entered Sent (#184)"
         int SendAttemptCount "dispatch attempts that entered Sent; each send must advance it by one (trg_JournalEntryBatch_SendOnce, 50030)"
         datetimeoffset PostedAt "nullable"
-        datetimeoffset SealMismatchDetectedAt "nullable - a retry recorded it Posted from the ERP over a broken seal (#216)"
+        datetimeoffset SealMismatchDetectedAt "nullable - a retry recorded it Posted from the ERP over a broken seal; set only then, frozen after (50034, #216)"
         string ErrorMessage "nullable"
     }
 ```
@@ -789,7 +789,9 @@ fires first, so a caller clearing it sees 50030). The send stamp — `SentAt`,
 `SentByUserID`, `SendAttemptCount` — changes only on a send, which must start from `Approved` or `Failed`
 and advance the count by one (50030). A locked entry's lines and their dimension tags are frozen too
 (50006, 50033, #216); a `Failed` retry that finds the batch already in the ERP is recorded `Posted`
-even over a broken seal, and `SealMismatchDetectedAt` flags it. `Archived` keeps the members
+even over a broken seal, and `SealMismatchDetectedAt` flags it. That flag is written only by the
+`Sent` → `Posted` update of a retry (`SendAttemptCount` above 1) and is never changed or cleared
+after; no insert carries it (50034). `Archived` keeps the members
 locked for good. Summary is excluded from netting/count/sweep via its type's `IsJournalEntryBatchSummary` flag (the
 discriminator); footing-trigger successor = pending Amith.
 

@@ -136,7 +136,11 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   `SealProblems` (#216): dispatch refuses incoherent content, and a broken seal on an `Approved`
   send, before the ERP lookup; on a `Failed` retry it runs the lookup first, and when the ERP
   already holds the batch it records it `Posted` with no second post and sets
-  `SealMismatchDetectedAt`. Every other lookup outcome still refuses a retry with a broken seal.
+  `SealMismatchDetectedAt` in that same `Sent`→`Posted` save. Every other lookup outcome still
+  refuses a retry with a broken seal. `trg_JournalEntryBatch_Immutability` (50034) allows the flag
+  only in a retry's `Sent`→`Posted` update and freezes it after, so when that save fails
+  `failAcceptedBatch` drops the flag before the `Sent`→`Failed` save (the failed save persisted
+  nothing); the next retry sets it again.
 - **`JournalEntryBatchEntityServer.Cancel(contextUser, { reason, confirmNotAlreadyPostedInERP })`**
   (#183) — legal from `Pending`, `Approved` and `Failed`, and the way a batch reaches `Cancelled`
   (#213): a transient flag set by `Cancel()` is what lets `Validate()` pass that edge, so the generic
