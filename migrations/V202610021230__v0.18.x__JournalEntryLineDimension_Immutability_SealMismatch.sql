@@ -31,11 +31,20 @@
 --    batch can be listed and its local tags reviewed. NULL on every other batch.
 --    Existing rows stay NULL.
 --
--- THROW with no ROLLBACK TRANSACTION first. A dimension tag is saved by the
--- entity's spCreate / spUpdate / spDelete, which the provider runs inside
--- INSERT-EXEC, where a ROLLBACK in the trigger is itself an error (3915) and the
--- caller would get that in place of the message below. A trigger runs with
--- XACT_ABORT on, so THROW alone rolls the statement back.
+-- 3. The flag is frozen. trg_JournalEntryBatch_Immutability (50034) lets
+--    SealMismatchDetectedAt be set only by the update that records a retried
+--    batch Posted (Sent -> Posted with SendAttemptCount above 1), and refuses any
+--    later change or clear and any insert that carries it. It is the review
+--    record, so no save may stamp it on a batch that was not adopted this way or
+--    erase it from one that was. trg_JournalEntryBatch_SendOnce keeps its First
+--    firing order: only this trigger is altered.
+--
+-- Both new rules THROW with no ROLLBACK TRANSACTION first. A dimension tag or a
+-- batch is saved by the entity's spCreate / spUpdate / spDelete, which the
+-- provider runs inside INSERT-EXEC, where a ROLLBACK in the trigger is itself an
+-- error (3915) and the caller would get that in place of the message. A trigger
+-- runs with XACT_ABORT on, so THROW alone rolls the statement back. The batch
+-- trigger's earlier rules keep their ROLLBACK, as V202610021220 left them.
 --
 -- Dimension tags already edited on locked lines are not re-checked: the rule
 -- applies to changes from now on.
@@ -73,6 +82,160 @@ GO
 EXEC sp_addextendedproperty @name = N'MS_Description',
     @value = N'When a retry of this Failed batch found its journal already in the ERP and recorded it Posted, with no second post, although the batch no longer matched its approved-content seal (a summary line''s dimension tags changed after approval). The local tags then differ from what the ERP holds; review them. NULL when the seal matched or the batch was never adopted this way.',
     @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'SealMismatchDetectedAt';
+GO
+
+-- -----------------------------------------------------------------------------
+-- 3. SealMismatchDetectedAt is set once, by the retry that records the batch Posted
+-- -----------------------------------------------------------------------------
+-- trg_JournalEntryBatch_Immutability is the V202610021220 (PendingCancelTeardownGate)
+-- body verbatim, plus INSERT among its events and the SEAL MISMATCH rule (50034)
+-- at the end. The earlier rules join inserted to deleted, or need deleted with no
+-- inserted, so an insert reaches only the new rule.
+CREATE OR ALTER TRIGGER __mj_BizAppsAccounting.trg_JournalEntryBatch_Immutability
+ON __mj_BizAppsAccounting.JournalEntryBatch
+AFTER INSERT, UPDATE, DELETE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- DELETE: an approved batch is never deleted, and neither is the record that one was cancelled.
+    IF NOT EXISTS (SELECT 1 FROM inserted) AND EXISTS (
+        SELECT 1 FROM deleted
+        WHERE Status IN ('Approved','Sent','Posted','Failed','Archived')
+           OR (Status = 'Cancelled' AND ApprovedAt IS NOT NULL)
+    )
+    BEGIN
+        ROLLBACK TRANSACTION;
+        THROW 50008, 'JournalEntryBatch cannot be deleted once Status is Approved, Sent, Posted, Failed, or Archived, or once it was cancelled after approval. Cancel it instead.', 1;
+    END;
+
+    -- STATUS: Cancelled releases entries, so only Pending / Approved / Failed may reach it, a batch
+    -- reaches it only with its summary pointer cleared (by the same update, or by regenerate's
+    -- teardown before it), and the terminal statuses never change again. Nothing moves back to
+    -- Pending (a Pending batch's members can be released by any journal entry save), only a Pending
+    -- batch is approved, and a Sent batch is not archived (it may still be posting in the ERP).
+    -- Posted and Failed are the outcomes of a send, so only a Sent batch reaches them; -> Sent is
+    -- policed by trg_JournalEntryBatch_SendOnce (50030).
+    IF EXISTS (
+        SELECT 1
+        FROM deleted d
+        JOIN inserted i ON i.ID = d.ID
+        WHERE i.Status <> d.Status
+          AND (
+            d.Status IN ('Posted','Cancelled','Archived')
+            OR i.Status = 'Pending'
+            OR (i.Status = 'Approved' AND d.Status <> 'Pending')
+            OR (i.Status = 'Archived' AND d.Status NOT IN ('Pending','Approved','Failed'))
+            OR (i.Status = 'Cancelled' AND d.Status NOT IN ('Pending','Approved','Failed'))
+            OR (i.Status = 'Cancelled' AND i.SummaryJournalEntryID IS NOT NULL)
+            OR (i.Status IN ('Posted','Failed') AND d.Status <> 'Sent')
+          )
+    )
+    BEGIN
+        ROLLBACK TRANSACTION;
+        THROW 50031, 'JournalEntryBatch status change refused. Posted, Cancelled and Archived are terminal; no batch returns to Pending; only a Pending batch is approved; Posted and Failed are reachable only from Sent; Archived is reachable only from Pending, Approved or Failed; Cancelled is reachable only from Pending, Approved or Failed; and a batch is cancelled only with its summary pointer cleared (JournalEntryBatchEntityServer.Cancel).', 1;
+    END;
+
+    -- AUDIT: the cancel audit and the ERP check are written only by the update that cancels the
+    -- batch, so no other save can stamp a "not posted in the ERP" record on it; and SentAt, once set,
+    -- is never cleared, because it is the evidence CK_JournalEntryBatch_CancelERPCheck keys on. A
+    -- retry re-stamps SentAt with a new time, which is allowed.
+    IF EXISTS (
+        SELECT 1
+        FROM deleted d
+        JOIN inserted i ON i.ID = d.ID
+        WHERE (d.SentAt IS NOT NULL AND i.SentAt IS NULL)
+           OR (
+               NOT (i.Status = 'Cancelled' AND d.Status <> 'Cancelled')
+               AND (
+                   ISNULL(i.CancelReason,                  N'')                                    <> ISNULL(d.CancelReason,                  N'')                                    OR
+                   (CASE WHEN i.CancelledAt IS NULL AND d.CancelledAt IS NULL THEN 0 WHEN i.CancelledAt IS NULL OR d.CancelledAt IS NULL THEN 1 WHEN ABS(DATEDIFF_BIG(MICROSECOND, i.CancelledAt, d.CancelledAt)) >= 1000 THEN 1 ELSE 0 END) = 1 OR
+                   ISNULL(i.CancelledByUserID,             '00000000-0000-0000-0000-000000000000') <> ISNULL(d.CancelledByUserID,             '00000000-0000-0000-0000-000000000000') OR
+                   (CASE WHEN i.ERPNotPostedConfirmedAt IS NULL AND d.ERPNotPostedConfirmedAt IS NULL THEN 0 WHEN i.ERPNotPostedConfirmedAt IS NULL OR d.ERPNotPostedConfirmedAt IS NULL THEN 1 WHEN ABS(DATEDIFF_BIG(MICROSECOND, i.ERPNotPostedConfirmedAt, d.ERPNotPostedConfirmedAt)) >= 1000 THEN 1 ELSE 0 END) = 1 OR
+                   ISNULL(i.ERPNotPostedConfirmedByUserID, '00000000-0000-0000-0000-000000000000') <> ISNULL(d.ERPNotPostedConfirmedByUserID, '00000000-0000-0000-0000-000000000000') OR
+                   ISNULL(i.ERPNotPostedBasis,             N'')                                    <> ISNULL(d.ERPNotPostedBasis,             N'')
+               )
+           )
+    )
+    BEGIN
+        ROLLBACK TRANSACTION;
+        THROW 50032, 'JournalEntryBatch audit refused. CancelReason / CancelledAt / CancelledByUserID and ERPNotPostedConfirmedAt / ERPNotPostedConfirmedByUserID / ERPNotPostedBasis are written only by the update that cancels the batch, and SentAt is never cleared once set.', 1;
+    END;
+
+    -- CONTENT: frozen from approval on, Failed and Cancelled included. The timestamps this migration
+    -- freezes compare at millisecond precision: every entity save writes each column back through a
+    -- JavaScript Date, so a value written by SQL with sub-millisecond digits would otherwise read as
+    -- changed on the next ordinary save.
+    IF EXISTS (
+        SELECT 1
+        FROM deleted d
+        JOIN inserted i ON i.ID = d.ID
+        WHERE d.Status IN ('Approved','Sent','Posted','Failed','Archived','Cancelled')
+          AND (
+            i.JournalEntryBatchNumber          <> d.JournalEntryBatchNumber          OR
+            i.CompanyID            <> d.CompanyID            OR
+            i.PostingDate          <> d.PostingDate          OR
+            -- The summary pointer is frozen, except for the one sanctioned change: an Approved or
+            -- Failed batch clearing it in the same update that marks it Cancelled.
+            (
+                ISNULL(i.SummaryJournalEntryID, '00000000-0000-0000-0000-000000000000') <> ISNULL(d.SummaryJournalEntryID, '00000000-0000-0000-0000-000000000000')
+                AND NOT (
+                    d.Status IN ('Approved','Failed')
+                    AND i.Status = 'Cancelled'
+                    AND i.SummaryJournalEntryID IS NULL
+                )
+            ) OR
+            ISNULL(i.ApprovalTaskID,        '00000000-0000-0000-0000-000000000000') <> ISNULL(d.ApprovalTaskID,        '00000000-0000-0000-0000-000000000000') OR
+            (CASE WHEN i.ApprovedAt IS NULL AND d.ApprovedAt IS NULL THEN 0 WHEN i.ApprovedAt IS NULL OR d.ApprovedAt IS NULL THEN 1 WHEN ABS(DATEDIFF_BIG(MICROSECOND, i.ApprovedAt, d.ApprovedAt)) >= 1000 THEN 1 ELSE 0 END) = 1 OR
+            ISNULL(i.ApprovedByUserID,      '00000000-0000-0000-0000-000000000000') <> ISNULL(d.ApprovedByUserID,      '00000000-0000-0000-0000-000000000000') OR
+            ISNULL(i.ApprovedContentHash,   N'')                                    <> ISNULL(d.ApprovedContentHash,   N'')                                    OR
+            i.TargetSystem         <> d.TargetSystem         OR
+            i.BatchedAt            <> d.BatchedAt            OR
+            i.BatchedByUserID      <> d.BatchedByUserID      OR
+            i.TotalEntries         <> d.TotalEntries         OR
+            i.TotalDebits          <> d.TotalDebits          OR
+            i.TotalCredits         <> d.TotalCredits         OR
+            -- Once Cancelled, the cancel audit and the ERP-check attestation are the record; they freeze too.
+            (
+                d.Status = 'Cancelled'
+                AND (
+                    ISNULL(i.CancelReason,                  N'')                                    <> ISNULL(d.CancelReason,                  N'')                                    OR
+                    (CASE WHEN i.CancelledAt IS NULL AND d.CancelledAt IS NULL THEN 0 WHEN i.CancelledAt IS NULL OR d.CancelledAt IS NULL THEN 1 WHEN ABS(DATEDIFF_BIG(MICROSECOND, i.CancelledAt, d.CancelledAt)) >= 1000 THEN 1 ELSE 0 END) = 1 OR
+                    ISNULL(i.CancelledByUserID,             '00000000-0000-0000-0000-000000000000') <> ISNULL(d.CancelledByUserID,             '00000000-0000-0000-0000-000000000000') OR
+                    (CASE WHEN i.ERPNotPostedConfirmedAt IS NULL AND d.ERPNotPostedConfirmedAt IS NULL THEN 0 WHEN i.ERPNotPostedConfirmedAt IS NULL OR d.ERPNotPostedConfirmedAt IS NULL THEN 1 WHEN ABS(DATEDIFF_BIG(MICROSECOND, i.ERPNotPostedConfirmedAt, d.ERPNotPostedConfirmedAt)) >= 1000 THEN 1 ELSE 0 END) = 1 OR
+                    ISNULL(i.ERPNotPostedConfirmedByUserID, '00000000-0000-0000-0000-000000000000') <> ISNULL(d.ERPNotPostedConfirmedByUserID, '00000000-0000-0000-0000-000000000000')
+                )
+            )
+          )
+    )
+    BEGIN
+        ROLLBACK TRANSACTION;
+        THROW 50009, 'JournalEntryBatch is locked (Status=Approved/Sent/Posted/Failed/Archived/Cancelled). Only Status / PostedAt / the Archive audit triple / ExternalJournalEntryBatchRef / ErrorMessage may evolve; the send stamp (SentAt / SentByUserID / SendAttemptCount) changes only on a send (50030); the Cancel audit and ERP check are written only by the update that cancels the batch (50032). CompanyID, PostingDate, SummaryJournalEntryID, the approval-task pointer, ApprovedAt / ApprovedByUserID and ApprovedContentHash freeze at approval; the summary pointer may clear only as an Approved or Failed batch is Cancelled.', 1;
+    END;
+
+    -- SEAL MISMATCH (#216): SealMismatchDetectedAt is written only by the update that records a
+    -- retried batch Posted from the ERP, and once set it never changes or clears. A retry is a send
+    -- from Failed; a first send from Approved is attempt 1, so Sent -> Posted with SendAttemptCount
+    -- above 1 is the one update that may set it. A new batch carries none. Compared at millisecond
+    -- precision, as above. THROW with no ROLLBACK, so an entity save reports this message, not 3915.
+    IF EXISTS (
+        SELECT 1
+        FROM inserted i
+        LEFT JOIN deleted d ON d.ID = i.ID
+        WHERE (d.ID IS NULL AND i.SealMismatchDetectedAt IS NOT NULL)
+           OR (
+               d.SealMismatchDetectedAt IS NOT NULL
+               AND (i.SealMismatchDetectedAt IS NULL OR ABS(DATEDIFF_BIG(MICROSECOND, i.SealMismatchDetectedAt, d.SealMismatchDetectedAt)) >= 1000)
+           )
+           OR (
+               d.ID IS NOT NULL
+               AND d.SealMismatchDetectedAt IS NULL
+               AND i.SealMismatchDetectedAt IS NOT NULL
+               AND NOT (d.Status = 'Sent' AND i.Status = 'Posted' AND i.SendAttemptCount > 1)
+           )
+    )
+        THROW 50034, 'JournalEntryBatch SealMismatchDetectedAt refused. It is set only by the update that records a retried batch Posted (Sent -> Posted, SendAttemptCount above 1), and once set it is never changed or cleared.', 1;
+END;
 GO
 
 
