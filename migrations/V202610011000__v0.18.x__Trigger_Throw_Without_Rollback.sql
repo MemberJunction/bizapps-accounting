@@ -1,5 +1,5 @@
 -- =============================================================================
--- Migration: V202609281400__v0.15.x__Trigger_Throw_Without_Rollback.sql
+-- Migration: V202610011000__v0.18.x__Trigger_Throw_Without_Rollback.sql
 -- Description: #211 — every accounting trigger THROWs without a ROLLBACK
 --              TRANSACTION first, so a refused save reports the trigger's own
 --              error instead of error 3915.
