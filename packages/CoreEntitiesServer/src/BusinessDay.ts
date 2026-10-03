@@ -5,7 +5,7 @@
  * midnight differs from the business day and can move an entry into the wrong month or period.
  */
 import { IMetadataProvider, UserInfo } from '@memberjunction/core';
-import { BusinessTimeZoneEngine, CalendarDayIn, IsCalendarDay, type CalendarDay } from '@mj-biz-apps/common-entities';
+import { BusinessTimeZoneEngine, CalendarDayIn, IsBeforeDay, IsCalendarDay, type CalendarDay } from '@mj-biz-apps/common-entities';
 
 /**
  * Today as a date-only value in the business zone, UTC midnight of that day. Assumes
@@ -92,6 +92,25 @@ export async function loadBoundDay(
   }
   if (isUtcMidnight(bound)) return bound.toISOString().slice(0, 10);
   return loadBusinessDayOf(bound, contextUser, provider, companyID);
+}
+
+/**
+ * A batch's PostingDate — the journal date the ERP receives — as a calendar day: the day the caller
+ * asked for, read by the same shape rules as a cutoff ({@link loadBoundDay}), or today's business day
+ * when it asked for none (golive #315). A future day is refused: the ERP would book the batch in a
+ * period that has not happened yet.
+ */
+export async function loadPostingDay(
+  postingDate: DateBound | null | undefined, contextUser: UserInfo, provider: IMetadataProvider, companyID?: string,
+): Promise<CalendarDay> {
+  await BusinessTimeZoneEngine.Instance.Config(false, contextUser, provider);
+  const today = BusinessTimeZoneEngine.Instance.Today(companyID);
+  if (!postingDate) return today;
+  const day = await loadBoundDay(postingDate, 'Batch PostingDate', contextUser, provider, companyID);
+  if (IsBeforeDay(today, day)) {
+    throw new Error(`Batch PostingDate ${day} is in the future (today is ${today}). Choose today or an earlier day.`);
+  }
+  return day;
 }
 
 const isUtcMidnight = (d: Date): boolean =>

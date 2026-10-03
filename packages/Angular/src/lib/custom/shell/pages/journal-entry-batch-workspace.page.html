@@ -99,7 +99,25 @@
           (ngModelChange)="OnCriteriaChanged()"
           [disabled]="IsBuilt" />
         @if (!Draft.Criteria.Cutoff) {
-          <span class="bw-hint">No cutoff — includes future-dated entries.</span>
+          <span class="bw-hint">No cutoff — includes everything through the posting date.</span>
+        }
+      </label>
+
+      <!-- The journal date the ERP receives (golive #315). It also ends the pool: an entry dated after
+           it waits for a later batch, so a changed date needs Apply like any other criterion. -->
+      <label class="bw-field">
+        <span>Posting date</span>
+        <input
+          type="date"
+          class="mj-input"
+          [max]="Today"
+          [(ngModel)]="Draft.Criteria.PostingDate"
+          (ngModelChange)="OnCriteriaChanged()"
+          [disabled]="IsBuilt" />
+        @if (PostingDateProblem && !IsBuilt) {
+          <span class="bw-hint bw-hint--error">{{ PostingDateProblem }}</span>
+        } @else {
+          <span class="bw-hint">The journal date {{ Draft.Criteria.TargetSystem }} receives. Entries dated after it wait for a later batch.</span>
         }
       </label>
 

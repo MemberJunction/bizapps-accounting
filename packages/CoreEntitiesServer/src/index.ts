@@ -63,6 +63,7 @@ export {
   pendingCompanies,
   EmptyJournalEntryBatchError,
   JournalEntryBatchFromViewError,
+  JournalEntryBatchPostingDateError,
   approveJournalEntryBatch,
   sendJournalEntryBatch,
   autoPostJournalEntryBatch,

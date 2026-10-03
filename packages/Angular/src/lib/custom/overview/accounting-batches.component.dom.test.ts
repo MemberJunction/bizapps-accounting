@@ -89,7 +89,25 @@ describe('AccountingBatchesPageComponent — Build Batch modal cutoff (DOM)', ()
     expect(input.value).toBe(BUSINESS_DAY);
   });
 
-  it('says so when the cutoff is cleared — the preview then includes future-dated entries', async () => {
+  it('defaults the posting date to the business day and sends it to the preview (golive #315)', async () => {
+    const fixture = await render();
+    await openModal(fixture);
+    const input = fixture.nativeElement.querySelector('input[aria-label="Posting Date"]') as HTMLInputElement | null;
+
+    expect(fixture.componentInstance.BuildPostingDate).toBe(BUSINESS_DAY);
+    expect(previewCalls.map(c => c.PostingDate)).toEqual([BUSINESS_DAY]);
+    await vi.waitFor(() => expect(input?.value).toBe(BUSINESS_DAY));
+  });
+
+  it('blocks the build on a future posting date (golive #315)', async () => {
+    const fixture = await render();
+    await openModal(fixture);
+    fixture.componentInstance.BuildPostingDate = '2026-09-01';
+    expect(fixture.componentInstance.BuildBlockedReason).toBe('The posting date 2026-09-01 is in the future — choose today or an earlier day.');
+    expect(fixture.componentInstance.CanBuild).toBe(false);
+  });
+
+  it('says so when the cutoff is cleared — the preview then runs through the posting date', async () => {
     const fixture = await render();
     const input = await openModal(fixture);
     const hint = () => fixture.nativeElement.querySelector('.mja-modal-hint') as HTMLElement | null;
@@ -101,7 +119,7 @@ describe('AccountingBatchesPageComponent — Build Batch modal cutoff (DOM)', ()
     await fixture.whenStable();
 
     expect(previewCalls.at(-1)?.Cutoff).toBeNull();
-    expect(hint()?.textContent?.trim()).toBe('No cutoff — includes future-dated entries.');
+    expect(hint()?.textContent?.trim()).toBe('No cutoff — includes everything through the posting date.');
   });
 
   it('keeps a cutoff the user chose when the modal is closed and reopened', async () => {

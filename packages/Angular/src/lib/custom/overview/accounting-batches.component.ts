@@ -6,7 +6,7 @@ import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
 import { NavigationService } from '@memberjunction/ng-shared';
 import { MJButtonDirective, MJDialogComponent, MJDialogActionsComponent, MJDropdownComponent } from '@memberjunction/ng-ui-components';
 import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
-import { BusinessTimeZoneEngine } from '@mj-biz-apps/common-entities';
+import { BusinessTimeZoneEngine, IsBeforeDay, IsCalendarDay } from '@mj-biz-apps/common-entities';
 import { calendarDaySpan, formatJournalDate } from '../form-panels/journal-entry-panel.helpers';
 import {
     DispatchConfirmationKind,
@@ -287,8 +287,21 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                 (ngModelChange)="OnBuildPreviewFilterChange()"
                                 aria-label="Effective Date Cutoff" />
                             @if (!BuildCutoffDate) {
-                                <span class="mja-modal-hint">No cutoff — includes future-dated entries.</span>
+                                <span class="mja-modal-hint">No cutoff — includes everything through the posting date.</span>
                             }
+                        </div>
+
+                        <!-- The journal date the ERP receives (golive #315); it also ends the pool. -->
+                        <div class="mja-modal-field">
+                            <label class="mja-modal-label">Posting Date</label>
+                            <input
+                                type="date"
+                                class="mj-input mja-modal-date-input"
+                                [max]="Today"
+                                [(ngModel)]="BuildPostingDate"
+                                (ngModelChange)="OnBuildPreviewFilterChange()"
+                                title="The journal date the ERP receives. Entries dated after it wait for a later batch."
+                                aria-label="Posting Date" />
                         </div>
                     </div>
 
@@ -1135,6 +1148,8 @@ export class AccountingBatchesPageComponent implements OnInit {
     public IsBuildingBatch = false;
     public BuildTarget = 'BusinessCentral';
     public BuildCutoffDate = '';
+    /** The batch's posting date (`YYYY-MM-DD`) — the journal date the ERP receives (golive #315). */
+    public BuildPostingDate = '';
     public ExcludeRevRec = true;
     public ModalErrorMessage: string | null = null;
 
@@ -1485,7 +1500,16 @@ export class AccountingBatchesPageComponent implements OnInit {
     }
 
     /** Non-null = why Build is disabled. Saying it beats a dead button with no explanation. */
+    /** Today's business day — the latest posting date the date input offers. */
+    public get Today(): string {
+        return BusinessTimeZoneEngine.Instance.Today();
+    }
+
     public get BuildBlockedReason(): string | null {
+        // The preview re-queries on every change and its pool ends at the posting date, so no ticked
+        // entry can postdate it; the server refuses that case regardless.
+        if (!IsCalendarDay(this.BuildPostingDate)) return 'Choose a posting date.';
+        if (IsBeforeDay(this.Today, this.BuildPostingDate)) return `The posting date ${this.BuildPostingDate} is in the future — choose today or an earlier day.`;
         if (this.PreviewCandidateCount === 0) return 'Nothing matches these criteria.';
         if (this.IncludedCount === 0) return 'Every entry is excluded — nothing to build.';
         if (!this.IsBalanced) return 'The selection does not balance (Dr ≠ Cr) — the ledger would reject it.';
@@ -1503,6 +1527,9 @@ export class AccountingBatchesPageComponent implements OnInit {
         this.ModalErrorMessage = null;
         if (!this.BuildCutoffDate) {
             this.BuildCutoffDate = BusinessTimeZoneEngine.Instance.Today();
+        }
+        if (!this.BuildPostingDate) {
+            this.BuildPostingDate = BusinessTimeZoneEngine.Instance.Today();
         }
         await this.LoadBuildPreview();
     }
@@ -1527,6 +1554,7 @@ export class AccountingBatchesPageComponent implements OnInit {
             // returns every candidate, so an unticked entry stays visible and re-tickable.
             const previewRes = await this.dispatchClient.PreviewJournalEntryBatch({
                 Cutoff: this.BuildCutoffDate || null,
+                PostingDate: this.BuildPostingDate || null,
                 ExcludeEntryTypeCodes: this.ExcludeRevRec ? ['RevenueRecognition'] : null,
                 IncludedJournalEntryIDs: this.ExcludedEntryIDs.length > 0 ? this.IncludedEntryIDs : null,
             });
@@ -1590,6 +1618,7 @@ export class AccountingBatchesPageComponent implements OnInit {
             const buildRes = await this.dispatchClient.BuildJournalEntryBatch({
                 TargetSystem: this.BuildTarget,
                 Cutoff: this.BuildCutoffDate || null,
+                PostingDate: this.BuildPostingDate || null,
                 ExcludeEntryTypeCodes: this.ExcludeRevRec ? ['RevenueRecognition'] : null,
                 Source: 'Explicit',
                 JournalEntryIDs: this.IncludedEntryIDs,
