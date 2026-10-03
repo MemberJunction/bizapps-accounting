@@ -237,11 +237,11 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                                     <i class="fa-solid fa-box-archive"></i> Archive
                                                 </button>
                                             }
-                                            @if (CanCancelApproved(batch)) {
+                                            @if (CanCancel(batch)) {
                                                 <button mjButton variant="secondary" size="sm" type="button"
                                                         [disabled]="CancellingBatchID === batch.ID"
                                                         title="Cancel this batch and return its journal entries to the next build."
-                                                        (click)="OnCancelApproved(batch, $event)">
+                                                        (click)="OnCancel(batch, $event)">
                                                     <i class="fa-solid fa-ban"></i> Cancel
                                                 </button>
                                             }
@@ -478,6 +478,9 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                         journal entry deleted. Its {{ CancelTarget?.TotalEntries }}
                         journal entr{{ CancelTarget?.TotalEntries === 1 ? 'y' : 'ies' }}
                         <strong>return to the candidate pool</strong> for the next build — this is not an archive.
+                        @if (CancelTarget?.Status === 'Pending') {
+                            Its approval request is closed.
+                        }
                     </p>
 
                     <div class="mja-modal-field">
@@ -524,7 +527,7 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                 <mj-dialog-actions>
                     <button mjButton variant="danger" size="sm" type="button"
                             [disabled]="!CanConfirmCancel"
-                            (click)="ConfirmCancelApproved()">
+                            (click)="ConfirmCancel()">
                         @if (CancellingBatchID) {
                             <i class="fa-solid fa-spinner fa-spin"></i> Cancelling…
                         } @else {
@@ -1249,18 +1252,23 @@ export class AccountingBatchesPageComponent implements OnInit {
     /** The batch number retyped to override a `Mismatch`, which is most likely this batch, already posted. */
     public CancelMismatchText = '';
 
-    /** Cancel (#183) is offered on an Approved or Failed batch; a Pending batch uses Reject instead. */
-    public CanCancelApproved(batch: BatchItem): boolean {
-        return (batch.Status === 'Approved' || batch.Status === 'Failed') && this.CancellingBatchID !== batch.ID;
+    /**
+     * Cancel is offered on a Pending (golive #302), Approved or Failed (#183) batch. Who may cancel is
+     * the server's call: the company's CFO or the batch's builder before approval, the CFO or the
+     * approver after it.
+     */
+    public CanCancel(batch: BatchItem): boolean {
+        return ['Pending', 'Approved', 'Failed'].includes(batch.Status) && this.CancellingBatchID !== batch.ID;
     }
 
     /**
-     * Cancel an Approved or Failed batch (#183): the batch becomes Cancelled, its summary journal entry
+     * Cancel a Pending, Approved or Failed batch: the batch becomes Cancelled, its summary journal entry
      * is deleted and its journal entries return to the candidate pool — the opposite of Archive, which
-     * keeps them locked. The dialog requires a reason. A Failed batch may already be in the ERP, so the
-     * server looks its number up first (#207); the dialog asks the operator only when it cannot say.
+     * keeps them locked. A Pending batch's approval request is closed. The dialog requires a reason. A
+     * Failed batch may already be in the ERP, so the server looks its number up first (#207); the dialog
+     * asks the operator only when it cannot say.
      */
-    public OnCancelApproved(batch: BatchItem, event: Event): void {
+    public OnCancel(batch: BatchItem, event: Event): void {
         // The row itself opens the record — an action button inside it must not also navigate.
         event.stopPropagation();
         if (this.CancellingBatchID) return;
@@ -1303,7 +1311,7 @@ export class AccountingBatchesPageComponent implements OnInit {
      * confirmation: the server checks the ERP itself. Only when it cannot settle it does the dialog
      * stay open and ask, and only that second attempt carries the operator's word.
      */
-    public async ConfirmCancelApproved(): Promise<void> {
+    public async ConfirmCancel(): Promise<void> {
         const batch = this.CancelTarget;
         if (!batch || !this.CanConfirmCancel) return;
         const reason = this.CancelReasonDraft.trim();

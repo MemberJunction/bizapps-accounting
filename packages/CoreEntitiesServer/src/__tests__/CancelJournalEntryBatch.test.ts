@@ -1,13 +1,14 @@
 /**
- * #183 / #233 / #214 — who may cancel a batch, and where that is enforced.
+ * #183 / #233 / #214 / golive #302 — who may cancel a batch, and where that is enforced.
  *
  *   · JournalEntryBatchEntityServer.Cancel authorizes itself (#214): it resolves its gate and ERP
  *     lookup through JournalEntryBatchDispatchServices (#233), so neither cancelJournalEntryBatch's
  *     caller nor a direct caller of Cancel() can pass them or skip them. These tests run the real
  *     entity against a fake registered at a higher priority, pointed at each test's gate and lookup.
- *   · a Pending cancel needs a rejection recorded on the approval Task; an Approved or Failed one
- *     must pass the gate's authorization, and records itself on the approval Task inside Cancel's
- *     transaction.
+ *   · a Pending cancel needs either a rejection recorded on the approval Task, or a reason from a
+ *     user the gate allows (the CFO or the builder, golive #302); an Approved or Failed one must pass
+ *     the gate's authorization. Every cancel but the rejected one records itself on the approval
+ *     Task inside Cancel's transaction.
  *   · a Failed cancel looks the batch number up in the ERP first (#207): a posting it holds refuses
  *     the cancel outright, nothing found lets it through, and anything else needs the operator.
  *   · and again before the cancel commits (#215): a posting found then undoes the cancel, and the
@@ -103,15 +104,17 @@ beforeEach(() => {
 afterEach(() => save.mockRestore());
 
 type FakeGate = JournalEntryBatchCancelGate & {
-  assertRejected: ReturnType<typeof vi.fn>;
+  isRejected: ReturnType<typeof vi.fn>;
+  assertMayCancelPending: ReturnType<typeof vi.fn>;
   assertMayCancelApproved: ReturnType<typeof vi.fn>;
   recordCancellation: ReturnType<typeof vi.fn>;
 };
 
 function gate(opts: { allowed: boolean; rejected?: boolean }): FakeGate {
   return {
-    assertRejected: vi.fn(async () => {
-      if (!opts.rejected) throw new Error('is not rejected — no terminal rejection decision on its approval Task');
+    isRejected: vi.fn(async () => opts.rejected === true),
+    assertMayCancelPending: vi.fn(async () => {
+      if (!opts.allowed) throw new Error('only the company\'s configured approver or the user who built this batch may cancel it before approval');
     }),
     assertMayCancelApproved: vi.fn(async () => {
       if (!opts.allowed) throw new Error('only the company\'s configured approver or the user who approved this batch may cancel it');
@@ -159,7 +162,7 @@ describe('cancelJournalEntryBatch — the gate and lookup are resolved, never pa
     const w = world('Approved');
     const g = use(gate({ allowed: true }));
     // A caller that still passes a gate: not part of the options any more, so it is ignored.
-    const permissive = { assertRejected: vi.fn(), assertMayCancelApproved: vi.fn(), recordCancellation: vi.fn() };
+    const permissive = { isRejected: vi.fn(), assertMayCancelPending: vi.fn(), assertMayCancelApproved: vi.fn(), recordCancellation: vi.fn() };
     await cancelJournalEntryBatch(BATCH_ID, USER, w.provider, { reason: 'Wrong period', gate: permissive } as never);
 
     expect(g.assertMayCancelApproved).toHaveBeenCalledWith(BATCH_ID, USER);
@@ -175,24 +178,56 @@ describe('cancelJournalEntryBatch — the gate and lookup are resolved, never pa
   });
 });
 
-describe('cancelJournalEntryBatch — a Pending cancel is a recorded rejection (#233)', () => {
+describe('cancelJournalEntryBatch — a Pending cancel (#233, golive #302)', () => {
   it('cancels a Pending batch once its approval Task records the rejection', async () => {
     const w = world('Pending');
     const g = use(gate({ allowed: false, rejected: true }));
     await cancelJournalEntryBatch(BATCH_ID, USER, w.provider);
 
-    expect(g.assertRejected).toHaveBeenCalledWith(BATCH_ID, USER);
+    expect(g.isRejected).toHaveBeenCalledWith(BATCH_ID, USER);
+    expect(g.assertMayCancelPending).not.toHaveBeenCalled();
     expect(g.assertMayCancelApproved).not.toHaveBeenCalled();
     expect(g.recordCancellation).not.toHaveBeenCalled(); // the rejection is the record
     expect(w.teardown).toHaveBeenCalledWith('SUM1', USER);
     expect(w.batch.Status).toBe('Cancelled');
   });
 
-  it('refuses a Pending batch nobody rejected, before anything is written', async () => {
+  it('cancels a Pending batch nobody rejected for a user the gate allows, with a reason, and records it on the approval Task', async () => {
     const w = world('Pending');
-    use(gate({ allowed: true, rejected: false }));
-    await expect(cancelJournalEntryBatch(BATCH_ID, USER, w.provider)).rejects.toThrow(/is not rejected/);
-    expectUntouched(w, 'Pending');
+    const g = use(gate({ allowed: true, rejected: false }));
+    await cancelJournalEntryBatch(BATCH_ID, USER, w.provider, { reason: 'Built with the wrong entries' });
+
+    expect(g.assertMayCancelPending).toHaveBeenCalledWith(BATCH_ID, USER);
+    expect(g.assertMayCancelApproved).not.toHaveBeenCalled();
+    expect(g.recordCancellation).toHaveBeenCalledWith(BATCH_ID, { reason: 'Built with the wrong entries', fromStatus: 'Pending' }, USER);
+    expect(w.teardown).toHaveBeenCalledWith('SUM1', USER);
+    expect(w.batch.Status).toBe('Cancelled');
+    expect(w.batch.CancelReason).toBe('Built with the wrong entries');
+    expect(w.batch.CancelledByUserID).toBe(USER.ID);
+  });
+
+  it('refuses a user the gate does not allow on a Pending batch nobody rejected, before anything is written', async () => {
+    const w = world('Pending');
+    const g = use(gate({ allowed: false, rejected: false }));
+    await expect(cancelJournalEntryBatch(BATCH_ID, USER, w.provider, { reason: 'Built with the wrong entries' })).rejects.toThrow(/user who built this batch/);
+    expectUntouched(w, 'Pending', g);
+  });
+
+  it.each([undefined, '   '])('refuses a Pending batch nobody rejected without a reason (%s), before anything is written', async (reason) => {
+    const w = world('Pending');
+    const g = use(gate({ allowed: true, rejected: false }));
+    await expect(cancelJournalEntryBatch(BATCH_ID, USER, w.provider, { reason })).rejects.toThrow(/a reason is required/);
+    expectUntouched(w, 'Pending', g);
+  });
+
+  it('rolls the cancel back when recording it on the approval Task fails', async () => {
+    const w = world('Pending');
+    const g = use(gate({ allowed: true, rejected: false }));
+    g.recordCancellation.mockRejectedValueOnce(new Error('closing its approval Task failed'));
+    await expect(cancelJournalEntryBatch(BATCH_ID, USER, w.provider, { reason: 'Built with the wrong entries' })).rejects.toThrow(/closing its approval Task failed/);
+    const tx = w.provider as unknown as { RollbackTransaction: Mock; CommitTransaction: Mock };
+    expect(tx.RollbackTransaction).toHaveBeenCalled();
+    expect(tx.CommitTransaction).not.toHaveBeenCalled();
   });
 });
 
@@ -201,7 +236,7 @@ describe('cancelJournalEntryBatch — authorizing a cancel past approval', () =>
     const w = world('Approved');
     const g = use(gate({ allowed: false }));
     await expect(cancelJournalEntryBatch(BATCH_ID, USER, w.provider, { reason: 'Wrong period' })).rejects.toThrow(/configured approver/);
-    expect(g.assertRejected).not.toHaveBeenCalled();
+    expect(g.isRejected).not.toHaveBeenCalled();
     expectUntouched(w, 'Approved', g);
   });
 
@@ -399,10 +434,10 @@ describe('JournalEntryBatchEntityServer.Cancel() called directly runs the same c
     expectUntouched(w, 'Failed');
   });
 
-  it('refuses a Pending batch nobody rejected', async () => {
+  it('refuses a Pending batch nobody rejected for a user the gate does not allow', async () => {
     const w = world('Pending');
-    use(gate({ allowed: true, rejected: false }));
-    await expect(w.batch.Cancel(USER)).rejects.toThrow(/is not rejected/);
+    use(gate({ allowed: false, rejected: false }));
+    await expect(w.batch.Cancel(USER, { reason: 'Built with the wrong entries' })).rejects.toThrow(/user who built this batch/);
     expectUntouched(w, 'Pending');
   });
 
