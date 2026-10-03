@@ -45,6 +45,7 @@ import {
 
 const CI_ENTITY = 'MJ: Company Integrations';
 const CI_MAP_ENTITY = 'MJ: Company Integration Entity Maps';
+const CI_FIELD_MAP_ENTITY = 'MJ: Company Integration Field Maps';
 const INTEGRATION_ENTITY = 'MJ: Integrations';
 
 export interface AccountingERPEngineSeams {
@@ -67,6 +68,26 @@ interface CredentialedIntegration {
   /** The Company Integration's Configuration JSON, as stored. */
   Configuration: string | null;
 }
+
+/** An active, sync-enabled entity map for one of the requested objects. */
+interface SyncEntityMap {
+  ID: string;
+  /** The target entity's name, one of `ERP_SYNC_OBJECT_ENTITY`'s values. */
+  Entity: string;
+}
+
+/**
+ * The key fields a map onto shared master data must match on, exactly (#268). Code is the identity
+ * of a Dimension, and of a Dimension Value within its Dimension; Dimensions are shared by every
+ * company, so a second company's sync must land on the row the first created. The Integration
+ * Engine matches an incoming record on the field maps marked `IsKeyField`; a map without these
+ * keys matches only through its own connection's record maps, and a second connection's insert
+ * then collides on `UQ_Dimension_Code`. GL Accounts are per company and are not checked here.
+ */
+const SHARED_MASTER_DATA_MATCH_KEYS: Readonly<Record<string, readonly string[]>> = {
+  [ERP_SYNC_OBJECT_ENTITY.dimensions]: ['Code'],
+  [ERP_SYNC_OBJECT_ENTITY.dimensionValues]: ['DimensionID', 'Code'],
+};
 
 /**
  * The connection a batch posts through (#256), or why there is none:
@@ -101,6 +122,11 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
    * ERPs and are left out. An ERP connection with no entity maps for the requested objects, such as
    * a posting-only connection (#256), is reported as skipped with `Success` true; only a real sync
    * error fails the run.
+   *
+   * The mapping contract (#268, docs/ARCHITECTURE.md §2.1): Code is the identity of a Dimension and
+   * of a Dimension Value within its Dimension, and Dimensions are shared by every company, so their
+   * maps must match on exactly those keys; a connection whose maps do not is failed before anything
+   * is pulled. AccountType is translated by a lookup transform on the AccountType field map.
    */
   public async SyncMasterData(input: RunERPSyncInput, user: UserInfo, provider: IMetadataProvider): Promise<RunERPSyncOutput> {
     await this.Config(false, user, provider);
@@ -131,11 +157,15 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     const extensions = await this.loadExtensions(provider, user, ci.CompanyID);
     await this.invokeExtensions(extensions, ctx, 'beforeSync');
     try {
-      const mapIds = await this.entityMapIDsForObjects(ci.CompanyIntegrationID, objects, user, provider);
-      if (mapIds.length === 0) {
+      const maps = await this.entityMapsForObjects(ci.CompanyIntegrationID, objects, user, provider);
+      if (maps.length === 0) {
         return syncResult(ci, objects, { Success: true, Skipped: true, Message: noEntityMapsReason(objects) });
       }
-      const sync = await this.runSync(ci.CompanyIntegrationID, user, mapIds, provider);
+      const keyProblems = await this.sharedMasterDataKeyProblems(maps, user, provider);
+      if (keyProblems.length > 0) {
+        return syncResult(ci, objects, { Success: false, Message: keyProblems.join(' ') });
+      }
+      const sync = await this.runSync(ci.CompanyIntegrationID, user, maps.map((m) => m.ID), provider);
       if (sync.Success) {
         for (const obj of objects) {
           await this.invokeExtensions(extensions, ctx, afterHookFor(obj));
@@ -438,12 +468,12 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     return names;
   }
 
-  private async entityMapIDsForObjects(
+  private async entityMapsForObjects(
     companyIntegrationID: string,
     objects: AccountingERPSyncObject[],
     user: UserInfo,
     provider: IMetadataProvider,
-  ): Promise<string[]> {
+  ): Promise<SyncEntityMap[]> {
     const rv = provider as unknown as IRunViewProvider;
     const res = await rv.RunView<Record<string, unknown>>({
       EntityName: CI_MAP_ENTITY,
@@ -458,12 +488,59 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
       throw new Error(`Entity maps for Company Integration ${companyIntegrationID} failed to load: ${res.ErrorMessage ?? 'unknown error'}`);
     }
     const wanted = new Set(objects.map((o) => ERP_SYNC_OBJECT_ENTITY[o]));
-    const ids: string[] = [];
+    const maps: SyncEntityMap[] = [];
     for (const row of res.Results ?? []) {
       const entityName = String(row.Entity ?? row.EntityName ?? '');
-      if (wanted.has(entityName)) ids.push(String(row.ID));
+      if (wanted.has(entityName)) maps.push({ ID: String(row.ID), Entity: entityName });
     }
-    return ids;
+    return maps;
+  }
+
+  /**
+   * Why the maps onto shared master data would not merge on Code (#268), one sentence per map; empty
+   * when they would. Checked before the sync runs, so a map that would insert a second copy of a
+   * Dimension fails the connection with the fix named instead of failing row by row on the unique
+   * constraint.
+   */
+  private async sharedMasterDataKeyProblems(
+    maps: SyncEntityMap[],
+    user: UserInfo,
+    provider: IMetadataProvider,
+  ): Promise<string[]> {
+    const checked = maps.filter((m) => SHARED_MASTER_DATA_MATCH_KEYS[m.Entity]);
+    if (checked.length === 0) return [];
+    const keysByMap = await this.activeKeyFieldsByMap(checked, user, provider);
+    const problems: string[] = [];
+    for (const map of checked) {
+      const required = SHARED_MASTER_DATA_MATCH_KEYS[map.Entity];
+      const actual = keysByMap.get(map.ID.toLowerCase()) ?? [];
+      if (!sameFieldSet(required, actual)) problems.push(matchKeyProblem(map, required, actual));
+    }
+    return problems;
+  }
+
+  /** Each map's active key-field destination names, keyed by lower-cased entity map ID. */
+  private async activeKeyFieldsByMap(
+    maps: SyncEntityMap[],
+    user: UserInfo,
+    provider: IMetadataProvider,
+  ): Promise<Map<string, string[]>> {
+    const rv = provider as unknown as IRunViewProvider;
+    const res = await rv.RunView<Record<string, unknown>>({
+      EntityName: CI_FIELD_MAP_ENTITY,
+      ExtraFilter: `EntityMapID IN (${maps.map((m) => `'${EscapeSQLString(m.ID)}'`).join(',')}) AND Status = 'Active' AND IsKeyField = 1`,
+      ResultType: 'simple',
+    }, user);
+    if (!res.Success) {
+      throw new Error(`Field maps for entity maps ${maps.map((m) => m.ID).join(', ')} failed to load: ${res.ErrorMessage ?? 'unknown error'}`);
+    }
+    const keysByMap = new Map<string, string[]>();
+    for (const row of res.Results ?? []) {
+      if (row.Status !== 'Active' || !isTrue(row.IsKeyField)) continue;
+      const mapId = String(row.EntityMapID ?? '').toLowerCase();
+      keysByMap.set(mapId, [...(keysByMap.get(mapId) ?? []), String(row.DestinationFieldName ?? '')]);
+    }
+    return keysByMap;
   }
 
   private async extensionContext(
@@ -556,6 +633,25 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     res.Instance.Configuration = row.ConfigurationObject ?? null;
     return res.Instance;
   }
+}
+
+/** The failure message for a shared master-data map that does not key on exactly `required`. */
+function matchKeyProblem(map: SyncEntityMap, required: readonly string[], actual: string[]): string {
+  return `Entity map ${map.ID} for ${map.Entity} must match on key fields ${required.join(' + ')} so a re-sync merges ` +
+    `into the shared row instead of inserting (#268); its active key fields are ${actual.length > 0 ? actual.join(' + ') : 'none'}. ` +
+    `Mark exactly ${required.join(' and ')} as IsKeyField on its field maps.`;
+}
+
+/** A bit column as a simple-result RunView returns it: true, 1, or the string form of either. */
+function isTrue(value: unknown): boolean {
+  return value === true || value === 1 || value === '1' || value === 'true';
+}
+
+/** True when both lists name the same fields, ignoring order and case. */
+function sameFieldSet(required: readonly string[], actual: string[]): boolean {
+  const want = new Set(required.map((f) => f.toLowerCase()));
+  const have = new Set(actual.map((f) => f.trim().toLowerCase()));
+  return want.size === have.size && [...want].every((f) => have.has(f));
 }
 
 function normalizeObjects(objects?: AccountingERPSyncObject[]): AccountingERPSyncObject[] {

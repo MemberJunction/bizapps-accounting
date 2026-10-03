@@ -42,6 +42,7 @@ import type {
   mjBizAppsAccountingJournalEntryTypeEntity,
 } from '@mj-biz-apps/accounting-entities';
 import type { PipelineLookups } from './pipeline.js';
+import { DEFAULT_FISCAL_YEAR_START, type FiscalYearStart } from './fiscal-year.js';
 
 const uuidKey = (id: string | null | undefined): string => (id ?? '').trim().toLowerCase();
 
@@ -243,6 +244,19 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
   public GLAccountRoleByName(name: string): mjBizAppsAccountingGLAccountRoleEntity | undefined {
     const key = (name ?? '').trim().toLowerCase();
     return this.GLAccountRoles.find(r => r.Name.trim().toLowerCase() === key);
+  }
+
+  /**
+   * The company's fiscal-year start from its Accounting Company Profile, or 1 January when it has
+   * none. Feed it to `FiscalYearOf` / `IsInFiscalYearToDate` (./fiscal-year.ts).
+   */
+  public FiscalYearStartFor(companyId: string | null | undefined): FiscalYearStart {
+    const key = uuidKey(companyId);
+    const profile = key ? this.CompanyProfiles.find(p => uuidKey(p.ID) === key) : undefined;
+    return {
+      Month: profile?.FiscalYearStartMonth ?? DEFAULT_FISCAL_YEAR_START.Month,
+      Day: profile?.FiscalYearStartDay ?? DEFAULT_FISCAL_YEAR_START.Day,
+    };
   }
 
   // ─── the link primitive (plan §2.1) ────────────────────────────────────────
