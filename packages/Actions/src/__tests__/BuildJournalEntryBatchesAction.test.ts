@@ -512,6 +512,8 @@ describe('BuildJournalEntryBatchesAction — company posting start dates', () =>
     beforeEach(() => {
         vi.restoreAllMocks();
         vi.spyOn(serverEngine, 'findStrandedJournalEntries').mockResolvedValue([]);
+        // AutoPost is restricted to the MJ system user (#269); the sweep runs as it.
+        vi.spyOn(UserCache.Instance, 'GetSystemUser').mockReturnValue({ ID: 'SYSTEM-USER' } as UserInfo);
     });
 
     const autoPostedCompanies = async (floors: Array<{ ID: string; PostingStartDate: Date | null }>): Promise<string[]> => {
