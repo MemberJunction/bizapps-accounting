@@ -1,5 +1,7 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FromCalendarDay } from '@mj-biz-apps/common-entities';
+import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
+import type { mjBizAppsAccountingAccountingCompanyProfileEntity } from '@mj-biz-apps/accounting-entities';
 import { DeferredRevenueWaterfallComponent } from '../lib/components/deferred-revenue-waterfall/deferred-revenue-waterfall.component';
 import type { mjBizAppsAccountingJournalEntryEntity } from '@mj-biz-apps/accounting-entities';
 import { useBusinessClock } from './support/business-clock';
@@ -11,12 +13,33 @@ const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
 beforeEach(() => {
     installStubProvider([
         stubEntityInfo(JE_ENTITY, [
-            'ID', 'EntryNumber', 'EffectiveDate', 'LinkedRecordID', 'Description', '__mj_CreatedAt',
+            'ID', 'CompanyID', 'EntryNumber', 'EffectiveDate', 'LinkedRecordID', 'Description', '__mj_CreatedAt',
             'ReversesJournalEntryID', 'ReversedByJournalEntryID',
         ]),
         stubEntityInfo(JEL_ENTITY, ['ID', 'JournalEntryID', 'DebitAmount', 'CreditAmount']),
     ]);
+    useCompanyProfiles([]);
 });
+
+afterEach(() => {
+    vi.restoreAllMocks();
+});
+
+/**
+ * Holds `AccountingEngineBase` as loaded with the given profiles' fiscal-year starts, so year-to-date
+ * reads them with no IMetadataProvider. Returns the `Config` spy.
+ */
+function useCompanyProfiles(
+    profiles: Array<{ ID: string; FiscalYearStartMonth: number; FiscalYearStartDay: number }>,
+    loaded = true,
+) {
+    const engine = AccountingEngineBase.Instance;
+    vi.spyOn(engine, 'Loaded', 'get').mockReturnValue(loaded);
+    vi.spyOn(engine, 'CompanyProfiles', 'get').mockReturnValue(
+        profiles as unknown as mjBizAppsAccountingAccountingCompanyProfileEntity[],
+    );
+    return vi.spyOn(engine, 'Config').mockResolvedValue(undefined);
+}
 
 /**
  * Business zone Chicago at 2026-02-01T03:00Z: 21:00 CST on 31 January, so the business month is
@@ -41,11 +64,13 @@ async function mockEntry(fields: {
     LinkedRecordID: string;
     Description: string;
     CreditAmount: number;
+    CompanyID?: string;
     ReversesJournalEntryID?: string;
     ReversedByJournalEntryID?: string;
 }): Promise<mjBizAppsAccountingJournalEntryEntity> {
     const entry = await entityObject<mjBizAppsAccountingJournalEntryEntity>(JE_ENTITY);
     entry.NewRecord();
+    if (fields.CompanyID) entry.CompanyID = fields.CompanyID;
     entry.EntryNumber = fields.EntryNumber;
     if (fields.EffectiveDate) entry.EffectiveDate = fields.EffectiveDate;
     if (fields.CreatedAt) entry.Set('__mj_CreatedAt', fields.CreatedAt);
@@ -306,6 +331,83 @@ describe('DeferredRevenueWaterfallComponent', () => {
             ]);
             expect(comp.Summary.TotalDeferredBeginning).toBe(100);
             expect(comp.Summary.TotalRecognizedToDate).toBe(100);
+        });
+    });
+
+    describe('recognized year to date', () => {
+        // The business day is 31 January 2026 (see LAST_BUSINESS_DAY_OF_JANUARY).
+        useBusinessClock({
+            BusinessZone: 'America/Chicago',
+            BusinessSqlZone: 'Central Standard Time',
+            MachineZone: 'America/Los_Angeles',
+            Instant: LAST_BUSINESS_DAY_OF_JANUARY,
+        });
+
+        const JULY_START_COMPANY = 'company-july-start';
+        const NO_PROFILE_COMPANY = 'company-no-profile';
+
+        function render(entries: mjBizAppsAccountingJournalEntryEntity[]): DeferredRevenueWaterfallComponent {
+            const comp = new DeferredRevenueWaterfallComponent();
+            comp.JournalEntries = entries;
+            comp.ngOnChanges({
+                JournalEntries: { currentValue: entries, previousValue: [], firstChange: true, isFirstChange: () => true },
+            });
+            return comp;
+        }
+
+        async function entry(day: string, amount: number, companyId: string, term = 'sub-term-1') {
+            return mockEntry({
+                EntryNumber: `${day}-${amount}`,
+                EffectiveDate: FromCalendarDay(day),
+                LinkedRecordID: term,
+                Description: 'Monthly Subscription Rev Rec',
+                CreditAmount: amount,
+                CompanyID: companyId,
+            });
+        }
+
+        it('counts from 1 January through today when the company has no profile', async () => {
+            const comp = render([
+                await entry('2025-12-31', 1, NO_PROFILE_COMPANY),
+                await entry('2026-01-01', 10, NO_PROFILE_COMPANY),
+                await entry('2026-01-31', 100, NO_PROFILE_COMPANY),
+                await entry('2026-02-01', 1000, NO_PROFILE_COMPANY),
+            ]);
+            expect(comp.Summary.TotalRecognizedToDate).toBe(111);
+            expect(comp.Summary.TotalRecognizedYTD).toBe(110);
+            expect(comp.Rows[0].RecognizedYTD).toBe(110);
+        });
+
+        it("starts at the company's fiscal-year start, not 1 January", async () => {
+            useCompanyProfiles([{ ID: JULY_START_COMPANY, FiscalYearStartMonth: 7, FiscalYearStartDay: 1 }]);
+            const comp = render([
+                await entry('2025-06-30', 1, JULY_START_COMPANY),
+                await entry('2025-07-01', 10, JULY_START_COMPANY),
+                await entry('2026-01-15', 100, JULY_START_COMPANY),
+                await entry('2026-02-15', 1000, JULY_START_COMPANY),
+            ]);
+            expect(comp.Summary.TotalRecognizedToDate).toBe(111);
+            expect(comp.Summary.TotalRecognizedYTD).toBe(110);
+        });
+
+        it("applies each entry's own company's start", async () => {
+            useCompanyProfiles([{ ID: JULY_START_COMPANY, FiscalYearStartMonth: 7, FiscalYearStartDay: 1 }]);
+            const comp = render([
+                await entry('2025-08-01', 10, JULY_START_COMPANY, 'sub-term-1'),
+                await entry('2025-08-01', 100, NO_PROFILE_COMPANY, 'sub-term-2'),
+            ]);
+            expect(comp.Rows.map((r) => r.RecognizedYTD)).toEqual([10, 0]);
+            expect(comp.Summary.TotalRecognizedYTD).toBe(10);
+        });
+
+        it('loads the engine once and recomputes when it has not loaded yet', async () => {
+            const config = useCompanyProfiles([], false);
+            const comp = render([await entry('2026-01-10', 10, NO_PROFILE_COMPANY)]);
+            expect(config).toHaveBeenCalledTimes(1);
+            await config.mock.results[0].value;
+            await Promise.resolve();
+            expect(comp.Summary.TotalRecognizedYTD).toBe(10);
+            expect(config).toHaveBeenCalledTimes(1);
         });
     });
 });
