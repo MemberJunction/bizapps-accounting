@@ -15,11 +15,20 @@ import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest';
 import { MJGlobal } from '@memberjunction/global';
 import type { IMetadataProvider, RunViewParams, UserInfo } from '@memberjunction/core';
 
+// The auto-post waiver is restricted to the MJ system user (#269); `systemUser.current` is who the
+// user cache answers with, or null when it does not hold one.
+const systemUser = vi.hoisted(() => ({ current: { ID: 'USER-1' } as { ID: string } | null }));
+vi.mock('@memberjunction/generic-database-provider', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@memberjunction/generic-database-provider')>()),
+    UserCache: { Instance: { GetSystemUser: () => systemUser.current } },
+}));
+
 vi.mock('../JournalEntryTypes.js', () => ({
     GetJournalEntryBatchSummaryEntryType: async () => ({ ID: 'aaaaaaaa-0000-0000-0000-00000000000a', Code: 'JournalEntryBatchSummary' }),
 }));
 
 import {
+    assertAutoPostCaller,
     assertAutoPostPolicy,
     autoPostJournalEntryBatch,
     findStrandedJournalEntries,
@@ -214,6 +223,46 @@ describe('sendJournalEntryBatch — the engine resolves its own gate, poster and
         const provider = {} as IMetadataProvider;
         expect(real.CreateApprovalGate(provider)).toBeInstanceOf(TasksAppApprovalGate);
         expect(typeof real.CreatePoster(provider)).toBe('function');
+    });
+});
+
+describe('autoPostJournalEntryBatch — only the MJ system user may auto-post (#269)', () => {
+    const OTHER_USER = { ID: 'USER-2' } as UserInfo;
+    const OPTIONS = { entryTypeCodes: ['OrderBooking'] };
+    afterEach(() => { systemUser.current = { ID: USER.ID }; });
+
+    const untouchedProvider = () => {
+        const getEntityObject = vi.fn();
+        const runView = vi.fn();
+        return { getEntityObject, runView, provider: { GetEntityObject: getEntityObject, RunView: runView } as unknown as IMetadataProvider };
+    };
+
+    it('lets the system user through to the build', async () => {
+        expect(() => assertAutoPostCaller(USER)).not.toThrow();
+        // Compared as UUIDs, so the case the cache holds it in does not matter.
+        systemUser.current = { ID: 'user-1' };
+        expect(() => assertAutoPostCaller(USER)).not.toThrow();
+        const provider = { GetEntityObject: vi.fn(), RunView: async () => ({ Success: true, Results: [] }) } as unknown as IMetadataProvider;
+        // Past the caller check, the build runs and throws its own error for this empty world.
+        await expect(autoPostJournalEntryBatch('11111111-0000-4000-8000-000000000001', 'BusinessCentral', USER, provider, OPTIONS))
+            .rejects.toThrow(/^buildJournalEntryBatch: /);
+    });
+
+    it('refuses any other user before anything is read', async () => {
+        const { getEntityObject, runView, provider } = untouchedProvider();
+        expect(() => assertAutoPostCaller(OTHER_USER)).toThrow(/restricted to the MJ system user/);
+        await expect(autoPostJournalEntryBatch('CO-1', 'BusinessCentral', OTHER_USER, provider, OPTIONS)).rejects.toThrow(/restricted to the MJ system user/);
+        expect(getEntityObject).not.toHaveBeenCalled();
+        expect(runView).not.toHaveBeenCalled();
+    });
+
+    it('fails closed when the user cache does not hold the system user', async () => {
+        systemUser.current = null;
+        const { getEntityObject, runView, provider } = untouchedProvider();
+        expect(() => assertAutoPostCaller(USER)).toThrow(/user cache does not hold it/);
+        await expect(autoPostJournalEntryBatch('CO-1', 'BusinessCentral', USER, provider, OPTIONS)).rejects.toThrow(/user cache does not hold it/);
+        expect(getEntityObject).not.toHaveBeenCalled();
+        expect(runView).not.toHaveBeenCalled();
     });
 });
 

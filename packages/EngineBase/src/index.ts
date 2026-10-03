@@ -8,3 +8,4 @@ export * from './AccountingEngineBase.js';
 export * from './journal-entry-netting.js';
 export * from './AccountingEngineExtension.js';
 export * from './erp-sync-contract.js';
+export * from './fiscal-year.js';

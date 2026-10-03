@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MJGlobal } from '@memberjunction/global';
 import { BaseAction } from '@memberjunction/actions';
 import { RunActionParams } from '@memberjunction/actions-base';
-import { Metadata } from '@memberjunction/core';
+import { Metadata, type UserInfo } from '@memberjunction/core';
+
+import { UserCache } from '@memberjunction/generic-database-provider';
 import { BuildJournalEntryBatchesAction, resolveCutoff } from '../BuildJournalEntryBatchesAction';
 import * as serverEngine from '@mj-biz-apps/accounting-core-entities-server';
 
@@ -44,6 +46,8 @@ describe('BuildJournalEntryBatchesAction', () => {
             Config: { ActiveStatusAssertions: false },
         } as never;
         vi.spyOn(serverEngine, 'findStrandedJournalEntries').mockResolvedValue([]);
+        // AutoPost is restricted to the MJ system user (#269); every run here is made as it unless a case says otherwise.
+        vi.spyOn(UserCache.Instance, 'GetSystemUser').mockReturnValue({ ID: 'SYSTEM-USER' } as UserInfo);
     });
 
     it('is registered in MJGlobal ClassFactory as Accounting.BuildJournalEntryBatches', () => {
@@ -363,6 +367,52 @@ describe('BuildJournalEntryBatchesAction', () => {
         expect(result.Success).toBe(true);
         expect(result.ResultCode).toBe('NO_BATCHES');
         expect(autoPostSpy).not.toHaveBeenCalled();
+    });
+
+    // ─── Auto-post is restricted to the MJ system user (#269) ────────────────────────────
+
+    it('refuses AutoPost from any user but the system user, before any company is read', async () => {
+        const pendingSpy = vi.spyOn(serverEngine, 'pendingCompanies');
+        const autoPostSpy = vi.spyOn(serverEngine, 'autoPostJournalEntryBatch');
+        const params = runParams(AUTO_POST_INPUTS);
+        params.ContextUser = { ID: 'SOME-OTHER-USER' } as never;
+
+        await expect(new BuildJournalEntryBatchesAction().Run(params)).rejects.toThrow(/restricted to the MJ system user/);
+        expect(pendingSpy).not.toHaveBeenCalled();
+        expect(autoPostSpy).not.toHaveBeenCalled();
+    });
+
+    it('refuses AutoPost when the user cache does not hold the system user', async () => {
+        vi.spyOn(UserCache.Instance, 'GetSystemUser').mockReturnValue(undefined as never);
+        const pendingSpy = vi.spyOn(serverEngine, 'pendingCompanies');
+
+        await expect(new BuildJournalEntryBatchesAction().Run(runParams(AUTO_POST_INPUTS))).rejects.toThrow(/user cache does not hold it/);
+        expect(pendingSpy).not.toHaveBeenCalled();
+    });
+
+    it('lets the system user auto-post', async () => {
+        vi.spyOn(serverEngine, 'pendingCompanies').mockResolvedValue(['CO-1']);
+        const autoPostSpy = vi.spyOn(serverEngine, 'autoPostJournalEntryBatch')
+            .mockImplementation(async (companyId) => autoPosted(companyId));
+
+        const result = await new BuildJournalEntryBatchesAction().Run(runParams(AUTO_POST_INPUTS));
+
+        expect(result.Success).toBe(true);
+        expect(autoPostSpy).toHaveBeenCalledWith('CO-1', 'BusinessCentral', expect.objectContaining({ ID: 'SYSTEM-USER' }), expect.anything(), expect.anything());
+    });
+
+    it('leaves an attended run by any user unrestricted: it builds behind the CFO approval gate', async () => {
+        vi.spyOn(UserCache.Instance, 'GetSystemUser').mockReturnValue(undefined as never);
+        vi.spyOn(serverEngine, 'pendingCompanies').mockResolvedValue(['CO-1']);
+        const buildBatchSpy = vi.spyOn(serverEngine, 'buildJournalEntryBatch')
+            .mockImplementation(async (companyId) => buildResult(companyId));
+        const params = runParams([]);
+        params.ContextUser = { ID: 'SOME-OTHER-USER' } as never;
+
+        await new BuildJournalEntryBatchesAction().Run(params);
+
+        expect(buildBatchSpy).toHaveBeenCalledTimes(1);
+        expect(buildBatchSpy.mock.calls[0][5]).toBeInstanceOf(serverEngine.TasksAppApprovalGate);
     });
 
     // ─── Auto-post policy is include-list only ───────────────────────────────────────────

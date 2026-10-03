@@ -68,6 +68,7 @@ export {
   sendJournalEntryBatch,
   autoPostJournalEntryBatch,
   assertAutoPostPolicy,
+  assertAutoPostCaller,
   AutoPostDispatchError,
   resumeJournalEntryBatchPosting,
   findStrandedJournalEntries,
