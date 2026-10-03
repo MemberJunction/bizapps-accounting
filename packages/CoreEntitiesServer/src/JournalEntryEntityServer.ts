@@ -39,7 +39,7 @@ import { AccountingEngineBase, FiscalYearOf } from '@mj-biz-apps/accounting-engi
 import { ToCalendarDay } from '@mj-biz-apps/common-entities';
 
 import { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
-import { loadTodayBusiness } from './BusinessDay.js';
+import { laterBusinessDate, loadTodayBusiness } from './BusinessDay.js';
 import { LookupJournalEntryTypeByID, RequireJournalEntryTypeID } from './JournalEntryTypes.js';
 import { getNextJournalEntryNumber } from './SequenceService.js';
 import { isSqlGuid, sqlGuidLiteral } from './SqlGuards.js';
@@ -566,8 +566,9 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
    * Create a new Pending JE that reverses this one (Dr/Cr swapped, dimension tags carried),
    * back-referenced both ways. Uses the encapsulated pattern: the reversal is assembled as a
    * JournalEntryEntityServer with Lines + Dimensions and persisted in ONE transactional Save().
-   * The reversal's EffectiveDate is today's BUSINESS day (`BusinessTimeZoneEngine`), not the
-   * server clock's calendar day (issue #230).
+   * The reversal's EffectiveDate is the later of today's BUSINESS day (`BusinessTimeZoneEngine`,
+   * not the server clock's calendar day — issue #230) and the original's EffectiveDate, so a
+   * reversal never lands in a period before the entry it reverses (issue #266).
    */
   public async GenerateReversal(
     reason: string,
@@ -598,7 +599,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
     const reversal = await provider.GetEntityObject<JournalEntryEntityServer>(JE_ENTITY, user);
     reversal.NewRecord();
     reversal.CompanyID = this.CompanyID;
-    reversal.EffectiveDate = await loadTodayBusiness(user, provider, this.CompanyID);
+    reversal.EffectiveDate = laterBusinessDate(await loadTodayBusiness(user, provider, this.CompanyID), this.EffectiveDate);
     reversal.EntryTypeID = reversalTypeId;
     reversal.Status = 'Pending';
     reversal.Description = `Reversal of ${this.EntryNumber}: ${reason}`;
