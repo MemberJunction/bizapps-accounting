@@ -149,6 +149,8 @@ export interface BuildJournalEntryBatchOptionsInput {
   CompanyIDs?: string[] | null;
   EntryTypeCodes?: string[] | null;
   ExcludeEntryTypeCodes?: string[] | null;
+  /** `YYYY-MM-DD`; omit for today. The journal date the ERP receives (golive #315). */
+  PostingDate?: string | null;
   Source?: 'Standard' | 'View' | 'Explicit';
   CompanyID?: string | null;
   ViewID?: string | null;
@@ -161,6 +163,8 @@ export interface PreviewJournalEntryBatchOptionsInput {
   CompanyIDs?: string[] | null;
   EntryTypeCodes?: string[] | null;
   ExcludeEntryTypeCodes?: string[] | null;
+  /** `YYYY-MM-DD`; omit for today. Ends the candidate pool like a cutoff (golive #315). */
+  PostingDate?: string | null;
   IncludedJournalEntryIDs?: string[] | null;
 }
 

@@ -104,6 +104,9 @@
   font-size: 11px;
   color: var(--mj-text-muted);
 }
+.bw-hint--error {
+  color: var(--mj-status-error-text, var(--mj-status-error));
+}
 
 .bw-chips {
   display: flex;

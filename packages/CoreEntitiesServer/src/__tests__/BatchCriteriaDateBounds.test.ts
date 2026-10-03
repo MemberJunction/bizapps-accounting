@@ -15,12 +15,15 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { IMetadataProvider, RemoteOpServerContext, UserInfo } from '@memberjunction/core';
 import { BusinessTimeZoneEngine, type InstanceConfigurationRow } from '@mj-biz-apps/common-entities';
 import { PreviewJournalEntryBatchOperation, type PreviewJournalEntryBatchInput } from '../JournalEntryBatchOperations.js';
-import { buildJournalEntryBatch } from '../JournalEntryBatchEngine.js';
+import { buildJournalEntryBatch, buildJournalEntryBatchFromExplicitIds, JournalEntryBatchPostingDateError } from '../JournalEntryBatchEngine.js';
 import { requireDateBound } from '../BusinessDay.js';
 
 const SUMMARY_TYPE_ID = 'e9521aa3-f4ef-4ec5-a899-d9dd59f320b7';
 const COMPANY_ID = '11111111-0000-4000-8000-000000000001';
 const USER = { ID: 'USER-1' } as UserInfo;
+const JE_ID = '22222222-0000-4000-8000-000000000001';
+/** 10 AM Central on 3 October 2026 — "today" for every test here, so the posting-date bound is fixed. */
+const NOW = new Date('2026-10-03T15:00:00Z');
 
 const engine = BusinessTimeZoneEngine.Instance as unknown as { _configurations: InstanceConfigurationRow[]; _loaded: boolean };
 const saved = { rows: engine._configurations, loaded: engine._loaded };
@@ -30,11 +33,14 @@ beforeEach(() => {
     { FeatureKey: 'BizApps.BusinessTimeZone', Value: '{"iana":"America/Chicago","sql":"Central Standard Time"}', DefaultValue: '{"iana":"UTC","sql":"UTC"}' },
   ];
   engine._loaded = true;
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(NOW);
 });
 
 afterEach(() => {
   engine._configurations = saved.rows;
   engine._loaded = saved.loaded;
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -89,7 +95,39 @@ describe('StartDate — resolved by the same rule as Cutoff', () => {
 
   it('reads a plain day as that day', async () => {
     const { filter } = await preview({ StartDate: '2026-09-01' });
-    expect(dateClauses(filter)).toEqual(["EffectiveDate >= '2026-09-01'"]);
+    // No cutoff: the pool still ends at the posting date, today by default (golive #315).
+    expect(dateClauses(filter)).toEqual(["EffectiveDate >= '2026-09-01'", "EffectiveDate < '2026-10-04'"]);
+  });
+});
+
+describe('PostingDate bounds the candidate pool (golive #315)', () => {
+  it('with no cutoff, ends the pool at today — the default posting date — so future-dated entries wait', async () => {
+    const { filter } = await preview({});
+    expect(dateClauses(filter)).toEqual(["EffectiveDate < '2026-10-04'"]);
+  });
+
+  it('ends the pool at the posting date when it is earlier than the cutoff', async () => {
+    const { filter } = await preview({ Cutoff: '2026-09-15', PostingDate: '2026-08-31' });
+    expect(dateClauses(filter)).toEqual(["EffectiveDate < '2026-09-01'"]);
+  });
+
+  it('keeps the cutoff when it is earlier than the posting date', async () => {
+    const { filter } = await preview({ Cutoff: '2026-08-15', PostingDate: '2026-08-31' });
+    expect(dateClauses(filter)).toEqual(["EffectiveDate < '2026-08-16'"]);
+  });
+
+  it('reads a date-time posting date as the business day it falls on', async () => {
+    const { filter } = await preview({ PostingDate: '2026-09-30T19:00:00-05:00' });
+    expect(dateClauses(filter)).toEqual(["EffectiveDate < '2026-10-01'"]);
+  });
+
+  it.each([
+    ['tomorrow', '2026-10-04', /Batch PostingDate 2026-10-04 is in the future \(today is 2026-10-03\)/],
+    ['malformed', '2026-02-30', /Batch PostingDate: '2026-02-30' is not a real calendar day/],
+  ])('refuses a %s posting date before any query', async (_label, value, message) => {
+    const { filter, error } = await preview({ PostingDate: value });
+    expect(error).toMatch(message);
+    expect(filter).toBeNull();
   });
 });
 
@@ -122,32 +160,75 @@ describe('requireDateBound', () => {
   });
 });
 
-describe('the batch PostingDate is today in the batch company\'s zone (parity with the cutoff)', () => {
-  it('passes the company to the business-day lookup', async () => {
-    const todayAsDate = vi.spyOn(BusinessTimeZoneEngine.Instance, 'TodayAsDate');
-    const RunView = async (req: ViewRequest) => {
-      if (req.ExtraFilter?.includes('IsJournalEntryBatchSummary=1')) return { Success: true, Results: [{ ID: SUMMARY_TYPE_ID }] };
-      if (req.EntityName === 'MJ_BizApps_Accounting: Journal Entries') return { Success: true, Results: [{ ID: 'je-1' }] };
-      if (req.EntityName === 'MJ_BizApps_Accounting: Journal Entry Lines') {
-        return {
-          Success: true,
-          Results: [
-            { ID: 'l-1', GLAccountID: 'aaaaaaaa-0000-4000-8000-000000000001', DebitAmount: 100, CreditAmount: null },
-            { ID: 'l-2', GLAccountID: 'aaaaaaaa-0000-4000-8000-000000000002', DebitAmount: null, CreditAmount: 100 },
-          ],
-        };
-      }
-      return { Success: true, Results: [] };
-    };
-    // The header is the first write; stop there — the posting date is chosen just before it.
-    const provider = {
-      RunView,
-      BeginTransaction: async () => undefined,
-      RollbackTransaction: async () => undefined,
-      GetEntityObject: async () => { throw new Error('stop: header write reached'); },
-    } as unknown as IMetadataProvider;
+interface CapturedHeader { PostingDate?: Date }
 
-    await expect(buildJournalEntryBatch(COMPANY_ID, 'BusinessCentral', USER.ID, USER, provider)).rejects.toThrow(/stop: header write reached/);
-    expect(todayAsDate).toHaveBeenCalledWith(COMPANY_ID);
+/**
+ * A provider for a one-company build of JE_ID (a balanced two-line entry dated `entryDay`). The batch
+ * header is the first write: its Save records the header and stops the build there.
+ */
+function buildProvider(entryDay: string, header: CapturedHeader): IMetadataProvider {
+  const RunView = async (req: ViewRequest) => {
+    if (req.ExtraFilter?.includes('IsJournalEntryBatchSummary=1')) return { Success: true, Results: [{ ID: SUMMARY_TYPE_ID }] };
+    if (req.EntityName === 'MJ_BizApps_Accounting: Journal Entries') {
+      // The posting-date check asks for members dated AFTER the posting day (`EffectiveDate > 'day'`).
+      const after = /EffectiveDate > '(\d{4}-\d{2}-\d{2})'/.exec(req.ExtraFilter ?? '');
+      if (after) return { Success: true, Results: entryDay > after[1] ? [{ EntryNumber: 'JE-0007', EffectiveDate: new Date(`${entryDay}T00:00:00Z`) }] : [] };
+      return { Success: true, Results: [{ ID: JE_ID, Status: 'Pending', CompanyID: COMPANY_ID }] };
+    }
+    if (req.EntityName === 'MJ_BizApps_Accounting: Journal Entry Lines') {
+      return {
+        Success: true,
+        Results: [
+          { ID: 'l-1', GLAccountID: 'aaaaaaaa-0000-4000-8000-000000000001', DebitAmount: 100, CreditAmount: null },
+          { ID: 'l-2', GLAccountID: 'aaaaaaaa-0000-4000-8000-000000000002', DebitAmount: null, CreditAmount: 100 },
+        ],
+      };
+    }
+    return { Success: true, Results: [] };
+  };
+  const batch = {
+    NewRecord: () => undefined,
+    MarkBuiltByBatchingProcess: () => undefined,
+    Save: async function (this: CapturedHeader) {
+      header.PostingDate = this.PostingDate;
+      throw new Error('stop: header write reached');
+    },
+  };
+  return {
+    RunView,
+    BeginTransaction: async () => undefined,
+    RollbackTransaction: async () => undefined,
+    GetEntityObject: async () => batch,
+  } as unknown as IMetadataProvider;
+}
+
+describe('the batch PostingDate (golive #315)', () => {
+  it('defaults to today in the batch company\'s zone (parity with the cutoff)', async () => {
+    const today = vi.spyOn(BusinessTimeZoneEngine.Instance, 'Today');
+    const header: CapturedHeader = {};
+    await expect(buildJournalEntryBatch(COMPANY_ID, 'BusinessCentral', USER.ID, USER, buildProvider('2026-10-01', header)))
+      .rejects.toThrow(/stop: header write reached/);
+    expect(today).toHaveBeenCalledWith(COMPANY_ID);
+    expect(header.PostingDate?.toISOString()).toBe('2026-10-03T00:00:00.000Z');
+  });
+
+  it('stamps the posting date the caller chose, as that day at UTC midnight', async () => {
+    const header: CapturedHeader = {};
+    await expect(buildJournalEntryBatch(COMPANY_ID, 'BusinessCentral', USER.ID, USER, buildProvider('2026-08-31', header), undefined, { postingDate: '2026-08-31' }))
+      .rejects.toThrow(/stop: header write reached/);
+    expect(header.PostingDate?.toISOString()).toBe('2026-08-31T00:00:00.000Z');
+  });
+
+  it('refuses a selection holding an entry dated after the posting date, before any write', async () => {
+    const header: CapturedHeader = {};
+    const build = buildJournalEntryBatchFromExplicitIds([JE_ID], 'BusinessCentral', USER.ID, USER, buildProvider('2026-09-02', header), undefined, '2026-08-31');
+    await expect(build).rejects.toThrow(JournalEntryBatchPostingDateError);
+    await expect(build).rejects.toThrow(/Posting date 2026-08-31 is earlier than 1 selected entry: JE-0007 \(2026-09-02\)\. Choose a posting date on or after 2026-09-02/);
+    expect(header.PostingDate).toBeUndefined();
+  });
+
+  it('refuses a future posting date on the explicit build', async () => {
+    const build = buildJournalEntryBatchFromExplicitIds([JE_ID], 'BusinessCentral', USER.ID, USER, buildProvider('2026-10-01', {}), undefined, '2026-10-04');
+    await expect(build).rejects.toThrow(/Batch PostingDate 2026-10-04 is in the future/);
   });
 });

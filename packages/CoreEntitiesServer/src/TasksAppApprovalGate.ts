@@ -8,7 +8,7 @@
  *   onBatchBuilt(batchId): batches are SINGLE-COMPANY (D7) — resolve the batch's CompanyID →
  *     that company's AccountingCompanyProfile.ApprovalCFOUserID (a __mj.User). If null,
  *     HARD-FAIL (per the per-company-field decision — no role fallback). Then
- *     CreateApprovalRequest ONE "Approve JE Batch #<JournalEntryBatchNumber>" Task linked to the batch
+ *     CreateApprovalRequest ONE "Approve JE Batch #<JournalEntryBatchNumber> (posting date <day>)" Task linked to the batch
  *     (polymorphic Task Link), assigned to that CFO User. (Interim shape pending the
  *     approval-flow review with Robert.)
  *   assertApproved(batchId): find the Task linked to the batch; require a terminal Approved /
@@ -39,6 +39,7 @@
  */
 import { IMetadataProvider, IRunViewProvider, UserInfo } from '@memberjunction/core';
 import { UUIDsEqual } from '@memberjunction/global';
+import { ToCalendarDay } from '@mj-biz-apps/common-entities';
 import {
   IsApprovalOutcome,
   IsTaskDecisionOutcomeCode,
@@ -118,10 +119,13 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     // Task Link's EntityID / assignee EntityID are UUID FKs to __mj.Entity.ID — resolve names → IDs.
     const batchEntityId = this.batchEntityId();
     const userEntityId = this.resolveUserEntityId();
+    // The posting date is the journal date the ERP receives, so the approver approves it too (golive #315).
+    const postingDay = ToCalendarDay(batch.PostingDate);
     await this.orchestration.CreateApprovalRequest({
-      Name: `Approve Journal Entry Batch #${batch.JournalEntryBatchNumber}`,
+      Name: `Approve Journal Entry Batch #${batch.JournalEntryBatchNumber} (posting date ${postingDay})`,
       TypeID: typeId,
-      Description: `CFO approval required to dispatch Journal Entry Batch #${batch.JournalEntryBatchNumber} to ${batch.TargetSystem}.`,
+      Description: `CFO approval required to dispatch Journal Entry Batch #${batch.JournalEntryBatchNumber} to ${batch.TargetSystem}, ` +
+        `posting date ${postingDay} — the journal date ${batch.TargetSystem} receives.`,
       Priority: 'High',
       LinkEntityID: batchEntityId,
       LinkRecordID: batchId,
