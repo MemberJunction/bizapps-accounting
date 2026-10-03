@@ -58,7 +58,6 @@ BEGIN
            OR (Status = 'Cancelled' AND ApprovedAt IS NOT NULL)
     )
     BEGIN
-        ROLLBACK TRANSACTION;
         THROW 50008, 'JournalEntryBatch cannot be deleted once Status is Approved, Sent, Posted, Failed, or Archived, or once it was cancelled after approval. Cancel it instead.', 1;
     END;
 
@@ -85,7 +84,6 @@ BEGIN
           )
     )
     BEGIN
-        ROLLBACK TRANSACTION;
         THROW 50031, 'JournalEntryBatch status change refused. Posted, Cancelled and Archived are terminal; no batch returns to Pending; only a Pending batch is approved; Posted and Failed are reachable only from Sent; Archived is reachable only from Pending, Approved or Failed; Cancelled is reachable only from Pending, Approved or Failed; and an Approved or Failed batch is cancelled only with its summary pointer cleared in the same update (JournalEntryBatchEntityServer.Cancel).', 1;
     END;
 
@@ -111,7 +109,6 @@ BEGIN
            )
     )
     BEGIN
-        ROLLBACK TRANSACTION;
         THROW 50032, 'JournalEntryBatch audit refused. CancelReason / CancelledAt / CancelledByUserID and ERPNotPostedConfirmedAt / ERPNotPostedConfirmedByUserID / ERPNotPostedBasis are written only by the update that cancels the batch, and SentAt is never cleared once set.', 1;
     END;
 
@@ -162,7 +159,6 @@ BEGIN
           )
     )
     BEGIN
-        ROLLBACK TRANSACTION;
         THROW 50009, 'JournalEntryBatch is locked (Status=Approved/Sent/Posted/Failed/Archived/Cancelled). Only Status / PostedAt / the Archive audit triple / ExternalJournalEntryBatchRef / ErrorMessage may evolve; the send stamp (SentAt / SentByUserID / SendAttemptCount) changes only on a send (50030); the Cancel audit and ERP check are written only by the update that cancels the batch (50032). CompanyID, PostingDate, SummaryJournalEntryID, the approval-task pointer, ApprovedAt / ApprovedByUserID and ApprovedContentHash freeze at approval; the summary pointer may clear only as an Approved or Failed batch is Cancelled.', 1;
     END;
 END;

@@ -39,12 +39,12 @@
 --    erase it from one that was. trg_JournalEntryBatch_SendOnce keeps its First
 --    firing order: only this trigger is altered.
 --
--- Both new rules THROW with no ROLLBACK TRANSACTION first. A dimension tag or a
--- batch is saved by the entity's spCreate / spUpdate / spDelete, which the
--- provider runs inside INSERT-EXEC, where a ROLLBACK in the trigger is itself an
--- error (3915) and the caller would get that in place of the message. A trigger
--- runs with XACT_ABORT on, so THROW alone rolls the statement back. The batch
--- trigger's earlier rules keep their ROLLBACK, as V202610021220 left them.
+-- Every rule in both triggers THROWs with no ROLLBACK TRANSACTION first, as
+-- V202610011000 (#211) left the batch trigger. A dimension tag or a batch is
+-- saved by the entity's spCreate / spUpdate / spDelete, which the provider runs
+-- inside INSERT-EXEC, where a ROLLBACK in the trigger is itself an error (3915)
+-- and the caller would get that in place of the message. A trigger runs with
+-- XACT_ABORT on, so THROW alone rolls the statement back.
 --
 -- Dimension tags already edited on locked lines are not re-checked: the rule
 -- applies to changes from now on.
@@ -105,7 +105,6 @@ BEGIN
            OR (Status = 'Cancelled' AND ApprovedAt IS NOT NULL)
     )
     BEGIN
-        ROLLBACK TRANSACTION;
         THROW 50008, 'JournalEntryBatch cannot be deleted once Status is Approved, Sent, Posted, Failed, or Archived, or once it was cancelled after approval. Cancel it instead.', 1;
     END;
 
@@ -132,7 +131,6 @@ BEGIN
           )
     )
     BEGIN
-        ROLLBACK TRANSACTION;
         THROW 50031, 'JournalEntryBatch status change refused. Posted, Cancelled and Archived are terminal; no batch returns to Pending; only a Pending batch is approved; Posted and Failed are reachable only from Sent; Archived is reachable only from Pending, Approved or Failed; Cancelled is reachable only from Pending, Approved or Failed; and a batch is cancelled only with its summary pointer cleared (JournalEntryBatchEntityServer.Cancel).', 1;
     END;
 
@@ -158,7 +156,6 @@ BEGIN
            )
     )
     BEGIN
-        ROLLBACK TRANSACTION;
         THROW 50032, 'JournalEntryBatch audit refused. CancelReason / CancelledAt / CancelledByUserID and ERPNotPostedConfirmedAt / ERPNotPostedConfirmedByUserID / ERPNotPostedBasis are written only by the update that cancels the batch, and SentAt is never cleared once set.', 1;
     END;
 
@@ -209,7 +206,6 @@ BEGIN
           )
     )
     BEGIN
-        ROLLBACK TRANSACTION;
         THROW 50009, 'JournalEntryBatch is locked (Status=Approved/Sent/Posted/Failed/Archived/Cancelled). Only Status / PostedAt / the Archive audit triple / ExternalJournalEntryBatchRef / ErrorMessage may evolve; the send stamp (SentAt / SentByUserID / SendAttemptCount) changes only on a send (50030); the Cancel audit and ERP check are written only by the update that cancels the batch (50032). CompanyID, PostingDate, SummaryJournalEntryID, the approval-task pointer, ApprovedAt / ApprovedByUserID and ApprovedContentHash freeze at approval; the summary pointer may clear only as an Approved or Failed batch is Cancelled.', 1;
     END;
 
