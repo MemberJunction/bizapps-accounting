@@ -657,6 +657,70 @@ describe('AccountingERPEngine.FindPostedJournalBatch', () => {
   });
 });
 
+// ── bc-aidp-next-golive#282: Business Central posts by account number ─────────────────────
+// For BC, ExternalAccountID holds a remapped BC account number (Code is immutable); blank posts by Code.
+// A BC account id (a GUID) there is refused: BC's accountNumber allows 20 characters.
+
+const BC_ACCOUNT_ID = '9A1B2C3D-0000-0000-0000-000000000282';
+
+function bcViewsWithAccount(glAccount: Record<string, unknown>): Record<string, unknown[]> {
+  return taggedViewsWithCodes({ 'MJ_BizApps_Accounting: GL Accounts': [glAccount] });
+}
+
+describe('Business Central — account numbers', () => {
+  beforeEach(() => {
+    vi.spyOn(AccountingEngine.Instance, 'Config').mockResolvedValue();
+  });
+
+  it('sends a remapped account under its External Account ID as the account number', async () => {
+    const runVerb = vi.fn(async () => ({ Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'DocNumber', Value: 'BATCH-1', Type: 'Output' }] }));
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+
+    await AccountingERPEngine.Instance.PostJournalBatch(
+      taggedBatch(), taggedLines(), user, providerWith(bcViewsWithAccount({ Code: '41500', ExternalSystem: 'BusinessCentral', ExternalAccountID: '41507' })),
+    );
+
+    expect(postedLines(runVerb).map((l) => (l as { accountNumber?: string }).accountNumber)).toEqual(['41507', '41507']);
+  });
+
+  it('refuses to post, without calling BC, when an External Account ID is a BC account id', async () => {
+    const runVerb = vi.fn();
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+
+    const result = await AccountingERPEngine.Instance.PostJournalBatch(
+      taggedBatch(), taggedLines(), user, providerWith(bcViewsWithAccount({ Code: '41507', ExternalSystem: 'BusinessCentral', ExternalAccountID: BC_ACCOUNT_ID })),
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/GL account 41507: External Account ID .* is 36 characters; Business Central account numbers allow 20/);
+    expect(runVerb).not.toHaveBeenCalled();
+  });
+
+  // An External System left blank applies to every ERP, so the same id is refused when the batch targets BC.
+  it('refuses an over-long External Account ID with External System blank, too', async () => {
+    const runVerb = vi.fn();
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+
+    const result = await AccountingERPEngine.Instance.PostJournalBatch(
+      taggedBatch(), taggedLines(), user, providerWith(bcViewsWithAccount({ Code: '41507', ExternalSystem: null, ExternalAccountID: BC_ACCOUNT_ID })),
+    );
+
+    expect(result.success).toBe(false);
+    expect(runVerb).not.toHaveBeenCalled();
+  });
+
+  // The lookup builds the same lines; it must say it cannot answer, never report a mismatch it made up.
+  it('reports a lookup error, not a mismatch, when an External Account ID is a BC account id', async () => {
+    AccountingERPEngine.Instance.UseSeams({ runVerb: glEntriesVerb([glEntry(100, 0), glEntry(0, 100)]) });
+
+    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(
+      taggedBatch(), taggedLines(), user, providerWith(bcViewsWithAccount({ Code: '41507', ExternalSystem: 'BusinessCentral', ExternalAccountID: BC_ACCOUNT_ID })),
+    );
+
+    expect(result.status).toBe('Error');
+  });
+});
+
 // ── #182: QuickBooks Online posts by QBO account id, and looks its journal up by day ─────────
 
 const QBO_ACCOUNT = '35';

@@ -20,6 +20,10 @@
  * Deliberately MUTABLE at any time: Name/Description (cosmetic), IsActive (normal lifecycle —
  * new-line gating is enforced by the JE/line servers), ExternalSystem/ExternalAccountID (the
  * sanctioned remap mechanism). Code format/uniqueness are DB CHECK/UQ constraints.
+ *
+ * For Business Central, ExternalAccountID is the BC account NUMBER the account posts under (the
+ * remap), never BC's account id: BC's journal line takes the number, 20 characters at most
+ * (bc-aidp-next-golive#282). Blank posts under the Code.
  * A mis-created account is corrected by deactivating it and creating a new one.
  */
 import { BaseEntity, ValidationResult, ValidationErrorInfo } from '@memberjunction/core';
@@ -27,6 +31,20 @@ import { RegisterClass } from '@memberjunction/global';
 import { mjBizAppsAccountingGLAccountEntity } from '@mj-biz-apps/accounting-entities';
 
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
+
+/** BC's G/L account `No.` is Code[20]: the longest account number a BC journal line takes. */
+export const BUSINESS_CENTRAL_ACCOUNT_NUMBER_MAX_LENGTH = 20;
+
+/**
+ * Why `externalAccountID` cannot be the Business Central account number `code` posts under, or null
+ * when it can. The usual cause is BC's account id, a 36-character GUID, entered in its place.
+ */
+export function BusinessCentralAccountNumberError(code: string | null | undefined, externalAccountID: string | null | undefined): string | null {
+  if (!externalAccountID || externalAccountID.length <= BUSINESS_CENTRAL_ACCOUNT_NUMBER_MAX_LENGTH) return null;
+  return `GL account ${code ?? '(no code)'}: External Account ID '${externalAccountID}' is ${externalAccountID.length} characters; ` +
+    `Business Central account numbers allow ${BUSINESS_CENTRAL_ACCOUNT_NUMBER_MAX_LENGTH}. For Business Central it is the BC account number ` +
+    `the account posts under, not BC's account id. Enter the BC account number, or clear it to post under the Code.`;
+}
 
 @RegisterClass(BaseEntity, GL_ENTITY)
 export class GLAccountEntityServer extends mjBizAppsAccountingGLAccountEntity {
@@ -52,6 +70,19 @@ export class GLAccountEntityServer extends mjBizAppsAccountingGLAccountEntity {
    * denormalized CompanyID. Pure in-memory OldValue check — no DB probe needed anymore.
    * Cosmetic fields (Name, Description, IsActive, ExternalSystem/ExternalAccountID) stay editable.
    */
+  /** A Business Central account's External Account ID must be a BC account number (bc-aidp-next-golive#282). */
+  public override Validate(): ValidationResult {
+    const result = super.Validate();
+    if (this.ExternalSystem === 'BusinessCentral') {
+      const error = BusinessCentralAccountNumberError(this.Code, this.ExternalAccountID);
+      if (error) {
+        result.Success = false;
+        result.Errors.push(new ValidationErrorInfo('ExternalAccountID', error, this.ExternalAccountID));
+      }
+    }
+    return result;
+  }
+
   public override async ValidateAsync(): Promise<ValidationResult> {
     const result = await super.ValidateAsync();
 
