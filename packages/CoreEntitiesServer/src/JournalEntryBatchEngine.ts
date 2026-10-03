@@ -24,7 +24,8 @@
  *   cancelJournalEntryBatch(): Pending | Approved | Failed → Cancelled, releasing the member JEs to
  *     the candidate pool (#183: a reason from Approved/Failed). From Failed the ERP is looked up first
  *     (#207): a posting it holds refuses the cancel, and the operator confirms only when it cannot say.
- *     A Pending cancel needs a rejection recorded on the approval Task. The gate and the ERP lookup
+ *     A Pending cancel needs a rejection recorded on the approval Task, or a reason from the CFO or the
+ *     batch's builder (golive #302). The gate and the ERP lookup
  *     are resolved through JournalEntryBatchDispatchServices, not taken from the caller (#233), by
  *     JournalEntryBatchEntityServer.Cancel itself, so a direct entity call runs them too (#214).
  *   autoPostJournalEntryBatch(): the scheduled-posting approval waiver — build under the include-list
@@ -919,18 +920,21 @@ async function lockJournalEntries(jeIds: string[], batchId: string, contextUser:
  * approval Task. JournalEntryBatchEntityServer.Cancel resolves it through {@link JournalEntryBatchDispatchServices}.
  */
 export interface JournalEntryBatchCancelGate {
-  /** Throw unless the batch's approval Task carries a terminal rejection — a Pending cancel IS that rejection. */
-  assertRejected(batchId: string, contextUser: UserInfo): Promise<void>;
+  /** Whether the batch's approval Task carries a terminal rejection; a rejected Pending batch is cancelled on it. */
+  isRejected(batchId: string, contextUser: UserInfo): Promise<boolean>;
+  /** Throw unless the user may cancel a Pending batch nobody rejected: the company's CFO or the batch's builder (golive #302). */
+  assertMayCancelPending(batchId: string, contextUser: UserInfo): Promise<void>;
   assertMayCancelApproved(batchId: string, contextUser: UserInfo): Promise<void>;
   recordCancellation(batchId: string, cancellation: RecordedCancellation, contextUser: UserInfo): Promise<void>;
 }
 
-/** What a cancel past approval records on the approval Task. */
+/** What a cancel records on the approval Task. */
 export interface RecordedCancellation {
   reason: string;
   /**
    * The status the batch was cancelled FROM. Passed in, not re-read: the recording runs inside the
    * cancel's transaction, after the batch was saved Cancelled, so a reload would say Cancelled.
+   * From Pending the approval Task is closed as well as commented on.
    */
   fromStatus: string;
   /** For a Failed batch, how "not posted in the ERP" was established (#207). */
@@ -964,8 +968,9 @@ export type CancelJournalEntryBatchOptions = JournalEntryBatchCancelOptions;
  * entries to the candidate pool and deletes its JournalEntryBatchSummary JE.
  *
  * The rules are the entity's, so they hold however the batch is reached (#214): a Pending cancel
- * needs the rejection recorded on the approval Task first (RecordJournalEntryBatchDecision records
- * it, then cancels); from Approved or Failed (#183) the gate must allow the caller,
+ * needs either the rejection recorded on the approval Task first (RecordJournalEntryBatchDecision
+ * records it, then cancels) or `options.reason` from the company's CFO or the batch's builder, which
+ * closes the approval Task (golive #302); from Approved or Failed (#183) the gate must allow the caller,
  * `options.reason` is required and the cancel is recorded on the approval Task in the same
  * transaction; from Failed the ERP is checked first (#207), see {@link checkFailedBatchBeforeCancel},
  * and again before the cancel commits (#215): a posting found then means the cancel does not stand,

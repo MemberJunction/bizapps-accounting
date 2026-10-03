@@ -263,9 +263,11 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
 
     // Cancel() authorizes itself through JournalEntryBatchDispatchServices (#214). These cases are
     // about the mechanics, so the gate allows everything and the ERP offers no lookup; the rules
-    // themselves are covered in CancelJournalEntryBatch.test.ts.
+    // themselves are covered in CancelJournalEntryBatch.test.ts. A Pending batch reads as rejected,
+    // so its cancel needs no reason.
     const cancelGate = {
-      assertRejected: vi.fn(async () => undefined),
+      isRejected: vi.fn(async () => true),
+      assertMayCancelPending: vi.fn(async () => undefined),
       assertMayCancelApproved: vi.fn(async () => undefined),
       recordCancellation: vi.fn(async () => undefined),
     } satisfies JournalEntryBatchCancelGate;

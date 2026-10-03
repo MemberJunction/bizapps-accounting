@@ -336,8 +336,9 @@ export class JournalEntryBatchDispatchClient {
   }
 
   /**
-   * Cancel an Approved or Failed batch and return its journal entries to the candidate pool (#183) —
-   * the opposite of Archive, which keeps them locked. The server requires a reason. A Failed batch may
+   * Cancel a Pending (golive #302), Approved or Failed (#183) batch and return its journal entries to
+   * the candidate pool — the opposite of Archive, which keeps them locked. The server requires a reason
+   * and decides who may cancel; a Pending batch's approval request is closed. A Failed batch may
    * already be in the ERP, so the server looks its number up first (#207): a posting it finds refuses
    * the cancel (an error); nothing found lets it through; otherwise it answers `ConfirmationRequired`,
    * and the caller sends `confirmNotAlreadyPostedInERP` only once the operator has checked. The server
