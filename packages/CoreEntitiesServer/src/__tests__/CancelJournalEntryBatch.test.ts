@@ -263,6 +263,20 @@ function lookupOf(result: ErpJournalLookupResult) {
 // Cancel releases a Failed batch's entries to be batched again under a NEW number, so no later lookup
 // can connect them to this batch's journal: the cancel is the last point a posted batch can be caught.
 describe('cancelJournalEntryBatch — the ERP check before cancelling a Failed batch (#207)', () => {
+  // The ERP accepted the batch and only the Posted save failed: cancelling would post its entries again.
+  it.each([undefined, true])('refuses a Failed batch carrying the ERP reference, before the gate or the lookup (confirmation: %s)', async (confirm) => {
+    const w = world('Failed');
+    w.batch.SetMany({ ExternalJournalEntryBatchRef: 'G00042' }, true, true);
+    const lookup = vi.fn(lookupOf({ status: 'NotFound' }));
+    const g = use(gate({ allowed: true }), lookup);
+
+    await expect(cancelJournalEntryBatch(BATCH_ID, USER, w.provider, { reason: 'Wrong period', confirmNotAlreadyPostedInERP: confirm }))
+      .rejects.toThrow(/the ERP accepted batch JEB-0183 as G00042.*Retry it from Dispatch status/);
+    expect(g.assertMayCancelApproved).not.toHaveBeenCalled();
+    expect(lookup).not.toHaveBeenCalled();
+    expectUntouched(w, 'Failed', g);
+  });
+
   it.each([undefined, true])('refuses when the ERP holds the batch, with no override (confirmation: %s)', async (confirm) => {
     const w = world('Failed');
     const g = use(gate({ allowed: true }), lookupOf({ status: 'Found', externalJournalEntryBatchRef: 'JEB-0183' }));

@@ -40,6 +40,7 @@ function preview(debits: number): BatchPreview {
     GrossCredits: debits,
     PerCompany: [],
     OutOfOrderSkipCount: 0,
+    BeforePostingStartCount: 0,
   };
 }
 

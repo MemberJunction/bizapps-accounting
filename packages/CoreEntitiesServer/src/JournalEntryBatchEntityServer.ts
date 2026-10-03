@@ -104,6 +104,13 @@ const ARCHIVABLE_FROM = legalFrom('Archived');
 const CANCELLABLE_FROM = legalFrom('Cancelled');
 
 /**
+ * The statuses only the dispatch engine writes, through
+ * {@link JournalEntryBatchEntityServer.SaveDispatchTransition}: Sent says the ERP is being called,
+ * Posted says it accepted the journal.
+ */
+const DISPATCH_TARGETS: ReadonlyArray<string> = ['Sent', 'Posted'];
+
+/**
  * How a sent batch was established as not posted in the ERP before it was cancelled (#183): the ERP
  * lookup found nothing under its number, or the lookup could not settle it and the canceller attested.
  * Derived from the generated field, never hand-copied.
@@ -196,6 +203,13 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
    * {@link Validate}, so the generic form or the GraphQL update cannot take one on its own.
    */
   private _cancelling = false;
+
+  /**
+   * Set only while {@link SaveDispatchTransition} is saving. Transient: it is what lets a → Sent or
+   * → Posted edge through {@link Validate}, so only the dispatch engine moves a batch there. A plain
+   * save that set Sent and then Posted would record a posting the ERP never received.
+   */
+  private _dispatching = false;
 
   /**
    * Declare that the batching process is creating this batch (golive #193).
@@ -341,6 +355,12 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     if (!(LEGAL_TRANSITIONS[oldStatus] ?? []).includes(this.Status)) {
       const legal = (LEGAL_TRANSITIONS[oldStatus] ?? []).filter(s => s !== oldStatus).join(', ') || '(terminal)';
       return [`Illegal batch status transition '${oldStatus}' → '${this.Status}'. Legal from '${oldStatus}': ${legal}.`];
+    }
+    if (DISPATCH_TARGETS.includes(this.Status) && !this._dispatching) {
+      return [
+        `A batch moves to ${this.Status} only through the dispatch engine (Send, or Retry on Dispatch status), which calls the ERP ` +
+          `and records what it answered. Setting Status directly would record a dispatch the ERP never received.`,
+      ];
     }
     if (this.Status === 'Cancelled' && !this._cancelling) {
       return [
@@ -564,6 +584,8 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
    *   · Approved / Failed — a reason is required, and the gate must allow the user (the company's
    *     CFO or the batch's approver). The cancel is recorded on the approval Task in the same
    *     transaction (#183).
+   *   · Failed with an ERP reference — refused before anything else: the ERP accepted the batch and
+   *     only the Posted save failed, so the one way forward is a retry, which records it Posted.
    *   · Failed — the ERP is looked up after authorizing (#207); see {@link JournalEntryBatchCancelOptions.confirmNotAlreadyPostedInERP}.
    *     Then, once every write is done and before the commit, it is looked up again (#215): the ERP
    *     may still have been processing a post it received before the failure was recorded, and
@@ -689,6 +711,12 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     if (!CANCELLABLE_FROM.includes(this.Status)) {
       throw new Error(`JournalEntryBatchEntityServer.Cancel: batch ${label} is ${this.Status}; only a ${CANCELLABLE_FROM.join(' / ')} batch can be cancelled.`);
     }
+    if (this.Status === 'Failed' && this.ExternalJournalEntryBatchRef) {
+      throw new Error(
+        `JournalEntryBatchEntityServer.Cancel: the ERP accepted batch ${label} as ${this.ExternalJournalEntryBatchRef}; only recording it Posted failed. ` +
+          'Cancelling would release its entries to post again. Retry it from Dispatch status instead: the retry records it Posted without sending it again.',
+      );
+    }
     if (this.Status !== 'Pending' && !options.reason?.trim()) {
       throw new Error(`JournalEntryBatchEntityServer.Cancel: batch ${label} is ${this.Status}; cancelling it discards an approved summary, so a reason is required.`);
     }
@@ -714,6 +742,19 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     }
     this.Status = 'Cancelled';
     await this.saveCancelled(`Cancel: ${fromStatus}→Cancelled`);
+  }
+
+  /**
+   * Save a → Sent or → Posted update for the dispatch engine (JournalEntryBatchEngine), with the
+   * {@link _dispatching} flag up so {@link Validate} lets the edge through. Returns what Save returns.
+   */
+  public async SaveDispatchTransition(): Promise<boolean> {
+    this._dispatching = true;
+    try {
+      return await this.Save();
+    } finally {
+      this._dispatching = false;
+    }
   }
 
   /** Save the → Cancelled update with the {@link _cancelling} flag up, so {@link Validate} lets the edge through. */

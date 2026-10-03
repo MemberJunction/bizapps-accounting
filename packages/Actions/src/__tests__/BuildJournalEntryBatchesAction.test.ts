@@ -219,6 +219,19 @@ describe('BuildJournalEntryBatchesAction', () => {
         expect(result.Message).toContain('All dispatched to the ERP');
     });
 
+    // The ERP accepted the batch, and neither its Posted nor its Failed save landed: triage keeps the
+    // reference, so the retry records the batch Posted instead of sending it again.
+    it('passes the ERP reference to triage when the Failed save did not persist after the ERP accepted the batch', async () => {
+        vi.spyOn(serverEngine, 'pendingCompanies').mockResolvedValue(['CO-1']);
+        const notRecorded = new serverEngine.JournalEntryBatchFailureNotRecordedError('BATCH-CO-1', 'Sent', 'G00042', 'recording Posted failed', 'database unavailable');
+        vi.spyOn(serverEngine, 'autoPostJournalEntryBatch').mockRejectedValue(new serverEngine.AutoPostDispatchError(buildResult('CO-1'), notRecorded));
+        const failSpy = vi.spyOn(serverEngine, 'recordDispatchFailure').mockResolvedValue({ status: 'Failed', marked: true });
+
+        await new BuildJournalEntryBatchesAction().Run(runParams(AUTO_POST_INPUTS));
+
+        expect(failSpy).toHaveBeenCalledWith('BATCH-CO-1', notRecorded.message, expect.anything(), expect.anything(), 'G00042');
+    });
+
     it('marks a batch Failed when its dispatch throws, and carries on to the next company', async () => {
         vi.spyOn(serverEngine, 'pendingCompanies').mockResolvedValue(['CO-1', 'CO-2']);
         const autoPostSpy = vi.spyOn(serverEngine, 'autoPostJournalEntryBatch').mockImplementation(async (companyId) => {
@@ -231,7 +244,7 @@ describe('BuildJournalEntryBatchesAction', () => {
         const result = await new BuildJournalEntryBatchesAction().Run(runParams(AUTO_POST_INPUTS));
 
         expect(autoPostSpy).toHaveBeenCalledTimes(2); // CO-2 still ran
-        expect(failSpy).toHaveBeenCalledWith('BATCH-CO-1', 'ERP tenant unreachable', expect.anything(), expect.anything());
+        expect(failSpy).toHaveBeenCalledWith('BATCH-CO-1', 'ERP tenant unreachable', expect.anything(), expect.anything(), null);
         expect(result.Success).toBe(false);
         expect(result.ResultCode).toBe('POST_INCOMPLETE');
         expect(result.Message).toContain('1 of 2 company(ies) did not post');

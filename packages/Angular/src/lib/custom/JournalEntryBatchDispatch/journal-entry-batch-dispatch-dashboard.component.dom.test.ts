@@ -146,6 +146,17 @@ describe('JournalEntryBatchDispatchDashboardComponent — cancelling a Failed ba
     return dashboard;
   }
 
+  it('does not offer Cancel on a Failed batch carrying the ERP reference: the ERP accepted it', async () => {
+    const fixture = TestBed.createComponent(JournalEntryBatchDispatchDashboardComponent);
+    fixture.componentRef.setInput('Provider', stubbedReadsProvider());
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
+    const row = { ...fixture.componentInstance.Batches[0], ExternalJournalEntryBatchRef: 'G00042' };
+
+    expect(fixture.componentInstance.canCancelApproved(row)).toBe(false);
+  });
+
   it('cancels on the first attempt, unconfirmed, without asking, when the server finds nothing in the ERP', async () => {
     const dashboard = await cancel('ERP rejected the journal');
     expect(cancelCalls).toEqual([false]);

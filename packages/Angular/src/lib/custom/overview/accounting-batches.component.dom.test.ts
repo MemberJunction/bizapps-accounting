@@ -49,7 +49,7 @@ describe('AccountingBatchesPageComponent — Build Batch modal cutoff (DOM)', ()
     previewCalls = [];
     vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'PreviewJournalEntryBatch').mockImplementation(async (options) => {
       previewCalls.push(options ?? {});
-      return { Success: true, Candidates: [], TotalDebits: 0, TotalCredits: 0, GrossDebits: 0, GrossCredits: 0, OutOfOrderSkipCount: 0 };
+      return { Success: true, Candidates: [], TotalDebits: 0, TotalCredits: 0, GrossDebits: 0, GrossCredits: 0, OutOfOrderSkipCount: 0, BeforePostingStartCount: 0 };
     });
   });
 
@@ -115,6 +115,7 @@ describe('AccountingBatchesPageComponent — Build Batch modal cutoff (DOM)', ()
       GrossDebits: 8666.63,
       GrossCredits: 8666.63,
       OutOfOrderSkipCount: 225,
+      BeforePostingStartCount: 0,
     });
     const fixture = await render();
     await openModal(fixture);
@@ -129,6 +130,39 @@ describe('AccountingBatchesPageComponent — Build Batch modal cutoff (DOM)', ()
     const warning = fixture.nativeElement.querySelector('.mja-banner[role="status"]')?.textContent?.replace(/\s+/g, ' ');
     expect(warning).toContain('225 excluded entries are older than an entry you included');
     expect(warning).not.toContain('included entries will batch');
+  });
+});
+
+describe('AccountingBatchesPageComponent — entries held back by a posting start date', () => {
+  useBusinessClock(AUGUST_CLOSE_IN_CHICAGO);
+
+  beforeEach(() => {
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async () => viewResult([], 0));
+  });
+
+  async function openWith(heldBack: number): Promise<ComponentFixture<AccountingBatchesPageComponent>> {
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'PreviewJournalEntryBatch').mockResolvedValue({
+      Success: true, Candidates: [], TotalDebits: 0, TotalCredits: 0, GrossDebits: 0, GrossCredits: 0, OutOfOrderSkipCount: 0, BeforePostingStartCount: heldBack,
+    });
+    const fixture = TestBed.createComponent(AccountingBatchesPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await fixture.componentInstance.OpenBuildBatchModal();
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  const banners = (fixture: ComponentFixture<AccountingBatchesPageComponent>): string[] =>
+    [...fixture.nativeElement.querySelectorAll('.mja-banner[role="status"]')].map((el: Element) => el.textContent?.replace(/\s+/g, ' ').trim() ?? '');
+
+  it('says how many entries the posting start date holds back', async () => {
+    const fixture = await openWith(3);
+    expect(banners(fixture).some(b => b.includes("3 entries are dated before their company's posting start date and held back"))).toBe(true);
+  });
+
+  it('says nothing when none are held back', async () => {
+    const fixture = await openWith(0);
+    expect(banners(fixture).some(b => b.includes('posting start date'))).toBe(false);
   });
 });
 
@@ -147,6 +181,7 @@ describe('AccountingBatchesPageComponent — overlapping Build Batch previews (#
     GrossDebits: debits,
     GrossCredits: debits,
     OutOfOrderSkipCount: skips,
+    BeforePostingStartCount: 0,
   });
 
   beforeEach(() => {

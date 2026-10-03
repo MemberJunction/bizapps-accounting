@@ -63,13 +63,24 @@ export function HasErpFieldLimits(integrationName: string): boolean {
 
 /**
  * The message for `value` sent as `field` to `integrationName`, or null when it fits or the ERP
- * has no field table. The engine must be configured.
+ * has no field table. `label` replaces the field's own label in the message. The engine must be
+ * configured.
  */
-export function CheckErpFieldValue(integrationName: string, field: ErpWireField, value: string | null | undefined): string | null {
+export function CheckErpFieldValue(integrationName: string, field: ErpWireField, value: string | null | undefined, label?: string): string | null {
   const spec = fieldSpec(integrationName, field);
   if (!spec) return null;
   const target: ExternalFieldTarget = { Integration: BUSINESS_CENTRAL_METADATA_INTEGRATION, Object: spec.Object, Field: spec.Field };
-  return ExternalFieldLimitEngine.Instance.Check(spec.Label, value, [target]);
+  return ExternalFieldLimitEngine.Instance.Check(label ?? spec.Label, value, [target]);
+}
+
+/**
+ * The message for an account number too long for the ERP, naming it. A GL account's Code cannot be
+ * edited, so the fix is the External Account ID, never shortening the value.
+ */
+function accountNumberProblem(integrationName: string, accountNumber: string | null | undefined): string | null {
+  const message = CheckErpFieldValue(integrationName, 'AccountNumber', accountNumber, `GL account number '${accountNumber}'`);
+  if (!message) return null;
+  return `${message.replace(/ Shorten it\.$/, '')} Set that GL account's External Account ID to the account number it posts under in the ERP.`;
 }
 
 /** Every over-limit value in a journal about to be sent, one message per distinct problem. */
@@ -80,7 +91,7 @@ export function CheckErpJournalInput(integrationName: string, input: CreateERPJo
   };
   add(CheckErpFieldValue(integrationName, 'DocumentNumber', input.DocNumber));
   for (const line of input.Lines) {
-    add(CheckErpFieldValue(integrationName, 'AccountNumber', line.accountNumber));
+    add(accountNumberProblem(integrationName, line.accountNumber));
     add(CheckErpFieldValue(integrationName, 'LineDescription', line.description));
     for (const dimension of line.dimensions ?? []) {
       add(CheckErpFieldValue(integrationName, 'DimensionCode', dimension.code));

@@ -72,10 +72,13 @@ describe('CheckErpJournalInput', () => {
     expect(CheckErpJournalInput(BC, journal())).toEqual([]);
   });
 
-  it('names an account number over 20 characters, such as a BC account id', () => {
-    const guid = '0f4fd84f-1111-2222-3333-444455556666';
-    const problems = CheckErpJournalInput(BC, journal({ Lines: [{ accountNumber: guid, debit: 1 }] }));
-    expect(problems).toEqual([`GL account number is 36 characters; ${BC} journalLines.accountNumber allows 20. Shorten it.`]);
+  it('names an account number over 20 characters, and points at the External Account ID rather than shortening it', () => {
+    const code = '4'.repeat(21);
+    const problems = CheckErpJournalInput(BC, journal({ Lines: [{ accountNumber: code, debit: 1 }] }));
+    expect(problems).toEqual([
+      `GL account number '${code}' is 21 characters; ${BC} journalLines.accountNumber allows 20. ` +
+        "Set that GL account's External Account ID to the account number it posts under in the ERP.",
+    ]);
   });
 
   it('names a document number over 20 characters', () => {

@@ -1077,14 +1077,14 @@ export class JournalEntryBatchPostedDuringCancelError extends Error {
  * batch Failed, saying a retry records it.
  */
 export async function recordFailedBatchPosted(
-  batch: mjBizAppsAccountingJournalEntryBatchEntity, externalJournalEntryBatchRef: string, contextUser: UserInfo, provider: IMetadataProvider,
+  batch: JournalEntryBatchEntityServer, externalJournalEntryBatchRef: string, contextUser: UserInfo, provider: IMetadataProvider,
 ): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
   const p = resolveProviders(provider);
   if (batch.Status !== 'Failed') {
     throw new Error(`recordFailedBatchPosted: batch ${batch.JournalEntryBatchNumber ?? batch.ID} is ${batch.Status}; only a Failed batch is recorded Posted this way.`);
   }
   batch.Status = 'Sent';
-  if (!(await batch.Save())) throw await sentSaveFailure(batch, 'Failed', contextUser, p);
+  if (!(await batch.SaveDispatchTransition())) throw await sentSaveFailure(batch, 'Failed', contextUser, p);
   return await markBatchPosted(batch, externalJournalEntryBatchRef, contextUser, p);
 }
 
@@ -1287,6 +1287,8 @@ const SENDABLE_FROM: ReadonlyArray<string> = ['Approved', 'Failed'];
  *   · no lookup for this ERP → a first send posts; a Failed retry needs `confirmNotAlreadyPostedInERP`.
  *                              So does a lookup that finds nothing while the company has an Open
  *                              ERP_POSTING_NOT_READ_BACK finance exception (#205): it may be blind there.
+ * A Failed batch that carries the ERP's reference skips the lookup: the ERP accepted it and only the
+ * Posted save failed, so the retry records it Posted under that reference ({@link recordAcceptedBatchPosted}).
  * A refused Failed retry throws {@link ErpPostingUnconfirmedError} and stays Failed. Any other refused
  * first send goes Sent→Failed with the reason, so it surfaces as a stranded batch to retry rather
  * than sitting at Approved unseen. The matched first send is the exception: marked Failed, its retry
@@ -1314,6 +1316,7 @@ async function sendBatch(
   }
 
   await gate.assertApproved(batchId, contextUser); // throws if not CFO-approved
+  if (fromStatus === 'Failed' && batch.ExternalJournalEntryBatchRef) return await recordAcceptedBatchPosted(batch, contextUser, p);
 
   // Re-run the approval-time checks and the seal comparison against the database, right before
   // the flip to Sent. A broken seal on a Failed retry waits for the lookup below (#216).
@@ -1335,7 +1338,7 @@ async function sendBatch(
   // The entity stamps SentAt, SentByUserID and SendAttemptCount. If another send of this batch got
   // here first, trg_JournalEntryBatch_SendOnce fails this save and the ERP is never called (#184).
   batch.Status = 'Sent';
-  if (!(await batch.Save())) throw await sentSaveFailure(batch, fromStatus, contextUser, p);
+  if (!(await batch.SaveDispatchTransition())) throw await sentSaveFailure(batch, fromStatus, contextUser, p);
 
   if (refusal) return await failBatch(batch, refusal.reason);
   if (preflight.status === 'Found') return await adoptErpPosting(batch, preflight.externalJournalEntryBatchRef, sealBroken, contextUser, p);
@@ -1344,6 +1347,23 @@ async function sendBatch(
   return postResult.success
     ? await markBatchPosted(batch, postResult.externalJournalEntryBatchRef ?? null, contextUser, p)
     : await failBatch(batch, postResult.error ?? 'ERP post failed');
+}
+
+/**
+ * A Failed retry of a batch the ERP already accepted: {@link failAcceptedBatch} kept the reference the
+ * ERP returned. Record it Posted under that reference, with no lookup and no ERP call; nothing else is
+ * allowed for it, because the ERP's answer is already known. A lookup could report a mismatch (tax
+ * lines the ERP added) or fail, and an operator's "not posted" would then send it a second time.
+ * `confirmNotAlreadyPostedInERP` is ignored. A broken seal is flagged, as in {@link adoptErpPosting}.
+ */
+async function recordAcceptedBatchPosted(
+  batch: JournalEntryBatchEntityServer, contextUser: UserInfo, p: Providers,
+): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
+  const externalRef = batch.ExternalJournalEntryBatchRef as string;
+  const check = await batch.CheckApprovedContent(contextUser);
+  batch.Status = 'Sent';
+  if (!(await batch.SaveDispatchTransition())) throw await sentSaveFailure(batch, 'Failed', contextUser, p);
+  return await adoptErpPosting(batch, externalRef, check.SealProblems.length > 0, contextUser, p);
 }
 
 /** The refusal for a batch whose content no longer matches what was approved. Thrown before →Sent, so the batch stays where it was. */
@@ -1362,7 +1382,7 @@ function contentDrift(batch: mjBizAppsAccountingJournalEntryBatchEntity, problem
  * trg_JournalEntryBatch_Immutability (50034) allows it only there, on a retry, and freezes it after.
  */
 async function adoptErpPosting(
-  batch: mjBizAppsAccountingJournalEntryBatchEntity, externalRef: string, sealBroken: boolean, contextUser: UserInfo, p: Providers,
+  batch: JournalEntryBatchEntityServer, externalRef: string, sealBroken: boolean, contextUser: UserInfo, p: Providers,
 ): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
   const doc = batch.JournalEntryBatchNumber ?? batch.ID;
   LogStatus(`sendJournalEntryBatch: the ERP already holds batch ${doc} as ${externalRef}; recording it Posted without sending it again.`);
@@ -1554,13 +1574,13 @@ async function loadSummaryLines(batch: mjBizAppsAccountingJournalEntryBatchEntit
  * Posted batch carrying an error reads as a batch that did not post.
  */
 async function markBatchPosted(
-  batch: mjBizAppsAccountingJournalEntryBatchEntity, externalJournalEntryBatchRef: string | null, contextUser: UserInfo, p: Providers,
+  batch: JournalEntryBatchEntityServer, externalJournalEntryBatchRef: string | null, contextUser: UserInfo, p: Providers,
 ): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
   batch.ExternalJournalEntryBatchRef = externalJournalEntryBatchRef;
   batch.PostedAt = new Date();
   batch.ErrorMessage = null;
   batch.Status = 'Posted';
-  if (!(await batch.Save())) return await failAcceptedBatch(batch, batch.LatestResult?.CompleteMessage ?? 'unknown');
+  if (!(await batch.SaveDispatchTransition())) return await failAcceptedBatch(batch, batch.LatestResult?.CompleteMessage ?? 'unknown');
   await markJournalEntriesGLPosted(batch, contextUser, p);
   return batch;
 }
@@ -1568,12 +1588,15 @@ async function markBatchPosted(
 /**
  * Sent → Failed for a batch the ERP HAS accepted whose Sent→Posted save failed. Thrown instead, it
  * left the batch at Sent on a manual dispatch, where nothing retries, archives or reports it. Failed
- * keeps the ERP reference and says the journal posted, so the retry's lookup records it Posted and
- * an operator asked to confirm it unposted knows not to.
+ * keeps the ERP reference, so the retry records it Posted under that reference with no lookup, and
+ * Cancel refuses it.
  */
-async function failAcceptedBatch(batch: mjBizAppsAccountingJournalEntryBatchEntity, saveError: string): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
+async function failAcceptedBatch(batch: JournalEntryBatchEntityServer, saveError: string): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
   const doc = batch.JournalEntryBatchNumber ?? batch.ID;
-  const ref = batch.ExternalJournalEntryBatchRef ? ` as ${batch.ExternalJournalEntryBatchRef}` : '';
+  // The reference is what marks the batch accepted: an ERP that returned none holds the journal under
+  // the document number it was sent with.
+  batch.ExternalJournalEntryBatchRef = batch.ExternalJournalEntryBatchRef ?? doc;
+  const ref = ` as ${batch.ExternalJournalEntryBatchRef}`;
   LogError(`sendJournalEntryBatch: the ERP accepted batch ${doc}${ref}, but Sent→Posted failed: ${saveError}`);
   batch.PostedAt = null;
   // The failed Posted save persisted nothing, so the flag must not ride on the Sent→Failed save:
@@ -1583,7 +1606,7 @@ async function failAcceptedBatch(batch: mjBizAppsAccountingJournalEntryBatchEnti
   return await failBatch(
     batch,
     `The ERP accepted document ${doc}${ref}, but recording the batch Posted failed: ${saveError} ` +
-      'Retry it: the ERP lookup finds the posting and records it Posted without sending it again. Do not confirm it as not posted.',
+      'Retry it: the retry records it Posted under that reference without sending it again. It cannot be cancelled.',
   );
 }
 
@@ -1729,7 +1752,9 @@ export interface DispatchFailureRecord { status: string; marked: boolean }
  * `Posted → Failed`. Asserting `Failed` from the others is not merely rejected, it is dangerous:
  *
  *   · `Sent`   → mark `Failed` with the cause. Members stay `Batched` for retry triage. The only
- *                state this function writes.
+ *                state this function writes. `externalJournalEntryBatchRef` is the reference the ERP
+ *                returned when it accepted the batch ({@link JournalEntryBatchFailureNotRecordedError});
+ *                kept on the batch, it makes the retry record it Posted instead of sending it again.
  *   · `Posted` → LEAVE IT. The ERP has already accepted this journal and only the member
  *                `Batched → GLPosted` flip is incomplete. Reporting it as `Failed` would invite a
  *                re-post and a DUPLICATE ERP journal — the worst outcome available here.
@@ -1740,7 +1765,7 @@ export interface DispatchFailureRecord { status: string; marked: boolean }
  * Deliberately does NOT route through `failBatch`, so the send path's own semantics are untouched.
  */
 export async function recordDispatchFailure(
-  batchId: string, error: string, contextUser: UserInfo, provider: IMetadataProvider,
+  batchId: string, error: string, contextUser: UserInfo, provider: IMetadataProvider, externalJournalEntryBatchRef: string | null = null,
 ): Promise<DispatchFailureRecord> {
   const p = resolveProviders(provider);
   const batch = await p.md.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
@@ -1749,6 +1774,7 @@ export async function recordDispatchFailure(
 
   batch.Status = 'Failed';
   batch.ErrorMessage = error;
+  if (externalJournalEntryBatchRef) batch.ExternalJournalEntryBatchRef = externalJournalEntryBatchRef;
   // Check the save. A rejected Save leaves the in-memory field set, so reading `batch.Status` back
   // would report a `Failed` that never reached the database.
   if (!(await batch.Save())) {
@@ -1757,17 +1783,47 @@ export async function recordDispatchFailure(
   return { status: 'Failed', marked: true };
 }
 
-/** Sent → Failed (allowed by 50009). JEs stay Batched; ErrorMessage records the cause for retry triage. */
+/**
+ * A dispatch whose Sent → Failed save did not persist: the batch is still Sent in the database, where
+ * no retry or cancel reaches it, so the send throws rather than report a Failed the database does not
+ * hold. `Status` is what the batch reads after a reload. `ExternalJournalEntryBatchRef` is set when the
+ * ERP had accepted the batch; {@link recordDispatchFailure} keeps it, so the retry records it Posted.
+ */
+export class JournalEntryBatchFailureNotRecordedError extends Error {
+  constructor(
+    public readonly JournalEntryBatchID: string,
+    public readonly Status: string,
+    public readonly ExternalJournalEntryBatchRef: string | null,
+    public readonly DispatchError: string,
+    saveError: string,
+  ) {
+    super(`sendJournalEntryBatch: could not mark batch ${JournalEntryBatchID} Failed (${saveError}); it reads ${Status}. The dispatch failed with: ${DispatchError}`);
+    this.name = 'JournalEntryBatchFailureNotRecordedError';
+  }
+}
+
+/**
+ * Sent → Failed (allowed by 50009). JEs stay Batched; ErrorMessage records the cause for retry triage.
+ * Throws {@link JournalEntryBatchFailureNotRecordedError} when the save fails.
+ */
 async function failBatch(batch: mjBizAppsAccountingJournalEntryBatchEntity, error: string): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
+  const acceptedRef = batch.ExternalJournalEntryBatchRef ?? null;
   batch.Status = 'Failed';
   batch.ErrorMessage = error;
-  if (!(await batch.Save())) {
-    // The failure record ITSELF failed to persist — the batch is stuck at 'Sent' in the database
-    // with no ErrorMessage. Log loudly (the original ERP error is in `error`) so retry triage can
-    // find it; the returned in-memory entity still carries the Failed state for the caller.
-    LogError(`sendJournalEntryBatch: could not mark batch ${batch.JournalEntryBatchNumber ?? batch.ID} as Failed (ERP error was: ${error}): ${batch.LatestResult?.CompleteMessage ?? 'unknown'}`);
+  if (await batch.Save()) return batch;
+  const saveError = batch.LatestResult?.CompleteMessage ?? 'unknown';
+  LogError(`sendJournalEntryBatch: could not mark batch ${batch.JournalEntryBatchNumber ?? batch.ID} as Failed (ERP error was: ${error}): ${saveError}`);
+  const status = await reloadedStatus(batch);
+  throw new JournalEntryBatchFailureNotRecordedError(batch.ID, status, acceptedRef, error, saveError);
+}
+
+/** The status the database holds for `batch`, reloading it; `Unknown` when the reload fails. */
+async function reloadedStatus(batch: mjBizAppsAccountingJournalEntryBatchEntity): Promise<string> {
+  try {
+    return (await batch.Load(batch.ID)) ? batch.Status : 'Unknown';
+  } catch {
+    return 'Unknown';
   }
-  return batch;
 }
 
 // ─── Batch preview (the workspace's read-only mirror of the build) ──────────

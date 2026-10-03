@@ -29,7 +29,7 @@ import type {
   mjBizAppsAccountingJournalEntryLineEntity,
 } from '@mj-biz-apps/accounting-entities';
 import { AccountingEngine } from './AccountingEngine.js';
-import { FinanceLedgerUser, RaiseFinanceExceptions } from './FinanceExceptions.js';
+import { FINANCE_EXCEPTION_TYPE_ENTITY, FinanceLedgerUser, RaiseFinanceExceptions } from './FinanceExceptions.js';
 import { CheckErpJournalInput, HasErpFieldLimits, LimitCheckUser } from './ErpFieldLimits.js';
 import {
   defaultAccountingVerbRunner,
@@ -316,7 +316,8 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
    *
    * Nothing found is only trusted while the company has no Open ERP_POSTING_NOT_READ_BACK exception
    * (#205): a post there that the lookup could not read back shows the lookup may not see the
-   * company's postings, so it answers `Unavailable` and a Failed retry needs the operator's word.
+   * company's postings, so it answers `Unavailable` and a Failed retry needs the operator's word. It
+   * answers the same when that exception type is missing or inactive, since no raise could land.
    */
   public async FindPostedJournalBatch(
     batch: mjBizAppsAccountingJournalEntryBatchEntity,
@@ -387,21 +388,36 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     }
   }
 
-  /** `NotFound`, unless an Open ERP_POSTING_NOT_READ_BACK exception says the company's lookup may be blind (#205). */
+  /**
+   * `NotFound`, unless an Open ERP_POSTING_NOT_READ_BACK exception says the company's lookup may be
+   * blind (#205). Fails closed: with that exception type missing or inactive, a raise would have been
+   * skipped and only logged, so nothing found is not trusted either.
+   */
   private async nothingFound(companyId: string, provider: IMetadataProvider): Promise<ErpJournalLookupResult> {
     const rv = provider as unknown as IRunViewProvider;
-    const res = await rv.RunView<{ SourceRecordID: string }>({
-      EntityName: FINANCE_EXCEPTION_ENTITY,
-      ExtraFilter: `CompanyID='${EscapeSQLString(companyId)}' AND Status='Open' AND FinanceExceptionTypeID IN ` +
-        `(SELECT ID FROM ${FINANCE_EXCEPTION_TYPE_TABLE} WHERE Code='${ERP_POSTING_NOT_READ_BACK}')`,
-      Fields: ['SourceRecordID'],
-      ResultType: 'simple',
-      BypassCache: true,
-    }, FinanceLedgerUser());
-    if (!res.Success) {
-      return { status: 'Error', error: `could not check for Open ${ERP_POSTING_NOT_READ_BACK} finance exceptions: ${res.ErrorMessage ?? 'unknown'}` };
+    const [typeRes, openRes] = await rv.RunViews<{ IsActive?: boolean; SourceRecordID?: string }>([
+      { EntityName: FINANCE_EXCEPTION_TYPE_ENTITY, ExtraFilter: `Code='${ERP_POSTING_NOT_READ_BACK}'`, Fields: ['IsActive'], ResultType: 'simple', BypassCache: true },
+      {
+        EntityName: FINANCE_EXCEPTION_ENTITY,
+        ExtraFilter: `CompanyID='${EscapeSQLString(companyId)}' AND Status='Open' AND FinanceExceptionTypeID IN ` +
+          `(SELECT ID FROM ${FINANCE_EXCEPTION_TYPE_TABLE} WHERE Code='${ERP_POSTING_NOT_READ_BACK}')`,
+        Fields: ['SourceRecordID'],
+        ResultType: 'simple',
+        BypassCache: true,
+      },
+    ], FinanceLedgerUser());
+    if (!typeRes?.Success || !openRes?.Success) {
+      const error = (!typeRes?.Success ? typeRes?.ErrorMessage : openRes?.ErrorMessage) ?? 'unknown';
+      return { status: 'Error', error: `could not check for Open ${ERP_POSTING_NOT_READ_BACK} finance exceptions: ${error}` };
     }
-    const open = res.Results ?? [];
+    if (typeRes.Results?.[0]?.IsActive !== true) {
+      return {
+        status: 'Unavailable',
+        reason: `the ${ERP_POSTING_NOT_READ_BACK} finance exception type is missing or inactive, so a batch the ERP accepted but could not read back ` +
+          'would have raised nothing, and a lookup that finds nothing does not show the batch did not post. Install or activate that type.',
+      };
+    }
+    const open = openRes.Results ?? [];
     if (open.length === 0) return { status: 'NotFound' };
     return {
       status: 'Unavailable',

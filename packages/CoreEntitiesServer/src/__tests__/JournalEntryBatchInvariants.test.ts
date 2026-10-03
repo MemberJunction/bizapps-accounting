@@ -178,6 +178,36 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
     expect(batch.Validate().Errors.some(e => getErrorText(e).includes('ERPNotPostedConfirmedAt'))).toBe(true);
   });
 
+  // A plain save that set Sent and then Posted would record a posting the ERP never received.
+  it.each([['Approved', 'Sent'], ['Failed', 'Sent'], ['Sent', 'Posted']])('a plain save of %s → %s is refused — only the dispatch engine takes that edge', (from, to) => {
+    asSaved(from);
+    batch.Status = to as typeof batch.Status;
+    const result = batch.Validate();
+    expect(result.Success).toBe(false);
+    expect(result.Errors.some(e => getErrorText(e).includes(`moves to ${to} only through the dispatch engine`))).toBe(true);
+  });
+
+  it.each([['Approved', 'Sent'], ['Failed', 'Sent'], ['Sent', 'Posted']])('SaveDispatchTransition lets %s → %s through', async (from, to) => {
+    const save = vi.spyOn(BaseEntity.prototype, 'Save').mockImplementation(function (this: BaseEntity) {
+      return Promise.resolve(this.Validate().Success);
+    });
+    try {
+      asSaved(from);
+      batch.Status = to as typeof batch.Status;
+      expect(await batch.SaveDispatchTransition()).toBe(true);
+      // The flag is down again once the save returns.
+      expect(batch.Validate().Success).toBe(false);
+    } finally {
+      save.mockRestore();
+    }
+  });
+
+  it('Sent → Failed stays a plain save: recording a failure calls no ERP', () => {
+    asSaved('Sent');
+    batch.Status = 'Failed';
+    expect(batch.Validate().Errors.some(e => getErrorText(e).includes('only through the dispatch engine'))).toBe(false);
+  });
+
   it('Sent → Cancelled is rejected — a sent batch may still be posting in the ERP', () => {
     asSaved('Sent');
     batch.Status = 'Cancelled';

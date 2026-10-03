@@ -72,6 +72,7 @@ export {
   resumeJournalEntryBatchPosting,
   findStrandedJournalEntries,
   recordDispatchFailure,
+  JournalEntryBatchFailureNotRecordedError,
   cancelJournalEntryBatch,
   regenerateJournalEntryBatch,
   netLines,

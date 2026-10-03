@@ -122,6 +122,12 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   totals that foot against nothing and is indistinguishable from a real batch until dispatch.
   Explorer's generic New form offered exactly that, so the guard is what makes "batches are built,
   not typed" true rather than a convention. The transient flag is instance state, never a field.
+- **`JournalEntryBatchEntityServer.Validate` — `Sent` and `Posted` are the dispatch engine's.** A
+  saved batch moves to `Sent` or `Posted` only through `SaveDispatchTransition()`, which raises a
+  transient flag for its one save, as `Cancel()` does for `Cancelled`. The engine's `→Sent` (send,
+  retry, `recordFailedBatchPosted`) and `→Posted` (`markBatchPosted`) saves are its only callers, so a
+  generic-form or GraphQL save cannot mark a batch Sent and then Posted without the ERP being called.
+  `Sent → Failed` stays a plain save: recording a failure calls no ERP.
 - **`JournalEntryBatchEntityServer.CheckControlTotalCoherence()`** — the Pending→Approved footing +
   member-count check is now a public method shared with the engine: `sendJournalEntryBatch` re-runs
   it **before** every `→Sent` (`Approved→Sent`, and `Failed→Sent` on a retry), so a batch whose member
@@ -141,6 +147,14 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   only in a retry's `Sent`→`Posted` update and freezes it after, so when that save fails
   `failAcceptedBatch` drops the flag before the `Sent`→`Failed` save (the failed save persisted
   nothing); the next retry sets it again.
+  **A `Failed` batch carrying `ExternalJournalEntryBatchRef` was accepted by the ERP** (only its
+  `Posted` save failed, and `failAcceptedBatch` kept the reference). Its retry records it `Posted`
+  under that reference with no lookup and no ERP call, ignoring `confirmNotAlreadyPostedInERP`, and
+  flags a broken seal as above; `Cancel()` refuses it. When the `Sent`→`Failed` save itself fails,
+  the send reloads the batch and throws `JournalEntryBatchFailureNotRecordedError` (the status it
+  reads, and the ERP reference when the ERP had accepted it) instead of reporting a `Failed` the
+  database does not hold. The scheduled run's triage passes that reference to
+  `recordDispatchFailure`, which keeps it on the batch it marks `Failed`.
 - **`JournalEntryBatchEntityServer.Cancel(contextUser, { reason, confirmNotAlreadyPostedInERP })`**
   (#183) — legal from `Pending`, `Approved` and `Failed`, and the way a batch reaches `Cancelled`
   (#213): a transient flag set by `Cancel()` is what lets `Validate()` pass that edge, so the generic

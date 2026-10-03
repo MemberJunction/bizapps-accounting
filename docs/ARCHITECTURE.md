@@ -135,7 +135,9 @@ balance **overall and per company** (AM-4), and writes atomically. Hooks on the 
   (#182): a Failed batch the ERP holds line for line is recorded `Posted` without a second send; a
   first send whose number is already there is refused. The operator's confirmation that the number
   has not posted is needed only when the lookup cannot settle it: a mismatch, a failed lookup, or an
-  ERP with no lookup. Business Central is looked up by document number on any date; QuickBooks
+  ERP with no lookup. A `Failed` batch that carries the ERP's reference was accepted and only its
+  `Posted` save failed: its retry records it `Posted` under that reference with no lookup, and it
+  cannot be cancelled. `Sent` and `Posted` are written only by the dispatch engine. Business Central is looked up by document number on any date; QuickBooks
   Online, whose verb cannot filter by number, among the posting date's journal entries. Business
   Central posting also refuses a journal that already holds unposted lines, and QuickBooks Online
   posting refuses a GL account with no QBO account id. Its content is frozen like an Approved batch's, and the dispatch check compares it with the

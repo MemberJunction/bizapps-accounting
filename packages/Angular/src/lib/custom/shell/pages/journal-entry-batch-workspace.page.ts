@@ -424,6 +424,9 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
   public get HasOutOfOrder(): boolean {
     return (this.Preview?.OutOfOrderSkipCount ?? 0) > 0;
   }
+  public get BeforePostingStartCount(): number {
+    return this.Preview?.BeforePostingStartCount ?? 0;
+  }
 
   // ─── build ─────────────────────────────────────────────────────────────────
 

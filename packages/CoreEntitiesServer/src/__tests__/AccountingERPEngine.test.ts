@@ -24,6 +24,7 @@ import { BaseAccountingEngineExtension, type AccountingEngineExtensionContext } 
 import { CheckExternalFieldLength, ExternalFieldLimitEngine, type ExternalFieldTarget } from '@mj-biz-apps/common-entities';
 import { AccountingEngine } from '../AccountingEngine.js';
 import { AccountingERPEngine, ERP_POSTING_NOT_READ_BACK, namesMatch } from '../AccountingERPEngine.js';
+import { FINANCE_EXCEPTION_TYPE_ENTITY } from '../FinanceExceptions.js';
 import { BaseAccountingERPProvider } from '../BaseAccountingERPProvider.js';
 import type { AccountingVerbResult } from '../AccountingVerbRunner.js';
 import type { ErpPostResult } from '../JournalEntryBatchEngine.js';
@@ -110,13 +111,27 @@ beforeEach(() => {
   );
 });
 
+/**
+ * Rows a provider double answers for `entityName`. The ERP_POSTING_NOT_READ_BACK type is installed and
+ * active unless the test's views say otherwise, as the shipped metadata leaves it.
+ */
+function viewRows(views: Record<string, unknown[]>, entityName: string): unknown[] {
+  return views[entityName] ?? (entityName === FINANCE_EXCEPTION_TYPE_ENTITY ? [{ IsActive: true }] : []);
+}
+
+/** A provider double whose RunViews answers each query through its RunView, in order. */
+function withRunViews<T extends { RunView: (params: never) => Promise<unknown> }>(provider: T): never {
+  const runView = provider.RunView as (params: unknown) => Promise<unknown>;
+  return { ...provider, RunViews: (all: unknown[]) => Promise.all(all.map((params) => runView(params))) } as never;
+}
+
 function providerWith(views: Record<string, unknown[]>) {
-  return {
+  return withRunViews({
     RunView: async (params: { EntityName: string }) => ({
       Success: true,
-      Results: views[params.EntityName] ?? [],
+      Results: viewRows(views, params.EntityName),
     }),
-  } as never;
+  });
 }
 
 // ── Dimension-tagged post fixtures ───────────────────────────────────────────────────────────
@@ -1185,15 +1200,29 @@ describe('Business Central renumbering a posting', () => {
   it('reports an error, never nothing posted, when the finance exceptions cannot be read', async () => {
     AccountingERPEngine.Instance.UseSeams({ runVerb: glEntriesVerb([]) });
     const views = taggedViewsWithCodes();
-    const p = {
+    const p = withRunViews({
       RunView: async (params: { EntityName: string }) => params.EntityName === 'MJ_BizApps_Accounting: Finance Exceptions'
         ? { Success: false, ErrorMessage: 'timeout' }
-        : { Success: true, Results: views[params.EntityName] ?? [] },
-    } as never;
+        : { Success: true, Results: viewRows(views, params.EntityName) },
+    });
 
     const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(taggedBatch(), taggedLines(), user, p);
 
     expect(result).toEqual({ status: 'Error', error: `could not check for Open ${ERP_POSTING_NOT_READ_BACK} finance exceptions: timeout` });
+  });
+
+  // Fails closed: with the type missing or inactive, a raise would have been skipped and only logged.
+  it.each<[string, unknown[]]>([
+    ['missing', []],
+    ['inactive', [{ IsActive: false }]],
+  ])('answers Unavailable, not nothing posted, when the ERP_POSTING_NOT_READ_BACK type is %s', async (_case, typeRows) => {
+    AccountingERPEngine.Instance.UseSeams({ runVerb: glEntriesVerb([]) });
+
+    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(
+      taggedBatch(), taggedLines(), user, providerWith(taggedViewsWithCodes({ [FINANCE_EXCEPTION_TYPE_ENTITY]: typeRows })),
+    );
+
+    expect(result).toEqual({ status: 'Unavailable', reason: expect.stringMatching(new RegExp(`the ${ERP_POSTING_NOT_READ_BACK} finance exception type is missing or inactive`)) });
   });
 });
 
@@ -1206,12 +1235,12 @@ function readbackFailingVerb() {
 
 /** providerWith, recording the ExtraFilter of every Finance Exceptions read. */
 function providerRecording(views: Record<string, unknown[]>, filters: string[]) {
-  return {
+  return withRunViews({
     RunView: async (params: { EntityName: string; ExtraFilter?: string }) => {
       if (params.EntityName === 'MJ_BizApps_Accounting: Finance Exceptions') filters.push(params.ExtraFilter ?? '');
-      return { Success: true, Results: views[params.EntityName] ?? [] };
+      return { Success: true, Results: viewRows(views, params.EntityName) };
     },
-  } as never;
+  });
 }
 
 // ── Real-schema filters and connector-named integrations ─────────────────────────────────────
@@ -1221,15 +1250,15 @@ function providerRecording(views: Record<string, unknown[]>, filters: string[]) 
  * IsActive column, so a filter naming IsActive fails the query instead of being ignored.
  */
 function providerWithMapSchema(views: Record<string, unknown[]>, filters: string[]) {
-  return {
+  return withRunViews({
     RunView: async (params: { EntityName: string; ExtraFilter?: string }) => {
       if (params.EntityName === 'MJ: Company Integration Entity Maps') {
         filters.push(params.ExtraFilter ?? '');
         if (/\bIsActive\b/.test(params.ExtraFilter ?? '')) return { Success: false, ErrorMessage: "Invalid column name 'IsActive'." };
       }
-      return { Success: true, Results: views[params.EntityName] ?? [] };
+      return { Success: true, Results: viewRows(views, params.EntityName) };
     },
-  } as never;
+  });
 }
 
 describe('AccountingERPEngine against the real entity-map schema', () => {
@@ -1456,16 +1485,16 @@ describe('AccountingERPEngine.SyncMasterData — ERP connections only (#256)', (
 
   /** Like providerWith, but entity maps are answered per connection, as the real filter would. */
   function providerWithMapsByConnection(views: Record<string, unknown[]>, failMaps = false) {
-    return {
+    return withRunViews({
       RunView: async (params: { EntityName: string; ExtraFilter?: string }) => {
         if (params.EntityName === MAP_VIEW) {
           if (failMaps) return { Success: false, ErrorMessage: 'timeout reading entity maps' };
           const rows = (views[MAP_VIEW] ?? []) as Array<{ CompanyIntegrationID: string }>;
           return { Success: true, Results: rows.filter((r) => (params.ExtraFilter ?? '').includes(r.CompanyIntegrationID)) };
         }
-        return { Success: true, Results: views[params.EntityName] ?? [] };
+        return { Success: true, Results: viewRows(views, params.EntityName) };
       },
-    } as never;
+    });
   }
 
   it('leaves out connections to systems that are not ERPs', async () => {

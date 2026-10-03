@@ -181,6 +181,7 @@ export interface PreviewJournalEntryBatchOutputWire {
   GrossDebits: number;
   GrossCredits: number;
   OutOfOrderSkipCount: number;
+  BeforePostingStartCount: number;
 }
 
 export interface PreviewJournalEntryBatchResult {
@@ -197,6 +198,11 @@ export interface PreviewJournalEntryBatchResult {
    * would batch ahead of. Surfaced so a caller can warn before building; the build allows it.
    */
   OutOfOrderSkipCount: number;
+  /**
+   * How many entries the other criteria admit that are dated before their company's posting start
+   * date: held back, and left Pending, by every build.
+   */
+  BeforePostingStartCount: number;
   ErrorMessage?: string;
 }
 
@@ -235,7 +241,7 @@ export class JournalEntryBatchDispatchClient {
     try {
       const res = await this.dataProvider.RouteOperation<PreviewJournalEntryBatchOptionsInput, PreviewJournalEntryBatchOutputWire>(
         'Accounting.PreviewJournalEntryBatch', options ?? {});
-      if (!res.Success || !res.Output) return { Success: false, Candidates: [], TotalDebits: 0, TotalCredits: 0, GrossDebits: 0, GrossCredits: 0, OutOfOrderSkipCount: 0, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
+      if (!res.Success || !res.Output) return { Success: false, Candidates: [], TotalDebits: 0, TotalCredits: 0, GrossDebits: 0, GrossCredits: 0, OutOfOrderSkipCount: 0, BeforePostingStartCount: 0, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
       return {
         Success: true,
         Candidates: res.Output.Candidates ?? [],
@@ -244,11 +250,12 @@ export class JournalEntryBatchDispatchClient {
         GrossDebits: res.Output.GrossDebits ?? 0,
         GrossCredits: res.Output.GrossCredits ?? 0,
         OutOfOrderSkipCount: res.Output.OutOfOrderSkipCount ?? 0,
+        BeforePostingStartCount: res.Output.BeforePostingStartCount ?? 0,
       };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       LogError(`JournalEntryBatchDispatchClient.PreviewJournalEntryBatch failed: ${msg}`);
-      return { Success: false, Candidates: [], TotalDebits: 0, TotalCredits: 0, GrossDebits: 0, GrossCredits: 0, OutOfOrderSkipCount: 0, ErrorMessage: msg };
+      return { Success: false, Candidates: [], TotalDebits: 0, TotalCredits: 0, GrossDebits: 0, GrossCredits: 0, OutOfOrderSkipCount: 0, BeforePostingStartCount: 0, ErrorMessage: msg };
     }
   }
 
