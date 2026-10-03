@@ -43,6 +43,8 @@ function arrange(): { source: JournalEntryEntityServer; reversal: CapturedRevers
     ID: 'JE_SOURCE',
     CompanyID: 'CO_100',
     EntryNumber: 'JE-0001',
+    // Earlier than any "today" below, so the business day alone decides the date (issue #266).
+    EffectiveDate: new Date('2026-08-01T00:00:00.000Z'),
     EntryTypeID: 'JET_ORDERBOOKING',
     ReversesJournalEntryID: null,
     ReversedByJournalEntryID: null,
