@@ -1,5 +1,5 @@
 -- =============================================================================
--- Migration: V202610021210__v0.18.x__BatchStatusFromSent.sql
+-- Migration: V202610021210__v0.19.x__BatchStatusFromSent.sql
 -- Description: #221 — Posted and Failed are reachable only from Sent, so the
 --              database refuses every status move the batch entity refuses.
 -- =============================================================================

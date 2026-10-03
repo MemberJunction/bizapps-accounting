@@ -1,5 +1,5 @@
 -- =============================================================================
--- Migration: V202610021220__v0.18.x__PendingCancelTeardownGate.sql
+-- Migration: V202610021220__v0.19.x__PendingCancelTeardownGate.sql
 -- Description: #213 — a Pending batch reaches Cancelled only with its summary
 --              pointer cleared, as an Approved or Failed batch already must.
 -- =============================================================================

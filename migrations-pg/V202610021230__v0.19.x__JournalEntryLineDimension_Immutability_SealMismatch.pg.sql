@@ -207,7 +207,7 @@ $do$;
 
 -- SKIPPED: trigger (auto-conversion not supported)
 -- -- =============================================================================
--- Migration: V202610021230__v0.18.x__JournalEntryLineDimension_Immutability_SealMismatch.sql
+-- Migration: V202610021230__v0.19.x__JournalEntryLineDimension_Immutability_SealMismatch.sql
 -- Description: #216 — di
 
 -- SKIPPED: trigger (auto-conversion not supported)
