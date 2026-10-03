@@ -24,6 +24,9 @@ jobs:
       - name: Reject sibling ../MJ references
         run: ./.github/scripts/validate-no-sibling-mj-paths.sh
 
+      - name: Check every metadata folder is in directoryOrder
+        run: ./.github/scripts/validate-metadata-directory-order.sh
+
       - name: Check for migration file changes
         id: migration_check
         run: |

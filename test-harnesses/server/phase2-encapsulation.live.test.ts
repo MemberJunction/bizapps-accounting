@@ -174,10 +174,11 @@ describe('phase-2 encapsulated JournalEntry (live tier-2)', () => {
   it('L3 — a fresh Load() hydrates Lines AND their Dimensions', async () => {
     const reloaded = await provider.GetEntityObject<JournalEntryEntityServer>(JE_ENTITY, ctx.user);
     expect(await reloaded.Load(firstJE.ID)).toBe(true);
-    expect(reloaded.Lines).toHaveLength(2);
-    const taggedLine = reloaded.Lines.find(l => (l.DebitAmount ?? 0) > 0);
-    expect(taggedLine?.Dimensions).toHaveLength(1);
-    expect(taggedLine?.Dimensions[0].DimensionValueID.toLowerCase()).toBe(ctx.dimValSales.toLowerCase());
+    // Lines and each line's Dimensions are RelatedRecordCollections — read them through Items.
+    expect(reloaded.Lines.Items).toHaveLength(2);
+    const taggedLine = reloaded.Lines.Items.find(l => (l.DebitAmount ?? 0) > 0);
+    expect(taggedLine?.Dimensions.Items).toHaveLength(1);
+    expect(taggedLine?.Dimensions.Items[0].DimensionValueID.toLowerCase()).toBe(ctx.dimValSales.toLowerCase());
   });
 
   it('L4 — GenerateReversal swaps amounts, back-references both ways, and CARRIES dimension tags', async () => {

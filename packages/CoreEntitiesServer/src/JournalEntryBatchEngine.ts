@@ -81,6 +81,7 @@ import {
   type NettableLine,
 } from '@mj-biz-apps/accounting-engine-base';
 import { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
+import { BusinessCentralAccountNumberError } from './GLAccountEntityServer.js';
 import { JournalEntryBatchEntityServer, type ERPNotPostedBasis, type JournalEntryBatchCancelOptions } from './JournalEntryBatchEntityServer.js';
 import { JournalEntryBatchDispatchServices } from './JournalEntryBatchDispatchServices.js';
 import { GetJournalEntryBatchSummaryEntryType } from './JournalEntryTypes.js';
@@ -812,7 +813,12 @@ export async function resolveExternalAccount(
   );
   const gl = glRes.Results?.[0];
   if (!gl) throw new Error(`resolveExternalAccount: GL account ${glAccountId} not found`);
-  if (gl.ExternalAccountID && (!gl.ExternalSystem || gl.ExternalSystem === targetSystem)) return gl.ExternalAccountID;
+  if (gl.ExternalAccountID && (!gl.ExternalSystem || gl.ExternalSystem === targetSystem)) {
+    // BC takes the account number; an id there (the usual mistake: BC's GUID) would fail in BC (bc-aidp-next-golive#282).
+    const bcError = targetSystem === 'BusinessCentral' ? BusinessCentralAccountNumberError(gl.Code, gl.ExternalAccountID) : null;
+    if (bcError) throw new Error(bcError);
+    return gl.ExternalAccountID;
+  }
   // An ERP that knows accounts only by its own id would read the Code as an id, and could match another account.
   if (requireExternalAccountID) {
     throw new Error(
