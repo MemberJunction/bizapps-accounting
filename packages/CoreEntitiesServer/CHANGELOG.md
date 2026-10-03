@@ -1,5 +1,17 @@
 # @mj-biz-apps/accounting-core-entities-server
 
+## 0.19.0
+
+### Patch Changes
+
+- 571a7a1: Auto-posting is restricted to the MJ system user (#269). `autoPostJournalEntryBatch` approves the batch as its context user with no approval Task, so until now any signed-in user who ran `Accounting.BuildJournalEntryBatches` with `AutoPost: true` could build, approve and post a batch without CFO approval. The new `assertAutoPostCaller` refuses any context user other than the system user the scheduled posting jobs run as, and refuses when the user cache does not hold the system user. `autoPostJournalEntryBatch` checks it before the build, and the action checks it before any company is read. A run without `AutoPost` is unchanged: it builds behind the approval gate for any user.
+- dd98450: `SyncMasterData` now checks, before it pulls, that the Dimensions entity map matches on exactly `Code` and the Dimension Values map on exactly `DimensionID` and `Code` (#268). Dimensions are shared by every company, so these keys make a second company's sync merge onto the existing row instead of colliding on `UQ_Dimension_Code`. A connection whose maps key on anything else fails with a message naming the map and the fix. `docs/ARCHITECTURE.md` §2.1 documents the full ERP master-data mapping contract, including the `AccountType` lookup transform.
+- f9e5be1: GenerateReversal dates a reversal on the later of today's business day and the original entry's EffectiveDate, so reversing a future-dated entry no longer lands the reversal in an earlier period (#266).
+- 6f1515e: The deferred-revenue waterfall adds a "Recognized YTD" KPI (#231): entries recognized between the first day of the company's fiscal year and the business day, inclusive. The fiscal-year start comes from the company's Accounting Company Profile, 1 January when it has none. The rule (`FiscalYearOf`, `IsInFiscalYearToDate`, `AccountingEngineBase.FiscalYearStartFor`) moves to accounting-engine-base, and journal-entry numbering now uses it too, with no change in the fiscal years it assigns.
+- Updated dependencies [6f1515e]
+  - @mj-biz-apps/accounting-engine-base@0.19.0
+  - @mj-biz-apps/accounting-entities@0.19.0
+
 ## 0.18.0
 
 ### Patch Changes
