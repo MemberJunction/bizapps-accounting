@@ -191,18 +191,30 @@ const APPROVED_OUTCOME_ID = '0a0a0a0a-0000-4000-8000-00000000a001';
 const CONDITIONS_OUTCOME_ID = '0a0a0a0a-0000-4000-8000-00000000a002';
 const REJECTED_OUTCOME_ID = '0a0a0a0a-0000-4000-8000-00000000a003';
 
-/** A provider serving a batch with (optionally) an approval Task carrying decisions of the given outcomes. */
-function decisionProvider(opts: { hasTask: boolean; outcomeIds: string[] }): IMetadataProvider {
+/**
+ * A provider serving a batch with (optionally) a stamped approval Task carrying decisions of the given outcomes.
+ * With `forgedRejectedLink`, Task Links answer with a newer link to FORGED_TASK_ID, which carries a rejection.
+ */
+function decisionProvider(opts: { hasTask: boolean; outcomeIds: string[]; forgedRejectedLink?: boolean }): IMetadataProvider {
   return {
     GetEntityObject: async (entityName: string) => {
       if (entityName === BATCH_ENTITY) return { Load: async () => true, ID: BATCH_ID, ApprovalTaskID: opts.hasTask ? TASK_ID : null };
-      if (entityName === 'MJ_BizApps_Tasks: Tasks') return { Load: async () => true, ID: TASK_ID };
+      if (entityName === 'MJ_BizApps_Tasks: Tasks') {
+        const t = { ID: '', Load: async (id: string) => { t.ID = id; return true; } };
+        return t;
+      }
       throw new Error(`decisionProvider: unexpected entity '${entityName}'`);
     },
     EntityByName: (entityName: string) => (entityName === BATCH_ENTITY ? { ID: BATCH_ENTITY_ID } : undefined),
-    RunView: async (params: { EntityName: string }) => {
-      if (params.EntityName === 'MJ_BizApps_Tasks: Task Links') return { Success: true, Results: opts.hasTask ? [{ TaskID: TASK_ID }] : [] };
-      if (params.EntityName === 'MJ_BizApps_Tasks: Task Decisions') return { Success: true, Results: opts.outcomeIds.map(OutcomeID => ({ OutcomeID })) };
+    RunView: async (params: { EntityName: string; ExtraFilter?: string }) => {
+      if (params.EntityName === 'MJ_BizApps_Tasks: Task Links') {
+        if (opts.forgedRejectedLink) return { Success: true, Results: [{ TaskID: FORGED_TASK_ID }] };
+        return { Success: true, Results: opts.hasTask ? [{ TaskID: TASK_ID }] : [] };
+      }
+      if (params.EntityName === 'MJ_BizApps_Tasks: Task Decisions') {
+        const outcomeIds = params.ExtraFilter?.includes(FORGED_TASK_ID) ? [REJECTED_OUTCOME_ID] : opts.outcomeIds;
+        return { Success: true, Results: outcomeIds.map(OutcomeID => ({ OutcomeID })) };
+      }
       if (params.EntityName === 'MJ_BizApps_Tasks: Task Decision Outcomes') {
         return {
           Success: true,
@@ -231,7 +243,17 @@ describe('TasksAppApprovalGate.assertRejected — a Pending cancel needs a recor
 
   it('refuses a batch with no approval Task — nothing could have rejected it', async () => {
     const gate = new TasksAppApprovalGate(decisionProvider({ hasTask: false, outcomeIds: [] }));
-    await expect(gate.assertRejected(BATCH_ID, cfo)).rejects.toThrow(/has no approval Task/);
+    await expect(gate.assertRejected(BATCH_ID, cfo)).rejects.toThrow(/has no stamped approval Task/);
+  });
+
+  it('ignores a newer Task Link to a rejected Task when the stamped Task carries no rejection', async () => {
+    const gate = new TasksAppApprovalGate(decisionProvider({ hasTask: true, outcomeIds: [], forgedRejectedLink: true }));
+    await expect(gate.assertRejected(BATCH_ID, cfo)).rejects.toThrow(/is not rejected/);
+  });
+
+  it('refuses a batch with no stamped approval Task, even when a Task Link names a rejected Task', async () => {
+    const gate = new TasksAppApprovalGate(decisionProvider({ hasTask: false, outcomeIds: [], forgedRejectedLink: true }));
+    await expect(gate.assertRejected(BATCH_ID, cfo)).rejects.toThrow(/has no stamped approval Task/);
   });
 
   it('does not count a rejection as an approval', async () => {

@@ -169,10 +169,13 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
    * Block a Pending cancel unless the batch's Task carries a terminal rejection (#233). A Pending
    * cancel IS the CFO's rejection, so recordDecision must have written it first; without this, a
    * server caller could cancel a batch awaiting approval that nobody rejected.
+   *
+   * SECURITY: the Task comes from the batch's stamped ApprovalTaskID, as in assertApproved — never the
+   * newest Task Link, which a newer link to a self-rejected Task could redirect.
    */
   async assertRejected(batchId: string, contextUser: UserInfo): Promise<void> {
-    const task = await this.resolveBatchTask(batchId, contextUser);
-    if (!task) throw new Error(`Batch ${batchId} has no approval Task, so no rejection is recorded — a Pending batch is cancelled only by rejecting it.`);
+    const task = await this.resolveStampedApprovalTask(batchId, contextUser);
+    if (!task) throw new Error(`Batch ${batchId} has no stamped approval Task, so no rejection is recorded — a Pending batch is cancelled only by rejecting it.`);
     if (!(await this.hasTerminalDecision(task.ID, 'Rejection', contextUser))) {
       throw new Error(`Batch ${batchId} is not rejected — no terminal rejection decision on its approval Task. Reject it from Batch approvals to cancel it.`);
     }
