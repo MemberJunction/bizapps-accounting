@@ -121,12 +121,15 @@ describe('PostingDate bounds the candidate pool (golive #315)', () => {
     expect(dateClauses(filter)).toEqual(["EffectiveDate < '2026-10-01'"]);
   });
 
-  it.each([
-    ['tomorrow', '2026-10-04', /Batch PostingDate 2026-10-04 is in the future \(today is 2026-10-03\)/],
-    ['malformed', '2026-02-30', /Batch PostingDate: '2026-02-30' is not a real calendar day/],
-  ])('refuses a %s posting date before any query', async (_label, value, message) => {
-    const { filter, error } = await preview({ PostingDate: value });
-    expect(error).toMatch(message);
+  it('accepts a future-month posting date, and the pool runs through it', async () => {
+    const { filter, error } = await preview({ PostingDate: '2026-11-01' });
+    expect(error).toBeNull();
+    expect(dateClauses(filter)).toEqual(["EffectiveDate < '2026-11-02'"]);
+  });
+
+  it('refuses a malformed posting date before any query', async () => {
+    const { filter, error } = await preview({ PostingDate: '2026-02-30' });
+    expect(error).toMatch(/Batch PostingDate: '2026-02-30' is not a real calendar day/);
     expect(filter).toBeNull();
   });
 });
@@ -227,8 +230,10 @@ describe('the batch PostingDate (golive #315)', () => {
     expect(header.PostingDate).toBeUndefined();
   });
 
-  it('refuses a future posting date on the explicit build', async () => {
-    const build = buildJournalEntryBatchFromExplicitIds([JE_ID], 'BusinessCentral', USER.ID, USER, buildProvider('2026-10-01', {}), undefined, '2026-10-04');
-    await expect(build).rejects.toThrow(/Batch PostingDate 2026-10-04 is in the future/);
+  it('stamps a future posting date on the explicit build', async () => {
+    const header: CapturedHeader = {};
+    const build = buildJournalEntryBatchFromExplicitIds([JE_ID], 'BusinessCentral', USER.ID, USER, buildProvider('2026-10-01', header), undefined, '2026-11-01');
+    await expect(build).rejects.toThrow(/stop: header write reached/);
+    expect(header.PostingDate?.toISOString()).toBe('2026-11-01T00:00:00.000Z');
   });
 });

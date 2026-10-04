@@ -116,8 +116,9 @@ export function resolveCutoff(explicitCutoff: string | undefined, mode: string |
 /**
  * A batch is dated the last day of its sweep window (golive #314), not the run date: a nightly run on
  * 1 September with cutoff 31 August posts on 31 August, so the activity stays in August in the ERP.
- * A cutoff later than today ends the window today, because the posting date also bounds the pool and
- * can never be in the future. No cutoff, no window end: null, and the engine dates the batch today.
+ * A cutoff later than today ends the window today: the posting date also bounds the pool, and an
+ * unattended run does not post ahead of the day it runs. No cutoff, no window end: null, and the
+ * engine dates the batch today.
  */
 export function postingDateForCutoff(cutoff: Date | null, now: Date, zone: string): Date | null {
   if (!cutoff) return null;

@@ -99,12 +99,30 @@ describe('AccountingBatchesPageComponent — Build Batch modal cutoff (DOM)', ()
     await vi.waitFor(() => expect(input?.value).toBe(BUSINESS_DAY));
   });
 
-  it('blocks the build on a future posting date (golive #315)', async () => {
+  it.each([
+    ['future', '2026-09-01', 'September 2026'],
+    ['prior', '2026-07-31', 'July 2026'],
+  ])('asks before building on a %s-month posting date, and asks again when the date changes (golive #315)', async (which, day, month) => {
     const fixture = await render();
     await openModal(fixture);
-    fixture.componentInstance.BuildPostingDate = '2026-09-01';
-    expect(fixture.componentInstance.BuildBlockedReason).toBe('The posting date 2026-09-01 is in the future — choose today or an earlier day.');
-    expect(fixture.componentInstance.CanBuild).toBe(false);
+    const page = fixture.componentInstance;
+    const warning = () => fixture.nativeElement.querySelector('.mja-modal-posting-warning') as HTMLElement | null;
+    expect(warning(), 'no warning on today').toBeNull();
+
+    page.BuildPostingDate = day;
+    fixture.detectChanges();
+    expect(warning()?.textContent).toContain(`The posting date ${day} is in a ${which} month, so the ERP books this batch in ${month}. Are you sure?`);
+    expect(page.BuildBlockedReason).toBe(`Confirm posting this batch in ${month}.`);
+
+    const box = warning()!.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    box.click();
+    fixture.detectChanges();
+    expect(page.PostingDateConfirmed).toBe(true);
+    expect(page.BuildBlockedReason).not.toBe(`Confirm posting this batch in ${month}.`);
+
+    page.BuildPostingDate = which === 'future' ? '2026-09-02' : '2026-07-30';
+    expect(page.PostingDateConfirmed).toBe(false);
+    expect(page.BuildBlockedReason).toMatch(/^Confirm posting this batch in /);
   });
 
   it('says so when the cutoff is cleared — the preview then runs through the posting date', async () => {

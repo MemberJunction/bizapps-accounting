@@ -6,8 +6,9 @@ import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
 import { NavigationService } from '@memberjunction/ng-shared';
 import { MJButtonDirective, MJDialogComponent, MJDialogActionsComponent, MJDropdownComponent } from '@memberjunction/ng-ui-components';
 import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
-import { BusinessTimeZoneEngine, IsBeforeDay, IsCalendarDay } from '@mj-biz-apps/common-entities';
+import { BusinessTimeZoneEngine, IsCalendarDay } from '@mj-biz-apps/common-entities';
 import { calendarDaySpan, formatJournalDate } from '../form-panels/journal-entry-panel.helpers';
+import { PostingDateMonthWarning, PostingMonthLabel } from '../shared/posting-date-warning';
 import {
     DispatchConfirmationKind,
     JournalEntryBatchDispatchClient,
@@ -297,13 +298,23 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                             <input
                                 type="date"
                                 class="mj-input mja-modal-date-input"
-                                [max]="Today"
                                 [(ngModel)]="BuildPostingDate"
                                 (ngModelChange)="OnBuildPreviewFilterChange()"
                                 title="The journal date the ERP receives. Entries dated after it wait for a later batch."
                                 aria-label="Posting Date" />
                         </div>
                     </div>
+
+                    <!-- A prior or future month is allowed but confirmed: the ERP books the batch in that month. -->
+                    @if (PostingDateWarning) {
+                        <div class="mja-modal-posting-warning" role="alert">
+                            <span>{{ PostingDateWarning }}</span>
+                            <label class="mja-modal-checkbox-label">
+                                <input type="checkbox" [checked]="PostingDateConfirmed" (change)="OnPostingDateConfirmChange($event)" />
+                                <span>Yes, post this batch in {{ PostingMonth }}</span>
+                            </label>
+                        </div>
+                    }
 
                     <div class="mja-modal-options">
                         <label class="mja-modal-checkbox-label">
@@ -977,6 +988,17 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
             font-size: 12px;
             color: var(--mj-status-warning);
         }
+        .mja-modal-posting-warning {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 12px;
+            padding: 9px 12px;
+            border-radius: 8px;
+            font-size: 12.5px;
+            background: color-mix(in srgb, var(--mj-status-warning) 10%, var(--mj-bg-surface));
+            border: 1px solid color-mix(in srgb, var(--mj-status-warning) 40%, transparent);
+        }
         .mja-modal-label {
             font-size: 11px;
             font-weight: 700;
@@ -1499,17 +1521,43 @@ export class AccountingBatchesPageComponent implements OnInit {
         return this.PreviewOutOfOrderSkipCount > 0;
     }
 
-    /** Non-null = why Build is disabled. Saying it beats a dead button with no explanation. */
-    /** Today's business day — the latest posting date the date input offers. */
+    /** Today's business day. */
     public get Today(): string {
         return BusinessTimeZoneEngine.Instance.Today();
     }
 
+    /** The posting date whose prior/future-month warning was confirmed; any other date asks again. */
+    private confirmedPostingDate: string | null = null;
+
+    /** "Are you sure?" text when the posting date is in a prior or future month (golive #315), or null. */
+    public get PostingDateWarning(): string | null {
+        return PostingDateMonthWarning(this.BuildPostingDate, this.Today);
+    }
+
+    /** The posting date's month, e.g. `September 2026`, for the confirmation label. */
+    public get PostingMonth(): string {
+        return IsCalendarDay(this.BuildPostingDate) ? PostingMonthLabel(this.BuildPostingDate) : '';
+    }
+
+    public get PostingDateConfirmed(): boolean {
+        return !!this.BuildPostingDate && this.BuildPostingDate === this.confirmedPostingDate;
+    }
+
+    public ConfirmPostingDate(confirmed: boolean): void {
+        this.confirmedPostingDate = confirmed ? this.BuildPostingDate : null;
+        this.cdr.markForCheck();
+    }
+
+    public OnPostingDateConfirmChange(event: Event): void {
+        this.ConfirmPostingDate((event.target as HTMLInputElement).checked);
+    }
+
+    /** Non-null = why Build is disabled. Saying it beats a dead button with no explanation. */
     public get BuildBlockedReason(): string | null {
         // The preview re-queries on every change and its pool ends at the posting date, so no ticked
         // entry can postdate it; the server refuses that case regardless.
         if (!IsCalendarDay(this.BuildPostingDate)) return 'Choose a posting date.';
-        if (IsBeforeDay(this.Today, this.BuildPostingDate)) return `The posting date ${this.BuildPostingDate} is in the future — choose today or an earlier day.`;
+        if (this.PostingDateWarning && !this.PostingDateConfirmed) return `Confirm posting this batch in ${this.PostingMonth}.`;
         if (this.PreviewCandidateCount === 0) return 'Nothing matches these criteria.';
         if (this.IncludedCount === 0) return 'Every entry is excluded — nothing to build.';
         if (!this.IsBalanced) return 'The selection does not balance (Dr ≠ Cr) — the ledger would reject it.';
@@ -1525,6 +1573,7 @@ export class AccountingBatchesPageComponent implements OnInit {
         // A fresh session starts with everything ticked — the sweep remains the one-click default.
         this.ExcludedEntryIDs = [];
         this.ModalErrorMessage = null;
+        this.confirmedPostingDate = null;
         if (!this.BuildCutoffDate) {
             this.BuildCutoffDate = BusinessTimeZoneEngine.Instance.Today();
         }
