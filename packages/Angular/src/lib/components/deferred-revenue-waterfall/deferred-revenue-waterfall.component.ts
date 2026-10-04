@@ -3,6 +3,11 @@ import type {
     mjBizAppsAccountingJournalEntryEntity,
     mjBizAppsAccountingJournalEntryLineEntity,
 } from '@mj-biz-apps/accounting-entities';
+import {
+    AccountingEngineBase,
+    IsInFiscalYearToDate,
+    type FiscalYearStart,
+} from '@mj-biz-apps/accounting-engine-base';
 import { BusinessTimeZoneEngine, CalendarDayIn, ToCalendarDay } from '@mj-biz-apps/common-entities';
 
 /** A single month's release cell in the waterfall */
@@ -37,6 +42,8 @@ export interface WaterfallRow {
     ContractValue: number;
     DeferredBeginning: number;
     RecognizedToDate: number;
+    /** The part of `RecognizedToDate` recognized since the first day of the entry's company's fiscal year. */
+    RecognizedYTD: number;
     RemainingUnearned: number;
     MonthlyCells: WaterfallMonthCell[];
 }
@@ -45,6 +52,7 @@ export interface WaterfallRow {
 export interface WaterfallSummary {
     TotalDeferredBeginning: number;
     TotalRecognizedToDate: number;
+    TotalRecognizedYTD: number;
     TotalRemainingUnearned: number;
     MonthlyRunRate: number;
     PercentRecognized: number;
@@ -106,6 +114,8 @@ export class DeferredRevenueWaterfallComponent implements OnChanges {
     public Summary: WaterfallSummary = emptySummary();
     public MonthHeaders: MonthHeader[] = [];
 
+    private engineLoadRequested = false;
+
     public ngOnChanges(changes: SimpleChanges): void {
         if (changes['JournalEntries'] || changes['TermLookup']) {
             this.recalculateWaterfall();
@@ -145,6 +155,7 @@ export class DeferredRevenueWaterfallComponent implements OnChanges {
             this.resetEmpty();
             return;
         }
+        this.ensureFiscalYearStartsLoaded();
 
         const activeEntries = selectActiveEntries(this.JournalEntries);
         this.DistinctTerms = this.buildDistinctTerms(activeEntries);
@@ -160,6 +171,19 @@ export class DeferredRevenueWaterfallComponent implements OnChanges {
         this.Rows = this.buildRows(groups, aggregated, monthTotalsMap, today);
         this.YearGroups = buildYearGroups(aggregated);
         this.Summary = buildSummary(this.Rows, this.MonthHeaders, monthTotalsMap, aggregated, todayKey);
+    }
+
+    /**
+     * Year-to-date reads each company's fiscal-year start from `AccountingEngineBase`, which loads at
+     * startup. If it has not loaded yet, load it and recompute, so a first render that fell back to a
+     * 1 January start is replaced by one using each company's own start.
+     */
+    private ensureFiscalYearStartsLoaded(): void {
+        const engine = AccountingEngineBase.Instance;
+        if (engine.Loaded || this.engineLoadRequested) return;
+        // Once per component: a load that resolves without loading must not recompute in a loop.
+        this.engineLoadRequested = true;
+        void engine.Config().then(() => this.recalculateWaterfall());
     }
 
     private resetEmpty(): void {
@@ -252,6 +276,7 @@ export class DeferredRevenueWaterfallComponent implements OnChanges {
         const monthlyCells = this.emptyMonthlyCells(today.slice(0, 7), group);
         let rowContractVal = 0;
         let rowRecognized = 0;
+        let rowRecognizedYTD = 0;
 
         for (const je of group.entries) {
             // Fixed-width `YYYY-MM-DD` days compare lexically in chronological order.
@@ -265,6 +290,9 @@ export class DeferredRevenueWaterfallComponent implements OnChanges {
             if (recognized) {
                 rowRecognized += amt;
             }
+            if (IsInFiscalYearToDate(day, today, fiscalYearStartOf(je))) {
+                rowRecognizedYTD += amt;
+            }
             monthTotalsMap.set(mKey, (monthTotalsMap.get(mKey) || 0) + amt);
         }
 
@@ -276,6 +304,7 @@ export class DeferredRevenueWaterfallComponent implements OnChanges {
             ContractValue: rowContractVal,
             DeferredBeginning: rowContractVal,
             RecognizedToDate: rowRecognized,
+            RecognizedYTD: rowRecognizedYTD,
             RemainingUnearned: Math.max(0, rowContractVal - rowRecognized),
             MonthlyCells: monthlyCells,
         };
@@ -286,6 +315,7 @@ function emptySummary(): WaterfallSummary {
     return {
         TotalDeferredBeginning: 0,
         TotalRecognizedToDate: 0,
+        TotalRecognizedYTD: 0,
         TotalRemainingUnearned: 0,
         MonthlyRunRate: 0,
         PercentRecognized: 0,
@@ -306,6 +336,11 @@ function entryDay(je: mjBizAppsAccountingJournalEntryEntity): string | null {
     const createdAt = new Date(je.__mj_CreatedAt);
     if (Number.isNaN(createdAt.getTime())) return null;
     return CalendarDayIn(createdAt, BusinessTimeZoneEngine.Instance.Zone);
+}
+
+/** The fiscal-year start of the entry's company (1 January when it has no accounting profile). */
+function fiscalYearStartOf(je: mjBizAppsAccountingJournalEntryEntity): FiscalYearStart {
+    return AccountingEngineBase.Instance.FiscalYearStartFor(je.CompanyID);
 }
 
 /**
@@ -416,11 +451,13 @@ function buildSummary(
 ): WaterfallSummary {
     const grandDeferred = rows.reduce((sum, r) => sum + r.DeferredBeginning, 0);
     const grandRecognized = rows.reduce((sum, r) => sum + r.RecognizedToDate, 0);
+    const grandRecognizedYTD = rows.reduce((sum, r) => sum + r.RecognizedYTD, 0);
     const grandUnearned = rows.reduce((sum, r) => sum + r.RemainingUnearned, 0);
     const totalMonthsWithAmt = Array.from(monthTotalsMap.values()).filter((v) => v > 0).length || 1;
     return {
         TotalDeferredBeginning: grandDeferred,
         TotalRecognizedToDate: grandRecognized,
+        TotalRecognizedYTD: grandRecognizedYTD,
         TotalRemainingUnearned: grandUnearned,
         MonthlyRunRate: grandDeferred / totalMonthsWithAmt,
         PercentRecognized: grandDeferred > 0 ? (grandRecognized / grandDeferred) * 100 : 0,

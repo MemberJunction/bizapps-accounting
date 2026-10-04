@@ -67,6 +67,8 @@
  *   DOC:          plans/bizapps-accounting-master.md §7 (lifecycle + batching)
  */
 import { DatabaseProviderBase, IMetadataProvider, IRunViewProvider, LogError, LogStatus, UserInfo } from '@memberjunction/core';
+import { UUIDsEqual } from '@memberjunction/global';
+import { UserCache } from '@memberjunction/generic-database-provider';
 import type {
   mjBizAppsAccountingJournalEntryBatchEntity,
   mjBizAppsAccountingJournalEntryEntity,
@@ -79,6 +81,7 @@ import {
   type NettableLine,
 } from '@mj-biz-apps/accounting-engine-base';
 import { JournalEntryEntityServer } from './JournalEntryEntityServer.js';
+import { BusinessCentralAccountNumberError } from './GLAccountEntityServer.js';
 import { JournalEntryBatchEntityServer, type ERPNotPostedBasis, type JournalEntryBatchCancelOptions } from './JournalEntryBatchEntityServer.js';
 import { JournalEntryBatchDispatchServices } from './JournalEntryBatchDispatchServices.js';
 import { GetJournalEntryBatchSummaryEntryType } from './JournalEntryTypes.js';
@@ -677,7 +680,12 @@ export async function resolveExternalAccount(
   );
   const gl = glRes.Results?.[0];
   if (!gl) throw new Error(`resolveExternalAccount: GL account ${glAccountId} not found`);
-  if (gl.ExternalAccountID && (!gl.ExternalSystem || gl.ExternalSystem === targetSystem)) return gl.ExternalAccountID;
+  if (gl.ExternalAccountID && (!gl.ExternalSystem || gl.ExternalSystem === targetSystem)) {
+    // BC takes the account number; an id there (the usual mistake: BC's GUID) would fail in BC (bc-aidp-next-golive#282).
+    const bcError = targetSystem === 'BusinessCentral' ? BusinessCentralAccountNumberError(gl.Code, gl.ExternalAccountID) : null;
+    if (bcError) throw new Error(bcError);
+    return gl.ExternalAccountID;
+  }
   // An ERP that knows accounts only by its own id would read the Code as an id, and could match another account.
   if (requireExternalAccountID) {
     throw new Error(
@@ -1133,6 +1141,21 @@ export function assertAutoPostPolicy(options: BuildJournalEntryBatchOptions): vo
 }
 
 /**
+ * Only the MJ system user, the identity the scheduled posting jobs run as, may auto-post (#269). The
+ * waiver approves as the caller, so any other caller would approve its own batch with no approval
+ * Task. Fails closed when the user cache does not hold the system user.
+ */
+export function assertAutoPostCaller(contextUser: UserInfo): void {
+  const systemUser = UserCache.Instance.GetSystemUser();
+  if (!systemUser) {
+    throw new Error('autoPostJournalEntryBatch: auto-posting is restricted to the MJ system user, and the user cache does not hold it — refusing to auto-post.');
+  }
+  if (!contextUser?.ID || !UUIDsEqual(contextUser.ID, systemUser.ID)) {
+    throw new Error('autoPostJournalEntryBatch: auto-posting is restricted to the MJ system user, which the scheduled posting jobs run as. Build without AutoPost so the batch goes to approval.');
+  }
+}
+
+/**
  * An auto-post that built its batch and then failed to approve or send it. Carries the build, so the
  * caller can report the batch's real state (see recordDispatchFailure); `cause` is what threw.
  */
@@ -1153,7 +1176,7 @@ export interface AutoPostJournalEntryBatchResult {
  * The scheduled-posting approval waiver, and the only way to send a batch without an approval Task
  * (#233): build one company's batch under the include-list policy, approve it as `contextUser`, and
  * send it. The waiver removes the approval STEP, not the audit trail — `ApprovedByUserID` is the
- * context user, which in a scheduled run is the system user the scheduler resolves.
+ * context user, which must be the MJ system user the scheduler resolves ({@link assertAutoPostCaller}).
  *
  * Throws what the build throws (EmptyJournalEntryBatchError included) before any batch exists, and
  * {@link AutoPostDispatchError} once one does.
@@ -1165,6 +1188,7 @@ export async function autoPostJournalEntryBatch(
   provider: IMetadataProvider,
   options: BuildJournalEntryBatchOptions,
 ): Promise<AutoPostJournalEntryBatchResult> {
+  assertAutoPostCaller(contextUser);
   assertAutoPostPolicy(options);
   const p = resolveProviders(provider);
   const build = await buildJournalEntryBatch(companyId, targetSystem, contextUser.ID, contextUser, provider, AutoApproveGate, options);

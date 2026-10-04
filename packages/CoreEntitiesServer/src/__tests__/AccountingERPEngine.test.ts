@@ -233,6 +233,9 @@ describe('AccountingERPEngine.SyncMasterData', () => {
         { ID: 'map-1', CompanyIntegrationID: CI, Entity: 'MJ_BizApps_Accounting: GL Accounts', IsActive: true },
         { ID: 'map-2', CompanyIntegrationID: CI, Entity: 'MJ_BizApps_Accounting: Dimensions', IsActive: true },
       ],
+      'MJ: Company Integration Field Maps': [
+        { EntityMapID: 'map-2', DestinationFieldName: 'Code', IsKeyField: true, Status: 'Active' },
+      ],
       'MJ_BizApps_Accounting: Accounting Engine Extensions': [
         {
           Code: 'ImportBankAccountBalances',
@@ -654,6 +657,70 @@ describe('AccountingERPEngine.FindPostedJournalBatch', () => {
 
     expect(result).toEqual({ status: 'Unavailable' });
     expect(runVerb).not.toHaveBeenCalled();
+  });
+});
+
+// ── bc-aidp-next-golive#282: Business Central posts by account number ─────────────────────
+// For BC, ExternalAccountID holds a remapped BC account number (Code is immutable); blank posts by Code.
+// A BC account id (a GUID) there is refused: BC's accountNumber allows 20 characters.
+
+const BC_ACCOUNT_ID = '9A1B2C3D-0000-0000-0000-000000000282';
+
+function bcViewsWithAccount(glAccount: Record<string, unknown>): Record<string, unknown[]> {
+  return taggedViewsWithCodes({ 'MJ_BizApps_Accounting: GL Accounts': [glAccount] });
+}
+
+describe('Business Central — account numbers', () => {
+  beforeEach(() => {
+    vi.spyOn(AccountingEngine.Instance, 'Config').mockResolvedValue();
+  });
+
+  it('sends a remapped account under its External Account ID as the account number', async () => {
+    const runVerb = vi.fn(async () => ({ Success: true, ResultCode: 'SUCCESS', Params: [{ Name: 'DocNumber', Value: 'BATCH-1', Type: 'Output' }] }));
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+
+    await AccountingERPEngine.Instance.PostJournalBatch(
+      taggedBatch(), taggedLines(), user, providerWith(bcViewsWithAccount({ Code: '41500', ExternalSystem: 'BusinessCentral', ExternalAccountID: '41507' })),
+    );
+
+    expect(postedLines(runVerb).map((l) => (l as { accountNumber?: string }).accountNumber)).toEqual(['41507', '41507']);
+  });
+
+  it('refuses to post, without calling BC, when an External Account ID is a BC account id', async () => {
+    const runVerb = vi.fn();
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+
+    const result = await AccountingERPEngine.Instance.PostJournalBatch(
+      taggedBatch(), taggedLines(), user, providerWith(bcViewsWithAccount({ Code: '41507', ExternalSystem: 'BusinessCentral', ExternalAccountID: BC_ACCOUNT_ID })),
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/GL account 41507: External Account ID .* is 36 characters; Business Central account numbers allow 20/);
+    expect(runVerb).not.toHaveBeenCalled();
+  });
+
+  // An External System left blank applies to every ERP, so the same id is refused when the batch targets BC.
+  it('refuses an over-long External Account ID with External System blank, too', async () => {
+    const runVerb = vi.fn();
+    AccountingERPEngine.Instance.UseSeams({ runVerb });
+
+    const result = await AccountingERPEngine.Instance.PostJournalBatch(
+      taggedBatch(), taggedLines(), user, providerWith(bcViewsWithAccount({ Code: '41507', ExternalSystem: null, ExternalAccountID: BC_ACCOUNT_ID })),
+    );
+
+    expect(result.success).toBe(false);
+    expect(runVerb).not.toHaveBeenCalled();
+  });
+
+  // The lookup builds the same lines; it must say it cannot answer, never report a mismatch it made up.
+  it('reports a lookup error, not a mismatch, when an External Account ID is a BC account id', async () => {
+    AccountingERPEngine.Instance.UseSeams({ runVerb: glEntriesVerb([glEntry(100, 0), glEntry(0, 100)]) });
+
+    const result = await AccountingERPEngine.Instance.FindPostedJournalBatch(
+      taggedBatch(), taggedLines(), user, providerWith(bcViewsWithAccount({ Code: '41507', ExternalSystem: 'BusinessCentral', ExternalAccountID: BC_ACCOUNT_ID })),
+    );
+
+    expect(result.status).toBe('Error');
   });
 });
 
@@ -1219,5 +1286,130 @@ describe('namesMatch', () => {
     expect(namesMatch('QuickBooks Online', 'BusinessCentral')).toBe(false);
     expect(namesMatch('HubSpot', 'BusinessCentral')).toBe(false);
     expect(namesMatch('business-central', null)).toBe(false);
+  });
+});
+
+describe('AccountingERPEngine.SyncMasterData — shared master data merges on Code (#268)', () => {
+  const DIMENSIONS = 'MJ_BizApps_Accounting: Dimensions';
+  const DIMENSION_VALUES = 'MJ_BizApps_Accounting: Dimension Values';
+
+  beforeEach(() => {
+    AccountingERPEngine.Instance.UseSeams({});
+    vi.spyOn(AccountingEngine.Instance, 'Config').mockResolvedValue();
+  });
+
+  function keyField(entityMapID: string, field: string, extra: Record<string, unknown> = {}) {
+    return { EntityMapID: entityMapID, DestinationFieldName: field, IsKeyField: true, Status: 'Active', ...extra };
+  }
+
+  /** One ERP connection with a GL Accounts, a Dimensions and a Dimension Values map, and these field maps. */
+  function viewsWith(fieldMaps: unknown[]): Record<string, unknown[]> {
+    return {
+      'MJ: Company Integrations': [
+        { ID: CI, CompanyID: COMPANY, IntegrationID: 'int-1', Integration: 'business-central', IsActive: true },
+      ],
+      'MJ: Company Integration Entity Maps': [
+        { ID: 'map-gl', CompanyIntegrationID: CI, Entity: 'MJ_BizApps_Accounting: GL Accounts', Status: 'Active', SyncEnabled: true },
+        { ID: 'map-dim', CompanyIntegrationID: CI, Entity: DIMENSIONS, Status: 'Active', SyncEnabled: true },
+        { ID: 'map-val', CompanyIntegrationID: CI, Entity: DIMENSION_VALUES, Status: 'Active', SyncEnabled: true },
+      ],
+      'MJ: Company Integration Field Maps': fieldMaps,
+      'MJ_BizApps_Accounting: Accounting Engine Extensions': [],
+    };
+  }
+
+  it('syncs when Dimensions match on Code and Dimension Values on DimensionID + Code', async () => {
+    const synced: string[][] = [];
+    AccountingERPEngine.Instance.UseSeams({ runSync: async (_id, _u, mapIds) => { synced.push(mapIds); return { Success: true }; } });
+    const p = providerWith(viewsWith([
+      keyField('map-dim', 'Code'),
+      keyField('MAP-VAL', 'code'),
+      keyField('map-val', 'DimensionID', { IsKeyField: 1 }),
+    ]));
+
+    const out = await AccountingERPEngine.Instance.SyncMasterData({}, user, p);
+
+    expect(out.Success).toBe(true);
+    expect(synced).toEqual([['map-gl', 'map-dim', 'map-val']]);
+  });
+
+  it('fails the connection before pulling anything when the Dimensions map has no Code key', async () => {
+    const synced: string[][] = [];
+    AccountingERPEngine.Instance.UseSeams({ runSync: async (_id, _u, mapIds) => { synced.push(mapIds); return { Success: true }; } });
+    const p = providerWith(viewsWith([
+      keyField('map-val', 'DimensionID'),
+      keyField('map-val', 'Code'),
+    ]));
+
+    const out = await AccountingERPEngine.Instance.SyncMasterData({}, user, p);
+
+    expect(synced).toEqual([]);
+    expect(out.Success).toBe(false);
+    expect(out.Results[0].Success).toBe(false);
+    expect(out.Results[0].Message).toMatch(/Entity map map-dim for MJ_BizApps_Accounting: Dimensions must match on key fields Code/);
+    expect(out.Results[0].Message).toMatch(/its active key fields are none/);
+    expect(out.Results[0].Message).not.toMatch(/map-val/);
+  });
+
+  it('refuses a Dimensions map keyed on more than Code, which would insert instead of merging', async () => {
+    AccountingERPEngine.Instance.UseSeams({ runSync: async () => ({ Success: true }) });
+    const p = providerWith(viewsWith([
+      keyField('map-dim', 'Code'),
+      keyField('map-dim', 'Name'),
+      keyField('map-val', 'DimensionID'),
+      keyField('map-val', 'Code'),
+    ]));
+
+    const out = await AccountingERPEngine.Instance.SyncMasterData({ Objects: ['dimensions'] }, user, p);
+
+    expect(out.Success).toBe(false);
+    expect(out.Results[0].Message).toMatch(/its active key fields are Code \+ Name/);
+  });
+
+  it('refuses a Dimension Values map keyed on Code alone, which merges values across Dimensions', async () => {
+    AccountingERPEngine.Instance.UseSeams({ runSync: async () => ({ Success: true }) });
+    const p = providerWith(viewsWith([
+      keyField('map-dim', 'Code'),
+      keyField('map-val', 'Code'),
+      keyField('map-val', 'DimensionID', { Status: 'Inactive' }),
+      keyField('map-val', 'Name', { IsKeyField: false }),
+    ]));
+
+    const out = await AccountingERPEngine.Instance.SyncMasterData({ Objects: ['dimensionValues'] }, user, p);
+
+    expect(out.Success).toBe(false);
+    expect(out.Results[0].Message).toMatch(/Entity map map-val for MJ_BizApps_Accounting: Dimension Values must match on key fields DimensionID \+ Code/);
+    expect(out.Results[0].Message).toMatch(/its active key fields are Code\./);
+  });
+
+  it('does not check key fields for an accounts-only sync', async () => {
+    const synced: string[][] = [];
+    AccountingERPEngine.Instance.UseSeams({ runSync: async (_id, _u, mapIds) => { synced.push(mapIds); return { Success: true }; } });
+    const p = providerWith(viewsWith([]));
+
+    const out = await AccountingERPEngine.Instance.SyncMasterData({ Objects: ['accounts'] }, user, p);
+
+    expect(out.Success).toBe(true);
+    expect(synced).toEqual([['map-gl']]);
+  });
+
+  it('fails the connection when the field maps cannot be read', async () => {
+    AccountingERPEngine.Instance.UseSeams({ runSync: async () => ({ Success: true }) });
+    const views = viewsWith([]);
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const p = {
+        RunView: async (params: { EntityName: string }) => params.EntityName === 'MJ: Company Integration Field Maps'
+          ? { Success: false, ErrorMessage: 'field maps timeout' }
+          : { Success: true, Results: views[params.EntityName] ?? [] },
+      } as never;
+
+      const out = await AccountingERPEngine.Instance.SyncMasterData({ Objects: ['dimensions'] }, user, p);
+
+      expect(out.Success).toBe(false);
+      expect(out.Results[0].Message).toMatch(/Field maps for entity maps map-dim failed to load: field maps timeout/);
+    } finally {
+      logged.mockRestore();
+    }
   });
 });

@@ -1,5 +1,39 @@
 # @mj-biz-apps/accounting-core-entities-server
 
+## 0.19.0
+
+### Patch Changes
+
+- 571a7a1: Auto-posting is restricted to the MJ system user (#269). `autoPostJournalEntryBatch` approves the batch as its context user with no approval Task, so until now any signed-in user who ran `Accounting.BuildJournalEntryBatches` with `AutoPost: true` could build, approve and post a batch without CFO approval. The new `assertAutoPostCaller` refuses any context user other than the system user the scheduled posting jobs run as, and refuses when the user cache does not hold the system user. `autoPostJournalEntryBatch` checks it before the build, and the action checks it before any company is read. A run without `AutoPost` is unchanged: it builds behind the approval gate for any user.
+- dd98450: `SyncMasterData` now checks, before it pulls, that the Dimensions entity map matches on exactly `Code` and the Dimension Values map on exactly `DimensionID` and `Code` (#268). Dimensions are shared by every company, so these keys make a second company's sync merge onto the existing row instead of colliding on `UQ_Dimension_Code`. A connection whose maps key on anything else fails with a message naming the map and the fix. `docs/ARCHITECTURE.md` §2.1 documents the full ERP master-data mapping contract, including the `AccountType` lookup transform.
+- f9e5be1: GenerateReversal dates a reversal on the later of today's business day and the original entry's EffectiveDate, so reversing a future-dated entry no longer lands the reversal in an earlier period (#266).
+- 6f1515e: The deferred-revenue waterfall adds a "Recognized YTD" KPI (#231): entries recognized between the first day of the company's fiscal year and the business day, inclusive. The fiscal-year start comes from the company's Accounting Company Profile, 1 January when it has none. The rule (`FiscalYearOf`, `IsInFiscalYearToDate`, `AccountingEngineBase.FiscalYearStartFor`) moves to accounting-engine-base, and journal-entry numbering now uses it too, with no change in the fiscal years it assigns.
+- Updated dependencies [6f1515e]
+  - @mj-biz-apps/accounting-engine-base@0.19.0
+  - @mj-biz-apps/accounting-entities@0.19.0
+
+## 0.18.0
+
+### Patch Changes
+
+- 905d1c0: A Business Central account's External Account ID must be a BC account number (bc-aidp-next-golive#282).
+
+  For Business Central, `GLAccount.ExternalAccountID` is the BC account number the account posts under: the remap for an account whose `Code` (immutable) is not its BC number. Blank posts under the `Code`. Dispatch has always sent it as the journal line's `accountNumber`. The AIDP Next data conversion wrote BC's account id there instead, a 36-character GUID, which BC's `accountNumber` (20 characters at most) would reject on every batch.
+
+  - **At save.** A GL account with External System `BusinessCentral` and an External Account ID longer than 20 characters is refused, naming the account and saying to enter the BC account number or clear the field.
+  - **At dispatch.** A batch bound for Business Central whose GL account resolves to an External Account ID longer than 20 characters is refused before BC is called, with the same message. The pre-send lookup reports it as an error rather than a mismatch. This also covers accounts with External System blank, and accounts already saved with an id.
+  - `BusinessCentralAccountNumberError` and `BUSINESS_CENTRAL_ACCOUNT_NUMBER_MAX_LENGTH` are exported from `GLAccountEntityServer`.
+
+  Accounts already holding BC's account id need their External Account ID cleared, or set to the BC account number (for converted accounts, their `Code`), before a batch posts to Business Central.
+
+- a08677e: The journal entry anomaly models no longer carry `ArtifactFileID` in `metadata/ml-models/.ml-models.json`. The key was set to null, and push writes every key it finds, nulls included, so pushing to the host where a model was trained cleared its link to the trained artifact. With the key absent, a fresh database gets null and an existing value is left alone. `ml-models/.mj-sync.json` now excludes `ArtifactFileID` on pull so the next pull does not write the File ID back (bizapps-accounting#222).
+
+  The `Validate Changes` workflow now fails when a folder under `metadata/` is missing from `directoryOrder` in `metadata/.mj-sync.json`.
+
+- Updated dependencies [cc21d7c]
+  - @mj-biz-apps/accounting-entities@0.18.0
+  - @mj-biz-apps/accounting-engine-base@0.18.0
+
 ## 0.17.0
 
 ### Minor Changes

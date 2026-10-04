@@ -10,6 +10,10 @@
             <span class="mja-kpi-val mja-val--green">{{ FormatMoney(Summary.TotalRecognizedToDate) }} ({{ Summary.PercentRecognized.toFixed(1) }}%)</span>
         </div>
         <div class="mja-kpi-card">
+            <span class="mja-kpi-label">Recognized YTD</span>
+            <span class="mja-kpi-val mja-val--green">{{ FormatMoney(Summary.TotalRecognizedYTD) }}</span>
+        </div>
+        <div class="mja-kpi-card">
             <span class="mja-kpi-label">Remaining Unearned</span>
             <span class="mja-kpi-val mja-val--amber">{{ FormatMoney(Summary.TotalRemainingUnearned) }}</span>
         </div>

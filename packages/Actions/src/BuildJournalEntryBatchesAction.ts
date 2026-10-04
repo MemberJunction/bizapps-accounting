@@ -3,6 +3,7 @@ import { ActionResultSimple, RunActionParams } from '@memberjunction/actions-bas
 import { BaseAction } from '@memberjunction/actions';
 import { RegisterClass } from '@memberjunction/global';
 import {
+  assertAutoPostCaller,
   assertAutoPostPolicy,
   autoPostJournalEntryBatch,
   buildJournalEntryBatch,
@@ -30,7 +31,8 @@ import { AddDays, BusinessTimeZoneEngine, CalendarDayIn, FromCalendarDay, LastDa
  *     land `Pending` and wait for a human decision. Nothing about this path changed.
  *   - AutoPost (unattended, A-US5/A-US6): build → approve → dispatch to the ERP per company through
  *     the engine's `autoPostJournalEntryBatch`, which holds the scheduled-posting approval waiver and
- *     its include-list policy (`assertAutoPostPolicy`, also checked here before any company is read).
+ *     its include-list policy (`assertAutoPostPolicy`) and its system-user restriction
+ *     (`assertAutoPostCaller`, #269); both are also checked here before any company is read.
  *     No caller passes a gate into a send (#233).
  *
  * `CutoffMode` exists because scheduled-job action params are Static or SQL-Statement only, with no
@@ -48,6 +50,7 @@ export class BuildJournalEntryBatchesAction extends BaseAction {
     const user = params.ContextUser;
     const targetSystem = readParam<JournalEntryBatchTargetSystem>(params, 'TargetSystem') ?? 'BusinessCentral';
     const autoPost = isTrue(readParam<boolean | string>(params, 'AutoPost'));
+    if (autoPost) assertAutoPostCaller(user);
     await BusinessTimeZoneEngine.Instance.Config(false, user, provider);
     const options = readBatchOptions(params);
     if (autoPost) assertAutoPostPolicy(options);

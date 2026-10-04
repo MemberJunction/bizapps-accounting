@@ -9,7 +9,7 @@
  * 2026-07-06 rework (engine-meeting rulings): AccountingPeriod is GONE (the ERP owns
  * periods — CH-1), and JE/batch numbering is GLOBAL, not company-scoped (D-SEQ):
  *
- *   R1  GLAccountRole reference data: exactly the 9 seeded roles, in sequence order
+ *   R1  GLAccountRole reference data: exactly the 12 seeded roles, in sequence order
  *        (proves the migrations-only deploy carried the metadata-sync seed).
  *   W1  AccountingCompanyProfile first-save seeding (AccountingCompanyProfileEntityServer):
  *        1. create + Save() succeeds
@@ -72,6 +72,7 @@ const BATCH_TABLE = `${SCHEMA}.JournalEntryBatch`;
 const EXPECTED_CODES = ['11101', '11201', '21201', '21301', '21401', '21402', '40100', '40200', '50400', '50500'];
 const EXPECTED_ROLES: ReadonlyArray<{ sequence: number; name: string }> = [
   { sequence: 10, name: 'Cash' },
+  { sequence: 15, name: 'BankAccount' },
   { sequence: 20, name: 'Accounts Receivable' },
   { sequence: 30, name: 'Inventory' },
   { sequence: 40, name: 'Cost of Goods Sold' },
@@ -80,6 +81,8 @@ const EXPECTED_ROLES: ReadonlyArray<{ sequence: number; name: string }> = [
   { sequence: 70, name: 'Sales Returns and Allowances' },
   { sequence: 80, name: 'Deferred Revenue' },
   { sequence: 90, name: 'Processing Fee' },
+  { sequence: 100, name: 'Unbilled Receivable' },
+  { sequence: 110, name: 'Customer Deposits' },
 ];
 
 const RUN_TAG = `BLOCK0-${Date.now()}`;
@@ -172,7 +175,7 @@ async function main(): Promise<void> {
   const createdBatchIds: string[] = [];
 
   // ─── R1 — GL account role reference data (metadata-sync seed) ─────────────
-  await test('R1 GLAccountRole reference data — exactly the 9 seeded roles, in sequence', async () => {
+  await test('R1 GLAccountRole reference data — exactly the 12 seeded roles, in sequence', async () => {
     const rv = new RunView();
     const res = await rv.RunView<{ Name: string; Sequence: number; Status: string }>(
       { EntityName: ROLE_ENTITY, Fields: ['Name', 'Sequence', 'Status'], OrderBy: 'Sequence ASC', ResultType: 'simple' }, user);
