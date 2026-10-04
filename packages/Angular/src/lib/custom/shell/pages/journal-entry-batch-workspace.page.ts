@@ -4,6 +4,7 @@ import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import { BusinessTimeZoneEngine, IsBeforeDay, IsCalendarDay, ToCalendarDay } from '@mj-biz-apps/common-entities';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
+import { PostingDateMonthWarning, PostingMonthLabel } from '../../shared/posting-date-warning';
 import { CompanyScopeService } from '../../shared/company-scope.service';
 import { WorkspaceTabStore } from '../../../transfer-pending/workspace-tabs/workspace-tab-store';
 import { WorkspaceTab } from '../../../transfer-pending/workspace-tabs/workspace-tabs.types';
@@ -411,12 +412,44 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
   // ─── build ─────────────────────────────────────────────────────────────────
 
   public get CanBuild(): boolean {
-    return !!this.Preview && this.IncludedCount > 0 && !this.IsBuilding && !this.IsBuilt && this.IsBalanced && !this.PostingDateProblem;
+    return !!this.Preview && this.IncludedCount > 0 && !this.IsBuilding && !this.IsBuilt && this.IsBalanced && !this.PostingDateProblem
+      && (!this.PostingDateWarning || this.PostingDateConfirmed);
   }
 
-  /** Today's business day — the latest posting date the date input offers. */
+  /** Today's business day. */
   public get Today(): string {
     return BusinessTimeZoneEngine.Instance.Today();
+  }
+
+  /** The draft tab and posting date whose prior/future-month warning was confirmed; any other asks again. */
+  private confirmedPostingDate: { tabId: string; day: string } | null = null;
+
+  /** "Are you sure?" text when the posting date is in a prior or future month (golive #315), or null. */
+  public get PostingDateWarning(): string | null {
+    return PostingDateMonthWarning(this.Draft?.Criteria.PostingDate, this.Today);
+  }
+
+  /** The posting date's month, e.g. `September 2026`, for the confirmation label. */
+  public get PostingMonth(): string {
+    const postingDate = this.Draft?.Criteria.PostingDate;
+    return postingDate && IsCalendarDay(postingDate) ? PostingMonthLabel(postingDate) : '';
+  }
+
+  /** True when the current posting date's month warning has been confirmed. */
+  public get PostingDateConfirmed(): boolean {
+    const c = this.confirmedPostingDate;
+    return !!c && c.tabId === this.tabs.ActiveId && c.day === this.Draft?.Criteria.PostingDate;
+  }
+
+  public ConfirmPostingDate(confirmed: boolean): void {
+    const tabId = this.tabs.ActiveId;
+    const day = this.Draft?.Criteria.PostingDate;
+    this.confirmedPostingDate = confirmed && tabId && day ? { tabId, day } : null;
+    this.cdr.markForCheck();
+  }
+
+  public OnPostingDateConfirmChange(event: Event): void {
+    this.ConfirmPostingDate((event.target as HTMLInputElement).checked);
   }
 
   /**
@@ -427,7 +460,6 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
   public get PostingDateProblem(): string | null {
     const postingDate = this.Draft?.Criteria.PostingDate ?? null;
     if (!postingDate || !IsCalendarDay(postingDate)) return 'Choose a posting date.';
-    if (IsBeforeDay(this.Today, postingDate)) return `The posting date ${postingDate} is in the future — choose today or an earlier day.`;
     const latest = this.latestIncludedDay();
     if (latest && IsBeforeDay(postingDate, latest)) {
       return `The posting date ${postingDate} is earlier than an included entry dated ${latest} — move it to ${latest} or later, or apply the filters again.`;
@@ -452,7 +484,9 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
     if (!this.Preview || this.Preview.Candidates.length === 0) return 'Nothing matches these criteria.';
     if (this.IncludedCount === 0) return 'Every entry is excluded — nothing to build.';
     if (!this.IsBalanced) return 'The selection does not balance (Dr ≠ Cr) — it would be rejected by the ledger.';
-    return this.PostingDateProblem;
+    if (this.PostingDateProblem) return this.PostingDateProblem;
+    if (this.PostingDateWarning && !this.PostingDateConfirmed) return `Confirm posting this batch in ${this.PostingMonth}.`;
+    return null;
   }
 
   public async Build(): Promise<void> {

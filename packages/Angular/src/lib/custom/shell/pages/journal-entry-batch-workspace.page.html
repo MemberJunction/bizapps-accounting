@@ -110,7 +110,6 @@
         <input
           type="date"
           class="mj-input"
-          [max]="Today"
           [(ngModel)]="Draft.Criteria.PostingDate"
           (ngModelChange)="OnCriteriaChanged()"
           [disabled]="IsBuilt" />
@@ -120,6 +119,24 @@
           <span class="bw-hint">The journal date {{ Draft.Criteria.TargetSystem }} receives. Entries dated after it wait for a later batch.</span>
         }
       </label>
+
+      <!-- A prior or future month is allowed but confirmed: the ERP books the batch in that month. -->
+      @if (PostingDateWarning && !IsBuilt) {
+        <div class="bw-warn bw-posting-warning" role="alert">
+          <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+          <div>
+            {{ PostingDateWarning }}
+            <label class="bw-posting-confirm">
+              <input
+                type="checkbox"
+                class="mj-checkbox"
+                [checked]="PostingDateConfirmed"
+                (change)="OnPostingDateConfirmChange($event)" />
+              Yes, post this batch in {{ PostingMonth }}
+            </label>
+          </div>
+        </div>
+      }
 
       <label class="bw-field">
         <span>Company</span>

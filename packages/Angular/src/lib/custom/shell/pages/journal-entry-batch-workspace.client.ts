@@ -120,7 +120,7 @@ export class JournalEntryBatchWorkspaceClient {
         Source: 'Explicit',
         JournalEntryIDs: includedIds,
         // The posting date is NOT dead payload: it is the date the batch carries to the ERP. The
-        // server refuses it in the future or earlier than any of these entries.
+        // server refuses it when it is earlier than any of these entries.
         PostingDate: this.toWireDay(criteria.PostingDate),
       },
     );

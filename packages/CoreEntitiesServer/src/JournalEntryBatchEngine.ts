@@ -57,7 +57,7 @@
  * one-transaction-per-batch guarantee (D10 rev. 2026-07-29) is here too: build + summary +
  * locks + approval task + ApprovalTaskID stamp commit all-or-none in one provider transaction.
  * PostingDate is the caller's choice (`postingDate`, golive #315), defaulting to today's BUSINESS
- * day; never in the future, never before a member entry, and it bounds the candidate pool.
+ * day; never before a member entry, and it bounds the candidate pool.
  *
  * CONNECTS TO:
  *   READS/WRITES: Journal Entries (members + the JournalEntryBatchSummary JE) · Journal Entry Lines
@@ -374,7 +374,7 @@ export interface BuildJournalEntryBatchOptions {
   /** Exclude these JournalEntryType CODES (e.g. 'RevenueRecognition'). Omit/empty = no exclusions. */
   excludeEntryTypeCodes?: string[] | null;
   /** The batch's PostingDate — the journal date the ERP receives (golive #315). Same shapes as
-   *  `cutoff`; omit for today's business day. Never in the future. It also bounds the candidate pool:
+   *  `cutoff`; omit for today's business day. It also bounds the candidate pool:
    *  an entry dated after the posting date is never a candidate, cutoff or not. */
   postingDate?: DateBound | null;
 }
