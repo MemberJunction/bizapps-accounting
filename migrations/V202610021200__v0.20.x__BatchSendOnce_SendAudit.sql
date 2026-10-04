@@ -1,238 +1,197 @@
 -- =============================================================================
--- Migration: V202610021230__v0.19.x__JournalEntryLineDimension_Immutability_SealMismatch.sql
--- Description: #216 — dimension tags on a locked journal entry line are frozen,
---              and a batch records when a retry found it posted in the ERP
---              although its approved-content seal no longer matched.
+-- Migration: V202610021200__v0.20.x__BatchSendOnce_SendAudit.sql
+-- Description: #184 — a batch can be sent only from Approved or Failed, one
+--              send at a time, and every send records who made it and which
+--              attempt it was.
 -- =============================================================================
 --
 -- WHY
 --
--- A batch's approved-content seal (ApprovedContentHash) covers every summary
--- line's dimension tags. Every other part of what it covers is already frozen
--- by a trigger once the batch is approved — the header by
--- trg_JournalEntryBatch_Immutability, the summary entry by
--- trg_JournalEntry_Immutability, its lines by trg_JEL_Immutability — but
--- JournalEntryLineDimension rows were not. A tag edited on a locked line broke
--- the seal, and a Failed batch whose journal had in fact reached the ERP could
--- then be neither retried (the seal refused it) nor cancelled (the ERP lookup
--- found the posting): it could only be archived.
+-- sendJournalEntryBatch reads the batch's Status, checks it is sendable, then
+-- saves Status='Sent'. The generated spUpdate is a blind UPDATE ... WHERE ID=@ID,
+-- so nothing ties that write to the status the send read. Two retries of one
+-- Failed batch, started close together, both read Failed, both write Sent, and
+-- both call the ERP: two journals.
 --
--- WHAT CHANGES
+-- The entity layer cannot catch this. The second writer's Status OldValue is
+-- the Failed it loaded, so its Failed -> Sent looks legal to Validate(). The row
+-- lock on the UPDATE is the only place the two sends meet, so the refusal lives
+-- in a trigger, and it has to hold whatever the first send has reached by the
+-- time the second one's UPDATE lands:
 --
--- 1. trg_JELD_Immutability refuses insert, update and delete of a dimension tag
---    on a line whose journal entry is Batched or GLPosted, as
---    trg_JEL_Immutability does for the line itself. Corrections are reversal
---    entries, as for lines.
+--   still Sent          the second UPDATE keeps the row Sent. Nothing keeps a
+--                       batch Sent on purpose — every write to a Sent batch
+--                       moves it to Posted or Failed — so a top-level UPDATE
+--                       that leaves a Sent row Sent is refused. That includes
+--                       one whose stamp matches the first send's exactly, the
+--                       same millisecond from the same user.
+--   Posted, or Failed   the second UPDATE writes the SendAttemptCount it
+--   again               computed from its stale load, which the first send
+--                       has already used. A send is valid only from Approved or
+--                       Failed, and only as the count's next value, so it is
+--                       refused. SendAttemptCount is the version token.
 --
--- 2. JournalEntryBatch.SealMismatchDetectedAt: when a Failed batch's retry finds
---    its journal already in the ERP, the batch is recorded Posted with no second
---    post even though the seal no longer matches (nothing is sent, and the ERP
---    holds what was approved). This column records when that happened, so the
---    batch can be listed and its local tags reviewed. NULL on every other batch.
---    Existing rows stay NULL.
+-- The losing save fails with 50030, and sendJournalEntryBatch throws
+-- JournalEntryBatchSendRefusedError before it calls the ERP.
 --
--- 3. The flag is frozen. trg_JournalEntryBatch_Immutability (50034) lets
---    SealMismatchDetectedAt be set only by the update that records a retried
---    batch Posted (Sent -> Posted with SendAttemptCount above 1), and refuses any
---    later change or clear and any insert that carries it. It is the review
---    record, so no save may stamp it on a batch that was not adopted this way or
---    erase it from one that was. trg_JournalEntryBatch_SendOnce keeps its First
---    firing order: only this trigger is altered.
+-- The send stamp — SentAt, SentByUserID, SendAttemptCount — changes only on a
+-- valid send, so a Posted batch's count or sender cannot be edited afterwards.
+-- SentAt is compared at millisecond precision: the entity writes JavaScript
+-- dates, and an exact comparison misfires on a value SQL wrote with sub-ms digits.
 --
--- Every rule in both triggers THROWs with no ROLLBACK TRANSACTION first, as
--- V202610011000 (#211) left the batch trigger. A dimension tag or a batch is
--- saved by the entity's spCreate / spUpdate / spDelete, which the provider runs
--- inside INSERT-EXEC, where a ROLLBACK in the trigger is itself an error (3915)
--- and the caller would get that in place of the message. A trigger runs with
--- XACT_ABORT on, so THROW alone rolls the statement back.
+-- The UPDATE that CodeGen's trgUpdateJournalEntryBatch makes to set
+-- __mj_UpdatedAt fires this trigger again, with the row already Sent. It changes
+-- nothing else, so it is let through by name. If that trigger does not exist
+-- (between CodeGen's DROP and CREATE inside a migration), OBJECT_ID is NULL and
+-- TRIGGER_NESTLEVEL(NULL, ...) counts every trigger on the stack, so the bypass
+-- is skipped rather than evaluated against NULL.
 --
--- Dimension tags already edited on locked lines are not re-checked: the rule
--- applies to changes from now on.
+-- FIRED FIRST. trg_JournalEntryBatch_Immutability also refuses Posted -> Sent
+-- and Cancelled -> Sent, with ROLLBACK + THROW. SQL Server does not define the
+-- order of AFTER triggers; if that one fires first, the caller gets 3915 in
+-- place of 50030 and the refused send is not recognised as one. Section 4 sets
+-- this trigger First for UPDATE. SQL Server drops that setting when this trigger
+-- itself is altered or dropped and recreated, so any later migration that does
+-- either must run sp_settriggerorder again. Recreating other triggers keeps it.
+--
+-- THROW with no ROLLBACK TRANSACTION first. The entity's save runs spUpdate
+-- inside INSERT-EXEC, where a ROLLBACK is itself an error (3915) and the caller
+-- would get that in place of the message below. A trigger runs with XACT_ABORT
+-- on, so THROW alone rolls the update back.
+--
+-- A SEPARATE TRIGGER, not a branch of trg_JournalEntryBatch_Immutability: that
+-- trigger is replaced wholesale (CREATE OR ALTER) by each migration that widens
+-- its status lists. Keeping this rule in its own object means neither change can
+-- silently drop the other.
+--
+-- SentByUserID and SendAttemptCount are the audit trail on the row itself. The
+-- full history of each attempt (the ErrorMessage a later success clears, every
+-- overwritten SentAt) is in __mj.RecordChange: the entity tracks record changes.
+--
+-- SET-BASED UPDATES IN LATER MIGRATIONS: "nothing keeps a batch Sent" refuses
+-- any top-level UPDATE of JournalEntryBatch that touches a Sent row, a backfill
+-- included. Add WHERE Status <> 'Sent', or disable this trigger around it.
 --
 -- This runs once, in order, against a database that has every earlier migration.
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
--- 1. Dimension tags on a locked journal entry line are frozen
+-- 1. Who sent it, and how many times
 -- -----------------------------------------------------------------------------
-CREATE TRIGGER __mj_BizAppsAccounting.trg_JELD_Immutability
-ON __mj_BizAppsAccounting.JournalEntryLineDimension
-AFTER INSERT, UPDATE, DELETE
+ALTER TABLE __mj_BizAppsAccounting.JournalEntryBatch ADD
+    SentByUserID      UNIQUEIDENTIFIER NULL,
+    SendAttemptCount  INT              NOT NULL CONSTRAINT DF_JournalEntryBatch_SendAttemptCount DEFAULT 0,
+    CONSTRAINT FK_JournalEntryBatch_SentBy FOREIGN KEY (SentByUserID) REFERENCES __mj.[User](ID),
+    CONSTRAINT CK_JournalEntryBatch_SendAttemptCount CHECK (SendAttemptCount >= 0);
+GO
+
+-- -----------------------------------------------------------------------------
+-- 2. A batch that has been sent was sent at least once
+-- -----------------------------------------------------------------------------
+-- The true count for an existing batch is not recoverable from the row: a retry
+-- overwrote SentAt. 1 is the floor, and it keeps a Posted batch from reading as
+-- never sent. SentByUserID stays NULL — unknown, not asserted. Runs before the
+-- trigger exists.
+-- -----------------------------------------------------------------------------
+UPDATE __mj_BizAppsAccounting.JournalEntryBatch
+SET SendAttemptCount = 1
+WHERE SentAt IS NOT NULL;
+GO
+
+-- -----------------------------------------------------------------------------
+-- 3. One send at a time, from Approved or Failed, each the count's next value
+-- -----------------------------------------------------------------------------
+CREATE TRIGGER __mj_BizAppsAccounting.trg_JournalEntryBatch_SendOnce
+ON __mj_BizAppsAccounting.JournalEntryBatch
+AFTER UPDATE
 AS
 BEGIN
     SET NOCOUNT ON;
+    DECLARE @CodeGenUpdateTrigger INT = OBJECT_ID(N'__mj_BizAppsAccounting.trgUpdateJournalEntryBatch');
+    IF @CodeGenUpdateTrigger IS NOT NULL AND TRIGGER_NESTLEVEL(@CodeGenUpdateTrigger, 'AFTER', 'DML') > 0 RETURN;
+
+    -- Still Sent: another dispatch holds the batch.
     IF EXISTS (
-        SELECT 1
-          FROM __mj_BizAppsAccounting.JournalEntryLine jel
-          JOIN __mj_BizAppsAccounting.JournalEntry je ON je.ID = jel.JournalEntryID
-         WHERE jel.ID IN (SELECT JournalEntryLineID FROM inserted UNION SELECT JournalEntryLineID FROM deleted)
-           AND je.Status IN ('Batched','GLPosted')
+        SELECT 1 FROM deleted d JOIN inserted i ON i.ID = d.ID
+        WHERE d.Status = 'Sent' AND i.Status = 'Sent'
     )
-        THROW 50033, 'JournalEntryLineDimension on a locked JournalEntry (Status=Batched/GLPosted) cannot be inserted, modified, or deleted. Use the reversal pattern.', 1;
+        THROW 50030, 'JournalEntryBatch send refused: the batch is already Sent. An update to a Sent batch must move it to Posted or Failed; if a dispatch is in progress, wait for its outcome.', 1;
+
+    -- Entering Sent: only from Approved or Failed, and only as the count's next value.
+    IF EXISTS (
+        SELECT 1 FROM deleted d JOIN inserted i ON i.ID = d.ID
+        WHERE i.Status = 'Sent' AND d.Status <> 'Sent'
+          AND (d.Status NOT IN ('Approved', 'Failed') OR i.SendAttemptCount <> d.SendAttemptCount + 1)
+    )
+        THROW 50030, 'JournalEntryBatch send refused: a send must start from Approved or Failed and advance SendAttemptCount by one. The batch has been sent since this send loaded it.', 1;
+
+    -- Not a send: the send stamp stays as it is.
+    IF EXISTS (
+        SELECT 1 FROM deleted d JOIN inserted i ON i.ID = d.ID
+        WHERE NOT (i.Status = 'Sent' AND d.Status <> 'Sent')
+          AND (
+            i.SendAttemptCount <> d.SendAttemptCount OR
+            ISNULL(i.SentByUserID, '00000000-0000-0000-0000-000000000000') <> ISNULL(d.SentByUserID, '00000000-0000-0000-0000-000000000000') OR
+            (i.SentAt IS NULL AND d.SentAt IS NOT NULL) OR (i.SentAt IS NOT NULL AND d.SentAt IS NULL) OR
+            ABS(DATEDIFF_BIG(MICROSECOND, d.SentAt, i.SentAt)) >= 1000
+          )
+    )
+        THROW 50030, 'JournalEntryBatch send refused: SentAt, SentByUserID and SendAttemptCount change only when the batch is sent.', 1;
 END;
 GO
 
 -- -----------------------------------------------------------------------------
--- 2. When a retry adopted the ERP's posting over a broken seal
+-- 4. Fire before trg_JournalEntryBatch_Immutability, so a refused send reports 50030
 -- -----------------------------------------------------------------------------
-ALTER TABLE __mj_BizAppsAccounting.JournalEntryBatch ADD
-    SealMismatchDetectedAt DATETIMEOFFSET NULL;
+EXEC sp_settriggerorder
+    @triggername = N'__mj_BizAppsAccounting.trg_JournalEntryBatch_SendOnce',
+    @order = N'First',
+    @stmttype = N'UPDATE';
+GO
+
+-- -----------------------------------------------------------------------------
+-- 5. Column descriptions — CodeGen carries these into EntityField.Description
+-- -----------------------------------------------------------------------------
+EXEC sp_updateextendedproperty @name = N'MS_Description',
+    @value = N'When the batch last entered Sent. A retry overwrites it; SendAttemptCount counts the sends, and __mj.RecordChange keeps each earlier value.',
+    @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'SentAt';
 GO
 
 EXEC sp_addextendedproperty @name = N'MS_Description',
-    @value = N'When a retry of this Failed batch found its journal already in the ERP and recorded it Posted, with no second post, although the batch no longer matched its approved-content seal (a summary line''s dimension tags changed after approval). The local tags then differ from what the ERP holds; review them. NULL when the seal matched or the batch was never adopted this way.',
-    @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'SealMismatchDetectedAt';
+    @value = N'User whose dispatch last moved the batch into Sent. Stamped on every send; changes at no other time. NULL for batches sent before this column existed.',
+    @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'SentByUserID';
 GO
 
--- -----------------------------------------------------------------------------
--- 3. SealMismatchDetectedAt is set once, by the retry that records the batch Posted
--- -----------------------------------------------------------------------------
--- trg_JournalEntryBatch_Immutability is the V202610021220 (PendingCancelTeardownGate)
--- body verbatim, plus INSERT among its events and the SEAL MISMATCH rule (50034)
--- at the end. The earlier rules join inserted to deleted, or need deleted with no
--- inserted, so an insert reaches only the new rule.
-CREATE OR ALTER TRIGGER __mj_BizAppsAccounting.trg_JournalEntryBatch_Immutability
-ON __mj_BizAppsAccounting.JournalEntryBatch
-AFTER INSERT, UPDATE, DELETE
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    -- DELETE: an approved batch is never deleted, and neither is the record that one was cancelled.
-    IF NOT EXISTS (SELECT 1 FROM inserted) AND EXISTS (
-        SELECT 1 FROM deleted
-        WHERE Status IN ('Approved','Sent','Posted','Failed','Archived')
-           OR (Status = 'Cancelled' AND ApprovedAt IS NOT NULL)
-    )
-    BEGIN
-        THROW 50008, 'JournalEntryBatch cannot be deleted once Status is Approved, Sent, Posted, Failed, or Archived, or once it was cancelled after approval. Cancel it instead.', 1;
-    END;
-
-    -- STATUS: Cancelled releases entries, so only Pending / Approved / Failed may reach it, a batch
-    -- reaches it only with its summary pointer cleared (by the same update, or by regenerate's
-    -- teardown before it), and the terminal statuses never change again. Nothing moves back to
-    -- Pending (a Pending batch's members can be released by any journal entry save), only a Pending
-    -- batch is approved, and a Sent batch is not archived (it may still be posting in the ERP).
-    -- Posted and Failed are the outcomes of a send, so only a Sent batch reaches them; -> Sent is
-    -- policed by trg_JournalEntryBatch_SendOnce (50030).
-    IF EXISTS (
-        SELECT 1
-        FROM deleted d
-        JOIN inserted i ON i.ID = d.ID
-        WHERE i.Status <> d.Status
-          AND (
-            d.Status IN ('Posted','Cancelled','Archived')
-            OR i.Status = 'Pending'
-            OR (i.Status = 'Approved' AND d.Status <> 'Pending')
-            OR (i.Status = 'Archived' AND d.Status NOT IN ('Pending','Approved','Failed'))
-            OR (i.Status = 'Cancelled' AND d.Status NOT IN ('Pending','Approved','Failed'))
-            OR (i.Status = 'Cancelled' AND i.SummaryJournalEntryID IS NOT NULL)
-            OR (i.Status IN ('Posted','Failed') AND d.Status <> 'Sent')
-          )
-    )
-    BEGIN
-        THROW 50031, 'JournalEntryBatch status change refused. Posted, Cancelled and Archived are terminal; no batch returns to Pending; only a Pending batch is approved; Posted and Failed are reachable only from Sent; Archived is reachable only from Pending, Approved or Failed; Cancelled is reachable only from Pending, Approved or Failed; and a batch is cancelled only with its summary pointer cleared (JournalEntryBatchEntityServer.Cancel).', 1;
-    END;
-
-    -- AUDIT: the cancel audit and the ERP check are written only by the update that cancels the
-    -- batch, so no other save can stamp a "not posted in the ERP" record on it; and SentAt, once set,
-    -- is never cleared, because it is the evidence CK_JournalEntryBatch_CancelERPCheck keys on. A
-    -- retry re-stamps SentAt with a new time, which is allowed.
-    IF EXISTS (
-        SELECT 1
-        FROM deleted d
-        JOIN inserted i ON i.ID = d.ID
-        WHERE (d.SentAt IS NOT NULL AND i.SentAt IS NULL)
-           OR (
-               NOT (i.Status = 'Cancelled' AND d.Status <> 'Cancelled')
-               AND (
-                   ISNULL(i.CancelReason,                  N'')                                    <> ISNULL(d.CancelReason,                  N'')                                    OR
-                   (CASE WHEN i.CancelledAt IS NULL AND d.CancelledAt IS NULL THEN 0 WHEN i.CancelledAt IS NULL OR d.CancelledAt IS NULL THEN 1 WHEN ABS(DATEDIFF_BIG(MICROSECOND, i.CancelledAt, d.CancelledAt)) >= 1000 THEN 1 ELSE 0 END) = 1 OR
-                   ISNULL(i.CancelledByUserID,             '00000000-0000-0000-0000-000000000000') <> ISNULL(d.CancelledByUserID,             '00000000-0000-0000-0000-000000000000') OR
-                   (CASE WHEN i.ERPNotPostedConfirmedAt IS NULL AND d.ERPNotPostedConfirmedAt IS NULL THEN 0 WHEN i.ERPNotPostedConfirmedAt IS NULL OR d.ERPNotPostedConfirmedAt IS NULL THEN 1 WHEN ABS(DATEDIFF_BIG(MICROSECOND, i.ERPNotPostedConfirmedAt, d.ERPNotPostedConfirmedAt)) >= 1000 THEN 1 ELSE 0 END) = 1 OR
-                   ISNULL(i.ERPNotPostedConfirmedByUserID, '00000000-0000-0000-0000-000000000000') <> ISNULL(d.ERPNotPostedConfirmedByUserID, '00000000-0000-0000-0000-000000000000') OR
-                   ISNULL(i.ERPNotPostedBasis,             N'')                                    <> ISNULL(d.ERPNotPostedBasis,             N'')
-               )
-           )
-    )
-    BEGIN
-        THROW 50032, 'JournalEntryBatch audit refused. CancelReason / CancelledAt / CancelledByUserID and ERPNotPostedConfirmedAt / ERPNotPostedConfirmedByUserID / ERPNotPostedBasis are written only by the update that cancels the batch, and SentAt is never cleared once set.', 1;
-    END;
-
-    -- CONTENT: frozen from approval on, Failed and Cancelled included. The timestamps this migration
-    -- freezes compare at millisecond precision: every entity save writes each column back through a
-    -- JavaScript Date, so a value written by SQL with sub-millisecond digits would otherwise read as
-    -- changed on the next ordinary save.
-    IF EXISTS (
-        SELECT 1
-        FROM deleted d
-        JOIN inserted i ON i.ID = d.ID
-        WHERE d.Status IN ('Approved','Sent','Posted','Failed','Archived','Cancelled')
-          AND (
-            i.JournalEntryBatchNumber          <> d.JournalEntryBatchNumber          OR
-            i.CompanyID            <> d.CompanyID            OR
-            i.PostingDate          <> d.PostingDate          OR
-            -- The summary pointer is frozen, except for the one sanctioned change: an Approved or
-            -- Failed batch clearing it in the same update that marks it Cancelled.
-            (
-                ISNULL(i.SummaryJournalEntryID, '00000000-0000-0000-0000-000000000000') <> ISNULL(d.SummaryJournalEntryID, '00000000-0000-0000-0000-000000000000')
-                AND NOT (
-                    d.Status IN ('Approved','Failed')
-                    AND i.Status = 'Cancelled'
-                    AND i.SummaryJournalEntryID IS NULL
-                )
-            ) OR
-            ISNULL(i.ApprovalTaskID,        '00000000-0000-0000-0000-000000000000') <> ISNULL(d.ApprovalTaskID,        '00000000-0000-0000-0000-000000000000') OR
-            (CASE WHEN i.ApprovedAt IS NULL AND d.ApprovedAt IS NULL THEN 0 WHEN i.ApprovedAt IS NULL OR d.ApprovedAt IS NULL THEN 1 WHEN ABS(DATEDIFF_BIG(MICROSECOND, i.ApprovedAt, d.ApprovedAt)) >= 1000 THEN 1 ELSE 0 END) = 1 OR
-            ISNULL(i.ApprovedByUserID,      '00000000-0000-0000-0000-000000000000') <> ISNULL(d.ApprovedByUserID,      '00000000-0000-0000-0000-000000000000') OR
-            ISNULL(i.ApprovedContentHash,   N'')                                    <> ISNULL(d.ApprovedContentHash,   N'')                                    OR
-            i.TargetSystem         <> d.TargetSystem         OR
-            i.BatchedAt            <> d.BatchedAt            OR
-            i.BatchedByUserID      <> d.BatchedByUserID      OR
-            i.TotalEntries         <> d.TotalEntries         OR
-            i.TotalDebits          <> d.TotalDebits          OR
-            i.TotalCredits         <> d.TotalCredits         OR
-            -- Once Cancelled, the cancel audit and the ERP-check attestation are the record; they freeze too.
-            (
-                d.Status = 'Cancelled'
-                AND (
-                    ISNULL(i.CancelReason,                  N'')                                    <> ISNULL(d.CancelReason,                  N'')                                    OR
-                    (CASE WHEN i.CancelledAt IS NULL AND d.CancelledAt IS NULL THEN 0 WHEN i.CancelledAt IS NULL OR d.CancelledAt IS NULL THEN 1 WHEN ABS(DATEDIFF_BIG(MICROSECOND, i.CancelledAt, d.CancelledAt)) >= 1000 THEN 1 ELSE 0 END) = 1 OR
-                    ISNULL(i.CancelledByUserID,             '00000000-0000-0000-0000-000000000000') <> ISNULL(d.CancelledByUserID,             '00000000-0000-0000-0000-000000000000') OR
-                    (CASE WHEN i.ERPNotPostedConfirmedAt IS NULL AND d.ERPNotPostedConfirmedAt IS NULL THEN 0 WHEN i.ERPNotPostedConfirmedAt IS NULL OR d.ERPNotPostedConfirmedAt IS NULL THEN 1 WHEN ABS(DATEDIFF_BIG(MICROSECOND, i.ERPNotPostedConfirmedAt, d.ERPNotPostedConfirmedAt)) >= 1000 THEN 1 ELSE 0 END) = 1 OR
-                    ISNULL(i.ERPNotPostedConfirmedByUserID, '00000000-0000-0000-0000-000000000000') <> ISNULL(d.ERPNotPostedConfirmedByUserID, '00000000-0000-0000-0000-000000000000')
-                )
-            )
-          )
-    )
-    BEGIN
-        THROW 50009, 'JournalEntryBatch is locked (Status=Approved/Sent/Posted/Failed/Archived/Cancelled). Only Status / PostedAt / the Archive audit triple / ExternalJournalEntryBatchRef / ErrorMessage may evolve; the send stamp (SentAt / SentByUserID / SendAttemptCount) changes only on a send (50030); the Cancel audit and ERP check are written only by the update that cancels the batch (50032). CompanyID, PostingDate, SummaryJournalEntryID, the approval-task pointer, ApprovedAt / ApprovedByUserID and ApprovedContentHash freeze at approval; the summary pointer may clear only as an Approved or Failed batch is Cancelled.', 1;
-    END;
-
-    -- SEAL MISMATCH (#216): SealMismatchDetectedAt is written only by the update that records a
-    -- retried batch Posted from the ERP, and once set it never changes or clears. A retry is a send
-    -- from Failed; a first send from Approved is attempt 1, so Sent -> Posted with SendAttemptCount
-    -- above 1 is the one update that may set it. A new batch carries none. Compared at millisecond
-    -- precision, as above. THROW with no ROLLBACK, so an entity save reports this message, not 3915.
-    IF EXISTS (
-        SELECT 1
-        FROM inserted i
-        LEFT JOIN deleted d ON d.ID = i.ID
-        WHERE (d.ID IS NULL AND i.SealMismatchDetectedAt IS NOT NULL)
-           OR (
-               d.SealMismatchDetectedAt IS NOT NULL
-               AND (i.SealMismatchDetectedAt IS NULL OR ABS(DATEDIFF_BIG(MICROSECOND, i.SealMismatchDetectedAt, d.SealMismatchDetectedAt)) >= 1000)
-           )
-           OR (
-               d.ID IS NOT NULL
-               AND d.SealMismatchDetectedAt IS NULL
-               AND i.SealMismatchDetectedAt IS NOT NULL
-               AND NOT (d.Status = 'Sent' AND i.Status = 'Posted' AND i.SendAttemptCount > 1)
-           )
-    )
-        THROW 50034, 'JournalEntryBatch SealMismatchDetectedAt refused. It is set only by the update that records a retried batch Posted (Sent -> Posted, SendAttemptCount above 1), and once set it is never changed or cleared.', 1;
-END;
+EXEC sp_addextendedproperty @name = N'MS_Description',
+    @value = N'Dispatch attempts that moved the batch into Sent, including a retry that finds the batch already in the ERP and a first send the pre-flight lookup refuses; neither calls the ERP. A retry refused before Sent is not counted. Each send must advance it by one (trg_JournalEntryBatch_SendOnce). Batches sent before this column existed read 1.',
+    @level0type = N'SCHEMA', @level0name = N'__mj_BizAppsAccounting', @level1type = N'TABLE', @level1name = N'JournalEntryBatch', @level2type = N'COLUMN', @level2name = N'SendAttemptCount';
 GO
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -291,9 +250,9 @@ GO
 /* SQL text to update existing entities from schema */
 EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='', @IncludedSchemaNames='${flyway:defaultSchema}';
 
-/* SQL text to insert 1 new entity field(s) */
+/* SQL text to insert 2 new entity field(s) */
 
-      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '1a8d15cf-9bd7-4334-8e2b-9406143e3c49' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'SealMismatchDetectedAt')) BEGIN
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '6581636b-749c-4cac-996c-c29561233bf9' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'SentByUserID')) BEGIN
          INSERT INTO [${mjSchema}].[EntityField]
          (
             [ID],
@@ -326,18 +285,81 @@ EXEC [${mjSchema}].[spUpdateExistingEntitiesFromSchema] @ExcludedSchemaNames='',
          )
          VALUES
          (
-            '1a8d15cf-9bd7-4334-8e2b-9406143e3c49',
+            '6581636b-749c-4cac-996c-c29561233bf9',
             '87AD37E9-62F9-4F0E-A15B-F64ADF009112', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
             (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112'),
-            'SealMismatchDetectedAt',
-            'Seal Mismatch Detected At',
-            'When a retry of this Failed batch found its journal already in the ERP and recorded it Posted, with no second post, although the batch no longer matched its approved-content seal (a summary line''s dimension tags changed after approval). The local tags then differ from what the ERP holds; review them. NULL when the seal matched or the batch was never adopted this way.',
-            'datetimeoffset',
-            10,
-            34,
-            7,
+            'SentByUserID',
+            'Sent By User ID',
+            'User whose dispatch last moved the batch into Sent. Stamped on every send; changes at no other time. NULL for batches sent before this column existed.',
+            'uniqueidentifier',
+            16,
+            0,
+            0,
             1,
             NULL,
+            0,
+            1,
+            0,
+            0,
+            'E1238F34-2837-EF11-86D4-6045BDEE16E6',
+            'ID',
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = '54a45f54-e6cf-4fe3-962c-93e9b12a316c' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'SendAttemptCount')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            '54a45f54-e6cf-4fe3-962c-93e9b12a316c',
+            '87AD37E9-62F9-4F0E-A15B-F64ADF009112', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112'),
+            'SendAttemptCount',
+            'Send Attempt Count',
+            'Dispatch attempts that moved the batch into Sent, including a retry that finds the batch already in the ERP and a first send the pre-flight lookup refuses; neither calls the ERP. A retry refused before Sent is not counted. Each send must advance it by one (trg_JournalEntryBatch_SendOnce). Batches sent before this column existed read 1.',
+            'int',
+            4,
+            10,
+            0,
+            0,
+            '(0)',
             0,
             1,
             0,
@@ -361,6 +383,16 @@ EXEC [${mjSchema}].[spUpdateExistingEntityFieldsFromSchema] @ExcludedSchemaNames
 
 /* SQL text to set default column width where needed */
 EXEC [${mjSchema}].[spSetDefaultColumnWidthWhereNeeded] @ExcludedSchemaNames='', @IncludedSchemaNames='${flyway:defaultSchema}';
+
+
+/* Create Entity Relationship: MJ: Users -> MJ_BizApps_Accounting: Journal Entry Batches (One To Many via SentByUserID) */
+   IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[EntityRelationship] WHERE [ID] = '4d28ab5a-4887-4c31-8338-b9239355e9e1'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[EntityRelationship] ([ID], [EntityID], [RelatedEntityID], [RelatedEntityJoinField], [Type], [BundleInAPI], [DisplayInForm], [Sequence], [__mj_CreatedAt], [__mj_UpdatedAt])
+                    VALUES ('4d28ab5a-4887-4c31-8338-b9239355e9e1', 'E1238F34-2837-EF11-86D4-6045BDEE16E6', '87AD37E9-62F9-4F0E-A15B-F64ADF009112', 'SentByUserID', 'One To Many', 1, 1, 116, GETUTCDATE(), GETUTCDATE())
+   END;
 
 /* SQL text to sync schema info from database schemas */
 EXEC [${mjSchema}].[spUpdateSchemaInfoFromDatabase] @ExcludedSchemaNames='', @IncludedSchemaNames='${flyway:defaultSchema}';
@@ -454,6 +486,9 @@ IF NOT EXISTS (
     AND object_id = OBJECT_ID('[${flyway:defaultSchema}].[JournalEntryBatch]')
 )
 CREATE INDEX IDX_AUTO_MJ_FKEY_JournalEntryBatch_SentByUserID ON [${flyway:defaultSchema}].[JournalEntryBatch] ([SentByUserID]);
+
+/* SQL text to update entity field related entity name field map for entity field ID 6581636B-749C-4CAC-996C-C29561233BF9 */
+EXEC [${mjSchema}].[spUpdateEntityFieldRelatedEntityNameFieldMap] @EntityFieldID='6581636B-749C-4CAC-996C-C29561233BF9', @RelatedEntityNameFieldMap='SentByUser';
 
 /* Base View SQL for MJ_BizApps_Accounting: Journal Entry Batches */
 -----------------------------------------------------------------
@@ -616,9 +651,7 @@ CREATE PROCEDURE [${flyway:defaultSchema}].[spCreateJournalEntryBatch]
     @ApprovedContentHash nvarchar(64) = NULL,
     @SentByUserID_Clear bit = 0,
     @SentByUserID uniqueidentifier = NULL,
-    @SendAttemptCount int = NULL,
-    @SealMismatchDetectedAt_Clear bit = 0,
-    @SealMismatchDetectedAt datetimeoffset = NULL
+    @SendAttemptCount int = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -660,8 +693,7 @@ BEGIN
                 [ERPNotPostedBasis],
                 [ApprovedContentHash],
                 [SentByUserID],
-                [SendAttemptCount],
-                [SealMismatchDetectedAt]
+                [SendAttemptCount]
             )
         OUTPUT INSERTED.[ID] INTO @InsertedRow
         VALUES
@@ -697,8 +729,7 @@ BEGIN
                 CASE WHEN @ERPNotPostedBasis_Clear = 1 THEN NULL ELSE ISNULL(@ERPNotPostedBasis, NULL) END,
                 CASE WHEN @ApprovedContentHash_Clear = 1 THEN NULL ELSE ISNULL(@ApprovedContentHash, NULL) END,
                 CASE WHEN @SentByUserID_Clear = 1 THEN NULL ELSE ISNULL(@SentByUserID, NULL) END,
-                ISNULL(@SendAttemptCount, 0),
-                CASE WHEN @SealMismatchDetectedAt_Clear = 1 THEN NULL ELSE ISNULL(@SealMismatchDetectedAt, NULL) END
+                ISNULL(@SendAttemptCount, 0)
             )
     END
     ELSE
@@ -736,8 +767,7 @@ BEGIN
                 [ERPNotPostedBasis],
                 [ApprovedContentHash],
                 [SentByUserID],
-                [SendAttemptCount],
-                [SealMismatchDetectedAt]
+                [SendAttemptCount]
             )
         OUTPUT INSERTED.[ID] INTO @InsertedRow
         VALUES
@@ -772,8 +802,7 @@ BEGIN
                 CASE WHEN @ERPNotPostedBasis_Clear = 1 THEN NULL ELSE ISNULL(@ERPNotPostedBasis, NULL) END,
                 CASE WHEN @ApprovedContentHash_Clear = 1 THEN NULL ELSE ISNULL(@ApprovedContentHash, NULL) END,
                 CASE WHEN @SentByUserID_Clear = 1 THEN NULL ELSE ISNULL(@SentByUserID, NULL) END,
-                ISNULL(@SendAttemptCount, 0),
-                CASE WHEN @SealMismatchDetectedAt_Clear = 1 THEN NULL ELSE ISNULL(@SealMismatchDetectedAt, NULL) END
+                ISNULL(@SendAttemptCount, 0)
             )
     END
     -- return the new record from the base view, which might have some calculated fields
@@ -859,9 +888,7 @@ CREATE PROCEDURE [${flyway:defaultSchema}].[spUpdateJournalEntryBatch]
     @ApprovedContentHash nvarchar(64) = NULL,
     @SentByUserID_Clear bit = 0,
     @SentByUserID uniqueidentifier = NULL,
-    @SendAttemptCount int = NULL,
-    @SealMismatchDetectedAt_Clear bit = 0,
-    @SealMismatchDetectedAt datetimeoffset = NULL
+    @SendAttemptCount int = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -898,8 +925,7 @@ BEGIN
         [ERPNotPostedBasis] = CASE WHEN @ERPNotPostedBasis_Clear = 1 THEN NULL ELSE ISNULL(@ERPNotPostedBasis, [ERPNotPostedBasis]) END,
         [ApprovedContentHash] = CASE WHEN @ApprovedContentHash_Clear = 1 THEN NULL ELSE ISNULL(@ApprovedContentHash, [ApprovedContentHash]) END,
         [SentByUserID] = CASE WHEN @SentByUserID_Clear = 1 THEN NULL ELSE ISNULL(@SentByUserID, [SentByUserID]) END,
-        [SendAttemptCount] = ISNULL(@SendAttemptCount, [SendAttemptCount]),
-        [SealMismatchDetectedAt] = CASE WHEN @SealMismatchDetectedAt_Clear = 1 THEN NULL ELSE ISNULL(@SealMismatchDetectedAt, [SealMismatchDetectedAt]) END
+        [SendAttemptCount] = ISNULL(@SendAttemptCount, [SendAttemptCount])
     WHERE
         [ID] = @ID
 
@@ -1003,9 +1029,151 @@ GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntryBatch] TO [cdp_D
 /* SQL text to delete unneeded entity fields (1 scoped entities) */
 EXEC [${mjSchema}].[spDeleteUnneededEntityFields] @ExcludedSchemaNames='', @EntityIDs='87AD37E9-62F9-4F0E-A15B-F64ADF009112', @IncludedSchemaNames='${flyway:defaultSchema}';
 
+/* SQL text to insert 1 new entity field(s) */
+
+      IF NOT EXISTS (SELECT 1 FROM [${mjSchema}].[EntityField] WHERE ID = 'efc0dbfa-e37b-4e49-a417-4093baf42ec3' OR (EntityID = '87AD37E9-62F9-4F0E-A15B-F64ADF009112' AND Name = 'SentByUser')) BEGIN
+         INSERT INTO [${mjSchema}].[EntityField]
+         (
+            [ID],
+            [EntityID],
+            [Sequence],
+            [Name],
+            [DisplayName],
+            [Description],
+            [Type],
+            [Length],
+            [Precision],
+            [Scale],
+            [AllowsNull],
+            [DefaultValue],
+            [AutoIncrement],
+            [AllowUpdateAPI],
+            [IsVirtual],
+            [IsComputed],
+            [RelatedEntityID],
+            [RelatedEntityFieldName],
+            [IsNameField],
+            [IncludeInUserSearchAPI],
+            [IncludeRelatedEntityNameFieldInBaseView],
+            [DefaultInView],
+            [IsPrimaryKey],
+            [IsUnique],
+            [RelatedEntityDisplayType],
+            [__mj_CreatedAt],
+            [__mj_UpdatedAt]
+         )
+         VALUES
+         (
+            'efc0dbfa-e37b-4e49-a417-4093baf42ec3',
+            '87AD37E9-62F9-4F0E-A15B-F64ADF009112', -- Entity: MJ_BizApps_Accounting: Journal Entry Batches
+            (SELECT COALESCE(MAX([Sequence]), 0) + 1 FROM [${mjSchema}].[EntityField] WHERE [EntityID] = '87AD37E9-62F9-4F0E-A15B-F64ADF009112'),
+            'SentByUser',
+            'Sent By User',
+            NULL,
+            'nvarchar',
+            200,
+            0,
+            0,
+            1,
+            NULL,
+            0,
+            0,
+            1,
+            0,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            'Search',
+            GETUTCDATE(),
+            GETUTCDATE()
+         )
+      END;
+
 /* SQL text to update existing entity fields from schema (1 scoped entities) */
 EXEC [${mjSchema}].[spUpdateExistingEntityFieldsFromSchema] @ExcludedSchemaNames='', @EntityIDs='87AD37E9-62F9-4F0E-A15B-F64ADF009112', @IncludedSchemaNames='${flyway:defaultSchema}';
 
 /* SQL text to set default column width where needed */
 EXEC [${mjSchema}].[spSetDefaultColumnWidthWhereNeeded] @ExcludedSchemaNames='', @IncludedSchemaNames='${flyway:defaultSchema}';
+
+/* Set categories for 7 fields */
+
+-- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.ArchiveReason 
+UPDATE [${mjSchema}].[EntityField]
+SET 
+   Category = 'Status and Lifecycle',
+   GeneratedFormSection = 'Category'
+WHERE 
+   ID = '88C4A711-FB72-43A4-9800-069F42D60A3E';
+
+-- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.ArchivedAt 
+UPDATE [${mjSchema}].[EntityField]
+SET 
+   Category = 'Status and Lifecycle',
+   GeneratedFormSection = 'Category'
+WHERE 
+   ID = '46B12172-B692-4E3E-9700-4838D439AA91';
+
+-- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.ArchivedByUserID 
+UPDATE [${mjSchema}].[EntityField]
+SET 
+   Category = 'Status and Lifecycle',
+   GeneratedFormSection = 'Category'
+WHERE 
+   ID = '0C7DD17F-A4ED-460E-91BF-07F8F643E56C';
+
+-- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.ArchivedByUser 
+UPDATE [${mjSchema}].[EntityField]
+SET 
+   Category = 'Status and Lifecycle',
+   GeneratedFormSection = 'Category'
+WHERE 
+   ID = '7DBAEC1E-3101-4314-B8BF-25F0F2EF6EC6';
+
+-- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.SentByUserID 
+UPDATE [${mjSchema}].[EntityField]
+SET 
+   Category = 'Approval and Dispatch',
+   GeneratedFormSection = 'Category'
+WHERE 
+   ID = '6581636B-749C-4CAC-996C-C29561233BF9';
+
+-- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.SendAttemptCount 
+UPDATE [${mjSchema}].[EntityField]
+SET 
+   Category = 'Approval and Dispatch',
+   GeneratedFormSection = 'Category'
+WHERE 
+   ID = '54A45F54-E6CF-4FE3-962C-93E9B12A316C';
+
+-- UPDATE Entity Field Category Info MJ_BizApps_Accounting: Journal Entry Batches.SentByUser 
+UPDATE [${mjSchema}].[EntityField]
+SET 
+   Category = 'Approval and Dispatch',
+   GeneratedFormSection = 'Category'
+WHERE 
+   ID = 'EFC0DBFA-E37B-4E49-A417-4093BAF42EC3';
+
+/* Generated Validation Functions for MJ_BizApps_Accounting: Journal Entry Batches */
+-- CHECK constraint for MJ_BizApps_Accounting: Journal Entry Batches: Field: SendAttemptCount was newly set or modified since the last generation of the validation function, the code was regenerated and updating the GeneratedCode table with the new generated validation function
+IF NOT EXISTS (
+      SELECT 1 FROM [${mjSchema}].[GeneratedCode] WHERE [CategoryID] = (SELECT [ID] FROM [${mjSchema}].[vwGeneratedCodeCategories] WHERE [Name]='CodeGen: Validators') AND [LinkedEntityID] = 'DF238F34-2837-EF11-86D4-6045BDEE16E6' AND [LinkedRecordPrimaryKey] = '54A45F54-E6CF-4FE3-962C-93E9B12A316C'
+   )
+   BEGIN
+      INSERT INTO [${mjSchema}].[GeneratedCode] ([ID], [CategoryID], [GeneratedByModelID], [GeneratedAt], [Language], [Status], [Source], [Code], [Description], [Name], [LinkedEntityID], [LinkedRecordPrimaryKey])
+VALUES ('034181c7-2967-4456-8228-992bdf860999', (SELECT [ID] FROM [${mjSchema}].[vwGeneratedCodeCategories] WHERE [Name]='CodeGen: Validators'), 'C43229F6-4CC8-4838-9D04-03419A2DA191', GETUTCDATE(), 'TypeScript', 'Approved', '([SendAttemptCount]>=(0))', 'public ValidateSendAttemptCountGreaterThanOrEqualToZero(result: ValidationResult) {
+	if (this.SendAttemptCount != null && this.SendAttemptCount < 0) {
+		result.Errors.push(new ValidationErrorInfo(
+			"SendAttemptCount",
+			"The send attempt count cannot be negative.",
+			this.SendAttemptCount,
+			ValidationErrorType.Failure
+		));
+	}
+}', 'The number of send attempts must be zero or a positive number to ensure valid tracking of delivery attempts.', 'ValidateSendAttemptCountGreaterThanOrEqualToZero', 'DF238F34-2837-EF11-86D4-6045BDEE16E6', '54A45F54-E6CF-4FE3-962C-93E9B12A316C')
+   END;
 

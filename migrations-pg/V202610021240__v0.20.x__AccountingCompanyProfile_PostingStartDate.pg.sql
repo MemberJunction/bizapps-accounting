@@ -39,7 +39,7 @@ SET standard_conforming_strings = on;
 -- ===================== DDL: Tables, PKs, Indexes =====================
 
 -- =============================================================================
--- Migration: V202610021240__v0.19.x__AccountingCompanyProfile_PostingStartDate.sql
+-- Migration: V202610021240__v0.20.x__AccountingCompanyProfile_PostingStartDate.sql
 -- Description: a per-company posting start date. Journal entries dated before
 --              it never enter a posting batch.
 -- =============================================================================
