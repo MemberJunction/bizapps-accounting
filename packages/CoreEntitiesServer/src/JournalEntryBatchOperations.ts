@@ -94,7 +94,7 @@ export interface JournalEntryBatchCriteriaInput {
   /** JournalEntryType CODES to EXCLUDE (e.g. ['RevenueRecognition']). Omit/empty = no exclusions. */
   ExcludeEntryTypeCodes?: string[] | null;
   /** The batch's PostingDate — the journal date the ERP receives (golive #315). Same shapes as
-   *  `Cutoff`; omit for today's business day. Never in the future, never before a selected entry,
+   *  `Cutoff`; omit for today's business day. Never before a selected entry,
    *  and it bounds the candidate pool like a cutoff does. */
   PostingDate?: string | null;
 }

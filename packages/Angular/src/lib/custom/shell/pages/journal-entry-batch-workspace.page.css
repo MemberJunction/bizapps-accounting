@@ -156,6 +156,13 @@
 .bw-warn i {
   color: var(--mj-status-warning);
 }
+.bw-posting-confirm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-weight: 600;
+}
 
 .bw-sumstrip {
   display: flex;

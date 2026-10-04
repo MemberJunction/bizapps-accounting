@@ -145,7 +145,6 @@ describe('JournalEntryBatchWorkspacePageComponent — posting date (golive #315)
 
   it.each([
     ['empty', '', 'Choose a posting date.'],
-    ['in the future', '2026-09-01', 'The posting date 2026-09-01 is in the future — choose today or an earlier day.'],
     ['earlier than an included entry', '2026-08-29',
       'The posting date 2026-08-29 is earlier than an included entry dated 2026-08-30 — move it to 2026-08-30 or later, or apply the filters again.'],
   ])('blocks the build when the posting date is %s', async (_label, postingDate, reason) => {
@@ -154,6 +153,37 @@ describe('JournalEntryBatchWorkspacePageComponent — posting date (golive #315)
     page.Draft!.Criteria.PostingDate = postingDate;
     expect(page.CanBuild).toBe(false);
     expect(page.BuildBlockedReason).toBe(reason);
+  });
+
+  it.each([
+    ['future', '2026-09-01', 'September 2026'],
+    ['prior', '2026-07-31', 'July 2026'],
+  ])('asks before building on a %s-month posting date, and asks again when the date changes', async (which, day, month) => {
+    const page = await render();
+    withPreview(page, '2026-07-01');
+    page.Draft!.Criteria.PostingDate = day;
+    expect(page.PostingDateWarning).toBe(`The posting date ${day} is in a ${which} month, so the ERP books this batch in ${month}. Are you sure?`);
+    expect(page.CanBuild).toBe(false);
+    expect(page.BuildBlockedReason).toBe(`Confirm posting this batch in ${month}.`);
+
+    page.ConfirmPostingDate(true);
+    expect(page.CanBuild).toBe(true);
+    expect(page.BuildBlockedReason).toBeNull();
+
+    page.Draft!.Criteria.PostingDate = which === 'future' ? '2026-09-02' : '2026-07-30';
+    expect(page.PostingDateProblem).toBeNull();
+    expect(page.CanBuild, 'a different date asks again').toBe(false);
+  });
+
+  it('sends a confirmed future-month posting date with the build', async () => {
+    const page = await render();
+    withPreview(page, '2026-08-30');
+    page.Draft!.Criteria.PostingDate = '2026-09-01';
+    page.ConfirmPostingDate(true);
+    await page.Build();
+
+    const build = calls.find(c => c.Name === 'Accounting.BuildJournalEntryBatch');
+    expect(build?.Payload['PostingDate']).toBe('2026-09-01');
   });
 
   it('allows a posting date on the latest included entry\'s day', async () => {
