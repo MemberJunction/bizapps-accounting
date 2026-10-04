@@ -323,26 +323,43 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
 
   // ─── preview ───────────────────────────────────────────────────────────────
 
+  /**
+   * Numbers each preview request (#254). Overlapping requests (fast ticking) can settle out of
+   * order, so a response is applied only when it is still the latest request for ITS tab, and the
+   * spinner clears only when the latest request overall settles.
+   */
+  private previewRequestSeq = 0;
+  private latestPreviewSeqByTab = new Map<string, number>();
+
   private async refreshPreview(): Promise<void> {
     const d = this.Draft;
-    if (!d || this.IsBuilt) return;
+    // The tab the request belongs to — the operator may switch tabs before it settles.
+    const tabId = this.tabs.ActiveId;
+    if (!d || !tabId || this.IsBuilt) return;
+
+    const seq = ++this.previewRequestSeq;
+    this.latestPreviewSeqByTab.set(tabId, seq);
+    const isLatestForTab = () => this.latestPreviewSeqByTab.get(tabId) === seq;
 
     this.IsPreviewing = true;
     this.cdr.markForCheck();
     try {
       const preview = await this.client.Preview(this.opProvider, d.Criteria, this.includedIds(d), this.entryTypeValues(d.Criteria.EntryTypeScope));
+      if (!isLatestForTab()) return; // superseded by a newer request for this tab
       // Store the preview ON THE TAB (per-tab), and clear the stale flag — the shown data now matches
       // the criteria again.
       d.Preview = preview;
       d.PreviewStale = false;
-      if (this.tabs.ActiveId) this.tabs.UpdateState(this.tabs.ActiveId, d);
+      this.tabs.UpdateState(tabId, d);
       this.ActionMessage = null;
     } catch (e) {
+      if (!isLatestForTab()) return;
       this.setError(e instanceof Error ? e.message : String(e));
       d.Preview = null;
-      if (this.tabs.ActiveId) this.tabs.UpdateState(this.tabs.ActiveId, d);
+      this.tabs.UpdateState(tabId, d);
     } finally {
-      this.IsPreviewing = false;
+      if (isLatestForTab()) this.latestPreviewSeqByTab.delete(tabId);
+      if (seq === this.previewRequestSeq) this.IsPreviewing = false;
       this.cdr.markForCheck();
     }
   }
@@ -406,6 +423,9 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
   }
   public get HasOutOfOrder(): boolean {
     return (this.Preview?.OutOfOrderSkipCount ?? 0) > 0;
+  }
+  public get BeforePostingStartCount(): number {
+    return this.Preview?.BeforePostingStartCount ?? 0;
   }
 
   // ─── build ─────────────────────────────────────────────────────────────────

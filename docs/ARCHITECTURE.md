@@ -158,16 +158,26 @@ balance **overall and per company** (AM-4), and writes atomically. Hooks on the 
   AM-4)**, JE immutability (50003/50004), JE-line immutability (50006). Batch side: summary
   foots overall (50014) **and per company (50023)**, batch immutability (50008/50009, `Failed`
   included since #183), the cancel-after-approval release and `CK_JournalEntryBatch_CancelAudit`.
+  Send-once (50030, #184) is validated by L21 and L22 in `test-harnesses/server/phase2-encapsulation.live.test.ts`:
+  a send must start from `Approved` or `Failed` and advance `SendAttemptCount` by one, no update keeps a
+  batch `Sent`, and the send stamp changes at no other time. Of two dispatches that loaded the same batch,
+  only one reaches the ERP, whether the loser's save lands while the winner is `Sent` or after it has left.
   *(The period-close trigger + W4 routing were retired with the period tables.)*
 - **Batch lifecycle (CH-3):** `Pending → Approved → Sent → Posted | Failed | Cancelled` — see
   `JournalEntryBatchEngine.ts`; the ERP wire is **account numbers, split per company** (AM-4).
+- **Posting start date:** `AccountingCompanyProfile.PostingStartDate` is a per-company floor on the
+  batch candidate pool. Entries dated before it (e.g. history brought in at cutover) never enter a
+  batch: `pendingCandidateFilter` applies it to every build, preview and scheduled sweep, and the
+  explicit-ID and view builds check it too. NULL, or no profile row, means no floor.
 - **Recovery past Approved (#145):** a `Failed` batch is retried by dispatching it again
   (`Failed → Sent`; the gate and the coherence check re-run, the original approval is reused). A
   `Failed` batch may already be in the ERP, so every send first looks the batch number up there
   (#182): a Failed batch the ERP holds line for line is recorded `Posted` without a second send; a
   first send whose number is already there is refused. The operator's confirmation that the number
   has not posted is needed only when the lookup cannot settle it: a mismatch, a failed lookup, or an
-  ERP with no lookup. Business Central is looked up by document number on any date; QuickBooks
+  ERP with no lookup. A `Failed` batch that carries the ERP's reference was accepted and only its
+  `Posted` save failed: its retry records it `Posted` under that reference with no lookup, and it
+  cannot be cancelled. `Sent` and `Posted` are written only by the dispatch engine. Business Central is looked up by document number on any date; QuickBooks
   Online, whose verb cannot filter by number, among the posting date's journal entries. Business
   Central posting also refuses a journal that already holds unposted lines, and QuickBooks Online
   posting refuses a GL account with no QBO account id. Its content is frozen like an Approved batch's, and the dispatch check compares it with the
@@ -177,11 +187,16 @@ balance **overall and per company** (AM-4), and writes atomically. Hooks on the 
   entries to the next build. From `Failed` the ERP is looked up first (#207), because the released
   entries get a new number no later lookup can connect: a posting it holds refuses the cancel, nothing
   found lets it through, and the operator confirms, persisted, only when the lookup cannot settle it.
+  Nothing found means nothing posted yet, so the cancel looks again after its writes and before it
+  commits (#215): a posting found then rolls the cancel back and records the batch `Posted`; a new posting that does not
+  match rolls it back and leaves the batch `Failed` for investigation.
   A
   `Posted` batch whose member `Batched → GLPosted` flip stopped partway is finished by
   `resumeJournalEntryBatchPosting` (`Accounting.ResumeJournalEntryBatchPosting`), which makes no
   ERP call. `findStrandedJournalEntries` reports the entries both states hold; the scheduled
   action and the Dispatch status page surface it. Scheduled runs never retry on their own.
+  Each send stamps `SentAt`, `SentByUserID` and `SendAttemptCount` on the batch; `__mj.RecordChange`
+  keeps every earlier attempt, including the `ErrorMessage` a successful retry clears (#184).
 - **W5** realized-FX auto-emit: retired — Orders/Payments computes + posts the FX line (§C1).
 - **Finance exceptions (golive #279):** `FinanceExceptions.ts` holds the logic behind
   `Accounting.GetFinanceExceptionTypes` / `RaiseFinanceExceptions` / `ClearFinanceException`
