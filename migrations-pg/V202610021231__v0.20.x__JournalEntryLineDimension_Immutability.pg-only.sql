@@ -1,12 +1,12 @@
 -- =============================================================================
--- Migration: V202610021231__v0.19.x__JournalEntryLineDimension_Immutability.pg-only.sql
+-- Migration: V202610021231__v0.20.x__JournalEntryLineDimension_Immutability.pg-only.sql
 -- Description: #216 — PostgreSQL twins of trg_JELD_Immutability and of the
 --              SealMismatchDetectedAt freeze on JournalEntryBatch.
 -- =============================================================================
 --
 -- WHY A PG-ONLY FILE
 --
--- V202610021230__v0.19.x__JournalEntryLineDimension_Immutability_SealMismatch
+-- V202610021230__v0.20.x__JournalEntryLineDimension_Immutability_SealMismatch
 -- creates trg_JELD_Immutability on SQL Server. The SQL converter does not
 -- convert triggers (its .pg.sql output marks the trigger SKIPPED), so the
 -- PostgreSQL trigger is written here by hand. It carries the same rule: a

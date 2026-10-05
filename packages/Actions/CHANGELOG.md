@@ -1,5 +1,60 @@
 # @mj-biz-apps/accounting-actions
 
+## 0.20.0
+
+### Minor Changes
+
+- c7a1af4: A journal entry batch can no longer be sent to the ERP twice, and every send is recorded (#184).
+
+  - New trigger `trg_JournalEntryBatch_SendOnce` (error 50030). A send must start from `Approved` or `Failed`
+    and advance `SendAttemptCount` by exactly one; no update may keep a batch `Sent`; and `SentAt`,
+    `SentByUserID` and `SendAttemptCount` change at no other time. When two operators, two browser tabs, or a
+    scheduled run and an operator send the same batch, the second save fails and its ERP call never runs,
+    whether the first send is still `Sent`, has `Posted`, or has `Failed` again.
+  - `sendJournalEntryBatch` throws `JournalEntryBatchSendRefusedError` for that refusal, naming the status the
+    batch reads now. `Accounting.BuildJournalEntryBatches` does not mark the batch `Failed` on it.
+  - New columns `SentByUserID` and `SendAttemptCount` on `JournalEntryBatch`. Every transition into `Sent`
+    stamps them, with `SentAt`, from the context user and the loaded count. The count is dispatch attempts that
+    entered `Sent`, including a retry adopted from the ERP and a first send the pre-flight lookup refuses.
+    Batches sent before this release read `SendAttemptCount = 1`, with no sender.
+  - The batch detail panel and the Dispatch status page show who sent a batch and how many attempts it took.
+  - A successful retry still clears `ErrorMessage`. The earlier value, and each overwritten `SentAt` and
+    sender, remain in `__mj.RecordChange`.
+
+### Patch Changes
+
+- 5ce8759: A batch the ERP accepted can no longer be posted a second time. A `Failed` batch that carries the ERP's reference (the ERP accepted it and only its `Posted` save failed) is recorded `Posted` by a retry under that reference, with no lookup and no post, whatever the lookup would answer and whether or not the operator confirmed. `Cancel()` refuses it, and Dispatch status no longer offers Cancel for it. When the ERP returns no reference, the batch number is kept in its place.
+
+  When the `Sent → Failed` save itself fails, the send reloads the batch and throws `JournalEntryBatchFailureNotRecordedError`, carrying the status the database holds and any ERP reference, instead of reporting a `Failed` the database does not hold. The scheduled run's triage writes that reference with `Failed`.
+
+  A batch moves to `Sent` or `Posted` only through `JournalEntryBatchEntityServer.SaveDispatchTransition()`, which the dispatch engine calls; a plain save to either is refused, so a batch cannot be marked `Sent` and then `Posted` without the ERP being called.
+
+  A lookup that finds nothing is not trusted while the `ERP_POSTING_NOT_READ_BACK` finance exception type is missing or inactive, since a post that could not be read back would then raise no exception. An over-long account number names the account and points at its External Account ID instead of saying to shorten it. Both batch previews show how many entries a company's posting start date holds back.
+
+- Updated dependencies [5ce8759]
+- Updated dependencies [525d657]
+- Updated dependencies [416d250]
+- Updated dependencies [c7a1af4]
+- Updated dependencies [3c5be1e]
+- Updated dependencies [346dc14]
+- Updated dependencies [01888bc]
+- Updated dependencies [6931f2c]
+- Updated dependencies [c0c06e0]
+- Updated dependencies [37ff531]
+- Updated dependencies [d8629a1]
+  - @mj-biz-apps/accounting-core-entities-server@0.20.0
+
+## 0.19.0
+
+### Patch Changes
+
+- 571a7a1: Auto-posting is restricted to the MJ system user (#269). `autoPostJournalEntryBatch` approves the batch as its context user with no approval Task, so until now any signed-in user who ran `Accounting.BuildJournalEntryBatches` with `AutoPost: true` could build, approve and post a batch without CFO approval. The new `assertAutoPostCaller` refuses any context user other than the system user the scheduled posting jobs run as, and refuses when the user cache does not hold the system user. `autoPostJournalEntryBatch` checks it before the build, and the action checks it before any company is read. A run without `AutoPost` is unchanged: it builds behind the approval gate for any user.
+- Updated dependencies [571a7a1]
+- Updated dependencies [dd98450]
+- Updated dependencies [f9e5be1]
+- Updated dependencies [6f1515e]
+  - @mj-biz-apps/accounting-core-entities-server@0.19.0
+
 ## 0.18.0
 
 ### Patch Changes

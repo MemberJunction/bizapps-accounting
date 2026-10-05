@@ -1,5 +1,26 @@
 # @mj-biz-apps/accounting-engine-base
 
+## 0.20.0
+
+### Patch Changes
+
+- Updated dependencies [77e4756]
+- Updated dependencies [c7a1af4]
+- Updated dependencies [d3a99ff]
+- Updated dependencies [b2de2f7]
+- Updated dependencies [a8e560f]
+  - @mj-biz-apps/accounting-entities@0.20.0
+
+## 0.19.0
+
+### Minor Changes
+
+- 6f1515e: The deferred-revenue waterfall adds a "Recognized YTD" KPI (#231): entries recognized between the first day of the company's fiscal year and the business day, inclusive. The fiscal-year start comes from the company's Accounting Company Profile, 1 January when it has none. The rule (`FiscalYearOf`, `IsInFiscalYearToDate`, `AccountingEngineBase.FiscalYearStartFor`) moves to accounting-engine-base, and journal-entry numbering now uses it too, with no change in the fiscal years it assigns.
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-entities@0.19.0
+
 ## 0.18.0
 
 ### Patch Changes

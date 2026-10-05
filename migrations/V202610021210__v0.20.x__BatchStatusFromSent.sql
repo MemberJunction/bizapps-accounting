@@ -1,40 +1,43 @@
 -- =============================================================================
--- Migration: V202610021220__v0.19.x__PendingCancelTeardownGate.sql
--- Description: #213 — a Pending batch reaches Cancelled only with its summary
---              pointer cleared, as an Approved or Failed batch already must.
+-- Migration: V202610021210__v0.20.x__BatchStatusFromSent.sql
+-- Description: #221 — Posted and Failed are reachable only from Sent, so the
+--              database refuses every status move the batch entity refuses.
 -- =============================================================================
 --
 -- WHY
 --
--- A Pending batch could be set to Cancelled by an ordinary save (the generic
--- form or the GraphQL update). That skips JournalEntryBatchEntityServer.Cancel's
--- teardown: the summary journal entry is not deleted, and the member entries
--- stay Batched under a Cancelled batch, where trg_JournalEntry_Immutability
--- then lets any journal entry save release them. V202609261000 closed this for
--- Approved and Failed batches; the Pending edge predates it.
+-- trg_JournalEntryBatch_Immutability (50031) refused most illegal status moves,
+-- but a raw UPDATE could still take a Pending or Approved batch straight to
+-- Posted or Failed, recording a batch as posted, or failed and retryable,
+-- without it ever being sent; and take a Failed batch to Posted without the
+-- retry that looks it up in the ERP. JournalEntryBatchEntityServer's LEGAL_TRANSITIONS
+-- refuses these, so only direct SQL could reach them.
 --
 -- WHAT CHANGES
 --
--- trg_JournalEntryBatch_Immutability's status rule (50031) now refuses a move to
--- Cancelled from ANY status while SummaryJournalEntryID is still set. The
--- sanctioned paths both clear it first:
---   * Cancel() clears the pointer in the update that marks the batch Cancelled,
---     then releases the members and deletes the summary.
---   * regenerateJournalEntryBatch's empty cancel runs TearDownSummaryAndUnlock
---     (pointer cleared, members released, summary deleted) and only then marks
---     the batch Cancelled.
+-- One condition is added to the 50031 status check: a batch becomes Posted or
+-- Failed only from Sent. The rest of the trigger is unchanged from
+-- V202609261000, except that the 50009 message now says the send stamp changes
+-- only on a send (50030).
 --
--- The trigger cannot require "no Batched members" instead: Cancel() marks the
--- batch Cancelled BEFORE releasing its members, because the release is what
--- trg_JournalEntry_Immutability sanctions only once the batch is Cancelled.
--- A save that clears the pointer itself is still accepted here, as it is from
--- Approved or Failed; the entity (JournalEntryBatchEntityServer.Validate) is
--- what refuses a cancel that did not come through Cancel().
+-- -> Sent is not repeated here. trg_JournalEntryBatch_SendOnce (V202610021200,
+-- 50030) already refuses it from anything but Approved or Failed, and fires
+-- first. Altering this trigger does not reset SendOnce's First order: SQL
+-- Server drops that attribute only when the ordered trigger itself is altered.
 --
--- Only the 50031 condition, its comment and its message differ from the body
--- V202610021210 (BatchStatusFromSent) left; everything else is that body
--- verbatim, so its Posted/Failed-only-from-Sent rule is kept. Existing rows are
--- not re-checked: the rule applies to status changes from now on.
+-- Together the two triggers now enforce the whole of LEGAL_TRANSITIONS:
+--   Pending  -> Approved | Cancelled | Archived
+--   Approved -> Sent | Cancelled | Archived
+--   Sent     -> Posted | Failed
+--   Failed   -> Sent | Cancelled | Archived
+--   Posted, Cancelled, Archived: terminal
+--
+-- Every engine write already follows these edges: the send saves Sent before
+-- it records Posted or Failed, and recordDispatchFailure marks only a Sent
+-- batch Failed. The trigger checks only the update in flight, so existing rows
+-- need no pre-check.
+--
+-- No schema or metadata change, so CodeGen has nothing to emit.
 --
 -- DETERMINISTIC, NOT IDEMPOTENT: this runs once, in order, against a database
 -- that has the prior migrations.
@@ -58,13 +61,13 @@ BEGIN
         THROW 50008, 'JournalEntryBatch cannot be deleted once Status is Approved, Sent, Posted, Failed, or Archived, or once it was cancelled after approval. Cancel it instead.', 1;
     END;
 
-    -- STATUS: Cancelled releases entries, so only Pending / Approved / Failed may reach it, a batch
-    -- reaches it only with its summary pointer cleared (by the same update, or by regenerate's
-    -- teardown before it), and the terminal statuses never change again. Nothing moves back to
-    -- Pending (a Pending batch's members can be released by any journal entry save), only a Pending
-    -- batch is approved, and a Sent batch is not archived (it may still be posting in the ERP).
-    -- Posted and Failed are the outcomes of a send, so only a Sent batch reaches them; -> Sent is
-    -- policed by trg_JournalEntryBatch_SendOnce (50030).
+    -- STATUS: Cancelled releases entries, so only Pending / Approved / Failed may reach it, an
+    -- Approved or Failed batch reaches it only with its summary pointer cleared in the same update,
+    -- and the terminal statuses never change again. Nothing moves back to Pending (a Pending batch's
+    -- members can be released by any journal entry save), only a Pending batch is approved, and a
+    -- Sent batch is not archived (it may still be posting in the ERP). Posted and Failed are the
+    -- outcomes of a send, so only a Sent batch reaches them; -> Sent is policed by
+    -- trg_JournalEntryBatch_SendOnce (50030).
     IF EXISTS (
         SELECT 1
         FROM deleted d
@@ -76,12 +79,12 @@ BEGIN
             OR (i.Status = 'Approved' AND d.Status <> 'Pending')
             OR (i.Status = 'Archived' AND d.Status NOT IN ('Pending','Approved','Failed'))
             OR (i.Status = 'Cancelled' AND d.Status NOT IN ('Pending','Approved','Failed'))
-            OR (i.Status = 'Cancelled' AND i.SummaryJournalEntryID IS NOT NULL)
+            OR (i.Status = 'Cancelled' AND d.Status IN ('Approved','Failed') AND i.SummaryJournalEntryID IS NOT NULL)
             OR (i.Status IN ('Posted','Failed') AND d.Status <> 'Sent')
           )
     )
     BEGIN
-        THROW 50031, 'JournalEntryBatch status change refused. Posted, Cancelled and Archived are terminal; no batch returns to Pending; only a Pending batch is approved; Posted and Failed are reachable only from Sent; Archived is reachable only from Pending, Approved or Failed; Cancelled is reachable only from Pending, Approved or Failed; and a batch is cancelled only with its summary pointer cleared (JournalEntryBatchEntityServer.Cancel).', 1;
+        THROW 50031, 'JournalEntryBatch status change refused. Posted, Cancelled and Archived are terminal; no batch returns to Pending; only a Pending batch is approved; Posted and Failed are reachable only from Sent; Archived is reachable only from Pending, Approved or Failed; Cancelled is reachable only from Pending, Approved or Failed; and an Approved or Failed batch is cancelled only with its summary pointer cleared in the same update (JournalEntryBatchEntityServer.Cancel).', 1;
     END;
 
     -- AUDIT: the cancel audit and the ERP check are written only by the update that cancels the
