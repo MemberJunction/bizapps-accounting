@@ -1,5 +1,66 @@
 # @mj-biz-apps/accounting-core-entities-server
 
+## 0.20.0
+
+### Minor Changes
+
+- 416d250: `JournalEntryBatchEntityServer.Cancel()` now authorizes itself (#214). It resolves the cancel gate and the ERP lookup through `JournalEntryBatchDispatchServices` and runs them before writing anything: a Pending cancel needs the rejection recorded on the approval Task, a cancel past approval needs the gate to allow the user and is recorded on the approval Task inside the cancel's transaction, and a Failed batch is looked up in the ERP first. A server caller that loads the entity and calls `Cancel()` directly can no longer skip any of these. `cancelJournalEntryBatch` now loads the batch and calls `Cancel()`.
+
+  Breaking change to `JournalEntryBatchCancelOptions` (and `CancelJournalEntryBatchOptions`): `erpNotPostedBasis` and `onCancelled` are removed. `ERPNotPostedBasis` comes only from the lookup's result, and `confirmNotAlreadyPostedInERP` counts only when the lookup cannot settle whether the batch posted. `Cancel()` also requires a context user.
+
+- c7a1af4: A journal entry batch can no longer be sent to the ERP twice, and every send is recorded (#184).
+
+  - New trigger `trg_JournalEntryBatch_SendOnce` (error 50030). A send must start from `Approved` or `Failed`
+    and advance `SendAttemptCount` by exactly one; no update may keep a batch `Sent`; and `SentAt`,
+    `SentByUserID` and `SendAttemptCount` change at no other time. When two operators, two browser tabs, or a
+    scheduled run and an operator send the same batch, the second save fails and its ERP call never runs,
+    whether the first send is still `Sent`, has `Posted`, or has `Failed` again.
+  - `sendJournalEntryBatch` throws `JournalEntryBatchSendRefusedError` for that refusal, naming the status the
+    batch reads now. `Accounting.BuildJournalEntryBatches` does not mark the batch `Failed` on it.
+  - New columns `SentByUserID` and `SendAttemptCount` on `JournalEntryBatch`. Every transition into `Sent`
+    stamps them, with `SentAt`, from the context user and the loaded count. The count is dispatch attempts that
+    entered `Sent`, including a retry adopted from the ERP and a first send the pre-flight lookup refuses.
+    Batches sent before this release read `SendAttemptCount = 1`, with no sender.
+  - The batch detail panel and the Dispatch status page show who sent a batch and how many attempts it took.
+  - A successful retry still clears `ErrorMessage`. The earlier value, and each overwritten `SentAt` and
+    sender, remain in `__mj.RecordChange`.
+
+- 6931f2c: A Failed batch that did post, but whose summary-line dimension tags changed locally, can be recorded Posted again (#216). Its retry was refused by the approved-content seal before the ERP lookup could find the posting, and its cancel was refused because the lookup did find it, so archiving was the only way out.
+
+  - `sendJournalEntryBatch` now judges a broken seal on a `Failed` retry after the ERP lookup. When the ERP already holds the batch, it is recorded `Posted` with no second post and `SealMismatchDetectedAt` is set; the local tags are left as they are. A lookup that finds nothing, a mismatch, another batch's journal, a failed lookup or no lookup still refuses the retry. A first send from `Approved`, and any retry whose footing, member count or summary header is off, are refused before the lookup as before.
+  - New `JournalEntryBatchEntityServer.CheckApprovedContent()` returns the dispatch checks split into `CoherenceProblems` and `SealProblems`; `CheckControlTotalCoherence()` is unchanged.
+  - The batch detail panel shows a warning and the time when a batch carries `SealMismatchDetectedAt`.
+
+- c0c06e0: A `Pending` journal entry batch can no longer be set to `Cancelled` by an ordinary save (#213). The generic form or the GraphQL update could take that edge and skip `Cancel()`'s teardown, leaving the summary journal entry in place and the member entries `Batched` under a `Cancelled` batch, where any journal entry save could release them. Every `→ Cancelled` edge now goes through `JournalEntryBatchEntityServer.Cancel()`, as `Approved` and `Failed` already did; regenerate's empty cancel uses the new `CancelAfterTeardown()`, which refuses a batch whose summary pointer is still set. `trg_JournalEntryBatch_Immutability` (50031) now refuses a move to `Cancelled` from any status while `SummaryJournalEntryID` is set.
+- 37ff531: A company's `PostingStartDate` keeps journal entries dated before it out of every posting batch, for example history brought in at cutover that the ERP already holds.
+
+  - `pendingCandidateFilter` excludes an entry whose `EffectiveDate` is before its own company's `PostingStartDate` on every build, preview and scheduled sweep. NULL, or a company with no profile row, means no floor. It composes with the per-call `startDate`: the later of the two wins.
+  - `buildJournalEntryBatchFromExplicitIds` refuses a selection holding such an entry, naming it; `buildJournalEntryBatchFromView` drops them with a warning.
+  - `previewBatch` reports `BeforePostingStartCount`: how many entries the other criteria matched that a posting start date held back.
+
+### Patch Changes
+
+- 5ce8759: A batch the ERP accepted can no longer be posted a second time. A `Failed` batch that carries the ERP's reference (the ERP accepted it and only its `Posted` save failed) is recorded `Posted` by a retry under that reference, with no lookup and no post, whatever the lookup would answer and whether or not the operator confirmed. `Cancel()` refuses it, and Dispatch status no longer offers Cancel for it. When the ERP returns no reference, the batch number is kept in its place.
+
+  When the `Sent → Failed` save itself fails, the send reloads the batch and throws `JournalEntryBatchFailureNotRecordedError`, carrying the status the database holds and any ERP reference, instead of reporting a `Failed` the database does not hold. The scheduled run's triage writes that reference with `Failed`.
+
+  A batch moves to `Sent` or `Posted` only through `JournalEntryBatchEntityServer.SaveDispatchTransition()`, which the dispatch engine calls; a plain save to either is refused, so a batch cannot be marked `Sent` and then `Posted` without the ERP being called.
+
+  A lookup that finds nothing is not trusted while the `ERP_POSTING_NOT_READ_BACK` finance exception type is missing or inactive, since a post that could not be read back would then raise no exception. An over-long account number names the account and points at its External Account ID instead of saying to shorten it. Both batch previews show how many entries a company's posting start date holds back.
+
+- 525d657: A batch the ERP accepted whose `Sent → Posted` save then failed is now marked `Failed` instead of throwing (#30). On a manual dispatch the throw left the batch at `Sent`, where no retry, archive or stranded-entry report reaches it, with its entries held at `Batched`. The `Failed` batch keeps the ERP reference, and the retry records it `Posted` under that reference without sending it again. `sendJournalEntryBatch` returns the batch `Failed` in this case, as it does for a send the ERP rejects.
+- 3c5be1e: The ERP lookup finds a Business Central posting that BC renumbered (#205). A BC journal batch with a Posting No. Series gives the posting a document number of its own, so the lookup by batch number found nothing and a Failed retry sent the batch again. When nothing has posted under the batch number, the lookup now searches the posting date's G/L entries on the batch's first account for the batch token, and reads the posting under BC's number. After a post, the provider reads the journal back the same way and records BC's number as the batch's reference instead of the batch number. A readback that fails leaves the post a success under the batch number, and raises a new `ERP_POSTING_NOT_READ_BACK` finance exception on the batch. While one is Open for a company, a lookup there that finds nothing answers Unavailable, so a Failed retry or cancel in that company needs the operator's confirmation. A renumbered posting on a date other than the batch's posting date is not found.
+- 346dc14: Reject values too long for Business Central instead of letting the post fail at BC. A dimension or dimension value code longer than BC's `code` field is refused on save when any company posts to BC. Before a batch is sent, every account number, batch number, line description and dimension code is checked against BC's journal-line limits, and the batch is not sent if any is over. The message names the field and the limit. Limits are read from the Business Central connector's integration metadata; nothing is truncated.
+- 01888bc: Cancelling a Failed batch now looks its number up in the ERP a second time, after the cancel's writes and before they commit (#215). The first lookup's "nothing posted" means nothing has posted yet; a post the ERP was still processing can land after it. If the second lookup finds this batch's posting, the cancel is rolled back, so its entries are never released, the batch is recorded Posted the way a retry records it (no second ERP post), and `Cancel()` throws the new `JournalEntryBatchPostedDuringCancelError`. If it finds a posting under the number that does not match the batch, one the first lookup had not reported, the cancel is refused: it is rolled back, the batch stays Failed and is not recorded Posted, and `Cancel()` throws the new `JournalEntryBatchMismatchDuringCancelError`, telling the operator to investigate that posting before cancelling or retrying. `confirmNotAlreadyPostedInERP` does not override it. Any other answer lets the cancel commit.
+- d8629a1: Batch preview now shows each candidate's own debit total in its Amount column whether or not it is ticked. Unticked entries previously read $0.00 (#253). The totals still cover only the ticked entries.
+- Updated dependencies [77e4756]
+- Updated dependencies [c7a1af4]
+- Updated dependencies [d3a99ff]
+- Updated dependencies [b2de2f7]
+- Updated dependencies [a8e560f]
+  - @mj-biz-apps/accounting-entities@0.20.0
+  - @mj-biz-apps/accounting-engine-base@0.20.0
+
 ## 0.19.0
 
 ### Patch Changes
