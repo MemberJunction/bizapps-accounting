@@ -12,6 +12,10 @@ name: PostgreSQL migration parity
 on:
   workflow_dispatch:
 
+# Least-privilege token: parity validation only — nothing here writes to the repo.
+permissions:
+  contents: read
+
 concurrency:
   group: pg-migrations-${{ github.ref }}
   cancel-in-progress: true
