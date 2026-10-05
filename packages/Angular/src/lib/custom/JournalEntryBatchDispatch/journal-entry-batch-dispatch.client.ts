@@ -2,7 +2,7 @@
  * JournalEntryBatchDispatchClient — a thin, strongly-typed wrapper over the batch Remote Operations
  * (`Accounting.BuildJournalEntryBatch` / `Accounting.RegenerateJournalEntryBatch` / `Accounting.DispatchJournalEntryBatch` /
  * `Accounting.RecordJournalEntryBatchDecision` / `Accounting.GetJournalEntryBatchApprovalState` /
- * `Accounting.ArchiveJournalEntryBatch` / `Accounting.ResumeJournalEntryBatchPosting` /
+ * `Accounting.ArchiveJournalEntryBatch` / `Accounting.CancelJournalEntryBatch` / `Accounting.ResumeJournalEntryBatchPosting` /
  * `Accounting.GetStrandedJournalEntries`).
  *
  * Deliberately NOT a hand-written GraphQL client (the old shape, which talked to the deleted
@@ -49,6 +49,12 @@ interface DispatchJournalEntryBatchOutputWire {
 interface GetJournalEntryBatchApprovalStateOutputWire { Approved: boolean; Reason?: string }
 interface RecordJournalEntryBatchDecisionOutputWire { Recorded: true }
 interface ArchiveJournalEntryBatchOutputWire { Status: string; ArchivedAt: string | null }
+interface CancelJournalEntryBatchOutputWire {
+  Status: string;
+  CancelledAt: string | null;
+  ConfirmationRequired?: string;
+  ConfirmationKind?: DispatchConfirmationKind;
+}
 interface ResumeJournalEntryBatchPostingOutputWire { Status: string; JournalEntriesPosted: number }
 
 /**
@@ -99,6 +105,19 @@ export interface ArchiveJournalEntryBatchResult {
   Success: boolean;
   Status?: string;
   ErrorMessage?: string;
+}
+
+export interface CancelJournalEntryBatchResult {
+  Success: boolean;
+  Status?: string;
+  ErrorMessage?: string;
+  /**
+   * Why a Failed cancel was not done (#207): the ERP lookup could not settle whether the batch already
+   * posted. The batch is untouched; cancel again with the operator's confirmation, or not at all.
+   */
+  ConfirmationRequired?: string;
+  /** Which way it could not settle it. `Mismatch` is most likely this batch, already posted. */
+  ConfirmationKind?: DispatchConfirmationKind;
 }
 
 export interface ResumeJournalEntryBatchPostingResult {
@@ -159,19 +178,31 @@ export interface PreviewJournalEntryBatchOutputWire {
   Candidates: PreviewEntryWire[];
   TotalDebits: number;
   TotalCredits: number;
+  GrossDebits: number;
+  GrossCredits: number;
   OutOfOrderSkipCount: number;
+  BeforePostingStartCount: number;
 }
 
 export interface PreviewJournalEntryBatchResult {
   Success: boolean;
   Candidates: PreviewEntryWire[];
+  /** Netted — what the batch will carry. Lines that cancel within the batch are gone. */
   TotalDebits: number;
   TotalCredits: number;
+  /** Before netting — every line of every ticked entry. */
+  GrossDebits: number;
+  GrossCredits: number;
   /**
-   * How many candidates the build would batch AHEAD of an older entry the operator left
-   * unticked. Surfaced so a caller can warn before building; the build allows it.
+   * How many unticked entries are OLDER than the newest ticked one — the entries newer ones
+   * would batch ahead of. Surfaced so a caller can warn before building; the build allows it.
    */
   OutOfOrderSkipCount: number;
+  /**
+   * How many entries the other criteria admit that are dated before their company's posting start
+   * date: held back, and left Pending, by every build.
+   */
+  BeforePostingStartCount: number;
   ErrorMessage?: string;
 }
 
@@ -210,18 +241,21 @@ export class JournalEntryBatchDispatchClient {
     try {
       const res = await this.dataProvider.RouteOperation<PreviewJournalEntryBatchOptionsInput, PreviewJournalEntryBatchOutputWire>(
         'Accounting.PreviewJournalEntryBatch', options ?? {});
-      if (!res.Success || !res.Output) return { Success: false, Candidates: [], TotalDebits: 0, TotalCredits: 0, OutOfOrderSkipCount: 0, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
+      if (!res.Success || !res.Output) return { Success: false, Candidates: [], TotalDebits: 0, TotalCredits: 0, GrossDebits: 0, GrossCredits: 0, OutOfOrderSkipCount: 0, BeforePostingStartCount: 0, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
       return {
         Success: true,
         Candidates: res.Output.Candidates ?? [],
         TotalDebits: res.Output.TotalDebits ?? 0,
         TotalCredits: res.Output.TotalCredits ?? 0,
+        GrossDebits: res.Output.GrossDebits ?? 0,
+        GrossCredits: res.Output.GrossCredits ?? 0,
         OutOfOrderSkipCount: res.Output.OutOfOrderSkipCount ?? 0,
+        BeforePostingStartCount: res.Output.BeforePostingStartCount ?? 0,
       };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       LogError(`JournalEntryBatchDispatchClient.PreviewJournalEntryBatch failed: ${msg}`);
-      return { Success: false, Candidates: [], TotalDebits: 0, TotalCredits: 0, OutOfOrderSkipCount: 0, ErrorMessage: msg };
+      return { Success: false, Candidates: [], TotalDebits: 0, TotalCredits: 0, GrossDebits: 0, GrossCredits: 0, OutOfOrderSkipCount: 0, BeforePostingStartCount: 0, ErrorMessage: msg };
     }
   }
 
@@ -297,6 +331,34 @@ export class JournalEntryBatchDispatchClient {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       LogError(`JournalEntryBatchDispatchClient.ArchiveBatch failed: ${msg}`);
+      return { Success: false, ErrorMessage: msg };
+    }
+  }
+
+  /**
+   * Cancel an Approved or Failed batch and return its journal entries to the candidate pool (#183) —
+   * the opposite of Archive, which keeps them locked. The server requires a reason. A Failed batch may
+   * already be in the ERP, so the server looks its number up first (#207): a posting it finds refuses
+   * the cancel (an error); nothing found lets it through; otherwise it answers `ConfirmationRequired`,
+   * and the caller sends `confirmNotAlreadyPostedInERP` only once the operator has checked. The server
+   * looks again before the cancel commits (#215); a posting found then undoes the cancel, records the
+   * batch Posted and comes back as an error saying so; a new posting that does not match undoes it,
+   * leaves the batch Failed and comes back as an error saying to investigate it.
+   */
+  public async CancelBatch(batchID: string, reason: string, confirmNotAlreadyPostedInERP = false): Promise<CancelJournalEntryBatchResult> {
+    try {
+      const res = await this.dataProvider.RouteOperation<{ JournalEntryBatchID: string; Reason: string; ConfirmNotAlreadyPostedInERP: boolean }, CancelJournalEntryBatchOutputWire>(
+        'Accounting.CancelJournalEntryBatch', { JournalEntryBatchID: batchID, Reason: reason, ConfirmNotAlreadyPostedInERP: confirmNotAlreadyPostedInERP });
+      if (!res.Success || !res.Output) return { Success: false, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
+      return {
+        Success: true,
+        Status: res.Output.Status,
+        ConfirmationRequired: res.Output.ConfirmationRequired,
+        ConfirmationKind: res.Output.ConfirmationKind,
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      LogError(`JournalEntryBatchDispatchClient.CancelBatch failed: ${msg}`);
       return { Success: false, ErrorMessage: msg };
     }
   }

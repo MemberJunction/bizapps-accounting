@@ -16,6 +16,13 @@
  *   recordDecision(batchId, outcome, decidedByPersonId, notes): resolve the batch's Task and record
  *     the decision via TaskOrchestrationService. The shared entry point for BOTH the in-app approve
  *     control and the Tasks inbox.
+ *   assertRejected(batchId) (#233): a Pending batch is cancelled only once its Task carries a terminal
+ *     rejection, which recordDecision writes first.
+ *   assertMayCancelApproved(batchId) / recordCancellation(batchId, cancellation) (#183): only the company's
+ *     CFO or the batch's recorded approver may cancel a batch past approval, and the cancel is
+ *     written to the approval Task as a comment, so the approver's record shows what became of it.
+ *     The comment needs the canceller's linked Person, so the authorization refuses a cancel
+ *     without one before any work starts (#212).
  *
  * PROVIDER: the gate is a plain helper with no provider of its own, so the correct
  * IMetadataProvider is INJECTED at construction — required, no global fallback (the system
@@ -24,8 +31,9 @@
  *
  * CONNECTS TO:
  *   READS:  Journal Entry Batches · Accounting Company Profiles · Task Links · Task Decisions
- *           · Task Decision Outcomes · Task Types
+ *           · Task Decision Outcomes · Task Types · People
  *   WRITES (via TaskOrchestrationService): Tasks · Task Links · Task Assignments · Task Decisions
+ *   WRITES (directly): Task Comments (a batch cancelled past approval)
  *   ENTITY (gated): 'MJ_BizApps_Accounting: Journal Entry Batches'
  *   DOC:    JournalEntryBatchEngine.ts (JournalEntryBatchApprovalGate seam) · plan §S1 (CFO-approval workflow gate)
  */
@@ -38,6 +46,7 @@ import {
   type TaskDecisionOutcomeCode,
 } from '@mj-biz-apps/tasks-core';
 import type {
+  mjBizAppsTasksTaskCommentEntity,
   mjBizAppsTasksTaskEntity,
   mjBizAppsTasksTaskTypeEntity,
   mjBizAppsTasksTaskLinkEntity,
@@ -48,8 +57,8 @@ import type {
   mjBizAppsAccountingJournalEntryBatchEntity,
   mjBizAppsAccountingAccountingCompanyProfileEntity,
 } from '@mj-biz-apps/accounting-entities';
-import type { JournalEntryBatchApprovalGate } from './JournalEntryBatchEngine.js';
-import { requireSqlGuid } from './SqlGuards.js';
+import type { JournalEntryBatchApprovalGate, JournalEntryBatchCancelGate, RecordedCancellation } from './JournalEntryBatchEngine.js';
+import { requireSqlGuid, sqlGuidLiteral } from './SqlGuards.js';
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
@@ -57,6 +66,8 @@ const TASK_TYPE_ENTITY = 'MJ_BizApps_Tasks: Task Types';
 const TASK_LINK_ENTITY = 'MJ_BizApps_Tasks: Task Links';
 const TASK_DECISION_ENTITY = 'MJ_BizApps_Tasks: Task Decisions';
 const TASK_DECISION_OUTCOME_ENTITY = 'MJ_BizApps_Tasks: Task Decision Outcomes';
+const TASK_COMMENT_ENTITY = 'MJ_BizApps_Tasks: Task Comments';
+const PERSON_ENTITY = 'MJ_BizApps_Common: People';
 
 /** The seeded generic approval TaskType that CreateApprovalRequest expects. */
 const APPROVAL_REQUEST_TASK_TYPE = 'Approval Request';
@@ -75,7 +86,7 @@ const USER_ENTITY = 'MJ: Users';
  * Real CFO-approval gate, backed by bizapps-tasks. Stateless — one instance can serve every batch.
  * The correct IMetadataProvider is injected at construction (required; no global fallback).
  */
-export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate {
+export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, JournalEntryBatchCancelGate {
   private readonly orchestration = new TaskOrchestrationService();
 
   constructor(private readonly provider: IMetadataProvider) {
@@ -140,7 +151,7 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate {
     // a missing value fails closed.
     const task = await this.resolveStampedApprovalTask(batchId, contextUser);
     if (!task) throw new Error(`Batch ${batchId} has no stamped approval Task — it was not raised through TasksAppApprovalGate.onBatchBuilt.`);
-    if (!(await this.hasApprovedDecision(task.ID, contextUser))) {
+    if (!(await this.hasTerminalDecision(task.ID, 'Approval', contextUser))) {
       throw new Error(`Batch ${batchId} is not approved — no terminal Approved/ApprovedWithConditions decision on its approval Task.`);
     }
   }
@@ -152,6 +163,19 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate {
     if (!(await batch.Load(batchId)) || !batch.ApprovalTaskID) return null;
     const task = await this.provider.GetEntityObject<mjBizAppsTasksTaskEntity>('MJ_BizApps_Tasks: Tasks', contextUser);
     return (await task.Load(batch.ApprovalTaskID)) ? task : null;
+  }
+
+  /**
+   * Block a Pending cancel unless the batch's Task carries a terminal rejection (#233). A Pending
+   * cancel IS the CFO's rejection, so recordDecision must have written it first; without this, a
+   * server caller could cancel a batch awaiting approval that nobody rejected.
+   */
+  async assertRejected(batchId: string, contextUser: UserInfo): Promise<void> {
+    const task = await this.resolveBatchTask(batchId, contextUser);
+    if (!task) throw new Error(`Batch ${batchId} has no approval Task, so no rejection is recorded — a Pending batch is cancelled only by rejecting it.`);
+    if (!(await this.hasTerminalDecision(task.ID, 'Rejection', contextUser))) {
+      throw new Error(`Batch ${batchId} is not rejected — no terminal rejection decision on its approval Task. Reject it from Batch approvals to cancel it.`);
+    }
   }
 
   /**
@@ -191,7 +215,86 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate {
     await this.orchestration.RecordDecision({ TaskID: task.ID, OutcomeCode: outcome, DecidedByPersonID: decidedByPersonId, Notes: notes }, contextUser);
   }
 
+  /**
+   * Who may cancel a batch past approval (#183): the company's configured CFO, or the user recorded
+   * as the batch's approver. Cancelling discards a summary that one of them signed and returns its
+   * entries to the next build, so it is theirs to decide — before this, the only cancel path was a
+   * CFO rejection through recordDecision. Unlike recordDecision this does not hard-fail when no CFO
+   * is configured, because the recorded approver is enough.
+   *
+   * It also refuses an authorized user who has no linked Person when the batch has an approval Task
+   * (#212): recordCancellation writes the cancel there as a TaskComment, which requires a Person.
+   * Checked here, the refusal comes before the ERP lookup and the member release instead of rolling
+   * them back. Authorization is checked first, so a user who may not cancel learns only that.
+   */
+  async assertMayCancelApproved(batchId: string, contextUser: UserInfo): Promise<void> {
+    const batch = await this.loadBatch(batchId, contextUser);
+    const cfoUserId = await this.readCFOUserIdForCompany(batch.CompanyID, contextUser);
+    const allowed = [cfoUserId, batch.ApprovedByUserID].filter((id): id is string => !!id);
+    if (!allowed.some(id => UUIDsEqual(id, contextUser.ID))) {
+      throw new Error(
+        `Batch ${batch.JournalEntryBatchNumber ?? batchId}: only the company's configured approver ` +
+        `(AccountingCompanyProfile.ApprovalCFOUserID) or the user who approved this batch may cancel it after approval.`,
+      );
+    }
+    if (!(await this.resolveBatchTask(batchId, contextUser))) return;
+    if (!(await this.resolvePersonIdForUser(contextUser))) throw this.noLinkedPersonError(batch, contextUser);
+  }
+
+  /**
+   * Record a cancel past approval on the batch's approval Task, as a comment by the cancelling user's
+   * Person. The Task keeps its approved decision — the comment is what tells the approver the batch
+   * they signed was cancelled, and why. A batch with no approval Task (approved without the tasks
+   * workflow) has nothing to annotate. assertMayCancelApproved has already refused a user with no
+   * linked Person; this refuses again in case the link was removed since, and the caller runs this
+   * inside the cancel's transaction, so the cancel rolls back rather than going unrecorded.
+   */
+  async recordCancellation(batchId: string, cancellation: RecordedCancellation, contextUser: UserInfo): Promise<void> {
+    const task = await this.resolveBatchTask(batchId, contextUser);
+    if (!task) return;
+    const batch = await this.loadBatch(batchId, contextUser);
+    const personId = await this.resolvePersonIdForUser(contextUser);
+    if (!personId) throw this.noLinkedPersonError(batch, contextUser);
+    const comment = await this.provider.GetEntityObject<mjBizAppsTasksTaskCommentEntity>(TASK_COMMENT_ENTITY, contextUser);
+    comment.NewRecord();
+    comment.TaskID = task.ID;
+    comment.PersonID = personId;
+    // The prior status comes from the caller: this runs after the cancel was saved, so the batch
+    // loaded above already reads Cancelled.
+    comment.Content = `Journal entry batch ${batch.JournalEntryBatchNumber} was cancelled after approval (it was ${cancellation.fromStatus}). Its journal entries return to the next build. Reason: ${cancellation.reason.trim()}` +
+      (cancellation.erpCheck ? ` ERP check: ${cancellation.erpCheck}` : '');
+    if (!(await comment.Save())) {
+      throw new Error(`Batch ${batch.JournalEntryBatchNumber ?? batchId}: recording the cancel on its approval Task failed: ${comment.LatestResult?.CompleteMessage ?? 'unknown'}`);
+    }
+  }
+
   // ─── helpers ───────────────────────────────────────────────────────────────
+
+  /** Why a cancel past approval is refused for a user with no linked Person (#212). */
+  private noLinkedPersonError(batch: mjBizAppsAccountingJournalEntryBatchEntity, contextUser: UserInfo): Error {
+    return new Error(
+      `Batch ${batch.JournalEntryBatchNumber ?? batch.ID}: the cancel cannot be recorded on its approval Task because user ` +
+      `${contextUser.Email ?? contextUser.ID} has no linked Person (MJ_BizApps_Common: People.LinkedUserID). ` +
+      'An administrator must link this user to a Person before the batch can be cancelled.',
+    );
+  }
+
+  /** The company's CFO User, or null when none is configured (no hard-fail — see assertMayCancelApproved). */
+  private async readCFOUserIdForCompany(companyId: string, contextUser: UserInfo): Promise<string | null> {
+    const acp = await this.provider.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, contextUser);
+    if (!(await acp.Load(companyId))) return null;
+    return acp.ApprovalCFOUserID ?? null;
+  }
+
+  /** The bizapps-common Person linked to this MJ user (Person.LinkedUserID), or null. */
+  private async resolvePersonIdForUser(contextUser: UserInfo): Promise<string | null> {
+    const res = await this.viewProvider.RunView<{ ID: string }>(
+      { EntityName: PERSON_ENTITY, ExtraFilter: `LinkedUserID=${sqlGuidLiteral(contextUser.ID, 'TasksAppApprovalGate.resolvePersonIdForUser')}`, Fields: ['ID'], MaxRows: 1, ResultType: 'simple', BypassCache: true },
+      contextUser,
+    );
+    if (!res.Success) throw new Error(`TasksAppApprovalGate: Person lookup failed: ${res.ErrorMessage ?? 'unknown'}`);
+    return res.Results?.[0]?.ID ?? null;
+  }
 
   private async loadBatch(batchId: string, contextUser: UserInfo): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
     const batch = await this.provider.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
@@ -254,31 +357,32 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate {
   }
 
   /**
-   * True when the Task has at least one terminal decision whose outcome code is Approved/ApprovedWithConditions.
+   * True when the Task has at least one terminal decision of the given kind: an approval
+   * (Approved/ApprovedWithConditions) or a rejection (any other terminal outcome).
    * WHO decided is enforced at the WRITE (recordDecision requires contextUser to be the company's
-   * ApprovalCFOUserID); this read deliberately stays "any terminal approval on the task" because
-   * decisions can legitimately carry no DecidedByPersonID (an approver User with no linked Person).
+   * ApprovalCFOUserID); this read deliberately stays "any terminal decision of that kind on the task"
+   * because decisions can legitimately carry no DecidedByPersonID (an approver User with no linked Person).
    */
-  private async hasApprovedDecision(taskId: string, contextUser: UserInfo): Promise<boolean> {
-    requireSqlGuid(taskId, 'TasksAppApprovalGate.hasApprovedDecision');
+  private async hasTerminalDecision(taskId: string, kind: 'Approval' | 'Rejection', contextUser: UserInfo): Promise<boolean> {
+    requireSqlGuid(taskId, 'TasksAppApprovalGate.hasTerminalDecision');
     const decRes = await this.viewProvider.RunView<mjBizAppsTasksTaskDecisionEntity>(
       { EntityName: TASK_DECISION_ENTITY, ExtraFilter: `TaskID='${taskId}'`, ResultType: 'entity_object', BypassCache: true },
       contextUser,
     );
     const decisions = decRes.Results ?? [];
     if (decisions.length === 0) return false;
-    const outcomes = await this.loadApprovedTerminalOutcomeIds(contextUser);
+    const outcomes = await this.loadTerminalOutcomeIds(kind, contextUser);
     return decisions.some(d => outcomes.some(oid => UUIDsEqual(oid, d.OutcomeID)));
   }
 
-  /** The TaskDecisionOutcome IDs that are BOTH terminal AND an approval (Approved / ApprovedWithConditions). */
-  private async loadApprovedTerminalOutcomeIds(contextUser: UserInfo): Promise<string[]> {
+  /** The terminal TaskDecisionOutcome IDs that are an approval, or that are not (a rejection). */
+  private async loadTerminalOutcomeIds(kind: 'Approval' | 'Rejection', contextUser: UserInfo): Promise<string[]> {
     const res = await this.viewProvider.RunView<mjBizAppsTasksTaskDecisionOutcomeEntity>(
       { EntityName: TASK_DECISION_OUTCOME_ENTITY, ExtraFilter: `IsTerminal=1`, ResultType: 'entity_object', BypassCache: true },
       contextUser,
     );
     return (res.Results ?? [])
-      .filter(o => IsTaskDecisionOutcomeCode(o.Code) && IsApprovalOutcome(o.Code))
+      .filter(o => IsTaskDecisionOutcomeCode(o.Code) && IsApprovalOutcome(o.Code) === (kind === 'Approval'))
       .map(o => o.ID);
   }
 }

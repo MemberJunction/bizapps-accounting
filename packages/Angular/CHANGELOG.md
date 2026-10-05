@@ -1,5 +1,124 @@
 # @mj-biz-apps/accounting-ng
 
+## 0.20.0
+
+### Minor Changes
+
+- c7a1af4: A journal entry batch can no longer be sent to the ERP twice, and every send is recorded (#184).
+
+  - New trigger `trg_JournalEntryBatch_SendOnce` (error 50030). A send must start from `Approved` or `Failed`
+    and advance `SendAttemptCount` by exactly one; no update may keep a batch `Sent`; and `SentAt`,
+    `SentByUserID` and `SendAttemptCount` change at no other time. When two operators, two browser tabs, or a
+    scheduled run and an operator send the same batch, the second save fails and its ERP call never runs,
+    whether the first send is still `Sent`, has `Posted`, or has `Failed` again.
+  - `sendJournalEntryBatch` throws `JournalEntryBatchSendRefusedError` for that refusal, naming the status the
+    batch reads now. `Accounting.BuildJournalEntryBatches` does not mark the batch `Failed` on it.
+  - New columns `SentByUserID` and `SendAttemptCount` on `JournalEntryBatch`. Every transition into `Sent`
+    stamps them, with `SentAt`, from the context user and the loaded count. The count is dispatch attempts that
+    entered `Sent`, including a retry adopted from the ERP and a first send the pre-flight lookup refuses.
+    Batches sent before this release read `SendAttemptCount = 1`, with no sender.
+  - The batch detail panel and the Dispatch status page show who sent a batch and how many attempts it took.
+  - A successful retry still clears `ErrorMessage`. The earlier value, and each overwritten `SentAt` and
+    sender, remain in `__mj.RecordChange`.
+
+- b2de2f7: Dimension tags on a locked journal entry line are frozen, and a batch can record that a retry adopted the ERP's posting over a broken approved-content seal (#216).
+
+  - New trigger `trg_JELD_Immutability` (error 50033) refuses insert, update and delete of a `JournalEntryLineDimension` row whose journal entry is `Batched` or `GLPosted`, as `trg_JEL_Immutability` does for the line. The PostgreSQL twin ships as a PG-only migration, since the converter does not convert triggers.
+  - New nullable column `JournalEntryBatch.SealMismatchDetectedAt`: when a Failed batch's retry finds its journal already in the ERP although the batch no longer matches its seal, this records when it was recorded Posted, so the batch can be listed and its local tags reviewed. Existing batches read NULL.
+  - `SealMismatchDetectedAt` is frozen. `trg_JournalEntryBatch_Immutability` (error 50034) lets it be set only by the update that records a retried batch `Posted` (`Sent` → `Posted` with `SendAttemptCount` above 1), and refuses any later change or clear and any insert that carries it. The trigger now also fires on insert. Its PostgreSQL twin is `trg_JournalEntryBatch_SealMismatchFreeze` in the same PG-only migration.
+
+- a8e560f: New nullable column `AccountingCompanyProfile.PostingStartDate` (DATE): the first `EffectiveDate` a company posts to the ERP. Journal entries dated before it are meant never to enter a posting batch, for example history brought in at cutover that the ERP already holds. NULL means no floor; existing profiles read NULL. Includes the CodeGen output for the column (entity subclass, GraphQL types, profile form field).
+
+### Patch Changes
+
+- 5ce8759: A batch the ERP accepted can no longer be posted a second time. A `Failed` batch that carries the ERP's reference (the ERP accepted it and only its `Posted` save failed) is recorded `Posted` by a retry under that reference, with no lookup and no post, whatever the lookup would answer and whether or not the operator confirmed. `Cancel()` refuses it, and Dispatch status no longer offers Cancel for it. When the ERP returns no reference, the batch number is kept in its place.
+
+  When the `Sent → Failed` save itself fails, the send reloads the batch and throws `JournalEntryBatchFailureNotRecordedError`, carrying the status the database holds and any ERP reference, instead of reporting a `Failed` the database does not hold. The scheduled run's triage writes that reference with `Failed`.
+
+  A batch moves to `Sent` or `Posted` only through `JournalEntryBatchEntityServer.SaveDispatchTransition()`, which the dispatch engine calls; a plain save to either is refused, so a batch cannot be marked `Sent` and then `Posted` without the ERP being called.
+
+  A lookup that finds nothing is not trusted while the `ERP_POSTING_NOT_READ_BACK` finance exception type is missing or inactive, since a post that could not be read back would then raise no exception. An over-long account number names the account and points at its External Account ID instead of saying to shorten it. Both batch previews show how many entries a company's posting start date holds back.
+
+- f6aebd8: The Journal Entry Batch and Company overview panels mount again. Their card tools and footers sat on `<div>` elements, but `mj-card`'s `mjCardTools` and `mjCardFooter` slots are TemplateRef directives that need an `<ng-template>`, so both panels failed with NG0201 and the batch record lost its member journal entries table.
+- 6931f2c: A Failed batch that did post, but whose summary-line dimension tags changed locally, can be recorded Posted again (#216). Its retry was refused by the approved-content seal before the ERP lookup could find the posting, and its cancel was refused because the lookup did find it, so archiving was the only way out.
+
+  - `sendJournalEntryBatch` now judges a broken seal on a `Failed` retry after the ERP lookup. When the ERP already holds the batch, it is recorded `Posted` with no second post and `SealMismatchDetectedAt` is set; the local tags are left as they are. A lookup that finds nothing, a mismatch, another batch's journal, a failed lookup or no lookup still refuses the retry. A first send from `Approved`, and any retry whose footing, member count or summary header is off, are refused before the lookup as before.
+  - New `JournalEntryBatchEntityServer.CheckApprovedContent()` returns the dispatch checks split into `CoherenceProblems` and `SealProblems`; `CheckControlTotalCoherence()` is unchanged.
+  - The batch detail panel shows a warning and the time when a batch carries `SealMismatchDetectedAt`.
+
+- 854cf11: Build Batch preview: apply only the latest preview response. Overlapping previews (ticking entries quickly) could settle out of order, so an earlier, slower response overwrote the totals for the current selection and cleared the loading state early. The Build Batch modal and the batch workspace now discard superseded responses, and the workspace writes a response to the tab that requested it rather than the tab active when it arrives (#254).
+- Updated dependencies [77e4756]
+- Updated dependencies [c7a1af4]
+- Updated dependencies [d3a99ff]
+- Updated dependencies [b2de2f7]
+- Updated dependencies [a8e560f]
+  - @mj-biz-apps/accounting-entities@0.20.0
+  - @mj-biz-apps/accounting-engine-base@0.20.0
+
+## 0.19.0
+
+### Minor Changes
+
+- 6f1515e: The deferred-revenue waterfall adds a "Recognized YTD" KPI (#231): entries recognized between the first day of the company's fiscal year and the business day, inclusive. The fiscal-year start comes from the company's Accounting Company Profile, 1 January when it has none. The rule (`FiscalYearOf`, `IsInFiscalYearToDate`, `AccountingEngineBase.FiscalYearStartFor`) moves to accounting-engine-base, and journal-entry numbering now uses it too, with no change in the fiscal years it assigns.
+
+### Patch Changes
+
+- Updated dependencies [6f1515e]
+  - @mj-biz-apps/accounting-engine-base@0.19.0
+  - @mj-biz-apps/accounting-entities@0.19.0
+
+## 0.18.0
+
+### Patch Changes
+
+- Updated dependencies [cc21d7c]
+  - @mj-biz-apps/accounting-entities@0.18.0
+  - @mj-biz-apps/accounting-engine-base@0.18.0
+
+## 0.17.0
+
+### Minor Changes
+
+- a36297a: Adds a finance exception list for month-end review (golive #279). New tables `FinanceExceptionType` (the catalog of exception kinds: a stable `Code`, the owning app, `IsActive`, and a JSON `Configuration` of detector thresholds) and `FinanceException` (one row per record a reviewer must look at, unique on type and `DedupeKey`, with `Status` `Open` → `Reviewed` | `Corrected` and a review audit that `CK_FinanceException_Review` keeps consistent with it). Five types are seeded as metadata: `PROGRESS_JUDGMENT_CALL`, `PROGRESS_UNATTESTED`, `WON_DEAL_ORDER_NOT_CONFIRMED`, `PRICE_BELOW_ENGINE_UNAPPROVED` and `OVERLAPPING_SUBSCRIPTION`. Three remote operations: `Accounting.GetFinanceExceptionTypes` returns each type's parsed thresholds; `Accounting.RaiseFinanceExceptions` raises exceptions idempotently (an existing row is returned rather than duplicated, and a repeat raise of an Open row refreshes its creator fields and summary; an inactive type is skipped; an unknown type or entity fails the whole call and writes nothing), joins the caller's transaction, reads under an update lock so a concurrent raise of the same item returns the first one's row, and requires the system user when called through the API, so only server code raises; `Accounting.ClearFinanceException` clears an Open exception with a required note, locking the row so a concurrent clear finds it no longer Open, and requires the new `MJ.BizApps.Accounting.FinanceExceptions.Clear` authorization, held by a new `Finance` role, while refusing the source record's creator and any exception whose creator has no linked login. `FinanceExceptionEntityServer` refuses a status or review change made outside that operation, any change to a cleared exception, and any delete. A saved query, "Finance Exceptions Ready To Close", groups the list by company and month; a month is ready when it has no Open exceptions. Remote operation typed bases are now emitted into `@mj-biz-apps/accounting-entities` (`generated/remote_operations.ts`).
+
+### Patch Changes
+
+- c46af6c: The batch preview returns `GrossDebits` and `GrossCredits`, the ticked entries' line totals before netting, beside
+  the netted `TotalDebits` and `TotalCredits` the batch carries. The Build Batch modal shows both as "Entry Totals" and
+  "Net to Post", with a note when netting reduces the total, and the batch workspace's summary strip shows both. A
+  recognition entry's Dr Deferred Revenue nets against its booking's Cr Deferred Revenue, so the netted pair alone read
+  as if recognition entries were left out. The modal's ordering warning now says the count is of excluded entries older
+  than an included one; it described them as included entries.
+- Updated dependencies [7210151]
+- Updated dependencies [3af15bb]
+- Updated dependencies [a36297a]
+  - @mj-biz-apps/accounting-entities@0.17.0
+  - @mj-biz-apps/accounting-engine-base@0.17.0
+
+## 0.16.0
+
+### Patch Changes
+
+- 0529ef0: The deferred-revenue waterfall counts an entry as recognized from its `EffectiveDate` day, not from the first of
+  its month, and a month's "Released" amount and chip follow the same rule. Reversed entries and reversal entries
+  are left out, since the pair nets to zero. The "Recognized YTD" KPI, which summed the whole schedule, is now
+  "Recognized to Date" (`WaterfallSummary.TotalRecognizedToDate`). The unused `FormatCompact` method is removed.
+- Updated dependencies [844cb02]
+  - @mj-biz-apps/accounting-entities@0.16.0
+  - @mj-biz-apps/accounting-engine-base@0.16.0
+
+## 0.15.0
+
+### Minor Changes
+
+- 0587bfa: A `Failed` journal entry batch's content is now frozen, and an `Approved` or `Failed` batch can be cancelled (#183). A `Failed` batch is retried under its original approval, but `trg_JournalEntryBatch_Immutability` did not freeze it, so its `PostingDate` — the journal date the ERP receives — control totals and summary pointer could be edited before the retry, and the dispatch check (self-consistency only) would not notice. The trigger now freezes `Failed` alongside `Approved` / `Sent` / `Posted` / `Archived`, and also `Cancelled`, whose approval pair and cancel audit can no longer be rewritten or deleted. It polices the status door too: `Posted`, `Cancelled` and `Archived` are terminal, no batch returns to `Pending`, only a `Pending` batch is approved, a `Sent` batch is not archived, `Cancelled` is reachable only from `Pending`, `Approved` or `Failed`, and an `Approved`/`Failed` batch becomes `Cancelled` only with its summary pointer cleared in the same update. The cancel audit and ERP check are written only by the update that cancels the batch, and `SentAt` is never cleared once set. So that a batch with genuinely wrong content is not left with only retry or archive, `JournalEntryBatchEntityServer.Cancel(contextUser, { reason, confirmNotAlreadyPostedInERP })` now takes an `Approved` or `Failed` batch — and is the only way to: it marks the batch `Cancelled`, then releases the member entries to the next build and deletes the summary, in one transaction. Past approval, only the company's CFO or the batch's approver may cancel, a reason is required (entity plus `CK_JournalEntryBatch_CancelAudit`) and written to the approval Task, and cancelling a `Failed` batch looks its number up in the ERP first (#207): its entries would otherwise be batched again under a new number that no later lookup can connect to a journal that did post. A matching posting refuses the cancel with no override (retry it instead, which records it `Posted`); nothing found lets it through; a mismatch, a failed lookup or no lookup needs the operator's confirmation, and the operation answers `ConfirmationRequired` / `ConfirmationKind` to ask for it. The check is persisted as `ERPNotPostedConfirmedAt` / `ERPNotPostedConfirmedByUserID` / `ERPNotPostedBasis` (`ERPLookup` or `UserAttested`; `CK_JournalEntryBatch_CancelERPCheck`), and the approval Task comment says whether the lookup or the operator established it. `trg_JournalEntry_Immutability` sanctions the member unlock while the owning batch is `Pending` or `Cancelled`. Approval also writes a new `ApprovedContentHash`, a SHA-256 of the batch header, summary entry and lines and member set, frozen by the trigger; `CheckControlTotalCoherence` compares against it and checks the summary entry carries the batch's date and company, so dispatch refuses a batch that changed since approval. Batches approved before this have no hash and get the other checks. Exposed as the `Accounting.CancelJournalEntryBatch` remote operation (Approved/Failed only; Pending is rejected through Batch approvals) and a Cancel action on Dispatch status, Batch Dispatch and the Batches overview.
+
+### Patch Changes
+
+- Updated dependencies [0587bfa]
+  - @mj-biz-apps/accounting-entities@0.15.0
+  - @mj-biz-apps/accounting-engine-base@0.15.0
+
 ## 0.14.0
 
 ### Patch Changes

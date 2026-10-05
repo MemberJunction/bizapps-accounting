@@ -11,6 +11,7 @@ import path from 'path';
 import { RunView } from '@memberjunction/core';
 import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
 import { finishAndExit } from './harness-exit.js';
+import { RegisterHarnessDispatchServices } from './harness-dispatch-services.js';
 import '@memberjunction/server-bootstrap-lite';
 import '@mj-biz-apps/common-entities';
 import '@mj-biz-apps/accounting-entities';
@@ -28,6 +29,7 @@ async function main(): Promise<void> {
   await UserCache.Instance.Refresh(pool);
   const user = UserCache.Users.find(u => u?.Type?.trim().toLowerCase() === 'owner') ?? UserCache.Users[0];
   if (!user) throw new Error('no context user');
+  RegisterHarnessDispatchServices(); // the send's gate and poster: always approved, mock ERP (#233)
 
   const rv = new RunView();
   const before = await rv.RunView<{ ID: string }>({ EntityName: 'MJ_BizApps_Accounting: Journal Entries', ExtraFilter: `Status='Pending'`, Fields: ['ID'], ResultType: 'simple', BypassCache: true }, user);
@@ -39,7 +41,7 @@ async function main(): Promise<void> {
   if (!built) { finishAndExit('buildJournalEntryBatch returned null (nothing netted).', 0, pool); return; }
   console.log(`Built batch ${built.batchId}: ${built.jeCount} JE(s), ${built.summaryLineCount} summary line(s), ${built.totalDebits}/${built.totalCredits}`);
   await approveJournalEntryBatch(built.batchId, user.ID, user);
-  const posted = await sendJournalEntryBatch(built.batchId, user, { gate: AutoApproveGate });
+  const posted = await sendJournalEntryBatch(built.batchId, user, {});
   console.log(`Batch ${built.batchId} → ${posted.Status} (ref ${posted.ExternalJournalEntryBatchRef})`);
   finishAndExit(`Posted ${built.jeCount} previously-Pending JE(s). Clean slate for block2.`, 0, pool);
 }

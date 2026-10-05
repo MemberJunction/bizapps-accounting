@@ -94,6 +94,12 @@
                 </div>
               }
 
+              @if (row.Status === 'Cancelled' && row.CancelReason) {
+                <div class="bd-card__hint">
+                  <i class="fa-solid fa-ban"></i> Cancelled: {{ row.CancelReason }}
+                </div>
+              }
+
               @if (row.Status === 'Pending' && row.Approved === false && row.ApprovalReason) {
                 <div class="bd-card__hint">
                   <i class="fa-solid fa-circle-info"></i> {{ row.ApprovalReason }}
@@ -125,6 +131,12 @@
                   <button mjButton variant="secondary" size="sm" [disabled]="row.Busy" (click)="OnArchive(row)"
                           title="Close this batch permanently without sending it to the ERP. Its journal entries stay locked to it.">
                     <i class="fa-solid fa-box-archive"></i> Archive
+                  </button>
+                }
+                @if (canCancelApproved(row)) {
+                  <button mjButton variant="secondary" size="sm" [disabled]="row.Busy" (click)="OnCancelApproved(row)"
+                          title="Cancel this batch and return its journal entries to the next build.">
+                    <i class="fa-solid fa-ban"></i> Cancel
                   </button>
                 }
                 @if (row.Busy) {

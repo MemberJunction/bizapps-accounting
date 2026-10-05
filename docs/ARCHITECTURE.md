@@ -35,12 +35,51 @@ Batching (CoreEntitiesServer)        GLOBAL multi-company buildJournalEntryBatch
 DB invariants (migrations)           12 triggers (incl. AM-4 per-company balance 50019/50023/50022)
                                      + 2 GLOBAL numbering sprocs  ◄── the un-bypassable floor
 ```
-ERP master data travels: Explorer / nightly job → **`Accounting.RunERPSync`** → `AccountingERPEngine.SyncMasterData` → `IntegrationEngine.RunSync` (entity maps, per-company isolation) → registered `BaseAccountingEngineExtension` subclasses (FP&A cash import first). Journal dispatch: approved batch → `PostJournalBatch` → MJ verb `CreateJournalEntry` (account **numbers**, AM-4). Accounting never writes `CashBalance`.
+ERP master data travels: Explorer / nightly job → **`Accounting.RunERPSync`** → `AccountingERPEngine.SyncMasterData` → `IntegrationEngine.RunSync` (entity maps, per-company isolation) → registered `BaseAccountingEngineExtension` subclasses (FP&A cash import first). Only ERP connections (Business Central, QuickBooks Online) are synced; one with no entity maps, such as a posting-only connection, is reported skipped, not failed (#256). Journal dispatch: approved batch → `PostJournalBatch` → MJ verb `CreateJournalEntry` (account **numbers**, AM-4). The pre-flight lookup and the post choose the same connection: the batch company's one active connection for the target, or among several the one whose Configuration has `"postJournalEntries": true`, else refuse. Its `CompanyIntegrationID` is sent to the verb (#256, MJ#4867). Accounting never writes `CashBalance`.
 
 How a write travels: caller (Orders, browser, script) → **`Accounting.CreateJournalEntry`** →
 engine pipeline → `BaseEntity.Save()` in one TransactionGroup (hooks number; triggers enforce;
 `__mj.RecordChange` audits) → later swept into a multi-company batch → CFO-approved → posted to
 the ERP **by account number, split per company** (AM-4). Periods/close live in the ERP (CH-1).
+
+<a id="erp-master-data-contract"></a>
+### 2.1 ERP master-data mapping contract (#268)
+How an ERP's chart of accounts and dimensions land in this app's tables. It holds for every ERP;
+each Company Integration's entity maps and field maps implement it.
+
+| Target | Identity | Scope | A re-sync |
+|---|---|---|---|
+| `GL Accounts` | `CompanyID` + `Code`; `ExternalSystem` / `ExternalAccountID` carry the ERP's id | per company | updates the company's row |
+| `Dimensions` | `Code` | **shared by every company** | merges onto the existing row; never inserts a second |
+| `Dimension Values` | `DimensionID` + `Code` | shared, through its Dimension | merges onto the existing row |
+
+- **Code is the identity of a Dimension and a Dimension Value.** They have no external-id columns,
+  and multi-ERP sync is out of scope. An ERP's dimension ids are per company, so a shared row has no
+  single external id to hold. Journal posting already sends dimension tags by `Code`
+  (`resolveExternalDimensions`).
+- **Dimensions are instance-wide shared master data.** Two companies that both use `DEPT` mean the
+  same Dimension. The Integration Engine matches an incoming record on the field maps marked
+  `IsKeyField`, so the Dimensions map marks exactly `Code`, and the Dimension Values map exactly
+  `DimensionID` and `Code`. `SyncMasterData` checks this before it pulls, and fails a connection
+  whose maps key on anything else. A map without the key matches only through its own connection's
+  record maps, so a second company's sync would insert and collide on `UQ_Dimension_Code`. Company
+  scoping, if it is ever needed, revisits this together with the identity rule.
+- **`AccountType` is translated per integration**, by a `lookup` step in the `TransformPipeline` of
+  the field map onto `AccountType` (a child of the GL Accounts entity map). Cost of Goods Sold maps to
+  `Expense`. Give the lookup no `Default`: an ERP value it does not list then yields null, the
+  `NOT NULL` column refuses the row, and the gap shows as an errored record instead of a guessed
+  type. A generic example, for an ERP whose account category field is `category`:
+
+  ```json
+  [{ "Type": "lookup", "Config": { "Map": {
+      "Assets": "Asset", "Liabilities": "Liability", "Equity": "Equity",
+      "Income": "Revenue", "Cost of Goods Sold": "Expense", "Expense": "Expense"
+  } } }]
+  ```
+- **Non-postable ERP rows are skipped, not forced into the enum.** Heading, total and begin/end-total
+  rows are presentation structure, not accounts. The Integration Engine has no record-level filter
+  yet, so today this is the connector's or the integrator's job; it must not be done by giving the
+  `AccountType` lookup a `Default`.
 
 ## 3. Design patterns used
 - **Audit by construction (AD-2):** every ledger mutation goes through `BaseEntity.Save()`
@@ -109,30 +148,61 @@ The front door for external callers is **`Accounting.CreateJournalEntry`** (§2)
 validates shape/accounts/dimensions, merges duplicate lines (debits ordered first), checks
 balance **overall and per company** (AM-4), and writes atomically. Hooks on the entity path:
 - **W6** `generateReversal(reason)` — new Pending JE (`EntryType='Reversal'`, trg 50012), Dr/Cr
-  swapped, back-referenced both ways.
+  swapped, back-referenced both ways, dated the later of today's business day and the original's
+  `EffectiveDate`.
 - **W9** attachment validation — a non-null `FileID` must reference an existing `__mj.File`.
 - **F1** `validateJournalEntry()` — read-only guard: balance overall + per company, two-line
   minimum, GL-active.
 - **DB invariants (triggers)** validated by `test-harnesses/server/block1-runtime.ts`, each with
   a raw-SQL bypass case: balanced-on-lock overall (50001) **and per company (50019/50022 —
   AM-4)**, JE immutability (50003/50004), JE-line immutability (50006). Batch side: summary
-  foots overall (50014) **and per company (50023)**, batch immutability (50008/50009).
+  foots overall (50014) **and per company (50023)**, batch immutability (50008/50009, `Failed`
+  included since #183), the cancel-after-approval release and `CK_JournalEntryBatch_CancelAudit`.
+  Send-once (50030, #184) is validated by L21 and L22 in `test-harnesses/server/phase2-encapsulation.live.test.ts`:
+  a send must start from `Approved` or `Failed` and advance `SendAttemptCount` by one, no update keeps a
+  batch `Sent`, and the send stamp changes at no other time. Of two dispatches that loaded the same batch,
+  only one reaches the ERP, whether the loser's save lands while the winner is `Sent` or after it has left.
   *(The period-close trigger + W4 routing were retired with the period tables.)*
 - **Batch lifecycle (CH-3):** `Pending → Approved → Sent → Posted | Failed | Cancelled` — see
   `JournalEntryBatchEngine.ts`; the ERP wire is **account numbers, split per company** (AM-4).
+- **Posting start date:** `AccountingCompanyProfile.PostingStartDate` is a per-company floor on the
+  batch candidate pool. Entries dated before it (e.g. history brought in at cutover) never enter a
+  batch: `pendingCandidateFilter` applies it to every build, preview and scheduled sweep, and the
+  explicit-ID and view builds check it too. NULL, or no profile row, means no floor.
 - **Recovery past Approved (#145):** a `Failed` batch is retried by dispatching it again
   (`Failed → Sent`; the gate and the coherence check re-run, the original approval is reused). A
   `Failed` batch may already be in the ERP, so every send first looks the batch number up there
   (#182): a Failed batch the ERP holds line for line is recorded `Posted` without a second send; a
   first send whose number is already there is refused. The operator's confirmation that the number
   has not posted is needed only when the lookup cannot settle it: a mismatch, a failed lookup, or an
-  ERP with no lookup. Business Central posting also refuses a journal that already holds unposted
-  lines. Its content is not frozen (#183). A
+  ERP with no lookup. A `Failed` batch that carries the ERP's reference was accepted and only its
+  `Posted` save failed: its retry records it `Posted` under that reference with no lookup, and it
+  cannot be cancelled. `Sent` and `Posted` are written only by the dispatch engine. Business Central is looked up by document number on any date; QuickBooks
+  Online, whose verb cannot filter by number, among the posting date's journal entries. Business
+  Central posting also refuses a journal that already holds unposted lines, and QuickBooks Online
+  posting refuses a GL account with no QBO account id. Its content is frozen like an Approved batch's, and the dispatch check compares it with the
+  `ApprovedContentHash` seal written at approval (#183). A `Failed` or `Approved` batch whose content
+  is wrong is cancelled instead (`Accounting.CancelJournalEntryBatch`: the company's CFO or the
+  batch's approver only, reason required and written to the approval Task), which releases its
+  entries to the next build. From `Failed` the ERP is looked up first (#207), because the released
+  entries get a new number no later lookup can connect: a posting it holds refuses the cancel, nothing
+  found lets it through, and the operator confirms, persisted, only when the lookup cannot settle it.
+  Nothing found means nothing posted yet, so the cancel looks again after its writes and before it
+  commits (#215): a posting found then rolls the cancel back and records the batch `Posted`; a new posting that does not
+  match rolls it back and leaves the batch `Failed` for investigation.
+  A
   `Posted` batch whose member `Batched → GLPosted` flip stopped partway is finished by
   `resumeJournalEntryBatchPosting` (`Accounting.ResumeJournalEntryBatchPosting`), which makes no
   ERP call. `findStrandedJournalEntries` reports the entries both states hold; the scheduled
   action and the Dispatch status page surface it. Scheduled runs never retry on their own.
+  Each send stamps `SentAt`, `SentByUserID` and `SendAttemptCount` on the batch; `__mj.RecordChange`
+  keeps every earlier attempt, including the `ErrorMessage` a successful retry clears (#184).
 - **W5** realized-FX auto-emit: retired — Orders/Payments computes + posts the FX line (§C1).
+- **Finance exceptions (golive #279):** `FinanceExceptions.ts` holds the logic behind
+  `Accounting.GetFinanceExceptionTypes` / `RaiseFinanceExceptions` / `ClearFinanceException`
+  (`FinanceExceptionOperations.ts`, over the CodeGen-emitted bases in `accounting-entities`);
+  `FinanceExceptionEntityServer.ts` makes the clear operation the only way a status changes. Orders
+  and sales resolve the operations by key through the ClassFactory, with no build-time dependency.
 
 ## 6. Connection map
 Hand-written, cross-layer files carry a top-of-file `CONNECTS TO:` block (CALLED BY / CALLS /

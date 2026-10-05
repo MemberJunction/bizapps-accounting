@@ -54,10 +54,16 @@ export interface AffectedAccount {
 export interface BatchPreview {
   Candidates: BatchPreviewEntry[];
   AffectedAccounts: AffectedAccount[];
+  /** Netted — what the batch will carry. */
   TotalDebits: number;
   TotalCredits: number;
+  /** Before netting — every line of every included entry. */
+  GrossDebits: number;
+  GrossCredits: number;
   PerCompany: Array<{ CompanyID: string; Debit: number; Credit: number }>;
   OutOfOrderSkipCount: number;
+  /** Entries dated before their company's posting start date: held back, and left Pending, by every build. */
+  BeforePostingStartCount: number;
 }
 
 export interface BuildOutcome {

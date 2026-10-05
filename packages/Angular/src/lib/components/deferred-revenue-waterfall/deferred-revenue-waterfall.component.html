@@ -6,8 +6,12 @@
             <span class="mja-kpi-val">{{ FormatMoney(Summary.TotalDeferredBeginning) }}</span>
         </div>
         <div class="mja-kpi-card">
+            <span class="mja-kpi-label">Recognized to Date</span>
+            <span class="mja-kpi-val mja-val--green">{{ FormatMoney(Summary.TotalRecognizedToDate) }} ({{ Summary.PercentRecognized.toFixed(1) }}%)</span>
+        </div>
+        <div class="mja-kpi-card">
             <span class="mja-kpi-label">Recognized YTD</span>
-            <span class="mja-kpi-val mja-val--green">{{ FormatMoney(Summary.TotalRecognizedYTD) }} ({{ Summary.PercentRecognized.toFixed(1) }}%)</span>
+            <span class="mja-kpi-val mja-val--green">{{ FormatMoney(Summary.TotalRecognizedYTD) }}</span>
         </div>
         <div class="mja-kpi-card">
             <span class="mja-kpi-label">Remaining Unearned</span>
@@ -77,7 +81,7 @@
                                                 {{ cell.TermLabel }}
                                             </span>
                                         }
-                                        @if (cell.IsPastOrCurrent && cell.Amount > 0) {
+                                        @if (cell.RecognizedAmount > 0) {
                                             <span class="mja-chip mja-chip--released"><i class="fa-solid fa-check"></i> Released</span>
                                         } @else if (cell.Amount > 0) {
                                             <span class="mja-chip mja-chip--scheduled">Scheduled</span>
