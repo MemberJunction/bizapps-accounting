@@ -45,6 +45,11 @@ removed (#158): the field is an optional per-company display override, and blank
 skipped, every row via `BaseEntity.Save()` so it stays audit-by-construction) seeds the 10-account
 AR-subledger set (AD-8 + §C1) **when deliberately invoked** — fixtures, demo seeds, or a future
 "seed standard chart" UI affordance.
+**Validates (bc-aidp-next-golive#313):** changing `EntityType` to Division, Department or Branch is
+refused while the company owns an active GL account. Those types keep no books: their entries resolve
+their legal entity's accounts (`AccountingEngineBase.LegalEntityFor`). `GLAccountEntityServer`
+refuses the same state from the account side: creating or reactivating an active account on such a
+company.
 - *(The profile's 5 default GL-account refs were RETIRED 2026-07-23 — role/link model replaces them.)*
 - *(Period generation was REMOVED 2026-07-06 — no `AccountingPeriod` rows exist to create.)*
 
