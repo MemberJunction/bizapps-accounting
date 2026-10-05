@@ -171,6 +171,8 @@ const REJECTED_OUTCOME_ID = '0a0a0a0a-0000-4000-8000-00000000a003';
 function decisionProvider(opts: { hasTask: boolean; outcomeIds: string[] }): IMetadataProvider {
   return {
     GetEntityObject: async (entityName: string) => {
+      // assertApproved loads the batch for its stamped ApprovalTaskID.
+      if (entityName === BATCH_ENTITY) return { Load: async () => true, ID: BATCH_ID, ApprovalTaskID: opts.hasTask ? TASK_ID : null };
       if (entityName === 'MJ_BizApps_Tasks: Tasks') return { Load: async () => true, ID: TASK_ID };
       throw new Error(`decisionProvider: unexpected entity '${entityName}'`);
     },
