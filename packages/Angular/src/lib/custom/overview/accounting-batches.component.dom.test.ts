@@ -265,7 +265,7 @@ describe('AccountingBatchesPageComponent — overlapping Build Batch previews (#
   });
 });
 
-describe('AccountingBatchesPageComponent — Cancel an Approved/Failed batch (#183)', () => {
+describe('AccountingBatchesPageComponent — Cancel a batch (#183, golive #302)', () => {
   const APPROVED: BatchItem = { ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000002', JournalEntryBatchNumber: 'JEB-TEST-0002', Status: 'Approved' };
   const FAILED: BatchItem = { ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000003', JournalEntryBatchNumber: 'JEB-TEST-0003', Status: 'Failed' };
   let cancelCalls: { ID: string; Reason: string; Confirm: boolean }[];
@@ -296,26 +296,38 @@ describe('AccountingBatchesPageComponent — Cancel an Approved/Failed batch (#1
     return fixture.componentInstance;
   }
 
-  it('offers Cancel on Approved and Failed batches but not on Pending', async () => {
+  it('offers Cancel on Pending (golive #302), Approved and Failed batches but not on a closed one', async () => {
     const page = await render();
-    expect(page.CanCancelApproved(APPROVED)).toBe(true);
-    expect(page.CanCancelApproved(FAILED)).toBe(true);
-    expect(page.CanCancelApproved(LISTED_BATCH)).toBe(false);
+    expect(page.CanCancel(LISTED_BATCH)).toBe(true);
+    expect(page.CanCancel(APPROVED)).toBe(true);
+    expect(page.CanCancel(FAILED)).toBe(true);
+    expect(page.CanCancel({ ...LISTED_BATCH, Status: 'Cancelled' })).toBe(false);
+    expect(page.CanCancel({ ...LISTED_BATCH, Status: 'Posted' })).toBe(false);
+  });
+
+  it('cancels a Pending batch with the reason, unconfirmed (golive #302)', async () => {
+    const page = await render();
+    page.OnCancel(LISTED_BATCH, new Event('click'));
+    page.CancelReasonDraft = '  Built with the wrong entries  ';
+    await page.ConfirmCancel();
+    expect(cancelCalls).toEqual([{ ID: LISTED_BATCH.ID, Reason: 'Built with the wrong entries', Confirm: false }]);
+    expect(page.ActionMessageIsError).toBe(false);
+    expect(page.CancelModalVisible).toBe(false);
   });
 
   it('does not cancel with a blank reason', async () => {
     const page = await render();
-    page.OnCancelApproved(APPROVED, new Event('click'));
+    page.OnCancel(APPROVED, new Event('click'));
     page.CancelReasonDraft = '   ';
-    await page.ConfirmCancelApproved();
+    await page.ConfirmCancel();
     expect(cancelCalls).toEqual([]);
   });
 
   it('cancels an Approved batch without the ERP confirmation', async () => {
     const page = await render();
-    page.OnCancelApproved(APPROVED, new Event('click'));
+    page.OnCancel(APPROVED, new Event('click'));
     page.CancelReasonDraft = '  wrong period  ';
-    await page.ConfirmCancelApproved();
+    await page.ConfirmCancel();
     expect(cancelCalls).toEqual([{ ID: APPROVED.ID, Reason: 'wrong period', Confirm: false }]);
     expect(page.ActionMessageIsError).toBe(false);
     expect(page.CancelModalVisible).toBe(false);
@@ -323,9 +335,9 @@ describe('AccountingBatchesPageComponent — Cancel an Approved/Failed batch (#1
 
   it('cancels a Failed batch on the first attempt, unconfirmed, when the server finds nothing in the ERP', async () => {
     const page = await render();
-    page.OnCancelApproved(FAILED, new Event('click'));
+    page.OnCancel(FAILED, new Event('click'));
     page.CancelReasonDraft = 'ERP rejected the journal';
-    await page.ConfirmCancelApproved();
+    await page.ConfirmCancel();
     expect(cancelCalls).toEqual([{ ID: FAILED.ID, Reason: 'ERP rejected the journal', Confirm: false }]);
     expect(page.CancelModalVisible).toBe(false);
     expect(page.ActionMessageIsError).toBe(false);
@@ -334,16 +346,16 @@ describe('AccountingBatchesPageComponent — Cancel an Approved/Failed batch (#1
   it('asks for the ERP check only when the server cannot settle it, then sends the confirmation', async () => {
     unconfirmedFailedAnswer = { Success: true, Status: 'Failed', ConfirmationRequired: 'could not check the ERP for document JEB-TEST-0003: timeout', ConfirmationKind: 'Error' };
     const page = await render();
-    page.OnCancelApproved(FAILED, new Event('click'));
+    page.OnCancel(FAILED, new Event('click'));
     page.CancelReasonDraft = 'ERP rejected the journal';
-    await page.ConfirmCancelApproved();
+    await page.ConfirmCancel();
 
     expect(page.CancelModalVisible).toBe(true);
     expect(page.CancelERPCheckReason).toMatch(/could not check the ERP/);
     expect(page.CanConfirmCancel).toBe(false); // the checkbox is the operator's word
 
     page.CancelConfirmNotPostedInERP = true;
-    await page.ConfirmCancelApproved();
+    await page.ConfirmCancel();
     expect(cancelCalls.map((c) => c.Confirm)).toEqual([false, true]);
     expect(page.CancelModalVisible).toBe(false);
   });
@@ -351,25 +363,25 @@ describe('AccountingBatchesPageComponent — Cancel an Approved/Failed batch (#1
   it('needs the batch number retyped to cancel past a Mismatch — the checkbox is not enough', async () => {
     unconfirmedFailedAnswer = { Success: true, Status: 'Failed', ConfirmationRequired: 'the ERP already holds document JEB-TEST-0003, and it does not match', ConfirmationKind: 'Mismatch' };
     const page = await render();
-    page.OnCancelApproved(FAILED, new Event('click'));
+    page.OnCancel(FAILED, new Event('click'));
     page.CancelReasonDraft = 'ERP rejected the journal';
-    await page.ConfirmCancelApproved();
+    await page.ConfirmCancel();
 
     page.CancelConfirmNotPostedInERP = true;
     page.CancelMismatchText = 'JEB-TEST-000';
     expect(page.CanConfirmCancel).toBe(false);
     page.CancelMismatchText = 'JEB-TEST-0003';
     expect(page.CanConfirmCancel).toBe(true);
-    await page.ConfirmCancelApproved();
+    await page.ConfirmCancel();
     expect(cancelCalls.map((c) => c.Confirm)).toEqual([false, true]);
   });
 
   it('shows the refusal when the ERP holds the batch, and does not ask to override it', async () => {
     unconfirmedFailedAnswer = { Success: false, ErrorMessage: 'the ERP already holds document JEB-TEST-0003 and it matches this batch, so the batch posted. Retry it from Dispatch status instead' };
     const page = await render();
-    page.OnCancelApproved(FAILED, new Event('click'));
+    page.OnCancel(FAILED, new Event('click'));
     page.CancelReasonDraft = 'ERP rejected the journal';
-    await page.ConfirmCancelApproved();
+    await page.ConfirmCancel();
 
     expect(cancelCalls).toHaveLength(1);
     expect(page.ActionMessageIsError).toBe(true);

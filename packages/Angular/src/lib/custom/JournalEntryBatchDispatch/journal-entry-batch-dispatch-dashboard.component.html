@@ -133,8 +133,8 @@
                     <i class="fa-solid fa-box-archive"></i> Archive
                   </button>
                 }
-                @if (canCancelApproved(row)) {
-                  <button mjButton variant="secondary" size="sm" [disabled]="row.Busy" (click)="OnCancelApproved(row)"
+                @if (canCancel(row)) {
+                  <button mjButton variant="secondary" size="sm" [disabled]="row.Busy" (click)="OnCancel(row)"
                           title="Cancel this batch and return its journal entries to the next build.">
                     <i class="fa-solid fa-ban"></i> Cancel
                   </button>

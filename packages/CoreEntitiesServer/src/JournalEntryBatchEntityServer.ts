@@ -118,13 +118,16 @@ const DISPATCH_TARGETS: ReadonlyArray<string> = ['Sent', 'Posted'];
 export type ERPNotPostedBasis = NonNullable<mjBizAppsAccountingJournalEntryBatchEntity['ERPNotPostedBasis']>;
 
 /**
- * Options for {@link JournalEntryBatchEntityServer.Cancel}. Both matter only once the batch has
- * been approved; a Pending cancel (a CFO rejection) needs neither.
+ * Options for {@link JournalEntryBatchEntityServer.Cancel}. A Pending batch the CFO rejected needs
+ * neither; any other cancel needs a reason, and only a Failed batch uses the ERP confirmation.
  *
  * Neither can authorize the cancel or stand in for the ERP check: Cancel runs those itself (#214).
  */
 export interface JournalEntryBatchCancelOptions {
-  /** Why the batch is being cancelled. Required from Approved or Failed (CK_JournalEntryBatch_CancelAudit). */
+  /**
+   * Why the batch is being cancelled. Required except for a Pending batch whose approval Task records
+   * a rejection; from Approved or Failed the database requires it too (CK_JournalEntryBatch_CancelAudit).
+   */
   reason?: string | null;
   /**
    * The canceller has checked the ERP and this Failed batch's number has NOT posted there. Cancel
@@ -140,7 +143,7 @@ export interface JournalEntryBatchCancelOptions {
 interface AuthorizedCancel {
   /** How "not posted in the ERP" was established, for a batch that had been sent. */
   erpNotPostedBasis?: ERPNotPostedBasis;
-  /** Records a cancel past approval on the approval Task; runs inside the cancel's transaction. */
+  /** Records the cancel on the approval Task; runs inside the cancel's transaction. */
   record?: () => Promise<void>;
   /** For a Failed batch, the first ERP lookup's answer and the lookup to run again before the cancel commits (#215). */
   erpCheck?: Pick<FailedCancelErpCheck, 'recheck' | 'firstStatus'>;
@@ -580,7 +583,9 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
    *
    * Before anything is written it authorizes the cancel as `contextUser` (#214), through the gate
    * {@link JournalEntryBatchDispatchServices} resolves, never one a caller passes:
-   *   · Pending — a CFO rejection: the approval Task must already record it (#233).
+   *   · Pending — either a CFO rejection the approval Task already records (#233), or (golive #302) a
+   *     cancel with a reason by the company's CFO or the user who built the batch, which comments on
+   *     the approval Task and closes it in the same transaction.
    *   · Approved / Failed — a reason is required, and the gate must allow the user (the company's
    *     CFO or the batch's approver). The cancel is recorded on the approval Task in the same
    *     transaction (#183).
@@ -678,13 +683,16 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     const provider = this.ProviderToUse as unknown as IMetadataProvider;
     const services = JournalEntryBatchDispatchServices.Resolve();
     const gate = services.CreateCancelGate(provider);
-    if (this.Status === 'Pending') {
-      await gate.assertRejected(this.ID, user);
-      return {};
-    }
-    await gate.assertMayCancelApproved(this.ID, user);
     // Captured now: the record runs after the batch was saved Cancelled.
     const fromStatus = this.Status;
+    if (fromStatus === 'Pending') {
+      if (await gate.isRejected(this.ID, user)) return {};
+      await gate.assertMayCancelPending(this.ID, user);
+      this.assertReason(options);
+      const cancellation = { reason: options.reason ?? '', fromStatus };
+      return { record: () => gate.recordCancellation(this.ID, cancellation, user) };
+    }
+    await gate.assertMayCancelApproved(this.ID, user);
     const erpCheck = fromStatus === 'Failed'
       ? await checkFailedBatchBeforeCancel(this, user, provider, services.CreateLookup(provider), options.confirmNotAlreadyPostedInERP === true)
       : undefined;
@@ -719,6 +727,16 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     }
     if (this.Status !== 'Pending' && !options.reason?.trim()) {
       throw new Error(`JournalEntryBatchEntityServer.Cancel: batch ${label} is ${this.Status}; cancelling it discards an approved summary, so a reason is required.`);
+    }
+  }
+
+  /**
+   * A Pending cancel nobody rejected needs a reason (golive #302). Checked after authorizing, so a
+   * user who may not cancel learns only that; the rejected path needs none, the decision is the record.
+   */
+  private assertReason(options: JournalEntryBatchCancelOptions): void {
+    if (!options.reason?.trim()) {
+      throw new Error(`JournalEntryBatchEntityServer.Cancel: batch ${this.JournalEntryBatchNumber ?? this.ID} is Pending and was not rejected; a reason is required to cancel it.`);
     }
   }
 
