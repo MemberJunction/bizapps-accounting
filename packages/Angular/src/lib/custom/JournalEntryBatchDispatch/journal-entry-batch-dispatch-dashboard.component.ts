@@ -314,8 +314,12 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
     return ['Pending', 'Approved', 'Failed'].includes(row.Status) && !row.Busy;
   }
 
-  /** Cancel (#183) is offered on an Approved or Failed batch; a Pending batch uses Reject instead. */
+  /**
+   * Cancel (#183) is offered on an Approved or Failed batch; a Pending batch uses Reject instead. Not
+   * on a Failed batch carrying the ERP's reference: the ERP accepted it, and the server refuses it.
+   */
   public canCancelApproved(row: BatchRow): boolean {
+    if (row.Status === 'Failed' && row.ExternalJournalEntryBatchRef) return false;
     return (row.Status === 'Approved' || row.Status === 'Failed') && !row.Busy;
   }
 

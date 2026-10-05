@@ -616,6 +616,13 @@ batch is approved, and a `Sent` batch is not archived (`trg_JournalEntryBatch_Im
   sees exactly what date span they are committing (Amith 2026-07-23). This date-awareness is the
   only "scheduling" machinery the system has: forward-dated JEs just sit Pending until a window
   reaches them.
+- **Per-company posting start date:** `AccountingCompanyProfile.PostingStartDate` (nullable) is a
+  floor under every filter. An entry dated before its own company's `PostingStartDate` is never a
+  candidate — not in a build, a preview or a scheduled sweep — for entries the ERP must not receive
+  from this ledger, e.g. history brought in at cutover. It composes with the per-call start date:
+  the later of the two bounds each company. NULL, or a company with no profile row, means no floor.
+  The preview reports how many entries the floor held back (`BeforePostingStartCount`); an
+  explicit-ID build holding such an entry is refused, and a view build drops them with a warning.
 - **Arbitrary batches via MJ User Views:** build a view of desired records → "generate batch from
   view"; the engine validates the view resolves ONLY unbatched entries (rejects loudly otherwise).
 - The whole batch (header + summary lines + dimensions + control totals + JE locks) commits in
