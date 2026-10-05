@@ -120,7 +120,8 @@ const rejectionChecks: string[] = [];
  * Pending batch as rejected. Nothing here cancels past approval.
  */
 const PendingRejectedCancelGate: JournalEntryBatchCancelGate = {
-  async assertRejected(batchId) { rejectionChecks.push(batchId.toLowerCase()); },
+  async isRejected(batchId) { rejectionChecks.push(batchId.toLowerCase()); return true; },
+  async assertMayCancelPending() { throw new Error('phase2 harness: every Pending batch here reads as rejected'); },
   async assertMayCancelApproved() { throw new Error('phase2 harness: no test cancels past approval'); },
   async recordCancellation() { throw new Error('phase2 harness: no test cancels past approval'); },
 };

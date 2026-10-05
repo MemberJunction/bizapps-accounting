@@ -1,5 +1,22 @@
 # @mj-biz-apps/accounting-ng
 
+## 0.21.0
+
+### Minor Changes
+
+- 6a30d91: A Pending journal entry batch can be cancelled with a reason by the company's configured approver or by the user who built it. Its journal entries return to the candidate pool, and its approval Task gets a comment and is closed as Cancelled. `Accounting.CancelJournalEntryBatch` now accepts a Pending batch. A CFO rejection still cancels a Pending batch through `Accounting.RecordJournalEntryBatchDecision`, and its notes become the batch's `CancelReason`.
+
+  The Batches screen and JE batch approvals offer Cancel on a Pending batch, and Reject asks for a reason.
+
+  Breaking change to `JournalEntryBatchCancelGate`: `assertRejected` is replaced by `isRejected`, which returns a boolean, and `assertMayCancelPending` is added.
+
+### Patch Changes
+
+- Updated dependencies [4b5fdac]
+- Updated dependencies [1af981d]
+  - @mj-biz-apps/accounting-entities@0.21.0
+  - @mj-biz-apps/accounting-engine-base@0.21.0
+
 ## 0.20.0
 
 ### Minor Changes
