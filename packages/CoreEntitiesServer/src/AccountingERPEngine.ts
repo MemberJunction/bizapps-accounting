@@ -8,7 +8,7 @@
 import { IntegrationEngine } from '@memberjunction/integration-engine';
 import { IMetadataProvider, IRunViewProvider, LogError, LogStatus, UserInfo } from '@memberjunction/core';
 import { BaseSingleton, EscapeSQLString, MJGlobal } from '@memberjunction/global';
-import { ToCalendarDay } from '@mj-biz-apps/common-entities';
+import { ExternalFieldLimitEngine, ToCalendarDay } from '@mj-biz-apps/common-entities';
 import {
   ACCOUNTING_ENGINE_EXTENSION_ENTITY,
   ALL_ERP_SYNC_OBJECTS,
@@ -21,11 +21,16 @@ import {
   type RunERPSyncOutput,
 } from '@mj-biz-apps/accounting-engine-base';
 import type {
+  AccountingFinanceExceptionToRaise,
+  AccountingRaiseFinanceExceptionsInput,
+  AccountingRaiseFinanceExceptionsOutput,
   mjBizAppsAccountingAccountingEngineExtensionEntity,
   mjBizAppsAccountingJournalEntryBatchEntity,
   mjBizAppsAccountingJournalEntryLineEntity,
 } from '@mj-biz-apps/accounting-entities';
 import { AccountingEngine } from './AccountingEngine.js';
+import { FINANCE_EXCEPTION_TYPE_ENTITY, FinanceLedgerUser, RaiseFinanceExceptions } from './FinanceExceptions.js';
+import { CheckErpJournalInput, HasErpFieldLimits, LimitCheckUser } from './ErpFieldLimits.js';
 import {
   defaultAccountingVerbRunner,
   type AccountingVerbRunner,
@@ -34,6 +39,7 @@ import {
   BaseAccountingERPProvider,
   type CreateERPJournalInput,
   type ERPPostedJournalLine,
+  type RenumberedJournalSearch,
 } from './BaseAccountingERPProvider.js';
 import {
   resolveExternalAccount,
@@ -47,6 +53,17 @@ const CI_ENTITY = 'MJ: Company Integrations';
 const CI_MAP_ENTITY = 'MJ: Company Integration Entity Maps';
 const CI_FIELD_MAP_ENTITY = 'MJ: Company Integration Field Maps';
 const INTEGRATION_ENTITY = 'MJ: Integrations';
+const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
+const FINANCE_EXCEPTION_ENTITY = 'MJ_BizApps_Accounting: Finance Exceptions';
+const FINANCE_EXCEPTION_TYPE_TABLE = '__mj_BizAppsAccounting.FinanceExceptionType';
+/** FinanceException.Summary's column width. */
+const FINANCE_EXCEPTION_SUMMARY_MAX = 1000;
+
+/**
+ * The finance exception raised on a batch the ERP accepted but that could not be read back (#205).
+ * Its row ships in metadata/finance-exception-types.
+ */
+export const ERP_POSTING_NOT_READ_BACK = 'ERP_POSTING_NOT_READ_BACK';
 
 export interface AccountingERPEngineSeams {
   runVerb?: AccountingVerbRunner;
@@ -56,6 +73,10 @@ export interface AccountingERPEngineSeams {
     entityMapIDs: string[],
     provider: IMetadataProvider,
   ) => Promise<{ Success: boolean; Message?: string }>;
+  raiseFinanceExceptions?: (
+    input: AccountingRaiseFinanceExceptionsInput,
+    provider: IMetadataProvider,
+  ) => Promise<AccountingRaiseFinanceExceptionsOutput>;
 }
 
 interface CredentialedIntegration {
@@ -217,6 +238,7 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     }
     // The ERP has accepted the journal. Nothing after this point may turn that into a failure: a
     // batch recorded Failed invites a retry, and a retry of a journal the ERP holds duplicates it.
+    if (posted.readbackError) await this.raiseUnreadPosting(batch, ci.IntegrationName, posted, provider);
     ctx.ExternalJournalEntryBatchRef = posted.externalJournalEntryBatchRef ?? null;
     try {
       await this.invokeExtensions(extensions, ctx, 'afterPost');
@@ -228,7 +250,8 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
 
   /**
    * Send the batch through the chosen connection: the connection's ID travels to the verb, so the
-   * ERP posts through exactly that connection. A throw is a failed post.
+   * ERP posts through exactly that connection. A value too long for the ERP's fields fails the post
+   * before the ERP is called. A throw is a failed post.
    */
   private async sendThroughConnection(
     plugin: BaseAccountingERPProvider,
@@ -240,14 +263,18 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
   ): Promise<ErpPostResult> {
     const target = batch.TargetSystem as JournalEntryBatchTargetSystem;
     try {
-      return await plugin.CreateJournalEntry({
+      const lines = await erpLinesFor(batch, summaryLines, target, plugin.RequiresExternalAccountID, user, provider);
+      const input: CreateERPJournalInput = {
         CompanyID: batch.CompanyID,
         CompanyIntegrationID: ci.CompanyIntegrationID,
         EntryDate: entryDateOf(batch),
         DocNumber: batch.JournalEntryBatchNumber,
         PrivateNote: `Accounting batch ${batch.JournalEntryBatchNumber}`,
-        Lines: await erpLinesFor(batch, summaryLines, target, plugin.RequiresExternalAccountID, user, provider),
-      }, user);
+        Lines: lines,
+        RenumberedSearch: renumberedSearchFor(batch, lines),
+      };
+      const tooLong = await this.checkFieldLengths(ci.IntegrationName, input, user, provider);
+      return tooLong ?? await plugin.CreateJournalEntry(input, user);
     } catch (e) {
       return { success: false, error: e instanceof Error ? e.message : String(e) };
     }
@@ -294,11 +321,33 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
   }
 
   /**
+   * A failed post naming every value too long for the ERP's fields, or null when all fit
+   * (bc-aidp-next-golive#280). Runs before the ERP is called, so an over-long value fails here
+   * with the field and limit named instead of at the ERP; nothing is truncated.
+   */
+  private async checkFieldLengths(
+    integrationName: string,
+    input: CreateERPJournalInput,
+    user: UserInfo,
+    provider: IMetadataProvider,
+  ): Promise<ErpPostResult | null> {
+    if (!HasErpFieldLimits(integrationName)) return null;
+    await ExternalFieldLimitEngine.Instance.Config(false, LimitCheckUser(user), provider);
+    const problems = CheckErpJournalInput(integrationName, input);
+    return problems.length === 0 ? null : { success: false, error: `Not sent to ${integrationName}: ${problems.join(' ')}` };
+  }
+
+  /**
    * What the batch's target ERP holds under the batch's number, compared with what the batch would
    * send (#182). A posting counts as this batch only when every line carries the batch's token
    * (#206), matches on account, debit and credit, and carries the batch's posting date. Lines whose
    * tokens name only other batches are another journal under the same number. Runs no extension
    * hooks: it posts nothing.
+   *
+   * Nothing found is only trusted while the company has no Open ERP_POSTING_NOT_READ_BACK exception
+   * (#205): a post there that the lookup could not read back shows the lookup may not see the
+   * company's postings, so it answers `Unavailable` and a Failed retry needs the operator's word. It
+   * answers the same when that exception type is missing or inactive, since no raise could land.
    */
   public async FindPostedJournalBatch(
     batch: mjBizAppsAccountingJournalEntryBatchEntity,
@@ -325,19 +374,20 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     if (!postingDate) return { status: 'Error', error: `batch ${batch.JournalEntryBatchNumber} has an unreadable posting date.` };
 
     try {
+      const expected = await erpLinesFor(batch, summaryLines, target, plugin.RequiresExternalAccountID, user, provider);
       const found = await plugin.FindJournalEntry({
         CompanyID: batch.CompanyID,
         CompanyIntegrationID: ci.CompanyIntegrationID,
         DocNumber: batch.JournalEntryBatchNumber,
         PostingDate: postingDate,
+        RenumberedSearch: renumberedSearchFor(batch, expected),
       }, user);
       if (found.status !== 'Ok') return found;
-      if (found.lines.length === 0) return { status: 'NotFound' };
+      if (found.lines.length === 0) return await this.nothingFound(batch.CompanyID, provider);
       const tokens = postedBatchTokens(found.lines, batch.ID);
       if (tokens.own === 0 && tokens.others.length > 0) {
         return { status: 'Foreign', detail: `its lines carry the token of batch ${tokens.others.join(', ')}, not this batch's ${batch.ID}.` };
       }
-      const expected = await erpLinesFor(batch, summaryLines, target, plugin.RequiresExternalAccountID, user, provider);
       const detail = tokenMismatch(tokens, found.lines.length, batch.ID, postedJournalMismatch(expected, postingDate, found.lines));
       return detail
         ? { status: 'Mismatch', detail }
@@ -345,6 +395,65 @@ export class AccountingERPEngine extends BaseSingleton<AccountingERPEngine> {
     } catch (e) {
       return { status: 'Error', error: e instanceof Error ? e.message : String(e) };
     }
+  }
+
+  /**
+   * Raises ERP_POSTING_NOT_READ_BACK on a batch the ERP accepted but that could not be read back
+   * (#205). Never throws: the post stands whatever happens here, so a raise that fails is logged.
+   */
+  private async raiseUnreadPosting(
+    batch: mjBizAppsAccountingJournalEntryBatchEntity, integrationName: string, posted: ErpPostResult, provider: IMetadataProvider,
+  ): Promise<void> {
+    const doc = batch.JournalEntryBatchNumber ?? batch.ID;
+    try {
+      const raise = this.seams.raiseFinanceExceptions ?? RaiseFinanceExceptions;
+      const result = await raise({ Exceptions: [unreadPostingException(batch, integrationName, posted)] }, provider);
+      const skipped = result.Results?.[0]?.Skipped === true;
+      if (!result.Success || skipped) {
+        const why = skipped ? `the ${ERP_POSTING_NOT_READ_BACK} type is inactive` : (result.Errors ?? []).map((e) => e.Message).join(' ');
+        LogError(`AccountingERPEngine.PostJournalBatch: batch ${doc} posted but could not be read back, and raising ${ERP_POSTING_NOT_READ_BACK} failed: ${why}`);
+      }
+    } catch (e) {
+      LogError(`AccountingERPEngine.PostJournalBatch: batch ${doc} posted but could not be read back, and raising ${ERP_POSTING_NOT_READ_BACK} threw.`, null, e);
+    }
+  }
+
+  /**
+   * `NotFound`, unless an Open ERP_POSTING_NOT_READ_BACK exception says the company's lookup may be
+   * blind (#205). Fails closed: with that exception type missing or inactive, a raise would have been
+   * skipped and only logged, so nothing found is not trusted either.
+   */
+  private async nothingFound(companyId: string, provider: IMetadataProvider): Promise<ErpJournalLookupResult> {
+    const rv = provider as unknown as IRunViewProvider;
+    const [typeRes, openRes] = await rv.RunViews<{ IsActive?: boolean; SourceRecordID?: string }>([
+      { EntityName: FINANCE_EXCEPTION_TYPE_ENTITY, ExtraFilter: `Code='${ERP_POSTING_NOT_READ_BACK}'`, Fields: ['IsActive'], ResultType: 'simple', BypassCache: true },
+      {
+        EntityName: FINANCE_EXCEPTION_ENTITY,
+        ExtraFilter: `CompanyID='${EscapeSQLString(companyId)}' AND Status='Open' AND FinanceExceptionTypeID IN ` +
+          `(SELECT ID FROM ${FINANCE_EXCEPTION_TYPE_TABLE} WHERE Code='${ERP_POSTING_NOT_READ_BACK}')`,
+        Fields: ['SourceRecordID'],
+        ResultType: 'simple',
+        BypassCache: true,
+      },
+    ], FinanceLedgerUser());
+    if (!typeRes?.Success || !openRes?.Success) {
+      const error = (!typeRes?.Success ? typeRes?.ErrorMessage : openRes?.ErrorMessage) ?? 'unknown';
+      return { status: 'Error', error: `could not check for Open ${ERP_POSTING_NOT_READ_BACK} finance exceptions: ${error}` };
+    }
+    if (typeRes.Results?.[0]?.IsActive !== true) {
+      return {
+        status: 'Unavailable',
+        reason: `the ${ERP_POSTING_NOT_READ_BACK} finance exception type is missing or inactive, so a batch the ERP accepted but could not read back ` +
+          'would have raised nothing, and a lookup that finds nothing does not show the batch did not post. Install or activate that type.',
+      };
+    }
+    const open = openRes.Results ?? [];
+    if (open.length === 0) return { status: 'NotFound' };
+    return {
+      status: 'Unavailable',
+      reason: `the ERP accepted ${open.length} batch(es) in this company that could not then be read back (${open.map((r) => r.SourceRecordID).join(', ')}), ` +
+        `so a lookup that finds nothing does not show the batch did not post. Clear the ${ERP_POSTING_NOT_READ_BACK} finance exceptions once the lookup is shown to work.`,
+    };
   }
 
   private providerFor(integrationName: string | undefined): BaseAccountingERPProvider | null {
@@ -838,6 +947,28 @@ export function createAccountingERPLookup(provider: IMetadataProvider) {
   ): Promise<ErpJournalLookupResult> => AccountingERPEngine.Instance.FindPostedJournalBatch(batch, summaryLines, user, provider);
 }
 
+/** The ERP_POSTING_NOT_READ_BACK raise for a batch the ERP accepted but could not be read back (#205). */
+function unreadPostingException(
+  batch: mjBizAppsAccountingJournalEntryBatchEntity, integrationName: string, posted: ErpPostResult,
+): AccountingFinanceExceptionToRaise {
+  const doc = batch.JournalEntryBatchNumber ?? batch.ID;
+  const ref = posted.externalJournalEntryBatchRef ?? doc;
+  const summary = `Batch ${doc} posted to ${integrationName} but could not be read back: ${posted.readbackError ?? 'no reason given.'} ` +
+    `It is recorded under ${ref}, which may not be the ERP's own number for it. Check the posting in the ERP. ` +
+    'Until this is cleared, a Failed batch in this company whose ERP lookup finds nothing needs the operator\'s confirmation before it is sent again or cancelled.';
+  return {
+    TypeCode: ERP_POSTING_NOT_READ_BACK,
+    SourceEntityName: BATCH_ENTITY,
+    SourceRecordID: batch.ID,
+    CompanyID: batch.CompanyID,
+    Amount: batch.TotalDebits ?? null,
+    // Its month is the close it blocks. An unreadable posting date falls back to today's.
+    ExceptionDate: ToCalendarDay(entryDateOf(batch)) ?? new Date().toISOString().slice(0, 10),
+    Summary: summary.length > FINANCE_EXCEPTION_SUMMARY_MAX ? `${summary.slice(0, FINANCE_EXCEPTION_SUMMARY_MAX - 1)}…` : summary,
+    DedupeKey: batch.ID.toLowerCase(),
+  };
+}
+
 /** The journal date the ERP receives. */
 function entryDateOf(batch: mjBizAppsAccountingJournalEntryBatchEntity): Date {
   return batch.PostingDate ? new Date(batch.PostingDate) : new Date();
@@ -881,6 +1012,15 @@ async function erpLinesFor(
  */
 function batchToken(batchId: string): string {
   return `JEB ${batchId.toLowerCase()}`;
+}
+
+/**
+ * What finds the batch's posting if the ERP gave it a document number of its own (#205): its token,
+ * on the account of its first line. Undefined when there is no line to search on.
+ */
+function renumberedSearchFor(batch: mjBizAppsAccountingJournalEntryBatchEntity, lines: CreateERPJournalInput['Lines']): RenumberedJournalSearch | undefined {
+  const accountNumber = lines[0]?.accountNumber;
+  return accountNumber ? { Token: batchToken(batch.ID), AccountNumber: accountNumber } : undefined;
 }
 
 const BATCH_TOKEN_PATTERN = /\bJEB ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/i;

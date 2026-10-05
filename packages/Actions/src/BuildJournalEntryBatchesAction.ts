@@ -10,8 +10,10 @@ import {
   findStrandedJournalEntries,
   pendingCompanies,
   recordDispatchFailure,
+  JournalEntryBatchFailureNotRecordedError,
   AutoPostDispatchError,
   EmptyJournalEntryBatchError,
+  JournalEntryBatchSendRefusedError,
   TasksAppApprovalGate,
   type BuildJournalEntryBatchResult,
   type StrandedJournalEntryBatch,
@@ -184,9 +186,16 @@ async function autoPostOne(companyId: string, ctx: SweepContext): Promise<Compan
     if (!(e instanceof AutoPostDispatchError)) throw e;
     const batchId = e.Build.batchId;
     LogError(`Accounting.BuildJournalEntryBatches: dispatch of batch ${batchId} failed: ${e.message}`);
+    // Another dispatch sent this batch first and owns it. Triage would mark that dispatch's
+    // in-flight batch Failed, inviting a retry while its ERP call may still be running (#184).
+    if (e.cause instanceof JournalEntryBatchSendRefusedError) {
+      return { companyId, batch: e.Build, status: e.cause.Status, error: e.message, needsAttention: e.cause.Status !== 'Posted' };
+    }
     // Every route through triage began with a throw, so every one of them needs a human — including
     // the `Posted` one, where the ERP has the journal but the member JE flip did not finish.
-    return { companyId, batch: e.Build, needsAttention: true, ...(await triage(batchId, e.message, ctx.user, ctx.provider)) };
+    // A Failed save that did not persist after the ERP accepted the batch: triage keeps the reference.
+    const acceptedRef = e.cause instanceof JournalEntryBatchFailureNotRecordedError ? e.cause.ExternalJournalEntryBatchRef : null;
+    return { companyId, batch: e.Build, needsAttention: true, ...(await triage(batchId, e.message, ctx.user, ctx.provider, acceptedRef)) };
   }
 }
 
@@ -196,10 +205,10 @@ async function autoPostOne(companyId: string, ctx: SweepContext): Promise<Compan
  * overwritten — see `recordDispatchFailure`.
  */
 async function triage(
-  batchId: string, message: string, user: UserInfo, provider: IMetadataProvider,
+  batchId: string, message: string, user: UserInfo, provider: IMetadataProvider, acceptedRef: string | null,
 ): Promise<{ status: string; error: string }> {
   try {
-    const { status, marked } = await recordDispatchFailure(batchId, message, user, provider);
+    const { status, marked } = await recordDispatchFailure(batchId, message, user, provider, acceptedRef);
     if (marked) return { status, error: message };
     if (status === 'Posted') {
       // The ERP took this journal. Only the member Batched→GLPosted flip is incomplete, and the
