@@ -1,5 +1,26 @@
 # @mj-biz-apps/accounting-core-entities-server
 
+## 0.21.0
+
+### Minor Changes
+
+- 6a30d91: A Pending journal entry batch can be cancelled with a reason by the company's configured approver or by the user who built it. Its journal entries return to the candidate pool, and its approval Task gets a comment and is closed as Cancelled. `Accounting.CancelJournalEntryBatch` now accepts a Pending batch. A CFO rejection still cancels a Pending batch through `Accounting.RecordJournalEntryBatchDecision`, and its notes become the batch's `CancelReason`.
+
+  The Batches screen and JE batch approvals offer Cancel on a Pending batch, and Reject asks for a reason.
+
+  Breaking change to `JournalEntryBatchCancelGate`: `assertRejected` is replaced by `isRejected`, which returns a boolean, and `assertMayCancelPending` is added.
+
+### Patch Changes
+
+- 1af981d: `AccountingEngineBase.LegalEntityFor(companyId)` returns the company whose books a company uses. A Division, Department or Branch walks up `ParentAccountingCompanyID` to the first company of any other type; every other type, and a company with no profile, is its own legal entity. A Division with no parent, a parent with no profile, or a loop throws `AccountingResolutionError` with code `LEGAL_ENTITY_UNRESOLVED`, naming the company. Also exported: the pure `ResolveLegalEntity`, `UsesParentBooks` and `PARENT_BOOKS_ENTITY_TYPES`.
+
+  A company that keeps no books owns no active GL accounts: `GLAccountEntityServer` refuses creating or reactivating an active account on a Division, Department or Branch, and `AccountingCompanyProfileEntityServer` refuses changing a company that owns an active account to one of those types.
+
+- Updated dependencies [4b5fdac]
+- Updated dependencies [1af981d]
+  - @mj-biz-apps/accounting-entities@0.21.0
+  - @mj-biz-apps/accounting-engine-base@0.21.0
+
 ## 0.20.0
 
 ### Minor Changes

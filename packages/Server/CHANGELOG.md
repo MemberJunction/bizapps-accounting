@@ -1,5 +1,20 @@
 # @mj-biz-apps/accounting-server
 
+## 0.21.0
+
+### Minor Changes
+
+- 4b5fdac: A company profile's parent may itself have a parent. `trg_ACP_NoChains` (error 50010) now refuses a cycle instead of any chain, so a Division can sit under a legal entity that sits under a holding company. A profile pointing at itself stays refused by `CK_AccountingCompanyProfile_NoSelfParent`. The `ParentAccountingCompanyID` description is rewritten: a Division, Department or Branch uses the books of the first company up the chain of any other type. Includes the CodeGen output for the description.
+
+### Patch Changes
+
+- Updated dependencies [4b5fdac]
+- Updated dependencies [1af981d]
+- Updated dependencies [6a30d91]
+  - @mj-biz-apps/accounting-entities@0.21.0
+  - @mj-biz-apps/accounting-core-entities-server@0.21.0
+  - @mj-biz-apps/accounting-actions@0.21.0
+
 ## 0.20.0
 
 ### Minor Changes
