@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MJGlobal } from '@memberjunction/global';
 import { BaseAction } from '@memberjunction/actions';
 import { RunActionParams } from '@memberjunction/actions-base';
-import { Metadata } from '@memberjunction/core';
+import { Metadata, type UserInfo } from '@memberjunction/core';
+
+import { UserCache } from '@memberjunction/generic-database-provider';
 import { BuildJournalEntryBatchesAction, resolveCutoff } from '../BuildJournalEntryBatchesAction';
 import * as serverEngine from '@mj-biz-apps/accounting-core-entities-server';
 
@@ -44,6 +46,8 @@ describe('BuildJournalEntryBatchesAction', () => {
             Config: { ActiveStatusAssertions: false },
         } as never;
         vi.spyOn(serverEngine, 'findStrandedJournalEntries').mockResolvedValue([]);
+        // AutoPost is restricted to the MJ system user (#269); every run here is made as it unless a case says otherwise.
+        vi.spyOn(UserCache.Instance, 'GetSystemUser').mockReturnValue({ ID: 'SYSTEM-USER' } as UserInfo);
     });
 
     it('is registered in MJGlobal ClassFactory as Accounting.BuildJournalEntryBatches', () => {
@@ -259,6 +263,19 @@ describe('BuildJournalEntryBatchesAction', () => {
         expect(result.Message).toContain('All dispatched to the ERP');
     });
 
+    // The ERP accepted the batch, and neither its Posted nor its Failed save landed: triage keeps the
+    // reference, so the retry records the batch Posted instead of sending it again.
+    it('passes the ERP reference to triage when the Failed save did not persist after the ERP accepted the batch', async () => {
+        vi.spyOn(serverEngine, 'pendingCompanies').mockResolvedValue(['CO-1']);
+        const notRecorded = new serverEngine.JournalEntryBatchFailureNotRecordedError('BATCH-CO-1', 'Sent', 'G00042', 'recording Posted failed', 'database unavailable');
+        vi.spyOn(serverEngine, 'autoPostJournalEntryBatch').mockRejectedValue(new serverEngine.AutoPostDispatchError(buildResult('CO-1'), notRecorded));
+        const failSpy = vi.spyOn(serverEngine, 'recordDispatchFailure').mockResolvedValue({ status: 'Failed', marked: true });
+
+        await new BuildJournalEntryBatchesAction().Run(runParams(AUTO_POST_INPUTS));
+
+        expect(failSpy).toHaveBeenCalledWith('BATCH-CO-1', notRecorded.message, expect.anything(), expect.anything(), 'G00042');
+    });
+
     it('marks a batch Failed when its dispatch throws, and carries on to the next company', async () => {
         vi.spyOn(serverEngine, 'pendingCompanies').mockResolvedValue(['CO-1', 'CO-2']);
         const autoPostSpy = vi.spyOn(serverEngine, 'autoPostJournalEntryBatch').mockImplementation(async (companyId) => {
@@ -271,7 +288,7 @@ describe('BuildJournalEntryBatchesAction', () => {
         const result = await new BuildJournalEntryBatchesAction().Run(runParams(AUTO_POST_INPUTS));
 
         expect(autoPostSpy).toHaveBeenCalledTimes(2); // CO-2 still ran
-        expect(failSpy).toHaveBeenCalledWith('BATCH-CO-1', 'ERP tenant unreachable', expect.anything(), expect.anything());
+        expect(failSpy).toHaveBeenCalledWith('BATCH-CO-1', 'ERP tenant unreachable', expect.anything(), expect.anything(), null);
         expect(result.Success).toBe(false);
         expect(result.ResultCode).toBe('POST_INCOMPLETE');
         expect(result.Message).toContain('1 of 2 company(ies) did not post');
@@ -305,6 +322,23 @@ describe('BuildJournalEntryBatchesAction', () => {
         expect(result.Success).toBe(false);
         expect(result.Message).toContain('(Approved:');
         expect(result.Message).toContain('NOT marked Failed');
+    });
+
+    // #184: a refused send means another dispatch holds the batch. Marking it Failed would put that
+    // dispatch's in-flight batch on the retry list while its ERP call may still be running.
+    it('never marks a batch Failed when its send was refused because another dispatch holds it', async () => {
+        vi.spyOn(serverEngine, 'pendingCompanies').mockResolvedValue(['CO-1']);
+        const refused = new serverEngine.JournalEntryBatchSendRefusedError('BATCH-CO-1', 'Sent', 'JournalEntryBatch send refused: the batch is already Sent.');
+        vi.spyOn(serverEngine, 'autoPostJournalEntryBatch')
+            .mockRejectedValue(new serverEngine.AutoPostDispatchError(buildResult('CO-1'), refused));
+        const failSpy = vi.spyOn(serverEngine, 'recordDispatchFailure');
+
+        const result = await new BuildJournalEntryBatchesAction().Run(runParams(AUTO_POST_INPUTS));
+
+        expect(failSpy).not.toHaveBeenCalled();
+        expect(result.Success).toBe(false);
+        expect(result.Message).toContain('(Sent:');
+        expect(result.Message).toContain('sent by another dispatch');
     });
 
     // ─── A build failure must not strand the companies already dispatched ────────────────
@@ -375,6 +409,52 @@ describe('BuildJournalEntryBatchesAction', () => {
         expect(autoPostSpy).not.toHaveBeenCalled();
     });
 
+    // ─── Auto-post is restricted to the MJ system user (#269) ────────────────────────────
+
+    it('refuses AutoPost from any user but the system user, before any company is read', async () => {
+        const pendingSpy = vi.spyOn(serverEngine, 'pendingCompanies');
+        const autoPostSpy = vi.spyOn(serverEngine, 'autoPostJournalEntryBatch');
+        const params = runParams(AUTO_POST_INPUTS);
+        params.ContextUser = { ID: 'SOME-OTHER-USER' } as never;
+
+        await expect(new BuildJournalEntryBatchesAction().Run(params)).rejects.toThrow(/restricted to the MJ system user/);
+        expect(pendingSpy).not.toHaveBeenCalled();
+        expect(autoPostSpy).not.toHaveBeenCalled();
+    });
+
+    it('refuses AutoPost when the user cache does not hold the system user', async () => {
+        vi.spyOn(UserCache.Instance, 'GetSystemUser').mockReturnValue(undefined as never);
+        const pendingSpy = vi.spyOn(serverEngine, 'pendingCompanies');
+
+        await expect(new BuildJournalEntryBatchesAction().Run(runParams(AUTO_POST_INPUTS))).rejects.toThrow(/user cache does not hold it/);
+        expect(pendingSpy).not.toHaveBeenCalled();
+    });
+
+    it('lets the system user auto-post', async () => {
+        vi.spyOn(serverEngine, 'pendingCompanies').mockResolvedValue(['CO-1']);
+        const autoPostSpy = vi.spyOn(serverEngine, 'autoPostJournalEntryBatch')
+            .mockImplementation(async (companyId) => autoPosted(companyId));
+
+        const result = await new BuildJournalEntryBatchesAction().Run(runParams(AUTO_POST_INPUTS));
+
+        expect(result.Success).toBe(true);
+        expect(autoPostSpy).toHaveBeenCalledWith('CO-1', 'BusinessCentral', expect.objectContaining({ ID: 'SYSTEM-USER' }), expect.anything(), expect.anything());
+    });
+
+    it('leaves an attended run by any user unrestricted: it builds behind the CFO approval gate', async () => {
+        vi.spyOn(UserCache.Instance, 'GetSystemUser').mockReturnValue(undefined as never);
+        vi.spyOn(serverEngine, 'pendingCompanies').mockResolvedValue(['CO-1']);
+        const buildBatchSpy = vi.spyOn(serverEngine, 'buildJournalEntryBatch')
+            .mockImplementation(async (companyId) => buildResult(companyId));
+        const params = runParams([]);
+        params.ContextUser = { ID: 'SOME-OTHER-USER' } as never;
+
+        await new BuildJournalEntryBatchesAction().Run(params);
+
+        expect(buildBatchSpy).toHaveBeenCalledTimes(1);
+        expect(buildBatchSpy.mock.calls[0][5]).toBeInstanceOf(serverEngine.TasksAppApprovalGate);
+    });
+
     // ─── Auto-post policy is include-list only ───────────────────────────────────────────
 
     it('refuses to auto-post without an explicit EntryTypeCodes include-list', async () => {
@@ -426,5 +506,77 @@ describe('BuildJournalEntryBatchesAction', () => {
 
         expect(result.Success).toBe(true);
         expect(result.Message).toContain('Could not count stranded journal entries: scan timeout');
+    });
+});
+
+/**
+ * The scheduled sweep selects companies through the engine's real `pendingCompanies`, so a
+ * company's PostingStartDate must keep its pre-floor entries out of the nightly run. The provider
+ * here answers the sweep's reads from memory; only the per-company build/dispatch is stubbed.
+ */
+describe('BuildJournalEntryBatchesAction — company posting start dates', () => {
+    const CO_HISTORY_ONLY = 'aaaaaaaa-0000-0000-0000-000000000001';
+    const CO_LIVE = 'bbbbbbbb-0000-0000-0000-000000000002';
+    const SUMMARY_TYPE = 'e9521aa3-f4ef-4ec5-a899-d9dd59f320b7';
+    const ORDER_TYPE = '684c06d4-55da-49d7-8453-e046fc82b895';
+    const journals = [
+        { ID: 'je-1', CompanyID: CO_HISTORY_ONLY, EffectiveDate: '2025-05-01', Status: 'Pending', EntryTypeID: ORDER_TYPE },
+        { ID: 'je-2', CompanyID: CO_LIVE, EffectiveDate: '2025-05-01', Status: 'Pending', EntryTypeID: ORDER_TYPE },
+        { ID: 'je-3', CompanyID: CO_LIVE, EffectiveDate: '2025-06-15', Status: 'Pending', EntryTypeID: ORDER_TYPE },
+    ];
+
+    /** Evaluates the engine's ExtraFilter subset (=, <>, >=, <, IN, AND, OR, NOT) over the rows. */
+    const matches = (filter: string) => new Function('r', `return (${filter
+        .replace(/\b(\w+) IN \(([^)]*)\)/g, '[$2].includes(r.$1)')
+        .replace(/\b(\w+)\s*(<>|>=|<=|<|>|=)\s*'/g, (_m, col: string, op: string) => `r.${col} ${op === '=' ? '===' : op === '<>' ? '!==' : op} '`)
+        .replace(/\bAND\b/g, '&&').replace(/\bOR\b/g, '||').replace(/\bNOT\b/g, '!')});`) as (row: object) => boolean;
+
+    const sweepProvider = (floors: Array<{ ID: string; PostingStartDate: Date | null }>) => {
+        const read = async (params: { EntityName?: string; ExtraFilter?: string }) => {
+            if (params.EntityName === 'MJ_BizApps_Accounting: Journal Entry Types') {
+                return params.ExtraFilter === 'IsJournalEntryBatchSummary=1'
+                    ? { Success: true, Results: [{ ID: SUMMARY_TYPE, Code: 'JournalEntryBatchSummary' }] }
+                    : { Success: true, Results: [{ ID: ORDER_TYPE, Code: 'OrderBooking' }] };
+            }
+            if (params.EntityName === 'MJ_BizApps_Accounting: Accounting Company Profiles') {
+                return { Success: true, Results: floors.filter(f => f.PostingStartDate !== null) };
+            }
+            if (params.EntityName === 'MJ_BizApps_Accounting: Journal Entries') {
+                return { Success: true, Results: journals.filter(matches(params.ExtraFilter ?? 'true')) };
+            }
+            return { Success: true, Results: [] };
+        };
+        return { Config: { ActiveStatusAssertions: false }, RunView: read, RunViews: (all: Array<{ EntityName?: string; ExtraFilter?: string }>) => Promise.all(all.map(read)) };
+    };
+
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        vi.spyOn(serverEngine, 'findStrandedJournalEntries').mockResolvedValue([]);
+        // AutoPost is restricted to the MJ system user (#269); the sweep runs as it.
+        vi.spyOn(UserCache.Instance, 'GetSystemUser').mockReturnValue({ ID: 'SYSTEM-USER' } as UserInfo);
+    });
+
+    const autoPostedCompanies = async (floors: Array<{ ID: string; PostingStartDate: Date | null }>): Promise<string[]> => {
+        Metadata.Provider = sweepProvider(floors) as never;
+        const autoPostSpy = vi.spyOn(serverEngine, 'autoPostJournalEntryBatch').mockImplementation(async (companyId) => ({
+            build: buildResult(companyId),
+            batch: { ID: `BATCH-${companyId}`, Status: 'Posted', ErrorMessage: null } as never,
+        }));
+        await new BuildJournalEntryBatchesAction().Run(runParams([
+            { Name: 'AutoPost', Value: true },
+            { Name: 'Cutoff', Value: '2025-12-31' },
+            { Name: 'EntryTypeCodes', Value: ['OrderBooking'] },
+        ]));
+        return autoPostSpy.mock.calls.map(c => c[0]).sort();
+    };
+
+    it('the nightly sweep skips a company whose only Pending entries predate its posting start date', async () => {
+        const floor = new Date('2025-06-01T00:00:00.000Z');
+        expect(await autoPostedCompanies([{ ID: CO_HISTORY_ONLY, PostingStartDate: floor }, { ID: CO_LIVE, PostingStartDate: floor }]))
+            .toEqual([CO_LIVE]);
+    });
+
+    it('with no posting start date set, the sweep is unchanged', async () => {
+        expect(await autoPostedCompanies([{ ID: CO_HISTORY_ONLY, PostingStartDate: null }])).toEqual([CO_HISTORY_ONLY, CO_LIVE]);
     });
 });

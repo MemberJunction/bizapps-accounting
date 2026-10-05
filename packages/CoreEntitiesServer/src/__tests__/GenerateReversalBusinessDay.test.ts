@@ -43,6 +43,8 @@ function arrange(): { source: JournalEntryEntityServer; reversal: CapturedRevers
     ID: 'JE_SOURCE',
     CompanyID: 'CO_100',
     EntryNumber: 'JE-0001',
+    // Earlier than any "today" below, so the business day alone decides the date (issue #266).
+    EffectiveDate: new Date('2026-08-01T00:00:00.000Z'),
     EntryTypeID: 'JET_ORDERBOOKING',
     ReversesJournalEntryID: null,
     ReversedByJournalEntryID: null,
@@ -67,12 +69,17 @@ describe('GenerateReversal — EffectiveDate is today in the BUSINESS zone (issu
     vi.useRealTimers();
   });
 
-  it('dates the reversal 31 August when UTC is already 1 September but Chicago is not', async () => {
-    // 2026-09-01T02:00:00Z is 31 August, 9 PM, in Chicago (CDT, UTC-5).
+  /** Points the engine at `iana`/`sql` as the business zone, with no database. */
+  function setZone(iana: string, sql: string): void {
     engine._configurations = [
-      { FeatureKey: 'BizApps.BusinessTimeZone', Value: '{"iana":"America/Chicago","sql":"Central Standard Time"}', DefaultValue: '{"iana":"UTC","sql":"UTC"}' },
+      { FeatureKey: 'BizApps.BusinessTimeZone', Value: JSON.stringify({ iana, sql }), DefaultValue: '{"iana":"UTC","sql":"UTC"}' },
     ];
     engine._loaded = true;
+  }
+
+  it('dates the reversal 31 August when UTC is already 1 September but Chicago is not', async () => {
+    // 2026-09-01T02:00:00Z is 31 August, 9 PM, in Chicago (CDT, UTC-5).
+    setZone('America/Chicago', 'Central Standard Time');
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-01T02:00:00.000Z'));
 
@@ -84,5 +91,17 @@ describe('GenerateReversal — EffectiveDate is today in the BUSINESS zone (issu
     expect(reversal.ReversesJournalEntryID).toBe('JE_SOURCE');
     expect(reversal.Status).toBe('Pending');
   });
-});
 
+  it('dates the reversal 1 October when UTC is still 30 September but Berlin is not', async () => {
+    // 2026-09-30T23:30:00Z is 1 October, 01:30, in Berlin (CEST, UTC+2).
+    setZone('Europe/Berlin', 'W. Europe Standard Time');
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-30T23:30:00.000Z'));
+
+    const { source, reversal } = arrange();
+    const user = { ID: 'USER_1' } as UserInfo;
+    await JournalEntryEntityServer.prototype.GenerateReversal.call(source, 'test', user);
+
+    expect(reversal.EffectiveDate?.toISOString()).toBe('2026-10-01T00:00:00.000Z');
+  });
+});

@@ -45,12 +45,16 @@ interface ViewRequest { EntityName: string; ExtraFilter?: string }
  * The provider answers the summary-type lookup and records the Journal Entries filter; it returns
  * no candidates, so the preview has nothing further to read.
  */
-async function preview(input: PreviewJournalEntryBatchInput): Promise<{ filter: string | null; error: string | null }> {
+async function preview(
+  input: PreviewJournalEntryBatchInput,
+  postingStartDates: Array<{ ID: string; PostingStartDate: string }> = [],
+): Promise<{ filter: string | null; error: string | null }> {
   let filter: string | null = null;
   const RunView = async (req: ViewRequest) => {
     if (req.ExtraFilter?.includes('IsJournalEntryBatchSummary=1')) {
       return { Success: true, Results: [{ ID: SUMMARY_TYPE_ID, Code: 'JournalEntryBatchSummary' }] };
     }
+    if (req.ExtraFilter === 'PostingStartDate IS NOT NULL') return { Success: true, Results: postingStartDates };
     if (req.EntityName === 'MJ_BizApps_Accounting: Journal Entries' && filter === null) filter = req.ExtraFilter ?? '';
     return { Success: true, Results: [] };
   };
@@ -90,6 +94,15 @@ describe('StartDate — resolved by the same rule as Cutoff', () => {
   it('reads a plain day as that day', async () => {
     const { filter } = await preview({ StartDate: '2026-09-01' });
     expect(dateClauses(filter)).toEqual(["EffectiveDate >= '2026-09-01'"]);
+  });
+
+  it('compares a company PostingStartDate with the business day of a date-time StartDate, not its UTC day', async () => {
+    // 2026-10-01T02:30Z is 30 September in Chicago. The company's floor (1 October) is later, so its
+    // clause must stay; read as its UTC day (1 October) the start would hide the floor, and that
+    // company's 30 September entries would enter the batch.
+    const { filter } = await preview({ StartDate: '2026-10-01T02:30:00Z' }, [{ ID: COMPANY_ID, PostingStartDate: '2026-10-01' }]);
+    expect(dateClauses(filter)).toEqual(["EffectiveDate >= '2026-09-30'"]);
+    expect(filter).toContain(`(CompanyID<>'${COMPANY_ID}' OR EffectiveDate >= '2026-10-01')`);
   });
 });
 

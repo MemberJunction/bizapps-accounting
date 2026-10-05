@@ -199,9 +199,9 @@ const COMP_OVERVIEW_CSS = `
                 
                 <!-- Card 1: 6-Month ERP Batch Volume -->
                 <mj-card Title="6-Month ERP Batch Volume" Subtitle="Aggregated Monthly Post Volume" Icon="fa-solid fa-chart-line">
-                    <div mjCardTools>
+                    <ng-template mjCardTools>
                         <span class="mja-code">Trailing 6M</span>
-                    </div>
+                    </ng-template>
 
                     <div class="mja-chart-bars">
                         <div class="mja-bar-col">
@@ -230,7 +230,7 @@ const COMP_OVERVIEW_CSS = `
                         </div>
                     </div>
 
-                    <div mjCardFooter>
+                    <ng-template mjCardFooter>
                         <div class="card-metric">
                             <span class="card-metric__label">Avg / Mo</span>
                             <span class="card-metric__val" style="color: var(--mj-status-success);">$142,500</span>
@@ -243,14 +243,14 @@ const COMP_OVERVIEW_CSS = `
                             <span class="card-metric__label">Pace</span>
                             <span class="card-metric__val" style="color: var(--mj-brand-primary);">+18% MoM</span>
                         </div>
-                    </div>
+                    </ng-template>
                 </mj-card>
 
                 <!-- Card 2: Core GL Account Role Mappings -->
                 <mj-card Title="Core GL Account Mappings" Subtitle="Primary Posting Roles & Codes" Icon="fa-solid fa-book-bookmark">
-                    <div mjCardTools>
+                    <ng-template mjCardTools>
                         <span class="mja-code">Configured</span>
-                    </div>
+                    </ng-template>
 
                     <div class="mja-deck">
                         <div class="mja-deck-item">
@@ -280,7 +280,7 @@ const COMP_OVERVIEW_CSS = `
                         </div>
                     </div>
 
-                    <div mjCardFooter>
+                    <ng-template mjCardFooter>
                         <div class="card-metric">
                             <span class="card-metric__label">Role Mappings</span>
                             <span class="card-metric__val">6 Active</span>
@@ -293,14 +293,14 @@ const COMP_OVERVIEW_CSS = `
                             <span class="card-metric__label">GL Health</span>
                             <span class="card-metric__val" style="color: var(--mj-status-success);">Valid</span>
                         </div>
-                    </div>
+                    </ng-template>
                 </mj-card>
 
                 <!-- Card 3: Recent ERP Batches Table -->
                 <mj-card Title="Recent ERP Batches" Subtitle="Historical Transmission Activity" Icon="fa-solid fa-clock-rotate-left">
-                    <div mjCardTools>
+                    <ng-template mjCardTools>
                         <span class="mja-code">{{ Batches.length }} Logged</span>
-                    </div>
+                    </ng-template>
 
                     <div style="overflow-x: auto; max-height: 210px; overflow-y: auto;">
                         @if (Batches.length > 0) {
@@ -331,7 +331,7 @@ const COMP_OVERVIEW_CSS = `
                         }
                     </div>
 
-                    <div mjCardFooter>
+                    <ng-template mjCardFooter>
                         <div class="card-metric">
                             <span class="card-metric__label">Batches</span>
                             <span class="card-metric__val">{{ Batches.length }} Total</span>
@@ -344,14 +344,14 @@ const COMP_OVERVIEW_CSS = `
                             <span class="card-metric__label">Integrity</span>
                             <span class="card-metric__val" style="color: var(--mj-status-success);">Clean</span>
                         </div>
-                    </div>
+                    </ng-template>
                 </mj-card>
 
                 <!-- Card 4: Tax Nexus & Subsidiaries -->
                 <mj-card Title="Tax Nexus & Structure" Subtitle="Jurisdictions & Legal Profile" Icon="fa-solid fa-passport">
-                    <div mjCardTools>
+                    <ng-template mjCardTools>
                         <span class="mja-code">Entity Hub</span>
-                    </div>
+                    </ng-template>
 
                     <div class="mja-deck">
                         <div class="mja-deck-item">
@@ -381,7 +381,7 @@ const COMP_OVERVIEW_CSS = `
                         </div>
                     </div>
 
-                    <div mjCardFooter>
+                    <ng-template mjCardFooter>
                         <div class="card-metric">
                             <span class="card-metric__label">Nexus Count</span>
                             <span class="card-metric__val">12 States</span>
@@ -394,7 +394,7 @@ const COMP_OVERVIEW_CSS = `
                             <span class="card-metric__label">Compliance</span>
                             <span class="card-metric__val" style="color: var(--mj-brand-primary);">Current</span>
                         </div>
-                    </div>
+                    </ng-template>
                 </mj-card>
 
             </mj-card-grid>
