@@ -164,7 +164,7 @@ erDiagram
     Company ||--o| AccountingCompanyProfile : "IS-A Disjoint - same UUID"
     User ||--o{ AccountingCompanyProfile : "ApprovalCFOUserID"
     Currency ||--o{ AccountingCompanyProfile : "Functional / Reporting"
-    AccountingCompanyProfile |o--o{ AccountingCompanyProfile : "uses books of (no chains)"
+    AccountingCompanyProfile |o--o{ AccountingCompanyProfile : "parent (Division/Dept/Branch use its books)"
     Currency ||--o{ CurrencySpotRate : "From / To"
     %% ---- chart of accounts / roles / links ----
     Company ||--o{ GLAccount : "owns COA"
@@ -495,7 +495,7 @@ erDiagram
     Company ||--o| AccountingCompanyProfile : "IS-A Disjoint - same UUID"
     User ||--o{ AccountingCompanyProfile : "ApprovalCFOUserID"
     Currency ||--o{ AccountingCompanyProfile : "Functional / Reporting currency"
-    AccountingCompanyProfile |o--o{ AccountingCompanyProfile : "ParentAccountingCompanyID - uses books of, no chains"
+    AccountingCompanyProfile |o--o{ AccountingCompanyProfile : "ParentAccountingCompanyID - nests, no cycles"
 
     AccountingCompanyProfile {
         uuid ID PK "IS-A: same UUID as parent Company (no own PK gen)"
@@ -512,7 +512,7 @@ erDiagram
         int FiscalYearStartMonth
         int FiscalYearStartDay
         date PostingStartDate "nullable - entries dated before it never batch"
-        uuid ParentAccountingCompanyID FK "nullable"
+        uuid ParentAccountingCompanyID FK "nullable - Division/Department/Branch use the legal entity found up this chain"
         uuid ApprovalCFOUserID FK "batch approver - a security identity"
         bool IsActive
     }
