@@ -26,12 +26,15 @@
  *   DOC:      docs/ARCHITECTURE.md#company-profile-init
  */
 
-import { BaseEntity, LogError, Metadata, RunView } from '@memberjunction/core';
+import { BaseEntity, IRunViewProvider, LogError, Metadata, RunView, ValidationErrorInfo, ValidationResult } from '@memberjunction/core';
 import { RegisterClass } from '@memberjunction/global';
 import {
   mjBizAppsAccountingAccountingCompanyProfileEntity,
   mjBizAppsAccountingGLAccountEntity,
 } from '@mj-biz-apps/accounting-entities';
+import { UsesParentBooks } from '@mj-biz-apps/accounting-engine-base';
+import { ParentBooksAccountOwnerError } from './GLAccountEntityServer.js';
+import { sqlGuidLiteral } from './SqlGuards.js';
 
 import {
   DEFAULT_CHART_OF_ACCOUNTS,
@@ -49,6 +52,55 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
   //  - OperatingTimeZone = 'UTC' default (#158): the field is a per-company display override,
   //    and blank means "inherit `BizApps.BusinessTimeZone`". Stamping 'UTC' made every new
   //    company override the business zone with UTC.
+
+  /** BaseEntity SKIPS ValidateAsync by default — opt in, or the owner check below never runs on Save. */
+  public override get DefaultSkipAsyncValidation(): boolean {
+    return false;
+  }
+
+  /**
+   * A company that owns active GL accounts cannot become a Division, Department or Branch
+   * (bc-aidp-next-golive#313). Those types keep no books, so their entries resolve their legal
+   * entity's accounts and an account the company owned would never be used, or would book entries
+   * under a company with no ERP connection. `GLAccountEntityServer` refuses the same state on the
+   * account side. Checked only when EntityType changes, so other edits to such a profile still save.
+   */
+  public override async ValidateAsync(): Promise<ValidationResult> {
+    const result = await super.ValidateAsync();
+    const entityTypeChanged = this.GetFieldByName('EntityType')?.Dirty ?? false;
+    if (this.IsSaved && entityTypeChanged && UsesParentBooks(this.EntityType)) {
+      const ownedCode = await this.firstActiveGLAccountCode();
+      const error = ownedCode === null ? null : ParentBooksAccountOwnerError(ownedCode, this.ID, this.EntityType);
+      if (error) {
+        result.Success = false;
+        result.Errors.push(new ValidationErrorInfo('EntityType', `${error} Deactivate its accounts first.`, this.EntityType));
+      }
+    }
+    return result;
+  }
+
+  /**
+   * The code of one active GL account this company owns, or null when it owns none. An inactive
+   * account takes no new lines, so it does no harm on a company that keeps no books.
+   */
+  private async firstActiveGLAccountCode(): Promise<string | null> {
+    const provider = this.ProviderToUse as unknown as IRunViewProvider;
+    const res = await provider.RunView<Pick<mjBizAppsAccountingGLAccountEntity, 'Code'>>(
+      {
+        EntityName: 'MJ_BizApps_Accounting: GL Accounts',
+        ExtraFilter: `CompanyID=${sqlGuidLiteral(this.ID, 'AccountingCompanyProfileEntityServer.firstActiveGLAccountCode')} AND IsActive=1`,
+        Fields: ['Code'],
+        MaxRows: 1,
+        ResultType: 'simple',
+        BypassCache: true,
+      },
+      this.ContextCurrentUser,
+    );
+    if (!res.Success) {
+      throw new Error(`AccountingCompanyProfileEntityServer: failed to read company ${this.ID}'s GL accounts: ${res.ErrorMessage ?? 'unknown error'}`);
+    }
+    return res.Results?.[0]?.Code ?? null;
+  }
 
   // ─── Seed COA (explicit capability — no longer an auto-hook) ───────────
 

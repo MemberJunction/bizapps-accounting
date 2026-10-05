@@ -355,7 +355,7 @@ __mj_BizAppsAccounting.AccountingCompanyProfile
   ReportingCurrencyCode CHAR(3) NULL,
   FiscalYearStartMonth TINYINT NOT NULL DEFAULT 1,
   FiscalYearStartDay TINYINT NOT NULL DEFAULT 1,
-  ParentAccountingCompanyID UNIQUEIDENTIFIER NULL,  -- "uses the books of"; no chains; not self
+  ParentAccountingCompanyID UNIQUEIDENTIFIER NULL,  -- parent; Division/Department/Branch use the books of the first non-such ancestor; nests; no cycles; not self (golive#313)
   ApprovalCFOUserID UNIQUEIDENTIFIER NULL FK → __mj.User,  -- designated batch approver
   IsActive BIT NOT NULL DEFAULT 1,
   UNIQUE (CompanyCode)

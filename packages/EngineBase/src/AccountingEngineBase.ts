@@ -17,6 +17,8 @@
  *     pair for an ordered company pair, used when one company collects cash settling another's
  *     line (BA-D26). Separate from the role/link path on purpose: an intercompany account is
  *     per-company-PAIR, which a per-record role lookup cannot express.
+ *   - LegalEntityFor(companyId) — the company whose books a company uses: a Division, Department
+ *     or Branch walks up its parents to the first company of any other type (bc-aidp-next-golive#313).
  *   - CreatePipelineLookups() — the cache-backed lookups the pure draft pipeline consumes.
  *
  * Browser-safe: deps are @memberjunction/core + global + the app's Entities package ONLY.
@@ -47,7 +49,7 @@ import { DEFAULT_FISCAL_YEAR_START, type FiscalYearStart } from './fiscal-year.j
 const uuidKey = (id: string | null | undefined): string => (id ?? '').trim().toLowerCase();
 
 /** Typed resolution failure. Distinct from JE draft `Errors[]` — this is a cache lookup, not a write. */
-export type AccountingResolutionErrorCode = 'ROLE_NOT_SINGULAR';
+export type AccountingResolutionErrorCode = 'ROLE_NOT_SINGULAR' | 'LEGAL_ENTITY_UNRESOLVED';
 
 export class AccountingResolutionError extends Error {
   readonly Code: AccountingResolutionErrorCode;
@@ -60,6 +62,78 @@ export class AccountingResolutionError extends Error {
 
 export function isAccountingResolutionError(e: unknown): e is AccountingResolutionError {
   return e instanceof AccountingResolutionError;
+}
+
+/**
+ * The entity types that keep no books of their own. A company of one of these types uses the books
+ * of its legal entity, found by walking `ParentAccountingCompanyID` up to the first company of any
+ * other type. Every other type (LegalEntity, Subsidiary, Partner, JointVenture, CostCenter, Other)
+ * is its own legal entity, whatever its parent.
+ */
+export const PARENT_BOOKS_ENTITY_TYPES: ReadonlyArray<mjBizAppsAccountingAccountingCompanyProfileEntity['EntityType']> = [
+  'Division',
+  'Department',
+  'Branch',
+];
+
+/** True when a company of this entity type uses its legal entity's books rather than its own. */
+export function UsesParentBooks(entityType: string | null | undefined): boolean {
+  return PARENT_BOOKS_ENTITY_TYPES.some(t => t === entityType);
+}
+
+/** The two profile fields the legal-entity walk reads. */
+export interface LegalEntityProfile {
+  ID: string;
+  EntityType: string;
+  ParentAccountingCompanyID: string | null;
+}
+
+/**
+ * The legal entity of `companyId`: the company itself unless its profile's type keeps no books
+ * (`UsesParentBooks`), in which case its parent's legal entity. Pure and exported for unit tests;
+ * `AccountingEngineBase.LegalEntityFor` feeds it the cached profiles.
+ *
+ * A company with no profile is its own legal entity. That is the state of every company before
+ * its profile is filled in, and it books exactly as it did before this rule existed.
+ *
+ * Throws `LEGAL_ENTITY_UNRESOLVED`, naming the company, when a Division, Department or Branch has
+ * no parent, its parent has no profile, or the walk loops. Each means the company setup is
+ * incomplete, and guessing a legal entity would post to the wrong books with nothing to show it.
+ */
+export function ResolveLegalEntity(
+  companyId: string,
+  profileById: (id: string) => LegalEntityProfile | undefined,
+): string {
+  const visited = new Set<string>();
+  let currentId = companyId;
+  let profile = profileById(currentId);
+  if (!profile) return companyId;
+  while (UsesParentBooks(profile.EntityType)) {
+    visited.add(uuidKey(currentId));
+    const parentId = profile.ParentAccountingCompanyID;
+    if (!parentId) {
+      throw legalEntityError(companyId, `${currentId} is a ${profile.EntityType} with no parent company`);
+    }
+    if (visited.has(uuidKey(parentId))) {
+      throw legalEntityError(companyId, `its parent companies loop back to ${parentId}`);
+    }
+    const parent = profileById(parentId);
+    if (!parent) {
+      throw legalEntityError(companyId, `its parent company ${parentId} has no Accounting Company Profile`);
+    }
+    currentId = parent.ID;
+    profile = parent;
+  }
+  return currentId;
+}
+
+function legalEntityError(companyId: string, why: string): AccountingResolutionError {
+  return new AccountingResolutionError(
+    'LEGAL_ENTITY_UNRESOLVED',
+    `Cannot find the legal entity of company ${companyId}: ${why}. A Division, Department or Branch ` +
+      `uses the books of the first company above it that is not one of those types. Set the ` +
+      `company's Parent and Entity Type on its Accounting Company Profile.`,
+  );
 }
 
 /** A resolved link: the winning GLAccountLink + its ordered dimension requirements. */
@@ -257,6 +331,21 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
       Month: profile?.FiscalYearStartMonth ?? DEFAULT_FISCAL_YEAR_START.Month,
       Day: profile?.FiscalYearStartDay ?? DEFAULT_FISCAL_YEAR_START.Day,
     };
+  }
+
+  // ─── the legal-entity walk (bc-aidp-next-golive#313) ─────────────────────────
+
+  /**
+   * The company whose books `companyId` uses — see `ResolveLegalEntity` for the rule and the
+   * failures it throws. Callers compare legal entities, not companies, wherever the question is
+   * "are these the same books?": whether a payment needs Due To / Due From, and which company a
+   * GL account must belong to.
+   */
+  public LegalEntityFor(companyId: string): string {
+    return ResolveLegalEntity(companyId, id => {
+      const key = uuidKey(id);
+      return key ? this.CompanyProfiles.find(p => uuidKey(p.ID) === key) : undefined;
+    });
   }
 
   // ─── the link primitive (plan §2.1) ────────────────────────────────────────

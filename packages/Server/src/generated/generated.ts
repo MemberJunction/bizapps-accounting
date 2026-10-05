@@ -74,7 +74,7 @@ export class mjBizAppsAccountingAccountingCompanyProfile_ {
     @Field(() => Int, {nullable: true, description: `Calendar day-of-month (1-31) when the fiscal year begins. Default 1.`}) 
     FiscalYearStartDay?: number;
         
-    @Field({nullable: true, description: `If set, this profile uses the books (COA, periods, JEs) of the referenced profile (consolidated reporting). Chains are forbidden: the referenced profile must NOT itself have a parent (BA-D9; trigger trg_ACP_NoChains).`}) 
+    @Field({nullable: true, description: `The company this profile sits under. A Division, Department or Branch keeps no books of its own: it uses the books of its legal entity, the first company up this chain whose EntityType is any other type. Any other type is its own legal entity and the parent records ownership only. Parents may nest; a cycle is refused (trigger trg_ACP_NoChains).`}) 
     @MaxLength(36)
     ParentAccountingCompanyID?: string;
         
