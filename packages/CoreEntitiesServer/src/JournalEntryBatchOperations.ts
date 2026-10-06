@@ -25,9 +25,9 @@
  *                                                            the cancel requires the rejection this records first, #233)
  *   Accounting.GetJournalEntryBatchApprovalState → gate.assertApproved probe (read-only: is this batch dispatchable?)
  *   Accounting.ArchiveJournalEntryBatch          → batch.Archive(reason)             terminal close with NO ERP call; members stay locked (#214)
- *   Accounting.CancelJournalEntryBatch           → cancelJournalEntryBatch(...)     Approved|Failed→Cancelled; members return to the
- *                                                            candidate pool (#183: CFO or approver only, Reason required,
- *                                                            ConfirmNotAlreadyPostedInERP from Failed; Pending uses Reject)
+ *   Accounting.CancelJournalEntryBatch           → cancelJournalEntryBatch(...)     Pending|Approved|Failed→Cancelled; members return to the
+ *                                                            candidate pool, Reason required (Pending: CFO or builder, golive #302;
+ *                                                            #183: Approved|Failed by CFO or approver; ConfirmNotAlreadyPostedInERP from Failed)
  *
  * These are thin by design — every rule (netting, the one-transaction build incl. the approval
  * Task + ApprovalTaskID stamp (D10 rev. 2026-07-29), the CFO precondition, EmptyJournalEntryBatchError) lives
@@ -65,6 +65,7 @@ import {
 import { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
 import { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
 import { requireSqlGuid } from './SqlGuards.js';
+import { requireDateBound } from './BusinessDay.js';
 import {
   IsApprovalOutcome,
   IsTaskDecisionOutcomeCode,
@@ -79,9 +80,12 @@ const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 
 /** The workspace criteria panel, on the wire. Dates are ISO strings; everything else optional. */
 export interface JournalEntryBatchCriteriaInput {
-  /** ISO date or datetime. A DATE-only value is INCLUSIVE of that whole day. */
+  /** `YYYY-MM-DD`, or an ISO datetime WITH an offset. Every cutoff is a whole DAY, INCLUSIVE of it
+   *  (EffectiveDate is a DATE column): a date-only value is that day; a datetime resolves to the
+   *  BUSINESS day it falls on. Anything else is refused with an error naming the field. */
   Cutoff?: string | null;
-  /** ISO date. Optional lower bound; omit for the standard oldest-forward flow. */
+  /** Optional lower bound, same shapes and resolution as `Cutoff`; omit for the standard
+   *  oldest-forward flow. */
   StartDate?: string | null;
   /** Omit/empty = all companies (each still builds its OWN single-company batch, D7). */
   CompanyIDs?: string[] | null;
@@ -91,10 +95,15 @@ export interface JournalEntryBatchCriteriaInput {
   ExcludeEntryTypeCodes?: string[] | null;
 }
 
+/**
+ * The strings travel to the engine AS STRINGS: their shape is what says whether a value is a day or
+ * an instant. Parsing to a `Date` here would lose that — `2026-09-30T19:00:00-05:00` is UTC midnight
+ * and would read as 1 October (golive #168). Validated here so a bad value fails at the boundary.
+ */
 function toOptions(input: JournalEntryBatchCriteriaInput | undefined): BuildJournalEntryBatchOptions {
   return {
-    cutoff: input?.Cutoff ? new Date(input.Cutoff) : null,
-    startDate: input?.StartDate ? new Date(input.StartDate) : null,
+    cutoff: input?.Cutoff ? requireDateBound(input.Cutoff, 'Batch criteria Cutoff') : null,
+    startDate: input?.StartDate ? requireDateBound(input.StartDate, 'Batch criteria StartDate') : null,
     companyIds: input?.CompanyIDs?.length ? input.CompanyIDs : null,
     entryTypeCodes: input?.EntryTypeCodes?.length ? input.EntryTypeCodes : null,
     excludeEntryTypeCodes: input?.ExcludeEntryTypeCodes?.length ? input.ExcludeEntryTypeCodes : null,
@@ -327,7 +336,7 @@ export interface RecordJournalEntryBatchDecisionOutput { Recorded: true }
  * Record an in-app CFO approve/reject decision against the batch's approval Task. An approval also
  * flips the batch Pending→Approved (content freeze + dispatchable); a rejection cancels the batch
  * and returns its journal entries to the candidate pool (a reject has a visible financial effect,
- * not a dead no-op).
+ * not a dead no-op). The rejection's notes become the batch's CancelReason.
  */
 @RegisterClass(BaseRemotableOperation, 'Accounting.RecordJournalEntryBatchDecision')
 export class RecordJournalEntryBatchDecisionOperation extends BaseRemotableOperation<RecordJournalEntryBatchDecisionInput, RecordJournalEntryBatchDecisionOutput> {
@@ -348,7 +357,7 @@ export class RecordJournalEntryBatchDecisionOperation extends BaseRemotableOpera
     if (IsApprovalOutcome(input.Decision)) {
       await approveJournalEntryBatch(input.JournalEntryBatchID, user.ID, user, provider);
     } else {
-      await cancelJournalEntryBatch(input.JournalEntryBatchID, user, provider);
+      await cancelJournalEntryBatch(input.JournalEntryBatchID, user, provider, { reason: input.Notes ?? null });
     }
     return { Recorded: true };
   }
@@ -425,7 +434,7 @@ export class ArchiveJournalEntryBatchOperation extends BaseRemotableOperation<Ar
 
 export interface CancelJournalEntryBatchInput {
   JournalEntryBatchID: string;
-  /** Required when the batch is Approved or Failed: cancelling discards a summary the approver signed. */
+  /** Required: the only record of why the batch was cancelled. */
   Reason?: string | null;
   /** Required `true` to cancel a Failed batch: the caller checked the ERP and the batch number has not posted. */
   ConfirmNotAlreadyPostedInERP?: boolean;
@@ -444,11 +453,12 @@ export interface CancelJournalEntryBatchOutput {
 }
 
 /**
- * Cancel an Approved or Failed batch and return its journal entries to the candidate pool (#183) —
- * the correction path for a batch whose frozen content is wrong, as opposed to Archive, which keeps
- * the entries locked for good. A Pending batch is refused here: its cancel is a rejection, which
- * goes through RecordJournalEntryBatchDecision so the CFO's decision is recorded on the Task.
- * Who may cancel (the CFO or the batch's approver), the required reason and the ERP confirmation
+ * Cancel a Pending, Approved or Failed batch and return its journal entries to the candidate pool —
+ * the correction path for a wrong batch, as opposed to Archive, which keeps the entries locked for
+ * good. Before approval (golive #302) the company's CFO or the batch's builder may cancel, and the
+ * approval Task is closed; past approval (#183) the CFO or the batch's approver may. A CFO rejecting
+ * a Pending batch uses RecordJournalEntryBatchDecision instead, so the decision is recorded.
+ * Who may cancel, the required reason and the ERP confirmation
  * are enforced by the engine, the gate and the entity; the engine resolves the gate and the ERP
  * lookup itself (#233). This operation only marshals. A Failed cancel undone because the ERP posted
  * the batch while it ran (#215) throws JournalEntryBatchPostedDuringCancelError, whose message says
@@ -462,7 +472,6 @@ export class CancelJournalEntryBatchOperation extends BaseRemotableOperation<Can
   protected async InternalExecute(input: CancelJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<CancelJournalEntryBatchOutput> {
     if (!input?.JournalEntryBatchID) throw new Error('CancelJournalEntryBatch: JournalEntryBatchID is required.');
     requireSqlGuid(input.JournalEntryBatchID, 'CancelJournalEntryBatch');
-    await this.refusePending(input.JournalEntryBatchID, provider, user);
     try {
       const batch = await cancelJournalEntryBatch(input.JournalEntryBatchID, user, provider, {
         reason: input.Reason ?? null,
@@ -473,14 +482,6 @@ export class CancelJournalEntryBatchOperation extends BaseRemotableOperation<Can
       // An answer for the operator, not a failure of the call: the batch is untouched and still Failed.
       if (e instanceof ErpPostingUnconfirmedError) return { Status: 'Failed', CancelledAt: null, ConfirmationRequired: e.Reason, ConfirmationKind: e.Kind };
       throw e;
-    }
-  }
-
-  private async refusePending(batchId: string, provider: IMetadataProvider, user: UserInfo): Promise<void> {
-    const batch = await provider.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, user);
-    if (!(await batch.Load(batchId))) throw new Error(`CancelJournalEntryBatch: batch ${batchId} not found.`);
-    if (batch.Status === 'Pending') {
-      throw new Error(`CancelJournalEntryBatch: batch ${batch.JournalEntryBatchNumber} is Pending — reject it from Batch approvals instead, so the decision is recorded on its approval Task.`);
     }
   }
 }

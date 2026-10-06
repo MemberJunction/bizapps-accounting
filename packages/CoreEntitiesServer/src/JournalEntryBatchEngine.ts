@@ -24,7 +24,8 @@
  *   cancelJournalEntryBatch(): Pending | Approved | Failed → Cancelled, releasing the member JEs to
  *     the candidate pool (#183: a reason from Approved/Failed). From Failed the ERP is looked up first
  *     (#207): a posting it holds refuses the cancel, and the operator confirms only when it cannot say.
- *     A Pending cancel needs a rejection recorded on the approval Task. The gate and the ERP lookup
+ *     A Pending cancel needs a rejection recorded on the approval Task, or a reason from the CFO or the
+ *     batch's builder (golive #302). The gate and the ERP lookup
  *     are resolved through JournalEntryBatchDispatchServices, not taken from the caller (#233), by
  *     JournalEntryBatchEntityServer.Cancel itself, so a direct entity call runs them too (#214).
  *   autoPostJournalEntryBatch(): the scheduled-posting approval waiver — build under the include-list
@@ -58,7 +59,7 @@
  * read-only previewBatch that runs the SAME filter/order/netting as the build. The
  * one-transaction-per-batch guarantee (D10 rev. 2026-07-29) is here too: build + summary +
  * locks + approval task + ApprovalTaskID stamp commit all-or-none in one provider transaction.
- * Still not here: PostingDate selection UI (defaults to today, UTC — a UI-port item).
+ * Still not here: PostingDate selection UI (defaults to today's BUSINESS day — a UI-port item).
  *
  * CONNECTS TO:
  *   READS/WRITES: Journal Entries (members + the JournalEntryBatchSummary JE) · Journal Entry Lines
@@ -88,8 +89,8 @@ import { JournalEntryBatchEntityServer, type ERPNotPostedBasis, type JournalEntr
 import { JournalEntryBatchDispatchServices } from './JournalEntryBatchDispatchServices.js';
 import { GetJournalEntryBatchSummaryEntryType } from './JournalEntryTypes.js';
 import { sqlGuidLiteral } from './SqlGuards.js';
-import { loadTodayBusiness } from './BusinessDay.js';
-import { ToCalendarDay } from '@mj-biz-apps/common-entities';
+import { AddDays, ToCalendarDay } from '@mj-biz-apps/common-entities';
+import { loadBoundDay, loadTodayBusiness, type DateBound } from './BusinessDay.js';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
@@ -332,12 +333,15 @@ export async function pendingCompanies(contextUser: UserInfo, provider: IMetadat
  * on/before a date so an operator can batch "everything up to the end of the month".
  */
 export interface BuildJournalEntryBatchOptions {
-  /** Upper bound. A DATE-only cutoff (midnight UTC) is INCLUSIVE of that whole day
-   *  (EffectiveDate < cutoff + 1 day); a datetime cutoff is exact (EffectiveDate <= cutoff). */
-  cutoff?: Date | null;
-  /** Optional lower bound (EffectiveDate >= startDate); omit for the standard oldest-forward flow.
-   *  Composes with each company's PostingStartDate, which always applies: the later of the two wins. */
-  startDate?: Date | null;
+  /** Upper bound, always a whole DAY and INCLUSIVE of it (EffectiveDate < day + 1) — EffectiveDate
+   *  is a DATE column, so there is no time of day to compare against. A `YYYY-MM-DD` string is that
+   *  day; a date-time string is the BUSINESS day it falls on; a `Date` is a day at UTC midnight and
+   *  an instant otherwise (golive #168 — see `loadBoundDay`). Prefer a string from a remote caller. */
+  cutoff?: DateBound | null;
+  /** Optional lower bound (EffectiveDate >= that day), resolved exactly like `cutoff`; omit for the
+   *  standard oldest-forward flow. Composes with each company's PostingStartDate, which always
+   *  applies: the later of the two wins. */
+  startDate?: DateBound | null;
   /** Restrict the candidate pool to these companies. Omit/empty = all companies. (Builds are
    *  per-company either way, D7 — this narrows which companies participate in a sweep/preview.) */
   companyIds?: string[] | null;
@@ -368,21 +372,33 @@ async function candidateFilterParts(
   contextUser: UserInfo,
   p: Providers,
 ): Promise<{ criteria: string[]; postingStart: string[] }> {
-  const [criteria, floors] = await Promise.all([criteriaClauses(options, contextUser, p), loadPostingStartDates(contextUser, p)]);
-  const startDay = options.startDate ? isoDate(options.startDate) : null;
+  // The start day is resolved once and shared by both halves: a date-time StartDate names its
+  // BUSINESS day, and the PostingStartDate comparison must use that same day, not the instant's UTC day.
+  const startDay = options.startDate
+    ? await loadBoundDay(options.startDate, 'Batch criteria StartDate', contextUser, p.md, scopeCompanyId(options))
+    : null;
+  const [criteria, floors] = await Promise.all([criteriaClauses(options, startDay, contextUser, p), loadPostingStartDates(contextUser, p)]);
   return { criteria, postingStart: postingStartClauses(floors, startDay) };
 }
 
-async function criteriaClauses(options: BuildJournalEntryBatchOptions, contextUser: UserInfo, p: Providers): Promise<string[]> {
+/** With exactly one company in scope its zone applies once the engine carries per-company zones;
+ *  today every company resolves to the app-wide `BizApps.BusinessTimeZone`. */
+function scopeCompanyId(options: BuildJournalEntryBatchOptions): string | undefined {
+  return options.companyIds?.length === 1 ? options.companyIds[0] : undefined;
+}
+
+async function criteriaClauses(
+  options: BuildJournalEntryBatchOptions,
+  startDay: string | null,
+  contextUser: UserInfo,
+  p: Providers,
+): Promise<string[]> {
   const summaryType = await GetJournalEntryBatchSummaryEntryType(contextUser, p.md);
   const clauses = [`Status='Pending'`, `EntryTypeID<>'${summaryType.ID}'`];
-  if (options.startDate) clauses.push(`EffectiveDate >= '${isoDate(options.startDate)}'`);
+  if (startDay) clauses.push(`EffectiveDate >= '${startDay}'`);
   if (options.cutoff) {
-    if (isMidnightUTC(options.cutoff)) {
-      clauses.push(`EffectiveDate < '${isoDate(addDaysUTC(options.cutoff, 1))}'`); // inclusive whole day
-    } else {
-      clauses.push(`EffectiveDate <= '${options.cutoff.toISOString()}'`); // exact datetime
-    }
+    const cutoffDay = await loadBoundDay(options.cutoff, 'Batch criteria Cutoff', contextUser, p.md, scopeCompanyId(options));
+    clauses.push(`EffectiveDate < '${AddDays(cutoffDay, 1)}'`); // inclusive whole day
   }
   // Empty/omitted scope = NO clause (all companies / all types) — never `IN ()`, which is a SQL
   // syntax error AND would silently mean "nothing".
@@ -487,14 +503,6 @@ function sqlText(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
 }
 
-const isMidnightUTC = (d: Date): boolean =>
-  d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0 && d.getUTCMilliseconds() === 0;
-const isoDate = (d: Date): string => new Date(d).toISOString().slice(0, 10);
-const addDaysUTC = (d: Date, n: number): Date => {
-  const r = new Date(d);
-  r.setUTCDate(r.getUTCDate() + n);
-  return r;
-};
 
 // ─── Explicit-ID + view builds (the workspace's include/exclude + B1.2) ──────
 
@@ -712,8 +720,9 @@ async function loadDimensionsByLine(lineIds: string[], contextUser: UserInfo, p:
 async function createBatchHeader(
   companyId: string, targetSystem: JournalEntryBatchTargetSystem, batchedByUserId: string, jeCount: number, contextUser: UserInfo, p: Providers,
 ): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
-  // PostingDate is today's business day (see BusinessDay.ts); PostingDate selection is a UI-port item.
-  const postingDate = await loadTodayBusiness(contextUser, p.md);
+  // PostingDate is today's business day in the batch's company (see BusinessDay.ts) — the same
+  // zone lookup the cutoff makes; PostingDate selection is a UI-port item.
+  const postingDate = await loadTodayBusiness(contextUser, p.md, companyId);
   const batch = await p.md.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, contextUser);
   batch.NewRecord();
   // The one sanctioned create. Everything else that saves a new batch — Explorer's generic New
@@ -919,18 +928,21 @@ async function lockJournalEntries(jeIds: string[], batchId: string, contextUser:
  * approval Task. JournalEntryBatchEntityServer.Cancel resolves it through {@link JournalEntryBatchDispatchServices}.
  */
 export interface JournalEntryBatchCancelGate {
-  /** Throw unless the batch's approval Task carries a terminal rejection — a Pending cancel IS that rejection. */
-  assertRejected(batchId: string, contextUser: UserInfo): Promise<void>;
+  /** Whether the batch's approval Task carries a terminal rejection; a rejected Pending batch is cancelled on it. */
+  isRejected(batchId: string, contextUser: UserInfo): Promise<boolean>;
+  /** Throw unless the user may cancel a Pending batch nobody rejected: the company's CFO or the batch's builder (golive #302). */
+  assertMayCancelPending(batchId: string, contextUser: UserInfo): Promise<void>;
   assertMayCancelApproved(batchId: string, contextUser: UserInfo): Promise<void>;
   recordCancellation(batchId: string, cancellation: RecordedCancellation, contextUser: UserInfo): Promise<void>;
 }
 
-/** What a cancel past approval records on the approval Task. */
+/** What a cancel records on the approval Task. */
 export interface RecordedCancellation {
   reason: string;
   /**
    * The status the batch was cancelled FROM. Passed in, not re-read: the recording runs inside the
    * cancel's transaction, after the batch was saved Cancelled, so a reload would say Cancelled.
+   * From Pending the approval Task is closed as well as commented on.
    */
   fromStatus: string;
   /** For a Failed batch, how "not posted in the ERP" was established (#207). */
@@ -964,8 +976,9 @@ export type CancelJournalEntryBatchOptions = JournalEntryBatchCancelOptions;
  * entries to the candidate pool and deletes its JournalEntryBatchSummary JE.
  *
  * The rules are the entity's, so they hold however the batch is reached (#214): a Pending cancel
- * needs the rejection recorded on the approval Task first (RecordJournalEntryBatchDecision records
- * it, then cancels); from Approved or Failed (#183) the gate must allow the caller,
+ * needs either the rejection recorded on the approval Task first (RecordJournalEntryBatchDecision
+ * records it, then cancels) or `options.reason` from the company's CFO or the batch's builder, which
+ * closes the approval Task (golive #302); from Approved or Failed (#183) the gate must allow the caller,
  * `options.reason` is required and the cancel is recorded on the approval Task in the same
  * transaction; from Failed the ERP is checked first (#207), see {@link checkFailedBatchBeforeCancel},
  * and again before the cancel commits (#215): a posting found then means the cancel does not stand,

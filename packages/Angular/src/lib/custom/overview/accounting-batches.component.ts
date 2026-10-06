@@ -7,6 +7,7 @@ import { NavigationService } from '@memberjunction/ng-shared';
 import { MJButtonDirective, MJDialogComponent, MJDialogActionsComponent, MJDropdownComponent } from '@memberjunction/ng-ui-components';
 import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
 import { BusinessTimeZoneEngine } from '@mj-biz-apps/common-entities';
+import { calendarDaySpan, formatJournalDate } from '../form-panels/journal-entry-panel.helpers';
 import {
     DispatchConfirmationKind,
     JournalEntryBatchDispatchClient,
@@ -211,7 +212,7 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                                 <i class="fa-solid fa-server"></i> {{ batch.TargetSystem }}
                                             </span>
                                         </td>
-                                        <td>{{ batch.PostingDate | date:'mediumDate' }}</td>
+                                        <td>{{ batch.PostingDate | date:'mediumDate':'UTC' }}</td>
                                         <td>{{ batch.Company || '—' }}</td>
                                         <td>
                                             <span class="mja-status-pill" [attr.data-status]="batch.Status">
@@ -237,11 +238,11 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                                     <i class="fa-solid fa-box-archive"></i> Archive
                                                 </button>
                                             }
-                                            @if (CanCancelApproved(batch)) {
+                                            @if (CanCancel(batch)) {
                                                 <button mjButton variant="secondary" size="sm" type="button"
                                                         [disabled]="CancellingBatchID === batch.ID"
                                                         title="Cancel this batch and return its journal entries to the next build."
-                                                        (click)="OnCancelApproved(batch, $event)">
+                                                        (click)="OnCancel(batch, $event)">
                                                     <i class="fa-solid fa-ban"></i> Cancel
                                                 </button>
                                             }
@@ -285,6 +286,9 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                 [(ngModel)]="BuildCutoffDate"
                                 (ngModelChange)="OnBuildPreviewFilterChange()"
                                 aria-label="Effective Date Cutoff" />
+                            @if (!BuildCutoffDate) {
+                                <span class="mja-modal-hint">No cutoff — includes future-dated entries.</span>
+                            }
                         </div>
                     </div>
 
@@ -314,8 +318,8 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                         <div class="mja-fact-item">
                             <span class="mja-fact-lbl">Date Range</span>
                             <strong class="mja-fact-val">
-                                {{ PreviewCoveredStartDate ? (PreviewCoveredStartDate | date:'mediumDate') : '—' }} &rarr;
-                                {{ PreviewCoveredEndDate ? (PreviewCoveredEndDate | date:'mediumDate') : '—' }}
+                                {{ FormatCoveredDay(PreviewCoveredStartDate) }} &rarr;
+                                {{ FormatCoveredDay(PreviewCoveredEndDate) }}
                             </strong>
                         </div>
                     </div>
@@ -398,7 +402,7 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                                     [attr.aria-label]="'Include ' + e.EntryNumber" />
                                             </td>
                                             <td><strong>{{ e.EntryNumber }}</strong></td>
-                                            <td>{{ e.EffectiveDate | date:'mediumDate' }}</td>
+                                            <td>{{ e.EffectiveDate | date:'mediumDate':'UTC' }}</td>
                                             <td><span class="mja-type-tag">{{ e.EntryTypeCode }}</span></td>
                                             <td class="mja-desc-cell">{{ e.Description || '—' }}</td>
                                             <td class="mja-td-right">{{ e.Amount | currency }}</td>
@@ -478,6 +482,9 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                         journal entry deleted. Its {{ CancelTarget?.TotalEntries }}
                         journal entr{{ CancelTarget?.TotalEntries === 1 ? 'y' : 'ies' }}
                         <strong>return to the candidate pool</strong> for the next build — this is not an archive.
+                        @if (CancelTarget?.Status === 'Pending') {
+                            Its approval request is closed.
+                        }
                     </p>
 
                     <div class="mja-modal-field">
@@ -524,7 +531,7 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                 <mj-dialog-actions>
                     <button mjButton variant="danger" size="sm" type="button"
                             [disabled]="!CanConfirmCancel"
-                            (click)="ConfirmCancelApproved()">
+                            (click)="ConfirmCancel()">
                         @if (CancellingBatchID) {
                             <i class="fa-solid fa-spinner fa-spin"></i> Cancelling…
                         } @else {
@@ -968,6 +975,10 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
             gap: 6px;
             min-width: 0;
         }
+        .mja-modal-hint {
+            font-size: 12px;
+            color: var(--mj-status-warning);
+        }
         .mja-modal-label {
             font-size: 11px;
             font-weight: 700;
@@ -1151,6 +1162,7 @@ export class AccountingBatchesPageComponent implements OnInit {
     public PreviewGrossDebits = 0;
     public PreviewGrossCredits = 0;
     public PreviewCandidateCount = 0;
+    /** Calendar days (`YYYY-MM-DD`) — the EffectiveDate span of the ticked entries. */
     public PreviewCoveredStartDate: string | null = null;
     public PreviewCoveredEndDate: string | null = null;
     /**
@@ -1249,18 +1261,23 @@ export class AccountingBatchesPageComponent implements OnInit {
     /** The batch number retyped to override a `Mismatch`, which is most likely this batch, already posted. */
     public CancelMismatchText = '';
 
-    /** Cancel (#183) is offered on an Approved or Failed batch; a Pending batch uses Reject instead. */
-    public CanCancelApproved(batch: BatchItem): boolean {
-        return (batch.Status === 'Approved' || batch.Status === 'Failed') && this.CancellingBatchID !== batch.ID;
+    /**
+     * Cancel is offered on a Pending (golive #302), Approved or Failed (#183) batch. Who may cancel is
+     * the server's call: the company's CFO or the batch's builder before approval, the CFO or the
+     * approver after it.
+     */
+    public CanCancel(batch: BatchItem): boolean {
+        return ['Pending', 'Approved', 'Failed'].includes(batch.Status) && this.CancellingBatchID !== batch.ID;
     }
 
     /**
-     * Cancel an Approved or Failed batch (#183): the batch becomes Cancelled, its summary journal entry
+     * Cancel a Pending, Approved or Failed batch: the batch becomes Cancelled, its summary journal entry
      * is deleted and its journal entries return to the candidate pool — the opposite of Archive, which
-     * keeps them locked. The dialog requires a reason. A Failed batch may already be in the ERP, so the
-     * server looks its number up first (#207); the dialog asks the operator only when it cannot say.
+     * keeps them locked. A Pending batch's approval request is closed. The dialog requires a reason. A
+     * Failed batch may already be in the ERP, so the server looks its number up first (#207); the dialog
+     * asks the operator only when it cannot say.
      */
-    public OnCancelApproved(batch: BatchItem, event: Event): void {
+    public OnCancel(batch: BatchItem, event: Event): void {
         // The row itself opens the record — an action button inside it must not also navigate.
         event.stopPropagation();
         if (this.CancellingBatchID) return;
@@ -1303,7 +1320,7 @@ export class AccountingBatchesPageComponent implements OnInit {
      * confirmation: the server checks the ERP itself. Only when it cannot settle it does the dialog
      * stay open and ask, and only that second attempt carries the operator's word.
      */
-    public async ConfirmCancelApproved(): Promise<void> {
+    public async ConfirmCancel(): Promise<void> {
         const batch = this.CancelTarget;
         if (!batch || !this.CanConfirmCancel) return;
         const reason = this.CancelReasonDraft.trim();
@@ -1572,17 +1589,14 @@ export class AccountingBatchesPageComponent implements OnInit {
     /** The effective-date span the ticked entries cover — the modal's fourth fact. */
     private setCoveredDateRange(entries: PreviewEntryWire[]): void {
         const excluded = new Set(this.ExcludedEntryIDs);
-        const dates = entries
-            .filter(e => !excluded.has(e.ID))
-            .map(e => new Date(e.EffectiveDate).getTime())
-            .filter(t => !isNaN(t));
-        if (dates.length === 0) {
-            this.PreviewCoveredStartDate = null;
-            this.PreviewCoveredEndDate = null;
-            return;
-        }
-        this.PreviewCoveredStartDate = new Date(Math.min(...dates)).toISOString();
-        this.PreviewCoveredEndDate = new Date(Math.max(...dates)).toISOString();
+        const span = calendarDaySpan(entries.filter(e => !excluded.has(e.ID)).map(e => e.EffectiveDate));
+        this.PreviewCoveredStartDate = span?.First ?? null;
+        this.PreviewCoveredEndDate = span?.Last ?? null;
+    }
+
+    /** A covered-range end (a calendar day) for display — UTC-anchored, never the browser's day. */
+    public FormatCoveredDay(day: string | null): string {
+        return formatJournalDate(day);
     }
 
     private clearPreview(): void {
