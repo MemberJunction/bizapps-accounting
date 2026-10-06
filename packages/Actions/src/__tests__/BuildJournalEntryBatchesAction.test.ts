@@ -81,6 +81,25 @@ describe('BuildJournalEntryBatchesAction', () => {
         expect(params.Params.find(p => p.Name === 'Batches')?.Value).toContain('BATCH-CO-1');
     });
 
+    it('passes StartDate to the engine as the caller wrote it, so its shape decides day vs instant', async () => {
+        // `new Date(startDate)` turned 2026-09-30T19:00:00-05:00 into UTC midnight on 1 October,
+        // which the engine then read as the day 1 October (golive #168).
+        const pendingCompaniesSpy = vi.spyOn(serverEngine, 'pendingCompanies').mockResolvedValue([]);
+
+        await new BuildJournalEntryBatchesAction().Run(runParams([{ Name: 'StartDate', Value: '2026-09-30T19:00:00-05:00' }]));
+
+        expect(pendingCompaniesSpy.mock.calls[0][2].startDate).toBe('2026-09-30T19:00:00-05:00');
+    });
+
+    it('refuses a malformed StartDate with an error naming it, before reading any company', async () => {
+        // Thrown, like an unknown CutoffMode: `new Date('2026-02-30')` silently rolled to 2 March.
+        const pendingCompaniesSpy = vi.spyOn(serverEngine, 'pendingCompanies').mockResolvedValue([]);
+
+        await expect(new BuildJournalEntryBatchesAction().Run(runParams([{ Name: 'StartDate', Value: '2026-02-30' }])))
+            .rejects.toThrow(/StartDate: '2026-02-30' is not a real calendar day/);
+        expect(pendingCompaniesSpy).not.toHaveBeenCalled();
+    });
+
     it('returns NO_BATCHES when no candidate companies have pending entries', async () => {
         vi.spyOn(serverEngine, 'pendingCompanies').mockResolvedValue([]);
         const buildBatchSpy = vi.spyOn(serverEngine, 'buildJournalEntryBatch');
@@ -123,6 +142,27 @@ describe('BuildJournalEntryBatchesAction', () => {
         it('an explicit Cutoff overrides the relative mode, so the manual path is unaffected', () => {
             const cutoff = resolveCutoff('2026-08-25', 'PriorDay', new Date('2026-09-01T01:00:00Z'), 'UTC');
             expect(cutoff?.toISOString()).toBe('2026-08-25T00:00:00.000Z');
+        });
+
+        // An explicit Cutoff's SHAPE decides what it means (golive #168): a plain day is that day; a
+        // date-time with an offset is the BUSINESS day it falls on. 7 PM Central on 30 September is
+        // exactly UTC midnight on 1 October — read as a Date, it looked like a day input for the 1st.
+        it('an explicit date-time cutoff at 7 PM Central is 30 September, not 1 October', () => {
+            const cutoff = resolveCutoff('2026-09-30T19:00:00-05:00', undefined, new Date('2026-10-01T12:00:00Z'), 'America/Chicago');
+            expect(cutoff?.toISOString()).toBe('2026-09-30T00:00:00.000Z');
+        });
+
+        it('an explicit date-time cutoff in the evening is the business day, not its UTC day', () => {
+            const cutoff = resolveCutoff('2026-10-01T02:30:00Z', undefined, new Date('2026-10-01T12:00:00Z'), 'America/Chicago');
+            expect(cutoff?.toISOString()).toBe('2026-09-30T00:00:00.000Z');
+        });
+
+        it.each([
+            ['garbage', /Cutoff: 'garbage' is not a calendar day/],
+            ['2026-02-30', /Cutoff: '2026-02-30' is not a real calendar day/],
+            ['2026-09-30T19:00:00', /with an offset/],
+        ])('refuses a malformed explicit Cutoff (%s) instead of throwing a bare RangeError or rolling over', (value, message) => {
+            expect(() => resolveCutoff(value, undefined, new Date(), 'UTC')).toThrow(message);
         });
 
         it('no cutoff and no mode means no date clause at all', () => {

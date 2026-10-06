@@ -1,4 +1,5 @@
 import { IRemoteOperationProvider, LogError } from '@memberjunction/core';
+import { IsCalendarDay } from '@mj-biz-apps/common-entities';
 
 /**
  * Thin typed client for the batch Remote Operations (§8.2).
@@ -22,7 +23,8 @@ export type EntryTypeScope = 'All' | 'System' | 'Manual';
 
 /** The §8.2 criteria panel's state. */
 export interface JournalEntryBatchCriteria {
-  /** `datetime-local` value (LOCAL time, as typed). Converted to a UTC instant on the wire. */
+  /** A calendar day (`YYYY-MM-DD`, from a date input), INCLUSIVE. EffectiveDate is a DATE column,
+   *  so the cutoff is a day, not an instant (golive #168). */
   Cutoff: string | null;
   CompanyIDs: string[];
   EntryTypeScope: EntryTypeScope;
@@ -75,14 +77,12 @@ export interface BuildOutcome {
 
 export class JournalEntryBatchWorkspaceClient {
   /**
-   * A `datetime-local` string is LOCAL wall-clock with no zone. `new Date(local)` interprets it in
-   * the browser's zone — which is exactly right here: the operator means "5pm my time". The engine
-   * then compares a real UTC instant.
+   * The cutoff goes on the wire as the calendar day itself. The engine reads a `YYYY-MM-DD` string
+   * as that day and includes the whole of it — no browser zone is involved at any step. An empty
+   * input sends no cutoff at all, which the page labels as including future-dated entries.
    */
-  private toInstant(local: string | null): string | null {
-    if (!local) return null;
-    const d = new Date(local);
-    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  private toCutoffDay(day: string | null): string | null {
+    return day && IsCalendarDay(day) ? day : null;
   }
 
   public async Preview(
@@ -92,7 +92,7 @@ export class JournalEntryBatchWorkspaceClient {
     entryTypes: string[] | null,
   ): Promise<BatchPreview> {
     const res = await provider.RouteOperation<Record<string, unknown>, BatchPreview>('Accounting.PreviewJournalEntryBatch', {
-      Cutoff: this.toInstant(criteria.Cutoff),
+      Cutoff: this.toCutoffDay(criteria.Cutoff),
       CompanyIDs: criteria.CompanyIDs.length ? criteria.CompanyIDs : null,
       EntryTypeCodes: entryTypes,
       IncludedJournalEntryIDs: includedIds,

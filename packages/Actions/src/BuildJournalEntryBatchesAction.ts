@@ -15,12 +15,13 @@ import {
   EmptyJournalEntryBatchError,
   JournalEntryBatchSendRefusedError,
   TasksAppApprovalGate,
+  requireDateBound,
   type BuildJournalEntryBatchResult,
   type StrandedJournalEntryBatch,
   type JournalEntryBatchTargetSystem,
   type BuildJournalEntryBatchOptions,
 } from '@mj-biz-apps/accounting-core-entities-server';
-import { AddDays, BusinessTimeZoneEngine, CalendarDayIn, FromCalendarDay, LastDayOfPriorMonth } from '@mj-biz-apps/common-entities';
+import { AddDays, BusinessTimeZoneEngine, CalendarDayIn, FromCalendarDay, IsCalendarDay, LastDayOfPriorMonth } from '@mj-biz-apps/common-entities';
 
 /**
  * Action: Accounting.BuildJournalEntryBatches
@@ -83,7 +84,8 @@ function readBatchOptions(params: RunActionParams): BuildJournalEntryBatchOption
 
   return {
     cutoff: resolveCutoff(readParam<string>(params, 'Cutoff'), readParam<string>(params, 'CutoffMode'), new Date(), BusinessTimeZoneEngine.Instance.Zone),
-    startDate: startDate ? new Date(startDate) : null,
+    // As written: the engine reads its shape (a day, or a date-time → the business day it falls on).
+    startDate: startDate ? requireDateBound(startDate, 'Accounting.BuildJournalEntryBatches: StartDate') : null,
     companyIds: companyIds?.length ? companyIds : null,
     entryTypeCodes: entryTypeCodes?.length ? entryTypeCodes : null,
     excludeEntryTypeCodes: excludeEntryTypeCodes?.length ? excludeEntryTypeCodes : null,
@@ -95,10 +97,16 @@ function readBatchOptions(params: RunActionParams): BuildJournalEntryBatchOption
  * `EffectiveDate < cutoff + 1 day` — the cutoff DAY is INCLUDED. So "strictly before the run date"
  * is YESTERDAY, and "strictly before the 1st of this month" is the LAST DAY OF THE PRIOR MONTH.
  * "The run date" is the calendar day in the BUSINESS zone: a job that fires at 1 AM UTC on the 1st
- * is still the last evening of the prior month in Chicago. An explicit `Cutoff` always wins.
+ * is still the last evening of the prior month in Chicago. An explicit `Cutoff` always wins, and its
+ * SHAPE decides what it means: `YYYY-MM-DD` is that day; a date-time with an offset is the day it falls
+ * on in `zone` (golive #168 — `2026-09-30T19:00:00-05:00` is UTC midnight, which `new Date()` made the
+ * 1st). Anything else throws, naming `Cutoff`. The result is always a day at UTC midnight.
  */
 export function resolveCutoff(explicitCutoff: string | undefined, mode: string | undefined, now: Date, zone: string): Date | null {
-  if (explicitCutoff) return new Date(explicitCutoff);
+  if (explicitCutoff) {
+    const cutoff = requireDateBound(explicitCutoff, 'Accounting.BuildJournalEntryBatches: Cutoff');
+    return FromCalendarDay(IsCalendarDay(cutoff) ? cutoff : CalendarDayIn(new Date(cutoff), zone));
+  }
   if (!mode) return null;
   const today = CalendarDayIn(now, zone);
   if (mode === 'PriorDay') return FromCalendarDay(AddDays(today, -1));

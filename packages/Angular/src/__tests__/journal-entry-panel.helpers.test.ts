@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+  calendarDaySpan,
+  calendarMonthOf,
   formatJournalDate,
   formatJournalMoney,
   journalLineTotals,
@@ -111,3 +113,37 @@ describe('isBalanced with journalLineTotals', () => {
   });
 });
 
+
+describe('calendarMonthOf — DATE-column month buckets (golive #168)', () => {
+  it('files the 1st of a month under that month for a viewer west of UTC', () => {
+    // The overview's monthly JE volume bars bucketed `new Date(EffectiveDate)` by local
+    // getFullYear/getMonth: in Chicago, UTC midnight on 1 September is 31 August, 7 PM.
+    AT('America/Chicago', () => {
+      expect(calendarMonthOf(new Date('2026-09-01T00:00:00.000Z'))).toBe('2026-09');
+      expect(calendarMonthOf('2026-09-01T00:00:00.000Z')).toBe('2026-09');
+      expect(calendarMonthOf('2026-09-01')).toBe('2026-09');
+    });
+  });
+
+  it('answers null for a missing or unreadable value', () => {
+    expect(calendarMonthOf(null)).toBeNull();
+    expect(calendarMonthOf('')).toBeNull();
+    expect(calendarMonthOf('not a date')).toBeNull();
+  });
+});
+
+describe('calendarDaySpan — the batch preview covered range (golive #168)', () => {
+  it('reports the first and last calendar day, unshifted, for a viewer west of UTC', () => {
+    AT('America/Los_Angeles', () => {
+      const span = calendarDaySpan(['2026-09-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z', null, '2026-08-15T00:00:00.000Z']);
+      expect(span).toEqual({ First: '2026-08-01', Last: '2026-09-01' });
+      expect(formatJournalDate(span?.First)).toBe('Aug 1, 2026');
+      expect(formatJournalDate(span?.Last)).toBe('Sep 1, 2026');
+    });
+  });
+
+  it('is null when no value is a calendar day', () => {
+    expect(calendarDaySpan([])).toBeNull();
+    expect(calendarDaySpan([null, 'garbage'])).toBeNull();
+  });
+});

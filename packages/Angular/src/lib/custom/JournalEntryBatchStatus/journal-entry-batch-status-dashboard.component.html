@@ -112,8 +112,8 @@
                 <td>{{ row.TargetSystem }}</td>
                 <td class="bs-num">{{ row.CompanyIDs.length }}</td>
                 <td class="bs-num">{{ row.TotalEntries }}</td>
-                <td>{{ row.StartDate ? (row.StartDate | date:'yyyy-MM-dd') : '—' }}</td>
-                <td>{{ row.EndDate ? (row.EndDate | date:'yyyy-MM-dd') : '—' }}</td>
+                <td>{{ row.StartDate ? (row.StartDate | date:'yyyy-MM-dd':'UTC') : '—' }}</td>
+                <td>{{ row.EndDate ? (row.EndDate | date:'yyyy-MM-dd':'UTC') : '—' }}</td>
                 <td class="bs-num">{{ row.TotalDebits | number:'1.2-2' }}</td>
                 <td class="bs-num">{{ row.TotalCredits | number:'1.2-2' }}</td>
                 <td>{{ row.BatchedAt ? (row.BatchedAt | date:'yyyy-MM-dd HH:mm') : '—' }}</td>
@@ -183,9 +183,9 @@
         </label>
         <div class="bs-preview__facts">
           <div><span class="bs-field__label">Covers</span>
-            <strong>{{ PreviewStart ? (PreviewStart | date:'yyyy-MM-dd') : '—' }}</strong>
+            <strong>{{ PreviewStart ? (PreviewStart | date:'yyyy-MM-dd':'UTC') : '—' }}</strong>
             <span class="bs-preview__arrow">→</span>
-            <strong>{{ PreviewEnd ? (PreviewEnd | date:'yyyy-MM-dd') : '—' }}</strong>
+            <strong>{{ PreviewEnd ? (PreviewEnd | date:'yyyy-MM-dd':'UTC') : '—' }}</strong>
           </div>
           <div><span class="bs-field__label">Entries</span> <strong>{{ PreviewCount }}</strong></div>
         </div>
@@ -203,7 +203,7 @@
               @for (e of PreviewEntries; track e.ID) {
                 <tr class="bs-detail-line">
                   <td>{{ e.EntryNumber }}@if (e.Description) {<span class="bs-detail-code"> · {{ e.Description }}</span>}</td>
-                  <td>{{ e.EffectiveDate ? (e.EffectiveDate | date:'yyyy-MM-dd') : '—' }}</td>
+                  <td>{{ e.EffectiveDate ? (e.EffectiveDate | date:'yyyy-MM-dd':'UTC') : '—' }}</td>
                   <td>{{ e.EntryType }}</td>
                   <td class="bs-num">{{ e.Amount | number:'1.2-2' }}</td>
                 </tr>

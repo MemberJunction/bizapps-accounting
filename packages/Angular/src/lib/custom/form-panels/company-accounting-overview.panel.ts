@@ -11,6 +11,7 @@ import { NavigationService } from '@memberjunction/ng-shared';
 import { BaseFormComponent, BaseFormPanel } from '@memberjunction/ng-base-forms';
 import { RegisterClassEx } from '@memberjunction/global';
 import { MJCompanyEntity } from '@memberjunction/core-entities';
+import { formatJournalDate } from './journal-entry-panel.helpers';
 
 interface RecentBatchRow {
     ID: string;
@@ -411,9 +412,9 @@ export class CompanyAccountingOverviewComponent implements OnInit, OnChanges {
     public Batches: RecentBatchRow[] = [];
     public IsLoading = false;
 
+    /** `PostingDate` is a `DATE` column — UTC-anchored, or viewers west of UTC see the day before. */
     public FormatDate(d: Date | null): string {
-        if (!d) return '—';
-        return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        return formatJournalDate(d, { month: 'short', day: 'numeric' });
     }
 
     public ngOnInit(): void {
