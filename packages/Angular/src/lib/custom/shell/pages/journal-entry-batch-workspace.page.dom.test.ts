@@ -136,7 +136,7 @@ describe('JournalEntryBatchWorkspacePageComponent — posting date (golive #315)
   function withPreview(page: JournalEntryBatchWorkspacePageComponent, day: string): void {
     page.Draft!.Preview = {
       Candidates: [{ ID: 'je-1', EntryNumber: 'JE-0001', EffectiveDate: `${day}T00:00:00.000Z`, EntryTypeCode: 'Manual', CompanyID: 'c-1', Description: null, Amount: 100 }],
-      AffectedAccounts: [], TotalDebits: 100, TotalCredits: 100, GrossDebits: 100, GrossCredits: 100, PerCompany: [], OutOfOrderSkipCount: 0,
+      AffectedAccounts: [], TotalDebits: 100, TotalCredits: 100, GrossDebits: 100, GrossCredits: 100, PerCompany: [], OutOfOrderSkipCount: 0, BeforePostingStartCount: 0,
     };
   }
 

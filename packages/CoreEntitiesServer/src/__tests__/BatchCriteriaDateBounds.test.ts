@@ -142,7 +142,7 @@ describe('PostingDate bounds the candidate pool (golive #315)', () => {
     // clause must stay; read as its UTC day (1 October) the start would hide the floor, and that
     // company's 30 September entries would enter the batch.
     const { filter } = await preview({ StartDate: '2026-10-01T02:30:00Z' }, [{ ID: COMPANY_ID, PostingStartDate: '2026-10-01' }]);
-    expect(dateClauses(filter)).toEqual(["EffectiveDate >= '2026-09-30'"]);
+    expect(dateClauses(filter)).toEqual(["EffectiveDate >= '2026-09-30'", "EffectiveDate < '2026-10-04'"]);
     expect(filter).toContain(`(CompanyID<>'${COMPANY_ID}' OR EffectiveDate >= '2026-10-01')`);
   });
 });
