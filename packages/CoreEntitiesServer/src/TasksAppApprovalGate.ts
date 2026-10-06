@@ -171,9 +171,12 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
   /**
    * True when the batch's Task carries a terminal rejection (#233). A rejected Pending batch is
    * cancelled on the CFO's recorded decision; one nobody rejected goes through assertMayCancelPending.
+   *
+   * SECURITY (#223): the Task comes from the batch's stamped ApprovalTaskID, as in assertApproved — never
+   * the newest Task Link, which a newer link to a self-rejected Task could redirect.
    */
   async isRejected(batchId: string, contextUser: UserInfo): Promise<boolean> {
-    const task = await this.resolveBatchTask(batchId, contextUser);
+    const task = await this.resolveStampedApprovalTask(batchId, contextUser);
     return !!task && (await this.hasTerminalDecision(task.ID, 'Rejection', contextUser));
   }
 
@@ -221,7 +224,7 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
    * CFO rejection through recordDecision. Unlike recordDecision this does not hard-fail when no CFO
    * is configured, because the recorded approver is enough.
    *
-   * It also refuses an authorized user who has no linked Person when the batch has an approval Task
+   * It also refuses an authorized user who has no linked Person when the batch has a stamped approval Task
    * (#212): recordCancellation writes the cancel there as a TaskComment, which requires a Person.
    * Checked here, the refusal comes before the ERP lookup and the member release instead of rolling
    * them back. Authorization is checked first, so a user who may not cancel learns only that.
@@ -236,7 +239,8 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
         `(AccountingCompanyProfile.ApprovalCFOUserID) or the user who approved this batch may cancel it after approval.`,
       );
     }
-    if (!(await this.resolveBatchTask(batchId, contextUser))) return;
+    // Same condition recordCancellation uses (#223): the stamped ApprovalTaskID, not a Task Link.
+    if (!batch.ApprovalTaskID) return;
     if (!(await this.resolvePersonIdForUser(contextUser))) throw this.noLinkedPersonError(batch, contextUser);
   }
 
@@ -245,8 +249,8 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
    * the user who built it (`BatchedByUserID`). Nothing has been approved or sent, so the builder may
    * undo a wrong batch; the cancel returns its entries to the next build. Like
    * assertMayCancelApproved it does not hard-fail when no CFO is configured, and it refuses a user
-   * with no linked Person when the batch has an approval Task, because recordCancellation comments
-   * on that Task as the user's Person.
+   * with no linked Person when the batch has a stamped approval Task, because recordCancellation
+   * comments on that Task as the user's Person.
    */
   async assertMayCancelPending(batchId: string, contextUser: UserInfo): Promise<void> {
     const batch = await this.loadBatch(batchId, contextUser);
@@ -258,7 +262,8 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
         `(AccountingCompanyProfile.ApprovalCFOUserID) or the user who built this batch may cancel it before approval.`,
       );
     }
-    if (!(await this.resolveBatchTask(batchId, contextUser))) return;
+    // Same condition recordCancellation uses (#223): the stamped ApprovalTaskID, not a Task Link.
+    if (!batch.ApprovalTaskID) return;
     if (!(await this.resolvePersonIdForUser(contextUser))) throw this.noLinkedPersonError(batch, contextUser);
   }
 
@@ -267,15 +272,23 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
    * Past approval the Task keeps its approved decision — the comment is what tells the approver the
    * batch they signed was cancelled, and why. Before approval (golive #302) the Task is also closed
    * as Cancelled, so the approver's inbox no longer asks for a decision on a batch that is gone; no
-   * decision is recorded, because the approver made none. A batch with no approval Task has nothing
-   * to annotate. The authorizing assert has already refused a user with no linked Person; this
-   * refuses again in case the link was removed since, and the caller runs this inside the cancel's
-   * transaction, so the cancel rolls back rather than going unrecorded.
+   * decision is recorded, because the approver made none. A batch with no stamped approval Task has
+   * nothing to annotate. Refuses when the stamped Task does not load. The authorizing assert has
+   * already refused a user with no linked Person; this refuses again in case the link was removed
+   * since, and the caller runs this inside the cancel's transaction, so the cancel rolls back rather
+   * than going unrecorded.
+   *
+   * SECURITY (#223): the Task comes from the batch's stamped ApprovalTaskID, never the newest Task
+   * Link — Task Links are writable through the tasks-app surface, so a forged newer link would
+   * otherwise redirect the comment (or the close) to another Task, or suppress it.
    */
   async recordCancellation(batchId: string, cancellation: RecordedCancellation, contextUser: UserInfo): Promise<void> {
-    const task = await this.resolveBatchTask(batchId, contextUser);
-    if (!task) return;
     const batch = await this.loadBatch(batchId, contextUser);
+    if (!batch.ApprovalTaskID) return;
+    const task = await this.provider.GetEntityObject<mjBizAppsTasksTaskEntity>('MJ_BizApps_Tasks: Tasks', contextUser);
+    if (!(await task.Load(batch.ApprovalTaskID))) {
+      throw new Error(`Batch ${batch.JournalEntryBatchNumber ?? batchId}: the cancel cannot be recorded because its approval Task ${batch.ApprovalTaskID} did not load.`);
+    }
     const personId = await this.resolvePersonIdForUser(contextUser);
     if (!personId) throw this.noLinkedPersonError(batch, contextUser);
     const beforeApproval = cancellation.fromStatus === 'Pending';
