@@ -110,3 +110,27 @@ export async function loadPostingDay(
 
 const isUtcMidnight = (d: Date): boolean =>
   d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0 && d.getUTCMilliseconds() === 0;
+
+/**
+ * The later of two business dates, each a date-only value held as UTC midnight of its day (the
+ * shape {@link todayBusiness} returns and a DATE column hydrates to). `other` is reduced to its
+ * calendar day first — a raw-loaded value can arrive as an ISO string at runtime despite the Date
+ * type — so the comparison is day against day, never instant against instant.
+ */
+export function laterBusinessDate(today: Date, other: Date | string): Date {
+  const day = toDateOnly(other);
+  return day.getTime() > today.getTime() ? day : today;
+}
+
+/** `value`'s calendar day as UTC midnight. Throws on a missing or unparseable value. */
+function toDateOnly(value: Date | string): Date {
+  if (typeof value === 'string') {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+    if (m) return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  }
+  const d = value instanceof Date ? value : new Date(value);
+  if (!value || Number.isNaN(d.getTime())) {
+    throw new Error(`BusinessDay: invalid date-only value: ${String(value)}`);
+  }
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}

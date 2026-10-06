@@ -225,6 +225,14 @@
         — later entries will batch ahead of them (allowed, but visible · MOD-8).
       </div>
     }
+    @if (BeforePostingStartCount > 0) {
+      <!-- Held back by AccountingCompanyProfile.PostingStartDate: never in any batch, so say how many. -->
+      <div class="bw-warn" role="status">
+        <i class="fa-solid fa-calendar-xmark" aria-hidden="true"></i>
+        <b>&nbsp;{{ BeforePostingStartCount }} entr{{ BeforePostingStartCount === 1 ? 'y is' : 'ies are' }}&nbsp;</b>
+        dated before {{ BeforePostingStartCount === 1 ? 'its' : 'their' }} company's posting start date and held back. They stay Pending and are not in this batch.
+      </div>
+    }
 
     @if (PreviewLoaded) {
     <div class="bw-sumstrip">

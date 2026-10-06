@@ -128,6 +128,26 @@ describe('JournalEntryBatchEntityServer — approved-content seal (#183)', () =>
     expect(problems[0]).toMatch(/no longer matches the content that was approved/);
   });
 
+  // #216: dispatch tells a broken seal from incoherent content, so it can adopt a Failed batch the ERP holds.
+  it('CheckApprovedContent reports a changed tag as a seal problem only', async () => {
+    await seal('Failed');
+    tags = [{ JournalEntryLineID: L2_ID, DimensionID: 'DIM-DEPT', DimensionValueID: 'DV-EVENTS' }];
+
+    const check = await batch.CheckApprovedContent();
+    expect(check.CoherenceProblems).toEqual([]);
+    expect(check.SealProblems).toHaveLength(1);
+    expect(check.SealProblems[0]).toMatch(/no longer matches the content that was approved/);
+  });
+
+  it('CheckApprovedContent keeps the summary-header problem apart from the seal', async () => {
+    const hash = await seal('Failed');
+    asSaved('Failed', { ApprovedContentHash: hash, PostingDate: new Date('2026-10-31T00:00:00.000Z') });
+
+    const check = await batch.CheckApprovedContent();
+    expect(check.CoherenceProblems).toEqual([expect.stringMatching(/posts on 2026-10-31/)]);
+    expect(check.SealProblems).toHaveLength(1);
+  });
+
   it('a changed member set breaks the seal even when TotalEntries still matches', async () => {
     await seal('Approved');
     memberIds = ['JE-1', 'JE-3'];

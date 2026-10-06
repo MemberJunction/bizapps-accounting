@@ -113,7 +113,7 @@ export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
         * * Display Name: Parent Accounting Company
         * * SQL Data Type: uniqueidentifier
         * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Accounting Company Profiles (vwAccountingCompanyProfiles.ID)
-        * * Description: If set, this profile uses the books (COA, periods, JEs) of the referenced profile (consolidated reporting). Chains are forbidden: the referenced profile must NOT itself have a parent (BA-D9; trigger trg_ACP_NoChains).`),
+        * * Description: The company this profile sits under. A Division, Department or Branch keeps no books of its own: it uses the books of its legal entity, the first company up this chain whose EntityType is any other type. Any other type is its own legal entity and the parent records ownership only. Parents may nest; a cycle is refused (trigger trg_ACP_NoChains).`),
     ApprovalCFOUserID: z.string().nullable().describe(`
         * * Field Name: ApprovalCFOUserID
         * * Display Name: Approval CFO User
@@ -136,6 +136,11 @@ export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
         * * Display Name: Updated At
         * * SQL Data Type: datetimeoffset
         * * Default Value: getutcdate()`),
+    PostingStartDate: z.date().nullable().describe(`
+        * * Field Name: PostingStartDate
+        * * Display Name: Posting Start Date
+        * * SQL Data Type: date
+        * * Description: The first EffectiveDate this company posts to the ERP. Journal entries dated before it never enter a posting batch (for example, history brought in at cutover that the ERP already holds). NULL means no floor: every Pending entry is a candidate.`),
     Name: z.string().describe(`
         * * Field Name: Name
         * * Display Name: Company Name
@@ -1595,7 +1600,7 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * Field Name: SentAt
         * * Display Name: Sent At
         * * SQL Data Type: datetimeoffset
-        * * Description: When the batch was sent to the ERP.`),
+        * * Description: When the batch last entered Sent. A retry overwrites it; SendAttemptCount counts the sends, and __mj.RecordChange keeps each earlier value.`),
     PostedAt: z.date().nullable().describe(`
         * * Field Name: PostedAt
         * * Display Name: Posted At
@@ -1684,6 +1689,23 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
         * * Display Name: Approved Content Hash
         * * SQL Data Type: nvarchar(64)
         * * Description: SHA-256 of the approved content (batch header, summary entry and lines, member set), written at approval and frozen by trg_JournalEntryBatch_Immutability. Dispatch recomputes and compares it. NULL on batches approved before the seal existed.`),
+    SentByUserID: z.string().nullable().describe(`
+        * * Field Name: SentByUserID
+        * * Display Name: Sent By User ID
+        * * SQL Data Type: uniqueidentifier
+        * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+        * * Description: User whose dispatch last moved the batch into Sent. Stamped on every send; changes at no other time. NULL for batches sent before this column existed.`),
+    SendAttemptCount: z.number().describe(`
+        * * Field Name: SendAttemptCount
+        * * Display Name: Send Attempt Count
+        * * SQL Data Type: int
+        * * Default Value: 0
+        * * Description: Dispatch attempts that moved the batch into Sent, including a retry that finds the batch already in the ERP and a first send the pre-flight lookup refuses; neither calls the ERP. A retry refused before Sent is not counted. Each send must advance it by one (trg_JournalEntryBatch_SendOnce). Batches sent before this column existed read 1.`),
+    SealMismatchDetectedAt: z.date().nullable().describe(`
+        * * Field Name: SealMismatchDetectedAt
+        * * Display Name: Seal Mismatch Detected At
+        * * SQL Data Type: datetimeoffset
+        * * Description: When a retry of this Failed batch found its journal already in the ERP and recorded it Posted, with no second post, although the batch no longer matched its approved-content seal (a summary line's dimension tags changed after approval). The local tags then differ from what the ERP holds; review them. NULL when the seal matched or the batch was never adopted this way.`),
     Company: z.string().describe(`
         * * Field Name: Company
         * * Display Name: Company
@@ -1715,6 +1737,10 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
     ERPNotPostedConfirmedByUser: z.string().nullable().describe(`
         * * Field Name: ERPNotPostedConfirmedByUser
         * * Display Name: ERP Not Posted Confirmed By User Name
+        * * SQL Data Type: nvarchar(100)`),
+    SentByUser: z.string().nullable().describe(`
+        * * Field Name: SentByUser
+        * * Display Name: Sent By User
         * * SQL Data Type: nvarchar(100)`),
 });
 
@@ -2617,7 +2643,7 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
     * * Display Name: Parent Accounting Company
     * * SQL Data Type: uniqueidentifier
     * * Related Entity/Foreign Key: MJ_BizApps_Accounting: Accounting Company Profiles (vwAccountingCompanyProfiles.ID)
-    * * Description: If set, this profile uses the books (COA, periods, JEs) of the referenced profile (consolidated reporting). Chains are forbidden: the referenced profile must NOT itself have a parent (BA-D9; trigger trg_ACP_NoChains).
+    * * Description: The company this profile sits under. A Division, Department or Branch keeps no books of its own: it uses the books of its legal entity, the first company up this chain whose EntityType is any other type. Any other type is its own legal entity and the parent records ownership only. Parents may nest; a cycle is refused (trigger trg_ACP_NoChains).
     */
     get ParentAccountingCompanyID(): string | null {
         return this.Get('ParentAccountingCompanyID');
@@ -2672,6 +2698,19 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
     */
     get __mj_UpdatedAt(): Date {
         return this.Get('__mj_UpdatedAt');
+    }
+
+    /**
+    * * Field Name: PostingStartDate
+    * * Display Name: Posting Start Date
+    * * SQL Data Type: date
+    * * Description: The first EffectiveDate this company posts to the ERP. Journal entries dated before it never enter a posting batch (for example, history brought in at cutover that the ERP already holds). NULL means no floor: every Pending entry is a candidate.
+    */
+    get PostingStartDate(): Date | null {
+        return this.Get('PostingStartDate');
+    }
+    set PostingStartDate(value: Date | null) {
+        this.Set('PostingStartDate', value);
     }
 
     /**
@@ -6612,6 +6651,7 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
 
     /**
     * Validate() method override for MJ_BizApps_Accounting: Journal Entry Batches entity. This is an auto-generated method that invokes the generated validators for this entity for the following fields:
+    * * SendAttemptCount: The number of send attempts must be zero or a positive number to ensure valid tracking of delivery attempts.
     * * Table-Level: Both the approval task and the time it was raised must either be set together, or both must be empty.
     * * Table-Level: When a record's status is set to 'Archived', an archive reason, an archive date, and the archiving user's ID must all be provided.
     * * Table-Level: If an approved journal entry batch is cancelled, a cancellation reason, cancellation date, and the user who cancelled it must all be provided.
@@ -6623,6 +6663,7 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     */
     public override Validate(): ValidationResult {
         const result = super.Validate();
+        this.ValidateSendAttemptCountGreaterThanOrEqualToZero(result);
         this.ValidateApprovalTaskAndRaisedAtCoexistence(result);
         this.ValidateArchivedFieldsWhenStatusIsArchived(result);
         this.ValidateCancellationDetailsForApprovedBatch(result);
@@ -6631,6 +6672,23 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
         result.Success = result.Success && (result.Errors.length === 0);
 
         return result;
+    }
+
+    /**
+    * The number of send attempts must be zero or a positive number to ensure valid tracking of delivery attempts.
+    * @param result - the ValidationResult object to add any errors or warnings to
+    * @public
+    * @method
+    */
+    public ValidateSendAttemptCountGreaterThanOrEqualToZero(result: ValidationResult) {
+    	if (this.SendAttemptCount != null && this.SendAttemptCount < 0) {
+    		result.Errors.push(new ValidationErrorInfo(
+    			"SendAttemptCount",
+    			"The send attempt count cannot be negative.",
+    			this.SendAttemptCount,
+    			ValidationErrorType.Failure
+    		));
+    	}
     }
 
     /**
@@ -7009,7 +7067,7 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     * * Field Name: SentAt
     * * Display Name: Sent At
     * * SQL Data Type: datetimeoffset
-    * * Description: When the batch was sent to the ERP.
+    * * Description: When the batch last entered Sent. A retry overwrites it; SendAttemptCount counts the sends, and __mj.RecordChange keeps each earlier value.
     */
     get SentAt(): Date | null {
         return this.Get('SentAt');
@@ -7229,6 +7287,47 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     }
 
     /**
+    * * Field Name: SentByUserID
+    * * Display Name: Sent By User ID
+    * * SQL Data Type: uniqueidentifier
+    * * Related Entity/Foreign Key: MJ: Users (vwUsers.ID)
+    * * Description: User whose dispatch last moved the batch into Sent. Stamped on every send; changes at no other time. NULL for batches sent before this column existed.
+    */
+    get SentByUserID(): string | null {
+        return this.Get('SentByUserID');
+    }
+    set SentByUserID(value: string | null) {
+        this.Set('SentByUserID', value);
+    }
+
+    /**
+    * * Field Name: SendAttemptCount
+    * * Display Name: Send Attempt Count
+    * * SQL Data Type: int
+    * * Default Value: 0
+    * * Description: Dispatch attempts that moved the batch into Sent, including a retry that finds the batch already in the ERP and a first send the pre-flight lookup refuses; neither calls the ERP. A retry refused before Sent is not counted. Each send must advance it by one (trg_JournalEntryBatch_SendOnce). Batches sent before this column existed read 1.
+    */
+    get SendAttemptCount(): number {
+        return this.Get('SendAttemptCount');
+    }
+    set SendAttemptCount(value: number) {
+        this.Set('SendAttemptCount', value);
+    }
+
+    /**
+    * * Field Name: SealMismatchDetectedAt
+    * * Display Name: Seal Mismatch Detected At
+    * * SQL Data Type: datetimeoffset
+    * * Description: When a retry of this Failed batch found its journal already in the ERP and recorded it Posted, with no second post, although the batch no longer matched its approved-content seal (a summary line's dimension tags changed after approval). The local tags then differ from what the ERP holds; review them. NULL when the seal matched or the batch was never adopted this way.
+    */
+    get SealMismatchDetectedAt(): Date | null {
+        return this.Get('SealMismatchDetectedAt');
+    }
+    set SealMismatchDetectedAt(value: Date | null) {
+        this.Set('SealMismatchDetectedAt', value);
+    }
+
+    /**
     * * Field Name: Company
     * * Display Name: Company
     * * SQL Data Type: nvarchar(50)
@@ -7298,6 +7397,15 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     */
     get ERPNotPostedConfirmedByUser(): string | null {
         return this.Get('ERPNotPostedConfirmedByUser');
+    }
+
+    /**
+    * * Field Name: SentByUser
+    * * Display Name: Sent By User
+    * * SQL Data Type: nvarchar(100)
+    */
+    get SentByUser(): string | null {
+        return this.Get('SentByUser');
     }
 }
 

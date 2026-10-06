@@ -109,14 +109,20 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
 
   // ─── actions ───────────────────────────────────────────────────────────────
 
-  /** Record an in-app CFO Approve / Reject decision on a batch, then refresh its approval state. */
+  /**
+   * Record an in-app CFO Approve / Reject decision on a batch, then refresh its approval state. A
+   * rejection cancels the batch, so it asks for a reason (golive #302), recorded as the decision's
+   * notes and the batch's CancelReason; a cancelled or blank prompt aborts silently.
+   */
   public async OnRecordDecision(row: BatchRow, decision: JournalEntryBatchDecision): Promise<void> {
     if (row.Busy) return;
+    const notes = decision === 'Rejected' ? this.PromptForRejectReason(row)?.trim() : undefined;
+    if (decision === 'Rejected' && !notes) return;
     row.Busy = true;
     this.clearActionMessage();
     this.cdr.markForCheck();
     try {
-      const res = await this.client().RecordDecision(row.ID, decision);
+      const res = await this.client().RecordDecision(row.ID, decision, notes);
       if (res.Success) {
         // A rejection reverses the preliminary lock: the batch is Cancelled and its entries return to the pool.
         const msg = decision === 'Rejected'
@@ -225,20 +231,26 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
   }
 
   /** The archive-reason prompt, as a seam a test can stub. Native prompt — this package has no dialog helper. */
+  /** The reject-reason prompt, as a seam a test can stub. */
+  protected PromptForRejectReason(row: BatchRow): string | null {
+    return window.prompt(`Reject batch ${row.JournalEntryBatchNumber}? It is cancelled and its journal entries return to the candidate pool for the next build.\n\nReason (required):`);
+  }
+
   protected PromptForReason(row: BatchRow): string | null {
     return window.prompt(`Archive batch ${row.JournalEntryBatchNumber}? It will never post to the ERP and its journal entries stay locked to it.\n\nReason (required):`);
   }
 
   /**
-   * Cancel an Approved or Failed batch (#183): the batch becomes Cancelled, its summary journal entry
-   * is deleted and its journal entries return to the candidate pool for the next build — the opposite
-   * of Archive, which keeps them locked. A cancelled or blank reason prompt aborts silently.
+   * Cancel a Pending (golive #302), Approved or Failed (#183) batch: the batch becomes Cancelled, its
+   * summary journal entry is deleted and its journal entries return to the candidate pool for the next
+   * build — the opposite of Archive, which keeps them locked. A Pending batch's approval request is
+   * closed. A cancelled or blank reason prompt aborts silently.
    *
    * A Failed batch may already be in the ERP, and its entries would post again under the next batch's
    * new number. The server looks the number up first (#207) and refuses outright if the ERP holds it;
    * the operator is asked only when the lookup cannot settle it, and declining leaves the batch as is.
    */
-  public async OnCancelApproved(row: BatchRow): Promise<void> {
+  public async OnCancel(row: BatchRow): Promise<void> {
     if (row.Busy) return;
     const reason = this.PromptForCancelReason(row)?.trim();
     if (!reason) return;
@@ -314,9 +326,15 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
     return ['Pending', 'Approved', 'Failed'].includes(row.Status) && !row.Busy;
   }
 
-  /** Cancel (#183) is offered on an Approved or Failed batch; a Pending batch uses Reject instead. */
-  public canCancelApproved(row: BatchRow): boolean {
-    return (row.Status === 'Approved' || row.Status === 'Failed') && !row.Busy;
+  /**
+   * Cancel is offered on a Pending (golive #302), Approved or Failed (#183) batch; who may cancel is
+   * the server's call. On a Pending batch it is the builder's way to withdraw it, beside the CFO's
+   * Reject. Not on a Failed batch carrying the ERP's reference: the ERP accepted it, and the server
+   * refuses it.
+   */
+  public canCancel(row: BatchRow): boolean {
+    if (row.Status === 'Failed' && row.ExternalJournalEntryBatchRef) return false;
+    return ['Pending', 'Approved', 'Failed'].includes(row.Status) && !row.Busy;
   }
 
   /** Map a batch status to a stat-badge variant for the status pill. */

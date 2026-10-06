@@ -239,11 +239,11 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                                     <i class="fa-solid fa-box-archive"></i> Archive
                                                 </button>
                                             }
-                                            @if (CanCancelApproved(batch)) {
+                                            @if (CanCancel(batch)) {
                                                 <button mjButton variant="secondary" size="sm" type="button"
                                                         [disabled]="CancellingBatchID === batch.ID"
                                                         title="Cancel this batch and return its journal entries to the next build."
-                                                        (click)="OnCancelApproved(batch, $event)">
+                                                        (click)="OnCancel(batch, $event)">
                                                     <i class="fa-solid fa-ban"></i> Cancel
                                                 </button>
                                             }
@@ -371,6 +371,18 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                         </div>
                     }
 
+                    <!-- Held back by AccountingCompanyProfile.PostingStartDate: never in any batch, so say how many. -->
+                    @if (PreviewBeforePostingStartCount > 0) {
+                        <div class="mja-banner" role="status">
+                            <i class="fa-solid fa-calendar-xmark"></i>
+                            <span>
+                                {{ PreviewBeforePostingStartCount }} entr{{ PreviewBeforePostingStartCount === 1 ? 'y is' : 'ies are' }}
+                                dated before {{ PreviewBeforePostingStartCount === 1 ? 'its' : 'their' }} company's posting start date and held back.
+                                They stay Pending and are not in this batch.
+                            </span>
+                        </div>
+                    }
+
                     <!-- Candidate List -->
                     @if (IsPreviewLoading) {
                         <div class="mja-modal-loading">
@@ -494,6 +506,9 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                         journal entry deleted. Its {{ CancelTarget?.TotalEntries }}
                         journal entr{{ CancelTarget?.TotalEntries === 1 ? 'y' : 'ies' }}
                         <strong>return to the candidate pool</strong> for the next build — this is not an archive.
+                        @if (CancelTarget?.Status === 'Pending') {
+                            Its approval request is closed.
+                        }
                     </p>
 
                     <div class="mja-modal-field">
@@ -540,7 +555,7 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                 <mj-dialog-actions>
                     <button mjButton variant="danger" size="sm" type="button"
                             [disabled]="!CanConfirmCancel"
-                            (click)="ConfirmCancelApproved()">
+                            (click)="ConfirmCancel()">
                         @if (CancellingBatchID) {
                             <i class="fa-solid fa-spinner fa-spin"></i> Cancelling…
                         } @else {
@@ -1192,6 +1207,11 @@ export class AccountingBatchesPageComponent implements OnInit {
      * would batch ahead of. Computed SERVER-side by the same code the build runs, so the warning cannot drift.
      */
     public PreviewOutOfOrderSkipCount = 0;
+    /** Entries dated before their company's posting start date: held back, and left Pending, by every build. */
+    public PreviewBeforePostingStartCount = 0;
+    /** Numbers each preview request. Only the latest one's response is applied (#254): ticking
+     *  fast fires overlapping previews, and a slower earlier one must not overwrite a newer one. */
+    private previewRequestSeq = 0;
 
     /**
      * The operator's unticked entries (golive #193). Held as an EXCLUSION set, not an inclusion
@@ -1278,18 +1298,23 @@ export class AccountingBatchesPageComponent implements OnInit {
     /** The batch number retyped to override a `Mismatch`, which is most likely this batch, already posted. */
     public CancelMismatchText = '';
 
-    /** Cancel (#183) is offered on an Approved or Failed batch; a Pending batch uses Reject instead. */
-    public CanCancelApproved(batch: BatchItem): boolean {
-        return (batch.Status === 'Approved' || batch.Status === 'Failed') && this.CancellingBatchID !== batch.ID;
+    /**
+     * Cancel is offered on a Pending (golive #302), Approved or Failed (#183) batch. Who may cancel is
+     * the server's call: the company's CFO or the batch's builder before approval, the CFO or the
+     * approver after it.
+     */
+    public CanCancel(batch: BatchItem): boolean {
+        return ['Pending', 'Approved', 'Failed'].includes(batch.Status) && this.CancellingBatchID !== batch.ID;
     }
 
     /**
-     * Cancel an Approved or Failed batch (#183): the batch becomes Cancelled, its summary journal entry
+     * Cancel a Pending, Approved or Failed batch: the batch becomes Cancelled, its summary journal entry
      * is deleted and its journal entries return to the candidate pool — the opposite of Archive, which
-     * keeps them locked. The dialog requires a reason. A Failed batch may already be in the ERP, so the
-     * server looks its number up first (#207); the dialog asks the operator only when it cannot say.
+     * keeps them locked. A Pending batch's approval request is closed. The dialog requires a reason. A
+     * Failed batch may already be in the ERP, so the server looks its number up first (#207); the dialog
+     * asks the operator only when it cannot say.
      */
-    public OnCancelApproved(batch: BatchItem, event: Event): void {
+    public OnCancel(batch: BatchItem, event: Event): void {
         // The row itself opens the record — an action button inside it must not also navigate.
         event.stopPropagation();
         if (this.CancellingBatchID) return;
@@ -1332,7 +1357,7 @@ export class AccountingBatchesPageComponent implements OnInit {
      * confirmation: the server checks the ERP itself. Only when it cannot settle it does the dialog
      * stay open and ask, and only that second attempt carries the operator's word.
      */
-    public async ConfirmCancelApproved(): Promise<void> {
+    public async ConfirmCancel(): Promise<void> {
         const batch = this.CancelTarget;
         if (!batch || !this.CanConfirmCancel) return;
         const reason = this.CancelReasonDraft.trim();
@@ -1585,6 +1610,9 @@ export class AccountingBatchesPageComponent implements OnInit {
 
     public CloseBuildBatchModal(): void {
         this.BuildModalVisible = false;
+        // Drop any preview still in flight — it answers a session that is over.
+        this.previewRequestSeq++;
+        this.IsPreviewLoading = false;
         this.ModalErrorMessage = null;
     }
 
@@ -1593,6 +1621,7 @@ export class AccountingBatchesPageComponent implements OnInit {
     }
 
     public async LoadBuildPreview(): Promise<void> {
+        const seq = ++this.previewRequestSeq;
         this.IsPreviewLoading = true;
         this.ModalErrorMessage = null;
         this.cdr.markForCheck();
@@ -1607,6 +1636,7 @@ export class AccountingBatchesPageComponent implements OnInit {
                 ExcludeEntryTypeCodes: this.ExcludeRevRec ? ['RevenueRecognition'] : null,
                 IncludedJournalEntryIDs: this.ExcludedEntryIDs.length > 0 ? this.IncludedEntryIDs : null,
             });
+            if (seq !== this.previewRequestSeq) return; // superseded by a newer request
 
             if (previewRes.Success) {
                 this.PreviewEntries = previewRes.Candidates ?? [];
@@ -1616,16 +1646,20 @@ export class AccountingBatchesPageComponent implements OnInit {
                 this.PreviewGrossDebits = previewRes.GrossDebits;
                 this.PreviewGrossCredits = previewRes.GrossCredits;
                 this.PreviewOutOfOrderSkipCount = previewRes.OutOfOrderSkipCount;
+                this.PreviewBeforePostingStartCount = previewRes.BeforePostingStartCount;
                 this.setCoveredDateRange(this.PreviewEntries);
             } else {
                 this.ModalErrorMessage = previewRes.ErrorMessage ?? 'Failed to load candidate preview.';
                 this.clearPreview();
             }
         } catch (e) {
+            if (seq !== this.previewRequestSeq) return;
             this.ModalErrorMessage = e instanceof Error ? e.message : String(e);
         } finally {
-            this.IsPreviewLoading = false;
-            this.cdr.markForCheck();
+            if (seq === this.previewRequestSeq) {
+                this.IsPreviewLoading = false;
+                this.cdr.markForCheck();
+            }
         }
     }
 
@@ -1650,6 +1684,7 @@ export class AccountingBatchesPageComponent implements OnInit {
         this.PreviewGrossDebits = 0;
         this.PreviewGrossCredits = 0;
         this.PreviewOutOfOrderSkipCount = 0;
+        this.PreviewBeforePostingStartCount = 0;
         this.PreviewCoveredStartDate = null;
         this.PreviewCoveredEndDate = null;
     }

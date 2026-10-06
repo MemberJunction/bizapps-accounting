@@ -16,8 +16,11 @@
  *   recordDecision(batchId, outcome, decidedByPersonId, notes): resolve the batch's Task and record
  *     the decision via TaskOrchestrationService. The shared entry point for BOTH the in-app approve
  *     control and the Tasks inbox.
- *   assertRejected(batchId) (#233): a Pending batch is cancelled only once its Task carries a terminal
- *     rejection, which recordDecision writes first.
+ *   isRejected(batchId) (#233): whether the batch's Task carries a terminal rejection, which
+ *     recordDecision writes before a rejected Pending batch is cancelled.
+ *   assertMayCancelPending(batchId) (golive #302): a Pending batch nobody rejected may be cancelled by
+ *     the company's CFO or by the user who built it; recordCancellation then comments on its
+ *     approval Task and closes it.
  *   assertMayCancelApproved(batchId) / recordCancellation(batchId, cancellation) (#183): only the company's
  *     CFO or the batch's recorded approver may cancel a batch past approval, and the cancel is
  *     written to the approval Task as a comment, so the approver's record shows what became of it.
@@ -33,7 +36,7 @@
  *   READS:  Journal Entry Batches · Accounting Company Profiles · Task Links · Task Decisions
  *           · Task Decision Outcomes · Task Types · People
  *   WRITES (via TaskOrchestrationService): Tasks · Task Links · Task Assignments · Task Decisions
- *   WRITES (directly): Task Comments (a batch cancelled past approval)
+ *   WRITES (directly): Task Comments (a cancelled batch) · Tasks (Status, closing a Pending batch's Task)
  *   ENTITY (gated): 'MJ_BizApps_Accounting: Journal Entry Batches'
  *   DOC:    JournalEntryBatchEngine.ts (JournalEntryBatchApprovalGate seam) · plan §S1 (CFO-approval workflow gate)
  */
@@ -154,16 +157,12 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
   }
 
   /**
-   * Block a Pending cancel unless the batch's Task carries a terminal rejection (#233). A Pending
-   * cancel IS the CFO's rejection, so recordDecision must have written it first; without this, a
-   * server caller could cancel a batch awaiting approval that nobody rejected.
+   * True when the batch's Task carries a terminal rejection (#233). A rejected Pending batch is
+   * cancelled on the CFO's recorded decision; one nobody rejected goes through assertMayCancelPending.
    */
-  async assertRejected(batchId: string, contextUser: UserInfo): Promise<void> {
+  async isRejected(batchId: string, contextUser: UserInfo): Promise<boolean> {
     const task = await this.resolveBatchTask(batchId, contextUser);
-    if (!task) throw new Error(`Batch ${batchId} has no approval Task, so no rejection is recorded — a Pending batch is cancelled only by rejecting it.`);
-    if (!(await this.hasTerminalDecision(task.ID, 'Rejection', contextUser))) {
-      throw new Error(`Batch ${batchId} is not rejected — no terminal rejection decision on its approval Task. Reject it from Batch approvals to cancel it.`);
-    }
+    return !!task && (await this.hasTerminalDecision(task.ID, 'Rejection', contextUser));
   }
 
   /**
@@ -230,12 +229,36 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
   }
 
   /**
-   * Record a cancel past approval on the batch's approval Task, as a comment by the cancelling user's
-   * Person. The Task keeps its approved decision — the comment is what tells the approver the batch
-   * they signed was cancelled, and why. A batch with no approval Task (approved without the tasks
-   * workflow) has nothing to annotate. assertMayCancelApproved has already refused a user with no
-   * linked Person; this refuses again in case the link was removed since, and the caller runs this
-   * inside the cancel's transaction, so the cancel rolls back rather than going unrecorded.
+   * Who may cancel a Pending batch nobody rejected (golive #302): the company's configured CFO, or
+   * the user who built it (`BatchedByUserID`). Nothing has been approved or sent, so the builder may
+   * undo a wrong batch; the cancel returns its entries to the next build. Like
+   * assertMayCancelApproved it does not hard-fail when no CFO is configured, and it refuses a user
+   * with no linked Person when the batch has an approval Task, because recordCancellation comments
+   * on that Task as the user's Person.
+   */
+  async assertMayCancelPending(batchId: string, contextUser: UserInfo): Promise<void> {
+    const batch = await this.loadBatch(batchId, contextUser);
+    const cfoUserId = await this.readCFOUserIdForCompany(batch.CompanyID, contextUser);
+    const allowed = [cfoUserId, batch.BatchedByUserID].filter((id): id is string => !!id);
+    if (!allowed.some(id => UUIDsEqual(id, contextUser.ID))) {
+      throw new Error(
+        `Batch ${batch.JournalEntryBatchNumber ?? batchId}: only the company's configured approver ` +
+        `(AccountingCompanyProfile.ApprovalCFOUserID) or the user who built this batch may cancel it before approval.`,
+      );
+    }
+    if (!(await this.resolveBatchTask(batchId, contextUser))) return;
+    if (!(await this.resolvePersonIdForUser(contextUser))) throw this.noLinkedPersonError(batch, contextUser);
+  }
+
+  /**
+   * Record a cancel on the batch's approval Task, as a comment by the cancelling user's Person.
+   * Past approval the Task keeps its approved decision — the comment is what tells the approver the
+   * batch they signed was cancelled, and why. Before approval (golive #302) the Task is also closed
+   * as Cancelled, so the approver's inbox no longer asks for a decision on a batch that is gone; no
+   * decision is recorded, because the approver made none. A batch with no approval Task has nothing
+   * to annotate. The authorizing assert has already refused a user with no linked Person; this
+   * refuses again in case the link was removed since, and the caller runs this inside the cancel's
+   * transaction, so the cancel rolls back rather than going unrecorded.
    */
   async recordCancellation(batchId: string, cancellation: RecordedCancellation, contextUser: UserInfo): Promise<void> {
     const task = await this.resolveBatchTask(batchId, contextUser);
@@ -243,16 +266,26 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     const batch = await this.loadBatch(batchId, contextUser);
     const personId = await this.resolvePersonIdForUser(contextUser);
     if (!personId) throw this.noLinkedPersonError(batch, contextUser);
+    const beforeApproval = cancellation.fromStatus === 'Pending';
     const comment = await this.provider.GetEntityObject<mjBizAppsTasksTaskCommentEntity>(TASK_COMMENT_ENTITY, contextUser);
     comment.NewRecord();
     comment.TaskID = task.ID;
     comment.PersonID = personId;
     // The prior status comes from the caller: this runs after the cancel was saved, so the batch
     // loaded above already reads Cancelled.
-    comment.Content = `Journal entry batch ${batch.JournalEntryBatchNumber} was cancelled after approval (it was ${cancellation.fromStatus}). Its journal entries return to the next build. Reason: ${cancellation.reason.trim()}` +
+    comment.Content = (beforeApproval
+      ? `Journal entry batch ${batch.JournalEntryBatchNumber} was cancelled before approval, so this approval request is closed. `
+      : `Journal entry batch ${batch.JournalEntryBatchNumber} was cancelled after approval (it was ${cancellation.fromStatus}). `) +
+      `Its journal entries return to the next build. Reason: ${cancellation.reason.trim()}` +
       (cancellation.erpCheck ? ` ERP check: ${cancellation.erpCheck}` : '');
     if (!(await comment.Save())) {
       throw new Error(`Batch ${batch.JournalEntryBatchNumber ?? batchId}: recording the cancel on its approval Task failed: ${comment.LatestResult?.CompleteMessage ?? 'unknown'}`);
+    }
+    if (beforeApproval && task.Status !== 'Cancelled') {
+      task.Status = 'Cancelled';
+      if (!(await task.Save())) {
+        throw new Error(`Batch ${batch.JournalEntryBatchNumber ?? batchId}: closing its approval Task failed: ${task.LatestResult?.CompleteMessage ?? 'unknown'}`);
+      }
     }
   }
 

@@ -3,14 +3,17 @@ import { ActionResultSimple, RunActionParams } from '@memberjunction/actions-bas
 import { BaseAction } from '@memberjunction/actions';
 import { RegisterClass } from '@memberjunction/global';
 import {
+  assertAutoPostCaller,
   assertAutoPostPolicy,
   autoPostJournalEntryBatch,
   buildJournalEntryBatch,
   findStrandedJournalEntries,
   pendingCompanies,
   recordDispatchFailure,
+  JournalEntryBatchFailureNotRecordedError,
   AutoPostDispatchError,
   EmptyJournalEntryBatchError,
+  JournalEntryBatchSendRefusedError,
   TasksAppApprovalGate,
   requireDateBound,
   type BuildJournalEntryBatchResult,
@@ -31,7 +34,8 @@ import { AddDays, BusinessTimeZoneEngine, CalendarDayIn, FromCalendarDay, IsBefo
  *     land `Pending` and wait for a human decision. Nothing about this path changed.
  *   - AutoPost (unattended, A-US5/A-US6): build → approve → dispatch to the ERP per company through
  *     the engine's `autoPostJournalEntryBatch`, which holds the scheduled-posting approval waiver and
- *     its include-list policy (`assertAutoPostPolicy`, also checked here before any company is read).
+ *     its include-list policy (`assertAutoPostPolicy`) and its system-user restriction
+ *     (`assertAutoPostCaller`, #269); both are also checked here before any company is read.
  *     No caller passes a gate into a send (#233).
  *
  * `CutoffMode` exists because scheduled-job action params are Static or SQL-Statement only, with no
@@ -49,6 +53,7 @@ export class BuildJournalEntryBatchesAction extends BaseAction {
     const user = params.ContextUser;
     const targetSystem = readParam<JournalEntryBatchTargetSystem>(params, 'TargetSystem') ?? 'BusinessCentral';
     const autoPost = isTrue(readParam<boolean | string>(params, 'AutoPost'));
+    if (autoPost) assertAutoPostCaller(user);
     await BusinessTimeZoneEngine.Instance.Config(false, user, provider);
     const options = readBatchOptions(params);
     if (autoPost) assertAutoPostPolicy(options);
@@ -207,9 +212,16 @@ async function autoPostOne(companyId: string, ctx: SweepContext): Promise<Compan
     if (!(e instanceof AutoPostDispatchError)) throw e;
     const batchId = e.Build.batchId;
     LogError(`Accounting.BuildJournalEntryBatches: dispatch of batch ${batchId} failed: ${e.message}`);
+    // Another dispatch sent this batch first and owns it. Triage would mark that dispatch's
+    // in-flight batch Failed, inviting a retry while its ERP call may still be running (#184).
+    if (e.cause instanceof JournalEntryBatchSendRefusedError) {
+      return { companyId, batch: e.Build, status: e.cause.Status, error: e.message, needsAttention: e.cause.Status !== 'Posted' };
+    }
     // Every route through triage began with a throw, so every one of them needs a human — including
     // the `Posted` one, where the ERP has the journal but the member JE flip did not finish.
-    return { companyId, batch: e.Build, needsAttention: true, ...(await triage(batchId, e.message, ctx.user, ctx.provider)) };
+    // A Failed save that did not persist after the ERP accepted the batch: triage keeps the reference.
+    const acceptedRef = e.cause instanceof JournalEntryBatchFailureNotRecordedError ? e.cause.ExternalJournalEntryBatchRef : null;
+    return { companyId, batch: e.Build, needsAttention: true, ...(await triage(batchId, e.message, ctx.user, ctx.provider, acceptedRef)) };
   }
 }
 
@@ -219,10 +231,10 @@ async function autoPostOne(companyId: string, ctx: SweepContext): Promise<Compan
  * overwritten — see `recordDispatchFailure`.
  */
 async function triage(
-  batchId: string, message: string, user: UserInfo, provider: IMetadataProvider,
+  batchId: string, message: string, user: UserInfo, provider: IMetadataProvider, acceptedRef: string | null,
 ): Promise<{ status: string; error: string }> {
   try {
-    const { status, marked } = await recordDispatchFailure(batchId, message, user, provider);
+    const { status, marked } = await recordDispatchFailure(batchId, message, user, provider, acceptedRef);
     if (marked) return { status, error: message };
     if (status === 'Posted') {
       // The ERP took this journal. Only the member Batched→GLPosted flip is incomplete, and the

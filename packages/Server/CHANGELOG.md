@@ -1,5 +1,93 @@
 # @mj-biz-apps/accounting-server
 
+## 0.21.0
+
+### Minor Changes
+
+- 4b5fdac: A company profile's parent may itself have a parent. `trg_ACP_NoChains` (error 50010) now refuses a cycle instead of any chain, so a Division can sit under a legal entity that sits under a holding company. A profile pointing at itself stays refused by `CK_AccountingCompanyProfile_NoSelfParent`. The `ParentAccountingCompanyID` description is rewritten: a Division, Department or Branch uses the books of the first company up the chain of any other type. Includes the CodeGen output for the description.
+
+### Patch Changes
+
+- Updated dependencies [4b5fdac]
+- Updated dependencies [1af981d]
+- Updated dependencies [6a30d91]
+  - @mj-biz-apps/accounting-entities@0.21.0
+  - @mj-biz-apps/accounting-core-entities-server@0.21.0
+  - @mj-biz-apps/accounting-actions@0.21.0
+
+## 0.20.0
+
+### Minor Changes
+
+- c7a1af4: A journal entry batch can no longer be sent to the ERP twice, and every send is recorded (#184).
+
+  - New trigger `trg_JournalEntryBatch_SendOnce` (error 50030). A send must start from `Approved` or `Failed`
+    and advance `SendAttemptCount` by exactly one; no update may keep a batch `Sent`; and `SentAt`,
+    `SentByUserID` and `SendAttemptCount` change at no other time. When two operators, two browser tabs, or a
+    scheduled run and an operator send the same batch, the second save fails and its ERP call never runs,
+    whether the first send is still `Sent`, has `Posted`, or has `Failed` again.
+  - `sendJournalEntryBatch` throws `JournalEntryBatchSendRefusedError` for that refusal, naming the status the
+    batch reads now. `Accounting.BuildJournalEntryBatches` does not mark the batch `Failed` on it.
+  - New columns `SentByUserID` and `SendAttemptCount` on `JournalEntryBatch`. Every transition into `Sent`
+    stamps them, with `SentAt`, from the context user and the loaded count. The count is dispatch attempts that
+    entered `Sent`, including a retry adopted from the ERP and a first send the pre-flight lookup refuses.
+    Batches sent before this release read `SendAttemptCount = 1`, with no sender.
+  - The batch detail panel and the Dispatch status page show who sent a batch and how many attempts it took.
+  - A successful retry still clears `ErrorMessage`. The earlier value, and each overwritten `SentAt` and
+    sender, remain in `__mj.RecordChange`.
+
+- b2de2f7: Dimension tags on a locked journal entry line are frozen, and a batch can record that a retry adopted the ERP's posting over a broken approved-content seal (#216).
+
+  - New trigger `trg_JELD_Immutability` (error 50033) refuses insert, update and delete of a `JournalEntryLineDimension` row whose journal entry is `Batched` or `GLPosted`, as `trg_JEL_Immutability` does for the line. The PostgreSQL twin ships as a PG-only migration, since the converter does not convert triggers.
+  - New nullable column `JournalEntryBatch.SealMismatchDetectedAt`: when a Failed batch's retry finds its journal already in the ERP although the batch no longer matches its seal, this records when it was recorded Posted, so the batch can be listed and its local tags reviewed. Existing batches read NULL.
+  - `SealMismatchDetectedAt` is frozen. `trg_JournalEntryBatch_Immutability` (error 50034) lets it be set only by the update that records a retried batch `Posted` (`Sent` → `Posted` with `SendAttemptCount` above 1), and refuses any later change or clear and any insert that carries it. The trigger now also fires on insert. Its PostgreSQL twin is `trg_JournalEntryBatch_SealMismatchFreeze` in the same PG-only migration.
+
+- a8e560f: New nullable column `AccountingCompanyProfile.PostingStartDate` (DATE): the first `EffectiveDate` a company posts to the ERP. Journal entries dated before it are meant never to enter a posting batch, for example history brought in at cutover that the ERP already holds. NULL means no floor; existing profiles read NULL. Includes the CodeGen output for the column (entity subclass, GraphQL types, profile form field).
+
+### Patch Changes
+
+- Updated dependencies [5ce8759]
+- Updated dependencies [525d657]
+- Updated dependencies [77e4756]
+- Updated dependencies [416d250]
+- Updated dependencies [c7a1af4]
+- Updated dependencies [d3a99ff]
+- Updated dependencies [3c5be1e]
+- Updated dependencies [346dc14]
+- Updated dependencies [01888bc]
+- Updated dependencies [6931f2c]
+- Updated dependencies [b2de2f7]
+- Updated dependencies [c0c06e0]
+- Updated dependencies [a8e560f]
+- Updated dependencies [37ff531]
+- Updated dependencies [d8629a1]
+  - @mj-biz-apps/accounting-core-entities-server@0.20.0
+  - @mj-biz-apps/accounting-actions@0.20.0
+  - @mj-biz-apps/accounting-entities@0.20.0
+
+## 0.19.0
+
+### Patch Changes
+
+- Updated dependencies [571a7a1]
+- Updated dependencies [dd98450]
+- Updated dependencies [f9e5be1]
+- Updated dependencies [6f1515e]
+  - @mj-biz-apps/accounting-core-entities-server@0.19.0
+  - @mj-biz-apps/accounting-actions@0.19.0
+  - @mj-biz-apps/accounting-entities@0.19.0
+
+## 0.18.0
+
+### Patch Changes
+
+- Updated dependencies [905d1c0]
+- Updated dependencies [a08677e]
+- Updated dependencies [cc21d7c]
+  - @mj-biz-apps/accounting-core-entities-server@0.18.0
+  - @mj-biz-apps/accounting-entities@0.18.0
+  - @mj-biz-apps/accounting-actions@0.18.0
+
 ## 0.17.0
 
 ### Minor Changes

@@ -67,6 +67,8 @@ export interface BatchPreview {
   GrossCredits: number;
   PerCompany: Array<{ CompanyID: string; Debit: number; Credit: number }>;
   OutOfOrderSkipCount: number;
+  /** Entries dated before their company's posting start date: held back, and left Pending, by every build. */
+  BeforePostingStartCount: number;
 }
 
 export interface BuildOutcome {

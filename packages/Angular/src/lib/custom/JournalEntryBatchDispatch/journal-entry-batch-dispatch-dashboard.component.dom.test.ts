@@ -141,10 +141,21 @@ describe('JournalEntryBatchDispatchDashboardComponent — cancelling a Failed ba
     await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
     const dashboard = fixture.componentInstance;
     const row = dashboard.Batches[0];
-    expect(dashboard.canCancelApproved(row), 'a Failed batch offers Cancel').toBe(true);
-    await dashboard.OnCancelApproved(row);
+    expect(dashboard.canCancel(row), 'a Failed batch offers Cancel').toBe(true);
+    await dashboard.OnCancel(row);
     return dashboard;
   }
+
+  it('does not offer Cancel on a Failed batch carrying the ERP reference: the ERP accepted it', async () => {
+    const fixture = TestBed.createComponent(JournalEntryBatchDispatchDashboardComponent);
+    fixture.componentRef.setInput('Provider', stubbedReadsProvider());
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
+    const row = { ...fixture.componentInstance.Batches[0], ExternalJournalEntryBatchRef: 'G00042' };
+
+    expect(fixture.componentInstance.canCancel(row)).toBe(false);
+  });
 
   it('cancels on the first attempt, unconfirmed, without asking, when the server finds nothing in the ERP', async () => {
     const dashboard = await cancel('ERP rejected the journal');
@@ -185,5 +196,76 @@ describe('JournalEntryBatchDispatchDashboardComponent — cancelling a Failed ba
     expect(cancelCalls).toEqual([false]);
     expect(dashboard.ActionMessageIsError).toBe(true);
     expect(dashboard.ActionMessage).toMatch(/so the batch posted/);
+  });
+});
+
+/**
+ * golive #302: a Pending batch can be cancelled, not only rejected. Cancel is the builder's way to
+ * withdraw it (the server decides who may); Reject is the CFO's decision, and now asks for a reason.
+ */
+describe('JournalEntryBatchDispatchDashboardComponent — a Pending batch (golive #302)', () => {
+  let cancelCalls: Array<{ Reason: string; Confirm: boolean }>;
+  let decisionCalls: Array<{ Decision: string; Notes: string | undefined }>;
+
+  beforeEach(async () => {
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) =>
+      p.EntityName === BATCH_ENTITY ? viewResult([batchRow('Pending')]) : viewResult([], 0),
+    );
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'GetApprovalState').mockResolvedValue({ Success: true, Approved: false });
+    cancelCalls = [];
+    decisionCalls = [];
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'CancelBatch').mockImplementation(async (_id, reason, confirm = false) => {
+      cancelCalls.push({ Reason: reason, Confirm: confirm });
+      return { Success: true, Status: 'Cancelled' };
+    });
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'RecordDecision').mockImplementation(async (_id, decision, notes) => {
+      decisionCalls.push({ Decision: decision, Notes: notes });
+      return { Success: true };
+    });
+    await TestBed.configureTestingModule({ imports: [JournalEntryBatchDispatchModule] }).compileComponents();
+  });
+
+  async function render(...promptAnswers: Array<string | null>): Promise<JournalEntryBatchDispatchDashboardComponent> {
+    const answers = [...promptAnswers];
+    vi.spyOn(window, 'prompt').mockImplementation(() => answers.shift() ?? null);
+    const fixture = TestBed.createComponent(JournalEntryBatchDispatchDashboardComponent);
+    fixture.componentRef.setInput('Provider', stubbedReadsProvider());
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
+    return fixture.componentInstance;
+  }
+
+  it('offers Cancel beside Reject on a Pending batch', async () => {
+    const dashboard = await render();
+    const row = dashboard.Batches[0];
+    expect(dashboard.canCancel(row)).toBe(true);
+    expect(dashboard.canDecide(row)).toBe(true);
+  });
+
+  it('cancels a Pending batch with the reason, unconfirmed', async () => {
+    const dashboard = await render('  Built with the wrong entries  ');
+    await dashboard.OnCancel(dashboard.Batches[0]);
+    expect(cancelCalls).toEqual([{ Reason: 'Built with the wrong entries', Confirm: false }]);
+    expect(dashboard.ActionMessageIsError).toBe(false);
+  });
+
+  it('sends a rejection with its reason as the decision notes', async () => {
+    const dashboard = await render('  Wrong period  ');
+    await dashboard.OnRecordDecision(dashboard.Batches[0], 'Rejected');
+    expect(decisionCalls).toEqual([{ Decision: 'Rejected', Notes: 'Wrong period' }]);
+  });
+
+  it.each([null, '   '])('does not reject without a reason (%s)', async (answer) => {
+    const dashboard = await render(answer);
+    await dashboard.OnRecordDecision(dashboard.Batches[0], 'Rejected');
+    expect(decisionCalls).toEqual([]);
+  });
+
+  it('approves without asking for a reason', async () => {
+    const dashboard = await render();
+    await dashboard.OnRecordDecision(dashboard.Batches[0], 'Approved');
+    expect(window.prompt).not.toHaveBeenCalled();
+    expect(decisionCalls).toEqual([{ Decision: 'Approved', Notes: undefined }]);
   });
 });
