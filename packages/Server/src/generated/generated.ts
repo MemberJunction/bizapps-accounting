@@ -3477,29 +3477,29 @@ export class mjBizAppsAccountingJournalEntry_ {
     @MaxLength(500)
     File?: string;
         
-    @Field({nullable: true, description: `Calculated outcome indicating if journal entry is anomalous or normal.`}) 
+    @Field({nullable: true}) 
     @MaxLength(9)
     AnomalyOutcome?: string;
         
-    @Field(() => Float, {nullable: true, description: `Sum of debit amounts across all lines for this journal entry.`}) 
+    @Field(() => Float, {nullable: true}) 
     TotalDebitAmount?: number;
         
-    @Field(() => Int, {nullable: true, description: `Total count of lines in this journal entry.`}) 
+    @Field(() => Int, {nullable: true}) 
     LineCount?: number;
         
-    @Field(() => Int, {nullable: true, description: `Calendar month of the journal entry effective date (1-12).`}) 
+    @Field(() => Int, {nullable: true}) 
     EffectiveMonth?: number;
         
-    @Field(() => Int, {nullable: true, description: `Day of week for the effective date (1=Sunday, 7=Saturday).`}) 
+    @Field(() => Int, {nullable: true}) 
     EffectiveDayOfWeek?: number;
         
-    @Field(() => Int, {nullable: true, description: `Binary indicator if the effective date falls on a weekend (1) or weekday (0).`}) 
+    @Field(() => Int, {nullable: true}) 
     IsWeekend?: number;
         
-    @Field(() => Int, {nullable: true, description: `Binary indicator if the journal entry has a linked source record ID.`}) 
+    @Field(() => Int, {nullable: true}) 
     HasLinkedRecord?: number;
         
-    @Field(() => Int, {nullable: true, description: `Binary indicator if the journal entry has an attached file.`}) 
+    @Field(() => Int, {nullable: true}) 
     HasFile?: number;
         
     @Field(() => [String], { nullable: true, description: `Field-level security: when non-null, the fields on this entity the calling user may read. Any other field arriving as null was withheld by the server rather than genuinely empty. Null for callers with no field restrictions.` })
