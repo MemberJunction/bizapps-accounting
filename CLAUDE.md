@@ -124,7 +124,7 @@ and nobody dispatches a publish.
    (head `changeset-release/main`, base `main`), opened by a GitHub App so its checks run on
    their own: every package bumped, CHANGELOGs generated, `mj-app.json`'s `version` and
    `mjVersionRange` synced (`version:prepare`), and **`pnpm-lock.yaml` refreshed**. PRs into
-   `main` run `release-readiness.yml` (the six `rr:` checks) and `build.yml`.
+   `main` run `release-readiness.yml` (the `rr:` checks) and `build.yml`.
 2. Merging it pushes to `main`, which triggers `publish.yml`: it validates, builds, runs
    `changeset publish` over npm OIDC, tags `vX.Y.Z` only if something actually shipped, and then
    the App opens and merges a `release-back-merge/vX.Y.Z` → `next` PR to carry the release home.
