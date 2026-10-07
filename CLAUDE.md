@@ -530,5 +530,7 @@ carry whatever `metadata/` has gained since. Two things about that step, because
   release process, not a gate — so a `metadata/` edit that matters to a host is not "done" when it
   merges, only when a release carries it.
 
+The model, and the Open App steps that differ from core (`--schema`, the `${mjSchema}` substitution): [Release Metadata Migrations Guide](https://github.com/MemberJunction/MJ/blob/next/guides/RELEASE_METADATA_MIGRATIONS_GUIDE.md).
+
 The review test: *if a colleague pulls this branch onto a database that already has last week's
 schema and runs `pnpm run mj:migrate`, do they get exactly the schema this branch describes?*
