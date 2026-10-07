@@ -1,5 +1,13 @@
 # @mj-biz-apps/accounting-ng
 
+## 0.21.2
+
+### Patch Changes
+
+- 7234d75: Company Setup selects a newly created company again. On MJ 6.1.x a new Accounting Company Profile (IsA MJ: Companies) comes back from its save with `.ID` holding the browser's key, which was never written, so the dashboard selected nothing after the reload. It now reads the key from `PrimaryKey`, which carries the written value.
+  - @mj-biz-apps/accounting-engine-base@0.21.2
+  - @mj-biz-apps/accounting-entities@0.21.2
+
 ## 0.21.1
 
 ### Patch Changes
