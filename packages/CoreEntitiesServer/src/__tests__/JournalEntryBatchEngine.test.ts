@@ -2,7 +2,7 @@
  * Compatibility shim: `netLines` still lives on JournalEntryBatchEngine so existing
  * server callers keep compiling. The behavior is owned by EngineBase.NetLines.
  */
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { NetLines } from '@mj-biz-apps/accounting-engine-base';
 import { BusinessTimeZoneEngine, type InstanceConfigurationRow } from '@mj-biz-apps/common-entities';
 import { netLines, type NettableLine } from '../JournalEntryBatchEngine.js';
@@ -126,6 +126,68 @@ describe('pendingCandidateFilter', () => {
             entryTypeCodes: ['OrderBooking', 'PaymentReceipt'],
         }, mockUser, mockProviders);
         expect(filter).toContain(`EntryTypeID IN ('${ORDER_ID}','${PAYMENT_ID}')`);
+    });
+
+    describe('cutoff is a BUSINESS day — EffectiveDate is a DATE column, never compared to an instant (golive #168)', () => {
+        const engine = BusinessTimeZoneEngine.Instance as unknown as { _configurations: InstanceConfigurationRow[]; _loaded: boolean };
+        const original = { rows: engine._configurations, loaded: engine._loaded };
+
+        beforeEach(() => {
+            engine._configurations = [
+                { FeatureKey: 'BizApps.BusinessTimeZone', Value: '{"iana":"America/Chicago","sql":"Central Standard Time"}', DefaultValue: '{"iana":"UTC","sql":"UTC"}' },
+            ];
+            engine._loaded = true;
+        });
+
+        afterEach(() => {
+            engine._configurations = original.rows;
+            engine._loaded = original.loaded;
+            vi.restoreAllMocks();
+        });
+
+        it('resolves a non-midnight cutoff instant to the business day it falls on, inclusive of that whole day', async () => {
+            // 2026-10-01T02:30:00Z is 30 September, 9:30 PM in Chicago (CDT, UTC-5) — the batch
+            // datetime an API or Action caller might send in the evening. The retired branch emitted
+            // `EffectiveDate <= '2026-10-01T02:30:00.000Z'`, which against a DATE column admits
+            // every JE dated 1 October (tomorrow, in Chicago) into the preview pool and the batch.
+            const filter = await pendingCandidateFilter({ cutoff: new Date('2026-10-01T02:30:00.000Z') }, mockUser, mockProviders);
+            expect(filter).toContain("EffectiveDate < '2026-10-01'");
+            expect(filter).not.toContain('T02:30');
+        });
+
+        it('uses the single company in scope when resolving the business day', async () => {
+            // Resolve ignores its company today (one app-wide zone), so the filter alone cannot tell
+            // whether the company was passed; the spy pins that it is, for when per-company zones land.
+            const resolve = vi.spyOn(BusinessTimeZoneEngine.Instance, 'Resolve');
+            const filter = await pendingCandidateFilter(
+                { cutoff: new Date('2026-10-01T02:30:00.000Z'), companyIds: ['11111111-0000-0000-0000-000000000001'] },
+                mockUser,
+                mockProviders,
+            );
+            expect(filter).toContain("EffectiveDate < '2026-10-01'");
+            expect(resolve).toHaveBeenCalledWith('11111111-0000-0000-0000-000000000001');
+        });
+
+        it('uses the app-wide zone when more than one company is in scope', async () => {
+            const resolve = vi.spyOn(BusinessTimeZoneEngine.Instance, 'Resolve');
+            await pendingCandidateFilter(
+                { cutoff: new Date('2026-10-01T02:30:00.000Z'), companyIds: ['11111111-0000-0000-0000-000000000001', '11111111-0000-0000-0000-000000000002'] },
+                mockUser,
+                mockProviders,
+            );
+            expect(resolve).toHaveBeenCalledWith(undefined);
+        });
+
+        it('moves to the next day only once the business day has turned', async () => {
+            // 2026-10-01T06:00:00Z is 1 October, 1 AM in Chicago — 1 October is now included.
+            const filter = await pendingCandidateFilter({ cutoff: new Date('2026-10-01T06:00:00.000Z') }, mockUser, mockProviders);
+            expect(filter).toContain("EffectiveDate < '2026-10-02'");
+        });
+
+        it('keeps a midnight-UTC cutoff as that calendar day, inclusive (unchanged behaviour)', async () => {
+            const filter = await pendingCandidateFilter({ cutoff: new Date('2026-09-30T00:00:00.000Z') }, mockUser, mockProviders);
+            expect(filter).toContain("EffectiveDate < '2026-10-01'");
+        });
     });
 });
 

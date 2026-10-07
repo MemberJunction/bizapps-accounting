@@ -1,5 +1,21 @@
 # @mj-biz-apps/accounting-ng
 
+## 0.21.1
+
+### Patch Changes
+
+- 96e5830: A journal-entry batch cutoff is now always a whole business day (golive #168). `EffectiveDate` is a `DATE` column, but the batch workspace sent its cutoff as a UTC instant ("now"), and the engine compared it directly, so from about 7 PM Central the preview included journal entries dated tomorrow and the build batched them. The workspace's cutoff is now a date input that defaults to today's business day.
+
+  The SHAPE of a cutoff or start date decides what it means: `YYYY-MM-DD` is that day; an ISO date-time with an offset is the business day it falls on (`BusinessTimeZoneEngine`), so `2026-09-30T19:00:00-05:00` — exactly UTC midnight — is 30 September, not 1 October. `StartDate` follows the same rule as `Cutoff`, so a start and cutoff at the same evening instant no longer select an empty window. `BuildJournalEntryBatchOptions.cutoff`/`startDate` accept these strings as well as a `Date`; a `Date` at UTC midnight is still read as a day (the in-process shape `FromCalendarDay` produces), any other `Date` as an instant.
+
+  A malformed `Cutoff` or `StartDate` — `garbage`, `2026-02-30`, a date-time with no offset — is now refused at the boundary with an error naming the field, instead of a bare `RangeError` or a silent roll-over into March. New public export: `requireDateBound(value, context)`. The batch `PostingDate` now looks up the business day for the batch's company, the same lookup the cutoff makes.
+
+- cb62474: Clearing the batch cutoff now says what it does (golive #168). An empty cutoff sends no date clause, so the preview includes Pending journal entries dated in the future; the batch workspace and the Batches page's Build Batch modal now show "No cutoff — includes future-dated entries." under the date input, and the workspace's criteria chips show it in place of the missing "through" chip.
+- 468b524: Date-only fields (`PostingDate`, `EffectiveDate`) now show the stored day for viewers west of UTC instead of the day before (golive #168). This covers the company overview's recent batches, the Batches page list, Build Batch preview rows and covered range, the Accounting overview's batch list, and the Batch Status dashboard. The overview's monthly JE volume bars now bucket by calendar month, so entries dated the 1st no longer count toward the prior month.
+- Updated dependencies [fd193bf]
+  - @mj-biz-apps/accounting-entities@0.21.1
+  - @mj-biz-apps/accounting-engine-base@0.21.1
+
 ## 0.21.0
 
 ### Minor Changes

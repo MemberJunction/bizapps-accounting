@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MJGlobal } from '@memberjunction/global';
 import { BaseAction } from '@memberjunction/actions';
 import { ActionResultSimple, RunActionParams } from '@memberjunction/actions-base';
 import { ACCOUNTING_VERBS, ERP_INTEGRATION, erpPluginKey } from '@memberjunction/actions-bizapps-accounting';
+import { BusinessTimeZoneEngine, type InstanceConfigurationRow } from '@mj-biz-apps/common-entities';
 import { CreateBusinessCentralJournalEntryWithDimensionsAction } from '../CreateBusinessCentralJournalEntryWithDimensionsAction';
 
 const PLUGIN_KEY = erpPluginKey(ACCOUNTING_VERBS.CreateJournalEntry, ERP_INTEGRATION.BusinessCentral);
@@ -218,5 +219,51 @@ describe('CreateBusinessCentralJournalEntryWithDimensionsAction', () => {
 
     expect(result.ResultCode).toBe('VALIDATION_ERROR');
     expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe('CreateBusinessCentralJournalEntryWithDimensionsAction — posting date with no EntryDate (golive #168)', () => {
+  // 2026-10-01T02:30:00Z is 9:30 PM Central on 30 September. The fallback was `new Date()` formatted
+  // by its UTC day, so an evening post with no EntryDate landed on 1 October — tomorrow, and on
+  // the last day of a month, the next month's period.
+  const engine = BusinessTimeZoneEngine.Instance as unknown as { _configurations: InstanceConfigurationRow[]; _loaded: boolean };
+  const saved = { rows: engine._configurations, loaded: engine._loaded };
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    engine._configurations = [
+      { FeatureKey: 'BizApps.BusinessTimeZone', Value: '{"iana":"America/Chicago","sql":"Central Standard Time"}', DefaultValue: '{"iana":"UTC","sql":"UTC"}' },
+    ];
+    engine._loaded = true;
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-01T02:30:00.000Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    engine._configurations = saved.rows;
+    engine._loaded = saved.loaded;
+  });
+
+  const postingDates = (spy: { mock: { calls: Parameters<BCRequestSeam['makeBCRequest']>[] } }): unknown[] =>
+    calls(spy).filter(c => c[0].endsWith('/journalLines') && c[1] === 'POST').map(c => c[2]?.postingDate);
+
+  it('defaults to today\'s business day', async () => {
+    const action = new CreateBusinessCentralJournalEntryWithDimensionsAction();
+    const spy = stubBC(action);
+
+    const result = await run(action, inputs({ CompanyID: 'comp-1', Lines: TAGGED_LINES }));
+
+    expect(result.Success).toBe(true);
+    expect(postingDates(spy)).toEqual(['2026-09-30', '2026-09-30']);
+  });
+
+  it('still posts an explicit EntryDate as given', async () => {
+    const action = new CreateBusinessCentralJournalEntryWithDimensionsAction();
+    const spy = stubBC(action);
+
+    await run(action, inputs({ CompanyID: 'comp-1', EntryDate: '2026-10-01', Lines: TAGGED_LINES }));
+
+    expect(postingDates(spy)).toEqual(['2026-10-01', '2026-10-01']);
   });
 });

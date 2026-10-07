@@ -5,6 +5,7 @@ import { AccountingBatchesPageComponent, BatchItem } from './accounting-batches.
 import {
   CancelJournalEntryBatchResult,
   JournalEntryBatchDispatchClient,
+  PreviewEntryWire,
   PreviewJournalEntryBatchOptionsInput,
   PreviewJournalEntryBatchResult,
 } from '../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
@@ -89,6 +90,21 @@ describe('AccountingBatchesPageComponent — Build Batch modal cutoff (DOM)', ()
     expect(input.value).toBe(BUSINESS_DAY);
   });
 
+  it('says so when the cutoff is cleared — the preview then includes future-dated entries', async () => {
+    const fixture = await render();
+    const input = await openModal(fixture);
+    const hint = () => fixture.nativeElement.querySelector('.mja-modal-hint') as HTMLElement | null;
+    expect(hint(), 'no warning while a cutoff is set').toBeNull();
+
+    input.value = '';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(previewCalls.at(-1)?.Cutoff).toBeNull();
+    expect(hint()?.textContent?.trim()).toBe('No cutoff — includes future-dated entries.');
+  });
+
   it('keeps a cutoff the user chose when the modal is closed and reopened', async () => {
     const fixture = await render();
     const first = await openModal(fixture);
@@ -130,6 +146,69 @@ describe('AccountingBatchesPageComponent — Build Batch modal cutoff (DOM)', ()
     const warning = fixture.nativeElement.querySelector('.mja-banner[role="status"]')?.textContent?.replace(/\s+/g, ' ');
     expect(warning).toContain('225 excluded entries are older than an entry you included');
     expect(warning).not.toContain('included entries will batch');
+  });
+});
+
+describe('AccountingBatchesPageComponent — DATE columns read as the stored day west of UTC (golive #168, DOM)', () => {
+  // The driver delivers a DATE as UTC midnight; in Chicago that is the evening BEFORE. A zone-less
+  // `date` pipe, or a covered range built from instants, shows every stored day one day early.
+  // The machine zone is pinned west of UTC so that regression fails here, not just in production.
+  useBusinessClock({ ...AUGUST_CLOSE_IN_CHICAGO, MachineZone: 'America/Chicago' });
+
+  const CANDIDATES: PreviewEntryWire[] = [
+    { ID: 'aaaaaaaa-0000-0000-0000-000000000001', EntryNumber: 'JE-0001', EffectiveDate: '2026-09-01T00:00:00.000Z', EntryTypeCode: 'Manual', CompanyID: '11111111-0000-0000-0000-000000000001', Description: null, Amount: 10 },
+    { ID: 'aaaaaaaa-0000-0000-0000-000000000002', EntryNumber: 'JE-0002', EffectiveDate: '2026-08-03T00:00:00.000Z', EntryTypeCode: 'Manual', CompanyID: '11111111-0000-0000-0000-000000000001', Description: null, Amount: 20 },
+  ];
+
+  beforeEach(() => {
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) =>
+      p.EntityName === BATCH_ENTITY ? viewResult([LISTED_BATCH]) : viewResult([], 0),
+    );
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'PreviewJournalEntryBatch').mockResolvedValue({
+      Success: true,
+      Candidates: CANDIDATES,
+      TotalDebits: 30,
+      TotalCredits: 30,
+      GrossDebits: 30,
+      GrossCredits: 30,
+      OutOfOrderSkipCount: 0,
+      BeforePostingStartCount: 0,
+    });
+  });
+
+  async function render(): Promise<ComponentFixture<AccountingBatchesPageComponent>> {
+    const fixture = TestBed.createComponent(AccountingBatchesPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('shows a listed batch PostingDate as the stored day', async () => {
+    const fixture = await render();
+    const row = fixture.nativeElement.querySelector('.mja-batch-num')?.closest('tr') as HTMLTableRowElement | null;
+    expect(row, 'the batch list rendered').not.toBeNull();
+    const cells = Array.from(row!.cells, c => c.textContent?.trim());
+    expect(cells).toContain('Aug 30, 2026'); // LISTED_BATCH.PostingDate
+    expect(cells).not.toContain('Aug 29, 2026');
+  });
+
+  it('shows the preview covered range and each entry date as the stored days', async () => {
+    const fixture = await render();
+    await fixture.componentInstance.OpenBuildBatchModal();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const range = [...fixture.nativeElement.querySelectorAll('.mja-fact-item')]
+      .find((el: Element) => el.querySelector('.mja-fact-lbl')?.textContent?.trim() === 'Date Range')
+      ?.querySelector('.mja-fact-val')?.textContent?.replace(/\s+/g, ' ').trim();
+    expect(range).toBe('Aug 3, 2026 → Sep 1, 2026');
+
+    const entryDates = [...fixture.nativeElement.querySelectorAll('.mja-modal-table tbody tr')].map(
+      (tr: Element) => (tr as HTMLTableRowElement).cells[2].textContent?.trim(),
+    );
+    expect(entryDates).toEqual(['Sep 1, 2026', 'Aug 3, 2026']);
   });
 });
 
