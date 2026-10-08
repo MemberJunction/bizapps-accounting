@@ -5,6 +5,7 @@
   },
   "directoryOrder": [
     "entities",
+    "entity-fields",
     "currencies",
     "journal-entry-types",
     "gl-account-roles",
