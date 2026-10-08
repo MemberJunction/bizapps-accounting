@@ -23,26 +23,33 @@
     "@types/node": "^24.10.11",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18",
-    "vite": "^7.1.5"
+    "vite": "^7.1.5",
+    "@memberjunction/core": "6.1.5",
+    "@memberjunction/core-entities": "6.1.5",
+    "@memberjunction/global": "6.1.5",
+    "@memberjunction/sqlserver-dataprovider": "6.1.5",
+    "@memberjunction/generic-database-provider": "6.1.5",
+    "@memberjunction/actions": "6.1.5",
+    "@memberjunction/integration-engine": "6.1.5",
+    "@mj-biz-apps/tasks-core": "1.4.1",
+    "@mj-biz-apps/tasks-entities": "1.4.1",
+    "@mj-biz-apps/common-entities": "5.50.2"
   },
   "dependencies": {
     "@mj-biz-apps/accounting-entities": "0.21.2",
-    "@mj-biz-apps/tasks-core": ">=1.4.1",
-    "@mj-biz-apps/tasks-entities": ">=1.4.1",
-    "@mj-biz-apps/accounting-engine-base": "0.21.2",
-    "@mj-biz-apps/common-entities": "^5.50.2",
-    "@memberjunction/actions": "~6.1.5",
-    "@memberjunction/generic-database-provider": "~6.1.5",
-    "@memberjunction/integration-engine": "~6.1.5"
+    "@mj-biz-apps/accounting-engine-base": "0.21.2"
   },
   "peerDependencies": {
-    "@memberjunction/core": "~6.1.5",
-    "@memberjunction/core-entities": "~6.1.5",
-    "@memberjunction/global": "~6.1.5",
-    "@memberjunction/sqlserver-dataprovider": "~6.1.5",
-    "@memberjunction/generic-database-provider": "~6.1.5",
-    "@memberjunction/actions": "~6.1.5",
-    "@memberjunction/integration-engine": "~6.1.5"
+    "@memberjunction/core": "^6.1.5",
+    "@memberjunction/core-entities": "^6.1.5",
+    "@memberjunction/global": "^6.1.5",
+    "@memberjunction/sqlserver-dataprovider": "^6.1.5",
+    "@memberjunction/generic-database-provider": "^6.1.5",
+    "@memberjunction/actions": "^6.1.5",
+    "@memberjunction/integration-engine": "^6.1.5",
+    "@mj-biz-apps/tasks-core": "^1.4.1",
+    "@mj-biz-apps/tasks-entities": "^1.4.1",
+    "@mj-biz-apps/common-entities": "^5.50.2"
   },
   "repository": {
     "type": "git",
