@@ -22,14 +22,16 @@
   "devDependencies": {
     "typescript": "^5.9.3",
     "vitest": "^4.0.18",
-    "vite": "^7.1.5"
+    "vite": "^7.1.5",
+    "@memberjunction/core": "^6.1.5",
+    "@memberjunction/global": "^6.1.5"
   },
   "dependencies": {
     "@mj-biz-apps/accounting-entities": "0.21.2"
   },
   "peerDependencies": {
-    "@memberjunction/core": "~6.1.5",
-    "@memberjunction/global": "~6.1.5"
+    "@memberjunction/core": "^6.1.5",
+    "@memberjunction/global": "^6.1.5"
   },
   "repository": {
     "type": "git",
