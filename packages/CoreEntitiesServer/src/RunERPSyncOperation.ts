@@ -9,6 +9,7 @@ import { AccountingERPEngine } from './AccountingERPEngine.js';
 @RegisterClass(BaseRemotableOperation, 'Accounting.RunERPSync')
 export class RunERPSyncOperation extends BaseRemotableOperation<RunERPSyncInput, RunERPSyncOutput> {
   public readonly OperationKey = 'Accounting.RunERPSync';
+  public readonly RequiredScope = 'accounting:write';
 
   protected async InternalExecute(
     input: RunERPSyncInput,

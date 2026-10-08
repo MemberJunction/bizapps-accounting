@@ -11,6 +11,8 @@
     "finance-exception-types",
     "remote-operation-categories",
     "remote-operations",
+    "api-scopes",
+    "api-application-scopes",
     "applications",
     "action-categories",
     "actions",
