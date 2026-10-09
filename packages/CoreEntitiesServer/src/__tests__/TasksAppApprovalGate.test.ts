@@ -323,3 +323,42 @@ describe('TasksAppApprovalGate.isRejected — whether the approval Task records 
     await expect(gate.assertApproved(BATCH_ID, cfo)).rejects.toThrow(/is not approved/);
   });
 });
+
+// ─── the approval Task shows the posting date (golive #315) ─────────────────
+
+describe('TasksAppApprovalGate.onBatchBuilt — the approval Task names the posting date', () => {
+  it('puts the batch PostingDate in the Task name and description', async () => {
+    const requests: Array<{ Name: string; Description: string }> = [];
+    const provider = {
+      GetEntityObject: async (entityName: string) => {
+        if (entityName === BATCH_ENTITY) {
+          return {
+            Load: async () => true,
+            ID: BATCH_ID,
+            CompanyID: COMPANY_ID,
+            JournalEntryBatchNumber: 'BATCH-0007',
+            TargetSystem: 'BusinessCentral',
+            PostingDate: new Date('2026-08-31T00:00:00Z'),
+          };
+        }
+        if (entityName === ACP_ENTITY) return { Load: async () => true, ApprovalCFOUserID: CFO_USER_ID };
+        if (entityName === 'MJ_BizApps_Tasks: Tasks') return { Load: async () => true, ID: TASK_ID };
+        throw new Error(`unexpected entity '${entityName}'`);
+      },
+      EntityByName: (entityName: string) => ({ ID: entityName === BATCH_ENTITY ? BATCH_ENTITY_ID : OTHER_USER_ID }),
+      RunView: async (params: { EntityName: string }) => {
+        if (params.EntityName === 'MJ_BizApps_Tasks: Task Types') return { Success: true, Results: [{ ID: TASK_ID }] };
+        if (params.EntityName === 'MJ_BizApps_Tasks: Task Links') return { Success: true, Results: [{ TaskID: TASK_ID }] };
+        return { Success: true, Results: [] };
+      },
+    } as unknown as IMetadataProvider;
+    const gate = new TasksAppApprovalGate(provider);
+    (gate as unknown as { orchestration: { CreateApprovalRequest: (req: { Name: string; Description: string }) => Promise<void> } })
+      .orchestration = { CreateApprovalRequest: async (req) => { requests.push(req); } };
+
+    await expect(gate.onBatchBuilt(BATCH_ID, cfo)).resolves.toBe(TASK_ID);
+    expect(requests).toHaveLength(1);
+    expect(requests[0].Name).toBe('Approve Journal Entry Batch #BATCH-0007 (posting date 2026-08-31)');
+    expect(requests[0].Description).toContain('posting date 2026-08-31 — the journal date BusinessCentral receives');
+  });
+});

@@ -93,6 +93,10 @@ export interface JournalEntryBatchCriteriaInput {
   EntryTypeCodes?: string[] | null;
   /** JournalEntryType CODES to EXCLUDE (e.g. ['RevenueRecognition']). Omit/empty = no exclusions. */
   ExcludeEntryTypeCodes?: string[] | null;
+  /** The batch's PostingDate — the journal date the ERP receives (golive #315). Same shapes as
+   *  `Cutoff`; omit for today's business day. Never before a selected entry,
+   *  and it bounds the candidate pool like a cutoff does. */
+  PostingDate?: string | null;
 }
 
 /**
@@ -107,6 +111,7 @@ function toOptions(input: JournalEntryBatchCriteriaInput | undefined): BuildJour
     companyIds: input?.CompanyIDs?.length ? input.CompanyIDs : null,
     entryTypeCodes: input?.EntryTypeCodes?.length ? input.EntryTypeCodes : null,
     excludeEntryTypeCodes: input?.ExcludeEntryTypeCodes?.length ? input.ExcludeEntryTypeCodes : null,
+    postingDate: input?.PostingDate ? requireDateBound(input.PostingDate, 'Batch PostingDate') : null,
   };
 }
 
@@ -182,7 +187,7 @@ export class BuildJournalEntryBatchOperation extends BaseRemotableOperation<Buil
       }
       case 'Explicit': {
         if (!input.JournalEntryIDs?.length) throw new Error('BuildJournalEntryBatch: Source=Explicit requires JournalEntryIDs.');
-        const batches = await buildJournalEntryBatchFromExplicitIds(input.JournalEntryIDs, input.TargetSystem, user.ID, user, provider, gate);
+        const batches = await buildJournalEntryBatchFromExplicitIds(input.JournalEntryIDs, input.TargetSystem, user.ID, user, provider, gate, options.postingDate);
         return { Batches: batches, NothingToBatch: false };
       }
       case 'Standard': {

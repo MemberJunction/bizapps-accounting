@@ -21,7 +21,7 @@ import {
   type JournalEntryBatchTargetSystem,
   type BuildJournalEntryBatchOptions,
 } from '@mj-biz-apps/accounting-core-entities-server';
-import { AddDays, BusinessTimeZoneEngine, CalendarDayIn, FromCalendarDay, IsCalendarDay, LastDayOfPriorMonth } from '@mj-biz-apps/common-entities';
+import { AddDays, BusinessTimeZoneEngine, CalendarDayIn, FromCalendarDay, IsBeforeDay, IsCalendarDay, LastDayOfPriorMonth, ToCalendarDay } from '@mj-biz-apps/common-entities';
 
 /**
  * Action: Accounting.BuildJournalEntryBatches
@@ -82,8 +82,12 @@ function readBatchOptions(params: RunActionParams): BuildJournalEntryBatchOption
   const excludeEntryTypeCodes = readParam<string[]>(params, 'ExcludeEntryTypeCodes');
   const companyIds = readParam<string[]>(params, 'CompanyIDs');
 
+  const now = new Date();
+  const zone = BusinessTimeZoneEngine.Instance.Zone;
+  const cutoff = resolveCutoff(readParam<string>(params, 'Cutoff'), readParam<string>(params, 'CutoffMode'), now, zone);
   return {
-    cutoff: resolveCutoff(readParam<string>(params, 'Cutoff'), readParam<string>(params, 'CutoffMode'), new Date(), BusinessTimeZoneEngine.Instance.Zone),
+    cutoff,
+    postingDate: postingDateForCutoff(cutoff, now, zone),
     // As written: the engine reads its shape (a day, or a date-time → the business day it falls on).
     startDate: startDate ? requireDateBound(startDate, 'Accounting.BuildJournalEntryBatches: StartDate') : null,
     companyIds: companyIds?.length ? companyIds : null,
@@ -112,6 +116,20 @@ export function resolveCutoff(explicitCutoff: string | undefined, mode: string |
   if (mode === 'PriorDay') return FromCalendarDay(AddDays(today, -1));
   if (mode === 'PriorMonth') return FromCalendarDay(LastDayOfPriorMonth(today));
   throw new Error(`Accounting.BuildJournalEntryBatches: unknown CutoffMode '${mode}' — expected 'PriorDay' or 'PriorMonth'.`);
+}
+
+/**
+ * A batch is dated the last day of its sweep window (golive #314), not the run date: a nightly run on
+ * 1 September with cutoff 31 August posts on 31 August, so the activity stays in August in the ERP.
+ * A cutoff later than today ends the window today: the posting date also bounds the pool, and an
+ * unattended run does not post ahead of the day it runs. No cutoff, no window end: null, and the
+ * engine dates the batch today.
+ */
+export function postingDateForCutoff(cutoff: Date | null, now: Date, zone: string): Date | null {
+  if (!cutoff) return null;
+  const today = CalendarDayIn(now, zone);
+  const cutoffDay = ToCalendarDay(cutoff) ?? today;
+  return FromCalendarDay(IsBeforeDay(cutoffDay, today) ? cutoffDay : today);
 }
 
 // ─── The sweep ───────────────────────────────────────────────────────────────────────────

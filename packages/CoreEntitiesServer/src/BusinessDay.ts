@@ -94,6 +94,20 @@ export async function loadBoundDay(
   return loadBusinessDayOf(bound, contextUser, provider, companyID);
 }
 
+/**
+ * A batch's PostingDate — the journal date the ERP receives — as a calendar day: the day the caller
+ * asked for, read by the same shape rules as a cutoff ({@link loadBoundDay}), or today's business day
+ * when it asked for none (golive #315). A prior or future month is allowed: the build screens ask the
+ * user to confirm it, and the server does not second-guess that confirmation.
+ */
+export async function loadPostingDay(
+  postingDate: DateBound | null | undefined, contextUser: UserInfo, provider: IMetadataProvider, companyID?: string,
+): Promise<CalendarDay> {
+  if (postingDate) return loadBoundDay(postingDate, 'Batch PostingDate', contextUser, provider, companyID);
+  await BusinessTimeZoneEngine.Instance.Config(false, contextUser, provider);
+  return BusinessTimeZoneEngine.Instance.Today(companyID);
+}
+
 const isUtcMidnight = (d: Date): boolean =>
   d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0 && d.getUTCMilliseconds() === 0;
 
