@@ -39,7 +39,7 @@
  *   ENGINE: ./JournalEntryBatchEngine (buildJournalEntryBatch · regenerateJournalEntryBatch · sendJournalEntryBatch · approveJournalEntryBatch · cancelJournalEntryBatch)
  *   GATE:   ./TasksAppApprovalGate (the bizapps-tasks-backed CFO gate; provider-injected)
  */
-import { BaseRemotableOperation, IMetadataProvider, IRunViewProvider, RunView, UserInfo } from '@memberjunction/core';
+import { BaseRemotableOperation, IMetadataProvider, UserInfo } from '@memberjunction/core';
 import { RegisterClass } from '@memberjunction/global';
 import {
   buildJournalEntryBatch,
@@ -64,6 +64,7 @@ import {
 } from './JournalEntryBatchEngine.js';
 import { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
 import { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
+import { ResolvePersonIDForUser } from './person-user-link.js';
 import { requireSqlGuid } from './SqlGuards.js';
 import { requireDateBound } from './BusinessDay.js';
 import {
@@ -73,7 +74,6 @@ import {
   type TaskDecisionOutcomeCode,
 } from '@mj-biz-apps/tasks-core';
 
-const PERSON_ENTITY = 'MJ_BizApps_Common: People';
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 
 // ─── Accounting.PreviewJournalEntryBatch + Accounting.BuildJournalEntryBatch ─────────────────────────
@@ -363,17 +363,16 @@ export class RecordJournalEntryBatchDecisionOperation extends BaseRemotableOpera
   }
 
   /**
-   * The current MJ user's bizapps-common Person ID (Person.LinkedUserID == user.ID), so the recorded
-   * decision is attributed to the right approver Person. Undefined when no Person is linked (the
-   * gate's RecordDecision treats DecidedByPersonID as optional).
+   * The current MJ user's bizapps-common Person ID (the user's People link, else Person.LinkedUserID),
+   * so the recorded decision is attributed to the right approver Person. Undefined when no Person is
+   * linked or the lookup fails (the gate's RecordDecision treats DecidedByPersonID as optional).
    */
   private async resolveCurrentPersonId(user: UserInfo, provider: IMetadataProvider): Promise<string | undefined> {
-    const rv = new RunView(provider as unknown as IRunViewProvider);
-    const res = await rv.RunView<{ ID: string }>(
-      { EntityName: PERSON_ENTITY, ExtraFilter: `LinkedUserID='${user.ID}'`, Fields: ['ID'], MaxRows: 1, ResultType: 'simple', BypassCache: true },
-      user,
-    );
-    return res.Success ? res.Results?.[0]?.ID : undefined;
+    try {
+      return (await ResolvePersonIDForUser(user, provider, user)) ?? undefined;
+    } catch {
+      return undefined;
+    }
   }
 }
 

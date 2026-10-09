@@ -143,6 +143,26 @@ describe('TasksAppApprovalGate — who may cancel past approval', () => {
     await expect(gate.assertMayCancelApproved(BATCH_ID, cfo)).rejects.toThrow(/BATCH-0007: .*has no linked Person.*An administrator must link this user to a Person/);
   });
 
+  it('finds the Person through the user\'s link to a People subtype when LinkedUserID names no one', async () => {
+    const PEOPLE_ENTITY_ID = 'e0000000-0000-4000-8000-0000000000e1';
+    const SUBTYPE_ENTITY_ID = 'e0000000-0000-4000-8000-0000000000e2';
+    const peopleEntity = { ID: PEOPLE_ENTITY_ID, Name: 'MJ_BizApps_Common: People', ParentChain: [] };
+    const subtype = { ID: SUBTYPE_ENTITY_ID, Name: 'Platform: People', ParentChain: [peopleEntity] };
+    const base = cancelProvider({ cfoUserId: CFO_USER_ID, approvalTaskId: TASK_ID, hasPerson: false }, world());
+    const provider = {
+      ...base,
+      Entities: [peopleEntity, subtype],
+      EntityByID: (id: string) => [peopleEntity, subtype].find((e) => e.ID === id),
+      RunView: async (params: { EntityName: string; ExtraFilter?: string }) =>
+        params.EntityName === 'MJ_BizApps_Common: People' && params.ExtraFilter === `ID = '${PERSON_ID}'`
+          ? { Success: true, Results: [{ ID: PERSON_ID }] }
+          : (base as unknown as { RunView: (p: { EntityName: string }) => Promise<unknown> }).RunView(params),
+    } as unknown as IMetadataProvider;
+    const linkedCfo = { ID: CFO_USER_ID, LinkedEntityID: SUBTYPE_ENTITY_ID, LinkedEntityRecordID: PERSON_ID } as unknown as UserInfo;
+    const gate = new TasksAppApprovalGate(provider);
+    await expect(gate.assertMayCancelApproved(BATCH_ID, linkedCfo)).resolves.toBeUndefined();
+  });
+
   it('lets an allowed user with no linked Person cancel a batch with no stamped approval Task, even when a Task Link names one', async () => {
     const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, approvalTaskId: null, hasPerson: false }, world()));
     await expect(gate.assertMayCancelApproved(BATCH_ID, cfo)).resolves.toBeUndefined();
