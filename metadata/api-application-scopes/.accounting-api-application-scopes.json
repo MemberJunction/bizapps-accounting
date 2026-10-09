@@ -1,0 +1,33 @@
+[
+  {
+    "_comments": [
+      "THE MJAPI CEILING FOR THE ACCOUNTING SCOPES (#310). An API key's scopes are intersected with what its application",
+      "allows, so a scope with no application row is refused on every key. Include on every resource (`*`), as MJ",
+      "grants its own scopes; which keys carry them is the host's choice."
+    ],
+    "fields": {
+      "ApplicationID": "@lookup:MJ: API Applications.Name=MJAPI",
+      "ScopeID": "@lookup:MJ: API Scopes.FullPath=accounting:read",
+      "ResourcePattern": "*",
+      "PatternType": "Include",
+      "IsDeny": false,
+      "Priority": 0
+    },
+    "primaryKey": {
+      "ID": "5EEAB93B-93CD-482C-9202-BA76E79AF83C"
+    }
+  },
+  {
+    "fields": {
+      "ApplicationID": "@lookup:MJ: API Applications.Name=MJAPI",
+      "ScopeID": "@lookup:MJ: API Scopes.FullPath=accounting:write",
+      "ResourcePattern": "*",
+      "PatternType": "Include",
+      "IsDeny": false,
+      "Priority": 0
+    },
+    "primaryKey": {
+      "ID": "B9D3F50E-0AF0-4851-934B-AD91887804DB"
+    }
+  }
+]

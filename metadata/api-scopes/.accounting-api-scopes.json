@@ -1,0 +1,52 @@
+[
+  {
+    "_comments": [
+      "API SCOPES FOR THE ACCOUNTING REMOTE OPERATIONS (#310). Every Accounting operation declares RequiredScope",
+      "accounting:read or accounting:write (metadata/remote-operations for the generated ones, the class itself for the",
+      "code-only ones). Without these rows MJAPI refuses every API-key call to them on a host that installs Accounting.",
+      "",
+      "A parent `accounting` with read and write children, matching how MJ lays out its own scopes. The application",
+      "ceiling that allows them on MJAPI is in metadata/api-application-scopes. A host then only issues API keys."
+    ],
+    "fields": {
+      "Name": "accounting",
+      "FullPath": "accounting",
+      "Category": "Accounting",
+      "Description": "Parent scope for Accounting remote operations",
+      "IsActive": true
+    },
+    "primaryKey": {
+      "ID": "3C1C4E61-F078-48A8-A101-0E985E5A2A18"
+    },
+    "relatedEntities": {
+      "MJ: API Scopes": [
+        {
+          "fields": {
+            "ParentID": "@parent:ID",
+            "Name": "read",
+            "FullPath": "accounting:read",
+            "Category": "Accounting",
+            "Description": "Read-only Accounting operations: batch previews, journal entry states, stranded entries, approval state and finance exception types",
+            "IsActive": true
+          },
+          "primaryKey": {
+            "ID": "6506ADAB-2078-41AE-879F-DE193B1BBC39"
+          }
+        },
+        {
+          "fields": {
+            "ParentID": "@parent:ID",
+            "Name": "write",
+            "FullPath": "accounting:write",
+            "Category": "Accounting",
+            "Description": "Accounting operations that change data: journal entries and reversals, batch build, dispatch, decisions and cancellation, ERP sync and finance exceptions",
+            "IsActive": true
+          },
+          "primaryKey": {
+            "ID": "D10952F0-1423-435D-B144-70E33988BE93"
+          }
+        }
+      ]
+    }
+  }
+]
