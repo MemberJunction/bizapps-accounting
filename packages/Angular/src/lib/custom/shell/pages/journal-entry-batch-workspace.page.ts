@@ -499,10 +499,9 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
   private latestIncludedDay(): string | null {
     const d = this.Draft;
     if (!d || !this.Preview) return null;
-    const excluded = new Set(d.ExcludedIDs);
     let latest: string | null = null;
     for (const c of this.Preview.Candidates) {
-      const day = excluded.has(c.ID) ? null : ToCalendarDay(c.EffectiveDate);
+      const day = IsEntryIncluded(d.Selection, c.ID) ? ToCalendarDay(c.EffectiveDate) : null;
       if (day && (!latest || IsBeforeDay(latest, day))) latest = day;
     }
     return latest;
