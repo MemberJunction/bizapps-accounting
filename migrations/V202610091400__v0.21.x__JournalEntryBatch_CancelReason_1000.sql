@@ -643,9 +643,6 @@ REVOKE EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntryBatch] FROM [cd
 REVOKE EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntryBatch] FROM [cdp_Integration]
 GRANT EXECUTE ON [${flyway:defaultSchema}].[spDeleteJournalEntryBatch] TO [cdp_Developer], [cdp_Integration];
 
-/* SQL text to delete unneeded entity fields */
-EXEC [${mjSchema}].[spDeleteUnneededEntityFields] @ExcludedSchemaNames='', @IncludedSchemaNames='${flyway:defaultSchema}';
-
 /* SQL text to update existing entity fields from schema */
 EXEC [${mjSchema}].[spUpdateExistingEntityFieldsFromSchema] @ExcludedSchemaNames='', @IncludedSchemaNames='${flyway:defaultSchema}';
 
