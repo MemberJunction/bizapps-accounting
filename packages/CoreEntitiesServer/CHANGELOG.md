@@ -1,5 +1,12 @@
 # @mj-biz-apps/accounting-core-entities-server
 
+## 0.21.3
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-engine-base@0.21.3
+- @mj-biz-apps/accounting-entities@0.21.3
+
 ## 0.21.2
 
 ### Patch Changes
