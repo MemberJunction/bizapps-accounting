@@ -46,7 +46,7 @@ Pending JE) and tears down in `afterAll`:
 > state machine; it does **not** assert "a non-CFO is rejected at decision time", because the
 > current engine does not enforce that (it would be claiming a guard that doesn't exist). The
 > "no CFO configured → build hard-fails" guard IS covered by the server harness
-> (`test-harnesses/server/block2-runtime.ts`).
+> (`test-harnesses/server/phase2-encapsulation.live.test.ts`, L12).
 
 ## Prerequisites (start the services out-of-band)
 

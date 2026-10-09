@@ -11,37 +11,58 @@ DB-level numbering sprocs, triggers, RecordChange audit) are validated **here**.
 
 ## Running
 
-The harness reads DB settings from `.env` in the **current working directory**, so run it
-from the **instance worktree root** (where the instance's `.env` lives). In an MJ Dev
-Manager instance that is `~/MJDev/instances/<slug>/mj`:
+The scripts need a database built from migrations (MJ core, bizapps-common, bizapps-tasks, then this
+repo) with each app's `metadata/` pushed, this repo's packages built (they import `dist/`), and an
+`.env` with `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` and the db_owner
+`CODEGEN_DB_USERNAME` / `CODEGEN_DB_PASSWORD` that teardown uses.
+
+The tsx scripts read `.env` from the **current working directory**. The Vitest specs read it from the
+current working directory too, and fall back to the MJ Dev Manager instance root (`mj/.env`, five
+directories above this folder).
+
+**In an MJ Dev Manager instance** (`~/MJDev/instances/<slug>/mj`), everything they import is
+installed:
 
 ```bash
 cd ~/MJDev/instances/<slug>/mj
 npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/block0-runtime.ts
+cd packages/dev-apps/bizapps-accounting
+npx vitest run --config test-harnesses/server/vitest.config.ts
 ```
 
-Exit code: `0` all passed · `1` test failures · `2` bootstrap error. Every script cleans
-up the rows it creates (teardown by CompanyID), so runs are idempotent.
+**In a plain clone**, the root `node_modules` holds only the repo's own tooling. The scripts also
+import `mssql`, `dotenv`, `@memberjunction/sqlserver-dataprovider`,
+`@memberjunction/server-bootstrap-lite`, `@mj-biz-apps/common-entities` and
+`@mj-biz-apps/tasks-entities`, and run under `tsx`; none of these are root dependencies, so install
+them into a scratch copy of the clone (not a branch you will push), then run from its root.
+
+Exit code of the tsx scripts: `0` all passed · `1` test failures · `2` bootstrap error. Every script
+cleans up the rows it creates (teardown by CompanyID), so runs are repeatable.
 
 ## Scripts
 
-Each block harness asserts **real, correct results** (not just "no error") against a live DB, and the
+Each harness asserts **real, correct results** (not just "no error") against a live DB, and the
 DB-invariant cases each include a **raw-SQL bypass** that the trigger still rejects (so a guard can't
-pass vacuously). Block numbering follows the master plan; **block3 is intentionally absent** (the
-intercompany balancing engine was removed per Amith — Payments owns intercompany).
+pass vacuously).
 
 | Script | Validates |
 |---|---|
-| `block0-runtime.ts` | **Block-0 foundation hooks.** W1 profile-init seeding (10-account COA, 17 periods, 5 default GL refs, `OperatingTimeZone` left blank, RecordChange audit), W2 JE numbering (`JE-{Code}-{FY}-{seq}`), W3 batch numbering (`BATCH-{Code}-{seq}`). |
-| `block1-runtime.ts` | **Block-1 JE lifecycle + invariants** (2026-07-06: periods retired; JEs are multi-company). W6 `generateReversal` (new Pending `Reversal`, Dr/Cr swapped, back-referenced), F1 `validateJournalEntry` (balanced overall + per company / GL-active). DB triggers w/ bypass proofs: balanced-on-lock **50001**, per-company balance **50019 (AM-4)**, JE immutability **50003/50004**, JE-line immutability **50006**. |
-| `block2-runtime.ts` | **Block-2 batching engine + invariants** (2026-07-06, CH-4: batches are MULTI-COMPANY; `buildJournalEntryBatch` is GLOBAL — sweeps every Pending JE; lifecycle Pending→Approved→Sent→Posted). S1 `buildJournalEntryBatch` (netting keys on company×account×dims; companyCount reported), §5.5 GL resolution (mapping override beats inline; unmapped falls back to the account **Code** — AM-4, never hard-fails), B5 dimension-through-batch, `approveJournalEntryBatch` (audit stamps; only-Pending guard), `sendJournalEntryBatch` (requires Approved + CFO gate → mock ERP post → Posted, JEs→GLPosted; deny-gate refuses), real TasksAppApprovalGate (per-company CFO union — one Task, all CFOs; approve/reject; no-CFO hard-fail). Trigger bypass proofs: summary-foots **50014**, per-company foot **50023 (AM-4)**, batch immutability **50009/50008**. |
-| `block4-runtime.ts` | **Block-4 scheduled-JE schedule (S3)** (2026-07-06, AM-6: the central materializer is RETIRED — domain entity servers generate the JE when a row comes due). `createScheduledEntries` (straight-line schedule + balanced line pairs, exact cent-remainder spread), the AM-6 domain-generation flow (entity-path flip to Generated w/ JE back-ref), and bypass proofs: Generated-coherence CK, SJE delete/field/line locks **50016/50017/50018**. |
-| `block5-runtime.ts` | **Block-5 COA-mapping approval workflow.** propose → UNapproved mapping is invisible to §5.5 resolution; approve → it resolves (override beats inline); strict 1:1 (approving a second mapping for a local GL supersedes the prior, `EffectiveTo` closed); idempotent re-approve. INV: `CK_COAMapping_ApprovalCoherence` raw-SQL bypass (ApprovedBy without ApprovedAt → rejected). |
-| `block6-runtime.ts` | **Block-6 read-model views (real values)** (2026-07-06: month-grain on EffectiveDate — periods gone). All 12 views: `vw_TrialBalance_AR` foots to zero, `vw_JEAuditTrail`, `vw_ARtoGLRecon` (month-grain status counts), `vw_DimensionPL`, `vw_BatchDispatchStatus` (Posted batch + CompanyCount + audit stamps), `vw_ScheduledJESummary`, `vw_FxExposure`, `vw_AROpenByCustomer`, `vw_ARAging`, `vw_DefRevRollforward` (PeriodMonth), `vw_SalesTaxLiability`, `vw_IntercompanyFlow`. |
-| `engine-runtime.ts` | **The accounting ENGINE (AM-7 step 4).** The 'Accounting.CreateJournalEntry' op end-to-end in-process: success path (merge/order/number, dimension lands, global EntryNumber), all 7 typed error codes live, the ATOMIC ROLLBACK proof (stale-cache FK failure mid-write → zero partial rows, raw-SQL verified; carries the MJ-core TG-crash guard — see the instance BUGS.md), and `ResolveLinkedAccount` over real GLAccountLink windows + ordered dimensions. |
-| `seed-demo.ts` | **Not a test** — the deterministic, idempotent Association **demo seeder** (`seedAssociationDemo`) that the API + Playwright tiers run against; verifies each Block-6 view populates. Persists by design (no teardown). |
+| `block0-runtime.ts` | **Block-0 foundation hooks.** GL account role reference data, explicit chart-of-accounts seeding on a new company profile, JE and batch numbering. |
+| `block1-runtime.ts` | **JE lifecycle DB invariants**, each with a raw-SQL bypass case and an allowed counter-case: balanced-on-lock, single-company lines, JE and line immutability, reversal typing, batch status, cancel audit and the cancel ERP check. |
+| `engine-runtime.ts` | **The accounting engine.** The `Accounting.CreateJournalEntry` operation end to end in-process (success path, typed error codes, atomic rollback) and `ResolveLinkedAccount` over real GLAccountLink rows. |
+| `intercompany-runtime.ts` | **The intercompany Due To / Due From pair.** The DB floor through raw SQL, the entity refusals, and `ResolveIntercompanyAccounts` against real rows. |
+| `phase2-encapsulation.live.test.ts` (Vitest) | **The encapsulated JournalEntry and the batch cycle.** One-save create, numbering, reversal, the draft path, build → approve → dispatch, lifecycle invariants, the real gate's CFO precondition and approval Task, concurrent retries and the send-once trigger. Cancels here go through a stub gate. |
+| `pending-cancel-gate.live.test.ts` (Vitest) | **Cancelling a Pending batch through the real `TasksAppApprovalGate`** (#305). The CFO and the builder may cancel with a reason; another user and a missing reason are refused; the approval Task gets the comment and is closed as Cancelled. |
+| `seed-demo.ts` | **Not a test.** The deterministic Association demo seeder the API and Playwright tiers run against. Persists by design (no teardown). |
 
-Shared helpers: `trigger-preflight.ts` (`assertInvariantTriggers` — fail-fast if any invariant trigger is missing/disabled, so bypass tests can't pass vacuously) and `harness-exit.ts` (`finishAndExit` — non-blocking pool close + force-exit, because the MJ provider pool's `close()` can hang).
+Shared helpers: `live-bootstrap.ts` (Vitest fixtures and teardown), `trigger-preflight.ts`
+(`assertInvariantTriggers`: fail fast if an invariant trigger is missing or disabled, so bypass tests
+can't pass vacuously), `harness-dispatch-services.ts` (approve-everything gate and mock ERP for
+sends) and `harness-exit.ts` (`finishAndExit`: non-blocking pool close + force-exit, because the MJ
+provider pool's `close()` can hang). `AssociationDemoSeedData.ts` is the seeder's data.
+
+The `_maint-*.ts` scripts are one-off maintenance tools for a dev database (residue sweeps, batch
+listings, metadata snapshots), not tests. Read each one's header before running it.
 
 ## Note on permissions
 No permission setup is needed. CodeGen creates the `__mj.EntityPermission` rows for all
