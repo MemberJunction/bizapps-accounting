@@ -58,6 +58,7 @@ interface JournalEntryBatchRow { ID: string; Status: JournalEntryBatchStatus }
 @RegisterClass(BaseRemotableOperation, 'Accounting.GetJournalEntryStates')
 export class GetJournalEntryStatesOperation extends BaseRemotableOperation<GetJournalEntryStatesInput, GetJournalEntryStatesOutput> {
   public readonly OperationKey = 'Accounting.GetJournalEntryStates';
+  public readonly RequiredScope = 'accounting:read';
 
   protected async InternalExecute(input: GetJournalEntryStatesInput, provider: IMetadataProvider, user: UserInfo): Promise<GetJournalEntryStatesOutput> {
     const ids = validateIds(input?.JournalEntryIDs);
