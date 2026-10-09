@@ -8,8 +8,8 @@ import '@memberjunction/server-bootstrap-lite'; import '@mj-biz-apps/common-enti
 async function main() {
   dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
   const pool = await new sql.ConnectionPool({ server: process.env.DB_HOST, port: Number(process.env.DB_PORT ?? 1433), user: process.env.DB_USERNAME, password: process.env.DB_PASSWORD, database: process.env.DB_DATABASE, options: { encrypt: false, trustServerCertificate: true } }).connect();
-  await setupSQLServerClient(new SQLServerProviderConfigData(pool, process.env.MJ_CORE_SCHEMA || '__mj'));
-  await UserCache.Instance.Refresh(pool);
+  const sqlProvider = await setupSQLServerClient(new SQLServerProviderConfigData(pool, process.env.MJ_CORE_SCHEMA || '__mj'));
+  await UserCache.Instance.Refresh(sqlProvider);
   const md = new Metadata();
   const checks: [string, string][] = [
     ['MJ_BizApps_Accounting: Journal Entry Batches', 'Status'],

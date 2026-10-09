@@ -113,9 +113,9 @@ async function bootstrap(): Promise<Ctx> {
     options: { encrypt: false, trustServerCertificate: true },
   }).connect();
 
-  await setupSQLServerClient(new SQLServerProviderConfigData(pool, schema));
+  const sqlProvider = await setupSQLServerClient(new SQLServerProviderConfigData(pool, schema));
   await assertInvariantTriggers(pool);
-  await UserCache.Instance.Refresh(pool);
+  await UserCache.Instance.Refresh(sqlProvider);
   const ctxUser = UserCache.Users.find(u => u?.Type?.trim().toLowerCase() === 'owner') ?? UserCache.Users[0];
   if (!ctxUser) throw new Error('No context user found in UserCache.');
 

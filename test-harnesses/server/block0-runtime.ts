@@ -139,9 +139,9 @@ async function bootstrap(): Promise<Ctx> {
 
   // NOTE on permissions: CodeGen creates the EntityPermission rows for every
   // __mj_BizAppsAccounting entity on this instance, so NO permission grant is needed here.
-  await setupSQLServerClient(new SQLServerProviderConfigData(pool, schema));
+  const sqlProvider = await setupSQLServerClient(new SQLServerProviderConfigData(pool, schema));
   await assertInvariantTriggers(pool); // pre-flight: fail fast if any invariant trigger is missing/disabled
-  await UserCache.Instance.Refresh(pool);
+  await UserCache.Instance.Refresh(sqlProvider);
   const ctxUser = UserCache.Users.find(u => u?.Type?.trim().toLowerCase() === 'owner') ?? UserCache.Users[0];
   if (!ctxUser) throw new Error('No context user found in UserCache.');
 

@@ -10,8 +10,8 @@ const N = Number(process.argv[2] ?? 2);
 async function main() {
   dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
   const pool = await new sql.ConnectionPool({ server: process.env.DB_HOST, port: Number(process.env.DB_PORT ?? 1433), user: process.env.DB_USERNAME, password: process.env.DB_PASSWORD, database: process.env.DB_DATABASE, options: { encrypt: false, trustServerCertificate: true } }).connect();
-  await setupSQLServerClient(new SQLServerProviderConfigData(pool, process.env.MJ_CORE_SCHEMA || '__mj'));
-  await UserCache.Instance.Refresh(pool);
+  const sqlProvider = await setupSQLServerClient(new SQLServerProviderConfigData(pool, process.env.MJ_CORE_SCHEMA || '__mj'));
+  await UserCache.Instance.Refresh(sqlProvider);
   const user = UserCache.Users.find(u => u?.Type?.trim().toLowerCase() === 'owner') ?? UserCache.Users[0];
   const S = '__mj_BizAppsAccounting';
   const gl = (await pool.request().query(`SELECT TOP 1 ar.CompanyID cid, ar.ID arID, rev.ID revID FROM ${S}.GLAccount ar JOIN ${S}.GLAccount rev ON rev.CompanyID=ar.CompanyID AND rev.Code='40100' WHERE ar.Code='11201'`)).recordset[0];
