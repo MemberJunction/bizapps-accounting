@@ -200,6 +200,62 @@ describe('JournalEntryBatchDispatchDashboardComponent — cancelling a Failed ba
 });
 
 /**
+ * #324: a cancel the server refuses still reloads the list. Cancelling a Failed batch can find that the
+ * ERP posted it during the cancel; the server then records the batch Posted and refuses, and the card
+ * must show Posted, not keep offering Cancel on a Failed batch.
+ */
+describe('JournalEntryBatchDispatchDashboardComponent — a refused cancel reloads the batch (#324)', () => {
+  let listedStatus: BatchStatus;
+  let batchReads: number;
+
+  beforeEach(async () => {
+    listedStatus = 'Failed';
+    batchReads = 0;
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+      if (p.EntityName !== BATCH_ENTITY) return viewResult([], 0);
+      batchReads++;
+      return viewResult([batchRow(listedStatus)]);
+    });
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'GetApprovalState').mockResolvedValue({ Success: true, Approved: true });
+    vi.spyOn(window, 'prompt').mockReturnValue('ERP rejected the journal');
+    await TestBed.configureTestingModule({ imports: [JournalEntryBatchDispatchModule] }).compileComponents();
+  });
+
+  function buttonLabelled(fixture: ComponentFixture<JournalEntryBatchDispatchDashboardComponent>, label: string): HTMLButtonElement | undefined {
+    const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('.bd-card__actions button'));
+    return buttons.find(b => b.textContent?.trim() === label);
+  }
+
+  it('shows the batch as Posted and keeps the refusal when the ERP posted it during the cancel', async () => {
+    const refusal = 'The ERP posted batch JEB-TEST-0001 while it was being cancelled; it is now recorded Posted.';
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'CancelBatch').mockImplementation(async () => {
+      listedStatus = 'Posted';
+      return { Success: false, ErrorMessage: refusal };
+    });
+    const fixture = TestBed.createComponent(JournalEntryBatchDispatchDashboardComponent);
+    fixture.componentRef.setInput('Provider', stubbedReadsProvider());
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
+    fixture.detectChanges();
+
+    const cancelButton = buttonLabelled(fixture, 'Cancel');
+    expect(cancelButton, 'a Failed batch offers Cancel').toBeTruthy();
+    cancelButton!.click();
+    await vi.waitFor(() => expect(batchReads, 'the list reloaded after the refused cancel').toBe(2));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const banner = fixture.nativeElement.querySelector('.bd-banner[role="status"]') as HTMLElement | null;
+    expect(banner?.classList).toContain('bd-banner--error');
+    expect(banner?.textContent).toContain(refusal);
+    const badge = fixture.nativeElement.querySelector('.bd-card__badges mj-stat-badge') as HTMLElement | null;
+    expect(badge?.textContent).toContain('Posted');
+    expect(buttonLabelled(fixture, 'Cancel'), 'a Posted batch offers no Cancel').toBeUndefined();
+  });
+});
+
+/**
  * golive #302: a Pending batch can be cancelled, not only rejected. Cancel is the builder's way to
  * withdraw it (the server decides who may); Reject is the CFO's decision, and now asks for a reason.
  */
