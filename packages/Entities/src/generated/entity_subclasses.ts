@@ -1643,7 +1643,7 @@ export const mjBizAppsAccountingJournalEntryBatchSchema = z.object({
     CancelReason: z.string().nullable().describe(`
         * * Field Name: CancelReason
         * * Display Name: Cancel Reason
-        * * SQL Data Type: nvarchar(500)
+        * * SQL Data Type: nvarchar(1000)
         * * Description: Why this batch was cancelled. Required when an approved batch is cancelled (CK_JournalEntryBatch_CancelAudit); optional when a Pending batch is. Frozen once Cancelled.`),
     CancelledAt: z.date().nullable().describe(`
         * * Field Name: CancelledAt
@@ -7289,7 +7289,7 @@ export class mjBizAppsAccountingJournalEntryBatchEntity extends BaseEntity<mjBiz
     /**
     * * Field Name: CancelReason
     * * Display Name: Cancel Reason
-    * * SQL Data Type: nvarchar(500)
+    * * SQL Data Type: nvarchar(1000)
     * * Description: Why this batch was cancelled. Required when an approved batch is cancelled (CK_JournalEntryBatch_CancelAudit); optional when a Pending batch is. Frozen once Cancelled.
     */
     get CancelReason(): string | null {
