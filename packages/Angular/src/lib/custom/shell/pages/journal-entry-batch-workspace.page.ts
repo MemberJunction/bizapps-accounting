@@ -15,6 +15,14 @@ import {
   type EntryTypeScope,
   type JournalEntryBatchTargetSystem,
 } from './journal-entry-batch-workspace.client';
+import {
+  ALL_ENTRIES,
+  IncludedCandidateIds,
+  IsEntryIncluded,
+  SelectionRequestIds,
+  ToggleEntrySelection,
+  type EntrySelection,
+} from '../../shared/entry-selection';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 
@@ -24,9 +32,9 @@ interface BatchDraft {
   /** Optional free-text label (JournalEntryBatch.Memo) — "what was this batch for". NOT identity
    *  (JournalEntryBatchNumber is); purely for findability. Editable pre-build, and it drives the tab caption. */
   Memo: string;
-  /** Ids the operator has UN-ticked. Kept as the exclusion set (not the inclusion set) so newly
-   *  appearing candidates default to INCLUDED, which is what an oldest-forward sweep means. */
-  ExcludedIDs: string[];
+  /** The ticked entries: every candidate (null), or an explicit include set sent to the preview as
+   *  it is (golive #284). Once the operator unticks one, entries a later Apply brings in start unticked. */
+  Selection: EntrySelection;
   /** Set once built — the tab becomes a read-only record of the batch. */
   BuiltJournalEntryBatchNumber?: string;
   /** The loaded preview — stored PER-TAB so switching tabs does NOT re-query the server (Marcelo
@@ -164,7 +172,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
       Status: 'complete', // read-only record — a built batch is immutable from here
       State: {
         Criteria: this.defaultCriteria(),
-        ExcludedIDs: [],
+        Selection: ALL_ENTRIES,
         Memo: row.Memo ?? '',
         Preview: null,
         PreviewStale: false,
@@ -196,7 +204,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
       Label: 'New JE batch (draft)',
       Icon: 'fa-solid fa-pen-ruler',
       Status: 'draft',
-      State: { Criteria: this.defaultCriteria(), ExcludedIDs: [], Memo: '', Preview: null, PreviewStale: false },
+      State: { Criteria: this.defaultCriteria(), Selection: ALL_ENTRIES, Memo: '', Preview: null, PreviewStale: false },
     });
     // NO auto-query (Marcelo 2026-07-21): a new tab does NOT hit the server. The operator clicks
     // "Load entries" in the table (or Apply in the filters) to run the first query.
@@ -345,7 +353,9 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
     this.IsPreviewing = true;
     this.cdr.markForCheck();
     try {
-      const preview = await this.client.Preview(this.opProvider, d.Criteria, this.includedIds(d), this.entryTypeValues(d.Criteria.EntryTypeScope));
+      // The selection goes as it is — never derived from the previous preview's candidates, which
+      // after a criteria change are the old pool (golive #284).
+      const preview = await this.client.Preview(this.opProvider, d.Criteria, SelectionRequestIds(d.Selection), this.entryTypeValues(d.Criteria.EntryTypeScope));
       if (!isLatestForTab()) return; // superseded by a newer request for this tab
       // Store the preview ON THE TAB (per-tab), and clear the stale flag — the shown data now matches
       // the criteria again.
@@ -387,22 +397,22 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
     return all.filter((c) => c !== 'Manual');
   }
 
-  private includedIds(d: BatchDraft): string[] | null {
-    if (!this.Preview) return null;
-    const excluded = new Set(d.ExcludedIDs);
-    return this.Preview.Candidates.filter((c) => !excluded.has(c.ID)).map((c) => c.ID);
+  /** The ticked candidates of the shown preview: what the build sends. */
+  private includedIds(d: BatchDraft): string[] {
+    return IncludedCandidateIds(d.Selection, (d.Preview?.Candidates ?? []).map((c) => c.ID));
   }
 
   // ─── include / exclude ─────────────────────────────────────────────────────
 
   public IsExcluded(id: string): boolean {
-    return this.Draft?.ExcludedIDs.includes(id) ?? false;
+    const d = this.Draft;
+    return !!d && !IsEntryIncluded(d.Selection, id);
   }
 
   public ToggleEntry(id: string): void {
     const d = this.Draft;
     if (!d || this.IsBuilt) return;
-    d.ExcludedIDs = d.ExcludedIDs.includes(id) ? d.ExcludedIDs.filter((x) => x !== id) : [...d.ExcludedIDs, id];
+    d.Selection = ToggleEntrySelection(d.Selection, id, (d.Preview?.Candidates ?? []).map((c) => c.ID));
     if (this.tabs.ActiveId) this.tabs.UpdateState(this.tabs.ActiveId, d);
     // Re-preview: the netted summary, totals and the MOD-8 warning are all a function of the
     // selection, and they are computed SERVER-side by the same code the build uses.
@@ -410,13 +420,12 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
   }
 
   public get IncludedCount(): number {
-    if (!this.Preview) return 0;
-    return this.Preview.Candidates.length - this.ExcludedCount;
+    const d = this.Draft;
+    return d?.Preview ? this.includedIds(d).length : 0;
   }
   public get ExcludedCount(): number {
-    if (!this.Preview || !this.Draft) return 0;
-    const ids = new Set(this.Preview.Candidates.map((c) => c.ID));
-    return this.Draft.ExcludedIDs.filter((x) => ids.has(x)).length;
+    if (!this.Preview) return 0;
+    return this.Preview.Candidates.length - this.IncludedCount;
   }
   public get IsBalanced(): boolean {
     if (!this.Preview) return false;
@@ -521,7 +530,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
       // still Pending and loud-rejects a stale selection — the preview is a snapshot.
       // An empty / zero-net selection now throws server-side (EmptyBatchError) and lands in the catch
       // below with the engine's message — no silent "nothing to batch" success to check for.
-      const res = await this.client.Build(this.opProvider, d.Criteria, this.includedIds(d) ?? []);
+      const res = await this.client.Build(this.opProvider, d.Criteria, this.includedIds(d));
 
       // A selection spanning companies builds one batch per company (D7) — show them all.
       d.BuiltJournalEntryBatchNumber = res.JournalEntryBatchIDs.join(', ');

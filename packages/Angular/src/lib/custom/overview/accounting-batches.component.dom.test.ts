@@ -3,6 +3,7 @@ import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { RunView, RunViewParams } from '@memberjunction/core';
 import { AccountingBatchesPageComponent, BatchItem } from './accounting-batches.component';
 import {
+  BuildJournalEntryBatchOptionsInput,
   CancelJournalEntryBatchResult,
   JournalEntryBatchDispatchClient,
   PreviewEntryWire,
@@ -377,6 +378,180 @@ describe('AccountingBatchesPageComponent — overlapping Build Batch previews (#
     await toggled;
     expect(page.PreviewTotalDebits).toBe(300);
     expect(page.IsPreviewLoading).toBe(false);
+  });
+});
+
+/**
+ * The Build Batch modal's selection (golive #284): every candidate, or an explicit include set sent
+ * to the preview as it is. The fake server below answers the way previewBatch does: it filters the
+ * pool by the criteria, totals only the included ids that are in that pool, and counts the
+ * out-of-order skips with the engine's own function. A request built from the previous response's
+ * candidates, the defect, makes the totals and the ticks on screen disagree after a filter change.
+ */
+describe('AccountingBatchesPageComponent — Build Batch selection after Clear All and filter changes (golive #284, DOM)', () => {
+  useBusinessClock(AUGUST_CLOSE_IN_CHICAGO);
+
+  const entry = (n: number, type: string, day: string, amount: number): PreviewEntryWire => ({
+    ID: `je-${n}`, EntryNumber: `JE-${n}`, EffectiveDate: `${day}T00:00:00.000Z`, EntryTypeCode: type, CompanyID: 'co-1', Description: null, Amount: amount,
+  });
+  // Oldest first, the order the engine returns candidates in.
+  const POOL: PreviewEntryWire[] = [
+    entry(1, 'Invoice', '2026-08-01', 100),
+    entry(2, 'RevenueRecognition', '2026-08-02', 30),
+    entry(3, 'Invoice', '2026-08-03', 200),
+    entry(4, 'RevenueRecognition', '2026-08-04', 40),
+    entry(5, 'Invoice', '2026-08-05', 300),
+  ];
+  let previewCalls: PreviewJournalEntryBatchOptionsInput[];
+  let buildCalls: BuildJournalEntryBatchOptionsInput[];
+
+  /** The engine's outOfOrderSkipCount (JournalEntryBatchEngine.ts), copied: this package does not depend on the server one. */
+  function outOfOrderSkipCount(rows: PreviewEntryWire[], included: ReadonlySet<string>): number {
+    const newest = rows.reduce((last, r, i) => (included.has(r.ID) ? i : last), -1);
+    return rows.slice(0, Math.max(newest, 0)).filter(r => !included.has(r.ID)).length;
+  }
+
+  /** Mirrors previewBatch: criteria filter, totals over included ∩ pool, outOfOrderSkipCount. */
+  function fakePreview(options: PreviewJournalEntryBatchOptionsInput): PreviewJournalEntryBatchResult {
+    const excludedTypes = new Set(options.ExcludeEntryTypeCodes ?? []);
+    const rows = POOL.filter(e => !excludedTypes.has(e.EntryTypeCode));
+    const included = new Set(options.IncludedJournalEntryIDs ?? rows.map(r => r.ID));
+    const total = rows.filter(r => included.has(r.ID)).reduce((sum, r) => sum + r.Amount, 0);
+    return {
+      Success: true,
+      Candidates: rows,
+      TotalDebits: total,
+      TotalCredits: total,
+      GrossDebits: total,
+      GrossCredits: total,
+      OutOfOrderSkipCount: outOfOrderSkipCount(rows, included),
+      BeforePostingStartCount: 0,
+    };
+  }
+
+  beforeEach(() => {
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async () => viewResult([], 0));
+    previewCalls = [];
+    buildCalls = [];
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'PreviewJournalEntryBatch').mockImplementation(async (options) => {
+      previewCalls.push(options ?? {});
+      return fakePreview(options ?? {});
+    });
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'BuildJournalEntryBatch').mockImplementation(async (options) => {
+      buildCalls.push(options as BuildJournalEntryBatchOptionsInput);
+      return { Success: true, SummaryLineCount: 1, TotalDebits: 0, TotalCredits: 0, JECount: 1, CompanyCount: 1, NothingToBatch: false };
+    });
+  });
+
+  async function openModal(): Promise<ComponentFixture<AccountingBatchesPageComponent>> {
+    const fixture = TestBed.createComponent(AccountingBatchesPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await fixture.componentInstance.OpenBuildBatchModal();
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  /** Clicks a checkbox the way an operator does and waits for the preview it fires to land. */
+  async function click(fixture: ComponentFixture<AccountingBatchesPageComponent>, selector: string): Promise<void> {
+    const box = fixture.nativeElement.querySelector(selector) as HTMLInputElement | null;
+    expect(box, `${selector} is on screen`).not.toBeNull();
+    box!.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsPreviewLoading).toBe(false));
+    fixture.detectChanges();
+  }
+
+  const revRecFilter = 'label.mja-modal-checkbox-label input[type="checkbox"]';
+  const clearAll = 'input[aria-label="Include every candidate"]';
+  const row = (n: number) => `input[aria-label="Include JE-${n}"]`;
+
+  /** What the operator reads: the header count, Entry Totals, the warning, the ticks and the Build button. */
+  function screen(fixture: ComponentFixture<AccountingBatchesPageComponent>) {
+    const el = fixture.nativeElement as HTMLElement;
+    const fact = (label: string) =>
+      Array.from(el.querySelectorAll('.mja-fact-item'))
+        .find(f => f.querySelector('.mja-fact-lbl')?.textContent?.trim() === label)
+        ?.querySelectorAll('.mja-fact-val');
+    const build = Array.from(el.querySelectorAll('button')).find(b => b.textContent?.includes('Build Batch (')) as HTMLButtonElement | undefined;
+    return {
+      Including: fact('Including')?.[0]?.textContent?.trim(),
+      EntryTotals: Array.from(fact('Entry Totals') ?? [], (v: Element) => v.textContent?.trim()).join(' '),
+      Warning: el.querySelector('.mja-banner[role="status"]')?.textContent?.replace(/\s+/g, ' ').trim() ?? null,
+      Ticked: Array.from(el.querySelectorAll<HTMLInputElement>('.mja-modal-table tbody input[type="checkbox"]'))
+        .filter(b => b.checked)
+        .map(b => b.getAttribute('aria-label')?.replace('Include ', '')),
+      Build: build?.textContent?.trim(),
+      BuildEnabled: build ? !build.disabled : false,
+    };
+  }
+
+  it('after Clear All, unticking Exclude Rev Rec brings the recognition entries in unticked, and the totals stay at zero', async () => {
+    const fixture = await openModal();
+    expect(screen(fixture)).toMatchObject({ Including: '3 of 3 JEs', EntryTotals: 'Dr $600.00 Cr $600.00', Build: 'Build Batch (3)', BuildEnabled: true });
+
+    await click(fixture, clearAll);
+    expect(previewCalls.at(-1)?.IncludedJournalEntryIDs).toEqual([]);
+    expect(screen(fixture)).toMatchObject({ Including: '0 of 3 JEs', EntryTotals: 'Dr $0.00 Cr $0.00', Ticked: [], Build: 'Build Batch (0)', BuildEnabled: false });
+
+    await click(fixture, revRecFilter);
+    expect(previewCalls.at(-1)).toMatchObject({ ExcludeEntryTypeCodes: null, IncludedJournalEntryIDs: [] });
+    expect(screen(fixture)).toEqual({
+      Including: '0 of 5 JEs',
+      EntryTotals: 'Dr $0.00 Cr $0.00',
+      Warning: null,
+      Ticked: [],
+      Build: 'Build Batch (0)',
+      BuildEnabled: false,
+    });
+  });
+
+  it('ticking one entry then totals that entry alone, counts the older unticked ones in the warning, and builds only it', async () => {
+    const fixture = await openModal();
+    await click(fixture, clearAll);
+    await click(fixture, revRecFilter);
+
+    await click(fixture, row(3));
+    expect(previewCalls.at(-1)?.IncludedJournalEntryIDs).toEqual(['je-3']);
+    expect(screen(fixture)).toEqual({
+      Including: '1 of 5 JEs',
+      EntryTotals: 'Dr $200.00 Cr $200.00',
+      Warning: expect.stringContaining('2 excluded entries are older than an entry you included'),
+      Ticked: ['JE-3'],
+      Build: 'Build Batch (1)',
+      BuildEnabled: true,
+    });
+
+    await fixture.componentInstance.ExecuteBuildBatch();
+    expect(buildCalls.map(c => c.JournalEntryIDs)).toEqual([['je-3']]);
+  });
+
+  it('a filter change after unticking one keeps the request and the ticks the same selection', async () => {
+    const fixture = await openModal();
+    await click(fixture, row(1));
+    expect(previewCalls.at(-1)?.IncludedJournalEntryIDs).toEqual(['je-3', 'je-5']);
+
+    await click(fixture, revRecFilter);
+    expect(previewCalls.at(-1)?.IncludedJournalEntryIDs).toEqual(['je-3', 'je-5']);
+    expect(screen(fixture)).toEqual({
+      Including: '2 of 5 JEs',
+      EntryTotals: 'Dr $500.00 Cr $500.00',
+      Warning: expect.stringContaining('3 excluded entries are older than an entry you included'),
+      Ticked: ['JE-3', 'JE-5'],
+      Build: 'Build Batch (2)',
+      BuildEnabled: true,
+    });
+  });
+
+  it('ticking every candidate again sends no selection, so later entries come in ticked', async () => {
+    const fixture = await openModal();
+    await click(fixture, clearAll);
+    await click(fixture, clearAll);
+    expect(previewCalls.at(-1)?.IncludedJournalEntryIDs).toBeNull();
+
+    await click(fixture, revRecFilter);
+    expect(screen(fixture)).toMatchObject({ Including: '5 of 5 JEs', EntryTotals: 'Dr $670.00 Cr $670.00', Build: 'Build Batch (5)' });
   });
 });
 

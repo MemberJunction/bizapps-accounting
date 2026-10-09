@@ -109,7 +109,7 @@ git checkout -b my-feature-branch
 BAC uses a two-tier branching model (matching BCSaaS and MJ):
 
 - **`next`** — integration branch. All feature work merges here.
-- **`main`** — release branch. Only updated by a single coordinating PR from `next`. Pushes to `main` trigger the publish workflow.
+- **`main`** — release branch. Only updated by the "Version Packages" PR (`changeset-release/main` → `main`). Pushes to `main` trigger the publish workflow.
 
 **Feature work flow:**
 1. Cut feature branch from `next` (not from `main`): `git checkout next && git pull && git checkout -b <feature-name>`
@@ -117,38 +117,29 @@ BAC uses a two-tier branching model (matching BCSaaS and MJ):
 3. `changes.yml` + `build.yml` run validation on the PR
 4. Merge to `next`
 
-**Release flow:** versioning and publishing are separate, and neither writes to a
-protected branch. The version bump arrives as a PR on `next`; publishing reads it.
+**Release flow:** the "Version Packages" PR IS the release. Nobody opens a `next` → `main` PR
+and nobody dispatches a publish.
 
-1. `version.yml` fires on every push to `next` and maintains a **"Version Packages" PR**
-   into `next` — every package bumped, CHANGELOGs generated, `mj-app.json`'s `version` and
-   `mjVersionRange` synced, and **`pnpm-lock.yaml` refreshed**. Review and merge it when you
-   are ready to cut a release. Its checks do not start on their own under the default
-   `GITHUB_TOKEN` — click **Approve and run** on the PR.
-2. Open a single PR from `next` → `main` ("Release vX.Y.Z"). `release-readiness.yml` asserts
-   no changesets are still pending, and that a release carrying migrations is at least a
-   minor.
-3. Merging it triggers `publish.yml`, which validates, builds, runs `changeset publish`
-   (publishing every package whose version is not already on the registry), and tags
-   `vX.Y.Z`. It computes no version and writes to no branch.
+1. `version.yml` fires on every push to `next` and maintains ONE **"Version Packages" PR**
+   (head `changeset-release/main`, base `main`), opened by a GitHub App so its checks run on
+   their own: every package bumped, CHANGELOGs generated, `mj-app.json`'s `version` and
+   `mjVersionRange` synced (`version:prepare`), and **`pnpm-lock.yaml` refreshed**. PRs into
+   `main` run `release-readiness.yml` (the `rr:` checks) and `build.yml`.
+2. Merging it pushes to `main`, which triggers `publish.yml`: it validates, builds, runs
+   `changeset publish` over npm OIDC, tags `vX.Y.Z` only if something actually shipped, and then
+   the App opens and merges a `release-back-merge/vX.Y.Z` → `next` PR to carry the release home.
 
 **Rules:**
-- **Never commit directly to `main`.** Always go through `next` first (except for the release coordinating PR itself).
+- **Never commit directly to `main`.** Always go through `next` first (except for the Version Packages PR itself).
 - **Never hand-edit the version bump.** It is `changeset version`'s output, delivered by the
   Version Packages PR. Bumping a package.json by hand desynchronises it from the lockfile —
   `changeset version` rewrites internal dependency ranges and does NOT touch the lockfile,
   which is why the version script refreshes it in the same PR.
-- **Hotfixes that genuinely must bypass `next`** go through a PR to `main`. **Open an
-  ordinary `main` → `next` PR immediately afterwards** to carry the fix home: there is no
-  automated merge-back any more. It used to exist because the old flow created the version
-  commit ON `main` and had to push it back to `next`; the bump now originates on `next`, so
-  nothing travels in that direction except a hotfix. Do not wait for the next release PR to
-  reconcile it — until that PR merges, the fix exists only on `main`.
-- **`main` will read as a commit or two "ahead" of `next` indefinitely.** Those are the
-  release PRs' own merge commits, and their trees are identical to `next` — GitHub creates a
-  merge commit even when the base is strictly behind. `git diff next main` (empty) is the
-  check that means something; `git log next..main` is noise. Nothing in the release path
-  depends on the ancestry.
+- **Hotfixes that genuinely must bypass `next`** go through a PR to `main`. If the hotfix ships a
+  release, `publish.yml`'s back-merge PR carries it to `next`; if nothing published, open an
+  ordinary `main` → `next` PR yourself straight away.
+- **Never publish by dispatching `publish.yml` on `next`** — the job is guarded to
+  `refs/heads/main` and will not run.
 
 ---
 
@@ -166,6 +157,26 @@ protected branch. The version bump arrives as a PR on `next`; publishing reads i
   - Define dependencies in the individual package's package.json
   - Run `pnpm install` at the repository root (NOT within the package directory)
   - Never run an install inside individual package directories
+
+## MemberJunction versions — the LTS line AIDP Next runs
+
+AIDP Next runs MemberJunction's 6.1 LTS line, pinned exactly in `aidp-next/package.json`. This repo builds, tests and runs CodeGen against that same version, so what passes here is what runs there (bc-aidp-next-golive#298).
+
+- **Declared ranges.** Every `@memberjunction/*` range in `dependencies`, `devDependencies` and `peerDependencies` is `~6.1.N`, where 6.1.N is the version AIDP Next runs: the 6.1 line, capped below 6.2. Never an edge or prerelease range (`6.1.0-edge.x` sorts *before* 6.1.0 and has none of the LTS fixes), and never `^`, which admits 6.2. Packages MJ versions separately (`@memberjunction/connector-*`, `@memberjunction/skyway-*`) keep their own ranges.
+- **`pnpm.overrides`.** `@memberjunction/core` and `@memberjunction/global` are pinned **exactly** to AIDP Next's version (for example `"6.1.5"`), not to a range. A range override can still leave two copies of `core`, and two copies split the ClassFactory: registrations land in one factory while the resolver reads the other, and nothing errors. Overrides are workspace-local and never published. Do not exact-pin sibling `@mj-biz-apps/*` packages here; how the apps declare each other is bc-aidp-next-golive#265.
+- **One copy of each.** After any install, `pnpm why @memberjunction/core` must show a single version. A sibling app package that exact-pins an old MJ build brings a second copy in (for example `@mj-biz-apps/common-ng@5.37.0` pinned edge.3 packages); fix it by raising that package's floor, not with more overrides.
+- **Bumping to a new 6.1.N**, when AIDP Next moves: update every `~6.1.N` floor and both overrides; `pnpm install`; confirm one copy; `mjVersionRange` in `mj-app.json` follows in the Version Packages PR (`ci/sync-mj-app-version.mjs`); rebuild the database from migrations on MJ core `v6.1.N` and regenerate (below); run the full test suite; add a `patch` changeset; commit the lockfile. If CI then fails on the lockfile although a clean local install works, GitHub is testing the merge with `next`: merge `next` in, run `pnpm install --no-frozen-lockfile`, and commit the lockfile.
+- **Never patch MemberJunction.** No `pnpm patch`, `patchedDependencies`, patch-package or `sed` against `@memberjunction/*` `dist/`. That is AIDP Next's hard rule (`.github/workflows/MJ_PATCH_REGISTER.md` in aidp-next). Fix MJ on its `next` branch and bring the fix to the line with the `backport lts/6.1` label, or with a hand-port PR against `lts/6.1` when the fix can't be isolated; then wait for the patch release.
+
+### CodeGen output must be reproducible from this repo
+
+Generated files are committed, and AIDP Next ships them as they are: it excludes every `__mj_BizApps*` schema from its own CodeGen and installs the published packages. So the committed output has to be what this repo's toolchain produces from its migrations.
+
+- Run CodeGen only with this repo's pinned MJ version, against a database built from migrations (MJ core `v6.1.N`, then the apps this one depends on, then this repo), after `mj sync push` of `metadata/`.
+- Set an AI key in your gitignored `.env`: `AI_VENDOR_API_KEY__GeminiLLM` (every CodeGen prompt ranks Gemini first), or `AI_VENDOR_API_KEY__OpenRouterLLM`. Without one, CodeGen silently drops AI-written output: check-constraint `Validate*()` methods, display names, descriptions and form layouts.
+- Never hand-edit generated files, and never paste in generated output from another toolchain or another database. That is how OrderLine lost `OrderHeader`'s `@Field` (bc-aidp-next-golive#295).
+- Review what AI wrote. Validators, names and descriptions are not deterministic between runs.
+- If CodeGen has to create metadata in the database that the generated code depends on (fields, value lists, relationships, validator code), ship it in a migration in the same PR. Otherwise every host installed from migrations drifts from the code.
 
 ## Development Workflow
 - **CRITICAL**: After making code changes, always compile the affected package by running `pnpm run build` in that package's directory to check for TypeScript errors
@@ -426,7 +437,7 @@ Source maps are scoped to local packages only (`apps/MJAPI/**`, `packages/Entiti
 - Repository: https://github.com/MemberJunction/bizapps-accounting
 - Default branch: `main` (release branch — publishes on push)
 - Integration branch: `next` (where feature PRs land)
-- Feature PRs target `next`. Release PRs target `main`.
+- Feature PRs target `next`. The only PR into `main` is the bot-maintained Version Packages PR (plus a rare hotfix).
 - See "Branching Model" section above for the full flow.
 
 ## Purpose
@@ -509,6 +520,8 @@ carry whatever `metadata/` has gained since. Two things about that step, because
 - **Nothing in CI detects a pending metadata change with no migration behind it.** The guard is the
   release process, not a gate — so a `metadata/` edit that matters to a host is not "done" when it
   merges, only when a release carries it.
+
+The model, and the Open App steps that differ from core (`--schema`, the `${mjSchema}` substitution): [Release Metadata Migrations Guide](https://github.com/MemberJunction/MJ/blob/next/guides/RELEASE_METADATA_MIGRATIONS_GUIDE.md).
 
 The review test: *if a colleague pulls this branch onto a database that already has last week's
 schema and runs `pnpm run mj:migrate`, do they get exactly the schema this branch describes?*

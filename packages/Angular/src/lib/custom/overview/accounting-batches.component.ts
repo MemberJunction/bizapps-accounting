@@ -10,6 +10,15 @@ import { BusinessTimeZoneEngine, IsCalendarDay } from '@mj-biz-apps/common-entit
 import { calendarDaySpan, formatJournalDate } from '../form-panels/journal-entry-panel.helpers';
 import { PostingDateMonthWarning, PostingMonthLabel } from '../shared/posting-date-warning';
 import {
+    ALL_ENTRIES,
+    NO_ENTRIES,
+    IncludedCandidateIds,
+    IsEntryIncluded,
+    SelectionRequestIds,
+    ToggleEntrySelection,
+    type EntrySelection,
+} from '../shared/entry-selection';
+import {
     DispatchConfirmationKind,
     JournalEntryBatchDispatchClient,
     PreviewEntryWire,
@@ -1214,12 +1223,12 @@ export class AccountingBatchesPageComponent implements OnInit {
     private previewRequestSeq = 0;
 
     /**
-     * The operator's unticked entries (golive #193). Held as an EXCLUSION set, not an inclusion
-     * one, because the preview always returns the full candidate pool: an unticked entry stays on
-     * screen and can be re-ticked, and a criteria change that widens the pool leaves new entries
-     * ticked by default rather than silently dropping them.
+     * The operator's ticked entries (golive #193, #284): every candidate, or an explicit include
+     * set. Sent to the preview as it is, so the server's totals and the ticks on screen always
+     * describe the same selection. After Clear All the set is empty, so entries that a later filter
+     * change brings into the pool start unticked.
      */
-    public ExcludedEntryIDs: string[] = [];
+    public Selection: EntrySelection = ALL_ENTRIES;
 
     /** Per-row in-flight id so the acting row's button disables, not every row's. */
     public ArchivingBatchID: string | null = null;
@@ -1496,28 +1505,26 @@ export class AccountingBatchesPageComponent implements OnInit {
     // candidate, so an operator with entries that must NOT post yet had no way to build at all.
 
     public IsExcluded(id: string): boolean {
-        return this.ExcludedEntryIDs.includes(id);
+        return !IsEntryIncluded(this.Selection, id);
     }
 
     /** Ticking re-previews: the netted totals and the out-of-order warning are both functions of
      *  the selection, and both are computed server-side by the code the build itself runs. */
     public async ToggleEntry(id: string): Promise<void> {
         if (this.IsBuildingBatch) return;
-        this.ExcludedEntryIDs = this.IsExcluded(id)
-            ? this.ExcludedEntryIDs.filter(x => x !== id)
-            : [...this.ExcludedEntryIDs, id];
+        this.Selection = ToggleEntrySelection(this.Selection, id, this.PreviewEntries.map(e => e.ID));
         await this.LoadBuildPreview();
     }
 
     public async SetAllEntriesIncluded(included: boolean): Promise<void> {
         if (this.IsBuildingBatch) return;
-        this.ExcludedEntryIDs = included ? [] : this.PreviewEntries.map(e => e.ID);
+        this.Selection = included ? ALL_ENTRIES : NO_ENTRIES;
         await this.LoadBuildPreview();
     }
 
+    /** The candidates on screen that are ticked: the set the preview totals and the build sends. */
     public get IncludedEntryIDs(): string[] {
-        const excluded = new Set(this.ExcludedEntryIDs);
-        return this.PreviewEntries.filter(e => !excluded.has(e.ID)).map(e => e.ID);
+        return IncludedCandidateIds(this.Selection, this.PreviewEntries.map(e => e.ID));
     }
 
     public get IncludedCount(): number {
@@ -1596,7 +1603,7 @@ export class AccountingBatchesPageComponent implements OnInit {
     public async OpenBuildBatchModal(): Promise<void> {
         this.BuildModalVisible = true;
         // A fresh session starts with everything ticked — the sweep remains the one-click default.
-        this.ExcludedEntryIDs = [];
+        this.Selection = ALL_ENTRIES;
         this.ModalErrorMessage = null;
         this.confirmedPostingDate = null;
         if (!this.BuildCutoffDate) {
@@ -1627,14 +1634,15 @@ export class AccountingBatchesPageComponent implements OnInit {
         this.cdr.markForCheck();
 
         try {
-            // Send the selection, so the netted totals, the date range and the out-of-order count
-            // describe what the TICKED entries would produce — not the whole pool. The server still
-            // returns every candidate, so an unticked entry stays visible and re-tickable.
+            // Send the selection as it is, so the netted totals and the out-of-order count describe
+            // what the TICKED entries would produce. It is never derived from the previous response's
+            // candidates: after a filter change those are the old pool (golive #284). The server
+            // still returns every candidate, so an unticked entry stays visible and re-tickable.
             const previewRes = await this.dispatchClient.PreviewJournalEntryBatch({
                 Cutoff: this.BuildCutoffDate || null,
                 PostingDate: this.BuildPostingDate || null,
                 ExcludeEntryTypeCodes: this.ExcludeRevRec ? ['RevenueRecognition'] : null,
-                IncludedJournalEntryIDs: this.ExcludedEntryIDs.length > 0 ? this.IncludedEntryIDs : null,
+                IncludedJournalEntryIDs: SelectionRequestIds(this.Selection),
             });
             if (seq !== this.previewRequestSeq) return; // superseded by a newer request
 
@@ -1665,8 +1673,7 @@ export class AccountingBatchesPageComponent implements OnInit {
 
     /** The effective-date span the ticked entries cover — the modal's fourth fact. */
     private setCoveredDateRange(entries: PreviewEntryWire[]): void {
-        const excluded = new Set(this.ExcludedEntryIDs);
-        const span = calendarDaySpan(entries.filter(e => !excluded.has(e.ID)).map(e => e.EffectiveDate));
+        const span = calendarDaySpan(entries.filter(e => IsEntryIncluded(this.Selection, e.ID)).map(e => e.EffectiveDate));
         this.PreviewCoveredStartDate = span?.First ?? null;
         this.PreviewCoveredEndDate = span?.Last ?? null;
     }
