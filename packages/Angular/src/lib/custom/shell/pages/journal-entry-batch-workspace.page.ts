@@ -16,6 +16,7 @@ import {
 } from './journal-entry-batch-workspace.client';
 import {
   ALL_ENTRIES,
+  NO_ENTRIES,
   IncludedCandidateIds,
   IsEntryIncluded,
   SelectionRequestIds,
@@ -413,6 +414,24 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
     // Re-preview: the netted summary, totals and the MOD-8 warning are all a function of the
     // selection, and they are computed SERVER-side by the same code the build uses.
     void this.refreshPreview();
+  }
+
+  /**
+   * The header checkbox (#327), as in the Build Batch dialog: ticking it selects every candidate,
+   * including entries a later criteria change brings in; unticking it clears the selection, so
+   * those later entries come in unticked.
+   */
+  public SetAllEntriesIncluded(included: boolean): void {
+    const d = this.Draft;
+    if (!d || this.IsBuilt) return;
+    d.Selection = included ? ALL_ENTRIES : NO_ENTRIES;
+    if (this.tabs.ActiveId) this.tabs.UpdateState(this.tabs.ActiveId, d);
+    void this.refreshPreview();
+  }
+
+  /** Whether every candidate on screen is ticked: the header checkbox's state. */
+  public get AllEntriesIncluded(): boolean {
+    return (this.Preview?.Candidates.length ?? 0) > 0 && this.ExcludedCount === 0;
   }
 
   public get IncludedCount(): number {
