@@ -1,0 +1,20 @@
+[
+  {
+    "fields": {
+      "Name": "Journal Entries Held Back By Posting Start Date",
+      "CategoryID": "@lookup:MJ: Query Categories.Name=Accounting",
+      "UserQuestion": "Which journal entries are held back from batching because they are dated before their company's posting start date?",
+      "Description": "Pending journal entries dated before their company's PostingStartDate, one row per entry line, with company, entry number, effective date, entry type, GL account and debit/credit amount. No batch build, preview or sweep picks these up, so finance reconciles them against what was booked directly in the ERP. Export from the query grid.",
+      "SQL": "@file:SQL/journal-entries-held-back-by-posting-start-date.sql",
+      "TechnicalDescription": "Reads __mj_BizAppsAccounting.vwJournalEntries joined to AccountingCompanyProfile on CompanyID. Keeps Status = Pending, entry types with IsJournalEntryBatchSummary = 0, and EffectiveDate < PostingStartDate where PostingStartDate is set: the same rows the batch engine's posting-start clause removes from its candidate filter. LEFT JOINs JournalEntryLine and GLAccount, so an entry with no lines appears once with empty line columns. Ordered by company, effective date, entry number, line number.",
+      "Status": "Approved",
+      "QualityRank": 8,
+      "ExecutionCostRank": 2,
+      "UsesTemplate": false
+    },
+    "relatedEntities": {},
+    "primaryKey": {
+      "ID": "5DF477D8-D037-4EF7-8A6A-AB3C0FB93B05"
+    }
+  }
+]
