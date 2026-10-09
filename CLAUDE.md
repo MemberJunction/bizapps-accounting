@@ -109,7 +109,7 @@ git checkout -b my-feature-branch
 BAC uses a two-tier branching model (matching BCSaaS and MJ):
 
 - **`next`** — integration branch. All feature work merges here.
-- **`main`** — release branch. Only updated by a single coordinating PR from `next`. Pushes to `main` trigger the publish workflow.
+- **`main`** — release branch. Only updated by the "Version Packages" PR (`changeset-release/main` → `main`). Pushes to `main` trigger the publish workflow.
 
 **Feature work flow:**
 1. Cut feature branch from `next` (not from `main`): `git checkout next && git pull && git checkout -b <feature-name>`
@@ -117,38 +117,29 @@ BAC uses a two-tier branching model (matching BCSaaS and MJ):
 3. `changes.yml` + `build.yml` run validation on the PR
 4. Merge to `next`
 
-**Release flow:** versioning and publishing are separate, and neither writes to a
-protected branch. The version bump arrives as a PR on `next`; publishing reads it.
+**Release flow:** the "Version Packages" PR IS the release. Nobody opens a `next` → `main` PR
+and nobody dispatches a publish.
 
-1. `version.yml` fires on every push to `next` and maintains a **"Version Packages" PR**
-   into `next` — every package bumped, CHANGELOGs generated, `mj-app.json`'s `version` and
-   `mjVersionRange` synced, and **`pnpm-lock.yaml` refreshed**. Review and merge it when you
-   are ready to cut a release. Its checks do not start on their own under the default
-   `GITHUB_TOKEN` — click **Approve and run** on the PR.
-2. Open a single PR from `next` → `main` ("Release vX.Y.Z"). `release-readiness.yml` asserts
-   no changesets are still pending, and that a release carrying migrations is at least a
-   minor.
-3. Merging it triggers `publish.yml`, which validates, builds, runs `changeset publish`
-   (publishing every package whose version is not already on the registry), and tags
-   `vX.Y.Z`. It computes no version and writes to no branch.
+1. `version.yml` fires on every push to `next` and maintains ONE **"Version Packages" PR**
+   (head `changeset-release/main`, base `main`), opened by a GitHub App so its checks run on
+   their own: every package bumped, CHANGELOGs generated, `mj-app.json`'s `version` and
+   `mjVersionRange` synced (`version:prepare`), and **`pnpm-lock.yaml` refreshed**. PRs into
+   `main` run `release-readiness.yml` (the `rr:` checks) and `build.yml`.
+2. Merging it pushes to `main`, which triggers `publish.yml`: it validates, builds, runs
+   `changeset publish` over npm OIDC, tags `vX.Y.Z` only if something actually shipped, and then
+   the App opens and merges a `release-back-merge/vX.Y.Z` → `next` PR to carry the release home.
 
 **Rules:**
-- **Never commit directly to `main`.** Always go through `next` first (except for the release coordinating PR itself).
+- **Never commit directly to `main`.** Always go through `next` first (except for the Version Packages PR itself).
 - **Never hand-edit the version bump.** It is `changeset version`'s output, delivered by the
   Version Packages PR. Bumping a package.json by hand desynchronises it from the lockfile —
   `changeset version` rewrites internal dependency ranges and does NOT touch the lockfile,
   which is why the version script refreshes it in the same PR.
-- **Hotfixes that genuinely must bypass `next`** go through a PR to `main`. **Open an
-  ordinary `main` → `next` PR immediately afterwards** to carry the fix home: there is no
-  automated merge-back any more. It used to exist because the old flow created the version
-  commit ON `main` and had to push it back to `next`; the bump now originates on `next`, so
-  nothing travels in that direction except a hotfix. Do not wait for the next release PR to
-  reconcile it — until that PR merges, the fix exists only on `main`.
-- **`main` will read as a commit or two "ahead" of `next` indefinitely.** Those are the
-  release PRs' own merge commits, and their trees are identical to `next` — GitHub creates a
-  merge commit even when the base is strictly behind. `git diff next main` (empty) is the
-  check that means something; `git log next..main` is noise. Nothing in the release path
-  depends on the ancestry.
+- **Hotfixes that genuinely must bypass `next`** go through a PR to `main`. If the hotfix ships a
+  release, `publish.yml`'s back-merge PR carries it to `next`; if nothing published, open an
+  ordinary `main` → `next` PR yourself straight away.
+- **Never publish by dispatching `publish.yml` on `next`** — the job is guarded to
+  `refs/heads/main` and will not run.
 
 ---
 
@@ -446,7 +437,7 @@ Source maps are scoped to local packages only (`apps/MJAPI/**`, `packages/Entiti
 - Repository: https://github.com/MemberJunction/bizapps-accounting
 - Default branch: `main` (release branch — publishes on push)
 - Integration branch: `next` (where feature PRs land)
-- Feature PRs target `next`. Release PRs target `main`.
+- Feature PRs target `next`. The only PR into `main` is the bot-maintained Version Packages PR (plus a rare hotfix).
 - See "Branching Model" section above for the full flow.
 
 ## Purpose
@@ -530,5 +521,23 @@ carry whatever `metadata/` has gained since. Two things about that step, because
   release process, not a gate — so a `metadata/` edit that matters to a host is not "done" when it
   merges, only when a release carries it.
 
+The model, and the Open App steps that differ from core (`--schema`, the `${mjSchema}` substitution): [Release Metadata Migrations Guide](https://github.com/MemberJunction/MJ/blob/next/guides/RELEASE_METADATA_MIGRATIONS_GUIDE.md).
+
 The review test: *if a colleague pulls this branch onto a database that already has last week's
 schema and runs `pnpm run mj:migrate`, do they get exactly the schema this branch describes?*
+
+## Filing issues (pilot of the BizApps issue system)
+- **Never work around a bug in this repo or in MJ silently.** File it with the `/report-issue` skill
+  (`.claude/skills/report-issue/`), which picks the repo where the fix lives, captures the
+  environment, searches for duplicates, and writes the same headings as the web form
+  (`.github/ISSUE_TEMPLATE/bug.yml`). If the bug already exists, it posts an occurrence comment on
+  the original instead of a new issue.
+- Filing from the web: **New issue → Bug report**. Every bug lands as `needs-triage`; a second
+  person reproduces it before it is `confirmed`. Confidence is a field, not a gate — say what you
+  actually did.
+- Not filed during the pilot: nits (cosmetic, no user impact) go in a local `BUGS.md`, not GitHub.
+  An agent files only with a minimal repro or after seeing the same failure twice, at most five
+  per session, and never closes, relabels, transfers or assigns anything.
+- MJ-core bugs go to `MemberJunction/MJ` (always pass `--repo`); mjdev-tool bugs to
+  `MemberJunction/MJDev`. Say which repo you chose and why under "Duplicate search".
+
