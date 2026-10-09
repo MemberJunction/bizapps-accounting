@@ -232,15 +232,6 @@
   flex-wrap: wrap;
 }
 
-.bw-sr {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
-
 /* Deferred-query controls (Marcelo 2026-07-21): Apply = the query trigger; the empty-state Load
    prompt; the stale-filters hint. */
 .bw-apply {

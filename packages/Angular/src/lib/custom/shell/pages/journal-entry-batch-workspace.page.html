@@ -236,7 +236,15 @@
         <table class="bw-grid mjsh-table">
           <thead>
             <tr>
-              <th class="bw-tick"><span class="bw-sr">Include</span></th>
+              <th class="bw-tick">
+                <input
+                  type="checkbox"
+                  class="mj-checkbox"
+                  [checked]="AllEntriesIncluded"
+                  [disabled]="IsBuilt || !(Preview?.Candidates?.length)"
+                  (change)="SetAllEntriesIncluded(!AllEntriesIncluded)"
+                  aria-label="Include every candidate" />
+              </th>
               <th>Entry №</th>
               <th>Date</th>
               <th>Memo</th>
