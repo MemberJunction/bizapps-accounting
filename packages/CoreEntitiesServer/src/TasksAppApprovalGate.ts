@@ -61,7 +61,8 @@ import type {
   mjBizAppsAccountingAccountingCompanyProfileEntity,
 } from '@mj-biz-apps/accounting-entities';
 import type { JournalEntryBatchApprovalGate, JournalEntryBatchCancelGate, RecordedCancellation } from './JournalEntryBatchEngine.js';
-import { requireSqlGuid, sqlGuidLiteral } from './SqlGuards.js';
+import { ResolvePersonIDForUser } from './person-user-link.js';
+import { requireSqlGuid } from './SqlGuards.js';
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
@@ -70,7 +71,6 @@ const TASK_LINK_ENTITY = 'MJ_BizApps_Tasks: Task Links';
 const TASK_DECISION_ENTITY = 'MJ_BizApps_Tasks: Task Decisions';
 const TASK_DECISION_OUTCOME_ENTITY = 'MJ_BizApps_Tasks: Task Decision Outcomes';
 const TASK_COMMENT_ENTITY = 'MJ_BizApps_Tasks: Task Comments';
-const PERSON_ENTITY = 'MJ_BizApps_Common: People';
 
 /** The seeded generic approval TaskType that CreateApprovalRequest expects. */
 const APPROVAL_REQUEST_TASK_TYPE = 'Approval Request';
@@ -320,7 +320,7 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
   private noLinkedPersonError(batch: mjBizAppsAccountingJournalEntryBatchEntity, contextUser: UserInfo): Error {
     return new Error(
       `Batch ${batch.JournalEntryBatchNumber ?? batch.ID}: the cancel cannot be recorded on its approval Task because user ` +
-      `${contextUser.Email ?? contextUser.ID} has no linked Person (MJ_BizApps_Common: People.LinkedUserID). ` +
+      `${contextUser.Email ?? contextUser.ID} has no linked Person (the user's LinkedEntityID/LinkedEntityRecordID to MJ_BizApps_Common: People or a subtype, or People.LinkedUserID). ` +
       'An administrator must link this user to a Person before the batch can be cancelled.',
     );
   }
@@ -332,14 +332,14 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     return acp.ApprovalCFOUserID ?? null;
   }
 
-  /** The bizapps-common Person linked to this MJ user (Person.LinkedUserID), or null. */
+  /** The bizapps-common Person linked to this MJ user (the user's People link, else Person.LinkedUserID), or null. */
   private async resolvePersonIdForUser(contextUser: UserInfo): Promise<string | null> {
-    const res = await this.viewProvider.RunView<{ ID: string }>(
-      { EntityName: PERSON_ENTITY, ExtraFilter: `LinkedUserID=${sqlGuidLiteral(contextUser.ID, 'TasksAppApprovalGate.resolvePersonIdForUser')}`, Fields: ['ID'], MaxRows: 1, ResultType: 'simple', BypassCache: true },
-      contextUser,
-    );
-    if (!res.Success) throw new Error(`TasksAppApprovalGate: Person lookup failed: ${res.ErrorMessage ?? 'unknown'}`);
-    return res.Results?.[0]?.ID ?? null;
+    requireSqlGuid(contextUser.ID, 'TasksAppApprovalGate.resolvePersonIdForUser');
+    try {
+      return await ResolvePersonIDForUser(contextUser, this.provider, contextUser);
+    } catch (error) {
+      throw new Error(`TasksAppApprovalGate: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   private async loadBatch(batchId: string, contextUser: UserInfo): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
