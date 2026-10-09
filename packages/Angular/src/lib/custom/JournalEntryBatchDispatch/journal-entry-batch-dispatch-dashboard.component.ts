@@ -249,6 +249,10 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
    * A Failed batch may already be in the ERP, and its entries would post again under the next batch's
    * new number. The server looks the number up first (#207) and refuses outright if the ERP holds it;
    * the operator is asked only when the lookup cannot settle it, and declining leaves the batch as is.
+   *
+   * Every answer from the cancel call reloads the list, a refusal included: when the ERP turns out to
+   * have posted the batch during the cancel, the server records it Posted and refuses, and the card
+   * must not keep showing `Failed`.
    */
   public async OnCancel(row: BatchRow): Promise<void> {
     if (row.Busy) return;
@@ -269,10 +273,10 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
       }
       if (res.Success) {
         this.setActionMessage(`Cancelled batch ${row.JournalEntryBatchNumber} — its journal entries return to the next build.`, false);
-        await this.loadBatches();
       } else {
         this.setActionMessage(res.ErrorMessage ?? 'Cancel failed.', true);
       }
+      await this.loadBatches();
     } finally {
       row.Busy = false;
       this.cdr.markForCheck();
