@@ -23,6 +23,7 @@ import {
     PreviewEntryWire,
     BuildJournalEntryBatchOptionsInput,
 } from '../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
+import { CompanyApprovers, LoadCompanyApprovers, MayCancelPendingBatch } from '../JournalEntryBatchDispatch/pending-cancel-permission';
 
 /**
  * The batch fields this page reads, PICKED from the generated entity class rather than
@@ -51,6 +52,8 @@ export type BatchItem = Pick<
     | 'ExternalJournalEntryBatchRef'
     | 'ArchiveReason'
     | 'CancelReason'
+    | 'CompanyID'
+    | 'BatchedByUserID'
 >;
 
 interface StageCount {
@@ -1271,13 +1274,18 @@ export class AccountingBatchesPageComponent implements OnInit {
     public CancelMismatchText = '';
 
     /**
-     * Cancel is offered on a Pending (golive #302), Approved or Failed (#183) batch. Who may cancel is
-     * the server's call: the company's CFO or the batch's builder before approval, the CFO or the
-     * approver after it.
+     * Cancel is offered on a Pending (golive #302), Approved or Failed (#183) batch. The server decides
+     * who may cancel: the company's CFO or the batch's builder before approval, the CFO or the approver
+     * after it. On a Pending batch the button shows only to those two (#308); the server check stays
+     * the authority.
      */
     public CanCancel(batch: BatchItem): boolean {
+        if (batch.Status === 'Pending' && !MayCancelPendingBatch(batch, Metadata.Provider?.CurrentUser?.ID, this.companyApprovers)) return false;
         return ['Pending', 'Approved', 'Failed'].includes(batch.Status) && this.CancellingBatchID !== batch.ID;
     }
+
+    /** Each company's configured approver, read with the batches; decides who sees Cancel on a Pending batch (#308). */
+    private companyApprovers: CompanyApprovers = new Map();
 
     /**
      * Cancel a Pending, Approved or Failed batch: the batch becomes Cancelled, its summary journal entry
@@ -1375,7 +1383,7 @@ export class AccountingBatchesPageComponent implements OnInit {
 
         try {
             const rv = new RunView();
-            const [batchRes, jeRes] = await Promise.all([
+            const [batchRes, jeRes, approvers] = await Promise.all([
                 rv.RunView<BatchItem>({
                     EntityName: BATCH_ENTITY,
                     OrderBy: 'PostingDate DESC, JournalEntryBatchNumber DESC',
@@ -1388,7 +1396,9 @@ export class AccountingBatchesPageComponent implements OnInit {
                     ResultType: 'simple',
                     MaxRows: 1,
                 }),
+                LoadCompanyApprovers(rv),
             ]);
+            this.companyApprovers = approvers;
 
             if (batchRes.Success && batchRes.Results) {
                 this.Batches = batchRes.Results;

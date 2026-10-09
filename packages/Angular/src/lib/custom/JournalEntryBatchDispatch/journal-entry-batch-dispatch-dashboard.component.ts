@@ -9,6 +9,7 @@ import {
   mjBizAppsAccountingJournalEntryBatchEntity,
 } from '@mj-biz-apps/accounting-entities';
 import { DispatchConfirmationKind, JournalEntryBatchDispatchClient, JournalEntryBatchDecision } from './journal-entry-batch-dispatch.client';
+import { CompanyApprovers, LoadCompanyApprovers, MayCancelPendingBatch } from './pending-cancel-permission';
 
 /** The generated batch Status union (rule 2c: derived, never hand-copied). */
 type BatchStatus = mjBizAppsAccountingJournalEntryBatchEntity['Status'];
@@ -26,6 +27,7 @@ type BatchStatus = mjBizAppsAccountingJournalEntryBatchEntity['Status'];
 type BatchRow = Pick<
   mjBizAppsAccountingJournalEntryBatchEntity,
   'ID' | 'JournalEntryBatchNumber' | 'Status' | 'TargetSystem' | 'TotalEntries' | 'TotalDebits' | 'TotalCredits' | 'ExternalJournalEntryBatchRef' | 'ErrorMessage' | 'ArchiveReason' | 'CancelReason'
+  | 'CompanyID' | 'BatchedByUserID'
 > & {
   /** undefined = not yet checked; null = unknown/error; true/false = gate result. */
   Approved?: boolean | null;
@@ -58,6 +60,8 @@ const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
   public IsLoading = false;
   public LoadError: string | null = null;
+  /** Each company's configured approver, read with the batches; decides who sees Cancel on a Pending batch (#308). */
+  private companyApprovers: CompanyApprovers = new Map();
 
   public Batches: BatchRow[] = [];
 
@@ -327,13 +331,15 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
   }
 
   /**
-   * Cancel is offered on a Pending (golive #302), Approved or Failed (#183) batch; who may cancel is
-   * the server's call. On a Pending batch it is the builder's way to withdraw it, beside the CFO's
-   * Reject. Not on a Failed batch carrying the ERP's reference: the ERP accepted it, and the server
-   * refuses it.
+   * Cancel is offered on a Pending (golive #302), Approved or Failed (#183) batch. On a Pending batch
+   * it is the builder's way to withdraw it, beside the CFO's Reject, so it shows only to the users the
+   * server would let cancel it: the company's approver or the batch's builder (#308). The server check
+   * stays the authority. Not on a Failed batch carrying the ERP's reference: the ERP accepted it, and
+   * the server refuses it.
    */
   public canCancel(row: BatchRow): boolean {
     if (row.Status === 'Failed' && row.ExternalJournalEntryBatchRef) return false;
+    if (row.Status === 'Pending' && !MayCancelPendingBatch(row, this.contextUser()?.ID, this.companyApprovers)) return false;
     return ['Pending', 'Approved', 'Failed'].includes(row.Status) && !row.Busy;
   }
 
@@ -354,14 +360,18 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
 
   private async loadBatches(): Promise<void> {
     const rv = this.runView();
-    const res = await rv.RunView<mjBizAppsAccountingJournalEntryBatchEntity>(
-      {
-        EntityName: BATCH_ENTITY,
-        OrderBy: 'BatchedAt DESC',
-        ResultType: 'simple',
-      },
-      this.contextUser(),
-    );
+    const [res, approvers] = await Promise.all([
+      rv.RunView<mjBizAppsAccountingJournalEntryBatchEntity>(
+        {
+          EntityName: BATCH_ENTITY,
+          OrderBy: 'BatchedAt DESC',
+          ResultType: 'simple',
+        },
+        this.contextUser(),
+      ),
+      LoadCompanyApprovers(rv, this.contextUser()),
+    ]);
+    this.companyApprovers = approvers;
     if (!res.Success) {
       this.Batches = [];
       this.LoadError = res.ErrorMessage ?? 'Failed to load journal entry batches.';
@@ -387,6 +397,8 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
       ErrorMessage: b.ErrorMessage,
       ArchiveReason: b.ArchiveReason,
       CancelReason: b.CancelReason,
+      CompanyID: b.CompanyID,
+      BatchedByUserID: b.BatchedByUserID,
     };
   }
 
