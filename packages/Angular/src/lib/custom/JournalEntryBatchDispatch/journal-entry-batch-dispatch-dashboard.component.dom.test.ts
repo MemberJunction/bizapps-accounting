@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
-import { RunView, RunViewParams } from '@memberjunction/core';
+import { IMetadataProvider, RunView, RunViewParams, UserInfo } from '@memberjunction/core';
 import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
 import { JournalEntryBatchDispatchDashboardComponent } from './journal-entry-batch-dispatch-dashboard.component';
 import { JournalEntryBatchDispatchModule } from './journal-entry-batch-dispatch.module';
@@ -17,6 +17,21 @@ type BatchStatus = mjBizAppsAccountingJournalEntryBatchEntity['Status'];
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const BATCH_NUMBER = 'JEB-TEST-0001';
+const COMPANY_PROFILE_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
+const COMPANY_ID = '00000000-0000-0000-0000-0000000000c1';
+const BUILDER_USER_ID = '00000000-0000-0000-0000-0000000000b1';
+const APPROVER_USER_ID = '00000000-0000-0000-0000-0000000000a1';
+const OTHER_USER_ID = '00000000-0000-0000-0000-0000000000f1';
+/** The MJ system user, which the nightly job builds as. */
+const SYSTEM_USER_ID = '00000000-0000-0000-0000-0000000000e1';
+
+/** A provider signed in as `userId`; every read is stubbed at `RunView.prototype`. */
+function providerSignedInAs(userId: string): IMetadataProvider {
+  const user = new UserInfo();
+  user.ID = userId;
+  const provider: Pick<IMetadataProvider, 'CurrentUser'> = { CurrentUser: user };
+  return provider as IMetadataProvider;
+}
 
 function batchRow(status: BatchStatus): Record<string, unknown> {
   return {
@@ -30,6 +45,8 @@ function batchRow(status: BatchStatus): Record<string, unknown> {
     ExternalJournalEntryBatchRef: null,
     ErrorMessage: null,
     ArchiveReason: null,
+    CompanyID: COMPANY_ID,
+    BatchedByUserID: BUILDER_USER_ID,
   };
 }
 
@@ -229,7 +246,7 @@ describe('JournalEntryBatchDispatchDashboardComponent — a Pending batch (goliv
     const answers = [...promptAnswers];
     vi.spyOn(window, 'prompt').mockImplementation(() => answers.shift() ?? null);
     const fixture = TestBed.createComponent(JournalEntryBatchDispatchDashboardComponent);
-    fixture.componentRef.setInput('Provider', stubbedReadsProvider());
+    fixture.componentRef.setInput('Provider', providerSignedInAs(BUILDER_USER_ID));
     fixture.detectChanges();
     await fixture.whenStable();
     await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
@@ -267,5 +284,57 @@ describe('JournalEntryBatchDispatchDashboardComponent — a Pending batch (goliv
     await dashboard.OnRecordDecision(dashboard.Batches[0], 'Approved');
     expect(window.prompt).not.toHaveBeenCalled();
     expect(decisionCalls).toEqual([{ Decision: 'Approved', Notes: undefined }]);
+  });
+});
+
+/**
+ * #308: on a Pending batch the Cancel button shows only to the users the server lets cancel it, the
+ * company's approver or the batch's builder. A batch the nightly job built has the system user as its
+ * builder, so only the approver sees it.
+ */
+describe('JournalEntryBatchDispatchDashboardComponent — who sees Cancel on a Pending batch (#308, DOM)', () => {
+  let builtBy: string;
+
+  beforeEach(async () => {
+    builtBy = BUILDER_USER_ID;
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+      if (p.EntityName === BATCH_ENTITY) return viewResult([{ ...batchRow('Pending'), BatchedByUserID: builtBy }]);
+      if (p.EntityName === COMPANY_PROFILE_ENTITY) return viewResult([{ ID: COMPANY_ID, ApprovalCFOUserID: APPROVER_USER_ID }]);
+      return viewResult([], 0);
+    });
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'GetApprovalState').mockResolvedValue({ Success: true, Approved: false });
+    await TestBed.configureTestingModule({ imports: [JournalEntryBatchDispatchModule] }).compileComponents();
+  });
+
+  /** The labels of the Pending batch card's action buttons, as `userId` sees them. */
+  async function actionsFor(userId: string): Promise<string[]> {
+    const fixture = TestBed.createComponent(JournalEntryBatchDispatchDashboardComponent);
+    fixture.componentRef.setInput('Provider', providerSignedInAs(userId));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
+    fixture.detectChanges();
+    const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('.bd-card__actions button'));
+    return buttons.map(b => b.textContent?.trim() ?? '');
+  }
+
+  it('shows the builder Cancel', async () => {
+    expect(await actionsFor(BUILDER_USER_ID)).toContain('Cancel');
+  });
+
+  it("shows the company's approver Cancel", async () => {
+    expect(await actionsFor(APPROVER_USER_ID)).toContain('Cancel');
+  });
+
+  it('shows anyone else no Cancel, and still the other actions', async () => {
+    const actions = await actionsFor(OTHER_USER_ID);
+    expect(actions).not.toContain('Cancel');
+    expect(actions).toContain('Archive');
+  });
+
+  it("shows only the approver Cancel on the nightly job's batch", async () => {
+    builtBy = SYSTEM_USER_ID;
+    expect(await actionsFor(BUILDER_USER_ID)).not.toContain('Cancel');
+    expect(await actionsFor(APPROVER_USER_ID)).toContain('Cancel');
   });
 });
