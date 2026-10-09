@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
-import { RunView, RunViewParams } from '@memberjunction/core';
+import { IMetadataProvider, Metadata, RunView, RunViewParams } from '@memberjunction/core';
 import { AccountingBatchesPageComponent, BatchItem } from './accounting-batches.component';
 import {
   BuildJournalEntryBatchOptionsInput,
@@ -533,6 +533,10 @@ describe('AccountingBatchesPageComponent — Cancel a batch (#183, golive #302)'
     vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) =>
       p.EntityName === BATCH_ENTITY ? viewResult([LISTED_BATCH, APPROVED, FAILED]) : viewResult([], 0),
     );
+    // The dialog reads the cancel reason's limit from the batch entity's metadata when it opens (#307).
+    vi.spyOn(Metadata, 'Provider', 'get').mockReturnValue({
+      EntityByName: (name: string) => (name === BATCH_ENTITY ? { Fields: [{ Name: 'CancelReason', MaxLength: 1000 }] } : undefined),
+    } as unknown as IMetadataProvider);
     cancelCalls = [];
     unconfirmedFailedAnswer = null;
     vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'CancelBatch').mockImplementation(async (id, reason, confirm = false) => {
@@ -642,5 +646,16 @@ describe('AccountingBatchesPageComponent — Cancel a batch (#183, golive #302)'
     expect(page.ActionMessage).toMatch(/so the batch posted/);
     expect(page.CancelERPCheckReason).toBeNull();
     expect(page.CancelModalVisible).toBe(false); // the refusal is on the page, not behind the modal
+  });
+
+  it('limits the cancel reason to the length the batch\'s CancelReason metadata reports (#307)', async () => {
+    const fixture = TestBed.createComponent(AccountingBatchesPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
+    fixture.componentInstance.OnCancel(LISTED_BATCH, new Event('click'));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(document.getElementById('aidp-cancel-reason')?.getAttribute('maxlength')).toBe('1000');
   });
 });

@@ -15,7 +15,8 @@
  *     ApprovedWithConditions Task Decision; otherwise THROW (blocks the send).
  *   recordDecision(batchId, outcome, decidedByPersonId, notes): resolve the batch's Task and record
  *     the decision via TaskOrchestrationService. The shared entry point for BOTH the in-app approve
- *     control and the Tasks inbox.
+ *     control and the Tasks inbox. It refuses first, writing nothing, when the batch is no longer
+ *     Pending (#306) or a rejection's notes would not fit the batch's CancelReason (#307).
  *   isRejected(batchId) (#233): whether the batch's Task carries a terminal rejection, which
  *     recordDecision writes before a rejected Pending batch is cancelled.
  *   assertMayCancelPending(batchId) (golive #302): a Pending batch nobody rejected may be cancelled by
@@ -212,9 +213,39 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
         `separation of duties requires an approver other than JournalEntryBatch.BatchedByUserID.`,
       );
     }
+    this.assertDecidable(batch, outcome, notes);
     const task = await this.resolveBatchTask(batchId, contextUser);
     if (!task) throw new Error(`Batch ${batchId} has no approval Task to record a decision against.`);
     await this.orchestration.RecordDecision({ TaskID: task.ID, OutcomeCode: outcome, DecidedByPersonID: decidedByPersonId, Notes: notes }, contextUser);
+  }
+
+  /**
+   * Refuse a decision the batch cannot carry out, before it is written to the Task, so the Task and
+   * the batch cannot disagree. The decision commits before the batch is approved or cancelled, so if
+   * the batch then refused, the Task would keep an outcome the batch never took.
+   *
+   * - The batch must still be Pending (#306): its builder may have cancelled it while the approver had it open.
+   * - A rejection's notes become the batch's CancelReason (#307), so they must fit that column. The Task's
+   *   notes have no limit, so a longer note would be recorded there and then refused by the cancel.
+   */
+  private assertDecidable(batch: mjBizAppsAccountingJournalEntryBatchEntity, outcome: TaskDecisionOutcomeCode, notes: string | undefined): void {
+    const label = batch.JournalEntryBatchNumber ?? batch.ID;
+    if (batch.Status !== 'Pending') {
+      throw new Error(`Batch ${label} is ${batch.Status}; a decision can be recorded only on a Pending batch.`);
+    }
+    if (IsApprovalOutcome(outcome)) return;
+    const max = this.cancelReasonMaxLength();
+    const length = notes?.trim().length ?? 0;
+    if (length > max) {
+      throw new Error(`Batch ${label}: a rejection's notes become the batch's cancel reason, which holds at most ${max} characters; these notes are ${length}.`);
+    }
+  }
+
+  /** JournalEntryBatch.CancelReason's length, read from the entity's field metadata so it follows the column. */
+  private cancelReasonMaxLength(): number {
+    const max = this.provider.EntityByName(BATCH_ENTITY)?.Fields.find((f) => f.Name === 'CancelReason')?.MaxLength;
+    if (!max) throw new Error(`TasksAppApprovalGate: no length metadata for ${BATCH_ENTITY}.CancelReason.`);
+    return max;
   }
 
   /**

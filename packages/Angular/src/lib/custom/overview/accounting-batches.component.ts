@@ -23,6 +23,7 @@ import {
     PreviewEntryWire,
     BuildJournalEntryBatchOptionsInput,
 } from '../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
+import { cancelReasonMaxLength } from '../JournalEntryBatchDispatch/cancel-reason';
 
 /**
  * The batch fields this page reads, PICKED from the generated entity class rather than
@@ -502,7 +503,7 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                             id="aidp-cancel-reason"
                             class="mj-input mja-archive-reason-input"
                             rows="3"
-                            maxlength="500"
+                            [maxlength]="CancelReasonMaxLength"
                             [(ngModel)]="CancelReasonDraft"></textarea>
                     </div>
 
@@ -1259,6 +1260,8 @@ export class AccountingBatchesPageComponent implements OnInit {
     public CancelModalVisible = false;
     public CancelTarget: BatchItem | null = null;
     public CancelReasonDraft = '';
+    /** The cancel reason's limit, read from JournalEntryBatch.CancelReason's field metadata when the dialog opens (#307). */
+    public CancelReasonMaxLength: number | null = null;
     /** For a Failed batch the server asked about: the operator confirmed its document number has not posted in the ERP. */
     public CancelConfirmNotPostedInERP = false;
     /**
@@ -1291,6 +1294,7 @@ export class AccountingBatchesPageComponent implements OnInit {
         event.stopPropagation();
         if (this.CancellingBatchID) return;
         this.resetCancelDialog();
+        this.CancelReasonMaxLength = cancelReasonMaxLength(Metadata.Provider);
         this.CancelTarget = batch;
         this.CancelModalVisible = true;
         this.cdr.markForCheck();
