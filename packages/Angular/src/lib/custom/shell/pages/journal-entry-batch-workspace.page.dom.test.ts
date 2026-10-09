@@ -259,10 +259,96 @@ describe('JournalEntryBatchWorkspacePageComponent — overlapping previews (DOM,
     pending[1].resolve(preview(200));
     await settle();
     expect(page.Preview, 'the response did not land on the new tab').toBeNull();
-    expect(page.Draft?.ExcludedIDs).toEqual([]);
+    expect(page.Draft?.Selection).toBeNull();
 
     page.SelectTab(firstTab);
     expect(page.Preview?.TotalDebits).toBe(200);
-    expect(page.Draft?.ExcludedIDs).toEqual([ENTRY_A.ID]);
+    expect(page.Draft?.Selection).toEqual([ENTRY_B.ID]);
+  });
+});
+
+/**
+ * The selection after a criteria change (golive #284). The preview request carries the selection
+ * as it is; it used to be derived from the previous preview's candidates, so after Apply on wider
+ * criteria the totals covered the old pool while the new entries showed ticked.
+ */
+describe('JournalEntryBatchWorkspacePageComponent — selection across a criteria change (DOM, golive #284)', () => {
+  const MANUAL = { ...ENTRY_A, EntryTypeCode: 'Manual', Amount: 100 };
+  const SYSTEM_OLD = { ...ENTRY_B, ID: 'je-s1', EntryNumber: 'JE-S1', EffectiveDate: '2026-07-31', EntryTypeCode: 'Invoice', Amount: 50 };
+  const SYSTEM_NEW = { ...ENTRY_B, ID: 'je-s2', EntryNumber: 'JE-S2', EffectiveDate: '2026-08-03', EntryTypeCode: 'Invoice', Amount: 70 };
+  const POOL = [SYSTEM_OLD, MANUAL, SYSTEM_NEW]; // oldest first
+  let requested: Array<string[] | null>;
+
+  beforeEach(async () => {
+    vi.spyOn(AccountingEngineBase.Instance, 'Config').mockResolvedValue(undefined);
+    requested = [];
+    // Answers like previewBatch: filter by type, total the included ids that are in the pool.
+    vi.spyOn(JournalEntryBatchWorkspaceClient.prototype, 'Preview').mockImplementation(async (_p, _c, includedIds, entryTypes) => {
+      requested.push(includedIds);
+      const rows = POOL.filter((e) => !entryTypes || entryTypes.includes(e.EntryTypeCode));
+      const included = new Set(includedIds ?? rows.map((r) => r.ID));
+      const total = rows.filter((r) => included.has(r.ID)).reduce((s, r) => s + r.Amount, 0);
+      return { ...preview(total), Candidates: rows };
+    });
+    await TestBed.configureTestingModule({ imports: [AccountingShellModule], providers: [PageRefreshService] }).compileComponents();
+  });
+
+  async function loadedManualOnly(): Promise<ComponentFixture<JournalEntryBatchWorkspacePageComponent>> {
+    const fixture = TestBed.createComponent(JournalEntryBatchWorkspacePageComponent);
+    fixture.componentRef.setInput('Provider', stubbedReadsProvider());
+    fixture.detectChanges();
+    const page = fixture.componentInstance;
+    page.Draft!.Criteria.EntryTypeScope = 'Manual';
+    page.Apply();
+    await vi.waitFor(() => expect(page.IsPreviewing).toBe(false));
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  async function widenToAll(fixture: ComponentFixture<JournalEntryBatchWorkspacePageComponent>): Promise<void> {
+    const page = fixture.componentInstance;
+    page.Draft!.Criteria.EntryTypeScope = 'All';
+    page.OnCriteriaChanged();
+    page.Apply();
+    await vi.waitFor(() => expect(page.IsPreviewing).toBe(false));
+    fixture.detectChanges();
+  }
+
+  const ticked = (fixture: ComponentFixture<JournalEntryBatchWorkspacePageComponent>) =>
+    Array.from(fixture.nativeElement.querySelectorAll('.bw-grid tbody input[type="checkbox"]') as NodeListOf<HTMLInputElement>)
+      .filter((b) => b.checked)
+      .map((b) => b.getAttribute('aria-label'));
+
+  it('with every entry ticked, wider criteria bring the new entries in ticked and totalled', async () => {
+    const fixture = await loadedManualOnly();
+    await widenToAll(fixture);
+    const page = fixture.componentInstance;
+    expect(requested).toEqual([null, null]);
+    expect(ticked(fixture)).toEqual(['Include JE-S1', 'Include JE-A', 'Include JE-S2']);
+    expect(page.IncludedCount).toBe(3);
+    expect(page.Preview?.GrossDebits).toBe(220);
+  });
+
+  it('after an untick, wider criteria bring the new entries in unticked, and the totals match the ticks', async () => {
+    const fixture = await loadedManualOnly();
+    const page = fixture.componentInstance;
+    page.ToggleEntry(MANUAL.ID); // untick the only entry
+    await vi.waitFor(() => expect(page.IsPreviewing).toBe(false));
+    expect(requested.at(-1)).toEqual([]);
+
+    await widenToAll(fixture);
+    expect(requested.at(-1)).toEqual([]);
+    expect(ticked(fixture)).toEqual([]);
+    expect(page.IncludedCount).toBe(0);
+    expect(page.Preview?.GrossDebits).toBe(0);
+    expect(page.CanBuild).toBe(false);
+
+    page.ToggleEntry(SYSTEM_NEW.ID);
+    await vi.waitFor(() => expect(page.IsPreviewing).toBe(false));
+    fixture.detectChanges();
+    expect(requested.at(-1)).toEqual([SYSTEM_NEW.ID]);
+    expect(ticked(fixture)).toEqual(['Include JE-S2']);
+    expect(page.IncludedCount).toBe(1);
+    expect(page.Preview?.GrossDebits).toBe(70);
   });
 });
