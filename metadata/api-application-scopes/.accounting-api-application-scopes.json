@@ -29,5 +29,18 @@
     "primaryKey": {
       "ID": "B9D3F50E-0AF0-4851-934B-AD91887804DB"
     }
+  },
+  {
+    "fields": {
+      "ApplicationID": "@lookup:MJ: API Applications.Name=MJAPI",
+      "ScopeID": "@lookup:MJ: API Scopes.FullPath=accounting:post",
+      "ResourcePattern": "*",
+      "PatternType": "Include",
+      "IsDeny": false,
+      "Priority": 0
+    },
+    "primaryKey": {
+      "ID": "8B4A3B41-6DF2-4E43-AD8B-82479B5BA156"
+    }
   }
 ]

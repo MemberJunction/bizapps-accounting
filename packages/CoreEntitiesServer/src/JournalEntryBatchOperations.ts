@@ -267,7 +267,7 @@ export interface DispatchJournalEntryBatchOutput {
 @RegisterClass(BaseRemotableOperation, 'Accounting.DispatchJournalEntryBatch')
 export class DispatchJournalEntryBatchOperation extends BaseRemotableOperation<DispatchJournalEntryBatchInput, DispatchJournalEntryBatchOutput> {
   public readonly OperationKey = 'Accounting.DispatchJournalEntryBatch';
-  public readonly RequiredScope = 'accounting:write';
+  public readonly RequiredScope = 'accounting:post';
 
   protected async InternalExecute(input: DispatchJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<DispatchJournalEntryBatchOutput> {
     if (!input?.JournalEntryBatchID) throw new Error('DispatchJournalEntryBatch: JournalEntryBatchID is required.');
@@ -298,7 +298,7 @@ export interface ResumeJournalEntryBatchPostingOutput { Status: string; JournalE
 @RegisterClass(BaseRemotableOperation, 'Accounting.ResumeJournalEntryBatchPosting')
 export class ResumeJournalEntryBatchPostingOperation extends BaseRemotableOperation<ResumeJournalEntryBatchPostingInput, ResumeJournalEntryBatchPostingOutput> {
   public readonly OperationKey = 'Accounting.ResumeJournalEntryBatchPosting';
-  public readonly RequiredScope = 'accounting:write';
+  public readonly RequiredScope = 'accounting:post';
 
   protected async InternalExecute(input: ResumeJournalEntryBatchPostingInput, provider: IMetadataProvider, user: UserInfo): Promise<ResumeJournalEntryBatchPostingOutput> {
     if (!input?.JournalEntryBatchID) throw new Error('ResumeJournalEntryBatchPosting: JournalEntryBatchID is required.');

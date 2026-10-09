@@ -48,7 +48,17 @@ function serverScopes(): Map<string, string | undefined> {
     return scopes;
 }
 
-const shippedScopes = new Set(flatten(readRecords('api-scopes')).map((r) => String(r.fields.FullPath)));
+/**
+ * The operations that send to the ERP or record what the ERP accepted. They need accounting:post, which a
+ * key holding accounting:write does not have, so a key that only books entries cannot dispatch (#329).
+ */
+const ERP_OPERATIONS = [
+    'Accounting.DispatchJournalEntryBatch',
+    'Accounting.ResumeJournalEntryBatchPosting',
+    'Accounting.RunERPSync',
+];
+
+const shippedScopes =new Set(flatten(readRecords('api-scopes')).map((r) => String(r.fields.FullPath)));
 
 const mjapiScopes = new Set(
     readRecords('api-application-scopes')
@@ -71,9 +81,14 @@ describe('Accounting remote operation scopes (#310)', () => {
 
     it.each([...actual.keys()])('%s carries an accounting scope that ships with an MJAPI ceiling', (key) => {
         const scope = actual.get(key);
-        expect(scope).toMatch(/^accounting:(read|write)$/);
+        expect(scope).toMatch(/^accounting:(read|write|post)$/);
         expect(shippedScopes.has(scope!)).toBe(true);
         expect(mjapiScopes.has(scope!)).toBe(true);
+    });
+
+    it('requires accounting:post on exactly the operations that act on the ERP (#329)', () => {
+        const post = [...actual.entries()].filter(([, scope]) => scope === 'accounting:post').map(([key]) => key).sort();
+        expect(post).toEqual(ERP_OPERATIONS);
     });
 
     it('ships the accounting parent scope', () => {
