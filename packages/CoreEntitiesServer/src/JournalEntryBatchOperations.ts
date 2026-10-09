@@ -336,7 +336,9 @@ export interface RecordJournalEntryBatchDecisionOutput { Recorded: true }
  * Record an in-app CFO approve/reject decision against the batch's approval Task. An approval also
  * flips the batch Pending→Approved (content freeze + dispatchable); a rejection cancels the batch
  * and returns its journal entries to the candidate pool (a reject has a visible financial effect,
- * not a dead no-op). The rejection's notes become the batch's CancelReason.
+ * not a dead no-op). The rejection's notes become the batch's CancelReason. The gate refuses a
+ * decision on a batch that is no longer Pending, or rejection notes longer than CancelReason holds,
+ * before writing it to the Task, so the Task cannot record an outcome the batch then refuses (#306, #307).
  */
 @RegisterClass(BaseRemotableOperation, 'Accounting.RecordJournalEntryBatchDecision')
 export class RecordJournalEntryBatchDecisionOperation extends BaseRemotableOperation<RecordJournalEntryBatchDecisionInput, RecordJournalEntryBatchDecisionOutput> {
