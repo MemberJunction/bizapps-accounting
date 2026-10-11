@@ -1,5 +1,20 @@
 # @mj-biz-apps/accounting-server
 
+## 0.22.0
+
+### Patch Changes
+
+- 37536eb: MemberJunction and other BizApps packages are peer dependencies with caret ranges (`^6.1.5`,
+  `^5.50.2` for common, `^1.4.1` for tasks; no `~`, nothing in `dependencies`), so a 6.2 host keeps
+  one copy of each instead of installing a second 6.1 tree. MemberJunction
+  devDependencies and the root `pnpm.overrides` use the same `^6.1.5` floor. Adds `check-dependency-model` to CI.
+- Updated dependencies [3974848]
+- Updated dependencies [3888284]
+- Updated dependencies [37536eb]
+  - @mj-biz-apps/accounting-core-entities-server@0.22.0
+  - @mj-biz-apps/accounting-actions@0.22.0
+  - @mj-biz-apps/accounting-entities@0.22.0
+
 ## 0.21.2
 
 ### Patch Changes

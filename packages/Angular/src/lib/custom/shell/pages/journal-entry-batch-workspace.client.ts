@@ -26,6 +26,9 @@ export interface JournalEntryBatchCriteria {
   /** A calendar day (`YYYY-MM-DD`, from a date input), INCLUSIVE. EffectiveDate is a DATE column,
    *  so the cutoff is a day, not an instant (golive #168). */
   Cutoff: string | null;
+  /** The batch's posting date (`YYYY-MM-DD`) — the journal date the ERP receives (golive #315).
+   *  Defaults to the business day; it also ends the candidate pool, like a cutoff. */
+  PostingDate: string | null;
   CompanyIDs: string[];
   EntryTypeScope: EntryTypeScope;
   Source: 'Standard' | 'View';
@@ -77,11 +80,11 @@ export interface BuildOutcome {
 
 export class JournalEntryBatchWorkspaceClient {
   /**
-   * The cutoff goes on the wire as the calendar day itself. The engine reads a `YYYY-MM-DD` string
-   * as that day and includes the whole of it — no browser zone is involved at any step. An empty
-   * input sends no cutoff at all, which the page labels as including future-dated entries.
+   * The cutoff and posting date go on the wire as the calendar day itself. The engine reads a
+   * `YYYY-MM-DD` string as that day — no browser zone is involved at any step. An empty cutoff sends
+   * no cutoff at all, so the pool runs through the posting date; an empty posting date is today.
    */
-  private toCutoffDay(day: string | null): string | null {
+  private toWireDay(day: string | null): string | null {
     return day && IsCalendarDay(day) ? day : null;
   }
 
@@ -92,7 +95,8 @@ export class JournalEntryBatchWorkspaceClient {
     entryTypes: string[] | null,
   ): Promise<BatchPreview> {
     const res = await provider.RouteOperation<Record<string, unknown>, BatchPreview>('Accounting.PreviewJournalEntryBatch', {
-      Cutoff: this.toCutoffDay(criteria.Cutoff),
+      Cutoff: this.toWireDay(criteria.Cutoff),
+      PostingDate: this.toWireDay(criteria.PostingDate),
       CompanyIDs: criteria.CompanyIDs.length ? criteria.CompanyIDs : null,
       EntryTypeCodes: entryTypes,
       IncludedJournalEntryIDs: includedIds,
@@ -117,6 +121,9 @@ export class JournalEntryBatchWorkspaceClient {
         // (EmptyBatchError) and surface as res.Success=false — never a silent NothingToBatch.
         Source: 'Explicit',
         JournalEntryIDs: includedIds,
+        // The posting date is NOT dead payload: it is the date the batch carries to the ERP. The
+        // server refuses it when it is earlier than any of these entries.
+        PostingDate: this.toWireDay(criteria.PostingDate),
       },
     );
     if (!res.Success || !res.Output) {
