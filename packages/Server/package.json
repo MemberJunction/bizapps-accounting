@@ -22,7 +22,13 @@
     "@types/node": "^24.10.11",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18",
-    "vite": "^7.1.5"
+    "vite": "^7.1.5",
+    "@memberjunction/core": "^6.1.5",
+    "@memberjunction/global": "^6.1.5",
+    "@memberjunction/server": "^6.1.5",
+    "@memberjunction/sqlserver-dataprovider": "^6.1.5",
+    "@mj-biz-apps/common-server": "5.50.2",
+    "@mj-biz-apps/common-entities": "5.50.2"
   },
   "dependencies": {
     "@mj-biz-apps/accounting-core-entities-server": "0.21.2",
@@ -31,10 +37,10 @@
     "class-validator": "^0.14.3"
   },
   "peerDependencies": {
-    "@memberjunction/core": "~6.1.5",
-    "@memberjunction/global": "~6.1.5",
-    "@memberjunction/server": "~6.1.5",
-    "@memberjunction/sqlserver-dataprovider": "~6.1.5",
+    "@memberjunction/core": "^6.1.5",
+    "@memberjunction/global": "^6.1.5",
+    "@memberjunction/server": "^6.1.5",
+    "@memberjunction/sqlserver-dataprovider": "^6.1.5",
     "@mj-biz-apps/common-server": "^5.50.2",
     "@mj-biz-apps/common-entities": "^5.50.2"
   },
