@@ -525,3 +525,19 @@ The model, and the Open App steps that differ from core (`--schema`, the `${mjSc
 
 The review test: *if a colleague pulls this branch onto a database that already has last week's
 schema and runs `pnpm run mj:migrate`, do they get exactly the schema this branch describes?*
+
+## Filing issues (pilot of the BizApps issue system)
+- **Never work around a bug in this repo or in MJ silently.** File it with the `/report-issue` skill
+  (`.claude/skills/report-issue/`), which picks the repo where the fix lives, captures the
+  environment, searches for duplicates, and writes the same headings as the web form
+  (`.github/ISSUE_TEMPLATE/bug.yml`). If the bug already exists, it posts an occurrence comment on
+  the original instead of a new issue.
+- Filing from the web: **New issue → Bug report**. Every bug lands as `needs-triage`; a second
+  person reproduces it before it is `confirmed`. Confidence is a field, not a gate — say what you
+  actually did.
+- Not filed during the pilot: nits (cosmetic, no user impact) go in a local `BUGS.md`, not GitHub.
+  An agent files only with a minimal repro or after seeing the same failure twice, at most five
+  per session, and never closes, relabels, transfers or assigns anything.
+- MJ-core bugs go to `MemberJunction/MJ` (always pass `--repo`); mjdev-tool bugs to
+  `MemberJunction/MJDev`. Say which repo you chose and why under "Duplicate search".
+
