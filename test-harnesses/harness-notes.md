@@ -1,18 +1,18 @@
 # harness-notes.md — how to build & run MJ server test harnesses (hard-won)
 
 Practical notes for anyone (human or agent) writing or running the bizapps-accounting
-**server integration harnesses** (`test-harnesses/server/block*-runtime.ts`). These are
+**server integration harnesses** (`test-harnesses/server/*-runtime.ts`). These are
 **tsx live-DB** harnesses that exercise the real MJ data provider + server entity subclasses
 against a real instance DB — the exact path MJAPI runs. They are kept, committed, and re-run
 on every substantive change. (The Vitest unit tier is separate: pure logic, no DB.)
 
 ## How to run
-- From the **instance worktree root** (so the instance `.env` resolves from cwd):
-  `cd ~/MJDev/instances/<slug>/mj && npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/block0-runtime.ts`
-- Exit codes: **0** all passed · **1** test failures · **2** bootstrap error.
-- Each harness self-bootstraps (creates a tagged throwaway company → W1 seeds the COA)
-  and tears down company-scoped rows by `CompanyID` and the now-GLOBAL JEs/batches by
-  **tracked ID lists** (2026-07-06: JE/batch headers lost CompanyID), so runs are idempotent.
+- Prerequisites, commands and exit codes:
+  [the tier 2 section of `test-harnesses/README.md`](README.md#tier-2-server-live-db).
+- Each harness self-bootstraps (creates its own throwaway company and the accounts it needs) and
+  tears down what it created — company-rooted deletes by `CompanyID`, or **tracked ID lists** for
+  JEs/batches — so runs are idempotent. (JE and batch headers lost `CompanyID` on 2026-07-06;
+  single-company JEs and batches, D3/D7, brought it back.)
 
 ## Hard-won lessons (the WHY — don't relearn these the hard way)
 
@@ -53,13 +53,16 @@ on every substantive change. (The Vitest unit tier is separate: pure logic, no D
 
 7. **Self-bootstrap + FK-aware teardown, tagged with a `RUN_TAG`.** Create a uniquely-tagged
    company so runs don't collide, and delete child→parent. Company-scoped rows sweep by
-   `CompanyID`; **JEs/batches are GLOBAL (2026-07-06)** — track their IDs as you create them
-   (including reversal JEs + every batch a tracked JE references) and delete by ID list.
-   Keeps runs idempotent and lets you identify/purge orphans from a crashed run.
+   `CompanyID`. JEs and batches were GLOBAL from 2026-07-06 until single-company JEs and batches
+   (D3/D7) gave them a `CompanyID` again, so they now sweep with their company; tracking their IDs
+   as you create them (including reversal JEs + every batch a tracked JE references) and deleting
+   by ID list still works. Keeps runs idempotent and lets you identify/purge orphans from a crashed run.
 
-7b. **buildJournalEntryBatch is GLOBAL — assert zero stray Pending JEs at bootstrap.** Any leftover Pending
-   JE gets swept into your test's batch and corrupts exact-value assertions. Every batching
-   harness/fixture fails fast on `SELECT COUNT(*) … WHERE Status='Pending' > 0`.
+7b. **`buildJournalEntryBatch` builds per company — scope any stray-Pending guard to your own
+   company.** It takes a `companyId` and gathers only that company's Pending JEs, so a leftover
+   Pending JE in your company still corrupts exact-value assertions, but other companies' Pending
+   JEs do not. A global `SELECT COUNT(*) … WHERE Status='Pending'` guard false-fails on an
+   instance with demo data (`server/engine-runtime.ts` narrows its guard to its own company).
 
 8. **Don't leave stray background harness processes.** A backgrounded run that lingers (lesson #1)
    or a forgotten wait-loop piles up and then contends with the next run (lesson #2). If you must

@@ -1,8 +1,8 @@
 # transfer-pending/ — parked framework-clean components
 
-> **Parking discipline (non-negotiable — UI action plan §0, `plans/TRANSFER-BACKLOG.md`).**
+> **Parking discipline (non-negotiable).**
 
-Everything in this folder is **owed to another home** (`bizapps-common`, `bizapps-tasks`, or MJ base).
+Everything in this folder is **owed to another home** (`bizapps-common` or MJ base).
 It is parked here only for iteration speed during the UI wave (no extra dev-linked apps / feature
 branches mid-wave).
 
@@ -20,26 +20,27 @@ build if any file here imports an accounting package. Don't weaken it — it IS 
 
 ## What's parked here
 
-| Folder | Target home | Tracked in |
+| Folder | What it holds | Target home |
 |---|---|---|
-| `workspace-tabs/` | bizapps-common | TRANSFER-BACKLOG |
-| `list-scaffold/` | bizapps-common → MJ base | TRANSFER-BACKLOG |
-| `approval-inbox/` | bizapps-tasks | TRANSFER-BACKLOG |
+| `workspace-tabs/` | `mj-workspace-card`, the workspace tab strip and its pure state store, the `mjTip` tooltip directive | bizapps-common |
+| `list-scaffold/` | pure list helpers: grid row-key parsing, `ExtraFilter` escaping, time-window defaults | bizapps-common → MJ base |
+| `dialog-dismiss/` | backdrop-click and Escape dismissal for editor dialogs, with a discard prompt when there are unsaved edits | bizapps-common → MJ base |
+| `cross-app-link/` | opens another app's nav item as an Explorer tab through `NavigationService` | MJ base |
+| `shell-refresh/` | sends the shell header's Refresh to the page currently mounted | MJ base |
+
+The `plans/TRANSFER-BACKLOG.md` that several file headers name is not on `next`.
 
 ## Check MJ first — the cheapest parked component is the one you don't build
 
 There was a `nav-rail/` here. It is gone: MJ already ships `<mj-left-nav>`
 (`@memberjunction/ng-ui-components`) with sections, badges, active state, `[header]`/`[footer]`
-slots and a responsive drawer. We deleted ours and adopted MJ's (UI plan §8 MJ-wins rule), which
-retired a TRANSFER-BACKLOG row outright — nothing to park, nothing to hand over later.
+slots and a responsive drawer. We deleted ours and adopted MJ's (the MJ-wins rule), so there was
+nothing to park and nothing to hand over later.
 
 Before parking anything new here, **search MJ's `ng-ui-components` / `ng-shared*` packages for the
 idiom first.** A parked component is a debt owed to a future transfer; an MJ component is free.
 
-See `plans/TRANSFER-BACKLOG.md` for each row's target + trigger, and
-`design-docs/ui-design/README.md` for the component inventory / MJ-base candidacy.
-
-## DESIGN RULE — size workspace content by CONTAINER, not viewport (Marcelo 2026-07-21)
+## DESIGN RULE — size workspace content by CONTAINER, not viewport (2026-07-21)
 
 Inside a workspace, **use CONTAINER units for sizing, never viewport units.** The workspace card
 (`mj-workspace-card`) is declared a query container (`container-type: size`), so content sizes with
@@ -51,6 +52,6 @@ it breaks the moment the card is in a split or a smaller window.
 - ❌ `height: min(45vh, 560px);` (viewport-relative — wrong in a pane)
 - Fixed **px** floors/ceilings are fine as bounds (`min-height: 160px`); the *proportional* size is `cq*`.
 - Reference: the JE workspace line grid (`je-workspace.page.css` `.jew__gridwrap`) — `cqh` default +
-  `resize: vertical` for a user drag handle.
+  a full-width drag bar (`.jew__resize`) the user pulls to resize it.
 
 Applies going forward to every workspace surface (JE + batch workspaces, order editor, future ones).
