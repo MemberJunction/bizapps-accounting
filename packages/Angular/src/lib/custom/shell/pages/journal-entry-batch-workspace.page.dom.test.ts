@@ -37,7 +37,7 @@ import { AUGUST_CLOSE_IN_CHICAGO, stubbedReadsProvider, useBusinessClock } from 
  * (a `datetime-local` would hold an instant) is pinned too.
  */
 const BUSINESS_DAY = '2026-08-31';
-const NO_CUTOFF = 'no cutoff — includes future-dated entries';
+const NO_CUTOFF = 'no cutoff — through the posting date';
 
 interface RecordedCall {
   Name: string;
@@ -86,9 +86,9 @@ describe('JournalEntryBatchWorkspacePageComponent — default cutoff (DOM)', () 
     expect(page.CriteriaChips).toContain(`through ${BUSINESS_DAY}`);
   });
 
-  it('says so when the cutoff is cleared — an empty cutoff previews entries dated in the future too', async () => {
-    // Clearing the date input sends no cutoff, so the preview includes every Pending entry,
-    // tomorrow's included. That was silent: the "through" chip simply vanished.
+  it('says so when the cutoff is cleared — an empty cutoff previews everything through the posting date', async () => {
+    // Clearing the date input sends no cutoff, so the pool ends at the posting date (golive #315).
+    // That was silent: the "through" chip simply vanished.
     const page = (await render()).componentInstance;
     page.Draft!.Criteria.Cutoff = '';
     page.OnCriteriaChanged();
@@ -106,6 +106,109 @@ describe('JournalEntryBatchWorkspacePageComponent — default cutoff (DOM)', () 
 
     expect(calls[0].Name).toBe('Accounting.PreviewJournalEntryBatch');
     expect(calls[0].Payload['Cutoff']).toBe(BUSINESS_DAY);
+  });
+});
+
+describe('JournalEntryBatchWorkspacePageComponent — posting date (golive #315)', () => {
+  useBusinessClock(AUGUST_CLOSE_IN_CHICAGO);
+  let calls: RecordedCall[];
+
+  beforeEach(async () => {
+    calls = [];
+    vi.spyOn(AccountingEngineBase.prototype, 'Config').mockResolvedValue(undefined);
+    await TestBed.configureTestingModule({
+      declarations: [JournalEntryBatchWorkspacePageComponent],
+      providers: [PageRefreshService],
+    })
+      .overrideComponent(JournalEntryBatchWorkspacePageComponent, { set: { template: '' } })
+      .compileComponents();
+  });
+
+  async function render(): Promise<JournalEntryBatchWorkspacePageComponent> {
+    const fixture = TestBed.createComponent(JournalEntryBatchWorkspacePageComponent);
+    fixture.componentRef.setInput('Provider', recordingProvider(calls));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    return fixture.componentInstance;
+  }
+
+  /** A loaded, balanced preview of one entry dated `day`. */
+  function withPreview(page: JournalEntryBatchWorkspacePageComponent, day: string): void {
+    page.Draft!.Preview = {
+      Candidates: [{ ID: 'je-1', EntryNumber: 'JE-0001', EffectiveDate: `${day}T00:00:00.000Z`, EntryTypeCode: 'Manual', CompanyID: 'c-1', Description: null, Amount: 100 }],
+      AffectedAccounts: [], TotalDebits: 100, TotalCredits: 100, GrossDebits: 100, GrossCredits: 100, PerCompany: [], OutOfOrderSkipCount: 0, BeforePostingStartCount: 0,
+    };
+  }
+
+  it('defaults to the business day, shows it as a chip, and sends it with the preview', async () => {
+    const page = await render();
+    expect(page.Draft?.Criteria.PostingDate).toBe(BUSINESS_DAY);
+    expect(page.CriteriaChips).toContain(`posting date ${BUSINESS_DAY}`);
+
+    page.Apply();
+    await vi.waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0].Payload['PostingDate']).toBe(BUSINESS_DAY);
+  });
+
+  it('sends the chosen posting date with the build', async () => {
+    const page = await render();
+    page.Draft!.Criteria.PostingDate = '2026-08-30';
+    withPreview(page, '2026-08-29');
+    await page.Build();
+
+    const build = calls.find(c => c.Name === 'Accounting.BuildJournalEntryBatch');
+    expect(build?.Payload['PostingDate']).toBe('2026-08-30');
+  });
+
+  it.each([
+    ['empty', '', 'Choose a posting date.'],
+    ['earlier than an included entry', '2026-08-29',
+      'The posting date 2026-08-29 is earlier than an included entry dated 2026-08-30 — move it to 2026-08-30 or later, or apply the filters again.'],
+  ])('blocks the build when the posting date is %s', async (_label, postingDate, reason) => {
+    const page = await render();
+    withPreview(page, '2026-08-30');
+    page.Draft!.Criteria.PostingDate = postingDate;
+    expect(page.CanBuild).toBe(false);
+    expect(page.BuildBlockedReason).toBe(reason);
+  });
+
+  it.each([
+    ['future', '2026-09-01', 'September 2026'],
+    ['prior', '2026-07-31', 'July 2026'],
+  ])('asks before building on a %s-month posting date, and asks again when the date changes', async (which, day, month) => {
+    const page = await render();
+    withPreview(page, '2026-07-01');
+    page.Draft!.Criteria.PostingDate = day;
+    expect(page.PostingDateWarning).toBe(`The posting date ${day} is in a ${which} month, so the ERP books this batch in ${month}. Are you sure?`);
+    expect(page.CanBuild).toBe(false);
+    expect(page.BuildBlockedReason).toBe(`Confirm posting this batch in ${month}.`);
+
+    page.ConfirmPostingDate(true);
+    expect(page.CanBuild).toBe(true);
+    expect(page.BuildBlockedReason).toBeNull();
+
+    page.Draft!.Criteria.PostingDate = which === 'future' ? '2026-09-02' : '2026-07-30';
+    expect(page.PostingDateProblem).toBeNull();
+    expect(page.CanBuild, 'a different date asks again').toBe(false);
+  });
+
+  it('sends a confirmed future-month posting date with the build', async () => {
+    const page = await render();
+    withPreview(page, '2026-08-30');
+    page.Draft!.Criteria.PostingDate = '2026-09-01';
+    page.ConfirmPostingDate(true);
+    await page.Build();
+
+    const build = calls.find(c => c.Name === 'Accounting.BuildJournalEntryBatch');
+    expect(build?.Payload['PostingDate']).toBe('2026-09-01');
+  });
+
+  it('allows a posting date on the latest included entry\'s day', async () => {
+    const page = await render();
+    withPreview(page, '2026-08-30');
+    page.Draft!.Criteria.PostingDate = '2026-08-30';
+    expect(page.PostingDateProblem).toBeNull();
+    expect(page.CanBuild).toBe(true);
   });
 });
 
@@ -139,7 +242,7 @@ describe('JournalEntryBatchWorkspacePageComponent — cutoff input (DOM, real te
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(label!.querySelector('.bw-hint')?.textContent?.trim()).toBe('No cutoff — includes future-dated entries.');
+    expect(label!.querySelector('.bw-hint')?.textContent?.trim()).toBe('No cutoff — includes everything through the posting date.');
   });
 });
 

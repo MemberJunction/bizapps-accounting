@@ -104,6 +104,9 @@
   font-size: 11px;
   color: var(--mj-text-muted);
 }
+.bw-hint--error {
+  color: var(--mj-status-error-text, var(--mj-status-error));
+}
 
 .bw-chips {
   display: flex;
@@ -152,6 +155,13 @@
 }
 .bw-warn i {
   color: var(--mj-status-warning);
+}
+.bw-posting-confirm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-weight: 600;
 }
 
 .bw-sumstrip {
