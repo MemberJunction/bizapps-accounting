@@ -3,9 +3,9 @@ Don't say "You're absolutely right" each time I correct you. Mix it up, that's s
 
 # BizApps Accounting Development Guide
 
-This is a **MemberJunction Open App** built on top of the [MemberJunction](https://github.com/MemberJunction/MJ) platform. It provides the AR subsidiary ledger of record and journal-entry primitives (GL accounts, accounting periods, balanced JEs with multi-currency, dimensions, tax) for the MJ ecosystem. It is **not a general ledger** — entries are batched to the ERP (Business Central, QuickBooks, NetSuite, etc.).
+This is a **MemberJunction Open App** built on top of the [MemberJunction](https://github.com/MemberJunction/MJ) platform. It provides the AR subsidiary ledger of record and journal-entry primitives (GL accounts, balanced JEs with multi-currency, dimensions, tax) for the MJ ecosystem. It is **not a general ledger** — entries are batched to the ERP (Business Central, QuickBooks, NetSuite, etc.).
 
-This repo depends on [bizapps-common](https://github.com/MemberJunction/bizapps-common) for shared entities (Currency, Organization, Address) and extends `__mj.Company` with an `AccountingCompanyProfile` (IsA Disjoint child).
+This repo depends on [bizapps-common](https://github.com/MemberJunction/bizapps-common) for shared helpers (`BusinessTimeZoneEngine`, the calendar-day functions, external field-length limits) and on [bizapps-tasks](https://github.com/MemberJunction/bizapps-tasks) for batch approval tasks, and extends `__mj.Company` with an `AccountingCompanyProfile` (IsA Disjoint child). `Currency` and `CurrencySpotRate` live in this repo's schema.
 
 See `plans/bizapps-accounting-master.md` for the full design and current decision log — the single source of truth.
 
@@ -21,6 +21,7 @@ bizapps-accounting/
     CoreEntitiesServer/ - @mj-biz-apps/accounting-core-entities-server (server-only entity lifecycle hooks)
     EngineBase/         - @mj-biz-apps/accounting-engine-base (shared engine base)
     Angular/            - @mj-biz-apps/accounting-ng (Angular bootstrap + form components)
+    IntegrationTests/   - @mj-biz-apps/accounting-integration-tests (private; live integration suite, see Testing)
 ```
 
 There are no bundled host apps — the packages run inside a MemberJunction host, wired up via
@@ -181,7 +182,11 @@ Generated files are committed, and AIDP Next ships them as they are: it excludes
 ## Development Workflow
 - **CRITICAL**: After making code changes, always compile the affected package by running `pnpm run build` in that package's directory to check for TypeScript errors
 - Fix all compilation errors before proceeding with additional changes
-- **Tasks**: whenever you need to spin up tasks - if they do not require interaction with the user and if they are not interdependent in any way, ALWAYS spin up multiple parallel tasks to work together for faster responses
+
+## Testing
+- `pnpm run test` runs each package's `test`, `test:dom` and `test:types` scripts through Turborepo, leaving out the integration tests. It is the only test step CI runs (`.github/workflows/build.yml`).
+- `pnpm run test:integration` runs the live suite in `packages/IntegrationTests` through `test-harnesses/integration.mjs`, after `pnpm run build`. It needs a running MJAPI, that MJAPI's system API key in `MJ_API_KEY`, and the bizapps-orders integration world loaded, and it writes data on every run (`RUN_MUTATION_TESTS=0` does not stop it). CI does not run it. Prerequisites: [`packages/IntegrationTests/README.md`](packages/IntegrationTests/README.md).
+- Every test tier and how to run each: [`test-harnesses/README.md`](test-harnesses/README.md).
 
 ## Ports
 - MJAPI GraphQL server: **4102** (configured via `GRAPHQL_PORT` in `.env`)
@@ -355,6 +360,7 @@ This repo uses MemberJunction's CodeGen system to generate entity and action sub
 - The PostgreSQL counterparts in `migrations-pg/` are produced by the MJ converter (`@memberjunction/sql-converter`) via `pnpm exec mj sql-convert <file> --from tsql --to postgres --output migrations-pg/<file>.pg.sql --schema __mj_BizAppsAccounting`. PG-only patches use the `.pg-only.sql` extension.
 - **Never hand-edit `migrations-pg/*.pg.sql`** — fix the converter rule and re-convert. PG-only patches are the exception, and live next to the converted files.
 - `.github/workflows/pg-migrations.yml` validates PG parity on `workflow_dispatch` (manual trigger) rather than gating PRs, per MJ cross-repo policy.
+- The counterpart gate is `.github/scripts/check-pg-counterpart.sh`: on PRs into `next` it only warns when a new migration has no `.pg.sql`; on the release PR (`rr: pg counterparts`) it fails for any migration added since the last release that has none.
 - See `migrations-pg/README.md` for the conversion workflow and the MJ repo's `/pg-migrate` slash command for the deeper toolchain.
 
 ### Accounting-specific schema invariants (see `plans/bizapps-accounting-master.md` §6)
@@ -406,14 +412,10 @@ This repo uses MemberJunction's CodeGen system to generate entity and action sub
 
 ## Debugging
 
-### VSCode Launch Configurations
-- **MJAPI**: Node.js debugger with source maps for local packages
-- **MJExplorer**: Chrome debugger (port 4302) with source maps
-- **MJExplorer (attach)**: Attach to existing Chrome on port 9222
-- **Full Stack**: Compound configuration running both MJAPI + MJExplorer
-
-### Source Map Scoping
-Source maps are scoped to local packages only (`apps/MJAPI/**`, `packages/Entities/**`, `packages/Actions/**`, `packages/Server/**`, `packages/Angular/**`). Third-party packages and node_modules are excluded to avoid noise.
+There is no host app in this repo to debug: the packages run inside a MemberJunction host, so debug
+that host's MJAPI and Explorer. The configurations in `.vscode/launch.json` (MJAPI, MJExplorer,
+MJExplorer attach, Full Stack) still point at the removed `apps/MJAPI` and `apps/MJExplorer` and do
+not work as they are.
 
 ---
 
@@ -442,14 +444,14 @@ Source maps are scoped to local packages only (`apps/MJAPI/**`, `packages/Entiti
 
 ## Purpose
 
-This repository provides the **AR subsidiary ledger of record + journal-entry primitives** for the MemberJunction ecosystem. Downstream apps (BizAppsOrders, future BizAppsPayroll/ExpenseManagement/FixedAssets) emit balanced journal entries by calling into this app's `AccountingService`. Entries batch to an external ERP (Business Central, QuickBooks, NetSuite, Sage) for the full general-ledger close.
+This repository provides the **AR subsidiary ledger of record + journal-entry primitives** for the MemberJunction ecosystem. Downstream apps (BizAppsOrders, future BizAppsPayroll/ExpenseManagement/FixedAssets) emit balanced journal entries through this app's `Accounting.CreateJournalEntry` / `Accounting.CreateJournalEntries` Remote Operations, which run on the server through `AccountingEngine`. Entries batch to an external ERP (Business Central, QuickBooks, NetSuite, Sage) for the full general-ledger close.
 
 **What lives here** (per `plans/bizapps-accounting-master.md`):
 1. `GLAccount` + seeded default chart of accounts
 2. `AccountingCompanyProfile` — IsA Disjoint child of `__mj.Company` (functional currency, fiscal year, business-profile fields). A company's **default accounts are company-level `GLAccountLink` rows** keyed by role (AR, Sales, Deferred Revenue, …), NOT columns on the profile (D12)
 3. `JournalEntry` / `JournalEntryLine` / `JournalEntryBatch` with balanced-JE + immutability invariants enforced at the DB level
 4. `Dimension` / `DimensionValue` / `JournalEntryLineDimension` for analytical tagging
-5. Tax entities (`TaxAuthority`, `TaxJurisdiction`, `TaxRate`, `TaxLiability`, `CustomerTaxProfile`) + pluggable `TaxCalculationProvider` — accounting keeps the tax ACCRUAL only; remitting to the authority is an ERP/GL concern (TaxRemittance removed 2026-07-29, Amith PR-27 review)
+5. Tax entities (`TaxAuthority`, `TaxJurisdiction`, `TaxRate`, `TaxLiability`, `CompanyTaxNexus`) + the pluggable `TaxCalculationProvider` seam (D17; not built yet) — accounting keeps the tax ACCRUAL only; remitting to the authority is an ERP/GL concern, so `TaxRemittance` was removed (2026-07-29). Buyer-side exemption is not here: `CustomerTaxProfile` was dropped
 6. Forward-dated real JEs for rev-rec and other scheduled recognition (D15 — this REPLACED the `Recurring*` template trio, which was never built)
 7. Read-model views (`vw_TrialBalance_AR`, `vw_AROpenByCustomer`, `vw_DefRevRollforward`, etc.) for Skip-generated reports. **Creation is deferred** (2026-07-22): none are in the baseline today; each is built when a report that needs it ships.
 
@@ -462,11 +464,11 @@ by company-level `GLAccountLink` rows).
 
 **What does NOT live here**: trial balance / P&L / balance sheet generation, year-end closing, statistical accounts, fixed-asset depreciation as first-class, inventory/COGS, expense management. Those stay in the ERP or future BizApps* siblings.
 
-**Dependencies**: `__mj` (MJ core) → `bizapps-common` (Currency, CurrencyExchangeRate, Organization, Address) → **this repo** → `bizapps-orders` → `bizapps-contracts` → `aidp`.
+**Dependencies**: `__mj` (MJ core) → `bizapps-common` (business time zone, calendar-day and field-limit helpers) and `bizapps-tasks` (`Task`, for batch approvals) → **this repo** → `bizapps-orders` → `bizapps-contracts` → `aidp`.
 
 ## Angular pinning model
 
-**Angular pinning model** (family-wide, 2026-08-07, with MemberJunction/MJ#3580): `@angular/*` peers in `packages/*` are **caret ranges at the platform pin** (`^21.1.3`) — compatibility claims, never exact. Each package that consumes Angular **anchors** the concrete version with exact `21.1.3` entries in its own `devDependencies`; the anchor is what actually installs. In the shared pnpm dev workspace `auto-install-peers=true` turns unanchored peer ranges into install instructions, which is how two copies of `@angular/core` ended up installed family-wide. Rev anchors with the era platform pin, never with MJ pins.
+**Angular pinning model** (family-wide, 2026-08-07, the same model MJ core uses): `@angular/*` peers in `packages/*` are **caret ranges at the platform pin** (`^21.1.3`) — compatibility claims, never exact. Each package that consumes Angular **anchors** the concrete version with exact `21.1.3` entries in its own `devDependencies`; the anchor is what actually installs. In the shared pnpm dev workspace `auto-install-peers=true` turns unanchored peer ranges into install instructions, which is how two copies of `@angular/core` ended up installed family-wide. Rev anchors with the era platform pin, never with MJ pins.
 
 ## UI architecture — READ BEFORE TOUCHING ANGULAR
 
@@ -496,11 +498,13 @@ Editing the baseline was correct while the schema changed constantly and nothing
 That phase is over: an edit to the baseline is invisible to any database that already ran it — the
 column never appears and nothing reports a problem: `mj migrate` (Skyway) records a checksum but
 never validates it, so the edited script is silently skipped. `scripts/rebuild-db.sh`
-remains only for standing up a brand-new empty database; it is not a development loop.
+remains only for standing up a brand-new empty database; it is not a development loop, and it still
+rewrites the baseline file in your working tree (#348), so never commit what it leaves behind.
 
 Write migrations **deterministically** against the state earlier migrations leave: Skyway runs each
 `V` migration once, in order, so guards against this repo's own earlier migrations are unnecessary
-(header: `DETERMINISTIC, NOT IDEMPOTENT`). Assume the database already has data, pre-check existing
+(header: `DETERMINISTIC, NOT IDEMPOTENT`). Add a table's new columns in one `ALTER TABLE … ADD`, with
+their constraints inline. Assume the database already has data, pre-check existing
 rows before adding a constraint, and keep guards where the starting point genuinely varies — see the
 doc. A migration that reads `__mj.Entity` must skip cleanly when the row is absent —
 CodeGen runs *after* migrations — and if the change is really about metadata (field categories,
