@@ -59,7 +59,8 @@
  * read-only previewBatch that runs the SAME filter/order/netting as the build. The
  * one-transaction-per-batch guarantee (D10 rev. 2026-07-29) is here too: build + summary +
  * locks + approval task + ApprovalTaskID stamp commit all-or-none in one provider transaction.
- * Still not here: PostingDate selection UI (defaults to today's BUSINESS day — a UI-port item).
+ * PostingDate is the caller's choice (`postingDate`, golive #315), defaulting to today's BUSINESS
+ * day; never before a member entry, and it bounds the candidate pool.
  *
  * CONNECTS TO:
  *   READS/WRITES: Journal Entries (members + the JournalEntryBatchSummary JE) · Journal Entry Lines
@@ -89,8 +90,8 @@ import { JournalEntryBatchEntityServer, type ERPNotPostedBasis, type JournalEntr
 import { JournalEntryBatchDispatchServices } from './JournalEntryBatchDispatchServices.js';
 import { GetJournalEntryBatchSummaryEntryType } from './JournalEntryTypes.js';
 import { sqlGuidLiteral } from './SqlGuards.js';
-import { AddDays, ToCalendarDay } from '@mj-biz-apps/common-entities';
-import { loadBoundDay, loadTodayBusiness, type DateBound } from './BusinessDay.js';
+import { AddDays, FromCalendarDay, IsBeforeDay, ToCalendarDay, type CalendarDay } from '@mj-biz-apps/common-entities';
+import { loadBoundDay, loadPostingDay, type DateBound } from './BusinessDay.js';
 
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
@@ -225,6 +226,43 @@ export class EmptyJournalEntryBatchError extends Error {
   }
 }
 
+/**
+ * Thrown when a batch's PostingDate is earlier than one of its entries (golive #315). The ERP books
+ * the whole batch on that date, so the entry would land before it happened — in an earlier month at
+ * a month end.
+ */
+export class JournalEntryBatchPostingDateError extends Error {
+  public constructor(message: string) {
+    super(message);
+    this.name = 'JournalEntryBatchPostingDateError';
+  }
+}
+
+/** Refuse the build when any member is dated after the posting day; names the offenders. */
+async function assertPostingDayCoversMembers(jeIds: string[], postingDay: CalendarDay, contextUser: UserInfo, p: Providers): Promise<void> {
+  if (jeIds.length === 0) return;
+  const res = await p.rv.RunView<{ EntryNumber: string; EffectiveDate: string }>(
+    {
+      EntityName: JE_ENTITY,
+      ExtraFilter: `ID IN (${jeIds.map(sqlGuid).join(',')}) AND EffectiveDate > '${postingDay}'`,
+      OrderBy: 'EffectiveDate ASC, EntryNumber ASC',
+      Fields: ['EntryNumber', 'EffectiveDate'],
+      ResultType: 'simple',
+      BypassCache: true,
+    },
+    contextUser,
+  );
+  if (!res.Success) throw new Error(`buildJournalEntryBatch: could not check entry dates against the posting date: ${res.ErrorMessage ?? 'unknown'}`);
+  const later = res.Results ?? [];
+  if (later.length === 0) return;
+  const shown = later.slice(0, 5).map(r => `${r.EntryNumber} (${ToCalendarDay(r.EffectiveDate)})`).join(', ');
+  const more = later.length > 5 ? ` and ${later.length - 5} more` : '';
+  throw new JournalEntryBatchPostingDateError(
+    `Posting date ${postingDay} is earlier than ${later.length} selected entr${later.length === 1 ? 'y' : 'ies'}: ${shown}${more}. ` +
+    `Choose a posting date on or after ${ToCalendarDay(later[later.length - 1].EffectiveDate)}, or leave those entries out.`,
+  );
+}
+
 // ─── buildJournalEntryBatch ──────────────────────────────────────────────────────────────
 
 /**
@@ -255,7 +293,7 @@ export async function buildJournalEntryBatch(
   if (jeIds.length === 0) {
     throw new EmptyJournalEntryBatchError(`Nothing to batch: company ${companyId} has no unbatched Pending journal entries matching the criteria.`);
   }
-  return buildJournalEntryBatchCore(companyId, jeIds, targetSystem, batchedByUserId, contextUser, provider, gate);
+  return buildJournalEntryBatchCore(companyId, jeIds, targetSystem, batchedByUserId, contextUser, provider, gate, options.postingDate);
 }
 
 /**
@@ -272,8 +310,11 @@ async function buildJournalEntryBatchCore(
   contextUser: UserInfo,
   provider: IMetadataProvider,
   gate: JournalEntryBatchApprovalGate,
+  postingDate: DateBound | null | undefined,
 ): Promise<BuildJournalEntryBatchResult> {
   const p = resolveProviders(provider);
+  const postingDay = await loadPostingDay(postingDate, contextUser, p.md, companyId);
+  await assertPostingDayCoversMembers(jeIds, postingDay, contextUser, p);
   const groups = NetLines(await loadNettableLines(companyId, jeIds, contextUser, p));
   if (groups.length === 0) {
     throw new EmptyJournalEntryBatchError(`Nothing to batch: company ${companyId}'s selected entries net to zero — no summary line would be produced.`);
@@ -286,7 +327,7 @@ async function buildJournalEntryBatchCore(
   const dbProvider = provider as unknown as DatabaseProviderBase;
   await dbProvider.BeginTransaction();
   try {
-    const batch = await createBatchHeader(companyId, targetSystem, batchedByUserId, jeIds.length, contextUser, p);
+    const batch = await createBatchHeader(companyId, targetSystem, batchedByUserId, jeIds.length, postingDay, contextUser, p);
     const summary = await writeSummaryJournalEntry(batch, groups, contextUser, p);
     await setSummaryPointerAndTotals(batch, summary.ID, totalDebits, totalCredits, jeIds.length);
     await lockJournalEntries(jeIds, batch.ID, contextUser, p);
@@ -350,6 +391,10 @@ export interface BuildJournalEntryBatchOptions {
   entryTypeCodes?: string[] | null;
   /** Exclude these JournalEntryType CODES (e.g. 'RevenueRecognition'). Omit/empty = no exclusions. */
   excludeEntryTypeCodes?: string[] | null;
+  /** The batch's PostingDate — the journal date the ERP receives (golive #315). Same shapes as
+   *  `cutoff`; omit for today's business day. It also bounds the candidate pool:
+   *  an entry dated after the posting date is never a candidate, cutoff or not. */
+  postingDate?: DateBound | null;
 }
 
 /**
@@ -396,10 +441,12 @@ async function criteriaClauses(
   const summaryType = await GetJournalEntryBatchSummaryEntryType(contextUser, p.md);
   const clauses = [`Status='Pending'`, `EntryTypeID<>'${summaryType.ID}'`];
   if (startDay) clauses.push(`EffectiveDate >= '${startDay}'`);
-  if (options.cutoff) {
-    const cutoffDay = await loadBoundDay(options.cutoff, 'Batch criteria Cutoff', contextUser, p.md, scopeCompanyId(options));
-    clauses.push(`EffectiveDate < '${AddDays(cutoffDay, 1)}'`); // inclusive whole day
-  }
+  // The pool ends at the earlier of the cutoff and the posting date: an entry dated after the posting
+  // date would reach the ERP before it happened (golive #315), so it waits for a later batch.
+  const postingDay = await loadPostingDay(options.postingDate, contextUser, p.md, scopeCompanyId(options));
+  const cutoffDay = options.cutoff ? await loadBoundDay(options.cutoff, 'Batch criteria Cutoff', contextUser, p.md, scopeCompanyId(options)) : null;
+  const throughDay = cutoffDay && IsBeforeDay(cutoffDay, postingDay) ? cutoffDay : postingDay;
+  clauses.push(`EffectiveDate < '${AddDays(throughDay, 1)}'`); // inclusive whole day
   // Empty/omitted scope = NO clause (all companies / all types) — never `IN ()`, which is a SQL
   // syntax error AND would silently mean "nothing".
   if (options.companyIds?.length) {
@@ -527,6 +574,7 @@ export async function buildJournalEntryBatchFromExplicitIds(
   contextUser: UserInfo,
   provider: IMetadataProvider,
   gate: JournalEntryBatchApprovalGate = AutoApproveGate,
+  postingDate: DateBound | null = null,
 ): Promise<BuildJournalEntryBatchResult[]> {
   if (jeIds.length === 0) throw new EmptyJournalEntryBatchError('Nothing to batch: no journal entries were selected.');
   const p = resolveProviders(provider);
@@ -555,7 +603,7 @@ export async function buildJournalEntryBatchFromExplicitIds(
   }
   const results: BuildJournalEntryBatchResult[] = [];
   for (const [companyId, ids] of byCompany) {
-    results.push(await buildJournalEntryBatchCore(companyId, ids, targetSystem, batchedByUserId, contextUser, provider, gate));
+    results.push(await buildJournalEntryBatchCore(companyId, ids, targetSystem, batchedByUserId, contextUser, provider, gate, postingDate));
   }
   return results;
 }
@@ -626,7 +674,7 @@ export async function buildJournalEntryBatchFromView(
     inWindow = (winRes.Results ?? []).map(r => r.ID);
     if (inWindow.length === 0) throw new EmptyJournalEntryBatchError('Batch-from-view: no view entries fall inside the date window.');
   }
-  return buildJournalEntryBatchFromExplicitIds(inWindow, targetSystem, batchedByUserId, contextUser, provider, gate);
+  return buildJournalEntryBatchFromExplicitIds(inWindow, targetSystem, batchedByUserId, contextUser, provider, gate, options.postingDate ?? null);
 }
 
 /**
@@ -718,18 +766,16 @@ async function loadDimensionsByLine(lineIds: string[], contextUser: UserInfo, p:
 }
 
 async function createBatchHeader(
-  companyId: string, targetSystem: JournalEntryBatchTargetSystem, batchedByUserId: string, jeCount: number, contextUser: UserInfo, p: Providers,
+  companyId: string, targetSystem: JournalEntryBatchTargetSystem, batchedByUserId: string, jeCount: number, postingDay: CalendarDay,
+  contextUser: UserInfo, p: Providers,
 ): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
-  // PostingDate is today's business day in the batch's company (see BusinessDay.ts) — the same
-  // zone lookup the cutoff makes; PostingDate selection is a UI-port item.
-  const postingDate = await loadTodayBusiness(contextUser, p.md, companyId);
   const batch = await p.md.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, contextUser);
   batch.NewRecord();
   // The one sanctioned create. Everything else that saves a new batch — Explorer's generic New
   // form included — is refused by the entity's create guard (#193).
   batch.MarkBuiltByBatchingProcess();
   batch.CompanyID = companyId;
-  batch.PostingDate = postingDate;
+  batch.PostingDate = FromCalendarDay(postingDay);
   batch.TargetSystem = targetSystem;
   batch.BatchedAt = new Date();
   batch.BatchedByUserID = batchedByUserId;
@@ -1151,7 +1197,8 @@ export async function regenerateJournalEntryBatch(
   try {
     await batch.TearDownSummaryAndUnlock(contextUser);
 
-    const jeIds = await loadPendingJEIds(batch.CompanyID, contextUser, p);
+    // The batch keeps its PostingDate, so the re-gather stops at it — the same bound a build applies.
+    const jeIds = await loadPendingJEIds(batch.CompanyID, contextUser, p, { postingDate: batch.PostingDate });
     const groups = NetLines(await loadNettableLines(batch.CompanyID, jeIds, contextUser, p));
     if (groups.length === 0) {
       // Nothing to rebuild — a batch with no summary line is never persisted (Marcelo 2026-07-21):

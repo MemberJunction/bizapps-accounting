@@ -37,7 +37,7 @@ import { AUGUST_CLOSE_IN_CHICAGO, stubbedReadsProvider, useBusinessClock } from 
  * (a `datetime-local` would hold an instant) is pinned too.
  */
 const BUSINESS_DAY = '2026-08-31';
-const NO_CUTOFF = 'no cutoff — includes future-dated entries';
+const NO_CUTOFF = 'no cutoff — through the posting date';
 
 interface RecordedCall {
   Name: string;
@@ -86,9 +86,9 @@ describe('JournalEntryBatchWorkspacePageComponent — default cutoff (DOM)', () 
     expect(page.CriteriaChips).toContain(`through ${BUSINESS_DAY}`);
   });
 
-  it('says so when the cutoff is cleared — an empty cutoff previews entries dated in the future too', async () => {
-    // Clearing the date input sends no cutoff, so the preview includes every Pending entry,
-    // tomorrow's included. That was silent: the "through" chip simply vanished.
+  it('says so when the cutoff is cleared — an empty cutoff previews everything through the posting date', async () => {
+    // Clearing the date input sends no cutoff, so the pool ends at the posting date (golive #315).
+    // That was silent: the "through" chip simply vanished.
     const page = (await render()).componentInstance;
     page.Draft!.Criteria.Cutoff = '';
     page.OnCriteriaChanged();
@@ -106,6 +106,109 @@ describe('JournalEntryBatchWorkspacePageComponent — default cutoff (DOM)', () 
 
     expect(calls[0].Name).toBe('Accounting.PreviewJournalEntryBatch');
     expect(calls[0].Payload['Cutoff']).toBe(BUSINESS_DAY);
+  });
+});
+
+describe('JournalEntryBatchWorkspacePageComponent — posting date (golive #315)', () => {
+  useBusinessClock(AUGUST_CLOSE_IN_CHICAGO);
+  let calls: RecordedCall[];
+
+  beforeEach(async () => {
+    calls = [];
+    vi.spyOn(AccountingEngineBase.prototype, 'Config').mockResolvedValue(undefined);
+    await TestBed.configureTestingModule({
+      declarations: [JournalEntryBatchWorkspacePageComponent],
+      providers: [PageRefreshService],
+    })
+      .overrideComponent(JournalEntryBatchWorkspacePageComponent, { set: { template: '' } })
+      .compileComponents();
+  });
+
+  async function render(): Promise<JournalEntryBatchWorkspacePageComponent> {
+    const fixture = TestBed.createComponent(JournalEntryBatchWorkspacePageComponent);
+    fixture.componentRef.setInput('Provider', recordingProvider(calls));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    return fixture.componentInstance;
+  }
+
+  /** A loaded, balanced preview of one entry dated `day`. */
+  function withPreview(page: JournalEntryBatchWorkspacePageComponent, day: string): void {
+    page.Draft!.Preview = {
+      Candidates: [{ ID: 'je-1', EntryNumber: 'JE-0001', EffectiveDate: `${day}T00:00:00.000Z`, EntryTypeCode: 'Manual', CompanyID: 'c-1', Description: null, Amount: 100 }],
+      AffectedAccounts: [], TotalDebits: 100, TotalCredits: 100, GrossDebits: 100, GrossCredits: 100, PerCompany: [], OutOfOrderSkipCount: 0, BeforePostingStartCount: 0,
+    };
+  }
+
+  it('defaults to the business day, shows it as a chip, and sends it with the preview', async () => {
+    const page = await render();
+    expect(page.Draft?.Criteria.PostingDate).toBe(BUSINESS_DAY);
+    expect(page.CriteriaChips).toContain(`posting date ${BUSINESS_DAY}`);
+
+    page.Apply();
+    await vi.waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0].Payload['PostingDate']).toBe(BUSINESS_DAY);
+  });
+
+  it('sends the chosen posting date with the build', async () => {
+    const page = await render();
+    page.Draft!.Criteria.PostingDate = '2026-08-30';
+    withPreview(page, '2026-08-29');
+    await page.Build();
+
+    const build = calls.find(c => c.Name === 'Accounting.BuildJournalEntryBatch');
+    expect(build?.Payload['PostingDate']).toBe('2026-08-30');
+  });
+
+  it.each([
+    ['empty', '', 'Choose a posting date.'],
+    ['earlier than an included entry', '2026-08-29',
+      'The posting date 2026-08-29 is earlier than an included entry dated 2026-08-30 — move it to 2026-08-30 or later, or apply the filters again.'],
+  ])('blocks the build when the posting date is %s', async (_label, postingDate, reason) => {
+    const page = await render();
+    withPreview(page, '2026-08-30');
+    page.Draft!.Criteria.PostingDate = postingDate;
+    expect(page.CanBuild).toBe(false);
+    expect(page.BuildBlockedReason).toBe(reason);
+  });
+
+  it.each([
+    ['future', '2026-09-01', 'September 2026'],
+    ['prior', '2026-07-31', 'July 2026'],
+  ])('asks before building on a %s-month posting date, and asks again when the date changes', async (which, day, month) => {
+    const page = await render();
+    withPreview(page, '2026-07-01');
+    page.Draft!.Criteria.PostingDate = day;
+    expect(page.PostingDateWarning).toBe(`The posting date ${day} is in a ${which} month, so the ERP books this batch in ${month}. Are you sure?`);
+    expect(page.CanBuild).toBe(false);
+    expect(page.BuildBlockedReason).toBe(`Confirm posting this batch in ${month}.`);
+
+    page.ConfirmPostingDate(true);
+    expect(page.CanBuild).toBe(true);
+    expect(page.BuildBlockedReason).toBeNull();
+
+    page.Draft!.Criteria.PostingDate = which === 'future' ? '2026-09-02' : '2026-07-30';
+    expect(page.PostingDateProblem).toBeNull();
+    expect(page.CanBuild, 'a different date asks again').toBe(false);
+  });
+
+  it('sends a confirmed future-month posting date with the build', async () => {
+    const page = await render();
+    withPreview(page, '2026-08-30');
+    page.Draft!.Criteria.PostingDate = '2026-09-01';
+    page.ConfirmPostingDate(true);
+    await page.Build();
+
+    const build = calls.find(c => c.Name === 'Accounting.BuildJournalEntryBatch');
+    expect(build?.Payload['PostingDate']).toBe('2026-09-01');
+  });
+
+  it('allows a posting date on the latest included entry\'s day', async () => {
+    const page = await render();
+    withPreview(page, '2026-08-30');
+    page.Draft!.Criteria.PostingDate = '2026-08-30';
+    expect(page.PostingDateProblem).toBeNull();
+    expect(page.CanBuild).toBe(true);
   });
 });
 
@@ -139,7 +242,7 @@ describe('JournalEntryBatchWorkspacePageComponent — cutoff input (DOM, real te
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(label!.querySelector('.bw-hint')?.textContent?.trim()).toBe('No cutoff — includes future-dated entries.');
+    expect(label!.querySelector('.bw-hint')?.textContent?.trim()).toBe('No cutoff — includes everything through the posting date.');
   });
 });
 
@@ -259,10 +362,96 @@ describe('JournalEntryBatchWorkspacePageComponent — overlapping previews (DOM,
     pending[1].resolve(preview(200));
     await settle();
     expect(page.Preview, 'the response did not land on the new tab').toBeNull();
-    expect(page.Draft?.ExcludedIDs).toEqual([]);
+    expect(page.Draft?.Selection).toBeNull();
 
     page.SelectTab(firstTab);
     expect(page.Preview?.TotalDebits).toBe(200);
-    expect(page.Draft?.ExcludedIDs).toEqual([ENTRY_A.ID]);
+    expect(page.Draft?.Selection).toEqual([ENTRY_B.ID]);
+  });
+});
+
+/**
+ * The selection after a criteria change (golive #284). The preview request carries the selection
+ * as it is; it used to be derived from the previous preview's candidates, so after Apply on wider
+ * criteria the totals covered the old pool while the new entries showed ticked.
+ */
+describe('JournalEntryBatchWorkspacePageComponent — selection across a criteria change (DOM, golive #284)', () => {
+  const MANUAL = { ...ENTRY_A, EntryTypeCode: 'Manual', Amount: 100 };
+  const SYSTEM_OLD = { ...ENTRY_B, ID: 'je-s1', EntryNumber: 'JE-S1', EffectiveDate: '2026-07-31', EntryTypeCode: 'Invoice', Amount: 50 };
+  const SYSTEM_NEW = { ...ENTRY_B, ID: 'je-s2', EntryNumber: 'JE-S2', EffectiveDate: '2026-08-03', EntryTypeCode: 'Invoice', Amount: 70 };
+  const POOL = [SYSTEM_OLD, MANUAL, SYSTEM_NEW]; // oldest first
+  let requested: Array<string[] | null>;
+
+  beforeEach(async () => {
+    vi.spyOn(AccountingEngineBase.Instance, 'Config').mockResolvedValue(undefined);
+    requested = [];
+    // Answers like previewBatch: filter by type, total the included ids that are in the pool.
+    vi.spyOn(JournalEntryBatchWorkspaceClient.prototype, 'Preview').mockImplementation(async (_p, _c, includedIds, entryTypes) => {
+      requested.push(includedIds);
+      const rows = POOL.filter((e) => !entryTypes || entryTypes.includes(e.EntryTypeCode));
+      const included = new Set(includedIds ?? rows.map((r) => r.ID));
+      const total = rows.filter((r) => included.has(r.ID)).reduce((s, r) => s + r.Amount, 0);
+      return { ...preview(total), Candidates: rows };
+    });
+    await TestBed.configureTestingModule({ imports: [AccountingShellModule], providers: [PageRefreshService] }).compileComponents();
+  });
+
+  async function loadedManualOnly(): Promise<ComponentFixture<JournalEntryBatchWorkspacePageComponent>> {
+    const fixture = TestBed.createComponent(JournalEntryBatchWorkspacePageComponent);
+    fixture.componentRef.setInput('Provider', stubbedReadsProvider());
+    fixture.detectChanges();
+    const page = fixture.componentInstance;
+    page.Draft!.Criteria.EntryTypeScope = 'Manual';
+    page.Apply();
+    await vi.waitFor(() => expect(page.IsPreviewing).toBe(false));
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  async function widenToAll(fixture: ComponentFixture<JournalEntryBatchWorkspacePageComponent>): Promise<void> {
+    const page = fixture.componentInstance;
+    page.Draft!.Criteria.EntryTypeScope = 'All';
+    page.OnCriteriaChanged();
+    page.Apply();
+    await vi.waitFor(() => expect(page.IsPreviewing).toBe(false));
+    fixture.detectChanges();
+  }
+
+  const ticked = (fixture: ComponentFixture<JournalEntryBatchWorkspacePageComponent>) =>
+    Array.from(fixture.nativeElement.querySelectorAll('.bw-grid tbody input[type="checkbox"]') as NodeListOf<HTMLInputElement>)
+      .filter((b) => b.checked)
+      .map((b) => b.getAttribute('aria-label'));
+
+  it('with every entry ticked, wider criteria bring the new entries in ticked and totalled', async () => {
+    const fixture = await loadedManualOnly();
+    await widenToAll(fixture);
+    const page = fixture.componentInstance;
+    expect(requested).toEqual([null, null]);
+    expect(ticked(fixture)).toEqual(['Include JE-S1', 'Include JE-A', 'Include JE-S2']);
+    expect(page.IncludedCount).toBe(3);
+    expect(page.Preview?.GrossDebits).toBe(220);
+  });
+
+  it('after an untick, wider criteria bring the new entries in unticked, and the totals match the ticks', async () => {
+    const fixture = await loadedManualOnly();
+    const page = fixture.componentInstance;
+    page.ToggleEntry(MANUAL.ID); // untick the only entry
+    await vi.waitFor(() => expect(page.IsPreviewing).toBe(false));
+    expect(requested.at(-1)).toEqual([]);
+
+    await widenToAll(fixture);
+    expect(requested.at(-1)).toEqual([]);
+    expect(ticked(fixture)).toEqual([]);
+    expect(page.IncludedCount).toBe(0);
+    expect(page.Preview?.GrossDebits).toBe(0);
+    expect(page.CanBuild).toBe(false);
+
+    page.ToggleEntry(SYSTEM_NEW.ID);
+    await vi.waitFor(() => expect(page.IsPreviewing).toBe(false));
+    fixture.detectChanges();
+    expect(requested.at(-1)).toEqual([SYSTEM_NEW.ID]);
+    expect(ticked(fixture)).toEqual(['Include JE-S2']);
+    expect(page.IncludedCount).toBe(1);
+    expect(page.Preview?.GrossDebits).toBe(70);
   });
 });
