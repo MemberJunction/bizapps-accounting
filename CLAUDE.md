@@ -381,8 +381,10 @@ This repo uses MemberJunction's CodeGen system to generate entity and action sub
   heads the plan's §5.9 "deliberately ABSENT" table. JEs carry dates only (`EffectiveDate`), and a
   dispatched batch lands in whatever period the ERP has active. **Closed-period collisions
   hold-and-flag, never auto-roll:** when the ERP rejects a batch for a closed posting date, the batch
-  is flagged for review — there is no local period gate to detect it first. Any future timing rule
-  detects by DATE, never a period FK.
+  is flagged for review: it goes `Failed` with the ERP's message and raises an `ERP_POSTING_REJECTED`
+  finance exception. Any timing rule detects by DATE, never a period FK. The one such rule is
+  `AccountingCompanyProfile.BooksClosedThroughDate` (golive #316): finance's date for how far the
+  ERP's periods are closed. Builds refuse a posting date on or before it; it is not a period table.
 - `AccountingCompanyProfile` is an IsA Disjoint child of `__mj.Company` — same UUID as the parent row, never INSERT a Profile without a matching Company.
 
 ### Instants are UTC; calendar days are calendar days; "today" is the business day (convention)

@@ -4,7 +4,7 @@ import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import { BusinessTimeZoneEngine, IsBeforeDay, IsCalendarDay, ToCalendarDay } from '@mj-biz-apps/common-entities';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
-import { PostingDateMonthWarning, PostingMonthLabel } from '../../shared/posting-date-warning';
+import { ClosedBooksProblem, PostingDateMonthWarning, PostingMonthLabel } from '../../shared/posting-date-warning';
 import { CompanyScopeService } from '../../shared/company-scope.service';
 import { WorkspaceTabStore } from '../../../transfer-pending/workspace-tabs/workspace-tab-store';
 import { WorkspaceTab } from '../../../transfer-pending/workspace-tabs/workspace-tabs.types';
@@ -489,6 +489,8 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
   public get PostingDateProblem(): string | null {
     const postingDate = this.Draft?.Criteria.PostingDate ?? null;
     if (!postingDate || !IsCalendarDay(postingDate)) return 'Choose a posting date.';
+    const closed = ClosedBooksProblem(postingDate, this.Draft?.Criteria.CompanyIDs ?? []);
+    if (closed) return closed;
     const latest = this.latestIncludedDay();
     if (latest && IsBeforeDay(postingDate, latest)) {
       return `The posting date ${postingDate} is earlier than an included entry dated ${latest} — move it to ${latest} or later, or apply the filters again.`;

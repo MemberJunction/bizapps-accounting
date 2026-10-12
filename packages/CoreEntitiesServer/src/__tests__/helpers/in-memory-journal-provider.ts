@@ -29,6 +29,7 @@ export interface JournalRow {
 export interface ProfileRow {
   ID: string;
   PostingStartDate: Date | null;
+  BooksClosedThroughDate?: Date | null;
 }
 
 interface ViewParams {
@@ -50,9 +51,13 @@ export function journal(id: string, companyId: string, effectiveDate: string, ov
   return { ID: id, EntryNumber: `JE-${id}`, CompanyID: companyId, EffectiveDate: effectiveDate, Status: 'Pending', EntryTypeID: MANUAL_TYPE_ID, Description: null, ...overrides };
 }
 
-/** A profile with a PostingStartDate as the provider returns a DATE column: UTC midnight. */
-export function profile(companyId: string, postingStartDate: string | null): ProfileRow {
-  return { ID: companyId, PostingStartDate: postingStartDate ? new Date(`${postingStartDate}T00:00:00.000Z`) : null };
+/** A profile with its DATE columns as the provider returns them: UTC midnight. */
+export function profile(companyId: string, postingStartDate: string | null, booksClosedThroughDate: string | null = null): ProfileRow {
+  return { ID: companyId, PostingStartDate: dateColumn(postingStartDate), BooksClosedThroughDate: dateColumn(booksClosedThroughDate) };
+}
+
+function dateColumn(day: string | null): Date | null {
+  return day ? new Date(`${day}T00:00:00.000Z`) : null;
 }
 
 /** Compile the engine's ExtraFilter subset to a row predicate. */
@@ -91,8 +96,10 @@ function resolve(params: ViewParams, data: { journals: JournalRow[]; profiles: P
       : [{ ID: SUMMARY_TYPE_ID, Code: 'JournalEntryBatchSummary' }, { ID: MANUAL_TYPE_ID, Code: 'Manual' }];
   }
   if (params.EntityName === ACP_ENTITY) {
-    if (params.ExtraFilter !== 'PostingStartDate IS NOT NULL') throw new Error(`in-memory provider: unexpected profile filter ${params.ExtraFilter}`);
-    return data.profiles.filter(p => p.PostingStartDate !== null);
+    if (params.ExtraFilter === 'PostingStartDate IS NOT NULL') return data.profiles.filter(p => p.PostingStartDate !== null);
+    // The build's books-closed read names one company.
+    if (params.ExtraFilter?.startsWith('ID=')) return data.profiles.filter(compileFilter(params.ExtraFilter));
+    throw new Error(`in-memory provider: unexpected profile filter ${params.ExtraFilter}`);
   }
   if (params.EntityName === JE_ENTITY) {
     return params.ExtraFilter ? data.journals.filter(compileFilter(params.ExtraFilter)) : data.journals;

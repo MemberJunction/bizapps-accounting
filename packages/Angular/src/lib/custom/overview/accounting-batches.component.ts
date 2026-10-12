@@ -8,7 +8,7 @@ import { MJButtonDirective, MJDialogComponent, MJDialogActionsComponent, MJDropd
 import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
 import { BusinessTimeZoneEngine, IsCalendarDay } from '@mj-biz-apps/common-entities';
 import { calendarDaySpan, formatJournalDate } from '../form-panels/journal-entry-panel.helpers';
-import { PostingDateMonthWarning, PostingMonthLabel } from '../shared/posting-date-warning';
+import { ClosedBooksProblem, PostingDateMonthWarning, PostingMonthLabel } from '../shared/posting-date-warning';
 import {
     ALL_ENTRIES,
     NO_ENTRIES,
@@ -1584,11 +1584,19 @@ export class AccountingBatchesPageComponent implements OnInit {
         this.ConfirmPostingDate((event.target as HTMLInputElement).checked);
     }
 
+    /** Why the posting date falls in a month finance has closed for a ticked entry's company (golive #316), or null. */
+    public get ClosedBooksProblem(): string | null {
+        const included = new Set(this.IncludedEntryIDs);
+        const companies = this.PreviewEntries.filter(e => included.has(e.ID)).map(e => e.CompanyID);
+        return ClosedBooksProblem(this.BuildPostingDate, companies);
+    }
+
     /** Non-null = why Build is disabled. Saying it beats a dead button with no explanation. */
     public get BuildBlockedReason(): string | null {
         // The preview re-queries on every change and its pool ends at the posting date, so no ticked
         // entry can postdate it; the server refuses that case regardless.
         if (!IsCalendarDay(this.BuildPostingDate)) return 'Choose a posting date.';
+        if (this.ClosedBooksProblem) return this.ClosedBooksProblem;
         if (this.PostingDateWarning && !this.PostingDateConfirmed) return `Confirm posting this batch in ${this.PostingMonth}.`;
         if (this.PreviewCandidateCount === 0) return 'Nothing matches these criteria.';
         if (this.IncludedCount === 0) return 'Every entry is excluded — nothing to build.';
