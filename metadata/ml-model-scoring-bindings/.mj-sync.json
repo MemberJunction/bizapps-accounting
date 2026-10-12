@@ -1,0 +1,13 @@
+{
+  "entity": "MJ: ML Model Scoring Bindings",
+  "filePattern": "**/.*.json",
+  "pull": {
+    "filter": "TargetEntityID = 'C040A1FC-16CE-49CB-B0E2-4F233BD0D762'",
+    "createNewFileIfNotFound": true,
+    "newFileName": ".ml-model-scoring-bindings.json",
+    "appendRecordsToExistingFile": true,
+    "updateExistingRecords": true,
+    "ignoreNullFields": true,
+    "ignoreVirtualFields": true
+  }
+}

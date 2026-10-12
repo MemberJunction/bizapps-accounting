@@ -11,6 +11,7 @@ import {
 } from '@mj-biz-apps/accounting-entities';
 import { JournalEntryBatchDispatchClient } from '../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
+import { resolveBatchStatusWindow } from './batch-status-window';
 
 /** Generated value-list unions (rule 2c: derived from the entity, never hand-copied). */
 type BatchStatus = mjBizAppsAccountingJournalEntryBatchEntity['Status'];
@@ -185,26 +186,21 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
   public OnFromDateChange(v: string): void { this.FromDate = v || null; this.ActiveWindow = null; this.cdr.markForCheck(); }
   public OnToDateChange(v: string): void { this.ToDate = v || null; this.ActiveWindow = null; this.cdr.markForCheck(); }
 
-  /** Moving-window presets (Robert 2026-07-09: "last day/week/month" windows). Sets the From/To range. */
+  /**
+   * Moving-window presets (Robert 2026-07-09: "last day/week/month" windows). Sets the From/To
+   * range. Anchored on the BUSINESS day via `resolveBatchStatusWindow`
+   * (`BusinessTimeZoneEngine.Instance.Today()`), not the browser's local day — see that file for
+   * why this component may read the engine directly.
+   */
   public ApplyWindow(win: 'today' | '7d' | '30d'): void {
-    const to = new Date();
-    const from = new Date();
-    if (win === '7d') from.setDate(from.getDate() - 6);
-    else if (win === '30d') from.setDate(from.getDate() - 29);
-    this.FromDate = this.toDateInput(from);
-    this.ToDate = this.toDateInput(to);
+    const { FromDate, ToDate } = resolveBatchStatusWindow(win);
+    this.FromDate = FromDate;
+    this.ToDate = ToDate;
     this.ActiveWindow = win;
     this.cdr.markForCheck();
   }
   public ClearWindow(): void { this.FromDate = null; this.ToDate = null; this.ActiveWindow = null; this.cdr.markForCheck(); }
   public IsWindowOn(win: 'today' | '7d' | '30d'): boolean { return this.ActiveWindow === win; }
-
-  /** Local-time yyyy-MM-dd for a native <input type="date"> (matches inSpan's day-granularity parsing). */
-  private toDateInput(d: Date): string {
-    const m = `${d.getMonth() + 1}`.padStart(2, '0');
-    const day = `${d.getDate()}`.padStart(2, '0');
-    return `${d.getFullYear()}-${m}-${day}`;
-  }
 
   public StatusVariant(active: boolean): MjButtonVariant { return active ? 'primary' : 'flat'; }
 
@@ -243,8 +239,13 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
   private inSpan(b: BatchRow): boolean {
     if (!this.FromDate && !this.ToDate) return true;
     if (!b.StartDate || !b.EndDate) return false; // a dateless batch can't satisfy a span
-    const fromT = this.FromDate ? new Date(this.FromDate).getTime() : -Infinity;
-    const toT = this.ToDate ? new Date(`${this.ToDate}T23:59:59`).getTime() : Infinity;
+    // BOTH ends are parsed as UTC midnight, the contract batch-status-window.ts states and the
+    // shape StartDate/EndDate already carry (they come from EffectiveDate, a DATE column). A bare
+    // 'YYYY-MM-DD' is UTC by spec, but 'YYYY-MM-DDTHH:mm:ss' with no offset is LOCAL — so the To
+    // end used to run to 23:59:59 in the BROWSER's zone, and a batch dated tomorrow showed up
+    // under the "Today" preset for every viewer west of UTC.
+    const fromT = this.FromDate ? new Date(`${this.FromDate}T00:00:00.000Z`).getTime() : -Infinity;
+    const toT = this.ToDate ? new Date(`${this.ToDate}T23:59:59.999Z`).getTime() : Infinity;
     return b.EndDate.getTime() >= fromT && b.StartDate.getTime() <= toT;
   }
 

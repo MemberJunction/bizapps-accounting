@@ -333,6 +333,13 @@
     text-decoration: underline;
 }
 
+.mja-je-ov-fact__hint {
+    display: block;
+    font-size: var(--mj-text-xs);
+    font-weight: 400;
+    color: var(--mj-text-muted);
+}
+
 .mja-je-timeline {
     display: flex;
     align-items: center;

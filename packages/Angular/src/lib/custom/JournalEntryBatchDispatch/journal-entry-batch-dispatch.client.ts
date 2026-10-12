@@ -2,7 +2,8 @@
  * JournalEntryBatchDispatchClient — a thin, strongly-typed wrapper over the batch Remote Operations
  * (`Accounting.BuildJournalEntryBatch` / `Accounting.RegenerateJournalEntryBatch` / `Accounting.DispatchJournalEntryBatch` /
  * `Accounting.RecordJournalEntryBatchDecision` / `Accounting.GetJournalEntryBatchApprovalState` /
- * `Accounting.ArchiveJournalEntryBatch`).
+ * `Accounting.ArchiveJournalEntryBatch` / `Accounting.CancelJournalEntryBatch` / `Accounting.ResumeJournalEntryBatchPosting` /
+ * `Accounting.GetStrandedJournalEntries`).
  *
  * Deliberately NOT a hand-written GraphQL client (the old shape, which talked to the deleted
  * BatchDispatchResolver): batch actions run the batching engine server-side, so they travel MJ's
@@ -37,10 +38,38 @@ interface BuildJournalEntryBatchOutputWire {
   NothingToBatch: boolean;
 }
 
-interface DispatchJournalEntryBatchOutputWire { Status: string; ExternalJournalEntryBatchRef: string | null }
+/** Keep in sync with `ErpPostingUnconfirmedKind` in CoreEntitiesServer's JournalEntryBatchEngine.ts. */
+export type DispatchConfirmationKind = 'Unavailable' | 'Error' | 'Mismatch';
+interface DispatchJournalEntryBatchOutputWire {
+  Status: string;
+  ExternalJournalEntryBatchRef: string | null;
+  ConfirmationRequired?: string;
+  ConfirmationKind?: DispatchConfirmationKind;
+}
 interface GetJournalEntryBatchApprovalStateOutputWire { Approved: boolean; Reason?: string }
 interface RecordJournalEntryBatchDecisionOutputWire { Recorded: true }
 interface ArchiveJournalEntryBatchOutputWire { Status: string; ArchivedAt: string | null }
+interface CancelJournalEntryBatchOutputWire {
+  Status: string;
+  CancelledAt: string | null;
+  ConfirmationRequired?: string;
+  ConfirmationKind?: DispatchConfirmationKind;
+}
+interface ResumeJournalEntryBatchPostingOutputWire { Status: string; JournalEntriesPosted: number }
+
+/**
+ * One batch holding entries at `Batched` that no run will pick up (#145). Keep in sync with
+ * `StrandedJournalEntryBatch` in CoreEntitiesServer's JournalEntryBatchEngine.ts: a status or
+ * recovery value added there compiles clean here and the page silently drops those rows.
+ */
+export interface StrandedJournalEntryBatchWire {
+  batchId: string;
+  batchNumber: string | null;
+  batchStatus: 'Failed' | 'Posted';
+  journalEntryCount: number;
+  recovery: 'Retry' | 'ResumePosting';
+}
+interface GetStrandedJournalEntriesOutputWire { Batches: StrandedJournalEntryBatchWire[]; JournalEntryCount: number }
 
 // ─── The legacy result shapes the dashboard components bind to (unchanged public API) ────────────
 
@@ -61,6 +90,10 @@ export interface DispatchJournalEntryBatchResult {
   Status?: string;
   ExternalJournalEntryBatchRef?: string;
   ErrorMessage?: string;
+  /** Why a Failed retry was not sent: the ERP lookup could not settle whether the batch already posted. */
+  ConfirmationRequired?: string;
+  /** Which way it could not settle it. `Mismatch` may be this very batch and needs the most care. */
+  ConfirmationKind?: DispatchConfirmationKind;
 }
 
 export interface RecordJournalEntryBatchDecisionResult {
@@ -71,6 +104,32 @@ export interface RecordJournalEntryBatchDecisionResult {
 export interface ArchiveJournalEntryBatchResult {
   Success: boolean;
   Status?: string;
+  ErrorMessage?: string;
+}
+
+export interface CancelJournalEntryBatchResult {
+  Success: boolean;
+  Status?: string;
+  ErrorMessage?: string;
+  /**
+   * Why a Failed cancel was not done (#207): the ERP lookup could not settle whether the batch already
+   * posted. The batch is untouched; cancel again with the operator's confirmation, or not at all.
+   */
+  ConfirmationRequired?: string;
+  /** Which way it could not settle it. `Mismatch` is most likely this batch, already posted. */
+  ConfirmationKind?: DispatchConfirmationKind;
+}
+
+export interface ResumeJournalEntryBatchPostingResult {
+  Success: boolean;
+  JournalEntriesPosted: number;
+  ErrorMessage?: string;
+}
+
+export interface StrandedJournalEntriesResult {
+  Success: boolean;
+  Batches: StrandedJournalEntryBatchWire[];
+  JournalEntryCount: number;
   ErrorMessage?: string;
 }
 
@@ -90,6 +149,8 @@ export interface BuildJournalEntryBatchOptionsInput {
   CompanyIDs?: string[] | null;
   EntryTypeCodes?: string[] | null;
   ExcludeEntryTypeCodes?: string[] | null;
+  /** `YYYY-MM-DD`; omit for today. The journal date the ERP receives (golive #315). */
+  PostingDate?: string | null;
   Source?: 'Standard' | 'View' | 'Explicit';
   CompanyID?: string | null;
   ViewID?: string | null;
@@ -102,6 +163,8 @@ export interface PreviewJournalEntryBatchOptionsInput {
   CompanyIDs?: string[] | null;
   EntryTypeCodes?: string[] | null;
   ExcludeEntryTypeCodes?: string[] | null;
+  /** `YYYY-MM-DD`; omit for today. Ends the candidate pool like a cutoff (golive #315). */
+  PostingDate?: string | null;
   IncludedJournalEntryIDs?: string[] | null;
 }
 
@@ -119,14 +182,31 @@ export interface PreviewJournalEntryBatchOutputWire {
   Candidates: PreviewEntryWire[];
   TotalDebits: number;
   TotalCredits: number;
+  GrossDebits: number;
+  GrossCredits: number;
   OutOfOrderSkipCount: number;
+  BeforePostingStartCount: number;
 }
 
 export interface PreviewJournalEntryBatchResult {
   Success: boolean;
   Candidates: PreviewEntryWire[];
+  /** Netted — what the batch will carry. Lines that cancel within the batch are gone. */
   TotalDebits: number;
   TotalCredits: number;
+  /** Before netting — every line of every ticked entry. */
+  GrossDebits: number;
+  GrossCredits: number;
+  /**
+   * How many unticked entries are OLDER than the newest ticked one — the entries newer ones
+   * would batch ahead of. Surfaced so a caller can warn before building; the build allows it.
+   */
+  OutOfOrderSkipCount: number;
+  /**
+   * How many entries the other criteria admit that are dated before their company's posting start
+   * date: held back, and left Pending, by every build.
+   */
+  BeforePostingStartCount: number;
   ErrorMessage?: string;
 }
 
@@ -165,17 +245,21 @@ export class JournalEntryBatchDispatchClient {
     try {
       const res = await this.dataProvider.RouteOperation<PreviewJournalEntryBatchOptionsInput, PreviewJournalEntryBatchOutputWire>(
         'Accounting.PreviewJournalEntryBatch', options ?? {});
-      if (!res.Success || !res.Output) return { Success: false, Candidates: [], TotalDebits: 0, TotalCredits: 0, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
+      if (!res.Success || !res.Output) return { Success: false, Candidates: [], TotalDebits: 0, TotalCredits: 0, GrossDebits: 0, GrossCredits: 0, OutOfOrderSkipCount: 0, BeforePostingStartCount: 0, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
       return {
         Success: true,
         Candidates: res.Output.Candidates ?? [],
         TotalDebits: res.Output.TotalDebits ?? 0,
         TotalCredits: res.Output.TotalCredits ?? 0,
+        GrossDebits: res.Output.GrossDebits ?? 0,
+        GrossCredits: res.Output.GrossCredits ?? 0,
+        OutOfOrderSkipCount: res.Output.OutOfOrderSkipCount ?? 0,
+        BeforePostingStartCount: res.Output.BeforePostingStartCount ?? 0,
       };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       LogError(`JournalEntryBatchDispatchClient.PreviewJournalEntryBatch failed: ${msg}`);
-      return { Success: false, Candidates: [], TotalDebits: 0, TotalCredits: 0, ErrorMessage: msg };
+      return { Success: false, Candidates: [], TotalDebits: 0, TotalCredits: 0, GrossDebits: 0, GrossCredits: 0, OutOfOrderSkipCount: 0, BeforePostingStartCount: 0, ErrorMessage: msg };
     }
   }
 
@@ -198,13 +282,25 @@ export class JournalEntryBatchDispatchClient {
     }
   }
 
-  /** Dispatch an Approved batch to the ERP (mock poster for v1). */
-  public async DispatchJournalEntryBatch(batchID: string): Promise<DispatchJournalEntryBatchResult> {
+  /**
+   * Dispatch an Approved batch to the ERP, or retry a Failed one (reusing its approval). The server
+   * checks the ERP for the batch's number first. When that check cannot settle whether a Failed batch
+   * already posted, the retry is not sent and `ConfirmationRequired` says why; retry with
+   * `confirmNotAlreadyPostedInERP` once the operator has checked. `Success` means the call ran, not
+   * that the ERP accepted — read `Status`, which is `'Failed'` when the ERP rejected the journal.
+   */
+  public async DispatchJournalEntryBatch(batchID: string, confirmNotAlreadyPostedInERP = false): Promise<DispatchJournalEntryBatchResult> {
     try {
-      const res = await this.dataProvider.RouteOperation<{ JournalEntryBatchID: string }, DispatchJournalEntryBatchOutputWire>(
-        'Accounting.DispatchJournalEntryBatch', { JournalEntryBatchID: batchID });
+      const res = await this.dataProvider.RouteOperation<{ JournalEntryBatchID: string; ConfirmNotAlreadyPostedInERP: boolean }, DispatchJournalEntryBatchOutputWire>(
+        'Accounting.DispatchJournalEntryBatch', { JournalEntryBatchID: batchID, ConfirmNotAlreadyPostedInERP: confirmNotAlreadyPostedInERP });
       if (!res.Success || !res.Output) return { Success: false, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
-      return { Success: true, Status: res.Output.Status, ExternalJournalEntryBatchRef: res.Output.ExternalJournalEntryBatchRef ?? undefined };
+      return {
+        Success: true,
+        Status: res.Output.Status,
+        ExternalJournalEntryBatchRef: res.Output.ExternalJournalEntryBatchRef ?? undefined,
+        ConfirmationRequired: res.Output.ConfirmationRequired,
+        ConfirmationKind: res.Output.ConfirmationKind,
+      };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       LogError(`JournalEntryBatchDispatchClient.DispatchJournalEntryBatch failed: ${msg}`);
@@ -240,6 +336,66 @@ export class JournalEntryBatchDispatchClient {
       const msg = e instanceof Error ? e.message : String(e);
       LogError(`JournalEntryBatchDispatchClient.ArchiveBatch failed: ${msg}`);
       return { Success: false, ErrorMessage: msg };
+    }
+  }
+
+  /**
+   * Cancel a Pending (golive #302), Approved or Failed (#183) batch and return its journal entries to
+   * the candidate pool — the opposite of Archive, which keeps them locked. The server requires a reason
+   * and decides who may cancel; a Pending batch's approval request is closed. A Failed batch may
+   * already be in the ERP, so the server looks its number up first (#207): a posting it finds refuses
+   * the cancel (an error); nothing found lets it through; otherwise it answers `ConfirmationRequired`,
+   * and the caller sends `confirmNotAlreadyPostedInERP` only once the operator has checked. The server
+   * looks again before the cancel commits (#215); a posting found then undoes the cancel, records the
+   * batch Posted and comes back as an error saying so; a new posting that does not match undoes it,
+   * leaves the batch Failed and comes back as an error saying to investigate it.
+   */
+  public async CancelBatch(batchID: string, reason: string, confirmNotAlreadyPostedInERP = false): Promise<CancelJournalEntryBatchResult> {
+    try {
+      const res = await this.dataProvider.RouteOperation<{ JournalEntryBatchID: string; Reason: string; ConfirmNotAlreadyPostedInERP: boolean }, CancelJournalEntryBatchOutputWire>(
+        'Accounting.CancelJournalEntryBatch', { JournalEntryBatchID: batchID, Reason: reason, ConfirmNotAlreadyPostedInERP: confirmNotAlreadyPostedInERP });
+      if (!res.Success || !res.Output) return { Success: false, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
+      return {
+        Success: true,
+        Status: res.Output.Status,
+        ConfirmationRequired: res.Output.ConfirmationRequired,
+        ConfirmationKind: res.Output.ConfirmationKind,
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      LogError(`JournalEntryBatchDispatchClient.CancelBatch failed: ${msg}`);
+      return { Success: false, ErrorMessage: msg };
+    }
+  }
+
+  /**
+   * Finish a Posted batch's Batched→GLPosted flip (#145). Makes NO ERP call — the ERP already holds
+   * this journal, which is why a Posted batch is never re-dispatched.
+   */
+  public async ResumeJournalEntryBatchPosting(batchID: string): Promise<ResumeJournalEntryBatchPostingResult> {
+    try {
+      const res = await this.dataProvider.RouteOperation<{ JournalEntryBatchID: string }, ResumeJournalEntryBatchPostingOutputWire>(
+        'Accounting.ResumeJournalEntryBatchPosting', { JournalEntryBatchID: batchID });
+      if (!res.Success || !res.Output) return { Success: false, JournalEntriesPosted: 0, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
+      return { Success: true, JournalEntriesPosted: res.Output.JournalEntriesPosted };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      LogError(`JournalEntryBatchDispatchClient.ResumeJournalEntryBatchPosting failed: ${msg}`);
+      return { Success: false, JournalEntriesPosted: 0, ErrorMessage: msg };
+    }
+  }
+
+  /** Read-only: batches holding entries at Batched that no scheduled run or build will pick up (#145). */
+  public async GetStrandedJournalEntries(): Promise<StrandedJournalEntriesResult> {
+    try {
+      const res = await this.dataProvider.RouteOperation<Record<string, never>, GetStrandedJournalEntriesOutputWire>(
+        'Accounting.GetStrandedJournalEntries', {});
+      if (!res.Success || !res.Output) return { Success: false, Batches: [], JournalEntryCount: 0, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
+      return { Success: true, Batches: res.Output.Batches ?? [], JournalEntryCount: res.Output.JournalEntryCount ?? 0 };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      LogError(`JournalEntryBatchDispatchClient.GetStrandedJournalEntries failed: ${msg}`);
+      return { Success: false, Batches: [], JournalEntryCount: 0, ErrorMessage: msg };
     }
   }
 

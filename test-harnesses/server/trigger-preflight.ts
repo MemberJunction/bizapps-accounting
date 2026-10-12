@@ -34,10 +34,12 @@ export const INVARIANT_TRIGGERS = [
   'trg_JEL_RecheckParentBalance',
   'trg_JournalEntry_Immutability',
   'trg_JEL_Immutability',
+  'trg_JELD_Immutability', // #216, not the baseline: without it a summary line's tags change under an approved batch
   'trg_JEL_CompanyMatch',
   'trg_JE_CompanyMatch',
   'trg_JournalEntryBatch_Immutability',
   'trg_JournalEntryBatch_SummaryCoherence',
+  'trg_JournalEntryBatch_SendOnce', // #184, not the baseline: without it two concurrent sends both reach the ERP
   'trg_ACP_NoChains',
   'trg_JE_ReversalConsistency',
   // Intercompany pair integrity (BA-D26). Belongs in this floor for the same reason as the rest:

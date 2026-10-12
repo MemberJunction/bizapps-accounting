@@ -6,6 +6,7 @@ import { RegisterClass } from '@memberjunction/global';
 import { CompositeKey, Metadata, RunView } from '@memberjunction/core';
 import { ResourceData } from '@memberjunction/core-entities';
 import { mjBizAppsAccountingAccountingCompanyProfileEntity } from '@mj-biz-apps/accounting-entities';
+import { createdRecordId } from './created-record-id';
 
 const COMPANY_PROFILE_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 // __mj.User — the CFO approver FK target (ApprovalCFOUserID). MJ v5: core entities REQUIRE the
@@ -206,7 +207,8 @@ export class CompanySetupDashboardComponent extends BaseDashboard {
     if (!saved) return; // cancelled
     const created = saved as mjBizAppsAccountingAccountingCompanyProfileEntity;
     await this.loadCompanies();
-    this._selectedID = created.ID;
+    // Not `created.ID`: on MJ 6.1.x that is the parent's unwritten key (see createdRecordId).
+    this._selectedID = createdRecordId(created);
     this.ActionMessage = `Company ${created.Name} created — its default chart of accounts has been seeded.`;
     this.ActionIsError = false;
     this.cdr.markForCheck();

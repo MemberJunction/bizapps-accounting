@@ -15,10 +15,19 @@
  *   Accounting.BuildJournalEntryBatch            → buildJournalEntryBatch(...)      one single-company batch (D7), or the
  *                                                            all-pending sweep when CompanyID is omitted
  *   Accounting.RegenerateJournalEntryBatch       → regenerateJournalEntryBatch(...) rebuild a Pending batch in place; empty → cancel + throw
- *   Accounting.DispatchJournalEntryBatch         → sendJournalEntryBatch(...)       Approved→Sent→Posted via AccountingERPEngine (AM-4 account numbers)
- *   Accounting.RecordJournalEntryBatchDecision   → gate.recordDecision + approveJournalEntryBatch | cancelJournalEntryBatch (in-app CFO approve/reject)
+ *   Accounting.DispatchJournalEntryBatch         → sendJournalEntryBatch(...)       Approved|Failed→Sent→Posted via AccountingERPEngine (AM-4 account numbers);
+ *                                                            from Failed it is the retry, reusing the batch's approval (#145); every
+ *                                                            send checks the ERP first, ConfirmNotAlreadyPostedInERP overriding a
+ *                                                            lookup that cannot settle it (#182)
+ *   Accounting.ResumeJournalEntryBatchPosting    → resumeJournalEntryBatchPosting(...) finish a Posted batch's Batched→GLPosted flip; NO ERP call (#145)
+ *   Accounting.GetStrandedJournalEntries         → findStrandedJournalEntries(...)  read-only: Failed / partly-flipped Posted batches holding entries (#145)
+ *   Accounting.RecordJournalEntryBatchDecision   → gate.recordDecision + approveJournalEntryBatch | cancelJournalEntryBatch (in-app CFO approve/reject;
+ *                                                            the cancel requires the rejection this records first, #233)
  *   Accounting.GetJournalEntryBatchApprovalState → gate.assertApproved probe (read-only: is this batch dispatchable?)
  *   Accounting.ArchiveJournalEntryBatch          → batch.Archive(reason)             terminal close with NO ERP call; members stay locked (#214)
+ *   Accounting.CancelJournalEntryBatch           → cancelJournalEntryBatch(...)     Pending|Approved|Failed→Cancelled; members return to the
+ *                                                            candidate pool, Reason required (Pending: CFO or builder, golive #302;
+ *                                                            #183: Approved|Failed by CFO or approver; ConfirmNotAlreadyPostedInERP from Failed)
  *
  * These are thin by design — every rule (netting, the one-transaction build incl. the approval
  * Task + ApprovalTaskID stamp (D10 rev. 2026-07-29), the CFO precondition, EmptyJournalEntryBatchError) lives
@@ -39,6 +48,9 @@ import {
   previewBatch,
   regenerateJournalEntryBatch,
   sendJournalEntryBatch,
+  ErpPostingUnconfirmedError,
+  resumeJournalEntryBatchPosting,
+  findStrandedJournalEntries,
   approveJournalEntryBatch,
   cancelJournalEntryBatch,
   pendingCompanies,
@@ -47,11 +59,13 @@ import {
   type BuildJournalEntryBatchResult,
   type BuildJournalEntryBatchOptions,
   type JournalEntryBatchPreviewResult,
+  type StrandedJournalEntryBatch,
+  type ErpPostingUnconfirmedKind,
 } from './JournalEntryBatchEngine.js';
-import { createAccountingERPPoster } from './AccountingERPEngine.js';
 import { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
 import { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
 import { requireSqlGuid } from './SqlGuards.js';
+import { requireDateBound } from './BusinessDay.js';
 import {
   IsApprovalOutcome,
   IsTaskDecisionOutcomeCode,
@@ -66,9 +80,12 @@ const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 
 /** The workspace criteria panel, on the wire. Dates are ISO strings; everything else optional. */
 export interface JournalEntryBatchCriteriaInput {
-  /** ISO date or datetime. A DATE-only value is INCLUSIVE of that whole day. */
+  /** `YYYY-MM-DD`, or an ISO datetime WITH an offset. Every cutoff is a whole DAY, INCLUSIVE of it
+   *  (EffectiveDate is a DATE column): a date-only value is that day; a datetime resolves to the
+   *  BUSINESS day it falls on. Anything else is refused with an error naming the field. */
   Cutoff?: string | null;
-  /** ISO date. Optional lower bound; omit for the standard oldest-forward flow. */
+  /** Optional lower bound, same shapes and resolution as `Cutoff`; omit for the standard
+   *  oldest-forward flow. */
   StartDate?: string | null;
   /** Omit/empty = all companies (each still builds its OWN single-company batch, D7). */
   CompanyIDs?: string[] | null;
@@ -76,22 +93,36 @@ export interface JournalEntryBatchCriteriaInput {
   EntryTypeCodes?: string[] | null;
   /** JournalEntryType CODES to EXCLUDE (e.g. ['RevenueRecognition']). Omit/empty = no exclusions. */
   ExcludeEntryTypeCodes?: string[] | null;
+  /** The batch's PostingDate — the journal date the ERP receives (golive #315). Same shapes as
+   *  `Cutoff`; omit for today's business day. Never before a selected entry,
+   *  and it bounds the candidate pool like a cutoff does. */
+  PostingDate?: string | null;
 }
 
+/**
+ * The strings travel to the engine AS STRINGS: their shape is what says whether a value is a day or
+ * an instant. Parsing to a `Date` here would lose that — `2026-09-30T19:00:00-05:00` is UTC midnight
+ * and would read as 1 October (golive #168). Validated here so a bad value fails at the boundary.
+ */
 function toOptions(input: JournalEntryBatchCriteriaInput | undefined): BuildJournalEntryBatchOptions {
   return {
-    cutoff: input?.Cutoff ? new Date(input.Cutoff) : null,
-    startDate: input?.StartDate ? new Date(input.StartDate) : null,
+    cutoff: input?.Cutoff ? requireDateBound(input.Cutoff, 'Batch criteria Cutoff') : null,
+    startDate: input?.StartDate ? requireDateBound(input.StartDate, 'Batch criteria StartDate') : null,
     companyIds: input?.CompanyIDs?.length ? input.CompanyIDs : null,
     entryTypeCodes: input?.EntryTypeCodes?.length ? input.EntryTypeCodes : null,
     excludeEntryTypeCodes: input?.ExcludeEntryTypeCodes?.length ? input.ExcludeEntryTypeCodes : null,
+    postingDate: input?.PostingDate ? requireDateBound(input.PostingDate, 'Batch PostingDate') : null,
   };
 }
 
 export interface PreviewJournalEntryBatchInput extends JournalEntryBatchCriteriaInput {
   /**
-   * The operator's ticked selection. Omit to preview the whole candidate pool. Supplying it is
-   * what makes the summary/totals/out-of-order warning reflect the include/exclude state.
+   * The operator's ticked selection. Omit (or null) to preview the whole candidate pool. Supplying
+   * it is what makes the summary/totals/out-of-order warning reflect the include/exclude state.
+   *
+   * An EMPTY array means "nothing is ticked" and is honoured as such — it is not the same as
+   * omitting the field. Collapsing the two netted the whole pool behind a header that said nothing
+   * was included, so the numbers contradicted the selection (#193).
    */
   IncludedJournalEntryIDs?: string[] | null;
 }
@@ -106,7 +137,7 @@ export class PreviewJournalEntryBatchOperation extends BaseRemotableOperation<Pr
   public readonly OperationKey = 'Accounting.PreviewJournalEntryBatch';
 
   protected async InternalExecute(input: PreviewJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<JournalEntryBatchPreviewResult> {
-    const included = input?.IncludedJournalEntryIDs?.length ? new Set(input.IncludedJournalEntryIDs) : undefined;
+    const included = input?.IncludedJournalEntryIDs ? new Set(input.IncludedJournalEntryIDs) : undefined;
     return previewBatch(toOptions(input), user, provider, included);
   }
 }
@@ -156,7 +187,7 @@ export class BuildJournalEntryBatchOperation extends BaseRemotableOperation<Buil
       }
       case 'Explicit': {
         if (!input.JournalEntryIDs?.length) throw new Error('BuildJournalEntryBatch: Source=Explicit requires JournalEntryIDs.');
-        const batches = await buildJournalEntryBatchFromExplicitIds(input.JournalEntryIDs, input.TargetSystem, user.ID, user, provider, gate);
+        const batches = await buildJournalEntryBatchFromExplicitIds(input.JournalEntryIDs, input.TargetSystem, user.ID, user, provider, gate, options.postingDate);
         return { Batches: batches, NothingToBatch: false };
       }
       case 'Standard': {
@@ -207,10 +238,34 @@ export class RegenerateJournalEntryBatchOperation extends BaseRemotableOperation
 
 // ─── Accounting.DispatchJournalEntryBatch ────────────────────────────────────────────────
 
-export interface DispatchJournalEntryBatchInput { JournalEntryBatchID: string }
-export interface DispatchJournalEntryBatchOutput { Status: string; ExternalJournalEntryBatchRef: string | null }
+export interface DispatchJournalEntryBatchInput {
+  JournalEntryBatchID: string;
+  /**
+   * The caller checked the ERP and the batch number has not posted. Needed only when the pre-flight
+   * lookup cannot settle it — see sendJournalEntryBatch.
+   */
+  ConfirmNotAlreadyPostedInERP?: boolean;
+}
+export interface DispatchJournalEntryBatchOutput {
+  Status: string;
+  ExternalJournalEntryBatchRef: string | null;
+  /**
+   * Set when a Failed retry was refused because the ERP lookup could not settle whether the batch
+   * already posted: why, for the operator to check before retrying with `ConfirmNotAlreadyPostedInERP`.
+   */
+  ConfirmationRequired?: string;
+  /** Why the lookup could not settle it; `Mismatch` needs the most care — see ErpPostingUnconfirmedKind. */
+  ConfirmationKind?: ErpPostingUnconfirmedKind;
+}
 
-/** Dispatch an Approved batch to the ERP (mock poster, v1). The gate + Status='Approved' block otherwise. */
+/**
+ * Dispatch an Approved batch to the ERP, or retry a Failed one. The gate and the engine's
+ * sendable-status check block anything else; a retry re-runs both, so it needs no second approval.
+ * Every send first asks the ERP what it holds under the batch's number: a matching posting is recorded
+ * as this batch's instead of being sent again, and `ConfirmNotAlreadyPostedInERP` overrides a lookup
+ * that cannot settle it (see sendJournalEntryBatch). A send the ERP rejects returns normally with
+ * `Status: 'Failed'`. The engine resolves the gate, the ERP poster and the lookup itself (#233).
+ */
 @RegisterClass(BaseRemotableOperation, 'Accounting.DispatchJournalEntryBatch')
 export class DispatchJournalEntryBatchOperation extends BaseRemotableOperation<DispatchJournalEntryBatchInput, DispatchJournalEntryBatchOutput> {
   public readonly OperationKey = 'Accounting.DispatchJournalEntryBatch';
@@ -218,12 +273,53 @@ export class DispatchJournalEntryBatchOperation extends BaseRemotableOperation<D
   protected async InternalExecute(input: DispatchJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<DispatchJournalEntryBatchOutput> {
     if (!input?.JournalEntryBatchID) throw new Error('DispatchJournalEntryBatch: JournalEntryBatchID is required.');
     requireSqlGuid(input.JournalEntryBatchID, 'DispatchJournalEntryBatch');
-    const batch = await sendJournalEntryBatch(input.JournalEntryBatchID, user, {
-      gate: new TasksAppApprovalGate(provider),
-      poster: createAccountingERPPoster(provider),
-      provider,
-    });
-    return { Status: batch.Status, ExternalJournalEntryBatchRef: batch.ExternalJournalEntryBatchRef ?? null };
+    try {
+      const batch = await sendJournalEntryBatch(input.JournalEntryBatchID, user, {
+        provider,
+        confirmNotAlreadyPostedInERP: input.ConfirmNotAlreadyPostedInERP === true,
+      });
+      return { Status: batch.Status, ExternalJournalEntryBatchRef: batch.ExternalJournalEntryBatchRef ?? null };
+    } catch (e) {
+      // An answer for the operator, not a failure of the call: the batch is untouched and still Failed.
+      if (e instanceof ErpPostingUnconfirmedError) return { Status: 'Failed', ExternalJournalEntryBatchRef: null, ConfirmationRequired: e.Reason, ConfirmationKind: e.Kind };
+      throw e;
+    }
+  }
+}
+
+// ─── Accounting.ResumeJournalEntryBatchPosting ───────────────────────────────────────────
+
+export interface ResumeJournalEntryBatchPostingInput { JournalEntryBatchID: string }
+export interface ResumeJournalEntryBatchPostingOutput { Status: string; JournalEntriesPosted: number }
+
+/**
+ * Finish the Batched→GLPosted flip of a batch the ERP already accepted (#145). Makes NO ERP call —
+ * re-dispatching a Posted batch would duplicate the ERP journal, which is why this is its own verb.
+ */
+@RegisterClass(BaseRemotableOperation, 'Accounting.ResumeJournalEntryBatchPosting')
+export class ResumeJournalEntryBatchPostingOperation extends BaseRemotableOperation<ResumeJournalEntryBatchPostingInput, ResumeJournalEntryBatchPostingOutput> {
+  public readonly OperationKey = 'Accounting.ResumeJournalEntryBatchPosting';
+
+  protected async InternalExecute(input: ResumeJournalEntryBatchPostingInput, provider: IMetadataProvider, user: UserInfo): Promise<ResumeJournalEntryBatchPostingOutput> {
+    if (!input?.JournalEntryBatchID) throw new Error('ResumeJournalEntryBatchPosting: JournalEntryBatchID is required.');
+    requireSqlGuid(input.JournalEntryBatchID, 'ResumeJournalEntryBatchPosting');
+    const { batch, journalEntriesPosted } = await resumeJournalEntryBatchPosting(input.JournalEntryBatchID, user, provider);
+    return { Status: batch.Status, JournalEntriesPosted: journalEntriesPosted };
+  }
+}
+
+// ─── Accounting.GetStrandedJournalEntries ────────────────────────────────────────────────
+
+export interface GetStrandedJournalEntriesOutput { Batches: StrandedJournalEntryBatch[]; JournalEntryCount: number }
+
+/** Read-only: which batches hold entries at Batched that nothing will move without an operator (#145). */
+@RegisterClass(BaseRemotableOperation, 'Accounting.GetStrandedJournalEntries')
+export class GetStrandedJournalEntriesOperation extends BaseRemotableOperation<Record<string, never>, GetStrandedJournalEntriesOutput> {
+  public readonly OperationKey = 'Accounting.GetStrandedJournalEntries';
+
+  protected async InternalExecute(_input: Record<string, never>, provider: IMetadataProvider, user: UserInfo): Promise<GetStrandedJournalEntriesOutput> {
+    const batches = await findStrandedJournalEntries(user, provider);
+    return { Batches: batches, JournalEntryCount: batches.reduce((n, b) => n + b.journalEntryCount, 0) };
   }
 }
 
@@ -245,7 +341,7 @@ export interface RecordJournalEntryBatchDecisionOutput { Recorded: true }
  * Record an in-app CFO approve/reject decision against the batch's approval Task. An approval also
  * flips the batch Pending→Approved (content freeze + dispatchable); a rejection cancels the batch
  * and returns its journal entries to the candidate pool (a reject has a visible financial effect,
- * not a dead no-op).
+ * not a dead no-op). The rejection's notes become the batch's CancelReason.
  */
 @RegisterClass(BaseRemotableOperation, 'Accounting.RecordJournalEntryBatchDecision')
 export class RecordJournalEntryBatchDecisionOperation extends BaseRemotableOperation<RecordJournalEntryBatchDecisionInput, RecordJournalEntryBatchDecisionOutput> {
@@ -266,7 +362,7 @@ export class RecordJournalEntryBatchDecisionOperation extends BaseRemotableOpera
     if (IsApprovalOutcome(input.Decision)) {
       await approveJournalEntryBatch(input.JournalEntryBatchID, user.ID, user, provider);
     } else {
-      await cancelJournalEntryBatch(input.JournalEntryBatchID, user, provider);
+      await cancelJournalEntryBatch(input.JournalEntryBatchID, user, provider, { reason: input.Notes ?? null });
     }
     return { Recorded: true };
   }
@@ -336,6 +432,62 @@ export class ArchiveJournalEntryBatchOperation extends BaseRemotableOperation<Ar
     if (!(await batch.Load(input.JournalEntryBatchID))) throw new Error(`ArchiveJournalEntryBatch: batch ${input.JournalEntryBatchID} not found.`);
     await batch.Archive(input.Reason, user);
     return { Status: batch.Status, ArchivedAt: batch.ArchivedAt?.toISOString() ?? null };
+  }
+}
+
+// ─── Accounting.CancelJournalEntryBatch ──────────────────────────────────────────────────
+
+export interface CancelJournalEntryBatchInput {
+  JournalEntryBatchID: string;
+  /** Required: the only record of why the batch was cancelled. */
+  Reason?: string | null;
+  /** Required `true` to cancel a Failed batch: the caller checked the ERP and the batch number has not posted. */
+  ConfirmNotAlreadyPostedInERP?: boolean;
+}
+export interface CancelJournalEntryBatchOutput {
+  Status: string;
+  CancelledAt: string | null;
+  /**
+   * Set, with the batch untouched, when a Failed cancel was refused because the ERP lookup could not
+   * settle whether the batch already posted (#207): why, for the operator to check before cancelling
+   * again with `ConfirmNotAlreadyPostedInERP`. A lookup that FOUND the posting refuses outright.
+   */
+  ConfirmationRequired?: string;
+  /** Which way the lookup could not settle it; `Mismatch` is most likely this batch, already posted. */
+  ConfirmationKind?: ErpPostingUnconfirmedKind;
+}
+
+/**
+ * Cancel a Pending, Approved or Failed batch and return its journal entries to the candidate pool —
+ * the correction path for a wrong batch, as opposed to Archive, which keeps the entries locked for
+ * good. Before approval (golive #302) the company's CFO or the batch's builder may cancel, and the
+ * approval Task is closed; past approval (#183) the CFO or the batch's approver may. A CFO rejecting
+ * a Pending batch uses RecordJournalEntryBatchDecision instead, so the decision is recorded.
+ * Who may cancel, the required reason and the ERP confirmation
+ * are enforced by the engine, the gate and the entity; the engine resolves the gate and the ERP
+ * lookup itself (#233). This operation only marshals. A Failed cancel undone because the ERP posted
+ * the batch while it ran (#215) throws JournalEntryBatchPostedDuringCancelError, whose message says
+ * the batch is now recorded Posted; one refused because a posting that does not match appeared throws
+ * JournalEntryBatchMismatchDuringCancelError, and the batch stays Failed.
+ */
+@RegisterClass(BaseRemotableOperation, 'Accounting.CancelJournalEntryBatch')
+export class CancelJournalEntryBatchOperation extends BaseRemotableOperation<CancelJournalEntryBatchInput, CancelJournalEntryBatchOutput> {
+  public readonly OperationKey = 'Accounting.CancelJournalEntryBatch';
+
+  protected async InternalExecute(input: CancelJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<CancelJournalEntryBatchOutput> {
+    if (!input?.JournalEntryBatchID) throw new Error('CancelJournalEntryBatch: JournalEntryBatchID is required.');
+    requireSqlGuid(input.JournalEntryBatchID, 'CancelJournalEntryBatch');
+    try {
+      const batch = await cancelJournalEntryBatch(input.JournalEntryBatchID, user, provider, {
+        reason: input.Reason ?? null,
+        confirmNotAlreadyPostedInERP: input.ConfirmNotAlreadyPostedInERP === true,
+      });
+      return { Status: batch.Status, CancelledAt: batch.CancelledAt?.toISOString() ?? null };
+    } catch (e) {
+      // An answer for the operator, not a failure of the call: the batch is untouched and still Failed.
+      if (e instanceof ErpPostingUnconfirmedError) return { Status: 'Failed', CancelledAt: null, ConfirmationRequired: e.Reason, ConfirmationKind: e.Kind };
+      throw e;
+    }
   }
 }
 

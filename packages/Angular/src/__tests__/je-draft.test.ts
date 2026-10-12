@@ -1,8 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { BaseEntity, EntityInfo, Metadata } from '@memberjunction/core';
-import { MJGlobal } from '@memberjunction/global';
-import type { JournalEntryEntity, JournalEntryLineEntity } from '@mj-biz-apps/accounting-entities';
-import '@mj-biz-apps/accounting-entities';
+import type { JournalEntryEntity } from '@mj-biz-apps/accounting-entities';
+import { entityObject, installStubProvider, stubEntityInfo } from './support/entity-stubs';
 import {
   parseMoney,
   TextIssue,
@@ -10,6 +8,7 @@ import {
   draftTotals,
   toCreateInput,
   newAmountText,
+  CalendarDayValue,
   type JEDraftState,
 } from '../lib/custom/shell/pages/je-draft';
 
@@ -43,79 +42,12 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
 const JELD_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Line Dimensions';
 
-/**
- * EntityInfo stubs, so `BaseEntity`'s constructor succeeds with no database.
- *
- * The same shape `JournalEntryExtendedServer.test.ts` uses. Kept local rather than shared because a
- * test helper crossing package boundaries is a dependency the packages do not otherwise have.
- */
-function mockEntityInfo(name: string, fieldNames: string[]): EntityInfo {
-  const info = Object.create(EntityInfo.prototype);
-  info.ID = `id-${name}`;
-  info.Name = name;
-  info.Status = 'Active';
-  info.AllowDirectSQL = true;
-
-  const fields = fieldNames.map((fn) => ({
-    Name: fn,
-    CodeName: fn,
-    Type: fn === 'ID' || fn.endsWith('ID') ? 'uniqueidentifier' : 'nvarchar',
-    TSType: 'string',
-    IsPrimaryKey: fn === 'ID',
-    AutoIncrement: false,
-    ReadOnly: false,
-    AllowsNull: true,
-  })) as unknown[];
-
-  Object.defineProperty(info, 'Fields', { get: () => fields, configurable: true });
-  Object.defineProperty(info, 'PrimaryKeys', {
-    get: () => (fields as Array<{ IsPrimaryKey: boolean }>).filter((f) => f.IsPrimaryKey),
-    configurable: true,
-  });
-  Object.defineProperty(info, 'HasInactiveFields', { get: () => false, configurable: true });
-  return info as EntityInfo;
-}
-
-let jeInfo: EntityInfo;
-let jelInfo: EntityInfo;
-let jeldInfo: EntityInfo;
-let entities: EntityInfo[];
-
-/**
- * An entity through the CLASS FACTORY, exactly as a real provider's `GetEntityObject` does.
- *
- * This is the mechanism `RelatedRecordCollection.Create()` reaches for, so wiring it here means the
- * collection's own creation path is what the tests exercise — including the registered subclass
- * winning over the generated base, which is the whole reason the factory exists.
- */
-async function entityObject(entityName: string): Promise<BaseEntity> {
-  const info = entities.find((e) => e.Name.toLowerCase() === entityName.toLowerCase());
-  if (!info) throw new Error(`No EntityInfo registered in this test for '${entityName}'.`);
-  return MJGlobal.Instance.ClassFactory.CreateInstance<BaseEntity>(BaseEntity, entityName, info)!;
-}
-
 beforeEach(() => {
-  jeInfo = mockEntityInfo(JE_ENTITY, ['ID', 'CompanyID', 'EffectiveDate', 'EntryTypeID', 'Status', 'EntryNumber', 'Description']);
-  jelInfo = mockEntityInfo(JEL_ENTITY, ['ID', 'JournalEntryID', 'LineNumber', 'GLAccountID', 'DebitAmount', 'CreditAmount', 'Description']);
-  jeldInfo = mockEntityInfo(JELD_ENTITY, ['ID', 'JournalEntryLineID', 'DimensionID', 'DimensionValueID']);
-  entities = [jeInfo, jelInfo, jeldInfo];
-
-  const provider = {
-    Entities: entities,
-    FindEntityByName: (name: string) => entities.find((e) => e.Name.toLowerCase() === name.toLowerCase()),
-    // What `Lines.Create()` and `Dimensions.Create()` call. Without it a collection cannot issue a
-    // child at all, which is the point: production has no other way to make one either.
-    GetEntityObject: (name: string) => entityObject(name),
-    Config: { ActiveStatusAssertions: false },
-    BeginTransaction: async () => undefined,
-    CommitTransaction: async () => undefined,
-    RollbackTransaction: async () => undefined,
-  } as never;
-
-  Metadata.Provider = provider;
-  // Separate global from Metadata.Provider, and the one `BaseEntity.ProviderToUse` actually reads —
-  // so a collection on an entity resolves its provider through this, not through Metadata.
-  BaseEntity.Provider = provider;
+  installStubProvider([
+    stubEntityInfo(JE_ENTITY, ['ID', 'CompanyID', 'EffectiveDate', 'EntryTypeID', 'Status', 'EntryNumber', 'Description']),
+    stubEntityInfo(JEL_ENTITY, ['ID', 'JournalEntryID', 'LineNumber', 'GLAccountID', 'DebitAmount', 'CreditAmount', 'Description']),
+    stubEntityInfo(JELD_ENTITY, ['ID', 'JournalEntryLineID', 'DimensionID', 'DimensionValueID']),
+  ]);
 });
 
 interface LineSpec {
@@ -130,18 +62,18 @@ async function draft(
   lines: LineSpec[],
   over: Partial<{ CompanyID: string; Description: string }> = {},
 ): Promise<JEDraftState> {
-  const entry = (await entityObject(JE_ENTITY)) as JournalEntryEntity;
+  const entry = await entityObject<JournalEntryEntity>(JE_ENTITY);
   entry.NewRecord();
   entry.CompanyID = over.CompanyID ?? 'c1';
-  entry.EffectiveDate = new Date('2026-07-16T00:00:00');
+  entry.EffectiveDate = new Date('2026-07-16T00:00:00.000Z');
   entry.Description = over.Description ?? 'Event deposit accrual';
 
-  const state: JEDraftState = { Entry: entry, Amounts: new Map(), Dimensions: new Map() };
+  const state: JEDraftState = { Entry: entry, Amounts: new Map() };
 
   for (const spec of lines) {
     // ISSUED BY THE COLLECTION. It stamps the foreign key at save and tracks the child for the save
     // plan; a hand-built line is a stranger the collection has to be told about.
-    const line = (await entry.Lines.Create()) as JournalEntryLineEntity;
+    const line = await entry.Lines.Create();
     if (spec.GLAccountID) line.GLAccountID = spec.GLAccountID;
     if (spec.Debit !== undefined) line.DebitAmount = spec.Debit;
     if (spec.Credit !== undefined) line.CreditAmount = spec.Credit;
@@ -324,11 +256,71 @@ describe('toCreateInput', () => {
     expect(toCreateInput(state).Lines[0].Description).toBe('deposit');
   });
 
-  it('formats the posting date from LOCAL parts, so it cannot slip a day', async () => {
-    // `toISOString()` on a local-midnight Date lands on the previous day anywhere west of Greenwich,
-    // which files the entry in the wrong period — balanced, reconciling, and wrong.
+  it('formats the posting date from its UTC parts, not the local ones', async () => {
+    // `toCreateInput` reads `EffectiveDate` through `CalendarDayValue`, which is UTC parts only —
+    // it no longer reads local parts at all. This test just pins the plain case; the zone-pinned
+    // describe below is what proves the UTC read discriminates from a local one.
+    //
+    // The fixture is an explicit UTC INSTANT (trailing Z), not a bare local one. A bare
+    // '2026-01-01T00:00:00' is LOCAL midnight, which reads back as 2026-01-01 only on a runner at
+    // or behind UTC — on any runner east of Greenwich it is 2025-12-31T22:00Z and this test failed
+    // for a reason that had nothing to do with the code under test.
     const state = await balanced();
-    state.Entry.EffectiveDate = new Date('2026-01-01T00:00:00');
+    state.Entry.EffectiveDate = new Date('2026-01-01T00:00:00.000Z');
     expect(toCreateInput(state).EffectiveDate).toBe('2026-01-01');
+  });
+});
+
+/**
+ * Run `fn` with the machine's zone pinned. Restoring an UNSET `TZ` must `delete` it: assigning
+ * `undefined` back stores the string "undefined", which ICU reads as UTC, so every later test in
+ * this worker would quietly run in a zone nobody chose.
+ */
+const AT = (tz: string, fn: () => void) => {
+  const original = process.env.TZ;
+  process.env.TZ = tz;
+  try {
+    fn();
+  } finally {
+    if (original === undefined) delete process.env.TZ;
+    else process.env.TZ = original;
+  }
+};
+
+describe('the effective date travels as the calendar day the user picked, in every zone', () => {
+  it('a UTC-midnight EffectiveDate maps to its own day west of Greenwich', async () => {
+    const state = await balanced();
+    state.Entry.EffectiveDate = new Date('2026-01-01T00:00:00.000Z');
+    AT('America/New_York', () => {
+      expect(toCreateInput(state).EffectiveDate).toBe('2026-01-01');
+    });
+  });
+
+  it('and east of it', async () => {
+    const state = await balanced();
+    state.Entry.EffectiveDate = new Date('2026-08-31T00:00:00.000Z');
+    AT('Asia/Kolkata', () => {
+      expect(toCreateInput(state).EffectiveDate).toBe('2026-08-31');
+    });
+  });
+});
+
+describe('CalendarDayValue renders the stored calendar day in any browser zone', () => {
+  it('shows the stored day west of Greenwich, where local parts would show the day before', () => {
+    AT('America/New_York', () => {
+      expect(CalendarDayValue(new Date('2026-08-31T00:00:00.000Z'))).toBe('2026-08-31');
+      expect(CalendarDayValue(new Date('2026-01-01T00:00:00.000Z'))).toBe('2026-01-01');
+    });
+  });
+
+  it('shows the stored day east of Greenwich too', () => {
+    AT('Asia/Kolkata', () => {
+      expect(CalendarDayValue(new Date('2026-08-31T00:00:00.000Z'))).toBe('2026-08-31');
+    });
+  });
+
+  it('is empty for absent or unreadable values rather than showing a wrong day', () => {
+    expect(CalendarDayValue(null)).toBe('');
+    expect(CalendarDayValue(new Date('nonsense'))).toBe('');
   });
 });

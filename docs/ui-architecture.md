@@ -121,7 +121,7 @@ const result = await op.Execute({ JournalEntryBatchID: id, Decision: 'Approved' 
 
 ```typescript
 await AccountingEngineBase.Instance.Config();
-const currency = AccountingEngineBase.Instance.Currencies.find(c => c.ISOCode === 'USD');
+const currency = AccountingEngineBase.Instance.Currencies.find(c => c.Code === 'USD');
 ```
 
 ## What a service IS still for
@@ -148,4 +148,4 @@ usually a DTO that mirrors an entity.
 
 - `packages/Entities/src/JournalEntryEntity.ts` — the shared subclass and what belongs on it
 - `metadata/entity-relationships/` — how `Lines` is declared (metadata, not TypeScript)
-- MJ: `packages/MJCore/docs/related-record-collections.md`
+- MJ: [`packages/MJCore/docs/related-record-collections.md`](https://github.com/MemberJunction/MJ/blob/next/packages/MJCore/docs/related-record-collections.md)

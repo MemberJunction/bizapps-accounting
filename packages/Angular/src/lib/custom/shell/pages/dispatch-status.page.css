@@ -56,3 +56,10 @@
 
 /* ── the MJ grid's height chain (height, never flex — see the header note) ── */
 .ds-grid { height: 100%; min-height: 320px; }
+
+.ds-cancel__label { display: block; margin-top: 12px; font-weight: 600; color: var(--mj-text-primary); }
+.ds-cancel__reason {
+  display: block; width: 100%; box-sizing: border-box; margin-top: 4px; padding: 8px;
+  font: inherit; color: var(--mj-text-primary); background: var(--mj-bg-surface);
+  border: 1px solid var(--mj-border-default); border-radius: 6px; resize: vertical;
+}

@@ -16,6 +16,7 @@ const USER = { ID: 'SYSTEM-USER' } as UserInfo;
 interface FakeBatch {
     Status: string;
     ErrorMessage: string | null;
+    ExternalJournalEntryBatchRef?: string | null;
     LatestResult: { CompleteMessage: string } | null;
     Load: (id: string) => Promise<boolean>;
     Save: () => Promise<boolean>;
@@ -42,6 +43,17 @@ describe('recordDispatchFailure', () => {
         expect(batch.Status).toBe('Failed');
         expect(batch.ErrorMessage).toBe('ERP tenant unreachable');
         expect(batch.Save).toHaveBeenCalledTimes(1);
+    });
+
+    // The ERP accepted the batch and both the Posted and the Failed saves failed: the reference is
+    // what makes the retry record it Posted instead of sending it again.
+    it('keeps the ERP reference it is given on the Failed batch', async () => {
+        const batch = fakeBatch('Sent');
+
+        await recordDispatchFailure('BATCH-1', 'Failed save failed', USER, providerFor(batch), 'ERP-REF-7');
+
+        expect(batch.Status).toBe('Failed');
+        expect(batch.ExternalJournalEntryBatchRef).toBe('ERP-REF-7');
     });
 
     // The one that matters: the ERP already has this journal.

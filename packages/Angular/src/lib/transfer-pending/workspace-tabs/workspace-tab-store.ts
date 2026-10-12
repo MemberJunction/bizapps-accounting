@@ -3,8 +3,8 @@ import { WorkspaceTab, WorkspaceTabState } from './workspace-tabs.types';
 /**
  * The pure, framework-free state machine behind the workspace-tab strip.
  *
- * Deliberately extracted from the component (per the tier-1 boundary doctrine in
- * TEST-ARCHITECTURE: pure seams get exhaustively unit-tested; the Angular shell around them stays
+ * Deliberately extracted from the component (per the tier-1 boundary in
+ * test-harnesses/README.md: pure seams get exhaustively unit-tested; the Angular shell around them stays
  * at tier 4). No Angular, no DB, no app types — synchronous and total.
  *
  * v1 semantics: session-scoped only. Nothing here touches persistence.

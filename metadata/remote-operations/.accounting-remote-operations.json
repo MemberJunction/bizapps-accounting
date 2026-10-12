@@ -1,0 +1,83 @@
+[
+  {
+    "fields": {
+      "Name": "Get Finance Exception Types",
+      "OperationKey": "Accounting.GetFinanceExceptionTypes",
+      "Description": "Read the finance exception types — code, whether active, and the parsed Configuration thresholds — optionally narrowed to a list of codes. Read-only. A detector reads its thresholds here; a missing or inactive type means the detector skips.",
+      "InputTypeName": "AccountingGetFinanceExceptionTypesInput",
+      "InputTypeDefinition": "@file:types/accounting-get-finance-exception-types.input.ts",
+      "OutputTypeName": "AccountingGetFinanceExceptionTypesOutput",
+      "OutputTypeDefinition": "@file:types/accounting-get-finance-exception-types.output.ts",
+      "RequiredScope": "accounting:read",
+      "CategoryID": "@lookup:MJ: Remote Operation Categories.Name=Finance Exceptions",
+      "InputTypeIsArray": false,
+      "OutputTypeIsArray": false,
+      "ExecutionMode": "Sync",
+      "RequiresSystemUser": false,
+      "GenerationType": "Manual",
+      "CodeApprovalStatus": "Approved",
+      "Status": "Active"
+    },
+    "primaryKey": {
+      "ID": "00FBDE86-5042-4D1B-9F8E-F2424A9D45D0"
+    },
+    "sync": {
+      "lastModified": "2026-09-30T19:18:03.780Z",
+      "checksum": "b8a9ebb4312440536cda45125e964334ab4e6e98b48ddd5516b624693bf8699d"
+    }
+  },
+  {
+    "fields": {
+      "Name": "Raise Finance Exceptions",
+      "OperationKey": "Accounting.RaiseFinanceExceptions",
+      "Description": "Raise finance exceptions from a consuming app's detector. Idempotent on (TypeCode, DedupeKey): an existing row is returned with Created false. On an Open row the creator fields (SourceCreatedByUserID, CreatorUnresolved) and the summary are refreshed from the raise, so a creator identified later (for example a login linked afterwards) unlocks it; nothing else changes, and Reviewed or Corrected rows are never touched. An inactive type is skipped. An unknown type code or entity name, or a malformed entry, fails the whole call and writes nothing. Joins the caller's transaction when there is one, so a raise made during a save commits or rolls back with it. Requires the system user when called through the API: the raise names who created the source record, which decides who may clear it, so only server code (the consuming apps' in-process detectors) may raise.",
+      "InputTypeName": "AccountingRaiseFinanceExceptionsInput",
+      "InputTypeDefinition": "@file:types/accounting-raise-finance-exceptions.input.ts",
+      "OutputTypeName": "AccountingRaiseFinanceExceptionsOutput",
+      "OutputTypeDefinition": "@file:types/accounting-raise-finance-exceptions.output.ts",
+      "RequiredScope": "accounting:write",
+      "CategoryID": "@lookup:MJ: Remote Operation Categories.Name=Finance Exceptions",
+      "InputTypeIsArray": false,
+      "OutputTypeIsArray": false,
+      "ExecutionMode": "Sync",
+      "RequiresSystemUser": true,
+      "GenerationType": "Manual",
+      "CodeApprovalStatus": "Approved",
+      "Status": "Active"
+    },
+    "primaryKey": {
+      "ID": "D1C717EA-83DB-4E38-974A-DFB738E87F38"
+    },
+    "sync": {
+      "lastModified": "2026-09-30T19:18:03.840Z",
+      "checksum": "0fba6ce1b1ecf3c74d7039a98f99e1bd01787cfe4c622fea9a2b090ccdf7ee0e"
+    }
+  },
+  {
+    "fields": {
+      "Name": "Clear Finance Exception",
+      "OperationKey": "Accounting.ClearFinanceException",
+      "Description": "Clear an Open finance exception as Reviewed (the judgement stands) or Corrected (the data was fixed), with a required note. Requires the MJ.BizApps.Accounting.FinanceExceptions.Clear authorization. Refused to the source record's creator, and refused while the creator has no linked login. The only way an exception's status changes.",
+      "InputTypeName": "AccountingClearFinanceExceptionInput",
+      "InputTypeDefinition": "@file:types/accounting-clear-finance-exception.input.ts",
+      "OutputTypeName": "AccountingClearFinanceExceptionOutput",
+      "OutputTypeDefinition": "@file:types/accounting-clear-finance-exception.output.ts",
+      "RequiredScope": "accounting:write",
+      "CategoryID": "@lookup:MJ: Remote Operation Categories.Name=Finance Exceptions",
+      "InputTypeIsArray": false,
+      "OutputTypeIsArray": false,
+      "ExecutionMode": "Sync",
+      "RequiresSystemUser": false,
+      "GenerationType": "Manual",
+      "CodeApprovalStatus": "Approved",
+      "Status": "Active"
+    },
+    "primaryKey": {
+      "ID": "AA31C44E-B72B-4BD2-97C1-C2AE8C36462C"
+    },
+    "sync": {
+      "lastModified": "2026-09-30T19:18:03.911Z",
+      "checksum": "03fd53304f657c70ec36cca47268e7ec793dc4ebe89c714c08b51e32c0a4c24c"
+    }
+  }
+]

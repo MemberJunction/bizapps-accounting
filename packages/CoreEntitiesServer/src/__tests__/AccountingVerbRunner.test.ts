@@ -74,6 +74,26 @@ describe('defaultAccountingVerbRunner', () => {
     expect(out.ResultCode).toBe('PROVIDER_NOT_REGISTERED');
   });
 
+  // #256: the connection the engine chose reaches the verb as a param named exactly CompanyIntegrationID
+  // (MemberJunction/MJ#4867), beside CompanyID.
+  it('passes CompanyIntegrationID through to the action as an input param', async () => {
+    getActionByName.mockReturnValue({ Name: 'CreateJournalEntry' });
+    runAction.mockResolvedValue({ Success: true, Result: { ResultCode: 'SUCCESS' }, Params: [] });
+
+    await defaultAccountingVerbRunner({
+      Verb: 'CreateJournalEntry',
+      CompanyID: 'co-1',
+      Params: { DocNumber: 'BATCH-1', CompanyIntegrationID: 'ci-uat' },
+      User: user,
+    });
+
+    expect(runAction.mock.calls[0][0].Params).toEqual([
+      { Name: 'CompanyID', Value: 'co-1', Type: 'Input' },
+      { Name: 'DocNumber', Value: 'BATCH-1', Type: 'Input' },
+      { Name: 'CompanyIntegrationID', Value: 'ci-uat', Type: 'Input' },
+    ]);
+  });
+
   it('returns ACTION_NOT_FOUND when the verb is not in the ActionEngine cache', async () => {
     getActionByName.mockReturnValue(undefined);
     const out = await defaultAccountingVerbRunner({

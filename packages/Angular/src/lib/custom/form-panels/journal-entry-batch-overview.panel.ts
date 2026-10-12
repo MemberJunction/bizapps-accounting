@@ -11,6 +11,7 @@ import { NavigationService } from '@memberjunction/ng-shared';
 import { BaseFormComponent, BaseFormPanel } from '@memberjunction/ng-base-forms';
 import { RegisterClassEx } from '@memberjunction/global';
 import type { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
+import { formatJournalDate } from './journal-entry-panel.helpers';
 
 interface MemberEntryRow {
     ID: string;
@@ -202,9 +203,9 @@ const BATCH_OVERVIEW_CSS = `
                 
                 <!-- Card 1: Batch Composition & Totals -->
                 <mj-card Title="Batch Composition & Volume" Subtitle="Aggregated Debits & Member Entries" Icon="fa-solid fa-chart-column">
-                    <div mjCardTools>
+                    <ng-template mjCardTools>
                         <span class="mja-code">\${{ TotalDebits.toLocaleString('en-US', { minimumFractionDigits: 2 }) }}</span>
-                    </div>
+                    </ng-template>
 
                     <div class="mja-chart-bars">
                         <div class="mja-bar-col">
@@ -225,7 +226,7 @@ const BATCH_OVERVIEW_CSS = `
                         </div>
                     </div>
 
-                    <div mjCardFooter>
+                    <ng-template mjCardFooter>
                         <div class="card-metric">
                             <span class="card-metric__label">Total Debits</span>
                             <span class="card-metric__val" style="color: var(--mj-status-success);">
@@ -240,14 +241,14 @@ const BATCH_OVERVIEW_CSS = `
                             <span class="card-metric__label">Net Variance</span>
                             <span class="card-metric__val" style="color: var(--mj-status-success);">$0.00 (Balanced)</span>
                         </div>
-                    </div>
+                    </ng-template>
                 </mj-card>
 
                 <!-- Card 2: ERP Bridge Transmission Pipeline -->
                 <mj-card Title="ERP Bridge Transmission Pipeline" Subtitle="Posting Stages & Connector State" Icon="fa-solid fa-route">
-                    <div mjCardTools>
+                    <ng-template mjCardTools>
                         <span class="mja-code">{{ Record?.Status || 'Pending' }}</span>
-                    </div>
+                    </ng-template>
 
                     <div class="mja-deck">
                         <div class="mja-deck-item">
@@ -277,7 +278,7 @@ const BATCH_OVERVIEW_CSS = `
                         </div>
                     </div>
 
-                    <div mjCardFooter>
+                    <ng-template mjCardFooter>
                         <div class="card-metric">
                             <span class="card-metric__label">Target ERP</span>
                             <span class="card-metric__val">{{ Record?.TargetSystem || 'ERP' }}</span>
@@ -290,14 +291,14 @@ const BATCH_OVERVIEW_CSS = `
                             <span class="card-metric__label">Status</span>
                             <span class="card-metric__val" style="color: var(--mj-brand-primary);">{{ Record?.Status || 'Active' }}</span>
                         </div>
-                    </div>
+                    </ng-template>
                 </mj-card>
 
                 <!-- Card 3: Member Journal Entries Table -->
                 <mj-card Title="Member Journal Entries" Subtitle="Drillable Batch Member Records" Icon="fa-solid fa-table-list">
-                    <div mjCardTools>
+                    <ng-template mjCardTools>
                         <span class="mja-code">{{ MemberEntries.length }} Loaded</span>
-                    </div>
+                    </ng-template>
 
                     <div style="overflow-x: auto; max-height: 210px; overflow-y: auto;">
                         @if (MemberEntries.length > 0) {
@@ -328,7 +329,7 @@ const BATCH_OVERVIEW_CSS = `
                         }
                     </div>
 
-                    <div mjCardFooter>
+                    <ng-template mjCardFooter>
                         <div class="card-metric">
                             <span class="card-metric__label">Total Members</span>
                             <span class="card-metric__val">{{ Record?.TotalEntries || 0 }} Records</span>
@@ -341,14 +342,14 @@ const BATCH_OVERVIEW_CSS = `
                             <span class="card-metric__label">Bridge State</span>
                             <span class="card-metric__val" style="color: var(--mj-brand-primary);">Batched</span>
                         </div>
-                    </div>
+                    </ng-template>
                 </mj-card>
 
                 <!-- Card 4: ERP Bridge Configuration -->
                 <mj-card Title="ERP Bridge Configuration" Subtitle="Target ERP Connector & Specs" Icon="fa-solid fa-gears">
-                    <div mjCardTools>
+                    <ng-template mjCardTools>
                         <span class="mja-code">Online</span>
-                    </div>
+                    </ng-template>
 
                     <div class="mja-deck">
                         <div class="mja-deck-item">
@@ -378,7 +379,7 @@ const BATCH_OVERVIEW_CSS = `
                         </div>
                     </div>
 
-                    <div mjCardFooter>
+                    <ng-template mjCardFooter>
                         <div class="card-metric">
                             <span class="card-metric__label">Connector</span>
                             <span class="card-metric__val">{{ Record?.TargetSystem || 'ERP' }}</span>
@@ -391,7 +392,7 @@ const BATCH_OVERVIEW_CSS = `
                             <span class="card-metric__label">Health</span>
                             <span class="card-metric__val" style="color: var(--mj-status-success);">Optimal</span>
                         </div>
-                    </div>
+                    </ng-template>
                 </mj-card>
 
             </mj-card-grid>
@@ -417,19 +418,25 @@ export class JournalEntryBatchOverviewComponent implements OnInit, OnChanges {
         return this.Record?.Status === 'Approved' || this.Record?.Status === 'Sent' || this.Record?.Status === 'Posted';
     }
 
+    /** `BatchedAt` is a `DATETIMEOFFSET` (a true instant) — stays on the viewer's local parts. */
     public get BatchedDateLabel(): string {
         if (!this.Record?.BatchedAt) return '—';
         return new Date(this.Record.BatchedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     }
 
+    /**
+     * `PostingDate` is a `DATE` column — a calendar day — so it goes through `formatJournalDate`
+     * (UTC parts in, UTC-anchored formatting out), not local parts. See `BatchedDateLabel` above
+     * for the true-timestamp counterpart, which deliberately stays local.
+     */
     public get PostingDateLabel(): string {
         if (!this.Record?.PostingDate) return '—';
-        return new Date(this.Record.PostingDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        return formatJournalDate(this.Record.PostingDate, { month: 'short', day: 'numeric' });
     }
 
+    /** `entry.EffectiveDate` is a `DATE` column too — same UTC-anchored formatting as `PostingDateLabel`. */
     public FormatDate(d: Date | null): string {
-        if (!d) return '—';
-        return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        return formatJournalDate(d, { month: 'short', day: 'numeric' });
     }
 
     public ngOnInit(): void {

@@ -35,9 +35,11 @@ import {
   mjBizAppsAccountingJournalEntryLineDimensionEntity,
 } from '@mj-biz-apps/accounting-entities';
 
-import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
+import { AccountingEngineBase, FiscalYearOf } from '@mj-biz-apps/accounting-engine-base';
+import { ToCalendarDay } from '@mj-biz-apps/common-entities';
 
 import { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
+import { laterBusinessDate, loadTodayBusiness } from './BusinessDay.js';
 import { LookupJournalEntryTypeByID, RequireJournalEntryTypeID } from './JournalEntryTypes.js';
 import { getNextJournalEntryNumber } from './SequenceService.js';
 import { isSqlGuid, sqlGuidLiteral } from './SqlGuards.js';
@@ -52,9 +54,10 @@ const FILE_ENTITY = 'Files'; // __mj.File
 /**
  * The legal JE status graph (plan §7 + the DB triggers' sanctioned carve-outs):
  *   Pending → Batched (the batch build's lock) · Batched → GLPosted (the batch DISPATCH — see the
- *   owning-batch check in ValidateAsync) · Batched → Pending (the reversible preliminary unlock the
- *   immutability trigger sanctions: JournalEntryBatchID cleared while the owning batch is still
- *   Pending — the batch-side condition stays DB-enforced, 50004/50005) · GLPosted is terminal.
+ *   owning-batch check in ValidateAsync) · Batched → Pending (the reversible unlock the immutability
+ *   trigger sanctions: JournalEntryBatchID cleared while the owning batch is Pending or Cancelled —
+ *   the batch-side condition stays DB-enforced, 50004/50005; an Approved or Failed batch reaches
+ *   Cancelled only through JournalEntryBatchEntityServer.Cancel, #183) · GLPosted is terminal.
  * The DB triggers freeze a LOCKED row but do not police a Pending row's transitions at all — without
  * this graph a direct client save could jump Pending→GLPosted with forged GLPostedAt/GLReferenceID
  * and the entry would look ERP-posted without ever being batched, approved, or dispatched.
@@ -234,7 +237,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
         if (!(JE_LEGAL_TRANSITIONS[oldStatus] ?? []).includes(this.Status)) {
           fail(`Illegal journal entry status transition '${oldStatus}' → '${this.Status}'. Legal from '${oldStatus}': ${(JE_LEGAL_TRANSITIONS[oldStatus] ?? []).filter(s => s !== oldStatus).join(', ') || '(terminal)'}.`);
         } else if (oldStatus === 'Batched' && this.Status === 'Pending' && this.JournalEntryBatchID) {
-          fail(`Batched→Pending is only the reversible unlock of an unapproved batch — JournalEntryBatchID must be cleared in the same save.`);
+          fail(`Batched→Pending is only the reversible unlock of a Pending or Cancelled batch — JournalEntryBatchID must be cleared in the same save.`);
         }
       }
     }
@@ -474,7 +477,8 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
   /**
    * Fiscal year from the company's ACP settings: the FY containing EffectiveDate,
    * labeled by the calendar year the fiscal year STARTS in. For the default Jan-1
-   * start this equals the calendar year. All date-part math in UTC (repo convention).
+   * start this equals the calendar year. The rule is `FiscalYearOf` (accounting-engine-base),
+   * shared with the deferred-revenue waterfall's year-to-date figure.
    */
   private async deriveFiscalYear(): Promise<number> {
     const effectiveDate = this.EffectiveDate;
@@ -487,15 +491,11 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
       throw new Error(`JournalEntryEntityServer.deriveFiscalYear: invalid EffectiveDate value: ${String(effectiveDate)}`);
     }
     await AccountingEngineBase.Instance.ConfigEx({ contextUser: this.ContextCurrentUser, provider: this.ProviderToUse as unknown as IMetadataProvider });
-    const acp = AccountingEngineBase.Instance.CompanyProfiles.find(
-      p => p.ID?.toLowerCase() === this.CompanyID?.toLowerCase()
-    );
-    const startMonth = acp?.FiscalYearStartMonth ?? 1;
-    const startDay = acp?.FiscalYearStartDay ?? 1;
-    const beforeFYStart =
-      d.getUTCMonth() + 1 < startMonth ||
-      (d.getUTCMonth() + 1 === startMonth && d.getUTCDate() < startDay);
-    return beforeFYStart ? d.getUTCFullYear() - 1 : d.getUTCFullYear();
+    const day = ToCalendarDay(d);
+    if (day === null) {
+      throw new Error(`JournalEntryEntityServer.deriveFiscalYear: EffectiveDate has no calendar day: ${String(effectiveDate)}`);
+    }
+    return FiscalYearOf(day, AccountingEngineBase.Instance.FiscalYearStartFor(this.CompanyID));
   }
 
   // ─── Status-graph hardening (data-driven half) ────────────────────────────
@@ -566,6 +566,9 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
    * Create a new Pending JE that reverses this one (Dr/Cr swapped, dimension tags carried),
    * back-referenced both ways. Uses the encapsulated pattern: the reversal is assembled as a
    * JournalEntryEntityServer with Lines + Dimensions and persisted in ONE transactional Save().
+   * The reversal's EffectiveDate is the later of today's BUSINESS day (`BusinessTimeZoneEngine`,
+   * not the server clock's calendar day — issue #230) and the original's EffectiveDate, so a
+   * reversal never lands in a period before the entry it reverses (issue #266).
    */
   public async GenerateReversal(
     reason: string,
@@ -596,7 +599,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
     const reversal = await provider.GetEntityObject<JournalEntryEntityServer>(JE_ENTITY, user);
     reversal.NewRecord();
     reversal.CompanyID = this.CompanyID;
-    reversal.EffectiveDate = new Date();
+    reversal.EffectiveDate = laterBusinessDate(await loadTodayBusiness(user, provider, this.CompanyID), this.EffectiveDate);
     reversal.EntryTypeID = reversalTypeId;
     reversal.Status = 'Pending';
     reversal.Description = `Reversal of ${this.EntryNumber}: ${reason}`;

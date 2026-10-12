@@ -4,6 +4,7 @@ import { RunViewParams, CompositeKey, Metadata, RunView } from '@memberjunction/
 import { MJFormPresenterService } from '@memberjunction/ng-base-forms';
 import { GridColumnConfig, EntityDataGridComponent } from '@memberjunction/ng-entity-viewer';
 import { mjBizAppsAccountingJournalEntryEntity } from '@mj-biz-apps/accounting-entities';
+import { BusinessTimeZoneEngine } from '@mj-biz-apps/common-entities';
 import { CompanyScopeService, ScopeCompany } from '../../shared/company-scope.service';
 import { openBizDetail } from '../../shared/biz-detail-form';
 import { TIME_WINDOWS, TimeWindowId, timeWindowRange, toSqlDate, andFilters } from '../../../transfer-pending/list-scaffold/time-window';
@@ -423,7 +424,7 @@ export class AllJournalEntriesPageComponent implements OnInit, OnDestroy {
   }
 
   private applyWindowRange(window: TimeWindowId): void {
-    const { From, To } = timeWindowRange(window);
+    const { From, To } = timeWindowRange(window, new Date(), BusinessTimeZoneEngine.Instance.Zone);
     this.FromDate = From ? toSqlDate(From) : null;
     // timeWindowRange's `To` is EXCLUSIVE (tomorrow 00:00 UTC). The calendar box states an INCLUSIVE
     // last day, so step back one day — and since EffectiveDate is a DATE column the resulting

@@ -5,6 +5,7 @@ import { CompositeKey, RunView } from '@memberjunction/core';
 import { NavigationService } from '@memberjunction/ng-shared';
 import { MJButtonDirective } from '@memberjunction/ng-ui-components';
 import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
+import { calendarMonthOf } from '../form-panels/journal-entry-panel.helpers';
 
 interface BatchStageMetric {
     Status: mjBizAppsAccountingJournalEntryBatchEntity['Status'];
@@ -233,7 +234,7 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                                 <i class="fa-solid fa-server"></i> {{ batch.TargetSystem }}
                                             </span>
                                         </td>
-                                        <td>{{ batch.PostingDate | date:'mediumDate' }}</td>
+                                        <td>{{ batch.PostingDate | date:'mediumDate':'UTC' }}</td>
                                         <td>{{ batch.Company || '—' }}</td>
                                         <td>
                                             <span class="mja-status-pill" [attr.data-status]="batch.Status">
@@ -746,10 +747,10 @@ export class AccountingOverviewPageComponent implements OnInit {
         const monthCounts: Record<string, number> = {};
 
         for (const e of entries) {
-            if (!e.EffectiveDate) continue;
-            const d = new Date(e.EffectiveDate);
-            if (isNaN(d.getTime())) continue;
-            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            // EffectiveDate is a DATE column: bucket by its calendar month, never local getters,
+            // which file the 1st of a month under the prior month west of UTC.
+            const key = calendarMonthOf(e.EffectiveDate);
+            if (!key) continue;
             monthCounts[key] = (monthCounts[key] || 0) + 1;
         }
 

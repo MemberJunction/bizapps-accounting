@@ -1,5 +1,129 @@
 # @mj-biz-apps/accounting-engine-base
 
+## 0.22.0
+
+### Patch Changes
+
+- 37536eb: MemberJunction and other BizApps packages are peer dependencies with caret ranges (`^6.1.5`,
+  `^5.50.2` for common, `^1.4.1` for tasks; no `~`, nothing in `dependencies`), so a 6.2 host keeps
+  one copy of each instead of installing a second 6.1 tree. MemberJunction
+  devDependencies and the root `pnpm.overrides` use the same `^6.1.5` floor. Adds `check-dependency-model` to CI.
+- Updated dependencies [37536eb]
+  - @mj-biz-apps/accounting-entities@0.22.0
+
+## 0.21.2
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-entities@0.21.2
+
+## 0.21.1
+
+### Patch Changes
+
+- Updated dependencies [fd193bf]
+  - @mj-biz-apps/accounting-entities@0.21.1
+
+## 0.21.0
+
+### Patch Changes
+
+- 1af981d: `AccountingEngineBase.LegalEntityFor(companyId)` returns the company whose books a company uses. A Division, Department or Branch walks up `ParentAccountingCompanyID` to the first company of any other type; every other type, and a company with no profile, is its own legal entity. A Division with no parent, a parent with no profile, or a loop throws `AccountingResolutionError` with code `LEGAL_ENTITY_UNRESOLVED`, naming the company. Also exported: the pure `ResolveLegalEntity`, `UsesParentBooks` and `PARENT_BOOKS_ENTITY_TYPES`.
+
+  A company that keeps no books owns no active GL accounts: `GLAccountEntityServer` refuses creating or reactivating an active account on a Division, Department or Branch, and `AccountingCompanyProfileEntityServer` refuses changing a company that owns an active account to one of those types.
+
+- Updated dependencies [4b5fdac]
+  - @mj-biz-apps/accounting-entities@0.21.0
+
+## 0.20.0
+
+### Patch Changes
+
+- Updated dependencies [77e4756]
+- Updated dependencies [c7a1af4]
+- Updated dependencies [d3a99ff]
+- Updated dependencies [b2de2f7]
+- Updated dependencies [a8e560f]
+  - @mj-biz-apps/accounting-entities@0.20.0
+
+## 0.19.0
+
+### Minor Changes
+
+- 6f1515e: The deferred-revenue waterfall adds a "Recognized YTD" KPI (#231): entries recognized between the first day of the company's fiscal year and the business day, inclusive. The fiscal-year start comes from the company's Accounting Company Profile, 1 January when it has none. The rule (`FiscalYearOf`, `IsInFiscalYearToDate`, `AccountingEngineBase.FiscalYearStartFor`) moves to accounting-engine-base, and journal-entry numbering now uses it too, with no change in the fiscal years it assigns.
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-entities@0.19.0
+
+## 0.18.0
+
+### Patch Changes
+
+- Updated dependencies [cc21d7c]
+  - @mj-biz-apps/accounting-entities@0.18.0
+
+## 0.17.0
+
+### Patch Changes
+
+- 3af15bb: A batch now posts through one chosen connection, and the ERP verb is told which one (#256).
+
+  - **The chosen connection reaches the ERP.** `CreateERPJournalInput` and `FindERPJournalInput` carry `CompanyIntegrationID`, and every verb call a provider makes (`CreateJournalEntry`, and the Business Central and QuickBooks Online `GetGLEntries` lookups) sends it as a `CompanyIntegrationID` param. It takes effect once MJ's accounting verbs accept that param (MemberJunction/MJ#4867); until then they ignore it and resolve their own connection as before.
+  - **One rule chooses the connection for the post and for the pre-flight lookup**, so the two always agree. The candidates are the batch company's active Company Integrations whose Integration matches the batch's target. None: the batch is refused as before. One: it is used. Several: the one whose Configuration JSON has `"postJournalEntries": true` is used when it is the only one marked; otherwise the post is refused and the lookup reports an error, naming the connections and saying how to fix it (mark exactly one, or deactivate the others). Before, a company with two active connections for its target (production plus a sandbox, say) posted through whichever row the database returned first. A Configuration that is not JSON does not mark its connection, and is logged.
+  - **One posting connection per company works** (option A in #256): a Company Integration owned by the company, on the shared ERP Credential and carrying that company's ERP company, with no entity maps and no schedule, posts the company's batches and is skipped by the master-data sync.
+  - **The nightly master-data sync reads ERP connections only, and skips a connection with nothing to pull.** `SyncMasterData` no longer tries a company's HubSpot, IRS or Asana connection, which reported a false failure every night. An ERP connection with no entity maps for the requested objects, such as a posting-only connection, is reported with `Skipped: true` and `Success: true`, and does not fail the run. A failed entity-map query is now a failure rather than being read as "no maps". `RunERPSyncCompanyResult` gains the optional `Skipped` field, and the `Accounting.RunERPSync` action's message gives a skipped connection's reason.
+
+- Updated dependencies [7210151]
+- Updated dependencies [a36297a]
+  - @mj-biz-apps/accounting-entities@0.17.0
+
+## 0.16.0
+
+### Patch Changes
+
+- Updated dependencies [844cb02]
+  - @mj-biz-apps/accounting-entities@0.16.0
+
+## 0.15.0
+
+### Patch Changes
+
+- Updated dependencies [0587bfa]
+  - @mj-biz-apps/accounting-entities@0.15.0
+
+## 0.14.0
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-entities@0.14.0
+
+## 0.13.0
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-entities@0.13.0
+
+## 0.12.0
+
+### Patch Changes
+
+- Updated dependencies [a64b1e0]
+  - @mj-biz-apps/accounting-entities@0.12.0
+
+## 0.11.0
+
+### Patch Changes
+
+- @mj-biz-apps/accounting-entities@0.11.0
+
+## 0.10.0
+
+### Patch Changes
+
+- Updated dependencies [2919ad0]
+  - @mj-biz-apps/accounting-entities@0.10.0
+
 ## 0.9.0
 
 ### Patch Changes

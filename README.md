@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/MemberJunction/MJ/main/logo.png" alt="MemberJunction" width="120" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://github.com/MemberJunction/MJ/raw/main/MJ_logo_dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="https://github.com/MemberJunction/MJ/raw/main/MJ_logo.webp">
+    <img alt="MemberJunction" src="https://github.com/MemberJunction/MJ/raw/main/MJ_logo.webp" width="220">
+  </picture>
 </p>
 
 <h1 align="center">BizApps Accounting</h1>
@@ -17,7 +21,7 @@
 </p>
 
 <p align="center">
-  <img alt="MJ Version" src="https://img.shields.io/badge/MemberJunction-5.33%2B-blue?style=flat-square" />
+  <img alt="MJ Version" src="https://img.shields.io/badge/MemberJunction-6.1.5%2B-blue?style=flat-square" />
   <img alt="Angular" src="https://img.shields.io/badge/Angular-21-DD0031?style=flat-square&logo=angular&logoColor=white" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white" />
   <img alt="SQL Server" src="https://img.shields.io/badge/SQL%20Server-2019%2B-CC2927?style=flat-square&logo=microsoftsqlserver&logoColor=white" />
@@ -31,7 +35,7 @@ Every back-office app eventually grows the same accounting primitives — a char
 
 The ERP (Business Central, QuickBooks, NetSuite, Sage) remains the **general ledger** and the system of record for periods and the full chart. BizApps Accounting stages subledger JEs and dispatches one summarized JE per approved batch, per company, to the ERP.
 
-> **Single source of truth for design:** [`plans/bizapps-accounting-master.md`](plans/bizapps-accounting-master.md) — the consolidated plan (decisions D1–D25). This README is the tour; the plan is the law.
+> **Single source of truth for design:** [`plans/bizapps-accounting-master.md`](plans/bizapps-accounting-master.md) — the consolidated plan (decisions D1–D25, then BA-D26 onward). This README is the tour; the plan is the law.
 
 ---
 
@@ -55,7 +59,7 @@ BizApps Accounting is a [MemberJunction Open App](https://github.com/MemberJunct
 mj app install https://github.com/MemberJunction/bizapps-accounting
 ```
 
-The CLI resolves dependencies automatically — installing this app installs [BizApps Common](https://github.com/MemberJunction/bizapps-common) first (for `Organization`, `Address`) and requires an MJ core version supporting the `__mj.Company` IsA pattern. `Currency` is owned by **this** app — BizApps Common does not ship currency entities.
+The CLI resolves dependencies automatically — installing this app installs [BizApps Common](https://github.com/MemberJunction/bizapps-common) (business time zone, calendar-day and field-limit helpers) and [BizApps Tasks](https://github.com/MemberJunction/bizapps-tasks) (for batch approval tasks) first, and requires an MJ core version supporting the `__mj.Company` IsA pattern. `Currency` is owned by **this** app — BizApps Common does not ship currency entities.
 
 ### Managing an installed app
 
@@ -79,10 +83,13 @@ mj app remove mj-bizapps-accounting   # Uninstall (--keep-data to preserve schem
 | **Account routing** | `GLAccountRole`, `GLAccountLink`, `GLAccountLinkDimension` | The JOB an account plays (AR, Sales, Deferred Revenue, Sales Discounts, Returns & Allowances, …) mapped polymorphically + date-effectively to Company / ProductCategory / Product (D11); company defaults are just company-level link rows (D12) |
 | **Company profile** | `AccountingCompanyProfile` | IsA Disjoint child of `__mj.Company` — functional currency, fiscal year settings |
 | **Currency** | `Currency`, `CurrencySpotRate` | ISO-4217 seed + spot-rate table; rate providers/auto-fetch deferred until multi-currency activates (D16) |
-| **Journal Entries** | `JournalEntry`, `JournalEntryLine`, `JournalEntryLineDimension`, `JournalEntrySequence` | Balanced single-company JEs, `Pending → Batched → GLPosted`, per-company gap-free numbering (D19); polymorphic origin pair `LinkedEntityID`/`LinkedRecordID` (D25) |
-| **Batching** | `JournalEntryBatch`, `JournalEntryBatchSequence` | Single-company batches with accountant-set `PostingDate` (D7/D8); the batch's summary is **one aggregated `JournalEntry`** (`EntryType='BatchSummary'`) via `SummaryJournalEntryID` (D9) |
+| **Journal Entries** | `JournalEntry`, `JournalEntryLine`, `JournalEntryLineDimension`, `JournalEntrySequence`, `JournalEntryType` | Balanced single-company JEs, `Pending → Batched → GLPosted`, per-company gap-free numbering (D19); polymorphic origin pair `LinkedEntityID`/`LinkedRecordID` (D25); an extensible type lookup that consuming apps seed their own types into (BA-D29) |
+| **Batching** | `JournalEntryBatch`, `JournalEntryBatchSequence` | Single-company batches with accountant-set `PostingDate` (D7/D8); the batch's summary is **one aggregated `JournalEntry`** of type `JournalEntryBatchSummary` via `SummaryJournalEntryID` (D9) |
 | **Dimensions** | `Dimension`, `DimensionValue` | First-class analytical tags (Department, CostCenter, Project, …), preserved through batch summarization to the ERP |
-| **Tax (snapshot)** | `TaxAuthority`, `TaxJurisdiction`, `TaxRate`, `TaxLiability`, `TaxRemittance`, `CustomerTaxProfile` | Records of what the third-party tax engine returned — never a rate authority we author or sync (D17) |
+| **Tax (snapshot)** | `TaxAuthority`, `TaxJurisdiction`, `TaxRate`, `TaxLiability`, `CompanyTaxNexus` | Records of what the third-party tax engine returned — never a rate authority we author or sync (D17). Remittance is the ERP's job, and buyer-side exemption is not stored here |
+| **Intercompany** | `IntercompanyAccountMatch`, `IntercompanyAccountMatchDimension` | Per company pair, the Due To / Due From accounts (and dimensions) that carry an intercompany obligation; the emitting app builds the entries (BA-D26) |
+| **Finance exceptions** | `FinanceExceptionType`, `FinanceException` | Records a finance reviewer must clear before a month closes, raised by detectors in consuming apps (golive #279) |
+| **Engine extensions** | `AccountingEngineExtension` | Registry of other apps' extensions that run around engine operations: enabled flag, run order, optional company scope, JSON configuration |
 
 Deliberately absent — see plan §5.9: `AccountingPeriod` (ERP owns periods), `ScheduledJournalEntry` (rev-rec = real forward-dated JEs), `AccountBalance` materialization (views on demand), `ChartOfAccountsMapping`, recurring-template machinery, JE origin FK columns per upstream entity (replaced by the D25 pair).
 
@@ -94,6 +101,7 @@ Deliberately absent — see plan §5.9: `AccountingPeriod` (ERP owns periods), `
 | **Actions** | `@mj-biz-apps/accounting-actions` | Server-side action handlers |
 | **Server** | `@mj-biz-apps/accounting-server` | GraphQL resolvers and server bootstrap |
 | **Angular** | `@mj-biz-apps/accounting-ng` | UI components, form overrides, custom widgets |
+| **Engine Base** | `@mj-biz-apps/accounting-engine-base` | Shared engine base (`AccountingEngineBase`): cached lookups and GL account resolution, usable on client and server |
 | **Core Entities Server** | `@mj-biz-apps/accounting-core-entities-server` | Server-only entity lifecycle hooks — JE numbering, `JournalEntryEntityServer` (extended entity with a `Lines` collection and properly scoped JE + lines transactions), GL/company alignment validation |
 
 ---
@@ -104,7 +112,7 @@ Critical integrity rules are enforced by **DB-level constraints and triggers**, 
 
 | Invariant | Mechanism |
 |---|---|
-| **Balanced JEs** — `SUM(Debits) = SUM(Credits)` per JE | Transaction-scope trigger at commit |
+| **Balanced JEs** — `SUM(Debits) = SUM(Credits)` per JE, checked when the JE locks (enters `Batched`/`GLPosted`); a `Pending` JE may be unbalanced while its lines are built | Lock-event trigger, plus a recheck when a locked JE's line changes |
 | **Single-company JEs** — every line's GLAccount belongs to the header's company | Trigger |
 | **Levels of locking** — a JE in a *pending* batch is preliminarily locked (releasable by reject/regenerate); batch **approval makes the lock permanent**; after that only GL-roundtrip fields may change | Immutability trigger (UPDATE/DELETE blocked; sanctioned unlock path only) |
 | **One side per line** — exactly one of Debit/Credit, positive | CHECK |
@@ -139,10 +147,9 @@ The cumulative effect: the audit trail is **correct by construction**. No code p
 
 | Reference | Refers to | Lives in |
 |---|---|---|
-| `JournalEntryLine.CounterpartyOrganizationID` | `Organization.ID` | `bizapps-common` |
-| `CustomerTaxProfile.OrganizationID` | `Organization.ID` | `bizapps-common` |
-| `JournalEntry.LinkedEntityID` + `LinkedRecordID` | The JE's single causal origin record (OrderLine, Payment, TaxRemittance, …) — `LinkedEntityID` is a hard FK to `__mj.Entity`; the record ref is soft by nature (D25) | upstream apps |
-| `OrderLine.JournalEntryID` (inverse direction) | This app's `JournalEntry.ID` — one JE per order line | `bizapps-orders` |
+| `JournalEntryBatch.ApprovalTaskID` | `Task.ID` — the approval task raised for the batch (D10) | `bizapps-tasks` |
+| `JournalEntry.LinkedEntityID` + `LinkedRecordID` | The JE's single causal origin record (OrderLine, Payment, …) — `LinkedEntityID` is a hard FK to `__mj.Entity`; the record ref is soft by nature (D25) | upstream apps |
+| `OrderLine.JournalEntryID` (inverse direction) | This app's `JournalEntry.ID` — one JE per order line *that has value*; a zero-value line stays NULL, so `IS NOT NULL` is not a "booked" test | `bizapps-orders` |
 
 ---
 
@@ -201,7 +208,7 @@ Set your JE's origin so drill-through works: `LinkedEntityID` = your entity's MJ
 
 ## Seeded Defaults
 
-Seed data (GL account roles, default per-company COA scaffolding) ships via **metadata sync** (`metadata/`), never SQL INSERTs — customizable per deployment. There are no system-level default accounts: **GL account defaults start at the company level** as company-scoped `GLAccountLink` rows (D12).
+Seed data (GL account roles, default per-company COA scaffolding) is authored as **metadata** (`metadata/`), never hand-written SQL INSERTs — customizable per deployment. It reaches a host through the `…__Metadata_Sync.sql` migration generated at release ([docs/database-migrations.md](docs/database-migrations.md)). There are no system-level default accounts: **GL account defaults start at the company level** as company-scoped `GLAccountLink` rows (D12).
 
 ---
 
@@ -209,14 +216,14 @@ Seed data (GL account roles, default per-company COA scaffolding) ships via **me
 
 SQL Server is the **source of truth** for migrations. PostgreSQL is supported via automatic conversion using [`@memberjunction/sql-converter`](https://github.com/MemberJunction/MJ/tree/main/packages/SQLConverter).
 
-**Standing practice (pre-production):** schema changes **edit the baseline migration in place** — clean-DB rebuild + CodeGen, no incremental fix-up migrations. The baseline file ends at the `CODEGEN OUTPUT` banner; everything below it is regenerated, never hand-edited.
+**Schema changes are new `V` migrations.** Don't edit the baseline (`B202605281200__…`): databases that already ran it would never see the edit. The rules are in [docs/database-migrations.md](docs/database-migrations.md).
 
 ```
-migrations/                       ←  T-SQL, hand-written baseline (+ regenerated CodeGen output)
+migrations/                       ←  T-SQL: the baseline plus incremental V migrations (each with its CodeGen output)
 migrations-pg/                    ←  PG, produced by `pnpm exec mj sql-convert`
 ```
 
-At runtime, `mj migrate` reads `DB_PLATFORM` and picks the right directory. CI applies the PG set to a fresh `postgres:17` container on every migration-touching PR — a T-SQL migration cannot land without a working PG counterpart.
+At runtime, `mj migrate` reads `DB_PLATFORM` and picks the right directory. Postgres counterparts are required from the release on: a PR into `next` with a new migration and no `.pg.sql` gets a warning, and the release PR fails (`rr: pg counterparts`) for any migration since the last release without one. Most migrations from before that rule, the baseline included, have none. The PG parity workflow (`pg-migrations.yml`) runs only when started by hand.
 
 ---
 
@@ -247,7 +254,7 @@ MJ_CORE_SCHEMA=__mj
 
 ```bash
 pnpm run mj:migrate                   # Apply migrations (creates __mj_BizAppsAccounting schema)
-pnpm run mj sync push --dir metadata  # Load seed metadata
+pnpm run mj sync push --dir metadata  # Load seed metadata into your dev database (hosts get it from the release's Metadata_Sync migration)
 pnpm run mj:codegen                   # Generate TypeScript / GraphQL / Angular code
 pnpm run build                        # Build all packages (Turborepo)
 ```
@@ -267,6 +274,15 @@ Ports are chosen to avoid colliding with concurrent MJ dev environments:
 | **bizapps-accounting** | **4102** | **4302** |
 | bizapps-orders | 4103 | 4303 |
 
+### Run Tests
+
+```bash
+pnpm run test               # unit tests across packages (what CI runs)
+pnpm run test:integration   # live suite against a running MJAPI; writes data (prerequisites: packages/IntegrationTests/README.md)
+```
+
+Every test tier, its prerequisites and its command: [test-harnesses/README.md](test-harnesses/README.md).
+
 ---
 
 ## Repository Structure
@@ -281,27 +297,24 @@ bizapps-accounting/
 │   ├── Server/                    # @mj-biz-apps/accounting-server
 │   ├── CoreEntitiesServer/        # @mj-biz-apps/accounting-core-entities-server
 │   ├── EngineBase/                # @mj-biz-apps/accounting-engine-base
-│   └── Angular/                   # @mj-biz-apps/accounting-ng
-├── migrations/                    # T-SQL baseline (source of truth)
+│   ├── Angular/                   # @mj-biz-apps/accounting-ng
+│   └── IntegrationTests/          # @mj-biz-apps/accounting-integration-tests (private)
+├── migrations/                    # T-SQL baseline + incremental V migrations (source of truth)
 ├── migrations-pg/                 # PG migrations (converter output)
 ├── metadata/                      # Seed data + entity metadata (synced via mj-sync)
+├── docs/                          # Architecture, ERD, lifecycle hooks, binding rules, seeding guides
 ├── plans/
-│   └── bizapps-accounting-master.md  # THE design doc & decision log (D1..D25)
+│   └── bizapps-accounting-master.md  # THE design doc & decision log
+├── test-harnesses/                # Live test tiers (see test-harnesses/README.md)
+├── scripts/                       # rebuild-db.sh (new empty database only), append-codegen.sh
 └── ci/                            # Release scripts
 ```
 
 ---
 
-## Build Sequencing (per master plan §16)
+## Build Sequencing
 
-Ruling of record: **build first, iterate in the system** — plans stay thin; nothing is "done" until tests are green and a demo artifact exists.
-
-1. **NOW — Orders per-line booking**: per-line JE factory + `OrderLine.JournalEntryID`, contra-role + company-default `GLAccountLink` seeds.
-2. **Schema cleanup wave** (deliberate, later): ACP default-account column drops, `ChartOfAccountsMapping` removal, **D25 provenance rework** (origin pair replaces origin columns + `JournalEntryLink`).
-3. **Batch rework**: single-company header, `PostingDate`, approver enforcement.
-4. **Rev-rec rework**: forward-dated JEs replace the retired ScheduledJournalEntry machinery; date-window batch filters + approval range display.
-5. **Cross-app FK hardening** once MJ CodeGen include-mode lands.
-6. Later: FX/multi-currency activation, tax engine selection, roles/approvals screens, report pages.
+Ruling of record: **build first, iterate in the system** — plans stay thin; nothing is "done" until tests are green and a demo artifact exists. The build order and the status of each step live in master plan §16.
 
 ---
 
@@ -309,7 +322,14 @@ Ruling of record: **build first, iterate in the system** — plans stay thin; no
 
 | Document | Description |
 |---|---|
-| [Master Plan](plans/bizapps-accounting-master.md) | The consolidated design doc & decision log (D1..D25) — single source of truth |
+| [Master Plan](plans/bizapps-accounting-master.md) | The consolidated design doc & decision log (D1–D25, then BA-D26 onward) — single source of truth |
+| [Architecture](docs/ARCHITECTURE.md) | How the system fits together, block by block |
+| [ERD](docs/bizapps-accounting-erd.md) | The current schema, sectioned |
+| [Lifecycle Hooks](docs/lifecycle-hooks.md) | The server-side `BaseEntity.Save()` hooks and the engine |
+| [UI Architecture](docs/ui-architecture.md) | Binding rule for Angular code: no data-access service layer |
+| [Database Migrations](docs/database-migrations.md) | Binding rule for schema changes: incremental `V` migrations only |
+| [Customer Deposits seeding](docs/customer-deposits-seeding.md) / [Unbilled Receivable seeding](docs/unbilled-receivable-seeding.md) | Per-company `GLAccountLink` rows orders needs before go-live |
+| [Testing](test-harnesses/README.md) | Test tiers and how to run each |
 | [PG Conversion Workflow](migrations-pg/README.md) | T-SQL ↔ PostgreSQL conversion pipeline |
 | [CLAUDE.md](CLAUDE.md) | Development conventions, schema invariants, build commands |
 
@@ -319,7 +339,7 @@ Ruling of record: **build first, iterate in the system** — plans stay thin; no
 
 | Layer | Technology | Version |
 |---|---|---|
-| **Platform** | [MemberJunction](https://github.com/MemberJunction/MJ) | 5.33+ |
+| **Platform** | [MemberJunction](https://github.com/MemberJunction/MJ) | 6.1.5+ |
 | **Runtime** | Node.js | 18+ |
 | **Language** | TypeScript | 5.9 (strict) |
 | **Database (primary)** | SQL Server / Azure SQL | 2019+ |
@@ -327,8 +347,8 @@ Ruling of record: **build first, iterate in the system** — plans stay thin; no
 | **API** | GraphQL (Apollo Server) | -- |
 | **UI Framework** | Angular | 21 |
 | **Build** | Turborepo | 2.7 |
-| **Validation** | Zod | 3.24 |
-| **SQL Conversion** | [`@memberjunction/sql-converter`](https://github.com/MemberJunction/MJ/tree/main/packages/SQLConverter) | 5.33+ |
+| **Validation** | Zod | 3.25 |
+| **SQL Conversion** | [`@memberjunction/sql-converter`](https://github.com/MemberJunction/MJ/tree/main/packages/SQLConverter) (through the `mj` CLI) | 6.1.5+ |
 
 ---
 

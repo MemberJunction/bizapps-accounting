@@ -1,11 +1,29 @@
 import { describe, it, expect } from 'vitest';
 import {
+  calendarDaySpan,
+  calendarMonthOf,
   formatJournalDate,
   formatJournalMoney,
   journalLineTotals,
   journalStatusChipClass,
 } from '../lib/custom/form-panels/journal-entry-panel.helpers';
 import { isBalanced } from '../lib/custom/shared/je-rules';
+
+/**
+ * Run `fn` with the machine's zone pinned. Restoring an UNSET `TZ` must `delete` it: assigning
+ * `undefined` back stores the string "undefined", which ICU reads as UTC, so every later test in
+ * this worker would quietly run in a zone nobody chose.
+ */
+const AT = (tz: string, fn: () => void) => {
+  const original = process.env.TZ;
+  process.env.TZ = tz;
+  try {
+    fn();
+  } finally {
+    if (original === undefined) delete process.env.TZ;
+    else process.env.TZ = original;
+  }
+};
 
 describe('formatJournalMoney', () => {
   it('formats two decimal places', () => {
@@ -56,6 +74,25 @@ describe('formatJournalDate', () => {
     expect(formatJournalDate(null)).toBe('—');
     expect(formatJournalDate('')).toBe('—');
   });
+
+  it('renders the stored calendar day west of Greenwich, where local parts would show the day before', () => {
+    // EffectiveDate is a DATE column: it travels as UTC midnight of its day. A viewer in New York
+    // reading local parts off that same instant would land on the 30th — the exact day-shift this
+    // helper exists to remove.
+    AT('America/New_York', () => {
+      expect(formatJournalDate(new Date('2026-08-31T00:00:00.000Z'))).toBe('Aug 31, 2026');
+    });
+  });
+
+  it('honors a caller-supplied options object (the batch panels drop the year) while still forcing timeZone: UTC', () => {
+    // journal-entry-batch-header.panel.ts's PostingDateLabel and journal-entry-batch-overview.panel.ts's
+    // PostingDateLabel/FormatDate all call this helper with { month: 'short', day: 'numeric' } (no
+    // year). The point of this test is that a shorter format string does NOT reopen the local-parts
+    // bug: `timeZone: 'UTC'` must still win even though the caller's options object never mentions it.
+    AT('America/New_York', () => {
+      expect(formatJournalDate(new Date('2026-08-31T00:00:00.000Z'), { month: 'short', day: 'numeric' })).toBe('Aug 31');
+    });
+  });
 });
 
 describe('isBalanced with journalLineTotals', () => {
@@ -76,3 +113,37 @@ describe('isBalanced with journalLineTotals', () => {
   });
 });
 
+
+describe('calendarMonthOf — DATE-column month buckets (golive #168)', () => {
+  it('files the 1st of a month under that month for a viewer west of UTC', () => {
+    // The overview's monthly JE volume bars bucketed `new Date(EffectiveDate)` by local
+    // getFullYear/getMonth: in Chicago, UTC midnight on 1 September is 31 August, 7 PM.
+    AT('America/Chicago', () => {
+      expect(calendarMonthOf(new Date('2026-09-01T00:00:00.000Z'))).toBe('2026-09');
+      expect(calendarMonthOf('2026-09-01T00:00:00.000Z')).toBe('2026-09');
+      expect(calendarMonthOf('2026-09-01')).toBe('2026-09');
+    });
+  });
+
+  it('answers null for a missing or unreadable value', () => {
+    expect(calendarMonthOf(null)).toBeNull();
+    expect(calendarMonthOf('')).toBeNull();
+    expect(calendarMonthOf('not a date')).toBeNull();
+  });
+});
+
+describe('calendarDaySpan — the batch preview covered range (golive #168)', () => {
+  it('reports the first and last calendar day, unshifted, for a viewer west of UTC', () => {
+    AT('America/Los_Angeles', () => {
+      const span = calendarDaySpan(['2026-09-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z', null, '2026-08-15T00:00:00.000Z']);
+      expect(span).toEqual({ First: '2026-08-01', Last: '2026-09-01' });
+      expect(formatJournalDate(span?.First)).toBe('Aug 1, 2026');
+      expect(formatJournalDate(span?.Last)).toBe('Sep 1, 2026');
+    });
+  });
+
+  it('is null when no value is a calendar day', () => {
+    expect(calendarDaySpan([])).toBeNull();
+    expect(calendarDaySpan([null, 'garbage'])).toBeNull();
+  });
+});

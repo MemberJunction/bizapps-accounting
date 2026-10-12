@@ -94,6 +94,56 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="ArchiveReason"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="ArchivedAt"
+            Type="datepicker"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="ArchivedByUserID"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+            LinkType="Record"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="CancelReason"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="CancelledAt"
+            Type="datepicker"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="CancelledByUserID"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+            LinkType="Record"
+        ></mj-form-field>
 
     </mj-collapsible-panel>
 
@@ -204,6 +254,56 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="ERPNotPostedConfirmedAt"
+            Type="datepicker"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="ERPNotPostedConfirmedByUserID"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+            LinkType="Record"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="ERPNotPostedBasis"
+            Type="select"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="ApprovedContentHash"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="SentByUserID"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+            LinkType="Record"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="SendAttemptCount"
+            Type="number"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
 
     </mj-collapsible-panel>
 
@@ -216,28 +316,11 @@
         [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
-            [ShowLabel]="true"
-            FieldName="ArchiveReason"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="ArchivedAt"
+            [ShowLabel]="false"
+            FieldName="SealMismatchDetectedAt"
             Type="datepicker"
             [EditMode]="EditMode"
             [FormContext]="formContext"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="ArchivedByUserID"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-            LinkType="Record"
         ></mj-form-field>
 
     </mj-collapsible-panel>

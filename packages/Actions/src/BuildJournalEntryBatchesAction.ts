@@ -3,20 +3,25 @@ import { ActionResultSimple, RunActionParams } from '@memberjunction/actions-bas
 import { BaseAction } from '@memberjunction/actions';
 import { RegisterClass } from '@memberjunction/global';
 import {
-  approveJournalEntryBatch,
+  assertAutoPostCaller,
+  assertAutoPostPolicy,
+  autoPostJournalEntryBatch,
   buildJournalEntryBatch,
-  createAccountingERPPoster,
+  findStrandedJournalEntries,
   pendingCompanies,
   recordDispatchFailure,
-  sendJournalEntryBatch,
-  AutoApproveGate,
+  JournalEntryBatchFailureNotRecordedError,
+  AutoPostDispatchError,
   EmptyJournalEntryBatchError,
+  JournalEntryBatchSendRefusedError,
   TasksAppApprovalGate,
+  requireDateBound,
   type BuildJournalEntryBatchResult,
-  type JournalEntryBatchApprovalGate,
+  type StrandedJournalEntryBatch,
   type JournalEntryBatchTargetSystem,
   type BuildJournalEntryBatchOptions,
 } from '@mj-biz-apps/accounting-core-entities-server';
+import { AddDays, BusinessTimeZoneEngine, CalendarDayIn, FromCalendarDay, IsBeforeDay, IsCalendarDay, LastDayOfPriorMonth, ToCalendarDay } from '@mj-biz-apps/common-entities';
 
 /**
  * Action: Accounting.BuildJournalEntryBatches
@@ -27,9 +32,11 @@ import {
  * Two modes:
  *   - DEFAULT (attended, A-US7): build only, behind the bizapps-tasks CFO approval gate. Batches
  *     land `Pending` and wait for a human decision. Nothing about this path changed.
- *   - AutoPost (unattended, A-US5/A-US6): build → approve → dispatch to the ERP per company, behind
- *     `AutoApproveGate` per the scheduled-posting approval waiver. Requires an explicit
- *     `EntryTypeCodes` include-list — see {@link assertAutoPostPolicy}.
+ *   - AutoPost (unattended, A-US5/A-US6): build → approve → dispatch to the ERP per company through
+ *     the engine's `autoPostJournalEntryBatch`, which holds the scheduled-posting approval waiver and
+ *     its include-list policy (`assertAutoPostPolicy`) and its system-user restriction
+ *     (`assertAutoPostCaller`, #269); both are also checked here before any company is read.
+ *     No caller passes a gate into a send (#233).
  *
  * `CutoffMode` exists because scheduled-job action params are Static or SQL-Statement only, with no
  * relative-date value type, and the driver's SQL path returns a row set and swallows errors as
@@ -46,13 +53,14 @@ export class BuildJournalEntryBatchesAction extends BaseAction {
     const user = params.ContextUser;
     const targetSystem = readParam<JournalEntryBatchTargetSystem>(params, 'TargetSystem') ?? 'BusinessCentral';
     const autoPost = isTrue(readParam<boolean | string>(params, 'AutoPost'));
+    if (autoPost) assertAutoPostCaller(user);
+    await BusinessTimeZoneEngine.Instance.Config(false, user, provider);
     const options = readBatchOptions(params);
     if (autoPost) assertAutoPostPolicy(options);
 
-    const gate: JournalEntryBatchApprovalGate = autoPost ? AutoApproveGate : new TasksAppApprovalGate(provider);
-    const outcomes = await sweep({ user, provider, gate, targetSystem, options, autoPost });
+    const outcomes = await sweep({ user, provider, targetSystem, options, autoPost });
 
-    return summarize(params, outcomes, autoPost);
+    return withStrandedNote(summarize(params, outcomes, autoPost), await strandedNote(user, provider));
   }
 }
 
@@ -74,9 +82,14 @@ function readBatchOptions(params: RunActionParams): BuildJournalEntryBatchOption
   const excludeEntryTypeCodes = readParam<string[]>(params, 'ExcludeEntryTypeCodes');
   const companyIds = readParam<string[]>(params, 'CompanyIDs');
 
+  const now = new Date();
+  const zone = BusinessTimeZoneEngine.Instance.Zone;
+  const cutoff = resolveCutoff(readParam<string>(params, 'Cutoff'), readParam<string>(params, 'CutoffMode'), now, zone);
   return {
-    cutoff: resolveCutoff(readParam<string>(params, 'Cutoff'), readParam<string>(params, 'CutoffMode'), new Date()),
-    startDate: startDate ? new Date(startDate) : null,
+    cutoff,
+    postingDate: postingDateForCutoff(cutoff, now, zone),
+    // As written: the engine reads its shape (a day, or a date-time → the business day it falls on).
+    startDate: startDate ? requireDateBound(startDate, 'Accounting.BuildJournalEntryBatches: StartDate') : null,
     companyIds: companyIds?.length ? companyIds : null,
     entryTypeCodes: entryTypeCodes?.length ? entryTypeCodes : null,
     excludeEntryTypeCodes: excludeEntryTypeCodes?.length ? excludeEntryTypeCodes : null,
@@ -87,30 +100,36 @@ function readBatchOptions(params: RunActionParams): BuildJournalEntryBatchOption
  * The cutoff handed to `pendingCandidateFilter`, which turns a midnight-UTC cutoff into
  * `EffectiveDate < cutoff + 1 day` — the cutoff DAY is INCLUDED. So "strictly before the run date"
  * is YESTERDAY, and "strictly before the 1st of this month" is the LAST DAY OF THE PRIOR MONTH.
- * An explicit `Cutoff` always wins, so the manual/on-demand path is unaffected.
+ * "The run date" is the calendar day in the BUSINESS zone: a job that fires at 1 AM UTC on the 1st
+ * is still the last evening of the prior month in Chicago. An explicit `Cutoff` always wins, and its
+ * SHAPE decides what it means: `YYYY-MM-DD` is that day; a date-time with an offset is the day it falls
+ * on in `zone` (golive #168 — `2026-09-30T19:00:00-05:00` is UTC midnight, which `new Date()` made the
+ * 1st). Anything else throws, naming `Cutoff`. The result is always a day at UTC midnight.
  */
-export function resolveCutoff(explicitCutoff: string | undefined, mode: string | undefined, now: Date): Date | null {
-  if (explicitCutoff) return new Date(explicitCutoff);
+export function resolveCutoff(explicitCutoff: string | undefined, mode: string | undefined, now: Date, zone: string): Date | null {
+  if (explicitCutoff) {
+    const cutoff = requireDateBound(explicitCutoff, 'Accounting.BuildJournalEntryBatches: Cutoff');
+    return FromCalendarDay(IsCalendarDay(cutoff) ? cutoff : CalendarDayIn(new Date(cutoff), zone));
+  }
   if (!mode) return null;
-  const year = now.getUTCFullYear();
-  const month = now.getUTCMonth();
-  if (mode === 'PriorDay') return new Date(Date.UTC(year, month, now.getUTCDate() - 1));
-  if (mode === 'PriorMonth') return new Date(Date.UTC(year, month, 0)); // day 0 = last day of the prior month
+  const today = CalendarDayIn(now, zone);
+  if (mode === 'PriorDay') return FromCalendarDay(AddDays(today, -1));
+  if (mode === 'PriorMonth') return FromCalendarDay(LastDayOfPriorMonth(today));
   throw new Error(`Accounting.BuildJournalEntryBatches: unknown CutoffMode '${mode}' — expected 'PriorDay' or 'PriorMonth'.`);
 }
 
 /**
- * Auto-posting is INCLUDE-LIST ONLY, by policy (Craig, AIDP-1). A blacklist would silently
- * auto-post any JournalEntryType added later; a financial control has to default the other way, so
- * a new entry type requires approval until an admin names it here.
+ * A batch is dated the last day of its sweep window (golive #314), not the run date: a nightly run on
+ * 1 September with cutoff 31 August posts on 31 August, so the activity stays in August in the ERP.
+ * A cutoff later than today ends the window today: the posting date also bounds the pool, and an
+ * unattended run does not post ahead of the day it runs. No cutoff, no window end: null, and the
+ * engine dates the batch today.
  */
-function assertAutoPostPolicy(options: BuildJournalEntryBatchOptions): void {
-  if (!options.entryTypeCodes?.length) {
-    throw new Error('Accounting.BuildJournalEntryBatches: AutoPost requires an explicit EntryTypeCodes include-list — auto-posting is include-list only, so an entry type never posts unattended unless it is named.');
-  }
-  if (options.excludeEntryTypeCodes?.length) {
-    throw new Error('Accounting.BuildJournalEntryBatches: AutoPost does not accept ExcludeEntryTypeCodes — the auto-post policy is an include-list, not a blacklist. Name the types that may post in EntryTypeCodes.');
-  }
+export function postingDateForCutoff(cutoff: Date | null, now: Date, zone: string): Date | null {
+  if (!cutoff) return null;
+  const today = CalendarDayIn(now, zone);
+  const cutoffDay = ToCalendarDay(cutoff) ?? today;
+  return FromCalendarDay(IsBeforeDay(cutoffDay, today) ? cutoffDay : today);
 }
 
 // ─── The sweep ───────────────────────────────────────────────────────────────────────────
@@ -134,7 +153,6 @@ const BUILD_FAILED = 'BuildFailed';
 interface SweepContext {
   user: UserInfo;
   provider: IMetadataProvider;
-  gate: JournalEntryBatchApprovalGate;
   targetSystem: JournalEntryBatchTargetSystem;
   options: BuildJournalEntryBatchOptions;
   autoPost: boolean;
@@ -144,7 +162,7 @@ interface SweepContext {
  * One batch per company (D7), each company independent under AutoPost.
  *
  * A build failure aborts the ATTENDED run, as it always has — those batches carry approval Tasks, so
- * they are visible and a human can act on them. It must NOT abort an UNATTENDED run: `AutoApproveGate`
+ * they are visible and a human can act on them. It must NOT abort an UNATTENDED run: the auto-post waiver
  * raises no Task, so every batch already built in this sweep would be stranded `Pending` with no Task,
  * where nothing can approve it, dispatch it (the manual op needs a Task), or re-sweep it (its entries
  * are `Batched`, so the next night skips them). Dispatching each company as it is built keeps that
@@ -156,13 +174,10 @@ async function sweep(ctx: SweepContext): Promise<CompanyOutcome[]> {
 
   for (const companyId of companies) {
     try {
-      const batch = await buildJournalEntryBatch(
-        companyId, ctx.targetSystem, ctx.user.ID, ctx.user, ctx.provider, ctx.gate, ctx.options,
-      );
-      // dispatchOne resolves its own failures into an outcome, so nothing below throws from here.
+      // autoPostOne resolves its dispatch failures into an outcome, so only a build failure throws from here.
       outcomes.push(ctx.autoPost
-        ? await dispatchOne(companyId, batch, ctx.user, ctx.provider)
-        : { companyId, batch, status: 'Pending', error: null, needsAttention: false });
+        ? await autoPostOne(companyId, ctx)
+        : { companyId, batch: await buildForApproval(companyId, ctx), status: 'Pending', error: null, needsAttention: false });
     } catch (e) {
       if (e instanceof EmptyJournalEntryBatchError) continue; // this company's candidates netted to zero
       if (!ctx.autoPost) throw e;
@@ -174,30 +189,39 @@ async function sweep(ctx: SweepContext): Promise<CompanyOutcome[]> {
   return outcomes;
 }
 
+/** The attended build: a Pending batch behind the bizapps-tasks CFO gate, with its approval Task. */
+function buildForApproval(companyId: string, ctx: SweepContext): Promise<BuildJournalEntryBatchResult> {
+  return buildJournalEntryBatch(
+    companyId, ctx.targetSystem, ctx.user.ID, ctx.user, ctx.provider, new TasksAppApprovalGate(ctx.provider), ctx.options,
+  );
+}
+
 // ─── Dispatch (AutoPost only) ────────────────────────────────────────────────────────────
 
 /**
- * Build → Approved → Sent → Posted for one batch. `ApprovedByUserID` is stamped with the context
- * user, which in a scheduled run IS the MJ System user the scheduler resolves — the waiver removes
- * the approval STEP, not the audit trail, so this is never null (Craig, AIDP-1).
+ * Build → Approved → Sent → Posted for one company, through the engine's waiver. `ApprovedByUserID`
+ * is stamped with the context user, which in a scheduled run IS the MJ System user the scheduler
+ * resolves — the waiver removes the approval STEP, not the audit trail, so this is never null.
+ * A build failure throws; a failure once the batch exists becomes an outcome.
  */
-async function dispatchOne(
-  companyId: string, batch: BuildJournalEntryBatchResult, user: UserInfo, provider: IMetadataProvider,
-): Promise<CompanyOutcome> {
+async function autoPostOne(companyId: string, ctx: SweepContext): Promise<CompanyOutcome> {
   try {
-    await approveJournalEntryBatch(batch.batchId, user.ID, user, provider);
-    const sent = await sendJournalEntryBatch(batch.batchId, user, {
-      gate: AutoApproveGate,
-      poster: createAccountingERPPoster(provider),
-      provider,
-    });
-    return { companyId, batch, status: sent.Status, error: sent.ErrorMessage ?? null, needsAttention: sent.Status !== 'Posted' };
+    const { build, batch: sent } = await autoPostJournalEntryBatch(companyId, ctx.targetSystem, ctx.user, ctx.provider, ctx.options);
+    return { companyId, batch: build, status: sent.Status, error: sent.ErrorMessage ?? null, needsAttention: sent.Status !== 'Posted' };
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    LogError(`Accounting.BuildJournalEntryBatches: dispatch of batch ${batch.batchId} failed: ${message}`);
+    if (!(e instanceof AutoPostDispatchError)) throw e;
+    const batchId = e.Build.batchId;
+    LogError(`Accounting.BuildJournalEntryBatches: dispatch of batch ${batchId} failed: ${e.message}`);
+    // Another dispatch sent this batch first and owns it. Triage would mark that dispatch's
+    // in-flight batch Failed, inviting a retry while its ERP call may still be running (#184).
+    if (e.cause instanceof JournalEntryBatchSendRefusedError) {
+      return { companyId, batch: e.Build, status: e.cause.Status, error: e.message, needsAttention: e.cause.Status !== 'Posted' };
+    }
     // Every route through triage began with a throw, so every one of them needs a human — including
     // the `Posted` one, where the ERP has the journal but the member JE flip did not finish.
-    return { companyId, batch, needsAttention: true, ...(await triage(batch.batchId, message, user, provider)) };
+    // A Failed save that did not persist after the ERP accepted the batch: triage keeps the reference.
+    const acceptedRef = e.cause instanceof JournalEntryBatchFailureNotRecordedError ? e.cause.ExternalJournalEntryBatchRef : null;
+    return { companyId, batch: e.Build, needsAttention: true, ...(await triage(batchId, e.message, ctx.user, ctx.provider, acceptedRef)) };
   }
 }
 
@@ -207,15 +231,15 @@ async function dispatchOne(
  * overwritten — see `recordDispatchFailure`.
  */
 async function triage(
-  batchId: string, message: string, user: UserInfo, provider: IMetadataProvider,
+  batchId: string, message: string, user: UserInfo, provider: IMetadataProvider, acceptedRef: string | null,
 ): Promise<{ status: string; error: string }> {
   try {
-    const { status, marked } = await recordDispatchFailure(batchId, message, user, provider);
+    const { status, marked } = await recordDispatchFailure(batchId, message, user, provider, acceptedRef);
     if (marked) return { status, error: message };
     if (status === 'Posted') {
       // The ERP took this journal. Only the member Batched→GLPosted flip is incomplete, and the
       // repair is to finish that flip — NOT to post again.
-      const warning = `ALREADY POSTED TO THE ERP — DO NOT RE-POST. The batch reached the ERP and only the member Batched→GLPosted flip is incomplete: ${message}`;
+      const warning = `ALREADY POSTED TO THE ERP — DO NOT RE-POST. The batch reached the ERP and only the member Batched→GLPosted flip is incomplete; finish it with Accounting.ResumeJournalEntryBatchPosting: ${message}`;
       LogError(`Accounting.BuildJournalEntryBatches: batch ${batchId} ${warning}`);
       return { status, error: warning };
     }
@@ -257,6 +281,47 @@ function summarize(params: RunActionParams, outcomes: CompanyOutcome[], autoPost
     Message: `${summary} ${problems.length} of ${outcomes.length} company(ies) did not post: ${detail}`,
     ResultCode: 'POST_INCOMPLETE',
   };
+}
+
+// ─── Stranded entries ────────────────────────────────────────────────────────────────────
+
+/**
+ * What this run cannot see (#145): entries held at `Batched` by a Failed batch or a partly-flipped
+ * Posted one. The sweep gathers `Status='Pending'` only, so they drop out of every run without a
+ * trace, and a failure on one night would otherwise be reported once and then never again. Runs
+ * never retry them — a retry is an operator's call — so reporting them every run is the recovery.
+ *
+ * Best-effort: failing to COUNT stranded entries must not turn a run that posted into a failed one,
+ * so a scan error is reported in the message instead.
+ */
+async function strandedNote(user: UserInfo, provider: IMetadataProvider): Promise<string | null> {
+  try {
+    const stranded = await findStrandedJournalEntries(user, provider);
+    if (stranded.length === 0) return null;
+    const total = stranded.reduce((n, b) => n + b.journalEntryCount, 0);
+    const detail = stranded
+      .map(b => `${b.batchNumber ?? b.batchId} (${b.batchStatus}, ${b.journalEntryCount} — ${recoveryStep(b)})`)
+      .join('; ');
+    return `${total} journal entries are stranded in ${stranded.length} batch(es) that no run will pick up: ${detail}.`;
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    LogError(`Accounting.BuildJournalEntryBatches: could not count stranded journal entries: ${message}`);
+    return `Could not count stranded journal entries: ${message}`;
+  }
+}
+
+/**
+ * A Failed batch may already be in the ERP — the post can succeed with the response lost, or succeed
+ * and then fail to record Posted — so the step is to check the ERP first, never just to retry (#182).
+ */
+function recoveryStep(b: StrandedJournalEntryBatch): string {
+  return b.recovery === 'Retry'
+    ? `confirm in the ERP that document ${b.batchNumber ?? b.batchId} has not posted before retrying the dispatch; if it has, do not retry`
+    : 'resume its GL posting';
+}
+
+function withStrandedNote(result: ActionResultSimple, note: string | null): ActionResultSimple {
+  return note ? { ...result, Message: `${result.Message} ${note}` } : result;
 }
 
 const sum = (outcomes: CompanyOutcome[], pick: (b: BuildJournalEntryBatchResult) => number): number =>

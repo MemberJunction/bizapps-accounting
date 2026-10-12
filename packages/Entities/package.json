@@ -1,7 +1,7 @@
 {
   "name": "@mj-biz-apps/accounting-entities",
   "type": "module",
-  "version": "0.9.0",
+  "version": "0.22.0",
   "description": "MJ BizApps Accounting Entity Subclasses",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -19,6 +19,9 @@
   "author": "MemberJunction.com",
   "license": "BUSL-1.1",
   "devDependencies": {
+    "@memberjunction/core": "^6.1.5",
+    "@memberjunction/global": "^6.1.5",
+    "@mj-biz-apps/common-entities": "5.50.2",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.9.3"
   },
@@ -26,9 +29,9 @@
     "zod": "^3.25.28"
   },
   "peerDependencies": {
-    "@memberjunction/core": "^6.1.0-edge.7",
-    "@memberjunction/global": "^6.1.0-edge.7",
-    "@mj-biz-apps/common-entities": ">=5.37.0"
+    "@memberjunction/core": "^6.1.5",
+    "@memberjunction/global": "^6.1.5",
+    "@mj-biz-apps/common-entities": "^5.50.2"
   },
   "repository": {
     "type": "git",

@@ -6,7 +6,20 @@ import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';
 import { NavigationService } from '@memberjunction/ng-shared';
 import { MJButtonDirective, MJDialogComponent, MJDialogActionsComponent, MJDropdownComponent } from '@memberjunction/ng-ui-components';
 import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
+import { BusinessTimeZoneEngine, IsCalendarDay } from '@mj-biz-apps/common-entities';
+import { calendarDaySpan, formatJournalDate } from '../form-panels/journal-entry-panel.helpers';
+import { PostingDateMonthWarning, PostingMonthLabel } from '../shared/posting-date-warning';
 import {
+    ALL_ENTRIES,
+    NO_ENTRIES,
+    IncludedCandidateIds,
+    IsEntryIncluded,
+    SelectionRequestIds,
+    ToggleEntrySelection,
+    type EntrySelection,
+} from '../shared/entry-selection';
+import {
+    DispatchConfirmationKind,
     JournalEntryBatchDispatchClient,
     PreviewEntryWire,
     BuildJournalEntryBatchOptionsInput,
@@ -38,6 +51,7 @@ export type BatchItem = Pick<
     | 'Company'
     | 'ExternalJournalEntryBatchRef'
     | 'ArchiveReason'
+    | 'CancelReason'
 >;
 
 interface StageCount {
@@ -208,7 +222,7 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                                 <i class="fa-solid fa-server"></i> {{ batch.TargetSystem }}
                                             </span>
                                         </td>
-                                        <td>{{ batch.PostingDate | date:'mediumDate' }}</td>
+                                        <td>{{ batch.PostingDate | date:'mediumDate':'UTC' }}</td>
                                         <td>{{ batch.Company || '—' }}</td>
                                         <td>
                                             <span class="mja-status-pill" [attr.data-status]="batch.Status">
@@ -216,6 +230,9 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                             </span>
                                             @if (batch.Status === 'Archived' && batch.ArchiveReason) {
                                                 <span class="mja-archive-reason" [title]="batch.ArchiveReason">{{ batch.ArchiveReason }}</span>
+                                            }
+                                            @if (batch.Status === 'Cancelled' && batch.CancelReason) {
+                                                <span class="mja-archive-reason" [title]="batch.CancelReason">{{ batch.CancelReason }}</span>
                                             }
                                         </td>
                                         <td class="mja-td-right">{{ batch.TotalEntries }}</td>
@@ -229,6 +246,14 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                                         title="Close this batch permanently without sending it to the ERP. Its journal entries stay locked to it."
                                                         (click)="OnArchive(batch, $event)">
                                                     <i class="fa-solid fa-box-archive"></i> Archive
+                                                </button>
+                                            }
+                                            @if (CanCancel(batch)) {
+                                                <button mjButton variant="secondary" size="sm" type="button"
+                                                        [disabled]="CancellingBatchID === batch.ID"
+                                                        title="Cancel this batch and return its journal entries to the next build."
+                                                        (click)="OnCancel(batch, $event)">
+                                                    <i class="fa-solid fa-ban"></i> Cancel
                                                 </button>
                                             }
                                             <i class="fa-solid fa-arrow-up-right-from-square"></i>
@@ -271,8 +296,34 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                 [(ngModel)]="BuildCutoffDate"
                                 (ngModelChange)="OnBuildPreviewFilterChange()"
                                 aria-label="Effective Date Cutoff" />
+                            @if (!BuildCutoffDate) {
+                                <span class="mja-modal-hint">No cutoff — includes everything through the posting date.</span>
+                            }
+                        </div>
+
+                        <!-- The journal date the ERP receives (golive #315); it also ends the pool. -->
+                        <div class="mja-modal-field">
+                            <label class="mja-modal-label">Posting Date</label>
+                            <input
+                                type="date"
+                                class="mj-input mja-modal-date-input"
+                                [(ngModel)]="BuildPostingDate"
+                                (ngModelChange)="OnBuildPreviewFilterChange()"
+                                title="The journal date the ERP receives. Entries dated after it wait for a later batch."
+                                aria-label="Posting Date" />
                         </div>
                     </div>
+
+                    <!-- A prior or future month is allowed but confirmed: the ERP books the batch in that month. -->
+                    @if (PostingDateWarning) {
+                        <div class="mja-modal-posting-warning" role="alert">
+                            <span>{{ PostingDateWarning }}</span>
+                            <label class="mja-modal-checkbox-label">
+                                <input type="checkbox" [checked]="PostingDateConfirmed" (change)="OnPostingDateConfirmChange($event)" />
+                                <span>Yes, post this batch in {{ PostingMonth }}</span>
+                            </label>
+                        </div>
+                    }
 
                     <div class="mja-modal-options">
                         <label class="mja-modal-checkbox-label">
@@ -284,25 +335,62 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                     <!-- Preview Statistics -->
                     <div class="mja-modal-facts">
                         <div class="mja-fact-item">
-                            <span class="mja-fact-lbl">Candidates</span>
-                            <strong class="mja-fact-val">{{ PreviewCandidateCount }} JEs</strong>
+                            <span class="mja-fact-lbl">Including</span>
+                            <strong class="mja-fact-val">{{ IncludedCount }} of {{ PreviewCandidateCount }} JEs</strong>
                         </div>
-                        <div class="mja-fact-item">
-                            <span class="mja-fact-lbl">Total Debits</span>
-                            <strong class="mja-fact-val">{{ PreviewTotalDebits | currency }}</strong>
+                        <div class="mja-fact-item" title="Every line of every ticked entry, before netting">
+                            <span class="mja-fact-lbl">Entry Totals</span>
+                            <strong class="mja-fact-val">Dr {{ PreviewGrossDebits | currency }}</strong>
+                            <strong class="mja-fact-val">Cr {{ PreviewGrossCredits | currency }}</strong>
                         </div>
-                        <div class="mja-fact-item">
-                            <span class="mja-fact-lbl">Total Credits</span>
-                            <strong class="mja-fact-val">{{ PreviewTotalCredits | currency }}</strong>
+                        <div class="mja-fact-item" title="The netted summary the batch will carry and post">
+                            <span class="mja-fact-lbl">Net to Post</span>
+                            <strong class="mja-fact-val">Dr {{ PreviewTotalDebits | currency }}</strong>
+                            <strong class="mja-fact-val">Cr {{ PreviewTotalCredits | currency }}</strong>
                         </div>
                         <div class="mja-fact-item">
                             <span class="mja-fact-lbl">Date Range</span>
                             <strong class="mja-fact-val">
-                                {{ PreviewCoveredStartDate ? (PreviewCoveredStartDate | date:'mediumDate') : '—' }} &rarr;
-                                {{ PreviewCoveredEndDate ? (PreviewCoveredEndDate | date:'mediumDate') : '—' }}
+                                {{ FormatCoveredDay(PreviewCoveredStartDate) }} &rarr;
+                                {{ FormatCoveredDay(PreviewCoveredEndDate) }}
                             </strong>
                         </div>
                     </div>
+
+                    <!-- Netting is why the two pairs differ: a booking's Cr Deferred Revenue and its
+                         recognition's Dr Deferred Revenue cancel inside the batch (golive #284). -->
+                    @if (NetsBelowGross) {
+                        <p class="mja-fact-note">
+                            Lines on the same account net against each other inside the batch, so Net to Post is
+                            less than Entry Totals. Net to Post is what the batch carries.
+                        </p>
+                    }
+
+                    <!-- Skipping an older entry while batching a newer one is ALLOWED, but it must
+                         be visible: the entries reach the ERP out of their own date order. -->
+                    @if (HasOutOfOrder) {
+                        <div class="mja-banner" role="status">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                            <span>
+                                {{ PreviewOutOfOrderSkipCount }} excluded entr{{ PreviewOutOfOrderSkipCount === 1 ? 'y is' : 'ies are' }}
+                                older than an entry you included, so newer entries will batch ahead of
+                                {{ PreviewOutOfOrderSkipCount === 1 ? 'it' : 'them' }}. That is allowed — the excluded
+                                entries stay Pending for a later batch.
+                            </span>
+                        </div>
+                    }
+
+                    <!-- Held back by AccountingCompanyProfile.PostingStartDate: never in any batch, so say how many. -->
+                    @if (PreviewBeforePostingStartCount > 0) {
+                        <div class="mja-banner" role="status">
+                            <i class="fa-solid fa-calendar-xmark"></i>
+                            <span>
+                                {{ PreviewBeforePostingStartCount }} entr{{ PreviewBeforePostingStartCount === 1 ? 'y is' : 'ies are' }}
+                                dated before {{ PreviewBeforePostingStartCount === 1 ? 'its' : 'their' }} company's posting start date and held back.
+                                They stay Pending and are not in this batch.
+                            </span>
+                        </div>
+                    }
 
                     <!-- Candidate List -->
                     @if (IsPreviewLoading) {
@@ -320,6 +408,14 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                             <table class="mja-table mja-modal-table">
                                 <thead>
                                     <tr>
+                                        <th class="mja-th-check">
+                                            <input
+                                                type="checkbox"
+                                                [checked]="AllEntriesIncluded"
+                                                [disabled]="IsBuildingBatch"
+                                                (change)="SetAllEntriesIncluded(!AllEntriesIncluded)"
+                                                aria-label="Include every candidate" />
+                                        </th>
                                         <th>Entry №</th>
                                         <th>Date</th>
                                         <th>Type</th>
@@ -329,9 +425,17 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                                 </thead>
                                 <tbody>
                                     @for (e of PreviewEntries; track e.ID) {
-                                        <tr>
+                                        <tr [class.mja-row--excluded]="IsExcluded(e.ID)">
+                                            <td class="mja-td-check">
+                                                <input
+                                                    type="checkbox"
+                                                    [checked]="!IsExcluded(e.ID)"
+                                                    [disabled]="IsBuildingBatch"
+                                                    (change)="ToggleEntry(e.ID)"
+                                                    [attr.aria-label]="'Include ' + e.EntryNumber" />
+                                            </td>
                                             <td><strong>{{ e.EntryNumber }}</strong></td>
-                                            <td>{{ e.EffectiveDate | date:'mediumDate' }}</td>
+                                            <td>{{ e.EffectiveDate | date:'mediumDate':'UTC' }}</td>
                                             <td><span class="mja-type-tag">{{ e.EntryTypeCode }}</span></td>
                                             <td class="mja-desc-cell">{{ e.Description || '—' }}</td>
                                             <td class="mja-td-right">{{ e.Amount | currency }}</td>
@@ -344,17 +448,21 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                 </div>
 
                 <mj-dialog-actions>
+                    @if (BuildBlockedReason) {
+                        <span class="mja-modal-blocked" role="status">{{ BuildBlockedReason }}</span>
+                    }
                     <button
                         mjButton
                         variant="primary"
                         size="sm"
                         type="button"
-                        [disabled]="IsBuildingBatch || IsPreviewLoading || PreviewCandidateCount === 0"
+                        [disabled]="!CanBuild"
+                        [title]="BuildBlockedReason || 'Build a batch from the ticked entries'"
                         (click)="ExecuteBuildBatch()">
                         @if (IsBuildingBatch) {
                             <i class="fa-solid fa-spinner fa-spin"></i> Building Batch…
                         } @else {
-                            <i class="fa-solid fa-layer-group"></i> Build Batch ({{ PreviewCandidateCount }})
+                            <i class="fa-solid fa-layer-group"></i> Build Batch ({{ IncludedCount }})
                         }
                     </button>
                     <button mjButton variant="flat" size="sm" type="button" [disabled]="IsBuildingBatch" (click)="CloseBuildBatchModal()">
@@ -396,6 +504,75 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                     </button>
                     <button mjButton variant="flat" size="sm" type="button" [disabled]="!!ArchivingBatchID" (click)="CloseArchiveModal()">
                         Cancel
+                    </button>
+                </mj-dialog-actions>
+            </mj-dialog>
+
+            <mj-dialog [Visible]="CancelModalVisible" Title="Cancel Journal Entry Batch" [Width]="560" (Close)="CloseCancelModal()">
+                <div class="mja-modal-content">
+                    <p class="mja-archive-blurb">
+                        Batch <strong>{{ CancelTarget?.JournalEntryBatchNumber }}</strong> will be cancelled and its summary
+                        journal entry deleted. Its {{ CancelTarget?.TotalEntries }}
+                        journal entr{{ CancelTarget?.TotalEntries === 1 ? 'y' : 'ies' }}
+                        <strong>return to the candidate pool</strong> for the next build — this is not an archive.
+                        @if (CancelTarget?.Status === 'Pending') {
+                            Its approval request is closed.
+                        }
+                    </p>
+
+                    <div class="mja-modal-field">
+                        <label class="mja-modal-label" for="aidp-cancel-reason">Reason (required)</label>
+                        <textarea
+                            id="aidp-cancel-reason"
+                            class="mj-input mja-archive-reason-input"
+                            rows="3"
+                            maxlength="500"
+                            [(ngModel)]="CancelReasonDraft"></textarea>
+                    </div>
+
+                    @if (CancelTarget?.Status === 'Failed' && CancelERPCheckReason === null) {
+                        <p class="mja-archive-blurb">
+                            {{ CancelTarget?.TargetSystem }} is checked for document <strong>{{ CancelTarget?.JournalEntryBatchNumber }}</strong>
+                            first. If the failed send posted anyway, the cancel is refused: retry the batch instead.
+                        </p>
+                    }
+                    @if (CancelERPCheckReason !== null) {
+                        <p class="mja-archive-blurb">{{ CancelERPCheckReason }}</p>
+                        @if (CancelERPCheckKind === 'Mismatch') {
+                            <div class="mja-modal-field">
+                                <label class="mja-modal-label" for="aidp-cancel-mismatch">
+                                    If that posting is this batch, do not cancel: its journal entries would post a second time.
+                                    To cancel anyway, type <strong>{{ CancelTarget?.JournalEntryBatchNumber }}</strong>
+                                </label>
+                                <input id="aidp-cancel-mismatch" type="text" class="mj-input" [(ngModel)]="CancelMismatchText" />
+                            </div>
+                        } @else {
+                            <div class="mja-modal-options">
+                                <label class="mja-modal-checkbox-label">
+                                    <input type="checkbox" [(ngModel)]="CancelConfirmNotPostedInERP" />
+                                    <span>
+                                        I searched {{ CancelTarget?.TargetSystem }} for document
+                                        <strong>{{ CancelTarget?.JournalEntryBatchNumber }}</strong> and it has <strong>not</strong> posted.
+                                        If it has, cancelling lets its journal entries post a second time in the next batch.
+                                    </span>
+                                </label>
+                            </div>
+                        }
+                    }
+                </div>
+
+                <mj-dialog-actions>
+                    <button mjButton variant="danger" size="sm" type="button"
+                            [disabled]="!CanConfirmCancel"
+                            (click)="ConfirmCancel()">
+                        @if (CancellingBatchID) {
+                            <i class="fa-solid fa-spinner fa-spin"></i> Cancelling…
+                        } @else {
+                            <i class="fa-solid fa-ban"></i> Cancel Batch
+                        }
+                    </button>
+                    <button mjButton variant="flat" size="sm" type="button" [disabled]="!!CancellingBatchID" (click)="CloseCancelModal()">
+                        Close
                     </button>
                 </mj-dialog-actions>
             </mj-dialog>
@@ -831,6 +1008,21 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
             gap: 6px;
             min-width: 0;
         }
+        .mja-modal-hint {
+            font-size: 12px;
+            color: var(--mj-status-warning);
+        }
+        .mja-modal-posting-warning {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 12px;
+            padding: 9px 12px;
+            border-radius: 8px;
+            font-size: 12.5px;
+            background: color-mix(in srgb, var(--mj-status-warning) 10%, var(--mj-bg-surface));
+            border: 1px solid color-mix(in srgb, var(--mj-status-warning) 40%, transparent);
+        }
         .mja-modal-label {
             font-size: 11px;
             font-weight: 700;
@@ -901,6 +1093,11 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
             font-weight: 700;
             color: var(--mj-text-primary);
         }
+        .mja-fact-note {
+            margin: 0;
+            font-size: 12px;
+            color: var(--mj-text-muted);
+        }
         .mja-modal-table-wrap {
             max-height: 240px;
             overflow-y: auto;
@@ -921,6 +1118,21 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
         }
         .mja-modal-table tbody td {
             color: var(--mj-text-primary);
+        }
+        .mja-th-check, .mja-td-check {
+            width: 32px;
+            text-align: center;
+            padding-right: 0;
+        }
+        /* An excluded row stays legible and re-tickable — dimmed, never hidden. */
+        .mja-modal-table tbody tr.mja-row--excluded td:not(.mja-td-check) {
+            opacity: 0.45;
+            text-decoration: line-through;
+        }
+        .mja-modal-blocked {
+            margin-right: auto;
+            font-size: 12px;
+            color: var(--mj-text-muted);
         }
         .mja-type-tag {
             display: inline-block;
@@ -982,6 +1194,8 @@ export class AccountingBatchesPageComponent implements OnInit {
     public IsBuildingBatch = false;
     public BuildTarget = 'BusinessCentral';
     public BuildCutoffDate = '';
+    /** The batch's posting date (`YYYY-MM-DD`) — the journal date the ERP receives (golive #315). */
+    public BuildPostingDate = '';
     public ExcludeRevRec = true;
     public ModalErrorMessage: string | null = null;
 
@@ -991,9 +1205,30 @@ export class AccountingBatchesPageComponent implements OnInit {
     public PreviewEntries: PreviewEntryWire[] = [];
     public PreviewTotalDebits = 0;
     public PreviewTotalCredits = 0;
+    public PreviewGrossDebits = 0;
+    public PreviewGrossCredits = 0;
     public PreviewCandidateCount = 0;
+    /** Calendar days (`YYYY-MM-DD`) — the EffectiveDate span of the ticked entries. */
     public PreviewCoveredStartDate: string | null = null;
     public PreviewCoveredEndDate: string | null = null;
+    /**
+     * How many unticked entries are older than the newest ticked one — the entries newer ones
+     * would batch ahead of. Computed SERVER-side by the same code the build runs, so the warning cannot drift.
+     */
+    public PreviewOutOfOrderSkipCount = 0;
+    /** Entries dated before their company's posting start date: held back, and left Pending, by every build. */
+    public PreviewBeforePostingStartCount = 0;
+    /** Numbers each preview request. Only the latest one's response is applied (#254): ticking
+     *  fast fires overlapping previews, and a slower earlier one must not overwrite a newer one. */
+    private previewRequestSeq = 0;
+
+    /**
+     * The operator's ticked entries (golive #193, #284): every candidate, or an explicit include
+     * set. Sent to the preview as it is, so the server's totals and the ticks on screen always
+     * describe the same selection. After Clear All the set is empty, so entries that a later filter
+     * change brings into the pool start unticked.
+     */
+    public Selection: EntrySelection = ALL_ENTRIES;
 
     /** Per-row in-flight id so the acting row's button disables, not every row's. */
     public ArchivingBatchID: string | null = null;
@@ -1052,6 +1287,113 @@ export class AccountingBatchesPageComponent implements OnInit {
             }
         } finally {
             this.ArchivingBatchID = null;
+            this.cdr.markForCheck();
+        }
+    }
+
+    /** Per-row in-flight id for Cancel (#183), scoped like ArchivingBatchID. */
+    public CancellingBatchID: string | null = null;
+    public CancelModalVisible = false;
+    public CancelTarget: BatchItem | null = null;
+    public CancelReasonDraft = '';
+    /** For a Failed batch the server asked about: the operator confirmed its document number has not posted in the ERP. */
+    public CancelConfirmNotPostedInERP = false;
+    /**
+     * Set when the server's ERP lookup could not settle whether a Failed batch already posted, and so
+     * refused the cancel until the operator checks (#207): why, and which way. Null on the first attempt.
+     */
+    public CancelERPCheckReason: string | null = null;
+    public CancelERPCheckKind: DispatchConfirmationKind | null = null;
+    /** The batch number retyped to override a `Mismatch`, which is most likely this batch, already posted. */
+    public CancelMismatchText = '';
+
+    /**
+     * Cancel is offered on a Pending (golive #302), Approved or Failed (#183) batch. Who may cancel is
+     * the server's call: the company's CFO or the batch's builder before approval, the CFO or the
+     * approver after it.
+     */
+    public CanCancel(batch: BatchItem): boolean {
+        return ['Pending', 'Approved', 'Failed'].includes(batch.Status) && this.CancellingBatchID !== batch.ID;
+    }
+
+    /**
+     * Cancel a Pending, Approved or Failed batch: the batch becomes Cancelled, its summary journal entry
+     * is deleted and its journal entries return to the candidate pool — the opposite of Archive, which
+     * keeps them locked. A Pending batch's approval request is closed. The dialog requires a reason. A
+     * Failed batch may already be in the ERP, so the server looks its number up first (#207); the dialog
+     * asks the operator only when it cannot say.
+     */
+    public OnCancel(batch: BatchItem, event: Event): void {
+        // The row itself opens the record — an action button inside it must not also navigate.
+        event.stopPropagation();
+        if (this.CancellingBatchID) return;
+        this.resetCancelDialog();
+        this.CancelTarget = batch;
+        this.CancelModalVisible = true;
+        this.cdr.markForCheck();
+    }
+
+    public CloseCancelModal(): void {
+        if (this.CancellingBatchID) return;
+        this.resetCancelDialog();
+        this.cdr.markForCheck();
+    }
+
+    private resetCancelDialog(): void {
+        this.CancelModalVisible = false;
+        this.CancelTarget = null;
+        this.CancelReasonDraft = '';
+        this.CancelConfirmNotPostedInERP = false;
+        this.CancelERPCheckReason = null;
+        this.CancelERPCheckKind = null;
+        this.CancelMismatchText = '';
+    }
+
+    /**
+     * A non-blank reason and nothing in flight; once the server has asked for the ERP check, the
+     * operator's confirmation too (the batch number retyped for a `Mismatch`).
+     */
+    public get CanConfirmCancel(): boolean {
+        const batch = this.CancelTarget;
+        if (!batch || this.CancellingBatchID || !this.CancelReasonDraft.trim()) return false;
+        if (this.CancelERPCheckReason === null) return true;
+        if (this.CancelERPCheckKind === 'Mismatch') return this.CancelMismatchText.trim() === batch.JournalEntryBatchNumber;
+        return this.CancelConfirmNotPostedInERP;
+    }
+
+    /**
+     * Run the cancel with the reason captured in the dialog. The first attempt carries no ERP
+     * confirmation: the server checks the ERP itself. Only when it cannot settle it does the dialog
+     * stay open and ask, and only that second attempt carries the operator's word.
+     */
+    public async ConfirmCancel(): Promise<void> {
+        const batch = this.CancelTarget;
+        if (!batch || !this.CanConfirmCancel) return;
+        const reason = this.CancelReasonDraft.trim();
+        const confirmed = this.CancelERPCheckReason !== null;
+
+        this.CancellingBatchID = batch.ID;
+        this.ActionMessage = null;
+        this.cdr.markForCheck();
+        try {
+            const res = await this.dispatchClient.CancelBatch(batch.ID, reason, confirmed);
+            if (res.Success && res.ConfirmationRequired) {
+                this.CancelERPCheckReason = res.ConfirmationRequired;
+                this.CancelERPCheckKind = res.ConfirmationKind ?? null;
+                this.CancelConfirmNotPostedInERP = false;
+                this.CancelMismatchText = '';
+                return;
+            }
+            this.ActionMessageIsError = !res.Success;
+            this.ActionMessage = res.Success
+                ? `Cancelled batch ${batch.JournalEntryBatchNumber} — its journal entries return to the next build.`
+                : (res.ErrorMessage ?? 'Cancel failed.');
+            // Close on a refusal too: the message is on the page, and the modal would hide it. The one
+            // that matters most, "the ERP holds this batch — retry it instead", has nothing to redo here.
+            this.resetCancelDialog();
+            if (res.Success) await this.LoadBatches();
+        } finally {
+            this.CancellingBatchID = null;
             this.cdr.markForCheck();
         }
     }
@@ -1154,17 +1496,130 @@ export class AccountingBatchesPageComponent implements OnInit {
         this.navService.OpenEntityRecord(BATCH_ENTITY, CompositeKey.FromID(id));
     }
 
+    // ─── include / exclude (golive #193) ──────────────────────────────────────────────────────
+    //
+    // The build's own contract already carries the operator's selection end to end
+    // (`PreviewJournalEntryBatchOptionsInput.IncludedJournalEntryIDs` and
+    // `BuildJournalEntryBatchOptionsInput { Source: 'Explicit', JournalEntryIDs }`, served by
+    // `buildJournalEntryBatchFromExplicitIds`). This page previously ignored it and swept every
+    // candidate, so an operator with entries that must NOT post yet had no way to build at all.
+
+    public IsExcluded(id: string): boolean {
+        return !IsEntryIncluded(this.Selection, id);
+    }
+
+    /** Ticking re-previews: the netted totals and the out-of-order warning are both functions of
+     *  the selection, and both are computed server-side by the code the build itself runs. */
+    public async ToggleEntry(id: string): Promise<void> {
+        if (this.IsBuildingBatch) return;
+        this.Selection = ToggleEntrySelection(this.Selection, id, this.PreviewEntries.map(e => e.ID));
+        await this.LoadBuildPreview();
+    }
+
+    public async SetAllEntriesIncluded(included: boolean): Promise<void> {
+        if (this.IsBuildingBatch) return;
+        this.Selection = included ? ALL_ENTRIES : NO_ENTRIES;
+        await this.LoadBuildPreview();
+    }
+
+    /** The candidates on screen that are ticked: the set the preview totals and the build sends. */
+    public get IncludedEntryIDs(): string[] {
+        return IncludedCandidateIds(this.Selection, this.PreviewEntries.map(e => e.ID));
+    }
+
+    public get IncludedCount(): number {
+        return this.IncludedEntryIDs.length;
+    }
+
+    public get ExcludedCount(): number {
+        return this.PreviewCandidateCount - this.IncludedCount;
+    }
+
+    public get AllEntriesIncluded(): boolean {
+        return this.PreviewCandidateCount > 0 && this.ExcludedCount === 0;
+    }
+
+    /** Cent-level tolerance — amounts are decimal(18,2), matching the server's FOOT_TOLERANCE. */
+    public get IsBalanced(): boolean {
+        return Math.abs(this.PreviewTotalDebits - this.PreviewTotalCredits) < 0.005;
+    }
+
+    /** True when netting inside the batch removes some of the ticked entries' volume. */
+    public get NetsBelowGross(): boolean {
+        return this.PreviewGrossDebits - this.PreviewTotalDebits > 0.005;
+    }
+
+    public get HasOutOfOrder(): boolean {
+        return this.PreviewOutOfOrderSkipCount > 0;
+    }
+
+    /** Today's business day. */
+    public get Today(): string {
+        return BusinessTimeZoneEngine.Instance.Today();
+    }
+
+    /** The posting date whose prior/future-month warning was confirmed; any other date asks again. */
+    private confirmedPostingDate: string | null = null;
+
+    /** "Are you sure?" text when the posting date is in a prior or future month (golive #315), or null. */
+    public get PostingDateWarning(): string | null {
+        return PostingDateMonthWarning(this.BuildPostingDate, this.Today);
+    }
+
+    /** The posting date's month, e.g. `September 2026`, for the confirmation label. */
+    public get PostingMonth(): string {
+        return IsCalendarDay(this.BuildPostingDate) ? PostingMonthLabel(this.BuildPostingDate) : '';
+    }
+
+    public get PostingDateConfirmed(): boolean {
+        return !!this.BuildPostingDate && this.BuildPostingDate === this.confirmedPostingDate;
+    }
+
+    public ConfirmPostingDate(confirmed: boolean): void {
+        this.confirmedPostingDate = confirmed ? this.BuildPostingDate : null;
+        this.cdr.markForCheck();
+    }
+
+    public OnPostingDateConfirmChange(event: Event): void {
+        this.ConfirmPostingDate((event.target as HTMLInputElement).checked);
+    }
+
+    /** Non-null = why Build is disabled. Saying it beats a dead button with no explanation. */
+    public get BuildBlockedReason(): string | null {
+        // The preview re-queries on every change and its pool ends at the posting date, so no ticked
+        // entry can postdate it; the server refuses that case regardless.
+        if (!IsCalendarDay(this.BuildPostingDate)) return 'Choose a posting date.';
+        if (this.PostingDateWarning && !this.PostingDateConfirmed) return `Confirm posting this batch in ${this.PostingMonth}.`;
+        if (this.PreviewCandidateCount === 0) return 'Nothing matches these criteria.';
+        if (this.IncludedCount === 0) return 'Every entry is excluded — nothing to build.';
+        if (!this.IsBalanced) return 'The selection does not balance (Dr ≠ Cr) — the ledger would reject it.';
+        return null;
+    }
+
+    public get CanBuild(): boolean {
+        return !this.IsBuildingBatch && !this.IsPreviewLoading && this.BuildBlockedReason === null;
+    }
+
     public async OpenBuildBatchModal(): Promise<void> {
         this.BuildModalVisible = true;
+        // A fresh session starts with everything ticked — the sweep remains the one-click default.
+        this.Selection = ALL_ENTRIES;
         this.ModalErrorMessage = null;
+        this.confirmedPostingDate = null;
         if (!this.BuildCutoffDate) {
-            this.BuildCutoffDate = new Date().toISOString().slice(0, 10);
+            this.BuildCutoffDate = BusinessTimeZoneEngine.Instance.Today();
+        }
+        if (!this.BuildPostingDate) {
+            this.BuildPostingDate = BusinessTimeZoneEngine.Instance.Today();
         }
         await this.LoadBuildPreview();
     }
 
     public CloseBuildBatchModal(): void {
         this.BuildModalVisible = false;
+        // Drop any preview still in flight — it answers a session that is over.
+        this.previewRequestSeq++;
+        this.IsPreviewLoading = false;
         this.ModalErrorMessage = null;
     }
 
@@ -1173,61 +1628,91 @@ export class AccountingBatchesPageComponent implements OnInit {
     }
 
     public async LoadBuildPreview(): Promise<void> {
+        const seq = ++this.previewRequestSeq;
         this.IsPreviewLoading = true;
         this.ModalErrorMessage = null;
         this.cdr.markForCheck();
 
         try {
+            // Send the selection as it is, so the netted totals and the out-of-order count describe
+            // what the TICKED entries would produce. It is never derived from the previous response's
+            // candidates: after a filter change those are the old pool (golive #284). The server
+            // still returns every candidate, so an unticked entry stays visible and re-tickable.
             const previewRes = await this.dispatchClient.PreviewJournalEntryBatch({
                 Cutoff: this.BuildCutoffDate || null,
+                PostingDate: this.BuildPostingDate || null,
                 ExcludeEntryTypeCodes: this.ExcludeRevRec ? ['RevenueRecognition'] : null,
+                IncludedJournalEntryIDs: SelectionRequestIds(this.Selection),
             });
+            if (seq !== this.previewRequestSeq) return; // superseded by a newer request
 
             if (previewRes.Success) {
                 this.PreviewEntries = previewRes.Candidates ?? [];
                 this.PreviewCandidateCount = this.PreviewEntries.length;
                 this.PreviewTotalDebits = previewRes.TotalDebits;
                 this.PreviewTotalCredits = previewRes.TotalCredits;
-
-                if (this.PreviewEntries.length > 0) {
-                    const dates = this.PreviewEntries.map(e => new Date(e.EffectiveDate).getTime()).filter(t => !isNaN(t));
-                    if (dates.length > 0) {
-                        this.PreviewCoveredStartDate = new Date(Math.min(...dates)).toISOString();
-                        this.PreviewCoveredEndDate = new Date(Math.max(...dates)).toISOString();
-                    } else {
-                        this.PreviewCoveredStartDate = null;
-                        this.PreviewCoveredEndDate = null;
-                    }
-                } else {
-                    this.PreviewCoveredStartDate = null;
-                    this.PreviewCoveredEndDate = null;
-                }
+                this.PreviewGrossDebits = previewRes.GrossDebits;
+                this.PreviewGrossCredits = previewRes.GrossCredits;
+                this.PreviewOutOfOrderSkipCount = previewRes.OutOfOrderSkipCount;
+                this.PreviewBeforePostingStartCount = previewRes.BeforePostingStartCount;
+                this.setCoveredDateRange(this.PreviewEntries);
             } else {
                 this.ModalErrorMessage = previewRes.ErrorMessage ?? 'Failed to load candidate preview.';
-                this.PreviewEntries = [];
-                this.PreviewCandidateCount = 0;
-                this.PreviewTotalDebits = 0;
-                this.PreviewTotalCredits = 0;
+                this.clearPreview();
             }
         } catch (e) {
+            if (seq !== this.previewRequestSeq) return;
             this.ModalErrorMessage = e instanceof Error ? e.message : String(e);
         } finally {
-            this.IsPreviewLoading = false;
-            this.cdr.markForCheck();
+            if (seq === this.previewRequestSeq) {
+                this.IsPreviewLoading = false;
+                this.cdr.markForCheck();
+            }
         }
     }
 
+    /** The effective-date span the ticked entries cover — the modal's fourth fact. */
+    private setCoveredDateRange(entries: PreviewEntryWire[]): void {
+        const span = calendarDaySpan(entries.filter(e => IsEntryIncluded(this.Selection, e.ID)).map(e => e.EffectiveDate));
+        this.PreviewCoveredStartDate = span?.First ?? null;
+        this.PreviewCoveredEndDate = span?.Last ?? null;
+    }
+
+    /** A covered-range end (a calendar day) for display — UTC-anchored, never the browser's day. */
+    public FormatCoveredDay(day: string | null): string {
+        return formatJournalDate(day);
+    }
+
+    private clearPreview(): void {
+        this.PreviewEntries = [];
+        this.PreviewCandidateCount = 0;
+        this.PreviewTotalDebits = 0;
+        this.PreviewTotalCredits = 0;
+        this.PreviewGrossDebits = 0;
+        this.PreviewGrossCredits = 0;
+        this.PreviewOutOfOrderSkipCount = 0;
+        this.PreviewBeforePostingStartCount = 0;
+        this.PreviewCoveredStartDate = null;
+        this.PreviewCoveredEndDate = null;
+    }
+
     public async ExecuteBuildBatch(): Promise<void> {
-        if (this.IsBuildingBatch || this.PreviewCandidateCount === 0) return;
+        if (!this.CanBuild) return;
         this.IsBuildingBatch = true;
         this.ModalErrorMessage = null;
         this.cdr.markForCheck();
 
         try {
+            // Build EXACTLY the ticked set. Source='Explicit' re-validates server-side that every
+            // id is still Pending and loud-rejects a stale selection — the preview is a snapshot.
+            // With nothing unticked this is the same set the criteria sweep would have taken.
             const buildRes = await this.dispatchClient.BuildJournalEntryBatch({
                 TargetSystem: this.BuildTarget,
                 Cutoff: this.BuildCutoffDate || null,
+                PostingDate: this.BuildPostingDate || null,
                 ExcludeEntryTypeCodes: this.ExcludeRevRec ? ['RevenueRecognition'] : null,
+                Source: 'Explicit',
+                JournalEntryIDs: this.IncludedEntryIDs,
             });
 
             if (buildRes.Success) {
