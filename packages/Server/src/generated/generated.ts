@@ -1852,7 +1852,7 @@ export class mjBizAppsAccountingFinanceException_ {
     @MaxLength(1000)
     Summary?: string;
         
-    @Field({nullable: true, description: `The detector's identity for this occurrence (e.g. the source record ID, or record ID and month). Unique per type: raising the same key again returns the existing row unchanged.`}) 
+    @Field({nullable: true, description: `The detector's identity for this occurrence (e.g. the source record ID, or record ID and month). Unique per type: raising the same key again returns the existing row. If that row is still Open and the repeat raise carries a different creator, its SourceCreatedByUserID, CreatorUnresolved and Summary are updated to match; nothing else changes, and Reviewed or Corrected rows are never touched.`}) 
     @MaxLength(400)
     DedupeKey?: string;
         
@@ -2728,7 +2728,7 @@ export class mjBizAppsAccountingGLAccount_ {
     @Field(() => Boolean, {nullable: true, description: `Whether the account is available for new JE lines. Inactive accounts retain historical data.`}) 
     IsActive?: boolean;
         
-    @Field(() => Boolean, {nullable: true, description: `TRUE if the account was created by spSeedDefaultChartOfAccounts. Lets reports distinguish platform-shipped accounts from deployment customizations.`}) 
+    @Field(() => Boolean, {nullable: true, description: `TRUE if the account was created by the starter-chart seed, AccountingCompanyProfileEntityServer.SeedDefaultChartOfAccounts(). Lets reports distinguish platform-shipped accounts from deployment customizations.`}) 
     IsSystemSeeded?: boolean;
         
     @Field({nullable: true, description: `Optional description for the account.`}) 
@@ -3874,7 +3874,7 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @MaxLength(36)
     ID: string;
         
-    @Field({nullable: true, description: `Gap-free batch number assigned by spAssignNextJournalEntryBatchNumber. Format 'BATCH-{CompanyCode}-{seq:000000}'.`}) 
+    @Field({nullable: true, description: `Gap-free batch number assigned by spAssignNextJournalEntryBatchNumber. Format 'BATCH-{seq:000000}': one global sequence shared by every company, with no company segment.`}) 
     @MaxLength(40)
     JournalEntryBatchNumber?: string;
         
