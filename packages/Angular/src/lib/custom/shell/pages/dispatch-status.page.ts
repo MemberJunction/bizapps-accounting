@@ -630,6 +630,7 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
     } catch (e) {
       this.resetCancelDialog();
       this.setError(e instanceof Error ? e.message : String(e));
+      this.Refresh();
     } finally {
       this.CancellingJournalEntryBatchID = null;
       this.cdr.markForCheck();
@@ -653,6 +654,8 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
     } else {
       // Includes the ERP holding the batch: that refusal has no override, and points to Retry.
       this.setError(res.ErrorMessage ?? 'Cancel failed.');
+      // A cancel whose response timed out may still have gone through: show what the server holds.
+      this.Refresh();
     }
   }
 

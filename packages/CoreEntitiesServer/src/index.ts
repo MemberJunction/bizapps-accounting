@@ -110,6 +110,7 @@ export type {
   JournalEntryBatchCancelGate,
   CancelJournalEntryBatchOptions,
   RecordedCancellation,
+  RecordedArchive,
   SendJournalEntryBatchOptions,
   AutoPostJournalEntryBatchResult,
   DispatchFailureRecord,

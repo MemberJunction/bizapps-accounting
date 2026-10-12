@@ -206,11 +206,72 @@ describe('TasksAppApprovalGate.recordCancellation — the approval Task records 
     expect(w.comments).toHaveLength(0);
   });
 
+  it('closes the approval Task without a comment when a user with no linked Person cancels before approval (golive #325)', async () => {
+    const w: CancelWorld = { comments: [] };
+    const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, approvalTaskId: TASK_ID, hasPerson: false }, w));
+    await gate.recordCancellation(BATCH_ID, { reason: 'Built with the wrong entries', fromStatus: 'Pending' }, { ID: BUILDER_USER_ID } as UserInfo);
+    expect(w.comments).toHaveLength(0);
+    expect(w.taskSaves).toEqual(['Cancelled']);
+  });
+
   it('refuses when the cancelling user has no linked Person, so the cancel rolls back rather than going unrecorded', async () => {
     const w: CancelWorld = { comments: [] };
     const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, approvalTaskId: TASK_ID, hasPerson: false }, w));
     await expect(gate.recordCancellation(BATCH_ID, { reason: 'Wrong posting period', fromStatus: 'Approved' }, cfo)).rejects.toThrow(/has no linked Person/);
     expect(w.comments).toHaveLength(0);
+  });
+});
+
+describe('TasksAppApprovalGate.recordArchive — the approval Task records an archive (golive #325)', () => {
+  it('closes the approval Task as Cancelled, with a comment, for a batch archived before approval', async () => {
+    const w: CancelWorld = { comments: [] };
+    const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, approvalTaskId: TASK_ID, hasPerson: true }, w));
+    await gate.recordArchive(BATCH_ID, { reason: '  Posted in the legacy system  ', fromStatus: 'Pending' }, cfo);
+
+    expect(w.comments).toHaveLength(1);
+    expect(w.comments[0].TaskID).toBe(TASK_ID);
+    expect(w.comments[0].PersonID).toBe(PERSON_ID);
+    expect(w.comments[0].Content).toMatch(/BATCH-0007 was archived before approval, so this approval request is closed\..*stay locked to it\. Reason: Posted in the legacy system$/);
+    expect(w.taskSaves).toEqual(['Cancelled']);
+  });
+
+  it('closes the approval Task without a comment when the user has no linked Person', async () => {
+    const w: CancelWorld = { comments: [] };
+    const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, approvalTaskId: TASK_ID, hasPerson: false }, w));
+    await gate.recordArchive(BATCH_ID, { reason: 'Posted in the legacy system', fromStatus: 'Pending' }, cfo);
+    expect(w.comments).toHaveLength(0);
+    expect(w.taskSaves).toEqual(['Cancelled']);
+  });
+
+  it.each(['Approved', 'Failed'])('comments on a %s batch\'s approval Task and leaves its decision in place', async (from) => {
+    const w: CancelWorld = { comments: [] };
+    const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, approvalTaskId: TASK_ID, hasPerson: true }, w));
+    await gate.recordArchive(BATCH_ID, { reason: 'Posted in the legacy system', fromStatus: from }, cfo);
+    expect(w.comments.map(c => c.Content)).toEqual([expect.stringMatching(new RegExp(`archived after approval \\(it was ${from}\\)`))]);
+    expect(w.taskSaves).toBeUndefined();
+  });
+
+  it('refuses an archive past approval by a user with no linked Person, so the archive rolls back', async () => {
+    const w: CancelWorld = { comments: [] };
+    const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, approvalTaskId: TASK_ID, hasPerson: false }, w));
+    await expect(gate.recordArchive(BATCH_ID, { reason: 'Posted in the legacy system', fromStatus: 'Approved' }, cfo))
+      .rejects.toThrow(/BATCH-0007: the archive cannot be recorded .*has no linked Person.*before the batch can be archived after approval/);
+    expect(w.comments).toHaveLength(0);
+  });
+
+  it('writes to the stamped approval Task, not the Task named by a newer Task Link (#223)', async () => {
+    const w: CancelWorld = { comments: [] };
+    const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, approvalTaskId: TASK_ID, hasPerson: true }, w));
+    await gate.recordArchive(BATCH_ID, { reason: 'Posted in the legacy system', fromStatus: 'Approved' }, cfo);
+    expect(w.comments.map(c => c.TaskID)).toEqual([TASK_ID]);
+  });
+
+  it('does nothing for a batch with no stamped approval Task', async () => {
+    const w: CancelWorld = { comments: [] };
+    const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, approvalTaskId: null, hasPerson: false }, w));
+    await gate.recordArchive(BATCH_ID, { reason: 'Posted in the legacy system', fromStatus: 'Approved' }, cfo);
+    expect(w.comments).toHaveLength(0);
+    expect(w.taskSaves).toBeUndefined();
   });
 });
 
@@ -235,14 +296,14 @@ describe('TasksAppApprovalGate — who may cancel before approval (golive #302)'
     await expect(gate.assertMayCancelPending(BATCH_ID, { ID: BUILDER_USER_ID } as UserInfo)).resolves.toBeUndefined();
   });
 
-  it('refuses an allowed user with no linked Person when the batch has an approval Task', async () => {
+  it('lets an allowed user with no linked Person cancel — nobody approved the batch (golive #325)', async () => {
     const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, approvalTaskId: TASK_ID, hasPerson: false }, world()));
-    await expect(gate.assertMayCancelPending(BATCH_ID, { ID: BUILDER_USER_ID } as UserInfo)).rejects.toThrow(/has no linked Person/);
+    await expect(gate.assertMayCancelPending(BATCH_ID, { ID: BUILDER_USER_ID } as UserInfo)).resolves.toBeUndefined();
   });
 
-  it('does not ask for a Person when only a Task Link, not the stamp, names an approval Task (#223)', async () => {
-    const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, approvalTaskId: null, hasPerson: false }, world()));
-    await expect(gate.assertMayCancelPending(BATCH_ID, { ID: BUILDER_USER_ID } as UserInfo)).resolves.toBeUndefined();
+  it('still refuses a user with no linked Person who may not cancel', async () => {
+    const gate = new TasksAppApprovalGate(cancelProvider({ cfoUserId: CFO_USER_ID, approvalTaskId: TASK_ID, hasPerson: false }, world()));
+    await expect(gate.assertMayCancelPending(BATCH_ID, { ID: OTHER_USER_ID } as UserInfo)).rejects.toThrow(/or the user who built this batch may cancel it before approval/);
   });
 });
 

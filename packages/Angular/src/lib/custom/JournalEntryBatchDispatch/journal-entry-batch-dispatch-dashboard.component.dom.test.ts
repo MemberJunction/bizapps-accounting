@@ -269,3 +269,47 @@ describe('JournalEntryBatchDispatchDashboardComponent — a Pending batch (goliv
     expect(decisionCalls).toEqual([{ Decision: 'Approved', Notes: undefined }]);
   });
 });
+
+/**
+ * golive #325: an archive whose response is lost (a gateway timeout) may still have gone through on
+ * the server, so the list reloads after an error too and the card shows the batch's real status.
+ */
+describe('JournalEntryBatchDispatchDashboardComponent — a failed archive reloads the batch (golive #325)', () => {
+  let listedStatus: BatchStatus;
+  let batchReads: number;
+
+  beforeEach(async () => {
+    listedStatus = 'Pending';
+    batchReads = 0;
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+      if (p.EntityName !== BATCH_ENTITY) return viewResult([], 0);
+      batchReads++;
+      return viewResult([batchRow(listedStatus)]);
+    });
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'GetApprovalState').mockResolvedValue({ Success: true, Approved: false });
+    vi.spyOn(window, 'prompt').mockReturnValue('Posted in the legacy system');
+    await TestBed.configureTestingModule({ imports: [JournalEntryBatchDispatchModule] }).compileComponents();
+  });
+
+  it('shows the batch Archived, and keeps the error, when the archive went through but its response timed out', async () => {
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'ArchiveBatch').mockImplementation(async () => {
+      listedStatus = 'Archived';
+      return { Success: false, ErrorMessage: 'GraphQL Error (Code: 504)' };
+    });
+    const fixture = TestBed.createComponent(JournalEntryBatchDispatchDashboardComponent);
+    fixture.componentRef.setInput('Provider', stubbedReadsProvider());
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
+    const dashboard = fixture.componentInstance;
+
+    await dashboard.OnArchive(dashboard.Batches[0]);
+
+    expect(batchReads, 'the list reloaded after the failed archive').toBe(2);
+    expect(dashboard.Batches.map((b) => b.Status)).toEqual(['Archived']);
+    fixture.detectChanges();
+    const banner = fixture.nativeElement.querySelector('.bd-banner[role="status"]') as HTMLElement | null;
+    expect(banner?.classList).toContain('bd-banner--error');
+    expect(banner?.textContent).toContain('GraphQL Error (Code: 504)');
+  });
+});
