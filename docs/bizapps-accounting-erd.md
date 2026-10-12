@@ -29,6 +29,7 @@
 > - **Seal mismatch** (#216): `SealMismatchDetectedAt`; a locked entry's dimension tags are frozen
 >   (`trg_JELD_Immutability`).
 > - **`AccountingCompanyProfile.PostingStartDate`**: entries dated before it never batch.
+> - **`AccountingCompanyProfile.BooksClosedThroughDate`**: the last day finance has closed; dates on or before it are in a closed month.
 > - **Company parents may nest**: `trg_ACP_NoChains` refuses a cycle instead of a chain (50010).
 >
 > **Earlier (to 2026-08-29):**
@@ -298,6 +299,7 @@ erDiagram
         int FiscalYearStartMonth
         int FiscalYearStartDay
         date PostingStartDate "nullable - entries dated before it never batch"
+        date BooksClosedThroughDate "nullable - dates on or before it are in a closed month"
         uuid ParentAccountingCompanyID FK
         uuid ApprovalCFOUserID FK
         bool IsActive
@@ -583,6 +585,7 @@ erDiagram
         int FiscalYearStartMonth
         int FiscalYearStartDay
         date PostingStartDate "nullable - entries dated before it never batch"
+        date BooksClosedThroughDate "nullable - dates on or before it are in a closed month"
         uuid ParentAccountingCompanyID FK "nullable - Division/Department/Branch use the legal entity found up this chain"
         uuid ApprovalCFOUserID FK "batch approver - a security identity"
         bool IsActive
