@@ -40,7 +40,6 @@ import {
   DEFAULT_CHART_OF_ACCOUNTS,
   SeededGLAccount,
 } from './SeedData.js';
-import { sqlGuidLiteral } from './SqlGuards.js';
 
 @RegisterClass(BaseEntity, 'MJ_BizApps_Accounting: Accounting Company Profiles')
 export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAccountingCompanyProfileEntity {
