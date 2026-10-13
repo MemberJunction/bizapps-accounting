@@ -3958,7 +3958,7 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     ArchivedByUserID?: string;
         
     @Field({nullable: true, description: `Why this batch was cancelled. Required when an approved batch is cancelled (CK_JournalEntryBatch_CancelAudit); optional when a Pending batch is. Frozen once Cancelled.`}) 
-    @MaxLength(500)
+    @MaxLength(1000)
     CancelReason?: string;
         
     @Field({nullable: true, description: `When the batch was cancelled. Required when an approved batch is cancelled.`}) 
