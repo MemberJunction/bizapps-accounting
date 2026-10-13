@@ -245,7 +245,7 @@ describe('JournalEntryBatchDispatchDashboardComponent — a refused cancel reloa
     vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
       if (p.EntityName !== BATCH_ENTITY) return viewResult([], 0);
       batchReads++;
-      return viewResult([batchRow(listedStatus)]);
+      return viewResult([{ ...batchRow(listedStatus), ApprovedByUserID: APPROVED_BY_USER_ID }]);
     });
     vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'GetApprovalState').mockResolvedValue({ Success: true, Approved: true });
     vi.spyOn(window, 'prompt').mockReturnValue('ERP rejected the journal');
@@ -264,7 +264,7 @@ describe('JournalEntryBatchDispatchDashboardComponent — a refused cancel reloa
       return { Success: false, ErrorMessage: refusal };
     });
     const fixture = TestBed.createComponent(JournalEntryBatchDispatchDashboardComponent);
-    fixture.componentRef.setInput('Provider', stubbedReadsProvider());
+    fixture.componentRef.setInput('Provider', Object.assign(providerWithCancelReasonLimit(), { CurrentUser: providerSignedInAs(APPROVED_BY_USER_ID).CurrentUser }));
     fixture.detectChanges();
     await fixture.whenStable();
     await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));

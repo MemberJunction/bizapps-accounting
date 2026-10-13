@@ -744,6 +744,12 @@ describe('AccountingBatchesPageComponent — a failed Cancel or Archive reloads 
       batchReads++;
       return viewResult([{ ...LISTED_BATCH, Status: listedStatus }]);
     });
+    signInAs(BUILDER_USER_ID);
+    const signedInUser = Metadata.Provider.CurrentUser;
+    vi.spyOn(Metadata, 'Provider', 'get').mockReturnValue({
+      CurrentUser: signedInUser,
+      EntityByName: (name: string) => (name === BATCH_ENTITY ? { Fields: [{ Name: 'CancelReason', MaxLength: 1000 }] } : undefined),
+    } as unknown as IMetadataProvider);
   });
 
   async function render(): Promise<AccountingBatchesPageComponent> {
