@@ -122,7 +122,8 @@ Where they disagree with §3, §3 is authoritative.
 |---|---|
 | Company profile init / starter COA | `CoreEntitiesServer/AccountingCompanyProfileEntityServer.ts` (W1) + `SeedData.ts` |
 | JE numbering (per company, per FY — D19, BA-D31) | `JournalEntryEntityServer.ts` (W2) + `SequenceService.ts` + `spAssignNextJournalEntryNumber` |
-| Batch numbering (GLOBAL) | `JournalEntryBatchEntityServer.ts` (W3) + `spAssignNextJournalEntryBatchNumber` |
+| Batch numbering (GLOBAL) | `JournalEntryBatchEntityServer.ts` (W3) + `SequenceService.ts` + `spAssignNextJournalEntryBatchNumber` |
+| Numbering on PostgreSQL | `SequenceService.ts` picks the SQL by `PlatformKey`; the PL/pgSQL functions are `migrations-pg/V202610121500__v0.23.x__JournalEntry_Numbering_Functions.pg-only.sql` |
 | The minimal seeded chart | `CoreEntitiesServer/SeedData.ts` (`DEFAULT_CHART_OF_ACCOUNTS`, `DEFAULT_GL_ACCOUNT_REFS`) |
 | **The engine contract / pure pipeline / caches / ResolveLinkedAccount** | `packages/EngineBase/src/{contract,pipeline,AccountingEngineBase}.ts` |
 | **CreateJournalEntry write path + the remotable op** | `CoreEntitiesServer/AccountingEngine.ts` + `CreateJournalEntryOperation.ts` |
