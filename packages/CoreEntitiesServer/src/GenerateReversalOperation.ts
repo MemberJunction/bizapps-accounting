@@ -34,6 +34,7 @@ export interface GenerateReversalOutput {
 @RegisterClass(BaseRemotableOperation, 'Accounting.GenerateJournalEntryReversal')
 export class GenerateReversalOperation extends BaseRemotableOperation<GenerateReversalInput, GenerateReversalOutput> {
   public readonly OperationKey = 'Accounting.GenerateJournalEntryReversal';
+  public readonly RequiredScope = 'accounting:write';
 
   protected async InternalExecute(input: GenerateReversalInput, provider: IMetadataProvider, user: UserInfo): Promise<GenerateReversalOutput> {
     if (!input?.JournalEntryID) throw new Error('GenerateJournalEntryReversal: JournalEntryID is required.');

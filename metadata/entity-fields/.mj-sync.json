@@ -1,0 +1,12 @@
+{
+  "entity": "MJ: Entity Fields",
+  "filePattern": "**/.*.json",
+  "pull": {
+    "createNewFileIfNotFound": false,
+    "newFileName": ".form-categories.json",
+    "appendRecordsToExistingFile": false,
+    "updateExistingRecords": true,
+    "ignoreNullFields": true,
+    "ignoreVirtualFields": true
+  }
+}

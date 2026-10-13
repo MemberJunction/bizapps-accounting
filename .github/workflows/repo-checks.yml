@@ -40,3 +40,8 @@ jobs:
         run: |
           node ./.github/scripts/check-dependency-model.mjs --self-test
           node ./.github/scripts/check-dependency-model.mjs
+
+      - name: Generated forms put no field in the Details panel
+        run: |
+          node ./.github/scripts/check-form-details-panel.mjs --self-test
+          node ./.github/scripts/check-form-details-panel.mjs
