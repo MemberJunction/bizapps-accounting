@@ -1,17 +1,17 @@
 /**
  * MAINT (not a test) — ERD drift check. Compares the tables/columns documented in
  * docs/bizapps-accounting-erd.md's mermaid erDiagram blocks against the LIVE schema.
- * Run from the instance worktree root (reads .env from cwd, like the other harnesses).
+ * Run from the repo root (.env lookup: ../harness-paths.mts).
  *
- *   npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/_maint-erd-drift.ts
+ *   npx tsx test-harnesses/server/_maint-erd-drift.ts
  */
 import sql from 'mssql';
-import dotenv from 'dotenv';
 import path from 'node:path';
 import fs from 'node:fs';
+import { LoadHarnessEnv, REPO_ROOT } from '../harness-paths.mjs';
 
 const SCHEMA = '__mj_BizAppsAccounting';
-const ERD = path.resolve(process.cwd(), 'packages/dev-apps/bizapps-accounting/docs/bizapps-accounting-erd.md');
+const ERD = path.join(REPO_ROOT, 'docs', 'bizapps-accounting-erd.md');
 
 /** Every `TableName { ... type Column ... }` body inside a ```mermaid erDiagram``` block. */
 function parseErd(md: string): Map<string, Set<string>> {
@@ -39,7 +39,7 @@ function parseErd(md: string): Map<string, Set<string>> {
 }
 
 async function main(): Promise<void> {
-  dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
+  LoadHarnessEnv();
   const pool = await new sql.ConnectionPool({
     server: process.env['DB_HOST'] ?? 'localhost',
     port: Number(process.env['DB_PORT'] ?? 1433),

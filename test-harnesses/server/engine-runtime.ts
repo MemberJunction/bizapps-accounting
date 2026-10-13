@@ -22,13 +22,11 @@
  *       (tie guard skipped); posting still uses the Cash-resolved account.
  *
  * PRECONDITION: zero stray Pending JEs (the engine writes Pending JEs; other harnesses' strays
- * would confuse the raw-SQL cross-checks). Run from the INSTANCE WORKTREE ROOT:
- *   npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/engine-runtime.ts
+ * would confuse the raw-SQL cross-checks). Run from the repo root:
+ *   npx tsx test-harnesses/server/engine-runtime.ts
  * Exit: 0 all passed · 1 failures · 2 bootstrap error. FK-aware teardown via the db_owner pool.
  */
 import sql from 'mssql';
-import dotenv from 'dotenv';
-import path from 'path';
 import { randomUUID } from 'crypto';
 import { Metadata, RunView, UserInfo } from '@memberjunction/core';
 import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
@@ -51,6 +49,7 @@ import type {
   mjBizAppsAccountingGLAccountEntity,
   mjBizAppsAccountingGLAccountLinkEntity,
 } from '@mj-biz-apps/accounting-entities';
+import { LoadHarnessEnv } from '../harness-paths.mjs';
 
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
@@ -107,9 +106,9 @@ async function createCompany(user: UserInfo, currencyCode: string, label: string
 }
 
 async function bootstrap(): Promise<Ctx> {
-  dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
+  LoadHarnessEnv();
   const { DB_HOST: host, DB_DATABASE: database, DB_USERNAME: user, DB_PASSWORD: password } = process.env;
-  if (!host || !database || !user || !password) throw new Error('Missing DB settings in .env (run from the instance worktree root).');
+  if (!host || !database || !user || !password) throw new Error('Missing DB settings in .env (looked in the working directory, then the repo root and each folder above it).');
   const pool = await new sql.ConnectionPool({ server: host, port: Number(process.env.DB_PORT ?? 1433), user, password, database, options: { encrypt: false, trustServerCertificate: true } }).connect();
   const { CODEGEN_DB_USERNAME: cgUser, CODEGEN_DB_PASSWORD: cgPassword } = process.env;
   if (!cgUser || !cgPassword) throw new Error('Missing CODEGEN_DB_USERNAME/PASSWORD in .env (needed for the db_owner teardown pool).');

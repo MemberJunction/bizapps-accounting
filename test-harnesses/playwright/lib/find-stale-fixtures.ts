@@ -3,12 +3,11 @@
  * Prints one `<ID> <Name>` per line — feed each ID to `batching-fixture.ts teardown <ID>`.
  */
 import sql from 'mssql';
-import dotenv from 'dotenv';
-import path from 'node:path';
+import { LoadHarnessEnv } from '../../harness-paths.mjs';
 
 async function main(): Promise<void> {
-  // Same convention as batching-fixture.ts: run from the WORKTREE ROOT; .env resolves off cwd.
-  dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
+  // Same .env lookup as batching-fixture.ts (../../harness-paths.mts).
+  LoadHarnessEnv();
   const pool = await new sql.ConnectionPool({
     server: process.env['DB_HOST'] ?? 'localhost',
     port: Number(process.env['DB_PORT'] ?? 1433),

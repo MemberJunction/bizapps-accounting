@@ -11,13 +11,11 @@
  * re-run: `seedAssociationDemo` is idempotent (static-UUID guards), so a second run reports the same
  * view counts and creates nothing new.
  *
- * USAGE (cwd = instance worktree root):
- *   npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/seed-demo.ts
+ * USAGE (from the repo root):
+ *   npx tsx test-harnesses/server/seed-demo.ts
  * Exit: 0 seeded + all views populated · 1 a view returned 0 rows · 2 bootstrap/seed error.
  */
 import sql from 'mssql';
-import dotenv from 'dotenv';
-import path from 'path';
 import { Metadata, RunView, UserInfo } from '@memberjunction/core';
 import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
 import { finishAndExit } from './harness-exit.js';
@@ -27,6 +25,7 @@ import '@mj-biz-apps/common-entities';
 import '@mj-biz-apps/accounting-entities';
 import '@mj-biz-apps/accounting-core-entities-server';
 import { seedAssociationDemo, DemoSeedReport } from './AssociationDemoSeedData.js';
+import { LoadHarnessEnv } from '../harness-paths.mjs';
 
 const SCHEMA = '__mj_BizAppsAccounting';
 
@@ -36,9 +35,9 @@ const outcomes: Outcome[] = [];
 interface BootCtx { pool: sql.ConnectionPool; user: UserInfo }
 
 async function bootstrap(): Promise<BootCtx> {
-  dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
+  LoadHarnessEnv();
   const { DB_HOST: host, DB_DATABASE: database, DB_USERNAME: user, DB_PASSWORD: password } = process.env;
-  if (!host || !database || !user || !password) throw new Error('Missing DB settings in .env (run from the instance worktree root).');
+  if (!host || !database || !user || !password) throw new Error('Missing DB settings in .env (looked in the working directory, then the repo root and each folder above it).');
   const pool = await new sql.ConnectionPool({ server: host, port: Number(process.env.DB_PORT ?? 1433), user, password, database, options: { encrypt: false, trustServerCertificate: true } }).connect();
   const sqlProvider = await setupSQLServerClient(new SQLServerProviderConfigData(pool, process.env.MJ_CORE_SCHEMA || '__mj'));
   await assertInvariantTriggers(pool); // fail fast if any invariant trigger is missing/disabled

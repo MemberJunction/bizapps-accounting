@@ -29,15 +29,12 @@
  * state and are intentionally NOT touched by teardown. Verification uses raw mssql queries
  * so a wrong count is caught even if the entity layer reports success.
  *
- * USAGE (cwd MUST be the instance worktree root so .env resolves, e.g.
- *   ~/MJDev/instances/accounting-engine-dev/mj):
- *   npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/block0-runtime.ts
+ * USAGE (from the repo root; .env lookup: ../harness-paths.mts):
+ *   npx tsx test-harnesses/server/block0-runtime.ts
  *
  * Exit code: 0 = all passed, 1 = test failures, 2 = bootstrap error.
  */
 import sql from 'mssql';
-import dotenv from 'dotenv';
-import path from 'path';
 import { Metadata, RunView, UserInfo } from '@memberjunction/core';
 import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
 import { assertInvariantTriggers } from './trigger-preflight.js';
@@ -54,6 +51,7 @@ import type {
   mjBizAppsAccountingJournalEntryEntity,
   mjBizAppsAccountingJournalEntryBatchEntity,
 } from '@mj-biz-apps/accounting-entities';
+import { LoadHarnessEnv } from '../harness-paths.mjs';
 
 const ACP_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
 const GL_ENTITY = 'MJ_BizApps_Accounting: GL Accounts';
@@ -123,14 +121,14 @@ function sequencePart(num: string): number {
 interface Ctx { pool: sql.ConnectionPool; user: UserInfo; currencyCode: string }
 
 async function bootstrap(): Promise<Ctx> {
-  dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
+  LoadHarnessEnv();
   const host = process.env.DB_HOST;
   const database = process.env.DB_DATABASE;
   const user = process.env.DB_USERNAME;
   const password = process.env.DB_PASSWORD;
   const schema = process.env.MJ_CORE_SCHEMA || '__mj';
   if (!host || !database || !user || !password) {
-    throw new Error('Missing DB settings in .env (DB_HOST, DB_DATABASE, DB_USERNAME, DB_PASSWORD). Run from the instance worktree root.');
+    throw new Error('Missing DB settings in .env (DB_HOST, DB_DATABASE, DB_USERNAME, DB_PASSWORD). Looked in the working directory, then the repo root and each folder above it.');
   }
   const pool = await new sql.ConnectionPool({
     server: host, port: Number(process.env.DB_PORT ?? 1433), user, password, database,

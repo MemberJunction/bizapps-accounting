@@ -13,14 +13,13 @@
  *   npx tsx .../_maint-unblock-dropschema.ts --yes  # actually delete
  */
 import sql from 'mssql';
-import dotenv from 'dotenv';
-import path from 'node:path';
+import { LoadHarnessEnv } from '../harness-paths.mjs';
 
 const TASKS = '__mj_BizAppsTasks';
 const SCHEMA = '__mj_BizAppsAccounting';
 
 async function main(): Promise<void> {
-  dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
+  LoadHarnessEnv();
   const apply = process.argv.includes('--yes');
   const p = await new sql.ConnectionPool({
     server: process.env['DB_HOST'] ?? 'localhost',

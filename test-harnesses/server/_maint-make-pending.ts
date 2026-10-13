@@ -1,14 +1,15 @@
 /** _maint-make-pending.ts — create N balanced Pending JEs on the first company's AR/Rev accounts, for a
- *  live reject/regenerate demo. Prints the JE ids. Run from instance worktree root. */
-import sql from 'mssql'; import dotenv from 'dotenv'; import path from 'path';
+ *  live reject/regenerate demo. Prints the JE ids. Run from the repo root. */
+import sql from 'mssql';
 import { Metadata, RunView } from '@memberjunction/core';
 import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
 import { finishAndExit } from './harness-exit.js';
 import '@memberjunction/server-bootstrap-lite'; import '@mj-biz-apps/common-entities'; import '@mj-biz-apps/accounting-entities'; import '@mj-biz-apps/accounting-core-entities-server';
 import type { mjBizAppsAccountingJournalEntryEntity, mjBizAppsAccountingJournalEntryLineEntity } from '@mj-biz-apps/accounting-entities';
+import { LoadHarnessEnv } from '../harness-paths.mjs';
 const N = Number(process.argv[2] ?? 2);
 async function main() {
-  dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
+  LoadHarnessEnv();
   const pool = await new sql.ConnectionPool({ server: process.env.DB_HOST, port: Number(process.env.DB_PORT ?? 1433), user: process.env.DB_USERNAME, password: process.env.DB_PASSWORD, database: process.env.DB_DATABASE, options: { encrypt: false, trustServerCertificate: true } }).connect();
   const sqlProvider = await setupSQLServerClient(new SQLServerProviderConfigData(pool, process.env.MJ_CORE_SCHEMA || '__mj'));
   await UserCache.Instance.Refresh(sqlProvider);

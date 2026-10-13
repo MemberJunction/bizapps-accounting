@@ -415,9 +415,7 @@ This repo uses MemberJunction's CodeGen system to generate entity and action sub
 ## Debugging
 
 There is no host app in this repo to debug: the packages run inside a MemberJunction host, so debug
-that host's MJAPI and Explorer. The configurations in `.vscode/launch.json` (MJAPI, MJExplorer,
-MJExplorer attach, Full Stack) still point at the removed `apps/MJAPI` and `apps/MJExplorer` and do
-not work as they are.
+that host's MJAPI and Explorer with the host's own launch configurations.
 
 ---
 
