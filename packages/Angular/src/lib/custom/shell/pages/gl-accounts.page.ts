@@ -68,7 +68,7 @@ interface ParentOption {
  * `GLAccount.CompanyID` is **NOT NULL** with **UNIQUE (CompanyID, Code)** — "each company has its
  * own chart" (the field's own description). There is **no global pool of unowned accounts** that
  * you then "hook to companies": an account is born inside exactly one company's chart, seeded by
- * `spSeedDefaultChartOfAccounts` (which is what `IsSystemSeeded` distinguishes from deployment
+ * `AccountingCompanyProfileEntityServer.SeedDefaultChartOfAccounts()` (which is what `IsSystemSeeded` distinguishes from deployment
  * customizations). So this page is "every account, GROUPED BY COMPANY" — the Company column is
  * first, the company drop-down narrows rather than assigns, and creating an account REQUIRES
  * picking the company that will own it. That per-company reality is surfaced, not hidden. Whether
@@ -517,7 +517,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
    * and behaves as "set to something nobody can find".
    *
    * `IsSystemSeeded` is deliberately never written by this page. It records that
-   * `spSeedDefaultChartOfAccounts` created the row — provenance, not a user preference. Letting the
+   * `SeedDefaultChartOfAccounts()` created the row — provenance, not a user preference. Letting the
    * UI set it would let a deployment customization claim to be platform-shipped, which is precisely
    * the distinction the flag exists to preserve. Binding the entity makes that a rule about what the
    * TEMPLATE offers rather than one enforced by a copier nobody can see.
