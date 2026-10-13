@@ -42,12 +42,12 @@ Shared helpers: `trigger-preflight.ts` (`assertInvariantTriggers` — fail-fast 
 
 ## Maintenance scripts (not tests)
 
-One-off and diagnostic scripts. Run them like the `tsx` harnesses, from the instance worktree root;
-they read the `.env` there. The ones marked *writes* change data.
+One-off and diagnostic scripts. Run them like the `tsx` harnesses, from the repo root; they find the
+`.env` the same way (`../harness-paths.mts`). The ones marked *writes* change data.
 
 | Script | What it does |
 |---|---|
-| `_maint-cache-candidate-counts.ts` | Read-only: row counts for the engine-cache candidate tables, to size caching decisions. Still queries `ChartOfAccountsMapping`, which no migration creates (D13). |
+| `_maint-cache-candidate-counts.ts` | Read-only: row counts for the engine-cache candidate tables, to size caching decisions. |
 | `_maint-check-fieldvalues.ts` | Read-only: prints the value lists for batch `Status`, batch `TargetSystem` and GL account `AccountType`. |
 | `_maint-clean-batches.ts` | *Writes*: demo cleanup — cancels stuck Pending batches that have no approval Task, sweeps the remaining Pending JEs to Posted (auto-approve gate, mock ERP), deletes empty Cancelled batches. Its cancel step now fails for those batches, because the engine refuses to cancel a Pending batch with no approval Task (#233); its header says to archive them instead. |
 | `_maint-clean-orphan-company-parents.ts` | *Writes* with `--yes` (reports otherwise): deletes `__mj.Company` IS-A parents in the demo UUID block whose `AccountingCompanyProfile` child is gone after a drop-schema. |

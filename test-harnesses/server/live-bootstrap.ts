@@ -11,12 +11,9 @@
  *   - self-contained fixtures: a run-tagged company (ACP save fires the W1 COA seeding) +
  *     dimensions, all torn down FK-aware by tag/ID afterwards. NEVER touches shared demo data.
  *
- * The .env is the working directory's, else the instance worktree root's (mj/.env), resolved relative to this file.
+ * The .env is the working directory's, else the nearest one from the repo root upward (../harness-paths.mts).
  */
 import sql from 'mssql';
-import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { randomUUID } from 'crypto';
 import { Metadata, RunView, UserInfo } from '@memberjunction/core';
 import { setupSQLServerClient, SQLServerDataProvider, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
@@ -27,6 +24,7 @@ import '@mj-biz-apps/tasks-entities';
 import '@mj-biz-apps/accounting-entities';
 import '@mj-biz-apps/accounting-core-entities-server';
 import type { mjBizAppsAccountingAccountingCompanyProfileEntity } from '@mj-biz-apps/accounting-entities';
+import { LoadHarnessEnv } from '../harness-paths.mjs';
 
 export const SCHEMA = '__mj_BizAppsAccounting';
 const TASKS_SCHEMA = '__mj_BizAppsTasks';
@@ -134,13 +132,9 @@ async function createCompany(user: UserInfo, runTag: string, label = 'Live Harne
 }
 
 export async function bootstrapLive(): Promise<LiveCtx> {
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  // The working directory's .env first (a plain clone, run from the repo root), then the MJ Dev Manager
-  // instance root's (mj/.env). dotenv never overrides a value already set, so the first file wins.
-  dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
-  dotenv.config({ path: path.resolve(here, '..', '..', '..', '..', '..', '.env'), quiet: true });
+  LoadHarnessEnv();
   const { DB_HOST: host, DB_DATABASE: database, DB_USERNAME: user, DB_PASSWORD: password } = process.env;
-  if (!host || !database || !user || !password) throw new Error('Missing DB_* settings — expected a .env in the working directory or the instance root (mj/.env)');
+  if (!host || !database || !user || !password) throw new Error('Missing DB_* settings — expected a .env in the working directory, the repo root or a folder above it (an mjdev instance root)');
   const port = Number(process.env.DB_PORT ?? 1433);
   const pool = await connectPool(host, port, database, user, password);
 

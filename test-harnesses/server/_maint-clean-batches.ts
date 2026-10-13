@@ -6,12 +6,10 @@
  *      rejection), so this step now fails for exactly these batches; archive them instead.
  *   2. buildJournalEntryBatch(AutoApproveGate) → approve → send  → sweep all Pending JEs to Posted (can't re-stick)
  *   3. delete every empty Cancelled batch row  → list shows only real (Posted) batches
- * Run from the instance worktree root:
- *   npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/server/_maint-clean-batches.ts
+ * Run from the repo root:
+ *   npx tsx test-harnesses/server/_maint-clean-batches.ts
  */
 import sql from 'mssql';
-import dotenv from 'dotenv';
-import path from 'path';
 import { Metadata, RunView } from '@memberjunction/core';
 import { setupSQLServerClient, SQLServerProviderConfigData, UserCache } from '@memberjunction/sqlserver-dataprovider';
 import { finishAndExit } from './harness-exit.js';
@@ -22,13 +20,14 @@ import '@mj-biz-apps/accounting-entities';
 import '@mj-biz-apps/accounting-core-entities-server';
 import { cancelJournalEntryBatch, buildJournalEntryBatch, approveJournalEntryBatch, sendJournalEntryBatch, AutoApproveGate } from '@mj-biz-apps/accounting-core-entities-server';
 import type { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
+import { LoadHarnessEnv } from '../harness-paths.mjs';
 
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
 const TASK_LINK_ENTITY = 'MJ_BizApps_Tasks: Task Links';
 
 async function main(): Promise<void> {
-  dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
+  LoadHarnessEnv();
   const pool = await new sql.ConnectionPool({
     server: process.env.DB_HOST, port: Number(process.env.DB_PORT ?? 1433),
     user: process.env.DB_USERNAME, password: process.env.DB_PASSWORD, database: process.env.DB_DATABASE,
