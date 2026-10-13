@@ -70,9 +70,9 @@ describe('TasksAppApprovalGate.recordDecision — separation of duties', () => {
 
   it('lets the configured CFO decide on a batch someone else built', async () => {
     const gate = new TasksAppApprovalGate(stubProvider(OTHER_USER_ID));
-    // Past both guards; the stub has no linked Task, which is where it stops.
+    // Past both guards; the stub's batch has no stamped Task, which is where it stops.
     await expect(gate.recordDecision(BATCH_ID, 'Approved', undefined, undefined, cfo)).rejects.toThrow(
-      /has no approval Task to record a decision against/,
+      /has no stamped approval Task to record a decision against/,
     );
   });
 });
@@ -395,7 +395,7 @@ const REJECTED_OUTCOME_ID = '0a0a0a0a-0000-4000-8000-00000000a003';
  * A provider serving a batch with (optionally) a stamped approval Task carrying decisions of the given outcomes.
  * With `forgedRejectedLink`, Task Links answer with a newer link to FORGED_TASK_ID, which carries a rejection.
  */
-function decisionProvider(opts: { hasTask: boolean; outcomeIds: string[]; forgedRejectedLink?: boolean }): IMetadataProvider {
+function decisionProvider(opts: { hasTask: boolean; outcomeIds: string[]; forgedRejectedLink?: boolean; forgedApprovedLink?: boolean }): IMetadataProvider {
   return {
     GetEntityObject: async (entityName: string) => {
       // assertApproved and isRejected load the batch for its stamped ApprovalTaskID.
@@ -409,11 +409,12 @@ function decisionProvider(opts: { hasTask: boolean; outcomeIds: string[]; forged
     EntityByName: (entityName: string) => (entityName === BATCH_ENTITY ? { ID: BATCH_ENTITY_ID } : undefined),
     RunView: async (params: { EntityName: string; ExtraFilter?: string }) => {
       if (params.EntityName === 'MJ_BizApps_Tasks: Task Links') {
-        if (opts.forgedRejectedLink) return { Success: true, Results: [{ TaskID: FORGED_TASK_ID }] };
+        if (opts.forgedRejectedLink || opts.forgedApprovedLink) return { Success: true, Results: [{ TaskID: FORGED_TASK_ID }] };
         return { Success: true, Results: opts.hasTask ? [{ TaskID: TASK_ID }] : [] };
       }
       if (params.EntityName === 'MJ_BizApps_Tasks: Task Decisions') {
-        const outcomeIds = params.ExtraFilter?.includes(FORGED_TASK_ID) ? [REJECTED_OUTCOME_ID] : opts.outcomeIds;
+        const forgedOutcome = opts.forgedApprovedLink ? APPROVED_OUTCOME_ID : REJECTED_OUTCOME_ID;
+        const outcomeIds = params.ExtraFilter?.includes(FORGED_TASK_ID) ? [forgedOutcome] : opts.outcomeIds;
         return { Success: true, Results: outcomeIds.map(OutcomeID => ({ OutcomeID })) };
       }
       if (params.EntityName === 'MJ_BizApps_Tasks: Task Decision Outcomes') {
@@ -460,6 +461,57 @@ describe('TasksAppApprovalGate.isRejected — whether the approval Task records 
   it('does not count a rejection as an approval', async () => {
     const gate = new TasksAppApprovalGate(decisionProvider({ hasTask: true, outcomeIds: [REJECTED_OUTCOME_ID] }));
     await expect(gate.assertApproved(BATCH_ID, cfo)).rejects.toThrow(/is not approved/);
+  });
+});
+
+// ─── the stamped Task decides, not the newest Task Link (#313) ──────────────
+
+describe('TasksAppApprovalGate.assertApproved — the stamped approval Task decides', () => {
+  it('passes when the stamped Task carries an approval', async () => {
+    const gate = new TasksAppApprovalGate(decisionProvider({ hasTask: true, outcomeIds: [APPROVED_OUTCOME_ID] }));
+    await expect(gate.assertApproved(BATCH_ID, cfo)).resolves.toBeUndefined();
+  });
+
+  it('refuses when a newer Task Link names an approved Task but the stamped Task carries no approval', async () => {
+    const gate = new TasksAppApprovalGate(decisionProvider({ hasTask: true, outcomeIds: [], forgedApprovedLink: true }));
+    await expect(gate.assertApproved(BATCH_ID, cfo)).rejects.toThrow(/is not approved/);
+  });
+
+  it('refuses a batch with no stamped approval Task, even when a Task Link names an approved Task', async () => {
+    const gate = new TasksAppApprovalGate(decisionProvider({ hasTask: false, outcomeIds: [], forgedApprovedLink: true }));
+    await expect(gate.assertApproved(BATCH_ID, cfo)).rejects.toThrow(/has no stamped approval Task/);
+  });
+});
+
+describe('TasksAppApprovalGate.recordDecision — the decision lands on the stamped approval Task', () => {
+  /** A gate over a Pending batch someone else built, whose Task Links name FORGED_TASK_ID; captures each decision. */
+  function decidingGate(approvalTaskId: string | null): { gate: TasksAppApprovalGate; decidedTaskIds: string[] } {
+    const provider = cancelProvider({ cfoUserId: CFO_USER_ID, approvalTaskId, hasPerson: true }, { comments: [] });
+    const getEntityObject = provider.GetEntityObject.bind(provider);
+    (provider as unknown as { GetEntityObject: typeof getEntityObject }).GetEntityObject = (async (entityName: string, user?: UserInfo) => {
+      const entity = await getEntityObject(entityName, user);
+      if (entityName === BATCH_ENTITY) Object.assign(entity, { Status: 'Pending', ApprovedByUserID: null });
+      return entity;
+    }) as typeof getEntityObject;
+    const gate = new TasksAppApprovalGate(provider);
+    const decidedTaskIds: string[] = [];
+    (gate as unknown as { orchestration: { RecordDecision: (req: { TaskID: string }) => Promise<void> } })
+      .orchestration = { RecordDecision: async (req) => { decidedTaskIds.push(req.TaskID); } };
+    return { gate, decidedTaskIds };
+  }
+
+  it('records on the stamped Task, not the Task a newer Task Link names', async () => {
+    const { gate, decidedTaskIds } = decidingGate(TASK_ID);
+    await gate.recordDecision(BATCH_ID, 'Approved', undefined, undefined, cfo);
+    expect(decidedTaskIds).toEqual([TASK_ID]);
+  });
+
+  it('refuses a batch with no stamped approval Task and records nothing, even when a Task Link names one', async () => {
+    const { gate, decidedTaskIds } = decidingGate(null);
+    await expect(gate.recordDecision(BATCH_ID, 'Approved', undefined, undefined, cfo)).rejects.toThrow(
+      /has no stamped approval Task to record a decision against/,
+    );
+    expect(decidedTaskIds).toEqual([]);
   });
 });
 

@@ -30,7 +30,7 @@
 import { createHash } from 'node:crypto';
 
 import { BaseEntity, DatabaseProviderBase, EntitySaveOptions, IMetadataProvider, IRunViewProvider, LogError, LogStatus, UserInfo, ValidationErrorInfo, ValidationResult } from '@memberjunction/core';
-import { RegisterClass } from '@memberjunction/global';
+import { RegisterClass, UUIDsEqual } from '@memberjunction/global';
 import {
   mjBizAppsAccountingJournalEntryBatchEntity,
   mjBizAppsAccountingJournalEntryEntity,
@@ -303,6 +303,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     };
 
     for (const message of this.IsSaved ? this.transitionProblems() : this.creationProblems()) fail(message);
+    for (const message of this.approvalTaskProblems()) fail(message);
 
     // Approval audit pair: an Approved batch carries WHO and WHEN, together.
     if (this.Status === 'Approved' && (!this.ApprovedAt || !this.ApprovedByUserID)) {
@@ -372,6 +373,23 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
       ];
     }
     return [];
+  }
+
+  /**
+   * The approval Task pointer is set once (#313). The send gate decides approval from the Task this
+   * column names, and the build stamps it in its own transaction; a later save that changed it could
+   * point a Pending batch at another batch's approved Task. Setting it on a batch that has none is
+   * the build's stamp and passes. trg_JournalEntryBatch_ApprovalTaskSetOnce (50035) enforces the same
+   * rule, ApprovalTaskRaisedAt included, for writes that skip this class.
+   */
+  private approvalTaskProblems(): string[] {
+    if (!this.IsSaved) return [];
+    const loaded = this.GetFieldByName('ApprovalTaskID')?.OldValue as string | null | undefined;
+    if (!loaded || UUIDsEqual(loaded, this.ApprovalTaskID)) return [];
+    return [
+      `A batch's approval Task is set once, by the build that raises it, and never changes after that — ` +
+        `ApprovalTaskID cannot move from ${loaded} to ${this.ApprovalTaskID ?? 'empty'}.`,
+    ];
   }
 
   /**
