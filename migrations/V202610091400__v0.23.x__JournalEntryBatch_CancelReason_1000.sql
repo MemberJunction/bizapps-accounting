@@ -1,5 +1,5 @@
 -- =============================================================================
--- Migration: V202610091400__v0.21.x__JournalEntryBatch_CancelReason_1000.sql
+-- Migration: V202610091400__v0.23.x__JournalEntryBatch_CancelReason_1000.sql
 -- Description: #307 — a batch's cancel reason holds 1,000 characters, up from
 --              500.
 -- =============================================================================
