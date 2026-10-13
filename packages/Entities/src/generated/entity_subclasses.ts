@@ -141,6 +141,11 @@ export const mjBizAppsAccountingAccountingCompanyProfileSchema = z.object({
         * * Display Name: Posting Start Date
         * * SQL Data Type: date
         * * Description: The first EffectiveDate this company posts to the ERP. Journal entries dated before it never enter a posting batch (for example, history brought in at cutover that the ERP already holds). NULL means no floor: every Pending entry is a candidate.`),
+    BooksClosedThroughDate: z.date().nullable().describe(`
+        * * Field Name: BooksClosedThroughDate
+        * * Display Name: Books Closed Through Date
+        * * SQL Data Type: date
+        * * Description: The last day of the latest month finance has closed for this company. A journal entry batch, progress measurement or correction dated on or before it is in a closed month. NULL means nothing is closed. Set by finance when a close finishes; moving it back reopens a month.`),
     Name: z.string().describe(`
         * * Field Name: Name
         * * Display Name: Company Name
@@ -2703,6 +2708,19 @@ export class mjBizAppsAccountingAccountingCompanyProfileEntity extends BaseEntit
     }
     set PostingStartDate(value: Date | null) {
         this.Set('PostingStartDate', value);
+    }
+
+    /**
+    * * Field Name: BooksClosedThroughDate
+    * * Display Name: Books Closed Through Date
+    * * SQL Data Type: date
+    * * Description: The last day of the latest month finance has closed for this company. A journal entry batch, progress measurement or correction dated on or before it is in a closed month. NULL means nothing is closed. Set by finance when a close finishes; moving it back reopens a month.
+    */
+    get BooksClosedThroughDate(): Date | null {
+        return this.Get('BooksClosedThroughDate');
+    }
+    set BooksClosedThroughDate(value: Date | null) {
+        this.Set('BooksClosedThroughDate', value);
     }
 
     /**
