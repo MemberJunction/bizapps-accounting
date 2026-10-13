@@ -101,14 +101,14 @@ describe('TasksAppApprovalGate.recordDecision — only a decision the batch can 
     const gate = new TasksAppApprovalGate(stubProvider(OTHER_USER_ID));
     const notes = `  ${'x'.repeat(CANCEL_REASON_MAX_LENGTH)}  `;
     await expect(gate.recordDecision(BATCH_ID, 'Rejected', undefined, notes, cfo)).rejects.toThrow(
-      /has no approval Task to record a decision against/,
+      /has no stamped approval Task to record a decision against/,
     );
   });
 
   it('does not limit approval notes, which are never written to the batch', async () => {
     const gate = new TasksAppApprovalGate(stubProvider(OTHER_USER_ID));
     await expect(gate.recordDecision(BATCH_ID, 'Approved', undefined, 'x'.repeat(CANCEL_REASON_MAX_LENGTH + 1), cfo)).rejects.toThrow(
-      /has no approval Task to record a decision against/,
+      /has no stamped approval Task to record a decision against/,
     );
   });
 
