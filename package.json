@@ -23,6 +23,7 @@
     "version": "changeset version",
     "version:prepare": "changeset version && node ci/sync-mj-app-version.mjs && pnpm install --lockfile-only",
     "db:rebuild": "scripts/rebuild-db.sh",
+    "demo:load": "mj sync push --dir demo-data",
     "test:integration": "node test-harnesses/integration.mjs"
   },
   "repository": {

@@ -122,6 +122,15 @@ Two properties of that step, both of which fail silently:
   the app installs cleanly either way. A `metadata/` edit a host needs is therefore not finished when
   it merges — only when a release carries it.
 
+**`metadata/` holds only what every host should receive.** A full `mj sync push --dir metadata` on
+a database built from migrations must create nothing the release `Metadata_Sync` would not carry.
+Records that only make sense for one dataset go in `demo-data/`, which is pushed on request
+(`pnpm run demo:load`) and never ships. The predictive-scoring bench (training pipelines, models,
+the scoring record process and its binding) lives there for that reason (issue #372): the models'
+fitted statistics come from one dataset and they carry no trained artifact, and a scheduled record
+process against a model with no artifact marks every record it touches `Failed`
+(MemberJunction/MJ#4829).
+
 The practical consequence for anything an external caller depends on (a Remote Operation, an
 Application row, a seeded lookup): it does not exist for that caller until a release ships the
 metadata migration.
