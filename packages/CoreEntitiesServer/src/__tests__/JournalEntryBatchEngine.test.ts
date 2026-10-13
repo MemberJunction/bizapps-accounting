@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { NetLines } from '@mj-biz-apps/accounting-engine-base';
-import { BusinessTimeZoneEngine, type InstanceConfigurationRow } from '@mj-biz-apps/common-entities';
+import { AddDays, BusinessTimeZoneEngine, type InstanceConfigurationRow } from '@mj-biz-apps/common-entities';
 import { netLines, type NettableLine } from '../JournalEntryBatchEngine.js';
 import { todayBusiness } from '../BusinessDay.js';
 
@@ -96,9 +96,11 @@ describe('pendingCandidateFilter', () => {
         },
     } as any;
 
-    it('generates base Pending and non-summary clauses by default', async () => {
+    it('generates base Pending and non-summary clauses, ending at the default posting date, by default', async () => {
         const filter = await pendingCandidateFilter({}, mockUser, mockProviders);
-        expect(filter).toBe(`Status='Pending' AND EntryTypeID<>'${SUMMARY_ID}'`);
+        // No cutoff still ends the pool at the posting date — today's business day (golive #315).
+        const through = AddDays(BusinessTimeZoneEngine.Instance.Today(), 1);
+        expect(filter).toBe(`Status='Pending' AND EntryTypeID<>'${SUMMARY_ID}' AND EffectiveDate < '${through}'`);
     });
 
     it('adds NOT IN clause when excludeEntryTypeCodes is provided', async () => {

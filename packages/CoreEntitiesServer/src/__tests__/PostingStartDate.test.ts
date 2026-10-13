@@ -52,7 +52,9 @@ async function admittedIds(options: Parameters<typeof pendingCandidateFilter>[0]
 describe('pendingCandidateFilter — the per-company PostingStartDate floor', () => {
   it('with no floor set anywhere the filter is unchanged and every Pending entry is a candidate', async () => {
     const { p } = providers([profile(CO_A, null)]);
-    expect(await pendingCandidateFilter({}, testUser, p)).toBe(`Status='Pending' AND EntryTypeID<>'e9521aa3-f4ef-4ec5-a899-d9dd59f320b7'`);
+    // The only date clause is the posting-date bound every pool carries; no floor clause is added.
+    expect(await pendingCandidateFilter({ postingDate: '2026-09-30' }, testUser, p))
+      .toBe(`Status='Pending' AND EntryTypeID<>'e9521aa3-f4ef-4ec5-a899-d9dd59f320b7' AND EffectiveDate < '2026-10-01'`);
     expect(await admittedIds({}, [profile(CO_A, null)])).toEqual(JOURNALS.map(j => j.ID).sort());
   });
 
@@ -137,11 +139,12 @@ describe('sweeps and builds', () => {
   });
 
   it('buildJournalEntryBatch nets only the entries on or after the floor', async () => {
-    const { provider, calls } = providers();
+    // GUID ids: the build checks its members' dates against the posting date by id.
+    const { provider, calls } = providers(PROFILES, guidJournals());
     // No lines in the fake, so the build stops at "nets to zero" — after choosing its entries.
     await expect(buildJournalEntryBatch(CO_A, 'BusinessCentral', 'USER-1', testUser, provider)).rejects.toThrow(EmptyJournalEntryBatchError);
-    expect(lineLoadFilter(calls)).toContain("'a-first'");
-    expect(lineLoadFilter(calls)).not.toContain("'a-history'");
+    expect(lineLoadFilter(calls)).toContain(idOf('a-first'));
+    expect(lineLoadFilter(calls)).not.toContain(idOf('a-history'));
   });
 
   it('an explicit selection holding a pre-floor entry is refused, naming it', async () => {

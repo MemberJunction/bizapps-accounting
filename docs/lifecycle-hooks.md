@@ -4,33 +4,36 @@
 > when an accounting record is created/changed. They live in `packages/CoreEntitiesServer/` and route every
 > mutation through `BaseEntity` so `__mj.RecordChange` audits it (P1: *audit by construction*).
 > **Updated 2026-07-06** for the engine-meeting rulings (AM-1..7): **AccountingPeriod is GONE** (the ERP owns
-> periods — CH-1), JEs/batches are **multi-company** (CH-2/CH-4), numbering is **global** (D-SEQ), the SJE
-> **materializer is retired** (AM-6), and the **accounting engine** (`AccountingEngine` +
-> `Accounting.CreateJournalEntry`) is the front door for external callers.
+> periods — CH-1), the SJE **materializer is retired** (AM-6), and the **accounting engine** (`AccountingEngine` +
+> `Accounting.CreateJournalEntry`) is the front door for external callers. Those rulings also made JEs/batches
+> multi-company (CH-2/CH-4) with global numbering (D-SEQ); the 2026-07-22 baseline rewrite reversed that: JEs
+> and batches are **single-company** (D3, D7), JE numbers are **per company, per fiscal year** (D19, BA-D31),
+> and batch numbers stay **global**.
 
-**Division of labor (P2):** *DB triggers* enforce un-bypassable invariants (balance overall **and per
-company** — AM-4, immutability); *hooks* orchestrate (seed, number, reverse, validate). A hook makes the
+**Division of labor (P2):** *DB triggers* enforce un-bypassable invariants (balance, every line in the
+JE's company — D3, immutability); *hooks* orchestrate (seed, number, reverse, validate). A hook makes the
 friendly thing happen; the trigger is the floor that catches anything — even raw SQL.
 
 **How a hook "fires" — two kinds:**
 - **Auto (in `Save()`):** the hook is an override of the entity's `Save()`. It runs **every time that entity
   is saved**, then a guard condition decides whether it acts.
-- **Explicit call:** not wired into `Save()` — it runs only when code **calls the method by name** (W6, F1).
+- **Explicit call:** not wired into `Save()` — it runs only when code **calls the method by name** (W6, and
+  W1's `SeedDefaultChartOfAccounts()`).
 
 **Status legend:** ✅ built + tested · 🚫 retired.
 
 | # | Hook | Entity | What causes it to fire | How | Status |
 |---|---|---|---|---|---|
-| **W1** | Profile init (TZ default; COA seed = explicit only, 2026-07-30) | `AccountingCompanyProfile` | a **new** profile is saved (`!IsSaved`) | TZ auto · seed via explicit `SeedDefaultChartOfAccounts()` | ✅ |
-| **W2** | JE numbering (GLOBAL) | `JournalEntry` | a **new** JE is saved with **no `EntryNumber`** | auto · `Save()` | ✅ |
+| **W1** | Profile init (TZ default removed, #158; COA seed = explicit only, 2026-07-30) | `AccountingCompanyProfile` | a saved profile's **`EntityType`** changes | check auto · `ValidateAsync()`; seed via explicit `SeedDefaultChartOfAccounts()` | ✅ |
+| **W2** | JE numbering (per company, per FY) | `JournalEntry` | a **new** JE is saved with **no `EntryNumber`** | auto · `Save()` | ✅ |
 | **W3** | Batch numbering (GLOBAL) | `JournalEntryBatch` | a **new** batch is saved with **no `JournalEntryBatchNumber`** | auto · `Save()` | ✅ |
 | **W4** | Adjusting-entry routing | — | — | — | 🚫 retired 2026-07-06 (periods removed, CH-1) |
 | **W5** | Realized FX auto-emit | — | — | — | 🚫 retired (Payments-side, §C1) |
-| **W6** | Reversal generation | `JournalEntry` | code **calls `generateReversal(reason)`** | explicit call | ✅ |
+| **W6** | Reversal generation | `JournalEntry` | code **calls `GenerateReversal(reason)`** | explicit call | ✅ |
 | **W7** | Period-close orchestration | — | — | — | 🚫 retired 2026-07-06 (periods removed, CH-1) |
 | **W8** | Period reopen | — | — | — | 🚫 retired 2026-07-06 (periods removed, CH-1) |
 | **W9** | Attachment validation | `JournalEntry` | a JE is saved with a non-null **`FileID`** | auto · `Save()` | ✅ |
-| **F1** | Routine JE validator | `JournalEntry` (read-only) | code **calls `validateJournalEntry(id)`** | explicit call | ✅ |
+| **F1** | Routine JE validator | — | — | — | 🚫 retired 2026-07-24 (its rules run on every save — see F1 below) |
 
 ---
 
@@ -55,20 +58,21 @@ company.
 
 ### W2 — JE numbering *(✅ `JournalEntryEntityServer.ts` + `SequenceService.ts`)*
 **Fires:** on a brand-new JournalEntry with no number.
-**Does:** calls the atomic sproc `spAssignNextJournalEntryNumber(@FiscalYear)` (HOLDLOCK/UPDLOCK — gap-free
-under concurrency) and sets **`EntryNumber = JE-{FY}-{seq:000000}`** before `super.Save()`. FY derives from
-`EffectiveDate` (UTC). **The sequence is GLOBAL per fiscal year** (D-SEQ 2026-07-06 — JEs are multi-company;
-there is no company segment in the number anymore).
+**Does:** calls the atomic sproc `spAssignNextJournalEntryNumber(@CompanyID, @FiscalYear)` (HOLDLOCK/UPDLOCK — gap-free
+under concurrency) and sets **`EntryNumber = JE-{CompanyCode}-{FY}-{seq:000000}`** before `super.Save()`. FY is the
+fiscal year `EffectiveDate` falls in, from the company's fiscal-year start on its profile (`FiscalYearOf`).
+**The sequence is per company, per fiscal year** (D19, BA-D31; the 2026-07-06 global sequence, D-SEQ, is retired
+for JEs).
 
 ### W3 — Batch numbering *(✅ `JournalEntryBatchEntityServer.ts` + `SequenceService.ts`)*
 **Fires:** on a brand-new batch with no number.
 **Does:** `spAssignNextJournalEntryBatchNumber()` → **`JournalEntryBatchNumber = BATCH-{seq:000000}`** — a single **GLOBAL** counter
-(batches are multi-company, CH-4).
+(D19: batch numbering stays global, though each batch belongs to one company, D7).
 
-### W6 — Reversal generation *(✅ `JournalEntryEntityServer.generateReversal(reason)`)*
+### W6 — Reversal generation *(✅ `JournalEntryEntityServer.GenerateReversal(reason)`)*
 **Fires:** only when code explicitly calls it on a saved JE.
-**Does:** creates a **new Pending JE** — `EntryType='Reversal'` (required by `trg_JE_ReversalConsistency`
-50012), every line's **Dr/Cr swapped**, `ReversesJournalEntryID =` the original — then back-references the
+**Does:** creates a **new Pending JE** of type `Reversal` (`EntryTypeID` → the `Reversal` `JournalEntryType` row,
+required by `trg_JE_ReversalConsistency` 50012), every line's **Dr/Cr swapped**, `ReversesJournalEntryID =` the original — then back-references the
 original's `ReversedByJournalEntryID` (the one field the immutability trigger lets change on a locked JE).
 The reversal's `EffectiveDate` is the later of today's business day (`BusinessTimeZoneEngine`) and the
 original's `EffectiveDate`, so a reversal never lands in a period before the entry it reverses (#266).
@@ -77,12 +81,12 @@ original's `EffectiveDate`, so a reversal never lands in a period before the ent
 **Fires:** whenever a JE is saved with a non-null `FileID`.
 **Does:** verifies the `FileID` references an existing `__mj.File` (the DB FK is the hard guarantee).
 
-### F1 — Routine JE validator *(✅ `JournalEntryValidation.ts` → `validateJournalEntry()`)*
-**Fires:** only when called explicitly (the batching engine / callers before locking).
-**Does:** read-only guard — checks **balanced overall** (±0.005), **balanced WITHIN EACH company** (AM-4 —
-company = the line's `GLAccount.CompanyID`; mirrors trigger 50019), **≥2 lines**, **GL accounts active**;
-returns an aggregated error list. *(The period-open check was retired with the period tables.)*
-Pure parts (`checkBalance`, `checkPerCompanyBalance`) are exported + unit-tested.
+### F1 — Routine JE validator *(🚫 retired 2026-07-24 — `JournalEntryValidation.ts` deleted)*
+Nothing called it. Its rules run on **every save** of a JournalEntry instead:
+- `JournalEntryEntity.Validate()` (`packages/Entities`, browser and server): **≥2 lines**, **balanced** (±0.005).
+- `JournalEntryEntityServer.Validate()`: born `Pending`, legal status transitions, no blank lines.
+- `JournalEntryEntityServer.ValidateAsync()`: every line's GL account **exists**, is **active** and belongs to the
+  JE's company (D3; trigger 50019 is the floor), plus the reversal-type pairing, W9 and the `GLPosted` transition check.
 
 ---
 
@@ -97,14 +101,14 @@ auto-refresh, and exposes:
 - **`ResolveLinkedAccounts(...)`** — every covering Active link for a Many role (`BankAccount`).
   One roles return the same 0-or-1 winner as `ResolveLinkedAccount`.
 - the **pure draft pipeline** (`runDraftPipeline`) + the typed contract (`JournalEntryDraft`,
-  `CreateJournalEntryResult`, the 7 error codes) — importable by Orders' client code with zero server deps.
+  `CreateJournalEntryResult`, the 10 error codes) — importable by Orders' client code with zero server deps.
 
 **`AccountingEngine`** (`packages/CoreEntitiesServer`) adds the server write path —
-**`CreateJournalEntry(draft, user, provider)`**: stages 1-5 pure validation (shape → accounts → dimensions →
-merge/order → balance overall AND per company), then stage 6 writes header + lines + line-dimensions in
+**`CreateJournalEntry(draft, user, provider)`**: stages 1-5 pure validation (shape → entry type → accounts →
+dimensions → merge/order → one company + balance), then stage 6 writes header + lines + line-dimensions in
 **one TransactionGroup** (all rows or none; numbering rides W2). Logical failures never throw — typed
-`Errors[]` (`MALFORMED_DRAFT · ACCOUNT_UNKNOWN · ACCOUNT_INACTIVE · DIMENSION_UNKNOWN ·
-DIMENSION_VALUE_UNKNOWN · UNBALANCED · INTERNAL_ERROR`). A bounded **cache-miss retry** (one forced refresh)
+`Errors[]` (`MALFORMED_DRAFT · ENTRY_TYPE_UNKNOWN · ENTRY_TYPE_INACTIVE · ACCOUNT_UNKNOWN · ACCOUNT_INACTIVE ·
+DIMENSION_UNKNOWN · DIMENSION_VALUE_UNKNOWN · UNBALANCED · MULTI_COMPANY_DRAFT · INTERNAL_ERROR`). A bounded **cache-miss retry** (one forced refresh)
 heals cross-process reference writes.
 
 **`CreateJournalEntryOperation`** — `@RegisterClass(BaseRemotableOperation, 'Accounting.CreateJournalEntry')`,
@@ -171,7 +175,8 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   pointer cleared and the cancel audit triple in ONE update, then releases the members, deletes the
   summary and records the cancel on the approval Task, in one transaction; the triggers key on that order (a member
   unlocks only while its batch is `Pending` or `Cancelled`; a batch becomes Cancelled only with its
-  pointer cleared). From `Approved`/`Failed` a reason is required. A rolled-back cancel reloads the
+  pointer cleared). From `Approved`/`Failed`, and from a `Pending` batch nobody rejected (golive #302), a
+  reason is required. A rolled-back cancel reloads the
   instance. `Save()` stamps `CancelledAt` / `CancelledByUserID` on the transition, as it does for the
   approval and archive pairs.
   **`Cancel()` authorizes itself (#214)**, before anything is written, so a server caller that loads the
@@ -185,8 +190,9 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   records itself on the approval Task as a comment (`recordCancellation`, run inside `Cancel()`'s
   transaction, so it commits or rolls back with the cancel; it refuses when the user has no linked
   Person). `Cancel()` passes the status the batch was cancelled FROM, because when the comment is written the batch
-  already reads Cancelled. The `Accounting.CancelJournalEntryBatch` operation refuses a Pending batch — that cancel is a CFO
-  rejection through `RecordJournalEntryBatchDecision`.
+  already reads Cancelled. Before approval (golive #302) the company's CFO or the batch's builder may cancel
+  through `Accounting.CancelJournalEntryBatch` with a reason; the approval Task gets the comment and is closed. A CFO
+  rejecting a Pending batch uses `RecordJournalEntryBatchDecision` instead, so the decision is recorded.
   **From `Failed` it looks the batch number up in the ERP first (#207)**, after authorizing and
   before writing anything. A cancel releases the entries to be batched again under a NEW number that
   no later lookup can connect to this journal, so this is the last point a posted batch is caught:
@@ -219,10 +225,11 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   the AccountingERPEngine lookup). A caller cannot pass them, so it cannot swap in a gate that allows
   everything or leave the lookup out. A higher-priority ClassFactory registration in the same process
   does replace them; unit tests rely on that, and it is the one way around the check.
-  A **Pending** cancel requires a terminal rejection on the approval Task (`assertRejected`);
-  `RecordJournalEntryBatchDecision` records it before cancelling. A Pending batch with **no** approval
-  Task (built with `AutoApproveGate`, e.g. an auto-post whose approve step failed) has nothing to
-  reject, so it cannot be cancelled; archive it instead. `regenerateJournalEntryBatch`'s empty-cancel
+  A **Pending** cancel needs either a terminal rejection on the approval Task (`isRejected`), which
+  `RecordJournalEntryBatchDecision` records before cancelling, or (golive #302) a reason from the company's
+  CFO or the user who built the batch (`assertMayCancelPending`); that cancel comments on the approval Task
+  and closes it. A Pending batch with **no** approval Task (built with `AutoApproveGate`, e.g. an auto-post
+  whose approve step failed) has no Task to update; the CFO or its builder cancels it with a reason. `regenerateJournalEntryBatch`'s empty-cancel
   (`CancelAfterTeardown()`) needs no rejection: it is limited to a Pending batch whose teardown has run.
 - **`TasksAppApprovalGate.recordDecision`** — now requires `contextUser` to BE the batch company's
   `AccountingCompanyProfile.ApprovalCFOUserID` (no CFO configured ⇒ hard-fail). Previously any
@@ -253,11 +260,11 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
 
 ## 3. Related (not `Save()` hooks)
 
-- **S1 batch dispatch — ✅** (`JournalEntryBatchEngine.ts`): `buildJournalEntryBatch(targetSystem, …)` is **GLOBAL** — nets ALL
-  Pending JEs (every company) into ONE multi-company batch (netting keys on company × account × dims; the
-  ERP-post seam splits by company, by **account number** — AM-4); `approveJournalEntryBatch` flips Pending→Approved with
+- **S1 batch dispatch — ✅** (`JournalEntryBatchEngine.ts`): `buildJournalEntryBatch(companyId, targetSystem, …)` nets one
+  company's Pending JEs into ONE single-company batch (D7; netting keys on company × account × dims; the
+  ERP receives **account numbers**); `approveJournalEntryBatch` flips Pending→Approved with
   audit stamps; `sendJournalEntryBatch` requires Approved (or Failed, for a retry) + the CFO gate
-  (`TasksAppApprovalGate` — per-company CFO **union**: one Task assigned to every involved company's CFO) → Sent →
+  (`TasksAppApprovalGate` — one Task assigned to the batch company's CFO, `ApprovalCFOUserID`) → Sent →
   **Posted** + JEs→GLPosted. A send the ERP rejects, or whose poster throws, returns normally with the batch `Failed`,
   and so does one the ERP accepted whose `Sent → Posted` save failed: that batch keeps the ERP
   reference and its `ErrorMessage` says the journal posted, so the retry's lookup records it `Posted`;
@@ -321,14 +328,9 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   (both enter `Sent` without an ERP call); a retry refused before `Sent` is not counted.
   A successful retry still clears `ErrorMessage`; the earlier value, and every overwritten `SentAt` and sender, are
   in `__mj.RecordChange` (the entity tracks record changes).
-- **S3 scheduled-JE schedules — ✅ creation only** (`ScheduledJournalEntryService.createScheduledEntries`:
-  straight-line schedules with exact cent-remainder spread). **The central materializer is RETIRED (AM-6)**
-  — *domain entity servers* (e.g. a future SubscriptionEntityServer) generate the real Pending JE when a row
-  comes due and flip the SJE to Generated (schema-supported: `CK_SJE_GeneratedCoherence` + locks 50016-18).
+- **S3 scheduled-JE schedules — 🚫 retired** (D15): the 2026-07-22 baseline dropped the `ScheduledJournalEntry`
+  tables and `ScheduledJournalEntryService` was deleted 2026-07-23. Deferred revenue is booked as real
+  forward-dated JEs at booking time; the central materializer had already been retired (AM-6).
 
 ## Build status at a glance
-- ✅ W1, W2, W3, W6, W9, F1 · S1 batching (6-status, multi-company) · S3 creation · Block 5 COA-mapping
-  approval · Block 6 read models (12 views) · **the engine + `Accounting.CreateJournalEntry`**.
-- 🧪 **Live-proven (2026-07-06):** T1 76/76 · T2 76/76 blocks + engine 12/12 + seed 6/6 · T3 64/64 + engine-op
-  8/8 · T5 10/10 — see `test-harnesses/testing.md` for the coverage matrix.
-- 🚫 **Retired:** W4/W7/W8 (periods — CH-1), W5 (FX generation is Payments'), the S3 materializer (AM-6).
+Hook status is the table at the top of this doc; test coverage and run commands are in `test-harnesses/testing.md`.

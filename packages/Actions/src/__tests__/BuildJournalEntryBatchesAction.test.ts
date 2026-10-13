@@ -5,7 +5,7 @@ import { RunActionParams } from '@memberjunction/actions-base';
 import { Metadata, type UserInfo } from '@memberjunction/core';
 
 import { UserCache } from '@memberjunction/generic-database-provider';
-import { BuildJournalEntryBatchesAction, resolveCutoff } from '../BuildJournalEntryBatchesAction';
+import { BuildJournalEntryBatchesAction, postingDateForCutoff, resolveCutoff } from '../BuildJournalEntryBatchesAction';
 import * as serverEngine from '@mj-biz-apps/accounting-core-entities-server';
 
 /** A built batch, shaped as buildJournalEntryBatch returns it. */
@@ -91,6 +91,24 @@ describe('BuildJournalEntryBatchesAction', () => {
         expect(pendingCompaniesSpy.mock.calls[0][2].startDate).toBe('2026-09-30T19:00:00-05:00');
     });
 
+    it('dates the batches the last day of the sweep window — the cutoff day — not the run date (golive #314)', async () => {
+        const pendingCompaniesSpy = vi.spyOn(serverEngine, 'pendingCompanies').mockResolvedValue(['CO-1']);
+        const buildBatchSpy = vi.spyOn(serverEngine, 'buildJournalEntryBatch').mockImplementation(async (companyId) => buildResult(companyId));
+
+        await new BuildJournalEntryBatchesAction().Run(runParams([{ Name: 'Cutoff', Value: '2026-08-31' }]));
+
+        expect(pendingCompaniesSpy.mock.calls[0][2].postingDate).toEqual(new Date('2026-08-31T00:00:00Z'));
+        expect(buildBatchSpy.mock.calls[0][6]?.postingDate).toEqual(new Date('2026-08-31T00:00:00Z'));
+    });
+
+    it('leaves the posting date to the engine (today) when the run has no cutoff', async () => {
+        const pendingCompaniesSpy = vi.spyOn(serverEngine, 'pendingCompanies').mockResolvedValue([]);
+
+        await new BuildJournalEntryBatchesAction().Run(runParams([]));
+
+        expect(pendingCompaniesSpy.mock.calls[0][2].postingDate).toBeNull();
+    });
+
     it('refuses a malformed StartDate with an error naming it, before reading any company', async () => {
         // Thrown, like an unknown CutoffMode: `new Date('2026-02-30')` silently rolled to 2 March.
         const pendingCompaniesSpy = vi.spyOn(serverEngine, 'pendingCompanies').mockResolvedValue([]);
@@ -110,6 +128,43 @@ describe('BuildJournalEntryBatchesAction', () => {
         expect(result.ResultCode).toBe('NO_BATCHES');
         expect(result.Message).toContain('No candidate journal entries found to batch.');
         expect(buildBatchSpy).not.toHaveBeenCalled();
+    });
+
+    // ─── Posting date = the end of the sweep window (golive #314 acceptance criteria) ──────
+
+    describe('postingDateForCutoff', () => {
+        const chicago = 'America/Chicago';
+        const day = (d: Date | null): string | null => d?.toISOString() ?? null;
+
+        it('a nightly run on 9/1 (cutoff 8/31) is dated 8/31', () => {
+            const now = new Date('2026-09-01T06:00:00Z'); // 1 AM Central
+            expect(day(postingDateForCutoff(resolveCutoff(undefined, 'PriorDay', now, chicago), now, chicago))).toBe('2026-08-31T00:00:00.000Z');
+        });
+
+        it('a monthly run on 9/1 (cutoff 8/31) is dated 8/31', () => {
+            const now = new Date('2026-09-01T08:00:00Z'); // 3 AM Central
+            expect(day(postingDateForCutoff(resolveCutoff(undefined, 'PriorMonth', now, chicago), now, chicago))).toBe('2026-08-31T00:00:00.000Z');
+        });
+
+        it('a nightly run on 9/15 (cutoff 9/14) is dated 9/14', () => {
+            const now = new Date('2026-09-15T06:00:00Z');
+            expect(day(postingDateForCutoff(resolveCutoff(undefined, 'PriorDay', now, chicago), now, chicago))).toBe('2026-09-14T00:00:00.000Z');
+        });
+
+        it('a cutoff later than today ends the window today — a posting date is never in the future', () => {
+            const now = new Date('2026-09-15T15:00:00Z');
+            expect(day(postingDateForCutoff(new Date('2026-09-30T00:00:00Z'), now, chicago))).toBe('2026-09-15T00:00:00.000Z');
+        });
+
+        it('takes today in the business zone, not UTC', () => {
+            // 9 PM Central on 14 September is already the 15th in UTC.
+            const now = new Date('2026-09-15T02:00:00Z');
+            expect(day(postingDateForCutoff(new Date('2026-09-30T00:00:00Z'), now, chicago))).toBe('2026-09-14T00:00:00.000Z');
+        });
+
+        it('no cutoff gives no posting date, so the engine uses today', () => {
+            expect(postingDateForCutoff(null, new Date(), chicago)).toBeNull();
+        });
     });
 
     // ─── Cutoff arithmetic (golive #161 / #162 acceptance criteria) ──────────────────────
