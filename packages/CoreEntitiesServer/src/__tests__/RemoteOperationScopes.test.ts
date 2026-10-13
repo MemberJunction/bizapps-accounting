@@ -58,7 +58,7 @@ const ERP_OPERATIONS = [
     'Accounting.RunERPSync',
 ];
 
-const shippedScopes =new Set(flatten(readRecords('api-scopes')).map((r) => String(r.fields.FullPath)));
+const shippedScopes = new Set(flatten(readRecords('api-scopes')).map((r) => String(r.fields.FullPath)));
 
 const mjapiScopes = new Set(
     readRecords('api-application-scopes')
