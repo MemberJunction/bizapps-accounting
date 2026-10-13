@@ -1,0 +1,14 @@
+[
+  {
+    "fields": {
+      "Name": "MJ.BizApps.Accounting.BooksClosedThroughDate.Set",
+      "ParentID": null,
+      "IsActive": true,
+      "UseAuditLog": true,
+      "Description": "Set or move a company's BooksClosedThroughDate on its Accounting Company Profile: closing a month moves it forward, reopening one moves it back. Held by the Finance role. Every change is kept in the profile's record-change history."
+    },
+    "primaryKey": {
+      "ID": "D6E5D7D7-2D25-4D40-A48E-4276B08F8728"
+    }
+  }
+]

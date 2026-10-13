@@ -24,7 +24,7 @@ friendly thing happen; the trigger is the floor that catches anything — even r
 
 | # | Hook | Entity | What causes it to fire | How | Status |
 |---|---|---|---|---|---|
-| **W1** | Profile init (TZ default removed, #158; COA seed = explicit only, 2026-07-30) | `AccountingCompanyProfile` | a saved profile's **`EntityType`** changes | check auto · `ValidateAsync()`; seed via explicit `SeedDefaultChartOfAccounts()` | ✅ |
+| **W1** | Profile init (TZ default removed, #158; COA seed = explicit only, 2026-07-30) | `AccountingCompanyProfile` | a saved profile's **`EntityType`** changes, or **`BooksClosedThroughDate`** changes | check auto · `ValidateAsync()`; seed via explicit `SeedDefaultChartOfAccounts()` | ✅ |
 | **W2** | JE numbering (per company, per FY) | `JournalEntry` | a **new** JE is saved with **no `EntryNumber`** | auto · `Save()` | ✅ |
 | **W3** | Batch numbering (GLOBAL) | `JournalEntryBatch` | a **new** batch is saved with **no `JournalEntryBatchNumber`** | auto · `Save()` | ✅ |
 | **W4** | Adjusting-entry routing | — | — | — | 🚫 retired 2026-07-06 (periods removed, CH-1) |
@@ -53,6 +53,9 @@ refused while the company owns an active GL account. Those types keep no books: 
 their legal entity's accounts (`AccountingEngineBase.LegalEntityFor`). `GLAccountEntityServer`
 refuses the same state from the account side: creating or reactivating an active account on such a
 company.
+**Validates (bc-aidp-next-golive#316):** setting, moving or clearing `BooksClosedThroughDate` is
+refused unless the saving user holds `MJ.BizApps.Accounting.BooksClosedThroughDate.Set` (the Finance
+role). An authorization missing from the catalog is held by nobody. Other edits are not checked.
 - *(The profile's 5 default GL-account refs were RETIRED 2026-07-23 — role/link model replaces them.)*
 - *(Period generation was REMOVED 2026-07-06 — no `AccountingPeriod` rows exist to create.)*
 

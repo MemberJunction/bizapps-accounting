@@ -175,6 +175,16 @@ refuses a draft that spans companies, checks balance, and writes atomically. Hoo
   batch candidate pool. Entries dated before it (e.g. history brought in at cutover) never enter a
   batch: `pendingCandidateFilter` applies it to every build, preview and scheduled sweep, and the
   explicit-ID and view builds check it too. NULL, or no profile row, means no floor.
+- **Books closed through (golive #316):** `AccountingCompanyProfile.BooksClosedThroughDate` is the last
+  day of the latest month finance has closed for a company; a day on or before it is in a closed month.
+  It records how far the ERP's periods are closed, not a period table (D2 stands). Every build refuses a
+  posting date on or before it (`assertPostingDayOpen`, failing closed when the read fails), and both
+  build screens say so before the click. Only holders of
+  `MJ.BizApps.Accounting.BooksClosedThroughDate.Set` (the Finance role) change it, and the profile's
+  record-change history keeps each change. The ERP's own lock stays the backstop: a batch the ERP
+  rejects goes `Failed` with its message and raises an `ERP_POSTING_REJECTED` finance exception.
+  Apps that date entries into the ledger read the same date (orders' progress attestation and
+  supersede); the shared rule is `books-closed.ts` in the engine base.
 - **Recovery past Approved (#145):** a `Failed` batch is retried by dispatching it again
   (`Failed → Sent`; the gate and the coherence check re-run, the original approval is reused). A
   `Failed` batch may already be in the ERP, so every send first looks the batch number up there

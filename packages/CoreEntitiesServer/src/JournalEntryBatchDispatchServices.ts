@@ -16,10 +16,13 @@
  * CONNECTS TO:
  *   RESOLVED BY: JournalEntryBatchEngine (sendJournalEntryBatch · autoPostJournalEntryBatch) · JournalEntryBatchEntityServer.Cancel (#214)
  *   DEFAULTS:    ./TasksAppApprovalGate · ./AccountingERPEngine (createAccountingERPPoster · createAccountingERPLookup)
+ *                · ./FinanceExceptions (RaiseFinanceExceptions)
  */
 import type { IMetadataProvider } from '@memberjunction/core';
 import { MJGlobal, RegisterClass } from '@memberjunction/global';
+import type { AccountingRaiseFinanceExceptionsInput, AccountingRaiseFinanceExceptionsOutput } from '@mj-biz-apps/accounting-entities';
 import { createAccountingERPLookup, createAccountingERPPoster } from './AccountingERPEngine.js';
+import { RaiseFinanceExceptions } from './FinanceExceptions.js';
 import type { ErpJournalLookup, ErpPoster, JournalEntryBatchApprovalGate, JournalEntryBatchCancelGate } from './JournalEntryBatchEngine.js';
 import { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
 
@@ -50,5 +53,12 @@ export class JournalEntryBatchDispatchServices {
   /** What the ERP holds under a batch's number, read before every send (#182) and before a Failed batch is cancelled (#207). */
   public CreateLookup(provider: IMetadataProvider): ErpJournalLookup {
     return createAccountingERPLookup(provider);
+  }
+
+  /** Raises finance exceptions for what a send found, such as an ERP that rejected the batch (golive #316). */
+  public RaiseFinanceExceptions(
+    input: AccountingRaiseFinanceExceptionsInput, provider: IMetadataProvider,
+  ): Promise<AccountingRaiseFinanceExceptionsOutput> {
+    return RaiseFinanceExceptions(input, provider);
   }
 }
