@@ -2,10 +2,13 @@
   {
     "_comments": [
       "API SCOPES FOR THE ACCOUNTING REMOTE OPERATIONS (#310). Every Accounting operation declares RequiredScope",
-      "accounting:read or accounting:write (metadata/remote-operations for the generated ones, the class itself for the",
-      "code-only ones). Without these rows MJAPI refuses every API-key call to them on a host that installs Accounting.",
+      "accounting:read, accounting:write or accounting:post (metadata/remote-operations for the generated ones, the class",
+      "itself for the code-only ones). Without these rows MJAPI refuses every API-key call to them on a host that installs",
+      "Accounting.",
       "",
-      "A parent `accounting` with read and write children, matching how MJ lays out its own scopes. The application",
+      "A parent `accounting` with read, write and post children, matching how MJ lays out its own scopes. `post` is apart",
+      "from `write` (#329) so a key that creates journal entries or raises finance exceptions cannot also send batches to",
+      "the ERP; scopes match exactly, so `write` does not include `post` and `post` does not include `write`. The application",
       "ceiling that allows them on MJAPI is in metadata/api-application-scopes. A host then only issues API keys."
     ],
     "fields": {
@@ -39,11 +42,24 @@
             "Name": "write",
             "FullPath": "accounting:write",
             "Category": "Accounting",
-            "Description": "Accounting operations that change data: journal entries and reversals, batch build, dispatch, decisions and cancellation, ERP sync and finance exceptions",
+            "Description": "Accounting operations that change data inside Accounting: journal entries and reversals, batch build, regenerate, decisions, archive and cancellation, and finance exceptions",
             "IsActive": true
           },
           "primaryKey": {
             "ID": "D10952F0-1423-435D-B144-70E33988BE93"
+          }
+        },
+        {
+          "fields": {
+            "ParentID": "@parent:ID",
+            "Name": "post",
+            "FullPath": "accounting:post",
+            "Category": "Accounting",
+            "Description": "Accounting operations that act on the ERP: dispatch a batch to the ERP, finish posting a batch the ERP accepted, and run the ERP master-data sync",
+            "IsActive": true
+          },
+          "primaryKey": {
+            "ID": "7ED8C7EE-2C11-4E74-AF43-F77020845CB2"
           }
         }
       ]
