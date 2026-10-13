@@ -59,7 +59,9 @@ company.
 ### W2 — JE numbering *(✅ `JournalEntryEntityServer.ts` + `SequenceService.ts`)*
 **Fires:** on a brand-new JournalEntry with no number.
 **Does:** calls the atomic sproc `spAssignNextJournalEntryNumber(@CompanyID, @FiscalYear)` (HOLDLOCK/UPDLOCK — gap-free
-under concurrency) and sets **`EntryNumber = JE-{CompanyCode}-{FY}-{seq:000000}`** before `super.Save()`. FY is the
+under concurrency) and sets **`EntryNumber = JE-{CompanyCode}-{FY}-{seq:000000}`** before `super.Save()`. On PostgreSQL it
+calls the function of the same name (row-locked `INSERT … ON CONFLICT DO UPDATE`, same format, same gap-free rule);
+`SequenceService` picks the SQL by the provider's `PlatformKey`. FY is the
 fiscal year `EffectiveDate` falls in, from the company's fiscal-year start on its profile (`FiscalYearOf`).
 **The sequence is per company, per fiscal year** (D19, BA-D31; the 2026-07-06 global sequence, D-SEQ, is retired
 for JEs).
@@ -67,7 +69,7 @@ for JEs).
 ### W3 — Batch numbering *(✅ `JournalEntryBatchEntityServer.ts` + `SequenceService.ts`)*
 **Fires:** on a brand-new batch with no number.
 **Does:** `spAssignNextJournalEntryBatchNumber()` → **`JournalEntryBatchNumber = BATCH-{seq:000000}`** — a single **GLOBAL** counter
-(D19: batch numbering stays global, though each batch belongs to one company, D7).
+(D19: batch numbering stays global, though each batch belongs to one company, D7). On PostgreSQL, the function of the same name.
 
 ### W6 — Reversal generation *(✅ `JournalEntryEntityServer.GenerateReversal(reason)`)*
 **Fires:** only when code explicitly calls it on a saved JE.
