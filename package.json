@@ -23,8 +23,7 @@
     "version": "changeset version",
     "version:prepare": "changeset version && node ci/sync-mj-app-version.mjs && pnpm install --lockfile-only",
     "db:rebuild": "scripts/rebuild-db.sh",
-    "test:integration": "node test-harnesses/integration.mjs",
-    "db:append-codegen": "scripts/append-codegen.sh"
+    "test:integration": "node test-harnesses/integration.mjs"
   },
   "repository": {
     "type": "git",
