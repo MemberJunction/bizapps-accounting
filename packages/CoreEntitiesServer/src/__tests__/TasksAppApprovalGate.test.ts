@@ -3,8 +3,10 @@
  *
  * The 2026-09-05 sweep made `recordDecision` require the caller to be the company's configured
  * `AccountingCompanyProfile.ApprovalCFOUserID`. That still lets a CFO who builds a batch approve
- * their own batch, so the gate additionally refuses the batch's `BatchedByUserID`. Isolated unit
- * test, no DB — the provider is a stub that answers only the two entity loads the guard reaches.
+ * their own batch, so the gate additionally refuses the batch's `BatchedByUserID`. It also refuses
+ * a decision the batch cannot carry out: on a batch no longer Pending (#306), or a rejection whose
+ * notes do not fit the batch's CancelReason (#307). Isolated unit test, no DB — the provider is a
+ * stub that answers only the entity loads the guards reach.
  */
 import { describe, it, expect } from 'vitest';
 import type { IMetadataProvider, UserInfo } from '@memberjunction/core';
@@ -21,8 +23,17 @@ const BATCH_ENTITY_ID = '87ad37e9-62f9-4f0e-a15b-f64adf009112';
 
 const cfo = { ID: CFO_USER_ID } as UserInfo;
 
-/** A provider that serves one batch (built by `batchedByUserId`) for a company whose CFO is CFO_USER_ID. */
-function stubProvider(batchedByUserId: string): IMetadataProvider {
+/** CancelReason's length as the entity metadata reports it (NVARCHAR(1000)). */
+const CANCEL_REASON_MAX_LENGTH = 1000;
+
+/** The batch entity's metadata: its ID, and the CancelReason field the rejection-notes check reads. */
+const batchEntityInfo = { ID: BATCH_ENTITY_ID, Fields: [{ Name: 'CancelReason', MaxLength: CANCEL_REASON_MAX_LENGTH }] };
+
+/**
+ * A provider that serves one batch (built by `batchedByUserId`, in `status`) for a company whose CFO is
+ * CFO_USER_ID. `lookups` counts the RunView calls, which start only once every guard has passed.
+ */
+function stubProvider(batchedByUserId: string, status = 'Pending', lookups = { count: 0 }): IMetadataProvider {
   return {
     GetEntityObject: async (entityName: string) => {
       if (entityName === BATCH_ENTITY) {
@@ -32,6 +43,7 @@ function stubProvider(batchedByUserId: string): IMetadataProvider {
           CompanyID: COMPANY_ID,
           JournalEntryBatchNumber: 'BATCH-0007',
           BatchedByUserID: batchedByUserId,
+          Status: status,
         };
       }
       if (entityName === ACP_ENTITY) {
@@ -39,9 +51,12 @@ function stubProvider(batchedByUserId: string): IMetadataProvider {
       }
       throw new Error(`stubProvider: unexpected entity '${entityName}'`);
     },
-    EntityByName: (entityName: string) => (entityName === BATCH_ENTITY ? { ID: BATCH_ENTITY_ID } : undefined),
+    EntityByName: (entityName: string) => (entityName === BATCH_ENTITY ? batchEntityInfo : undefined),
     // Reached only once the guards pass; no Task Link exists, so recordDecision fails further down.
-    RunView: async () => ({ Success: true, Results: [] }),
+    RunView: async () => {
+      lookups.count++;
+      return { Success: true, Results: [] };
+    },
   } as unknown as IMetadataProvider;
 }
 
@@ -58,6 +73,49 @@ describe('TasksAppApprovalGate.recordDecision — separation of duties', () => {
     // Past both guards; the stub has no linked Task, which is where it stops.
     await expect(gate.recordDecision(BATCH_ID, 'Approved', undefined, undefined, cfo)).rejects.toThrow(
       /has no approval Task to record a decision against/,
+    );
+  });
+});
+
+describe('TasksAppApprovalGate.recordDecision — only a decision the batch can carry out (#306, #307)', () => {
+  // Every refusal comes before the approval Task is looked up, so nothing is written to it.
+  it.each(['Cancelled', 'Approved', 'Archived'])('refuses a decision on a %s batch, before reading its Task', async (status) => {
+    const lookups = { count: 0 };
+    const gate = new TasksAppApprovalGate(stubProvider(OTHER_USER_ID, status, lookups));
+    await expect(gate.recordDecision(BATCH_ID, 'Approved', undefined, undefined, cfo)).rejects.toThrow(
+      `Batch BATCH-0007 is ${status}; a decision can be recorded only on a Pending batch.`,
+    );
+    expect(lookups.count).toBe(0);
+  });
+
+  it('refuses rejection notes longer than the batch\'s cancel reason holds, before reading its Task', async () => {
+    const lookups = { count: 0 };
+    const gate = new TasksAppApprovalGate(stubProvider(OTHER_USER_ID, 'Pending', lookups));
+    await expect(gate.recordDecision(BATCH_ID, 'Rejected', undefined, 'x'.repeat(CANCEL_REASON_MAX_LENGTH + 1), cfo)).rejects.toThrow(
+      `holds at most ${CANCEL_REASON_MAX_LENGTH} characters; these notes are ${CANCEL_REASON_MAX_LENGTH + 1}`,
+    );
+    expect(lookups.count).toBe(0);
+  });
+
+  it('accepts rejection notes at the limit, measured without surrounding spaces as the cancel stores them', async () => {
+    const gate = new TasksAppApprovalGate(stubProvider(OTHER_USER_ID));
+    const notes = `  ${'x'.repeat(CANCEL_REASON_MAX_LENGTH)}  `;
+    await expect(gate.recordDecision(BATCH_ID, 'Rejected', undefined, notes, cfo)).rejects.toThrow(
+      /has no approval Task to record a decision against/,
+    );
+  });
+
+  it('does not limit approval notes, which are never written to the batch', async () => {
+    const gate = new TasksAppApprovalGate(stubProvider(OTHER_USER_ID));
+    await expect(gate.recordDecision(BATCH_ID, 'Approved', undefined, 'x'.repeat(CANCEL_REASON_MAX_LENGTH + 1), cfo)).rejects.toThrow(
+      /has no approval Task to record a decision against/,
+    );
+  });
+
+  it('tells a user who may not decide only that, even on a batch that is no longer Pending', async () => {
+    const gate = new TasksAppApprovalGate(stubProvider(CFO_USER_ID, 'Cancelled'));
+    await expect(gate.recordDecision(BATCH_ID, 'Approved', undefined, undefined, cfo)).rejects.toThrow(
+      /the user who built a batch may not approve it/,
     );
   });
 });

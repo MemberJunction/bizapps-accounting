@@ -9,6 +9,7 @@ import {
   mjBizAppsAccountingJournalEntryBatchEntity,
 } from '@mj-biz-apps/accounting-entities';
 import { DispatchConfirmationKind, JournalEntryBatchDispatchClient, JournalEntryBatchDecision } from './journal-entry-batch-dispatch.client';
+import { cancelReasonMaxLength } from './cancel-reason';
 
 /** The generated batch Status union (rule 2c: derived, never hand-copied). */
 type BatchStatus = mjBizAppsAccountingJournalEntryBatchEntity['Status'];
@@ -116,7 +117,9 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
    */
   public async OnRecordDecision(row: BatchRow, decision: JournalEntryBatchDecision): Promise<void> {
     if (row.Busy) return;
-    const notes = decision === 'Rejected' ? this.PromptForRejectReason(row)?.trim() : undefined;
+    const notes = decision === 'Rejected'
+      ? (this.askForCancelReason((draft, tooLong) => this.PromptForRejectReason(row, draft, tooLong)) ?? undefined)
+      : undefined;
     if (decision === 'Rejected' && !notes) return;
     row.Busy = true;
     this.clearActionMessage();
@@ -230,12 +233,32 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
     }
   }
 
-  /** The archive-reason prompt, as a seam a test can stub. Native prompt — this package has no dialog helper. */
-  /** The reject-reason prompt, as a seam a test can stub. */
-  protected PromptForRejectReason(row: BatchRow): string | null {
-    return window.prompt(`Reject batch ${row.JournalEntryBatchNumber}? It is cancelled and its journal entries return to the candidate pool for the next build.\n\nReason (required):`);
+  /** The reject-reason prompt, as a seam a test can stub. `draft` refills it; `tooLong` says why it asks again. */
+  protected PromptForRejectReason(row: BatchRow, draft = '', tooLong = ''): string | null {
+    return window.prompt(
+      `Reject batch ${row.JournalEntryBatchNumber}? It is cancelled and its journal entries return to the candidate pool for the next build.${tooLong}\n\nReason (required):`,
+      draft,
+    );
   }
 
+  /**
+   * Ask for a reason that becomes the batch's CancelReason, asking again with the text kept while it
+   * is longer than the column holds (#307). Null when the prompt is cancelled or left blank.
+   */
+  private askForCancelReason(ask: (draft: string, tooLong: string) => string | null): string | null {
+    const max = cancelReasonMaxLength(this.ProviderToUse);
+    let draft = '';
+    let tooLong = '';
+    for (;;) {
+      const reason = ask(draft, tooLong)?.trim();
+      if (!reason) return null;
+      if (reason.length <= max) return reason;
+      draft = reason;
+      tooLong = `\n\nThis reason is ${reason.length} characters; the limit is ${max}.`;
+    }
+  }
+
+  /** The archive-reason prompt, as a seam a test can stub. Native prompt — this package has no dialog helper. */
   protected PromptForReason(row: BatchRow): string | null {
     return window.prompt(`Archive batch ${row.JournalEntryBatchNumber}? It will never post to the ERP and its journal entries stay locked to it.\n\nReason (required):`);
   }
@@ -252,7 +275,7 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
    */
   public async OnCancel(row: BatchRow): Promise<void> {
     if (row.Busy) return;
-    const reason = this.PromptForCancelReason(row)?.trim();
+    const reason = this.askForCancelReason((draft, tooLong) => this.PromptForCancelReason(row, draft, tooLong));
     if (!reason) return;
 
     row.Busy = true;
@@ -279,9 +302,12 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
     }
   }
 
-  /** The cancel-reason prompt, as a seam a test can stub. */
-  protected PromptForCancelReason(row: BatchRow): string | null {
-    return window.prompt(`Cancel batch ${row.JournalEntryBatchNumber}? Its journal entries return to the candidate pool for the next build.\n\nReason (required):`);
+  /** The cancel-reason prompt, as a seam a test can stub. `draft` refills it; `tooLong` says why it asks again. */
+  protected PromptForCancelReason(row: BatchRow, draft = '', tooLong = ''): string | null {
+    return window.prompt(
+      `Cancel batch ${row.JournalEntryBatchNumber}? Its journal entries return to the candidate pool for the next build.${tooLong}\n\nReason (required):`,
+      draft,
+    );
   }
 
   /**

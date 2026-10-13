@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
-import { RunView, RunViewParams } from '@memberjunction/core';
+import { IMetadataProvider, RunView, RunViewParams } from '@memberjunction/core';
 import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
 import { JournalEntryBatchDispatchDashboardComponent } from './journal-entry-batch-dispatch-dashboard.component';
 import { JournalEntryBatchDispatchModule } from './journal-entry-batch-dispatch.module';
@@ -31,6 +31,17 @@ function batchRow(status: BatchStatus): Record<string, unknown> {
     ErrorMessage: null,
     ArchiveReason: null,
   };
+}
+
+/** A short CancelReason limit, as the entity's field metadata reports it, so a test reason can pass it. */
+const CANCEL_REASON_MAX_LENGTH = 30;
+
+/** The reads provider, plus the batch entity's metadata the reason prompts read their limit from (#307). */
+function providerWithCancelReasonLimit(): IMetadataProvider {
+  const entity = { Fields: [{ Name: 'CancelReason', MaxLength: CANCEL_REASON_MAX_LENGTH }] };
+  return Object.assign(stubbedReadsProvider(), {
+    EntityByName: (name: string) => (name === BATCH_ENTITY ? entity : undefined),
+  }) as IMetadataProvider;
 }
 
 describe('JournalEntryBatchDispatchDashboardComponent — first dispatch outcome (DOM)', () => {
@@ -135,7 +146,7 @@ describe('JournalEntryBatchDispatchDashboardComponent — cancelling a Failed ba
     const answers = [...promptAnswers];
     vi.spyOn(window, 'prompt').mockImplementation(() => answers.shift() ?? null);
     const fixture = TestBed.createComponent(JournalEntryBatchDispatchDashboardComponent);
-    fixture.componentRef.setInput('Provider', stubbedReadsProvider());
+    fixture.componentRef.setInput('Provider', providerWithCancelReasonLimit());
     fixture.detectChanges();
     await fixture.whenStable();
     await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
@@ -148,7 +159,7 @@ describe('JournalEntryBatchDispatchDashboardComponent — cancelling a Failed ba
 
   it('does not offer Cancel on a Failed batch carrying the ERP reference: the ERP accepted it', async () => {
     const fixture = TestBed.createComponent(JournalEntryBatchDispatchDashboardComponent);
-    fixture.componentRef.setInput('Provider', stubbedReadsProvider());
+    fixture.componentRef.setInput('Provider', providerWithCancelReasonLimit());
     fixture.detectChanges();
     await fixture.whenStable();
     await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
@@ -229,7 +240,7 @@ describe('JournalEntryBatchDispatchDashboardComponent — a Pending batch (goliv
     const answers = [...promptAnswers];
     vi.spyOn(window, 'prompt').mockImplementation(() => answers.shift() ?? null);
     const fixture = TestBed.createComponent(JournalEntryBatchDispatchDashboardComponent);
-    fixture.componentRef.setInput('Provider', stubbedReadsProvider());
+    fixture.componentRef.setInput('Provider', providerWithCancelReasonLimit());
     fixture.detectChanges();
     await fixture.whenStable();
     await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
@@ -260,6 +271,40 @@ describe('JournalEntryBatchDispatchDashboardComponent — a Pending batch (goliv
     const dashboard = await render(answer);
     await dashboard.OnRecordDecision(dashboard.Batches[0], 'Rejected');
     expect(decisionCalls).toEqual([]);
+  });
+
+  // #307: the reason becomes the batch's CancelReason, so a longer one is asked for again, with the text kept.
+  it('asks again for a rejection reason longer than the batch holds, keeping the text, and sends the shortened one', async () => {
+    const tooLong = 'Wrong period, see the close notes';
+    const dashboard = await render(tooLong, 'Wrong period');
+    await dashboard.OnRecordDecision(dashboard.Batches[0], 'Rejected');
+    const prompt = vi.mocked(window.prompt);
+    expect(prompt).toHaveBeenCalledTimes(2);
+    expect(prompt.mock.calls[1][0]).toContain(`This reason is ${tooLong.length} characters; the limit is ${CANCEL_REASON_MAX_LENGTH}.`);
+    expect(prompt.mock.calls[1][1]).toBe(tooLong);
+    expect(decisionCalls).toEqual([{ Decision: 'Rejected', Notes: 'Wrong period' }]);
+  });
+
+  it('does not reject when the user gives up on a reason that is too long', async () => {
+    const dashboard = await render('Wrong period, see the close notes', null);
+    await dashboard.OnRecordDecision(dashboard.Batches[0], 'Rejected');
+    expect(decisionCalls).toEqual([]);
+  });
+
+  it('accepts a reason at the limit, measured without surrounding spaces', async () => {
+    const atLimit = 'x'.repeat(CANCEL_REASON_MAX_LENGTH);
+    const dashboard = await render(`  ${atLimit}  `);
+    await dashboard.OnRecordDecision(dashboard.Batches[0], 'Rejected');
+    expect(window.prompt).toHaveBeenCalledTimes(1);
+    expect(decisionCalls).toEqual([{ Decision: 'Rejected', Notes: atLimit }]);
+  });
+
+  it('asks again for a cancel reason longer than the batch holds, keeping the text', async () => {
+    const tooLong = 'Built with the wrong entries for August';
+    const dashboard = await render(tooLong, 'Wrong entries');
+    await dashboard.OnCancel(dashboard.Batches[0]);
+    expect(vi.mocked(window.prompt).mock.calls[1][1]).toBe(tooLong);
+    expect(cancelCalls).toEqual([{ Reason: 'Wrong entries', Confirm: false }]);
   });
 
   it('approves without asking for a reason', async () => {
