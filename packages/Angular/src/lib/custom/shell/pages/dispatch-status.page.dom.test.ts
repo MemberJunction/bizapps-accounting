@@ -116,3 +116,54 @@ describe('DispatchStatusPageComponent — cancelling a Failed batch (#207)', () 
     expect(page.ActionMessage).toMatch(/so the batch posted/);
   });
 });
+
+/**
+ * golive #325: a cancel whose response is lost (a gateway timeout) may still have gone through on the
+ * server, so the page refetches after a failure too, and shows the batch's real status.
+ */
+describe('DispatchStatusPageComponent — a failed cancel refetches (golive #325)', () => {
+  beforeEach(async () => {
+    installStubProvider([stubEntityInfo(BATCH_ENTITY, ['ID', 'JournalEntryBatchNumber', 'Status', 'TargetSystem', 'TotalEntries'])]);
+    vi.spyOn(RunView.prototype, 'RunViews').mockResolvedValue([viewResult([], 0), viewResult([], 0)]);
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'GetStrandedJournalEntries')
+      .mockResolvedValue({ Success: true, Batches: [], JournalEntryCount: 0 });
+    await TestBed.configureTestingModule({
+      declarations: [DispatchStatusPageComponent],
+      providers: [PageRefreshService],
+    })
+      .overrideComponent(DispatchStatusPageComponent, { set: { template: '' } })
+      .compileComponents();
+  });
+
+  async function openCancel(): Promise<DispatchStatusPageComponent> {
+    const fixture = TestBed.createComponent(DispatchStatusPageComponent);
+    fixture.componentRef.setInput('Provider', stubbedReadsProvider());
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const page = fixture.componentInstance;
+    page.CancelBatch(await failedBatch());
+    page.CancelReason = 'ERP rejected the journal';
+    return page;
+  }
+
+  it('refetches when the cancel answers with an error', async () => {
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'CancelBatch').mockResolvedValue({ Success: false, ErrorMessage: 'GraphQL Error (Code: 504)' });
+    const page = await openCancel();
+    const refresh = vi.spyOn(page, 'Refresh');
+    await page.ConfirmCancelBatch();
+
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(page.ActionIsError).toBe(true);
+    expect(page.ActionMessage).toBe('GraphQL Error (Code: 504)');
+  });
+
+  it('refetches when the cancel call throws', async () => {
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'CancelBatch').mockRejectedValue(new Error('network down'));
+    const page = await openCancel();
+    const refresh = vi.spyOn(page, 'Refresh');
+    await page.ConfirmCancelBatch();
+
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(page.ActionMessage).toBe('network down');
+  });
+});

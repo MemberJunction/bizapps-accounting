@@ -210,6 +210,10 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
    * Archive a batch that must never post to the ERP (#214): terminal, no ERP call, and the batch's
    * journal entries STAY locked — the opposite of Reject, which returns them to the candidate pool.
    * A cancelled or blank prompt aborts silently; the reason is required and is the only record of why.
+   *
+   * Every answer reloads the list, an error included: a call that timed out on the way back may
+   * still have archived the batch on the server, and the card must show that rather than invite a
+   * second attempt.
    */
   public async OnArchive(row: BatchRow): Promise<void> {
     if (row.Busy) return;
@@ -223,10 +227,10 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
       const res = await this.client().ArchiveBatch(row.ID, reason.trim());
       if (res.Success) {
         this.setActionMessage(`Archived batch ${row.JournalEntryBatchNumber} — no ERP call; its journal entries stay locked to it.`, false);
-        await this.loadBatches();
       } else {
         this.setActionMessage(res.ErrorMessage ?? 'Archive failed.', true);
       }
+      await this.loadBatches();
     } finally {
       row.Busy = false;
       this.cdr.markForCheck();

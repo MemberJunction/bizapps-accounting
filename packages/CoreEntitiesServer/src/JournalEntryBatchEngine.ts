@@ -1006,6 +1006,15 @@ export interface JournalEntryBatchCancelGate {
   assertMayCancelPending(batchId: string, contextUser: UserInfo): Promise<void>;
   assertMayCancelApproved(batchId: string, contextUser: UserInfo): Promise<void>;
   recordCancellation(batchId: string, cancellation: RecordedCancellation, contextUser: UserInfo): Promise<void>;
+  /** Record an archive on the approval Task, closing it when the batch was never approved (golive #325). */
+  recordArchive(batchId: string, archive: RecordedArchive, contextUser: UserInfo): Promise<void>;
+}
+
+/** What an archive records on the approval Task (golive #325). */
+export interface RecordedArchive {
+  reason: string;
+  /** The status the batch was archived FROM, passed in for the same reason as {@link RecordedCancellation.fromStatus}. */
+  fromStatus: string;
 }
 
 /** What a cancel records on the approval Task. */

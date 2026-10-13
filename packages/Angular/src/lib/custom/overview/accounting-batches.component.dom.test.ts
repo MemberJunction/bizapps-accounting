@@ -695,3 +695,64 @@ describe('AccountingBatchesPageComponent — Cancel a batch (#183, golive #302)'
     expect(document.getElementById('aidp-cancel-reason')?.getAttribute('maxlength')).toBe('1000');
   });
 });
+
+/**
+ * golive #325: a Cancel or Archive whose response is lost (a gateway timeout) may still have gone
+ * through on the server. The list reloads after every answer, so it shows the batch's real status
+ * instead of inviting a second attempt.
+ */
+describe('AccountingBatchesPageComponent — a failed Cancel or Archive reloads the list (golive #325)', () => {
+  const TIMEOUT = 'GraphQL Error (Code: 504)';
+  let listedStatus: string;
+  let batchReads: number;
+
+  beforeEach(() => {
+    listedStatus = 'Pending';
+    batchReads = 0;
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+      if (p.EntityName !== BATCH_ENTITY) return viewResult([], 0);
+      batchReads++;
+      return viewResult([{ ...LISTED_BATCH, Status: listedStatus }]);
+    });
+  });
+
+  async function render(): Promise<AccountingBatchesPageComponent> {
+    const fixture = TestBed.createComponent(AccountingBatchesPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
+    return fixture.componentInstance;
+  }
+
+  it('shows the batch Cancelled, and the error, when the cancel went through but its response timed out', async () => {
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'CancelBatch').mockImplementation(async () => {
+      listedStatus = 'Cancelled';
+      return { Success: false, ErrorMessage: TIMEOUT };
+    });
+    const page = await render();
+    page.OnCancel(LISTED_BATCH, new Event('click'));
+    page.CancelReasonDraft = 'Built with the wrong entries';
+    await page.ConfirmCancel();
+
+    expect(batchReads).toBe(2);
+    expect(page.Batches.map((b) => b.Status)).toEqual(['Cancelled']);
+    expect(page.ActionMessageIsError).toBe(true);
+    expect(page.ActionMessage).toBe(TIMEOUT);
+  });
+
+  it('shows the batch Archived, and the error, when the archive went through but its response timed out', async () => {
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'ArchiveBatch').mockImplementation(async () => {
+      listedStatus = 'Archived';
+      return { Success: false, ErrorMessage: TIMEOUT };
+    });
+    const page = await render();
+    page.OnArchive(LISTED_BATCH, new Event('click'));
+    page.ArchiveReasonDraft = 'Posted in the legacy system';
+    await page.ConfirmArchive();
+
+    expect(batchReads).toBe(2);
+    expect(page.Batches.map((b) => b.Status)).toEqual(['Archived']);
+    expect(page.ActionMessageIsError).toBe(true);
+    expect(page.ActionMessage).toBe(TIMEOUT);
+  });
+});

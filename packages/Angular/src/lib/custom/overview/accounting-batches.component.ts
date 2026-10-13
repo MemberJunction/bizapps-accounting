@@ -1265,7 +1265,10 @@ export class AccountingBatchesPageComponent implements OnInit {
         this.cdr.markForCheck();
     }
 
-    /** Run the archive with the reason captured in the dialog. The button is disabled until it is non-blank. */
+    /**
+     * Run the archive with the reason captured in the dialog. The button is disabled until it is non-blank.
+     * Every answer reloads the list: an archive whose response timed out may still have gone through.
+     */
     public async ConfirmArchive(): Promise<void> {
         const batch = this.ArchiveTarget;
         const reason = this.ArchiveReasonDraft.trim();
@@ -1284,8 +1287,8 @@ export class AccountingBatchesPageComponent implements OnInit {
                 this.ArchiveModalVisible = false;
                 this.ArchiveTarget = null;
                 this.ArchiveReasonDraft = '';
-                await this.LoadBatches();
             }
+            await this.LoadBatches();
         } finally {
             this.ArchivingBatchID = null;
             this.cdr.markForCheck();
@@ -1395,7 +1398,9 @@ export class AccountingBatchesPageComponent implements OnInit {
             // Close on a refusal too: the message is on the page, and the modal would hide it. The one
             // that matters most, "the ERP holds this batch — retry it instead", has nothing to redo here.
             this.resetCancelDialog();
-            if (res.Success) await this.LoadBatches();
+            // Reload on a refusal too: a cancel whose response timed out may still have gone through,
+            // and a list still showing the old status invites a second attempt.
+            await this.LoadBatches();
         } finally {
             this.CancellingBatchID = null;
             this.cdr.markForCheck();
