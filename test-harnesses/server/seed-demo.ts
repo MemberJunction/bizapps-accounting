@@ -40,9 +40,9 @@ async function bootstrap(): Promise<BootCtx> {
   const { DB_HOST: host, DB_DATABASE: database, DB_USERNAME: user, DB_PASSWORD: password } = process.env;
   if (!host || !database || !user || !password) throw new Error('Missing DB settings in .env (run from the instance worktree root).');
   const pool = await new sql.ConnectionPool({ server: host, port: Number(process.env.DB_PORT ?? 1433), user, password, database, options: { encrypt: false, trustServerCertificate: true } }).connect();
-  await setupSQLServerClient(new SQLServerProviderConfigData(pool, process.env.MJ_CORE_SCHEMA || '__mj'));
+  const sqlProvider = await setupSQLServerClient(new SQLServerProviderConfigData(pool, process.env.MJ_CORE_SCHEMA || '__mj'));
   await assertInvariantTriggers(pool); // fail fast if any invariant trigger is missing/disabled
-  await UserCache.Instance.Refresh(pool);
+  await UserCache.Instance.Refresh(sqlProvider);
   const ctxUser = UserCache.Users.find(u => u?.Type?.trim().toLowerCase() === 'owner') ?? UserCache.Users[0];
   if (!ctxUser) throw new Error('No context user found.');
   return { pool, user: ctxUser };

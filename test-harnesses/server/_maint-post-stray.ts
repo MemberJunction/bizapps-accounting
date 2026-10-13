@@ -25,8 +25,8 @@ async function main(): Promise<void> {
     user: process.env.DB_USERNAME, password: process.env.DB_PASSWORD, database: process.env.DB_DATABASE,
     options: { encrypt: false, trustServerCertificate: true },
   }).connect();
-  await setupSQLServerClient(new SQLServerProviderConfigData(pool, process.env.MJ_CORE_SCHEMA || '__mj'));
-  await UserCache.Instance.Refresh(pool);
+  const sqlProvider = await setupSQLServerClient(new SQLServerProviderConfigData(pool, process.env.MJ_CORE_SCHEMA || '__mj'));
+  await UserCache.Instance.Refresh(sqlProvider);
   const user = UserCache.Users.find(u => u?.Type?.trim().toLowerCase() === 'owner') ?? UserCache.Users[0];
   if (!user) throw new Error('no context user');
   RegisterHarnessDispatchServices(); // the send's gate and poster: always approved, mock ERP (#233)

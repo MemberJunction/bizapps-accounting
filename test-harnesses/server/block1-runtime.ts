@@ -111,9 +111,9 @@ async function bootstrap(): Promise<Ctx> {
   const { CODEGEN_DB_USERNAME: cgUser, CODEGEN_DB_PASSWORD: cgPassword } = process.env;
   if (!cgUser || !cgPassword) throw new Error('Missing CODEGEN_DB_USERNAME/PASSWORD in .env (needed for the db_owner teardown pool).');
   const teardownPool = await new sql.ConnectionPool({ server: host, port: Number(process.env.DB_PORT ?? 1433), user: cgUser, password: cgPassword, database, options: { encrypt: false, trustServerCertificate: true } }).connect();
-  await setupSQLServerClient(new SQLServerProviderConfigData(pool, process.env.MJ_CORE_SCHEMA || '__mj'));
+  const sqlProvider = await setupSQLServerClient(new SQLServerProviderConfigData(pool, process.env.MJ_CORE_SCHEMA || '__mj'));
   await assertInvariantTriggers(pool); // pre-flight: fail fast if any invariant trigger is missing/disabled
-  await UserCache.Instance.Refresh(pool);
+  await UserCache.Instance.Refresh(sqlProvider);
   const ctxUser = UserCache.Users.find(u => u?.Type?.trim().toLowerCase() === 'owner') ?? UserCache.Users[0];
   if (!ctxUser) throw new Error('No context user found.');
   const rv = new RunView();
@@ -504,6 +504,9 @@ async function main(): Promise<void> {
   try {
     for (const t of toggledTables) await exec(`DISABLE TRIGGER ALL ON ${SCHEMA}.${t}`);
     for (const co of [companyA, companyB]) {
+      // A batch's summary pointer references one of the company's JEs: clear it first, or the JE
+      // delete fails on FK_JournalEntryBatch_SummaryJE and the batch and company deletes fail after it.
+      await exec(`UPDATE ${SCHEMA}.JournalEntryBatch SET SummaryJournalEntryID=NULL WHERE CompanyID='${co.id}'`);
       await exec(`DELETE l FROM ${SCHEMA}.JournalEntryLine l JOIN ${SCHEMA}.JournalEntry j ON j.ID=l.JournalEntryID WHERE j.CompanyID='${co.id}'`);
       await exec(`DELETE FROM ${SCHEMA}.JournalEntry WHERE CompanyID='${co.id}'`);
       await exec(`DELETE FROM ${SCHEMA}.JournalEntryBatch WHERE CompanyID='${co.id}'`);
