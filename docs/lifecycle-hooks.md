@@ -233,7 +233,14 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   (`CancelAfterTeardown()`) needs no rejection: it is limited to a Pending batch whose teardown has run.
 - **`TasksAppApprovalGate.recordDecision`** — now requires `contextUser` to BE the batch company's
   `AccountingCompanyProfile.ApprovalCFOUserID` (no CFO configured ⇒ hard-fail). Previously any
-  authenticated user could approve any batch, including their own.
+  authenticated user could approve any batch, including their own. The decision is recorded on the
+  batch's stamped `ApprovalTaskID`, as `assertApproved`, `isRejected` and the cancel paths read it, never
+  the newest Task Link, which is writable through the tasks app; a batch with no stamp is refused (#313).
+- **`JournalEntryBatchEntityServer.Validate` — the approval Task is set once (#313).** A saved batch whose
+  loaded `ApprovalTaskID` is set refuses any other value, so a Pending batch cannot be pointed at another
+  batch's approved Task. Setting it on a batch with none (the build's stamp) passes. The database enforces
+  the same rule for `ApprovalTaskID` and `ApprovalTaskRaisedAt` on raw SQL
+  (`trg_JournalEntryBatch_ApprovalTaskSetOnce`, 50035), and a filtered unique index keeps one batch per Task.
 - **SQL-predicate id validation (`SqlGuards.ts`)** — `isSqlGuid`/`requireSqlGuid`/`sqlGuidLiteral`
   (extracted from the engine's private `sqlGuid`) now guard every client-supplied id that is
   interpolated into an `ExtraFilter`: the batch remote ops, the gate's Task-Link lookups, W9's

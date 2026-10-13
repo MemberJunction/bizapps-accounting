@@ -13,8 +13,8 @@
  *     approval-flow review with Robert.)
  *   assertApproved(batchId): find the Task linked to the batch; require a terminal Approved /
  *     ApprovedWithConditions Task Decision; otherwise THROW (blocks the send).
- *   recordDecision(batchId, outcome, decidedByPersonId, notes): resolve the batch's Task and record
- *     the decision via TaskOrchestrationService. The shared entry point for BOTH the in-app approve
+ *   recordDecision(batchId, outcome, decidedByPersonId, notes): record the decision on the batch's
+ *     stamped approval Task via TaskOrchestrationService (#313). The shared entry point for BOTH the in-app approve
  *     control and the Tasks inbox.
  *   isRejected(batchId) (#233): whether the batch's Task carries a terminal rejection, which
  *     recordDecision writes before a rejected Pending batch is cancelled.
@@ -167,7 +167,15 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
   private async resolveStampedApprovalTask(batchId: string, contextUser: UserInfo): Promise<mjBizAppsTasksTaskEntity | null> {
     requireSqlGuid(batchId, 'TasksAppApprovalGate.resolveStampedApprovalTask');
     const batch = await this.provider.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
-    if (!(await batch.Load(batchId)) || !batch.ApprovalTaskID) return null;
+    if (!(await batch.Load(batchId))) return null;
+    return this.loadStampedApprovalTask(batch, contextUser);
+  }
+
+  /** Load the Task an already-loaded batch's ApprovalTaskID names; null when it has none or it does not load. */
+  private async loadStampedApprovalTask(
+    batch: mjBizAppsAccountingJournalEntryBatchEntity, contextUser: UserInfo,
+  ): Promise<mjBizAppsTasksTaskEntity | null> {
+    if (!batch.ApprovalTaskID) return null;
     const task = await this.provider.GetEntityObject<mjBizAppsTasksTaskEntity>('MJ_BizApps_Tasks: Tasks', contextUser);
     return (await task.Load(batch.ApprovalTaskID)) ? task : null;
   }
@@ -216,8 +224,11 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
         `separation of duties requires an approver other than JournalEntryBatch.BatchedByUserID.`,
       );
     }
-    const task = await this.resolveBatchTask(batchId, contextUser);
-    if (!task) throw new Error(`Batch ${batchId} has no approval Task to record a decision against.`);
+    // SECURITY (#313): the decision lands on the batch's stamped ApprovalTaskID, as assertApproved reads
+    // it — never the newest Task Link, which a forged newer link could point at another Task. A batch
+    // with no stamp is refused: assertApproved could never send it, whatever was decided.
+    const task = await this.loadStampedApprovalTask(batch, contextUser);
+    if (!task) throw new Error(`Batch ${batch.JournalEntryBatchNumber ?? batchId} has no stamped approval Task to record a decision against — it was not raised through TasksAppApprovalGate.onBatchBuilt.`);
     await this.orchestration.RecordDecision({ TaskID: task.ID, OutcomeCode: outcome, DecidedByPersonID: decidedByPersonId, Notes: notes }, contextUser);
   }
 
@@ -383,7 +394,12 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     return entity.ID;
   }
 
-  /** The (single) approval Task linked to this batch via a polymorphic Task Link. */
+  /**
+   * The approval Task linked to this batch via a polymorphic Task Link. Used only by onBatchBuilt, to
+   * confirm the link the build just created; every later read goes through the stamped
+   * ApprovalTaskID instead (resolveStampedApprovalTask), because Task Links are writable through the
+   * tasks app.
+   */
   private async resolveBatchTask(batchId: string, contextUser: UserInfo): Promise<mjBizAppsTasksTaskEntity | null> {
     // batchId can arrive raw from a remote caller and is interpolated into the filter below —
     // validate, don't escape (a batch id is always a UUID; anything else is refused).

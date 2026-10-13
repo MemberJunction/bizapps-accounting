@@ -838,8 +838,8 @@ erDiagram
         int TotalEntries "control totals"
         decimal TotalDebits
         decimal TotalCredits
-        uuid ApprovalTaskID "FK to __mj_BizAppsTasks.Task (#22) - both-or-neither with RaisedAt (CHECK)"
-        datetimeoffset ApprovalTaskRaisedAt "nullable"
+        uuid ApprovalTaskID "FK to __mj_BizAppsTasks.Task (#22) - both-or-neither with RaisedAt (CHECK); unique when set, set once (50035, #313)"
+        datetimeoffset ApprovalTaskRaisedAt "nullable - set with ApprovalTaskID, then frozen (50035)"
         string ExternalJournalEntryBatchRef "nullable"
         datetimeoffset SentAt "nullable - latest send; a retry overwrites it"
         uuid SentByUserID FK "nullable - whose dispatch last entered Sent (#184)"
@@ -866,7 +866,10 @@ and advance the count by one (50030). A locked entry's lines and their dimension
 (50006, 50033, #216); a `Failed` retry that finds the batch already in the ERP is recorded `Posted`
 even over a broken seal, and `SealMismatchDetectedAt` flags it. That flag is written only by the
 `Sent` → `Posted` update of a retry (`SendAttemptCount` above 1) and is never changed or cleared
-after; no insert carries it (50034). `Archived` keeps the members
+after; no insert carries it (50034). The approval Task pointer is set once, by the build: once
+`ApprovalTaskID` is set, neither it nor `ApprovalTaskRaisedAt` changes or clears, in any status
+(`trg_JournalEntryBatch_ApprovalTaskSetOnce`, 50035), and `UQ_JournalEntryBatch_ApprovalTaskID` keeps two
+batches from naming the same Task (#313). `Archived` keeps the members
 locked for good. Summary is excluded from netting/count/sweep via its type's `IsJournalEntryBatchSummary` flag (the
 discriminator). Footing is checked in code, by `JournalEntryBatchEntityServer` at approval and again
 at dispatch; whether a database trigger should also assert it is still open

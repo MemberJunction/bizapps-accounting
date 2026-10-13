@@ -50,7 +50,7 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
       'ApprovedAt', 'ApprovedByUserID', 'ArchiveReason', 'ArchivedAt', 'ArchivedByUserID',
       'CancelReason', 'CancelledAt', 'CancelledByUserID', 'ApprovedContentHash',
       'ERPNotPostedConfirmedAt', 'ERPNotPostedConfirmedByUserID', 'ERPNotPostedBasis',
-      'SentAt', 'SentByUserID', 'SendAttemptCount', 'ErrorMessage',
+      'SentAt', 'SentByUserID', 'SendAttemptCount', 'ErrorMessage', 'ApprovalTaskID', 'ApprovalTaskRaisedAt',
     ]);
     Metadata.Provider = {
       Entities: [batchInfo],
@@ -169,6 +169,57 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
     const result = batch.Validate();
     expect(result.Success).toBe(false);
     expect(result.Errors.some(e => getErrorText(e).includes('cancelled only through Cancel'))).toBe(true);
+  });
+
+  // ─── the approval Task pointer is set once (#313) ─────────────────────────
+
+  describe('ApprovalTaskID is set once, by the build', () => {
+    const STAMPED_TASK = '7a5c0d1e-0000-4000-8000-0000000074a5';
+    const OTHER_TASK = '0badf00d-0000-4000-8000-00000000f0f0';
+    const setOnceErrors = (r: { Errors: unknown[] }) => r.Errors.filter(e => getErrorText(e).includes('approval Task is set once'));
+
+    it('refuses re-pointing a Pending batch at another Task', () => {
+      asSaved('Pending', { ApprovalTaskID: STAMPED_TASK });
+      batch.ApprovalTaskID = OTHER_TASK;
+      const result = batch.Validate();
+      expect(result.Success).toBe(false);
+      expect(setOnceErrors(result).length).toBe(1);
+    });
+
+    it('refuses clearing the stamp', () => {
+      asSaved('Pending', { ApprovalTaskID: STAMPED_TASK });
+      batch.ApprovalTaskID = null;
+      expect(setOnceErrors(batch.Validate()).length).toBe(1);
+    });
+
+    it('refuses a re-point carried by the same save that approves the batch', () => {
+      asSaved('Pending', { ApprovalTaskID: STAMPED_TASK });
+      batch.SetMany({ ApprovedAt: new Date(), ApprovedByUserID: 'U1' }, true);
+      batch.Status = 'Approved';
+      batch.ApprovalTaskID = OTHER_TASK;
+      const result = batch.Validate();
+      expect(result.Success).toBe(false);
+      expect(setOnceErrors(result).length).toBe(1);
+    });
+
+    it('lets an approval that leaves the stamp alone through', () => {
+      asSaved('Pending', { ApprovalTaskID: STAMPED_TASK });
+      batch.SetMany({ ApprovedAt: new Date(), ApprovedByUserID: 'U1' }, true);
+      batch.Status = 'Approved';
+      expect(setOnceErrors(batch.Validate())).toEqual([]);
+    });
+
+    it('lets the build stamp a batch that has none', () => {
+      asSaved('Pending', { ApprovalTaskID: null });
+      batch.ApprovalTaskID = STAMPED_TASK;
+      expect(setOnceErrors(batch.Validate())).toEqual([]);
+    });
+
+    it('treats the same Task in different letter case as unchanged', () => {
+      asSaved('Pending', { ApprovalTaskID: STAMPED_TASK });
+      batch.ApprovalTaskID = STAMPED_TASK.toUpperCase();
+      expect(setOnceErrors(batch.Validate())).toEqual([]);
+    });
   });
 
   it('a batch cancelled after it was sent, without the ERP-check attestation, fails validation', () => {
