@@ -139,5 +139,18 @@
     "primaryKey": {
       "ID": "155F86C0-CF1F-4832-8E30-903B7C22B31C"
     }
+  },
+  {
+    "fields": {
+      "Code": "PROVIDER_PAYMENT_ORDER_DUPLICATE",
+      "Name": "Possible Duplicate of a Payment Order",
+      "Description": "An order that may duplicate one created from a card payment that matched no order: same buyer, a shared product and the same total within 30 days. Raised by orders when the keyed order is confirmed, against that order, naming the order created from the payment. Nothing is cancelled automatically; finance cancels or credits one of the two.",
+      "OwningApp": "orders",
+      "IsActive": true,
+      "Configuration": "{}"
+    },
+    "primaryKey": {
+      "ID": "A578E7B7-1790-4978-8772-79582CDB45C5"
+    }
   }
 ]
