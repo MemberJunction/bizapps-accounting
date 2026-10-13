@@ -22,6 +22,8 @@ const COMPANY_ID = '00000000-0000-0000-0000-0000000000c1';
 const BUILDER_USER_ID = '00000000-0000-0000-0000-0000000000b1';
 const APPROVER_USER_ID = '00000000-0000-0000-0000-0000000000a1';
 const OTHER_USER_ID = '00000000-0000-0000-0000-0000000000f1';
+/** The user recorded as having approved a batch, who may cancel it past approval. */
+const APPROVED_BY_USER_ID = '00000000-0000-0000-0000-0000000000d1';
 /** The MJ system user, which the nightly job builds as. */
 const SYSTEM_USER_ID = '00000000-0000-0000-0000-0000000000e1';
 
@@ -47,6 +49,7 @@ function batchRow(status: BatchStatus): Record<string, unknown> {
     ArchiveReason: null,
     CompanyID: COMPANY_ID,
     BatchedByUserID: BUILDER_USER_ID,
+    ApprovedByUserID: null,
   };
 }
 
@@ -133,7 +136,7 @@ describe('JournalEntryBatchDispatchDashboardComponent — cancelling a Failed ba
 
   beforeEach(async () => {
     vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) =>
-      p.EntityName === BATCH_ENTITY ? viewResult([batchRow('Failed')]) : viewResult([], 0),
+      p.EntityName === BATCH_ENTITY ? viewResult([{ ...batchRow('Failed'), ApprovedByUserID: APPROVED_BY_USER_ID }]) : viewResult([], 0),
     );
     vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'GetApprovalState').mockResolvedValue({ Success: true, Approved: true });
     cancelCalls = [];
@@ -152,7 +155,7 @@ describe('JournalEntryBatchDispatchDashboardComponent — cancelling a Failed ba
     const answers = [...promptAnswers];
     vi.spyOn(window, 'prompt').mockImplementation(() => answers.shift() ?? null);
     const fixture = TestBed.createComponent(JournalEntryBatchDispatchDashboardComponent);
-    fixture.componentRef.setInput('Provider', stubbedReadsProvider());
+    fixture.componentRef.setInput('Provider', providerSignedInAs(APPROVED_BY_USER_ID));
     fixture.detectChanges();
     await fixture.whenStable();
     await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
@@ -165,7 +168,7 @@ describe('JournalEntryBatchDispatchDashboardComponent — cancelling a Failed ba
 
   it('does not offer Cancel on a Failed batch carrying the ERP reference: the ERP accepted it', async () => {
     const fixture = TestBed.createComponent(JournalEntryBatchDispatchDashboardComponent);
-    fixture.componentRef.setInput('Provider', stubbedReadsProvider());
+    fixture.componentRef.setInput('Provider', providerSignedInAs(APPROVED_BY_USER_ID));
     fixture.detectChanges();
     await fixture.whenStable();
     await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
@@ -219,15 +222,18 @@ describe('JournalEntryBatchDispatchDashboardComponent — cancelling a Failed ba
 /**
  * golive #302: a Pending batch can be cancelled, not only rejected. Cancel is the builder's way to
  * withdraw it (the server decides who may); Reject is the CFO's decision, and now asks for a reason.
+ * Signed in as the company's approver, who may do both.
  */
 describe('JournalEntryBatchDispatchDashboardComponent — a Pending batch (golive #302)', () => {
   let cancelCalls: Array<{ Reason: string; Confirm: boolean }>;
   let decisionCalls: Array<{ Decision: string; Notes: string | undefined }>;
 
   beforeEach(async () => {
-    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) =>
-      p.EntityName === BATCH_ENTITY ? viewResult([batchRow('Pending')]) : viewResult([], 0),
-    );
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+      if (p.EntityName === BATCH_ENTITY) return viewResult([batchRow('Pending')]);
+      if (p.EntityName === COMPANY_PROFILE_ENTITY) return viewResult([{ ID: COMPANY_ID, ApprovalCFOUserID: APPROVER_USER_ID }]);
+      return viewResult([], 0);
+    });
     vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'GetApprovalState').mockResolvedValue({ Success: true, Approved: false });
     cancelCalls = [];
     decisionCalls = [];
@@ -246,7 +252,7 @@ describe('JournalEntryBatchDispatchDashboardComponent — a Pending batch (goliv
     const answers = [...promptAnswers];
     vi.spyOn(window, 'prompt').mockImplementation(() => answers.shift() ?? null);
     const fixture = TestBed.createComponent(JournalEntryBatchDispatchDashboardComponent);
-    fixture.componentRef.setInput('Provider', providerSignedInAs(BUILDER_USER_ID));
+    fixture.componentRef.setInput('Provider', providerSignedInAs(APPROVER_USER_ID));
     fixture.detectChanges();
     await fixture.whenStable();
     await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
@@ -336,5 +342,89 @@ describe('JournalEntryBatchDispatchDashboardComponent — who sees Cancel on a P
     builtBy = SYSTEM_USER_ID;
     expect(await actionsFor(BUILDER_USER_ID)).not.toContain('Cancel');
     expect(await actionsFor(APPROVER_USER_ID)).toContain('Cancel');
+  });
+});
+
+/**
+ * #339: Approve and Reject show only to the users the server records a decision from, the company's
+ * approver when they did not build the batch. Cancel past approval shows only to the company's approver
+ * or the user who approved the batch.
+ */
+describe('JournalEntryBatchDispatchDashboardComponent — who sees Approve, Reject and Cancel past approval (#339, DOM)', () => {
+  let listed: Record<string, unknown>;
+  /** Whether the approver read succeeds; a case can make it fail. */
+  let profilesRead: boolean;
+
+  beforeEach(async () => {
+    listed = batchRow('Pending');
+    profilesRead = true;
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+      if (p.EntityName === BATCH_ENTITY) return viewResult([listed]);
+      if (p.EntityName === COMPANY_PROFILE_ENTITY) {
+        return profilesRead
+          ? viewResult([{ ID: COMPANY_ID, ApprovalCFOUserID: APPROVER_USER_ID }])
+          : { ...viewResult([]), Success: false, ErrorMessage: 'read refused' };
+      }
+      return viewResult([], 0);
+    });
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'GetApprovalState').mockResolvedValue({ Success: true, Approved: false });
+    await TestBed.configureTestingModule({ imports: [JournalEntryBatchDispatchModule] }).compileComponents();
+  });
+
+  /** The labels of the batch card's action buttons, as `userId` sees them. */
+  async function actionsFor(userId: string): Promise<string[]> {
+    const fixture = TestBed.createComponent(JournalEntryBatchDispatchDashboardComponent);
+    fixture.componentRef.setInput('Provider', providerSignedInAs(userId));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
+    fixture.detectChanges();
+    const buttons: HTMLButtonElement[] = Array.from(fixture.nativeElement.querySelectorAll('.bd-card__actions button'));
+    return buttons.map(b => b.textContent?.trim() ?? '');
+  }
+
+  it("shows the company's approver Approve and Reject on a Pending batch", async () => {
+    const actions = await actionsFor(APPROVER_USER_ID);
+    expect(actions).toContain('Approve');
+    expect(actions).toContain('Reject');
+  });
+
+  it('shows the approver no Approve or Reject on a batch they built', async () => {
+    listed = { ...batchRow('Pending'), BatchedByUserID: APPROVER_USER_ID };
+    const actions = await actionsFor(APPROVER_USER_ID);
+    expect(actions).not.toContain('Approve');
+    expect(actions).not.toContain('Reject');
+    expect(actions, 'the builder may still cancel it').toContain('Cancel');
+  });
+
+  it.each([['the builder', BUILDER_USER_ID], ['anyone else', OTHER_USER_ID]])('shows %s no Approve or Reject', async (_who, userId) => {
+    const actions = await actionsFor(userId);
+    expect(actions).not.toContain('Approve');
+    expect(actions).not.toContain('Reject');
+  });
+
+  it('shows no one Approve or Reject when the approvers cannot be read', async () => {
+    profilesRead = false;
+    expect(await actionsFor(APPROVER_USER_ID)).not.toContain('Approve');
+  });
+
+  it.each(['Approved', 'Failed'] as const)(
+    "shows Cancel on a batch in %s to the company's approver and the user who approved it, and no one else",
+    async (status) => {
+      listed = { ...batchRow(status), ApprovedByUserID: APPROVED_BY_USER_ID };
+      expect(await actionsFor(APPROVER_USER_ID)).toContain('Cancel');
+      expect(await actionsFor(APPROVED_BY_USER_ID)).toContain('Cancel');
+      expect(await actionsFor(BUILDER_USER_ID)).not.toContain('Cancel');
+      const other = await actionsFor(OTHER_USER_ID);
+      expect(other).not.toContain('Cancel');
+      expect(other, 'the other actions still show').toContain('Archive');
+    },
+  );
+
+  it('shows Cancel past approval only to the user who approved the batch when the approvers cannot be read', async () => {
+    profilesRead = false;
+    listed = { ...batchRow('Approved'), ApprovedByUserID: APPROVED_BY_USER_ID };
+    expect(await actionsFor(APPROVER_USER_ID)).not.toContain('Cancel');
+    expect(await actionsFor(APPROVED_BY_USER_ID)).toContain('Cancel');
   });
 });

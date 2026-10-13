@@ -8,6 +8,7 @@ import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/account
 import { AddDays, BusinessTimeZoneEngine, DayStartUtc, IsCalendarDay } from '@mj-biz-apps/common-entities';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
 import { CancelJournalEntryBatchResult, DispatchConfirmationKind, JournalEntryBatchDispatchClient, StrandedJournalEntryBatchWire } from '../../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
+import { CompanyApprovers, LoadCompanyApprovers, MayCancelApprovedBatch } from '../../JournalEntryBatchDispatch/batch-action-permission';
 import { TIME_WINDOWS, TimeWindowId, timeWindowRange, toSqlDate, andFilters } from '../../../transfer-pending/list-scaffold/time-window';
 import { sqlLiteral, likeContains } from '../../../transfer-pending/list-scaffold/sql-filter';
 import { rowKeyToId } from '../../../transfer-pending/list-scaffold/grid-row-key';
@@ -105,6 +106,8 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
   public TotalCount: number | null = null;
   /** Failed batches in the current NON-status filter — the attention strip's rows. */
   public FailedBatches: mjBizAppsAccountingJournalEntryBatchEntity[] = [];
+  /** Each company's configured approver, read with the failed batches; decides who sees Cancel (#339). */
+  private companyApprovers: CompanyApprovers = new Map();
   /** The row whose full dispatch facts are pinned above the grid (grid Error column truncates). */
   public SelectedBatch: mjBizAppsAccountingJournalEntryBatchEntity | null = null;
 
@@ -301,11 +304,14 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
     this.cdr.markForCheck();
     try {
       const rv = new RunView();
-      const [[count, failed], stranded] = await Promise.all([
+      const [[count, failed], stranded, approvers] = await Promise.all([
         rv.RunViews([this.countParams(), this.failedParams()]),
         this.client().GetStrandedJournalEntries(),
+        LoadCompanyApprovers(rv),
       ]);
       if (token !== this.loadToken) return;
+
+      this.companyApprovers = approvers;
 
       this.StrandedBatches = stranded.Batches;
       this.TotalCount = count?.Success ? (count.TotalRowCount ?? 0) : null;
@@ -579,9 +585,18 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
     }
   }
 
-  /** A Failed batch can be cancelled instead of retried, when no retry or cancel is already running. */
+  /**
+   * Whether the Cancel button shows on a Failed batch: only to the users the server would let cancel
+   * it, the company's approver or the user who approved the batch (#339). The server check stays the
+   * authority.
+   */
+  public MayCancelBatch(batch: mjBizAppsAccountingJournalEntryBatchEntity): boolean {
+    return batch.Status === 'Failed' && MayCancelApprovedBatch(batch, Metadata.Provider?.CurrentUser?.ID, this.companyApprovers);
+  }
+
+  /** A Failed batch can be cancelled instead of retried, by those users, when no retry or cancel is already running. */
   public CanCancelBatch(batch: mjBizAppsAccountingJournalEntryBatchEntity): boolean {
-    return batch.Status === 'Failed' && this.RetryingJournalEntryBatchID === null && this.CancellingJournalEntryBatchID === null;
+    return this.MayCancelBatch(batch) && this.RetryingJournalEntryBatchID === null && this.CancellingJournalEntryBatchID === null;
   }
 
   /**

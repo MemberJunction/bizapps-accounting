@@ -23,7 +23,7 @@ import {
     PreviewEntryWire,
     BuildJournalEntryBatchOptionsInput,
 } from '../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
-import { CompanyApprovers, LoadCompanyApprovers, MayCancelPendingBatch } from '../JournalEntryBatchDispatch/pending-cancel-permission';
+import { CompanyApprovers, LoadCompanyApprovers, MayCancelApprovedBatch, MayCancelPendingBatch } from '../JournalEntryBatchDispatch/batch-action-permission';
 
 /**
  * The batch fields this page reads, PICKED from the generated entity class rather than
@@ -54,6 +54,7 @@ export type BatchItem = Pick<
     | 'CancelReason'
     | 'CompanyID'
     | 'BatchedByUserID'
+    | 'ApprovedByUserID'
 >;
 
 interface StageCount {
@@ -1275,16 +1276,19 @@ export class AccountingBatchesPageComponent implements OnInit {
 
     /**
      * Cancel is offered on a Pending (golive #302), Approved or Failed (#183) batch. The server decides
-     * who may cancel: the company's CFO or the batch's builder before approval, the CFO or the approver
-     * after it. On a Pending batch the button shows only to those two (#308); the server check stays
-     * the authority.
+     * who may cancel: the company's CFO or the batch's builder before approval (#308), the CFO or the
+     * approver after it (#339). The button shows only to those users; the server check stays the
+     * authority.
      */
     public CanCancel(batch: BatchItem): boolean {
-        if (batch.Status === 'Pending' && !MayCancelPendingBatch(batch, Metadata.Provider?.CurrentUser?.ID, this.companyApprovers)) return false;
-        return ['Pending', 'Approved', 'Failed'].includes(batch.Status) && this.CancellingBatchID !== batch.ID;
+        if (!['Pending', 'Approved', 'Failed'].includes(batch.Status) || this.CancellingBatchID === batch.ID) return false;
+        const userId = Metadata.Provider?.CurrentUser?.ID;
+        return batch.Status === 'Pending'
+            ? MayCancelPendingBatch(batch, userId, this.companyApprovers)
+            : MayCancelApprovedBatch(batch, userId, this.companyApprovers);
     }
 
-    /** Each company's configured approver, read with the batches; decides who sees Cancel on a Pending batch (#308). */
+    /** Each company's configured approver, read with the batches; decides who sees Cancel (#308, #339). */
     private companyApprovers: CompanyApprovers = new Map();
 
     /**

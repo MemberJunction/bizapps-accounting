@@ -25,6 +25,8 @@ const COMPANY_ID = '00000000-0000-0000-0000-0000000000c1';
 const BUILDER_USER_ID = '00000000-0000-0000-0000-0000000000b1';
 const APPROVER_USER_ID = '00000000-0000-0000-0000-0000000000a1';
 const OTHER_USER_ID = '00000000-0000-0000-0000-0000000000f1';
+/** The user recorded as having approved a batch, who may cancel it past approval. */
+const APPROVED_BY_USER_ID = '00000000-0000-0000-0000-0000000000d1';
 /** The MJ system user, which the nightly job builds as. */
 const SYSTEM_USER_ID = '00000000-0000-0000-0000-0000000000e1';
 
@@ -52,6 +54,7 @@ const LISTED_BATCH: BatchItem = {
   CancelReason: null,
   CompanyID: COMPANY_ID,
   BatchedByUserID: BUILDER_USER_ID,
+  ApprovedByUserID: null,
 };
 
 describe('AccountingBatchesPageComponent — Build Batch modal cutoff (DOM)', () => {
@@ -537,8 +540,12 @@ describe('AccountingBatchesPageComponent — Build Batch selection after Clear A
 });
 
 describe('AccountingBatchesPageComponent — Cancel a batch (#183, golive #302)', () => {
-  const APPROVED: BatchItem = { ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000002', JournalEntryBatchNumber: 'JEB-TEST-0002', Status: 'Approved' };
-  const FAILED: BatchItem = { ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000003', JournalEntryBatchNumber: 'JEB-TEST-0003', Status: 'Failed' };
+  const APPROVED: BatchItem = {
+    ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000002', JournalEntryBatchNumber: 'JEB-TEST-0002', Status: 'Approved', ApprovedByUserID: APPROVED_BY_USER_ID,
+  };
+  const FAILED: BatchItem = {
+    ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000003', JournalEntryBatchNumber: 'JEB-TEST-0003', Status: 'Failed', ApprovedByUserID: APPROVED_BY_USER_ID,
+  };
   let cancelCalls: { ID: string; Reason: string; Confirm: boolean }[];
   /**
    * What the server answers an unconfirmed Failed cancel, standing in for its ERP lookup (#207):
@@ -547,10 +554,13 @@ describe('AccountingBatchesPageComponent — Cancel a batch (#183, golive #302)'
   let unconfirmedFailedAnswer: CancelJournalEntryBatchResult | null;
 
   beforeEach(() => {
-    signInAs(BUILDER_USER_ID);
-    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) =>
-      p.EntityName === BATCH_ENTITY ? viewResult([LISTED_BATCH, APPROVED, FAILED]) : viewResult([], 0),
-    );
+    // The company's approver may cancel at every status these cases cover.
+    signInAs(APPROVER_USER_ID);
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+      if (p.EntityName === BATCH_ENTITY) return viewResult([LISTED_BATCH, APPROVED, FAILED]);
+      if (p.EntityName === COMPANY_PROFILE_ENTITY) return viewResult([{ ID: COMPANY_ID, ApprovalCFOUserID: APPROVER_USER_ID }]);
+      return viewResult([], 0);
+    });
     cancelCalls = [];
     unconfirmedFailedAnswer = null;
     vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'CancelBatch').mockImplementation(async (id, reason, confirm = false) => {
@@ -664,18 +674,21 @@ describe('AccountingBatchesPageComponent — Cancel a batch (#183, golive #302)'
 });
 
 /**
- * #308: on a Pending batch the Cancel button shows only to the users the server lets cancel it, the
- * company's approver or the batch's builder. A batch the nightly job built has the system user as its
- * builder, so only the approver sees it.
+ * The Cancel button shows only to the users the server lets cancel the batch. On a Pending batch
+ * (#308): the company's approver or the batch's builder; a batch the nightly job built has the system
+ * user as its builder, so only the approver sees it. Past approval (#339): the company's approver or
+ * the user who approved the batch.
  */
-describe('AccountingBatchesPageComponent — who sees Cancel on a Pending batch (#308, DOM)', () => {
+describe('AccountingBatchesPageComponent — who sees Cancel (#308, #339, DOM)', () => {
   const NIGHTLY: BatchItem = {
     ...LISTED_BATCH,
     ID: '00000000-0000-0000-0000-000000000004',
     JournalEntryBatchNumber: 'JEB-TEST-0004',
     BatchedByUserID: SYSTEM_USER_ID,
   };
-  const APPROVED: BatchItem = { ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000002', JournalEntryBatchNumber: 'JEB-TEST-0002', Status: 'Approved' };
+  const APPROVED: BatchItem = {
+    ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000002', JournalEntryBatchNumber: 'JEB-TEST-0002', Status: 'Approved', ApprovedByUserID: APPROVED_BY_USER_ID,
+  };
   /** The profile read the page answers with; a case can make it fail. */
   let profilesRead: boolean;
 
@@ -705,9 +718,9 @@ describe('AccountingBatchesPageComponent — who sees Cancel on a Pending batch 
       .map(row => row.querySelector('.mja-batch-num')?.textContent?.trim() ?? '');
   }
 
-  it("shows the builder Cancel on their own Pending batch, not on the nightly job's", async () => {
+  it("shows the builder Cancel on their own Pending batch, not on the nightly job's, and not past approval", async () => {
     signInAs(BUILDER_USER_ID);
-    expect(await rowsOfferingCancel()).toEqual(['JEB-TEST-0001', 'JEB-TEST-0002']);
+    expect(await rowsOfferingCancel()).toEqual(['JEB-TEST-0001']);
   });
 
   it("shows the company's approver Cancel on every Pending batch, the nightly job's included", async () => {
@@ -715,14 +728,23 @@ describe('AccountingBatchesPageComponent — who sees Cancel on a Pending batch 
     expect(await rowsOfferingCancel()).toEqual(['JEB-TEST-0001', 'JEB-TEST-0004', 'JEB-TEST-0002']);
   });
 
-  it('shows anyone else no Cancel on a Pending batch; past approval the server still decides', async () => {
-    signInAs(OTHER_USER_ID);
+  it('shows the user who approved a batch Cancel on it, and not on the Pending batches', async () => {
+    signInAs(APPROVED_BY_USER_ID);
     expect(await rowsOfferingCancel()).toEqual(['JEB-TEST-0002']);
   });
 
-  it('shows only the builder Cancel when the approvers cannot be read', async () => {
+  it('shows anyone else no Cancel', async () => {
+    signInAs(OTHER_USER_ID);
+    expect(await rowsOfferingCancel()).toEqual([]);
+  });
+
+  it('shows Cancel only to the builder and the user who approved the batch when the approvers cannot be read', async () => {
     profilesRead = false;
     signInAs(APPROVER_USER_ID);
+    expect(await rowsOfferingCancel()).toEqual([]);
+    signInAs(BUILDER_USER_ID);
+    expect(await rowsOfferingCancel()).toEqual(['JEB-TEST-0001']);
+    signInAs(APPROVED_BY_USER_ID);
     expect(await rowsOfferingCancel()).toEqual(['JEB-TEST-0002']);
   });
 });
