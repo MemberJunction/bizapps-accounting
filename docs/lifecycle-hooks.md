@@ -258,10 +258,12 @@ Save-path validation added in `packages/CoreEntitiesServer/` (these fire on EVER
   ordinary save: they are not guarded), so a creator identified later unlocks a row raised as
   unresolved; a terminal row is never touched. It is marked `RequiresSystemUser`, so through the API
   only the system user may raise; the consuming apps' detectors call it in-process, where that gate
-  does not apply. It reads existing rows with `UPDLOCK, HOLDLOCK`, so a concurrent raise of the same
-  item waits and returns the first one's row.
-- **`Accounting.ClearFinanceException`** locks the row (`UPDLOCK`) in its transaction before reading
-  it, so of two concurrent clears the second finds the row no longer Open (`NOT_OPEN`).
+  does not apply. It reads existing rows with `UPDLOCK, HOLDLOCK` on SQL Server; on PostgreSQL it
+  first takes a transaction-scoped advisory lock per (type, DedupeKey), then reads with `FOR UPDATE`.
+  Either way a concurrent raise of the same item waits and returns the first one's row.
+- **`Accounting.ClearFinanceException`** locks the row (`UPDLOCK` on SQL Server, `FOR UPDATE` on
+  PostgreSQL) in its transaction before reading it, so of two concurrent clears the second finds the
+  row no longer Open (`NOT_OPEN`).
 
 ## 3. Related (not `Save()` hooks)
 

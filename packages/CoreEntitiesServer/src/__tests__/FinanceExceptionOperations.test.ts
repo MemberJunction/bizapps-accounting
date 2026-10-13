@@ -62,6 +62,7 @@ interface StubOptions {
   saveSucceeds?: boolean;
   stored?: Partial<WrittenRow> | null;
   authHolders?: string[];
+  platform?: string;
 }
 
 function stubProvider(options: StubOptions = {}) {
@@ -102,6 +103,7 @@ function stubProvider(options: StubOptions = {}) {
   const provider = {
     Entities: [ORDER_LINES] as unknown as EntityInfo[],
     Authorizations: [auth] as unknown as AuthorizationInfo[],
+    PlatformKey: options.platform ?? 'sqlserver',
     TransactionDepth: options.transactionDepth ?? 0,
     BeginTransaction: tx.begin,
     CommitTransaction: tx.commit,
@@ -189,9 +191,47 @@ describe('Accounting.RaiseFinanceExceptions', () => {
     const s = stubProvider();
     await new RaiseFinanceExceptionsOperation().ExecuteServer({ Exceptions: [raise()] }, context(s.provider));
     expect(s.calls).toEqual(['begin', 'sql', 'commit']);
-    const [sql] = s.executeSQL.mock.calls[0];
+    const [sql, params] = s.executeSQL.mock.calls[0] as unknown as [string, string[]];
     expect(sql).toMatch(/FROM __mj_BizAppsAccounting\.FinanceException WITH \(UPDLOCK, HOLDLOCK\)/);
-    expect(sql).toContain(`FinanceExceptionTypeID = '${TYPES[0].ID}' AND DedupeKey IN (N'77777777-7777-4777-8777-777777777777')`);
+    expect(sql).toContain('(FinanceExceptionTypeID = ? AND DedupeKey IN (?))');
+    expect(params).toEqual([TYPES[0].ID, '77777777-7777-4777-8777-777777777777']);
+  });
+
+  it('binds every type and key positionally, so a quote in a DedupeKey stays a value', async () => {
+    const s = stubProvider();
+    await new RaiseFinanceExceptionsOperation().ExecuteServer(
+      { Exceptions: [raise({ DedupeKey: "O'Brien-1" }), raise({ DedupeKey: 'KEY-2' })] },
+      context(s.provider),
+    );
+    const [sql, params] = s.executeSQL.mock.calls[0] as unknown as [string, string[]];
+    expect(sql).toContain('(FinanceExceptionTypeID = ? AND DedupeKey IN (?, ?))');
+    expect(sql).not.toContain("O'Brien");
+    expect(params).toEqual([TYPES[0].ID, "O'Brien-1", 'KEY-2']);
+  });
+
+  it('on PostgreSQL, takes an advisory lock per key in order, then reads with FOR UPDATE', async () => {
+    const s = stubProvider({ platform: 'postgresql' });
+    await new RaiseFinanceExceptionsOperation().ExecuteServer(
+      { Exceptions: [raise({ DedupeKey: 'Key-A' }), raise({ DedupeKey: 'KEY-A' }), raise({ DedupeKey: 'KEY-B' })] },
+      context(s.provider),
+    );
+    expect(s.calls).toEqual(['begin', 'sql', 'sql', 'commit']);
+    const [lockSql, lockParams] = s.executeSQL.mock.calls[0] as unknown as [string, string[]];
+    expect(lockSql).toMatch(/^SELECT pg_advisory_xact_lock\(k\) FROM .*hashtextextended\(v\.lock_key, 0\).*VALUES \(\$1::text\), \(\$2::text\)\).* ORDER BY k$/);
+    const typeID = TYPES[0].ID.toLowerCase();
+    expect(lockParams).toEqual([`FinanceException|${typeID}|key-a`, `FinanceException|${typeID}|key-b`]);
+    const [readSql, readParams] = s.executeSQL.mock.calls[1] as unknown as [string, string[]];
+    expect(readSql).toMatch(/FROM __mj_BizAppsAccounting\.FinanceException WHERE \(FinanceExceptionTypeID = \$1 AND DedupeKey IN \(\$2, \$3, \$4\)\) FOR UPDATE$/);
+    expect(readSql).not.toContain('WITH (');
+    expect(readParams).toEqual([TYPES[0].ID, 'Key-A', 'KEY-A', 'KEY-B']);
+  });
+
+  it('runs no SQL and reports WRITE_FAILED on a platform it has no locking SQL for', async () => {
+    const s = stubProvider({ platform: 'mysql' });
+    const result = await new RaiseFinanceExceptionsOperation().ExecuteServer({ Exceptions: [raise()] }, context(s.provider));
+    expect(result.Output).toMatchObject({ Success: false, Errors: [expect.objectContaining({ Code: 'WRITE_FAILED' })] });
+    expect(s.executeSQL).not.toHaveBeenCalled();
+    expect(s.tx.begin).not.toHaveBeenCalled();
   });
 
   it('is limited to the system user when called through the API; the other two operations are not', () => {
@@ -321,9 +361,18 @@ describe('Accounting.ClearFinanceException', () => {
     const s = stubProvider({ stored: openRow() });
     await clear(s, {});
     expect(s.calls).toEqual(['begin', 'sql', 'commit']);
-    const [sql, params] = s.executeSQL.mock.calls[0] as unknown as [string, Record<string, unknown>];
-    expect(sql).toMatch(/FROM __mj_BizAppsAccounting\.FinanceException WITH \(UPDLOCK, ROWLOCK\) WHERE ID = @ID/);
-    expect(params).toEqual({ ID: EXCEPTION_ID });
+    const [sql, params] = s.executeSQL.mock.calls[0] as unknown as [string, string[]];
+    expect(sql).toBe('SELECT ID FROM __mj_BizAppsAccounting.FinanceException WITH (UPDLOCK, ROWLOCK) WHERE ID = ?');
+    expect(params).toEqual([EXCEPTION_ID]);
+  });
+
+  it('on PostgreSQL, locks the row with FOR UPDATE and a positional parameter', async () => {
+    const s = stubProvider({ stored: openRow(), platform: 'postgresql' });
+    const result = await clear(s, {});
+    expect(result.Output).toEqual({ Success: true, Status: 'Reviewed' });
+    const [sql, params] = s.executeSQL.mock.calls[0] as unknown as [string, string[]];
+    expect(sql).toBe('SELECT ID FROM __mj_BizAppsAccounting.FinanceException WHERE ID = $1 FOR UPDATE');
+    expect(params).toEqual([EXCEPTION_ID]);
   });
 
   it('rolls back and reports SAVE_FAILED when the save fails', async () => {
