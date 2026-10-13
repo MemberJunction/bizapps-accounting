@@ -298,9 +298,8 @@ async function main(): Promise<void> {
     assert(seq > firstEntrySeq, `expected sequence > ${firstEntrySeq}, got ${seq} ('${je.EntryNumber}')`);
   });
 
-  // ─── W3 — batch numbering (still the GLOBAL singleton sequence; ⚠ DR-5: the column
-  // description promises BATCH-{CompanyCode}-{seq} but spAssignNextJournalEntryBatchNumber emits the
-  // global BATCH-{seq} — asserted here as the sproc actually behaves; see plans/donor-audit.md) ──
+  // ─── W3 — batch numbering (the GLOBAL singleton sequence: spAssignNextJournalEntryBatchNumber
+  // emits BATCH-{seq:000000} with no company segment, as the column description says since #352) ──
   const makeBatch = async (): Promise<mjBizAppsAccountingJournalEntryBatchEntity> => {
     const batch = await md.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, user);
     batch.NewRecord();
