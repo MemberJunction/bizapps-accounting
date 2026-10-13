@@ -498,8 +498,7 @@ Editing the baseline was correct while the schema changed constantly and nothing
 That phase is over: an edit to the baseline is invisible to any database that already ran it — the
 column never appears and nothing reports a problem: `mj migrate` (Skyway) records a checksum but
 never validates it, so the edited script is silently skipped. `scripts/rebuild-db.sh`
-remains only for standing up a brand-new empty database; it is not a development loop, and it still
-rewrites the baseline file in your working tree (#348), so never commit what it leaves behind.
+remains only for standing up a brand-new empty database; it is not a development loop.
 
 Write migrations **deterministically** against the state earlier migrations leave: Skyway runs each
 `V` migration once, in order, so guards against this repo's own earlier migrations are unnecessary

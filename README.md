@@ -306,7 +306,7 @@ bizapps-accounting/
 ├── plans/
 │   └── bizapps-accounting-master.md  # THE design doc & decision log
 ├── test-harnesses/                # Live test tiers (see test-harnesses/README.md)
-├── scripts/                       # rebuild-db.sh (new empty database only), append-codegen.sh
+├── scripts/                       # rebuild-db.sh (new empty database only)
 └── ci/                            # Release scripts
 ```
 
