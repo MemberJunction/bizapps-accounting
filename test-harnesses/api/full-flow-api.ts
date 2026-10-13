@@ -2,16 +2,20 @@
  * Tier-3 API harness — the FULL DEMO JOURNEY on one fresh company, entirely over the wire
  * (GraphQL + X-API-Key): the exact calls the UI buttons make, with the same parameters.
  *
- * Amith's demo flow (2026-07-30), as one continuous chain:
+ * The demo flow (2026-07-30), as one continuous chain:
  *   A. Company profile setup — the "New company" dialog's save: ONE ACP create over the
- *      generated mutation (IS-A creates the __mj.Company parent). Since 2026-07-30 (Marcelo
- *      ruling) the chart starts EMPTY — asserted — and the journey then creates its AR/Revenue
- *      accounts over the wire (the accounts-editor path), matching the demo narrative.
+ *      generated mutation (IS-A creates the __mj.Company parent). Since 2026-07-30 the chart
+ *      starts EMPTY (the W1 auto-seed was retired: it collided with the L8 identity lock) —
+ *      asserted — and the journey then creates its AR/Revenue accounts over the wire (the
+ *      accounts-editor path), matching the demo narrative.
  *   B. JE + Lines — 'Accounting.CreateJournalEntry' (the JE workspace's Create-entry op),
  *      three balanced JEs incl. the merge shape (70+30→100, LineCount 2).
  *   C. Batching — Preview → Build (netted 600/600) → approval state flip → Approve →
  *      Dispatch (mock poster → Posted) → JEs read back GLPosted through the same dynamic
  *      views the dashboards consume.
+ *   C2. Dimension-split consolidation — two JEs tag the SAME AR account with different values of
+ *      an existing dimension; the batch's persisted summary JE nets ACROSS JEs per dimension
+ *      combination (AR×SALES 140, AR×MKTG 60, Revenue 200 untagged, exactly 3 lines).
  *   D. Teardown — the shared batching-fixture teardown (FK-aware, company-rooted).
  *
  * NOTE: coverage for negatives/variations lives in engine-op-api.ts + batch-ops-api.ts;
@@ -21,7 +25,8 @@
  *
  * Run from the INSTANCE WORKTREE ROOT:
  *   npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/api/full-flow-api.ts
- * Env overrides: MJ_API_URL (default http://localhost:4180) · MJ_API_KEY · MJDEV_SLUG.
+ * Env overrides: MJ_API_URL (default http://localhost:4180) · MJ_API_KEY (default: minted with
+ * `mjdev key <slug>`) · MJDEV_SLUG (default accounting-revamp).
  * Exit codes: 0 all passed · 1 assertion failures · 2 bootstrap/connection error.
  */
 import { execFileSync, execSync } from 'node:child_process';

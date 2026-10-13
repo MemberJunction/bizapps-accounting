@@ -1,5 +1,33 @@
 # @mj-biz-apps/accounting-ng
 
+## 0.22.0
+
+### Minor Changes
+
+- 3888284: A journal entry batch's `PostingDate` — the journal date the ERP receives — can now be chosen (golive #315), and scheduled batches are dated the last day of their sweep window instead of the run date (golive #314).
+
+  - **Engine.** `BuildJournalEntryBatchOptions.postingDate` (and `PostingDate` on `Accounting.BuildJournalEntryBatch` / `Accounting.PreviewJournalEntryBatch`) sets it, read by the same shape rules as a cutoff. Omitted, it is today's business day, as before. A selection holding an entry dated after the posting date is refused (`JournalEntryBatchPostingDateError`, naming the entries). `buildJournalEntryBatchFromExplicitIds` takes it as a new trailing parameter.
+  - **The posting date bounds the candidate pool.** Candidates end at the earlier of the cutoff and the posting date, in preview and build alike. A build with no cutoff no longer sweeps forward-dated entries (e.g. future revenue recognition); they wait for a batch dated on or after them. `regenerateJournalEntryBatch` re-gathers only through the batch's own posting date.
+  - **Approval.** The approval Task's name and description carry the posting date. A posting date cannot change after approval (the batch is frozen); cancel the batch and rebuild it, which raises a new approval.
+  - **Scheduled runs.** `Accounting.BuildJournalEntryBatches` dates each batch its cutoff day, or today when the cutoff is later: the nightly run on 1 September (cutoff 31 August) posts on 31 August. New export `postingDateForCutoff`.
+  - **UI.** The batch workspace and the Batches page's build modal have a Posting date input (default today); the workspace blocks the build while the date is empty or earlier than an included entry. The no-cutoff hint now says the pool runs through the posting date.
+
+### Patch Changes
+
+- 3974848: Batch posting date: a prior or future month is confirmed, not refused (golive #315).
+
+  - **Engine.** A future `PostingDate` is no longer refused. The candidate pool still ends at the earlier of the cutoff and the posting date, and a selection holding an entry dated after the posting date is still refused.
+  - **UI.** The batch workspace and the Batches page's build modal offer any date. When the posting date is outside the current month, they show an "are you sure?" warning naming the month the ERP books the batch in, and Build stays disabled until the user ticks the confirmation. Changing the date asks again.
+
+- 746b731: Batch preview selection (the Build Batch dialog and the batch workspace) is now either every candidate or an explicit set of ticked entries, sent to the preview and the build as it is. A filter change no longer sends a selection derived from the previous preview's entries, so Entry Totals, Net to Post, the out-of-order warning and the Build count describe the entries ticked on screen. After Clear All, or any untick, entries that a later filter change brings in start unticked (bc-aidp-next-golive#284).
+- 37536eb: MemberJunction and other BizApps packages are peer dependencies with caret ranges (`^6.1.5`,
+  `^5.50.2` for common, `^1.4.1` for tasks; no `~`, nothing in `dependencies`), so a 6.2 host keeps
+  one copy of each instead of installing a second 6.1 tree. MemberJunction
+  devDependencies and the root `pnpm.overrides` use the same `^6.1.5` floor. Adds `check-dependency-model` to CI.
+- Updated dependencies [37536eb]
+  - @mj-biz-apps/accounting-engine-base@0.22.0
+  - @mj-biz-apps/accounting-entities@0.22.0
+
 ## 0.21.2
 
 ### Patch Changes
