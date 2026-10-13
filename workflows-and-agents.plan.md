@@ -33,7 +33,7 @@ This plan enumerates every workflow and AI agent surface in the accounting app, 
 
 **P1. Audit by construction.** Anything that mutates ledger state must go through a BaseEntity subclass `.Save()` so MJ's Record Changes table captures the before/after. **No bare T-SQL `INSERT` from app code** — even seed data is created via `Metadata.GetEntityObject` + `.Save()`.
 
-**P2. DB-level for invariants, BaseEntity for orchestration.** The 9 triggers and 2 numbering sprocs from the baseline migration stay at DB level — they enforce integrity that no caller (including SA) can bypass. Everything else (seeding, reversal, batching orchestration) moves to TypeScript so it's testable, debuggable, and audited.
+**P2. DB-level for invariants, BaseEntity for orchestration.** The 14 business-rule triggers (12 from the baseline migration, 2 added by later migrations) and the 2 numbering sprocs stay at DB level — they enforce integrity that no caller (including SA) can bypass. Everything else (seeding, reversal, batching orchestration) moves to TypeScript so it's testable, debuggable, and audited.
 
 **P3. `Pending → Batched → GLPosted` is the authorization boundary.** Agents may freely create and edit `Pending` JEs; humans control the flip to `Batched`. The triggers enforce immutability regardless of who edits — so we can give agents broad write access on Pending without risk to historical entries.
 
@@ -41,7 +41,7 @@ This plan enumerates every workflow and AI agent surface in the accounting app, 
 
 **P5. Agents emit, they don't decide.** Agents draft JEs, flag anomalies, suggest mappings. Acceptance and lock (transition to Batched) is the human's decision unless an explicit fully-autonomous policy is configured.
 
-**P6. Soft-ref policy enforced.** Agents in this repo MUST NOT introduce hard FKs to downstream apps (BizAppsOrders, etc.). `JournalEntry.OrderID` and friends stay as polymorphic UUIDs that Accounting blindly stores.
+**P6. No references to dependents.** Agents in this repo MUST NOT add a reference to a downstream app (BizAppsOrders, etc.), neither a hard FK nor a soft ID column (BA-D30). The one sanctioned downstream lineage is the D25 origin pair on `JournalEntry`: `LinkedEntityID` (hard FK to `__mj.Entity`) + `LinkedRecordID`, which Accounting stores without interpreting. The former per-entity columns such as `JournalEntry.OrderID` are gone. References *up* the dependency graph are real FKs (issue #39).
 
 ---
 
@@ -53,12 +53,12 @@ These are the "boring infrastructure" pieces every accounting team does manually
 
 | # | Hook | Entity | Trigger | Mechanism |
 |---|---|---|---|---|
-| W1 | **Profile init** | `AccountingCompanyProfile` | First `Save()` (isNew) | `AccountingCompanyProfileEntityServer.Save()` calls helper methods that seed default COA (23 GLAccount rows), then wire the company's default accounts. ~~generate current-FY periods (17 rows)~~ and ~~seed the 4 standard recurring JE templates~~ are **Void (§8)**, and defaults are company-level `GLAccountLink` rows rather than columns on the profile (D12). **All via BaseEntity** → Record Changes captures every create. |
+| W1 | **Profile init** | `AccountingCompanyProfile` | First `Save()` (isNew) | `AccountingCompanyProfileEntityServer.Save()` calls helper methods that seed default COA (23 GLAccount rows), then wire the company's default accounts. ~~generate current-FY periods (17 rows)~~ and ~~seed the 4 standard recurring JE templates~~ are **Void (§8)**, and defaults are company-level `GLAccountLink` rows rather than columns on the profile (D12). **All via BaseEntity** → Record Changes captures every create. **Superseded 2026-07-30:** there is no first-save hook; a new company starts with an empty chart, and `SeedDefaultChartOfAccounts()` seeds the 10-account starter set on request (§7). |
 | W2 | **JE numbering** | `JournalEntry` | Pre-`Save()` when `isNew && !EntryNumber` | `JournalEntryEntityServer.Save()` invokes `spAssignNextJournalEntryNumber` (atomic counter) via the data provider, sets `EntryNumber` on the entity before `super.Save()`. |
-| W3 | **Batch numbering** | `JournalEntryBatch` | Pre-`Save()` when `isNew && !BatchNumber` | `JournalEntryBatchEntityServer.Save()` invokes `spAssignNextBatchNumber`, sets `BatchNumber` before save. |
+| W3 | **Batch numbering** | `JournalEntryBatch` | Pre-`Save()` when `isNew && !JournalEntryBatchNumber` | `JournalEntryBatchEntityServer.Save()` invokes `spAssignNextJournalEntryBatchNumber`, sets `JournalEntryBatchNumber` before save. |
 | ~~W4~~ | ~~**Adjusting-entry routing**~~ | ~~`JournalEntry`~~ | ~~Pre-`Save()` when target `AccountingPeriod.Status='Closed'`~~ | **Void — no periods, no close guard (§8).** A closed-period collision surfaces as the ERP rejecting the batch; it is held and flagged for review (plan §4), never auto-rolled into an adjusting period. |
-| W5 | **Realized FX gain/loss** | `JournalEntry` (EntryType='PaymentReceipt') | Pre-`Save()` when payment-currency rate ≠ AR booking rate | Auto-adds an FX-gain/loss JEL line so the JE balances. Posts to `AccountingCompanyProfile.RealizedFXGainLossGLAccountID`. |
-| W6 | **Reversal generation** | `JournalEntry` | `JournalEntryEntityServer.GenerateReversal(reason)` | Creates a new Pending JE with debits/credits swapped, `EntryType='Reversal'`, `ReversesJournalEntryID=this.ID`, and back-references this.`ReversedByJournalEntryID` on save of the reverser. |
+| ~~W5~~ | ~~**Realized FX gain/loss**~~ | ~~`JournalEntry` (EntryType='PaymentReceipt')~~ | ~~Pre-`Save()` when payment-currency rate ≠ AR booking rate~~ | ~~Auto-adds an FX-gain/loss JEL line so the JE balances. Posts to `AccountingCompanyProfile.RealizedFXGainLossGLAccountID`.~~ **Void — D16 and D12.** All FX, realized and unrealized, is computed and posted upstream by Orders/Payments (D16). The column it posts to was removed with the other default-account columns (D12: company defaults are `GLAccountLink` rows by role, and no FX gain/loss role is seeded). |
+| W6 | **Reversal generation** | `JournalEntry` | `JournalEntryEntityServer.GenerateReversal(reason)` | Creates a new Pending JE with debits/credits swapped, typed `Reversal` (`EntryTypeID`, BA-D29), `ReversesJournalEntryID=this.ID`, and back-references this.`ReversedByJournalEntryID` on save of the reverser. |
 | ~~W7~~ | ~~**Period close orchestration**~~ | ~~`AccountingPeriod`~~ | ~~`Save()` on `Open → Closing`~~ | **Void — the ERP owns close (§8).** No `AccountingPeriod` entity to hook, and no `AccountBalance` to materialize (D20: the views compute on demand). |
 | ~~W8~~ | ~~**Period reopen**~~ | ~~`AccountingPeriod`~~ | ~~`Save()` on `Closed → Reopened`~~ | **Void — same as W7 (§8).** |
 | W9 | **JE attachment validation** | `JournalEntry` | Pre-`Save()` when `FileID` set | Verifies the linked `__mj.File` row exists and isn't deleted. |
@@ -67,11 +67,11 @@ These are the "boring infrastructure" pieces every accounting team does manually
 
 | # | Workflow | Cadence | Owns | Notes |
 |---|---|---|---|---|
-| S1 | **Batch dispatch** | Daily (default; configurable per Company × TargetSystem) | Selects Pending JEs by (Company, Period, TargetSystem) → creates `JournalEntryBatch` row → server-side hook flips child JEs to Batched | Per BA-D16 (batching is the lock event) |
-| S2 | **ERP acknowledgment poller** | Every 5 min | Watches the integration framework's response queue, marks Batch.Status='Acknowledged', flips child JEs to GLPosted with GLReferenceID | Optional — ERP connector may use webhooks instead |
+| S1 | **Batch dispatch** | Daily (default; configurable per Company × TargetSystem) | Selects Pending JEs by (Company, date cutoff, TargetSystem) → creates `JournalEntryBatch` row → server-side hook flips child JEs to Batched | Per D5 (batching is the lock event). Built as scheduled jobs (§7) |
+| S2 | **ERP acknowledgment poller** | Every 5 min | Watches the integration framework's response queue, marks Batch.Status='Posted', flips child JEs to GLPosted with GLReferenceID | Optional — ERP connector may use webhooks instead |
 | ~~S3~~ | ~~**Recurring JE emitter**~~ | ~~Every 15 min (sweeper)~~ | ~~Scans `RecurringJournalEntry` … instantiates lines from template~~ | **Void — superseded by D15 (§8).** Rev-rec and other scheduled recognition are **real forward-dated JEs** written at origination, not templates emitted by a sweeper. Nothing to scan. |
-| S4 | **Currency rate refresh** | Weekly (default, opt-in) | Calls `CurrencyExchangeRateProvider.fetchRates()`, upserts rows in `__mj_BizAppsCommon.CurrencyExchangeRate` | BA-D11; auto-fetch off by default per the plan |
-| S5 | **Tax rate sync** | Monthly (when Avalara/TaxJar configured) | Calls `TaxCalculationProvider.syncRates()`, upserts `TaxRate` rows with `Source='Avalara' \| 'TaxJar'` | BA-D19 |
+| S4 | **Currency rate refresh** | Weekly (default, opt-in) | Calls `CurrencyExchangeRateProvider.fetchRates()`, upserts rows in an exchange-rate table *(rescope: there is no `__mj_BizAppsCommon.CurrencyExchangeRate`; accounting owns `Currency`, and the exchange-rate table is deferred until multi-currency activates)* | D16; auto-fetch off by default per the plan |
+| S5 | **Tax rate sync** | Monthly (when Avalara/TaxJar configured) | Calls `TaxCalculationProvider.syncRates()`, upserts `TaxRate` rows with `Source='Avalara' \| 'TaxJar'` | *Conflicts with D17:* tax tables are snapshot data, never a rate authority we sync, and the master plan §5.8 rules out a rate-sync build |
 | S6 | **FX revaluation runner** | ~~Period-close hook~~ → **needs a new trigger** | Reads open foreign-currency balances → looks up spot rate → emits revaluation JE + auto-reversing JE dated the following month | Intent stands (plan §6.4), mechanism does not: there is no period close to hook and no `RecurringJournalEntryTemplate` to seed it from (§8). Retrigger on a date cadence. |
 | S7 | **Sales tax snapshot** | Monthly, on a **date** cadence | Rolls forward open `TaxLiability` balances per (Company × Authority × Jurisdiction × **date window**) | Intent stands; the `× Period` key and the "seeded as a recurring template" mechanism are void (§8). Accounting keeps the accrual only — remittance is an ERP/GL concern. |
 
@@ -108,7 +108,7 @@ Built on MJ's `BaseAgent` (Flow or Loop type). Each agent has a system prompt te
 | A2 | **COA Mapping Suggester** | Flow | Read `vw_GLDetail_Subledger`, similarity search over `GLAccount` rows; ~~create `ChartOfAccountsMapping` rows~~ → **propose `GLAccount.ExternalSystem` / `.ExternalAccountID` values** (D13, §8) | Proposals un-approved until an admin accepts | Plan §4.6 / M16+D27 require explicit admin approval |
 | A3 | **Manual JE Reviewer** | Flow | Loads the proposed JE + JEL rows; drafts `Description`, suggests GL accounts based on counterparty history, flags policy violations (round numbers, off-hours posting, unusually large amounts) | Annotates draft; CFO approval before Batched | Manual JEs already require CFO approval (plan §14 Q10) |
 | ~~A4~~ | ~~**Recurring Template Inducer**~~ | ~~Loop~~ | ~~offers to convert to `RecurringJournalEntryTemplate` + schedule~~ | **Void — D15 (§8).** | ~~Template creation changes future emit behavior~~ |
-| A5 | **Tax Classification Advisor** | Flow | Reads `CustomerTaxProfile`, related sales history, product description; proposes `TaxCategory` + nexus check | Tax-config writes require Finance.Admin role | Tax decisions carry legal liability |
+| A5 | **Tax Classification Advisor** *(rescope: `CustomerTaxProfile` is gone)* | Flow | ~~Reads `CustomerTaxProfile`~~, related sales history, product description; proposes `TaxCategory` + nexus check. `CustomerTaxProfile` was dropped: customer exemption moved to bizapps-orders as `CustomerTaxExemption`, and accounting now holds `CompanyTaxNexus`, so this agent's inputs need redefining | Tax-config writes require Finance.Admin role | Tax decisions carry legal liability |
 | A6 | **AR-to-GL Recon Resolver** | Loop | Queries `vw_ARtoGLRecon`, traces JE lines through `vw_JEAuditTrail`, identifies the breaking entry, proposes corrective JE | Corrective JE drafted as Pending; human approves to Batched | Corrective JEs are ordinary dated JEs — there is no adjusting period (§8) |
 | A7 | **Reversal Composer** | Flow | Given a `ReversesJournalEntryID`, drafts the reversal narrative, dimension tags, cross-references | Reversal as Pending; human approves to Batched | Dispute-driven reversals are high-visibility |
 | A8 | **Audit Pack Assembler** | Flow | Gathers JE samples, supporting `__mj.File` attachments, close attestations from `__mj.AuditLog`, balances computed from JE lines (no materialized table, D20/§8) | Read-only output (PDF/zip artifact) | Auditor delivery is high-stakes; human reviews before sending |
@@ -139,7 +139,7 @@ Where the cost of a wrong call is small or the safeguard is a downstream human r
 |---|---|
 | **BaseEntity subclass + `Save()` hook** (this repo's `packages/CoreEntitiesServer/`) | W1–W9. Each lifecycle hook IS a `Save()` / `Delete()` override; Record Changes captures audit |
 | **Stored proc (DB-level)** | W2 / W3 numbering (atomic counter via HOLDLOCK+UPDLOCK) — called from EntityServer, results stored on the entity which then logs to Record Changes |
-| **Trigger (DB-level)** | All 9 triggers in baseline migration; enforces what BaseEntity cannot (audit guarantee even against SA) |
+| **Trigger (DB-level)** | All 14 business-rule triggers (12 in the baseline, 2 added by later migrations); enforces what BaseEntity cannot (audit guarantee even against SA) |
 | **Scheduled Action** | S1–S7. MJ's scheduled-action framework picks them up from metadata |
 | **`AccountingService` (TypeScript)** | Façade over EntityServer subclasses; consumed by upstream apps (BizAppsOrders future) |
 | **`BaseAgent` Flow** | A2, A3, A5, A7, A8 (single-turn structured agents) |
@@ -174,16 +174,19 @@ Tied to the master plan's Phases A–G (`plans/bizapps-accounting-master.md` §1
 
 | Item | Status | Notes |
 |---|---|---|
-| Baseline schema migration | ✅ Landed | `migrations/B202605281200__v0.1.0__Schema_and_Tables.sql` |
-| DB-level numbering sprocs | ✅ Landed | `spAssignNextJournalEntryNumber`, `spAssignNextBatchNumber` |
-| W1 — Profile init via EntityServer | 🚧 In flight | This PR; replaces removed `spSeedDefaultChartOfAccounts` / `spGenerateAccountingPeriods` / `spSeedDefaultRecurringJournalEntryTemplates` / `spInitializeAccountingCompanyProfile` |
-| W2 — JE numbering via EntityServer | 🚧 In flight | This PR; calls atomic sproc but routes through BaseEntity for audit |
-| W3 — Batch numbering via EntityServer | 🚧 In flight | This PR |
-| W5, W6, W9 | ⏳ Planned | Phase B |
+| Baseline schema migration | ✅ Landed | `migrations/B202605281200__v0.1.x__Schema_and_Tables.sql` |
+| DB-level numbering sprocs | ✅ Landed | `spAssignNextJournalEntryNumber`, `spAssignNextJournalEntryBatchNumber` |
+| W1 — Profile init via EntityServer | ✅ Landed, then superseded 2026-07-30 | `AccountingCompanyProfileEntityServer` replaced the removed `spSeedDefaultChartOfAccounts` / `spGenerateAccountingPeriods` / `spSeedDefaultRecurringJournalEntryTemplates` / `spInitializeAccountingCompanyProfile`. The first-save hook is gone: a new company starts with an empty chart, and `SeedDefaultChartOfAccounts()` seeds the starter accounts on request |
+| W2 — JE numbering via EntityServer | ✅ Landed | `JournalEntryEntityServer.Save()` → `getNextJournalEntryNumber` (`SequenceService.ts`); calls the atomic sproc but routes through BaseEntity for audit |
+| W3 — Batch numbering via EntityServer | ✅ Landed | `JournalEntryBatchEntityServer.Save()` → `getNextJournalEntryBatchNumber` (`SequenceService.ts`) |
+| W6 — Reversal generation | ✅ Landed | `JournalEntryEntityServer.GenerateReversal`, exposed as the `Accounting.GenerateJournalEntryReversal` remote op (`GenerateReversalOperation.ts`); tests `GenerateReversalBusinessDay.test.ts`, `GenerateReversalNotBeforeOriginal.test.ts` |
+| W9 — JE attachment validation | ✅ Landed | `JournalEntryEntityServer` (`ValidateAttachment`) |
+| ~~W5~~ | ❌ Void | D16 and D12 (see the W5 row in §2.1) |
 | ~~W4, W7, W8~~ | ❌ Void | Removed with the period tables 2026-07-06 (§8) |
-| Scheduled Actions S1, S2, S4–S7 | ⏳ Planned | Phase B–E |
+| S1 — Batch dispatch | ✅ Landed | Scheduled jobs in `metadata/scheduled-jobs/`: a nightly Order + Payment post and a monthly revenue-recognition post, each running the `Build Journal Entry Batches` action (`packages/Actions/src/BuildJournalEntryBatchesAction.ts`) with auto-post. A daily ERP master-data sync job sits beside them |
+| Scheduled Actions S2, S4–S7 | ⏳ Planned | Phase B–E |
 | ~~S3~~ | ❌ Void | Superseded by D15's forward-dated JEs (§8) |
-| `AccountingService` façade | ⏳ Planned | Phase G |
+| `AccountingService` façade | ⏳ Not built as a class | Upstream apps call `AccountingEngine` and the `Accounting.*` remote operations (`packages/CoreEntitiesServer/src/index.ts`; master plan §14) |
 | Agents A1–A9, F1–F8 | ⏳ Planned | Phase B onward, agent-by-agent per phase table |
 
 ---

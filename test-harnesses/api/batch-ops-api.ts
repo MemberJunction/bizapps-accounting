@@ -6,17 +6,24 @@
  *
  * Integration-style (mirrors the orders headless E2E pattern + MJ's client-first transport
  * doctrine): one continuous business flow with EXACT-value asserts, not per-op smoke checks.
+ * The step numbers match the console output (there is no step 7).
  *
+ *   0. Accounting.PreviewJournalEntryBatch (read-only, before any build) — 3 candidates, NETTED
+ *      totals 600/600, one per-company footer row; selecting only the newest entry flags the two
+ *      older ones as out-of-order skips.
  *   1. Accounting.BuildJournalEntryBatch (explicit CompanyID) — the fixture's 3 JEs net 6 lines → 3 summary
  *      lines, NETTED totals 600 (not the gross 800); approvalTaskId returned (one-transaction
  *      build, D10 rev. 2026-07-29).
  *   2. The ApprovalTaskID/RaisedAt stamp is on the batch row (verified over the wire).
- *   3. GetBatchApprovalState → not approved (with a reason).
- *   4. RecordBatchDecision Approved → approval state flips true.
- *   5. DispatchJournalEntryBatch → Posted + MOCK external ref.
- *   6. Reject path: a new wire-created JE builds a second batch; RecordBatchDecision Rejected →
- *      batch Cancelled, the JE returns to the candidate pool (Pending, JournalEntryBatchID NULL).
- *   7. EmptyJournalEntryBatchError on the wire: an explicit build for a company with nothing to batch is a
+ *   3. Accounting.GetJournalEntryBatchApprovalState → not approved (with a reason).
+ *   4. Accounting.RecordJournalEntryBatchDecision Approved → approval state flips true.
+ *   5. Accounting.DispatchJournalEntryBatch → Posted + MOCK external ref.
+ *   6. Reject path: a new wire-created JE builds a second batch (Source 'Explicit'); re-building the
+ *      now-locked selection is refused; RecordJournalEntryBatchDecision Rejected → batch Cancelled,
+ *      the JE returns to the candidate pool (Pending, JournalEntryBatchID NULL).
+ *   8. Accounting.RegenerateJournalEntryBatch — a late JE is re-gathered into the SAME Pending batch
+ *      with the exact netted total (161 = 50 + 111); the batch is then rejected for teardown.
+ *   9. EmptyJournalEntryBatchError on the wire: an explicit build for a company with nothing to batch is a
  *      loud failure, not a silent no-op.
  *
  * (The no-CompanyID SWEEP form is deliberately NOT exercised here: on a shared instance it would
@@ -25,7 +32,8 @@
  *
  * Run from the INSTANCE WORKTREE ROOT:
  *   npx tsx packages/dev-apps/bizapps-accounting/test-harnesses/api/batch-ops-api.ts
- * Env overrides: MJ_API_URL (default http://localhost:4180) · MJ_API_KEY · MJDEV_SLUG.
+ * Env overrides: MJ_API_URL (default http://localhost:4180) · MJ_API_KEY (default: minted with
+ * `mjdev key <slug>`) · MJDEV_SLUG (default accounting-revamp).
  * Exit codes: 0 all passed · 1 assertion failures · 2 bootstrap/connection error.
  */
 import { execFileSync, execSync } from 'node:child_process';
