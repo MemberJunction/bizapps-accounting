@@ -1,5 +1,13 @@
 # @mj-biz-apps/accounting-actions
 
+## 0.22.1
+
+### Patch Changes
+
+- 95623ed: The packages' dependencies on each other are caret ranges (`^0.22.0`) instead of exact versions. A host that pins or overrides one package of this app at a later compatible version no longer forces an exact-match copy of its siblings. Changesets keeps the caret and moves its floor on each release.
+- Updated dependencies [95623ed]
+  - @mj-biz-apps/accounting-core-entities-server@0.22.1
+
 ## 0.22.0
 
 ### Patch Changes
