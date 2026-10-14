@@ -30,7 +30,7 @@
 import { createHash } from 'node:crypto';
 
 import { BaseEntity, DatabaseProviderBase, EntitySaveOptions, IMetadataProvider, IRunViewProvider, LogError, LogStatus, UserInfo, ValidationErrorInfo, ValidationResult } from '@memberjunction/core';
-import { RegisterClass } from '@memberjunction/global';
+import { RegisterClass, UUIDsEqual } from '@memberjunction/global';
 import {
   mjBizAppsAccountingJournalEntryBatchEntity,
   mjBizAppsAccountingJournalEntryEntity,
@@ -303,6 +303,7 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     };
 
     for (const message of this.IsSaved ? this.transitionProblems() : this.creationProblems()) fail(message);
+    for (const message of this.approvalTaskProblems()) fail(message);
 
     // Approval audit pair: an Approved batch carries WHO and WHEN, together.
     if (this.Status === 'Approved' && (!this.ApprovedAt || !this.ApprovedByUserID)) {
@@ -372,6 +373,23 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
       ];
     }
     return [];
+  }
+
+  /**
+   * The approval Task pointer is set once (#313). The send gate decides approval from the Task this
+   * column names, and the build stamps it in its own transaction; a later save that changed it could
+   * point a Pending batch at another batch's approved Task. Setting it on a batch that has none is
+   * the build's stamp and passes. trg_JournalEntryBatch_ApprovalTaskSetOnce (50035) enforces the same
+   * rule, ApprovalTaskRaisedAt included, for writes that skip this class.
+   */
+  private approvalTaskProblems(): string[] {
+    if (!this.IsSaved) return [];
+    const loaded = this.GetFieldByName('ApprovalTaskID')?.OldValue as string | null | undefined;
+    if (!loaded || UUIDsEqual(loaded, this.ApprovalTaskID)) return [];
+    return [
+      `A batch's approval Task is set once, by the build that raises it, and never changes after that — ` +
+        `ApprovalTaskID cannot move from ${loaded} to ${this.ApprovalTaskID ?? 'empty'}.`,
+    ];
   }
 
   /**
@@ -794,7 +812,12 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
    * NOT — the entries stay at `Batched` with their JournalEntryBatchID, which keeps them out of every
    * candidate pool (those filter `Status='Pending'`) and, once this save lands, out of reach of
    * trg_JournalEntry_Immutability's unlock (it sanctions Batched→Pending only while the owning batch
-   * is Pending or Cancelled). No teardown means no transaction: this is a single-row update.
+   * is Pending or Cancelled).
+   *
+   * The archive is recorded on the batch's approval Task in the same transaction (golive #325):
+   * a Pending batch's Task is closed, so the approver is no longer asked to decide on it; past
+   * approval the Task gets a comment, which needs the user's linked Person. If the recording fails
+   * the archive rolls back and the instance is reloaded.
    */
   public async Archive(reason: string, contextUser?: UserInfo): Promise<boolean> {
     if (!this.IsSaved) throw new Error('JournalEntryBatchEntityServer.Archive: the batch must be saved.');
@@ -804,12 +827,27 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     if (!reason?.trim()) {
       throw new Error(`JournalEntryBatchEntityServer.Archive: an archive reason is required — it is the only record of why batch ${this.JournalEntryBatchNumber} will never post.`);
     }
-    this.ArchiveReason = reason.trim();
-    this.ArchivedAt = new Date();
-    this.ArchivedByUserID = (contextUser ?? this.ContextCurrentUser)?.ID ?? null;
-    this.Status = 'Archived';
-    if (!(await this.Save())) throw new Error(`Archive: →Archived failed: ${this.LatestResult?.CompleteMessage ?? 'unknown'}`);
-    return true;
+    const user = contextUser ?? this.ContextCurrentUser;
+    if (!user) throw new Error('JournalEntryBatchEntityServer.Archive: a context user is required; the archive is recorded on the approval Task as that user.');
+    const provider = this.ProviderToUse as unknown as IMetadataProvider;
+    const gate = JournalEntryBatchDispatchServices.Resolve().CreateCancelGate(provider);
+    const archive = { reason: reason.trim(), fromStatus: this.Status };
+    const dbProvider = this.ProviderToUse as unknown as DatabaseProviderBase;
+    await dbProvider.BeginTransaction();
+    try {
+      this.ArchiveReason = archive.reason;
+      this.ArchivedAt = new Date();
+      this.ArchivedByUserID = user.ID;
+      this.Status = 'Archived';
+      if (!(await this.Save())) throw new Error(`Archive: →Archived failed: ${this.LatestResult?.CompleteMessage ?? 'unknown'}`);
+      await gate.recordArchive(this.ID, archive, user);
+      await dbProvider.CommitTransaction();
+      return true;
+    } catch (e) {
+      try { await dbProvider.RollbackTransaction(); } catch { /* rollback best-effort */ }
+      await this.reloadAfterRollback();
+      throw e;
+    }
   }
 
   /**

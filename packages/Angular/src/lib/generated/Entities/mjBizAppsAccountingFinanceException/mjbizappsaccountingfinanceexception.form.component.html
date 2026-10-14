@@ -17,6 +17,16 @@
         Icon="fa fa-align-left"
         [Form]="this"
         [FormContext]="formContext">
+
+    </mj-collapsible-panel>
+
+    <!-- Exception Details Section -->
+    <mj-collapsible-panel
+        SectionKey="exceptionDetails"
+        SectionName="Exception Details"
+        Icon="fa fa-align-left"
+        [Form]="this"
+        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -25,23 +35,6 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
             LinkType="Record"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="SourceEntityID"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-            LinkType="Record"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
-            FieldName="SourceRecordID"
-            Type="textbox"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
         ></mj-form-field>
         <mj-form-field 
             [Record]="record"
@@ -71,14 +64,6 @@
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
-            FieldName="DetectedAt"
-            Type="datepicker"
-            [EditMode]="EditMode"
-            [FormContext]="formContext"
-        ></mj-form-field>
-        <mj-form-field 
-            [Record]="record"
-            [ShowLabel]="true"
             FieldName="Summary"
             Type="textbox"
             [EditMode]="EditMode"
@@ -89,6 +74,41 @@
             [ShowLabel]="true"
             FieldName="DedupeKey"
             Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- Source Section -->
+    <mj-collapsible-panel
+        SectionKey="source"
+        SectionName="Source"
+        Icon="fa fa-info-circle"
+        [Form]="this"
+        [FormContext]="formContext">
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="SourceEntityID"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+            LinkType="Record"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="SourceRecordID"
+            Type="textbox"
+            [EditMode]="EditMode"
+            [FormContext]="formContext"
+        ></mj-form-field>
+        <mj-form-field 
+            [Record]="record"
+            [ShowLabel]="true"
+            FieldName="DetectedAt"
+            Type="datepicker"
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
@@ -109,6 +129,16 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- Review Section -->
+    <mj-collapsible-panel
+        SectionKey="review"
+        SectionName="Review"
+        Icon="fa fa-info-circle"
+        [Form]="this"
+        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"
@@ -142,6 +172,16 @@
             [EditMode]="EditMode"
             [FormContext]="formContext"
         ></mj-form-field>
+
+    </mj-collapsible-panel>
+
+    <!-- System Metadata Section -->
+    <mj-collapsible-panel
+        SectionKey="systemMetadata"
+        SectionName="System Metadata"
+        Icon="fa fa-cog"
+        [Form]="this"
+        [FormContext]="formContext">
         <mj-form-field 
             [Record]="record"
             [ShowLabel]="true"

@@ -39,7 +39,7 @@
  *   ENGINE: ./JournalEntryBatchEngine (buildJournalEntryBatch · regenerateJournalEntryBatch · sendJournalEntryBatch · approveJournalEntryBatch · cancelJournalEntryBatch)
  *   GATE:   ./TasksAppApprovalGate (the bizapps-tasks-backed CFO gate; provider-injected)
  */
-import { BaseRemotableOperation, IMetadataProvider, IRunViewProvider, RunView, UserInfo } from '@memberjunction/core';
+import { BaseRemotableOperation, IMetadataProvider, UserInfo } from '@memberjunction/core';
 import { RegisterClass } from '@memberjunction/global';
 import {
   buildJournalEntryBatch,
@@ -64,6 +64,7 @@ import {
 } from './JournalEntryBatchEngine.js';
 import { JournalEntryBatchEntityServer } from './JournalEntryBatchEntityServer.js';
 import { TasksAppApprovalGate } from './TasksAppApprovalGate.js';
+import { ResolvePersonIDForUser } from './person-user-link.js';
 import { requireSqlGuid } from './SqlGuards.js';
 import { requireDateBound } from './BusinessDay.js';
 import {
@@ -73,7 +74,6 @@ import {
   type TaskDecisionOutcomeCode,
 } from '@mj-biz-apps/tasks-core';
 
-const PERSON_ENTITY = 'MJ_BizApps_Common: People';
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
 
 // ─── Accounting.PreviewJournalEntryBatch + Accounting.BuildJournalEntryBatch ─────────────────────────
@@ -135,6 +135,7 @@ export interface PreviewJournalEntryBatchInput extends JournalEntryBatchCriteria
 @RegisterClass(BaseRemotableOperation, 'Accounting.PreviewJournalEntryBatch')
 export class PreviewJournalEntryBatchOperation extends BaseRemotableOperation<PreviewJournalEntryBatchInput, JournalEntryBatchPreviewResult> {
   public readonly OperationKey = 'Accounting.PreviewJournalEntryBatch';
+  public readonly RequiredScope = 'accounting:read';
 
   protected async InternalExecute(input: PreviewJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<JournalEntryBatchPreviewResult> {
     const included = input?.IncludedJournalEntryIDs ? new Set(input.IncludedJournalEntryIDs) : undefined;
@@ -172,6 +173,7 @@ export interface BuildJournalEntryBatchOutput {
 @RegisterClass(BaseRemotableOperation, 'Accounting.BuildJournalEntryBatch')
 export class BuildJournalEntryBatchOperation extends BaseRemotableOperation<BuildJournalEntryBatchInput, BuildJournalEntryBatchOutput> {
   public readonly OperationKey = 'Accounting.BuildJournalEntryBatch';
+  public readonly RequiredScope = 'accounting:write';
 
   protected async InternalExecute(input: BuildJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<BuildJournalEntryBatchOutput> {
     if (!input?.TargetSystem) throw new Error('BuildJournalEntryBatch: TargetSystem is required.');
@@ -225,6 +227,7 @@ export interface RegenerateJournalEntryBatchInput { JournalEntryBatchID: string;
 @RegisterClass(BaseRemotableOperation, 'Accounting.RegenerateJournalEntryBatch')
 export class RegenerateJournalEntryBatchOperation extends BaseRemotableOperation<RegenerateJournalEntryBatchInput, BuildJournalEntryBatchResult> {
   public readonly OperationKey = 'Accounting.RegenerateJournalEntryBatch';
+  public readonly RequiredScope = 'accounting:write';
 
   protected async InternalExecute(input: RegenerateJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<BuildJournalEntryBatchResult> {
     if (!input?.JournalEntryBatchID) throw new Error('RegenerateJournalEntryBatch: JournalEntryBatchID is required.');
@@ -269,6 +272,7 @@ export interface DispatchJournalEntryBatchOutput {
 @RegisterClass(BaseRemotableOperation, 'Accounting.DispatchJournalEntryBatch')
 export class DispatchJournalEntryBatchOperation extends BaseRemotableOperation<DispatchJournalEntryBatchInput, DispatchJournalEntryBatchOutput> {
   public readonly OperationKey = 'Accounting.DispatchJournalEntryBatch';
+  public readonly RequiredScope = 'accounting:post';
 
   protected async InternalExecute(input: DispatchJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<DispatchJournalEntryBatchOutput> {
     if (!input?.JournalEntryBatchID) throw new Error('DispatchJournalEntryBatch: JournalEntryBatchID is required.');
@@ -299,6 +303,7 @@ export interface ResumeJournalEntryBatchPostingOutput { Status: string; JournalE
 @RegisterClass(BaseRemotableOperation, 'Accounting.ResumeJournalEntryBatchPosting')
 export class ResumeJournalEntryBatchPostingOperation extends BaseRemotableOperation<ResumeJournalEntryBatchPostingInput, ResumeJournalEntryBatchPostingOutput> {
   public readonly OperationKey = 'Accounting.ResumeJournalEntryBatchPosting';
+  public readonly RequiredScope = 'accounting:post';
 
   protected async InternalExecute(input: ResumeJournalEntryBatchPostingInput, provider: IMetadataProvider, user: UserInfo): Promise<ResumeJournalEntryBatchPostingOutput> {
     if (!input?.JournalEntryBatchID) throw new Error('ResumeJournalEntryBatchPosting: JournalEntryBatchID is required.');
@@ -316,6 +321,7 @@ export interface GetStrandedJournalEntriesOutput { Batches: StrandedJournalEntry
 @RegisterClass(BaseRemotableOperation, 'Accounting.GetStrandedJournalEntries')
 export class GetStrandedJournalEntriesOperation extends BaseRemotableOperation<Record<string, never>, GetStrandedJournalEntriesOutput> {
   public readonly OperationKey = 'Accounting.GetStrandedJournalEntries';
+  public readonly RequiredScope = 'accounting:read';
 
   protected async InternalExecute(_input: Record<string, never>, provider: IMetadataProvider, user: UserInfo): Promise<GetStrandedJournalEntriesOutput> {
     const batches = await findStrandedJournalEntries(user, provider);
@@ -341,11 +347,14 @@ export interface RecordJournalEntryBatchDecisionOutput { Recorded: true }
  * Record an in-app CFO approve/reject decision against the batch's approval Task. An approval also
  * flips the batch Pending→Approved (content freeze + dispatchable); a rejection cancels the batch
  * and returns its journal entries to the candidate pool (a reject has a visible financial effect,
- * not a dead no-op). The rejection's notes become the batch's CancelReason.
+ * not a dead no-op). The rejection's notes become the batch's CancelReason. The gate refuses a
+ * decision on a batch that is no longer Pending, or rejection notes longer than CancelReason holds,
+ * before writing it to the Task, so the Task cannot record an outcome the batch then refuses (#306, #307).
  */
 @RegisterClass(BaseRemotableOperation, 'Accounting.RecordJournalEntryBatchDecision')
 export class RecordJournalEntryBatchDecisionOperation extends BaseRemotableOperation<RecordJournalEntryBatchDecisionInput, RecordJournalEntryBatchDecisionOutput> {
   public readonly OperationKey = 'Accounting.RecordJournalEntryBatchDecision';
+  public readonly RequiredScope = 'accounting:write';
 
   protected async InternalExecute(input: RecordJournalEntryBatchDecisionInput, provider: IMetadataProvider, user: UserInfo): Promise<RecordJournalEntryBatchDecisionOutput> {
     if (!input?.JournalEntryBatchID) throw new Error('RecordBatchDecision: JournalEntryBatchID is required.');
@@ -368,17 +377,16 @@ export class RecordJournalEntryBatchDecisionOperation extends BaseRemotableOpera
   }
 
   /**
-   * The current MJ user's bizapps-common Person ID (Person.LinkedUserID == user.ID), so the recorded
-   * decision is attributed to the right approver Person. Undefined when no Person is linked (the
-   * gate's RecordDecision treats DecidedByPersonID as optional).
+   * The current MJ user's bizapps-common Person ID (the user's People link, else Person.LinkedUserID),
+   * so the recorded decision is attributed to the right approver Person. Undefined when no Person is
+   * linked or the lookup fails (the gate's RecordDecision treats DecidedByPersonID as optional).
    */
   private async resolveCurrentPersonId(user: UserInfo, provider: IMetadataProvider): Promise<string | undefined> {
-    const rv = new RunView(provider as unknown as IRunViewProvider);
-    const res = await rv.RunView<{ ID: string }>(
-      { EntityName: PERSON_ENTITY, ExtraFilter: `LinkedUserID='${user.ID}'`, Fields: ['ID'], MaxRows: 1, ResultType: 'simple', BypassCache: true },
-      user,
-    );
-    return res.Success ? res.Results?.[0]?.ID : undefined;
+    try {
+      return (await ResolvePersonIDForUser(user, provider, user)) ?? undefined;
+    } catch {
+      return undefined;
+    }
   }
 }
 
@@ -391,6 +399,7 @@ export interface GetJournalEntryBatchApprovalStateOutput { Approved: boolean; Re
 @RegisterClass(BaseRemotableOperation, 'Accounting.GetJournalEntryBatchApprovalState')
 export class GetJournalEntryBatchApprovalStateOperation extends BaseRemotableOperation<GetJournalEntryBatchApprovalStateInput, GetJournalEntryBatchApprovalStateOutput> {
   public readonly OperationKey = 'Accounting.GetJournalEntryBatchApprovalState';
+  public readonly RequiredScope = 'accounting:read';
 
   protected async InternalExecute(input: GetJournalEntryBatchApprovalStateInput, provider: IMetadataProvider, user: UserInfo): Promise<GetJournalEntryBatchApprovalStateOutput> {
     if (!input?.JournalEntryBatchID) throw new Error('GetBatchApprovalState: JournalEntryBatchID is required.');
@@ -422,6 +431,7 @@ export interface ArchiveJournalEntryBatchOutput { Status: string; ArchivedAt: st
 @RegisterClass(BaseRemotableOperation, 'Accounting.ArchiveJournalEntryBatch')
 export class ArchiveJournalEntryBatchOperation extends BaseRemotableOperation<ArchiveJournalEntryBatchInput, ArchiveJournalEntryBatchOutput> {
   public readonly OperationKey = 'Accounting.ArchiveJournalEntryBatch';
+  public readonly RequiredScope = 'accounting:write';
 
   protected async InternalExecute(input: ArchiveJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<ArchiveJournalEntryBatchOutput> {
     if (!input?.JournalEntryBatchID) throw new Error('ArchiveJournalEntryBatch: JournalEntryBatchID is required.');
@@ -473,6 +483,7 @@ export interface CancelJournalEntryBatchOutput {
 @RegisterClass(BaseRemotableOperation, 'Accounting.CancelJournalEntryBatch')
 export class CancelJournalEntryBatchOperation extends BaseRemotableOperation<CancelJournalEntryBatchInput, CancelJournalEntryBatchOutput> {
   public readonly OperationKey = 'Accounting.CancelJournalEntryBatch';
+  public readonly RequiredScope = 'accounting:write';
 
   protected async InternalExecute(input: CancelJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<CancelJournalEntryBatchOutput> {
     if (!input?.JournalEntryBatchID) throw new Error('CancelJournalEntryBatch: JournalEntryBatchID is required.');

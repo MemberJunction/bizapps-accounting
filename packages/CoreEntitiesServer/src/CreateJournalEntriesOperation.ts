@@ -32,6 +32,7 @@ import { AccountingEngine } from './AccountingEngine.js';
 @RegisterClass(BaseRemotableOperation, 'Accounting.CreateJournalEntries')
 export class CreateJournalEntriesOperation extends BaseRemotableOperation<CreateJournalEntriesInput, CreateJournalEntriesOutput> {
   public readonly OperationKey = 'Accounting.CreateJournalEntries';
+  public readonly RequiredScope = 'accounting:write';
 
   protected async InternalExecute(
     input: CreateJournalEntriesInput,

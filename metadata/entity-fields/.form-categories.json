@@ -1,0 +1,668 @@
+[
+  {
+    "_comments": [
+      "Field sections for fields added after their entity's form was first grouped (MemberJunction/bizapps-orders#276). CodeGen fills a blank Category only for a new entity or field, so these are set here; each joins an existing section of its form where one fits. GeneratedFormSection must say Category too, or CodeGen still puts the field in Details."
+    ],
+    "fields": {
+      "Category": "Financial Settings",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Accounting Company Profiles&Name=PostingStartDate"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:05.943Z",
+      "checksum": "056836a523ee04141cc0e0938dae55e988658d21a4826cc4084d68ea6df24765"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Administrative Settings",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Accounting Company Profiles&Name=ParentAccountingCompanyIDDepth"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:05.979Z",
+      "checksum": "491a41d7b7318a1a30f19149505c0f11928f682935698b99480dbe22e5d0166e"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Administrative Settings",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Accounting Company Profiles&Name=ParentAccountingCompanyIDPath"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.010Z",
+      "checksum": "491a41d7b7318a1a30f19149505c0f11928f682935698b99480dbe22e5d0166e"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Administrative Settings",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Accounting Company Profiles&Name=ParentAccountingCompanyIDIsLeaf"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.044Z",
+      "checksum": "491a41d7b7318a1a30f19149505c0f11928f682935698b99480dbe22e5d0166e"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Administrative Settings",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Accounting Company Profiles&Name=ParentAccountingCompanyIDChildCount"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.075Z",
+      "checksum": "491a41d7b7318a1a30f19149505c0f11928f682935698b99480dbe22e5d0166e"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Hierarchy",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Dimension Values&Name=ParentDimensionValueIDDepth"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.115Z",
+      "checksum": "77c106d234210d0b5eef8a90b34f566fd43815c6a6d18195648ddd44dca3785e"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Hierarchy",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Dimension Values&Name=ParentDimensionValueIDPath"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.144Z",
+      "checksum": "77c106d234210d0b5eef8a90b34f566fd43815c6a6d18195648ddd44dca3785e"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Hierarchy",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Dimension Values&Name=ParentDimensionValueIDIsLeaf"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.175Z",
+      "checksum": "77c106d234210d0b5eef8a90b34f566fd43815c6a6d18195648ddd44dca3785e"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Hierarchy",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Dimension Values&Name=ParentDimensionValueIDChildCount"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.205Z",
+      "checksum": "77c106d234210d0b5eef8a90b34f566fd43815c6a6d18195648ddd44dca3785e"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Exception Details",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Finance Exceptions&Name=FinanceExceptionTypeID"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.264Z",
+      "checksum": "95859002226403a63c5fa51428c767160a7f6b895e1c817d38c0c3c304ad02fe"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Exception Details",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Finance Exceptions&Name=CompanyID"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.297Z",
+      "checksum": "95859002226403a63c5fa51428c767160a7f6b895e1c817d38c0c3c304ad02fe"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Exception Details",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Finance Exceptions&Name=Amount"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.328Z",
+      "checksum": "95859002226403a63c5fa51428c767160a7f6b895e1c817d38c0c3c304ad02fe"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Exception Details",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Finance Exceptions&Name=ExceptionDate"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.357Z",
+      "checksum": "95859002226403a63c5fa51428c767160a7f6b895e1c817d38c0c3c304ad02fe"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Exception Details",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Finance Exceptions&Name=Summary"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.388Z",
+      "checksum": "95859002226403a63c5fa51428c767160a7f6b895e1c817d38c0c3c304ad02fe"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Exception Details",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Finance Exceptions&Name=DedupeKey"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.418Z",
+      "checksum": "95859002226403a63c5fa51428c767160a7f6b895e1c817d38c0c3c304ad02fe"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Source",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Finance Exceptions&Name=SourceEntityID"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.449Z",
+      "checksum": "9b0acd12695e573ef4e8c2577dfb358afccbb03088f0903c4ffc8e0f74e4d5e2"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Source",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Finance Exceptions&Name=SourceRecordID"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.481Z",
+      "checksum": "9b0acd12695e573ef4e8c2577dfb358afccbb03088f0903c4ffc8e0f74e4d5e2"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Source",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Finance Exceptions&Name=SourceCreatedByUserID"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.519Z",
+      "checksum": "9b0acd12695e573ef4e8c2577dfb358afccbb03088f0903c4ffc8e0f74e4d5e2"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Source",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Finance Exceptions&Name=CreatorUnresolved"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.557Z",
+      "checksum": "9b0acd12695e573ef4e8c2577dfb358afccbb03088f0903c4ffc8e0f74e4d5e2"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Source",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Finance Exceptions&Name=DetectedAt"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.588Z",
+      "checksum": "9b0acd12695e573ef4e8c2577dfb358afccbb03088f0903c4ffc8e0f74e4d5e2"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Review",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Finance Exceptions&Name=Status"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.617Z",
+      "checksum": "2883f4a7d2ef249c47f6232f08bb0983d6085b68b5bd5750c27fe1e6ab352db0"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Review",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Finance Exceptions&Name=ReviewedByUserID"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.650Z",
+      "checksum": "2883f4a7d2ef249c47f6232f08bb0983d6085b68b5bd5750c27fe1e6ab352db0"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Review",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Finance Exceptions&Name=ReviewedAt"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.680Z",
+      "checksum": "2883f4a7d2ef249c47f6232f08bb0983d6085b68b5bd5750c27fe1e6ab352db0"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Review",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Finance Exceptions&Name=ReviewNote"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.712Z",
+      "checksum": "2883f4a7d2ef249c47f6232f08bb0983d6085b68b5bd5750c27fe1e6ab352db0"
+    }
+  },
+  {
+    "fields": {
+      "Category": "System Metadata",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Finance Exceptions&Name=__mj_CreatedAt"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.742Z",
+      "checksum": "b613dc35c115e0292ee1d6aa1c986e587c853a63f707d3947428ecb93fcc52c6"
+    }
+  },
+  {
+    "fields": {
+      "Category": "System Metadata",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Finance Exceptions&Name=__mj_UpdatedAt"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.769Z",
+      "checksum": "b613dc35c115e0292ee1d6aa1c986e587c853a63f707d3947428ecb93fcc52c6"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Type Details",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Finance Exception Types&Name=Code"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.806Z",
+      "checksum": "f742d9eb94b24d16ec807f860bc7731cc80bbc0fbbd06b18c64fef0e69529fc5"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Type Details",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Finance Exception Types&Name=Name"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.834Z",
+      "checksum": "f742d9eb94b24d16ec807f860bc7731cc80bbc0fbbd06b18c64fef0e69529fc5"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Type Details",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Finance Exception Types&Name=Description"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.861Z",
+      "checksum": "f742d9eb94b24d16ec807f860bc7731cc80bbc0fbbd06b18c64fef0e69529fc5"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Type Details",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Finance Exception Types&Name=OwningApp"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.888Z",
+      "checksum": "f742d9eb94b24d16ec807f860bc7731cc80bbc0fbbd06b18c64fef0e69529fc5"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Type Details",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Finance Exception Types&Name=IsActive"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.914Z",
+      "checksum": "f742d9eb94b24d16ec807f860bc7731cc80bbc0fbbd06b18c64fef0e69529fc5"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Type Details",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Finance Exception Types&Name=Configuration"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.941Z",
+      "checksum": "f742d9eb94b24d16ec807f860bc7731cc80bbc0fbbd06b18c64fef0e69529fc5"
+    }
+  },
+  {
+    "fields": {
+      "Category": "System Metadata",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Finance Exception Types&Name=__mj_CreatedAt"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.968Z",
+      "checksum": "b613dc35c115e0292ee1d6aa1c986e587c853a63f707d3947428ecb93fcc52c6"
+    }
+  },
+  {
+    "fields": {
+      "Category": "System Metadata",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Finance Exception Types&Name=__mj_UpdatedAt"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:06.996Z",
+      "checksum": "b613dc35c115e0292ee1d6aa1c986e587c853a63f707d3947428ecb93fcc52c6"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Hierarchy and Rollup",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: GL Accounts&Name=ParentGLAccountIDDepth"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:07.031Z",
+      "checksum": "71f1a31e71dd946c53d4e88035c6dda2430535fe7fe41d3bfb1a08ce5e13b076"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Hierarchy and Rollup",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: GL Accounts&Name=ParentGLAccountIDPath"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:07.061Z",
+      "checksum": "71f1a31e71dd946c53d4e88035c6dda2430535fe7fe41d3bfb1a08ce5e13b076"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Hierarchy and Rollup",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: GL Accounts&Name=ParentGLAccountIDIsLeaf"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:07.087Z",
+      "checksum": "71f1a31e71dd946c53d4e88035c6dda2430535fe7fe41d3bfb1a08ce5e13b076"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Hierarchy and Rollup",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: GL Accounts&Name=ParentGLAccountIDChildCount"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:07.115Z",
+      "checksum": "71f1a31e71dd946c53d4e88035c6dda2430535fe7fe41d3bfb1a08ce5e13b076"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Anomaly Detection",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entries&Name=AnomalyOutcome"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:07.151Z",
+      "checksum": "d979daa214839687d1fbe25ed0bc6940f9634ef7ae7c2fca479214221cb82e6f"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Anomaly Detection",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entries&Name=TotalDebitAmount"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:07.179Z",
+      "checksum": "d979daa214839687d1fbe25ed0bc6940f9634ef7ae7c2fca479214221cb82e6f"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Anomaly Detection",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entries&Name=LineCount"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:07.206Z",
+      "checksum": "d979daa214839687d1fbe25ed0bc6940f9634ef7ae7c2fca479214221cb82e6f"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Anomaly Detection",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entries&Name=EffectiveMonth"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:07.233Z",
+      "checksum": "d979daa214839687d1fbe25ed0bc6940f9634ef7ae7c2fca479214221cb82e6f"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Anomaly Detection",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entries&Name=EffectiveDayOfWeek"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:07.259Z",
+      "checksum": "d979daa214839687d1fbe25ed0bc6940f9634ef7ae7c2fca479214221cb82e6f"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Anomaly Detection",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entries&Name=IsWeekend"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:07.287Z",
+      "checksum": "d979daa214839687d1fbe25ed0bc6940f9634ef7ae7c2fca479214221cb82e6f"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Anomaly Detection",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entries&Name=HasLinkedRecord"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:07.313Z",
+      "checksum": "d979daa214839687d1fbe25ed0bc6940f9634ef7ae7c2fca479214221cb82e6f"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Anomaly Detection",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entries&Name=HasFile"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:07.340Z",
+      "checksum": "d979daa214839687d1fbe25ed0bc6940f9634ef7ae7c2fca479214221cb82e6f"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Approval and Dispatch",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Journal Entry Batches&Name=SealMismatchDetectedAt"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:07.375Z",
+      "checksum": "5142b677249ac904a9c2178a2baa3c64987a8370ad4fabaddce24da762cb70cd"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Jurisdiction Hierarchy",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Tax Jurisdictions&Name=ParentTaxJurisdictionIDDepth"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:07.412Z",
+      "checksum": "57e0987a587028ab8f1d7decf354a5965f13a272a171a1f2acecf86c40f9e48f"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Jurisdiction Hierarchy",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Tax Jurisdictions&Name=ParentTaxJurisdictionIDPath"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:07.439Z",
+      "checksum": "57e0987a587028ab8f1d7decf354a5965f13a272a171a1f2acecf86c40f9e48f"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Jurisdiction Hierarchy",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Tax Jurisdictions&Name=ParentTaxJurisdictionIDIsLeaf"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:07.466Z",
+      "checksum": "57e0987a587028ab8f1d7decf354a5965f13a272a171a1f2acecf86c40f9e48f"
+    }
+  },
+  {
+    "fields": {
+      "Category": "Jurisdiction Hierarchy",
+      "GeneratedFormSection": "Category"
+    },
+    "primaryKey": {
+      "ID": "@lookup:MJ: Entity Fields.EntityID=@lookup:MJ: Entities.Name=MJ_BizApps_Accounting: Tax Jurisdictions&Name=ParentTaxJurisdictionIDChildCount"
+    },
+    "sync": {
+      "lastModified": "2026-10-08T21:19:07.493Z",
+      "checksum": "57e0987a587028ab8f1d7decf354a5965f13a272a171a1f2acecf86c40f9e48f"
+    }
+  }
+]

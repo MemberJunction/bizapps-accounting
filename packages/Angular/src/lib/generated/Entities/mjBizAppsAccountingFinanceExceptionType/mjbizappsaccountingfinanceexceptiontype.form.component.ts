@@ -17,6 +17,8 @@ export class mjBizAppsAccountingFinanceExceptionTypeFormComponent extends BaseFo
         await super.ngOnInit();
         this.initSections([
             { sectionKey: 'details', sectionName: 'Details', isExpanded: true },
+            { sectionKey: 'typeDetails', sectionName: 'Type Details', isExpanded: true },
+            { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false },
             { sectionKey: 'mJBizAppsAccountingFinanceExceptions', sectionName: 'Finance Exceptions', isExpanded: false }
         ]);
     }

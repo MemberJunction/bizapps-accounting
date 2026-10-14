@@ -13,16 +13,15 @@ import path from 'node:path';
 import { loginViaMagicLink } from '../lib/auth';
 import { openAccountingApp, openNavItem, captureConsoleErrors, expectNoConsoleErrors, resetCompanyScopeToAll } from '../lib/explorer';
 import { HARNESS_DIR } from '../lib/env';
+import { REPO_ROOT, TSX_BIN } from '../../harness-paths.mjs';
 
-const WORKTREE_ROOT = path.resolve(HARNESS_DIR, '..', '..', '..', '..', '..');
-const TSX = path.resolve(WORKTREE_ROOT, 'node_modules', '.bin', 'tsx');
 const TEARDOWN = path.resolve(HARNESS_DIR, 'lib', 'company-teardown.ts');
 
 const CODE = `PWCO-${Date.now().toString(36).toUpperCase().slice(-6)}`;
 const NAME = `PW Created Co ${CODE}`;
 
 test.afterAll(() => {
-  try { execFileSync(TSX, [TEARDOWN, CODE], { cwd: WORKTREE_ROOT, encoding: 'utf8', timeout: 120_000 }); } catch { /* best-effort */ }
+  try { execFileSync(TSX_BIN, [TEARDOWN, CODE], { cwd: REPO_ROOT, encoding: 'utf8', timeout: 120_000 }); } catch { /* best-effort */ }
 });
 
 async function railItem(page: Page, category: string, item: string): Promise<void> {

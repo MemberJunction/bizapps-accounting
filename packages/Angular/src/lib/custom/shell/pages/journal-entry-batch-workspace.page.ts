@@ -4,7 +4,7 @@ import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 import { BusinessTimeZoneEngine, IsBeforeDay, IsCalendarDay, ToCalendarDay } from '@mj-biz-apps/common-entities';
 import { BaseAngularComponent } from '@memberjunction/ng-base-types';
 import { PageRefreshService } from '../../../transfer-pending/shell-refresh/page-refresh.service';
-import { PostingDateMonthWarning, PostingMonthLabel } from '../../shared/posting-date-warning';
+import { ClosedBooksProblem, PostingDateMonthWarning, PostingMonthLabel } from '../../shared/posting-date-warning';
 import { CompanyScopeService } from '../../shared/company-scope.service';
 import { WorkspaceTabStore } from '../../../transfer-pending/workspace-tabs/workspace-tab-store';
 import { WorkspaceTab } from '../../../transfer-pending/workspace-tabs/workspace-tabs.types';
@@ -17,6 +17,7 @@ import {
 } from './journal-entry-batch-workspace.client';
 import {
   ALL_ENTRIES,
+  NO_ENTRIES,
   IncludedCandidateIds,
   IsEntryIncluded,
   SelectionRequestIds,
@@ -419,6 +420,24 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
     void this.refreshPreview();
   }
 
+  /**
+   * The header checkbox (#327), as in the Build Batch dialog: ticking it selects every candidate,
+   * including entries a later criteria change brings in; unticking it clears the selection, so
+   * those later entries come in unticked.
+   */
+  public SetAllEntriesIncluded(included: boolean): void {
+    const d = this.Draft;
+    if (!d || this.IsBuilt) return;
+    d.Selection = included ? ALL_ENTRIES : NO_ENTRIES;
+    if (this.tabs.ActiveId) this.tabs.UpdateState(this.tabs.ActiveId, d);
+    void this.refreshPreview();
+  }
+
+  /** Whether every candidate on screen is ticked: the header checkbox's state. */
+  public get AllEntriesIncluded(): boolean {
+    return (this.Preview?.Candidates.length ?? 0) > 0 && this.ExcludedCount === 0;
+  }
+
   public get IncludedCount(): number {
     const d = this.Draft;
     return d?.Preview ? this.includedIds(d).length : 0;
@@ -489,6 +508,8 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
   public get PostingDateProblem(): string | null {
     const postingDate = this.Draft?.Criteria.PostingDate ?? null;
     if (!postingDate || !IsCalendarDay(postingDate)) return 'Choose a posting date.';
+    const closed = ClosedBooksProblem(postingDate, this.Draft?.Criteria.CompanyIDs ?? []);
+    if (closed) return closed;
     const latest = this.latestIncludedDay();
     if (latest && IsBeforeDay(postingDate, latest)) {
       return `The posting date ${postingDate} is earlier than an included entry dated ${latest} — move it to ${latest} or later, or apply the filters again.`;

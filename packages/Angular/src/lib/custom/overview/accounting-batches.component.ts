@@ -8,7 +8,7 @@ import { MJButtonDirective, MJDialogComponent, MJDialogActionsComponent, MJDropd
 import { mjBizAppsAccountingJournalEntryBatchEntity } from '@mj-biz-apps/accounting-entities';
 import { BusinessTimeZoneEngine, IsCalendarDay } from '@mj-biz-apps/common-entities';
 import { calendarDaySpan, formatJournalDate } from '../form-panels/journal-entry-panel.helpers';
-import { PostingDateMonthWarning, PostingMonthLabel } from '../shared/posting-date-warning';
+import { ClosedBooksProblem, PostingDateMonthWarning, PostingMonthLabel } from '../shared/posting-date-warning';
 import {
     ALL_ENTRIES,
     NO_ENTRIES,
@@ -24,6 +24,8 @@ import {
     PreviewEntryWire,
     BuildJournalEntryBatchOptionsInput,
 } from '../JournalEntryBatchDispatch/journal-entry-batch-dispatch.client';
+import { cancelReasonMaxLength } from '../JournalEntryBatchDispatch/cancel-reason';
+import { CompanyApprovers, LoadCompanyApprovers, MayCancelApprovedBatch, MayCancelPendingBatch } from '../JournalEntryBatchDispatch/batch-action-permission';
 
 /**
  * The batch fields this page reads, PICKED from the generated entity class rather than
@@ -52,6 +54,9 @@ export type BatchItem = Pick<
     | 'ExternalJournalEntryBatchRef'
     | 'ArchiveReason'
     | 'CancelReason'
+    | 'CompanyID'
+    | 'BatchedByUserID'
+    | 'ApprovedByUserID'
 >;
 
 interface StageCount {
@@ -526,7 +531,7 @@ const JE_ENTITY = 'MJ_BizApps_Accounting: Journal Entries';
                             id="aidp-cancel-reason"
                             class="mj-input mja-archive-reason-input"
                             rows="3"
-                            maxlength="500"
+                            [maxlength]="CancelReasonMaxLength"
                             [(ngModel)]="CancelReasonDraft"></textarea>
                     </div>
 
@@ -1264,7 +1269,10 @@ export class AccountingBatchesPageComponent implements OnInit {
         this.cdr.markForCheck();
     }
 
-    /** Run the archive with the reason captured in the dialog. The button is disabled until it is non-blank. */
+    /**
+     * Run the archive with the reason captured in the dialog. The button is disabled until it is non-blank.
+     * Every answer reloads the list: an archive whose response timed out may still have gone through.
+     */
     public async ConfirmArchive(): Promise<void> {
         const batch = this.ArchiveTarget;
         const reason = this.ArchiveReasonDraft.trim();
@@ -1283,8 +1291,8 @@ export class AccountingBatchesPageComponent implements OnInit {
                 this.ArchiveModalVisible = false;
                 this.ArchiveTarget = null;
                 this.ArchiveReasonDraft = '';
-                await this.LoadBatches();
             }
+            await this.LoadBatches();
         } finally {
             this.ArchivingBatchID = null;
             this.cdr.markForCheck();
@@ -1296,6 +1304,8 @@ export class AccountingBatchesPageComponent implements OnInit {
     public CancelModalVisible = false;
     public CancelTarget: BatchItem | null = null;
     public CancelReasonDraft = '';
+    /** The cancel reason's limit, read from JournalEntryBatch.CancelReason's field metadata when the dialog opens (#307). */
+    public CancelReasonMaxLength: number | null = null;
     /** For a Failed batch the server asked about: the operator confirmed its document number has not posted in the ERP. */
     public CancelConfirmNotPostedInERP = false;
     /**
@@ -1308,13 +1318,21 @@ export class AccountingBatchesPageComponent implements OnInit {
     public CancelMismatchText = '';
 
     /**
-     * Cancel is offered on a Pending (golive #302), Approved or Failed (#183) batch. Who may cancel is
-     * the server's call: the company's CFO or the batch's builder before approval, the CFO or the
-     * approver after it.
+     * Cancel is offered on a Pending (golive #302), Approved or Failed (#183) batch. The server decides
+     * who may cancel: the company's CFO or the batch's builder before approval (#308), the CFO or the
+     * approver after it (#339). The button shows only to those users; the server check stays the
+     * authority.
      */
     public CanCancel(batch: BatchItem): boolean {
-        return ['Pending', 'Approved', 'Failed'].includes(batch.Status) && this.CancellingBatchID !== batch.ID;
+        if (!['Pending', 'Approved', 'Failed'].includes(batch.Status) || this.CancellingBatchID === batch.ID) return false;
+        const userId = Metadata.Provider?.CurrentUser?.ID;
+        return batch.Status === 'Pending'
+            ? MayCancelPendingBatch(batch, userId, this.companyApprovers)
+            : MayCancelApprovedBatch(batch, userId, this.companyApprovers);
     }
+
+    /** Each company's configured approver, read with the batches; decides who sees Cancel (#308, #339). */
+    private companyApprovers: CompanyApprovers = new Map();
 
     /**
      * Cancel a Pending, Approved or Failed batch: the batch becomes Cancelled, its summary journal entry
@@ -1328,6 +1346,7 @@ export class AccountingBatchesPageComponent implements OnInit {
         event.stopPropagation();
         if (this.CancellingBatchID) return;
         this.resetCancelDialog();
+        this.CancelReasonMaxLength = cancelReasonMaxLength(Metadata.Provider);
         this.CancelTarget = batch;
         this.CancelModalVisible = true;
         this.cdr.markForCheck();
@@ -1391,7 +1410,9 @@ export class AccountingBatchesPageComponent implements OnInit {
             // Close on a refusal too: the message is on the page, and the modal would hide it. The one
             // that matters most, "the ERP holds this batch — retry it instead", has nothing to redo here.
             this.resetCancelDialog();
-            if (res.Success) await this.LoadBatches();
+            // Reload on a refusal too: a cancel whose response timed out may still have gone through,
+            // and a list still showing the old status invites a second attempt.
+            await this.LoadBatches();
         } finally {
             this.CancellingBatchID = null;
             this.cdr.markForCheck();
@@ -1412,7 +1433,7 @@ export class AccountingBatchesPageComponent implements OnInit {
 
         try {
             const rv = new RunView();
-            const [batchRes, jeRes] = await Promise.all([
+            const [batchRes, jeRes, approvers] = await Promise.all([
                 rv.RunView<BatchItem>({
                     EntityName: BATCH_ENTITY,
                     OrderBy: 'PostingDate DESC, JournalEntryBatchNumber DESC',
@@ -1425,7 +1446,9 @@ export class AccountingBatchesPageComponent implements OnInit {
                     ResultType: 'simple',
                     MaxRows: 1,
                 }),
+                LoadCompanyApprovers(rv),
             ]);
+            this.companyApprovers = approvers;
 
             if (batchRes.Success && batchRes.Results) {
                 this.Batches = batchRes.Results;
@@ -1584,11 +1607,19 @@ export class AccountingBatchesPageComponent implements OnInit {
         this.ConfirmPostingDate((event.target as HTMLInputElement).checked);
     }
 
+    /** Why the posting date falls in a month finance has closed for a ticked entry's company (golive #316), or null. */
+    public get ClosedBooksProblem(): string | null {
+        const included = new Set(this.IncludedEntryIDs);
+        const companies = this.PreviewEntries.filter(e => included.has(e.ID)).map(e => e.CompanyID);
+        return ClosedBooksProblem(this.BuildPostingDate, companies);
+    }
+
     /** Non-null = why Build is disabled. Saying it beats a dead button with no explanation. */
     public get BuildBlockedReason(): string | null {
         // The preview re-queries on every change and its pool ends at the posting date, so no ticked
         // entry can postdate it; the server refuses that case regardless.
         if (!IsCalendarDay(this.BuildPostingDate)) return 'Choose a posting date.';
+        if (this.ClosedBooksProblem) return this.ClosedBooksProblem;
         if (this.PostingDateWarning && !this.PostingDateConfirmed) return `Confirm posting this batch in ${this.PostingMonth}.`;
         if (this.PreviewCandidateCount === 0) return 'Nothing matches these criteria.';
         if (this.IncludedCount === 0) return 'Every entry is excluded — nothing to build.';

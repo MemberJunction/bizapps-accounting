@@ -6,14 +6,13 @@
  * anything we had deliberately set?" is to compare SEMANTICALLY — keyed on entity+field NAME, never
  * on ID, and ignoring ordering entirely.
  *
- * Run from the instance worktree root (reads .env from cwd, like the other harnesses):
+ * Run from the repo root (.env lookup: ../harness-paths.mts):
  *   npx tsx .../_maint-metadata-snapshot.ts snapshot <out.json>
  *   npx tsx .../_maint-metadata-snapshot.ts diff <before.json> <after.json>
  */
 import sql from 'mssql';
-import dotenv from 'dotenv';
-import path from 'node:path';
 import fs from 'node:fs';
+import { LoadHarnessEnv } from '../harness-paths.mjs';
 
 const SCHEMA = '__mj_BizAppsAccounting';
 
@@ -29,7 +28,7 @@ interface RelSnap { Entity: string; RelatedEntity: string; DisplayInForm: boolea
 interface Snapshot { entities: EntitySnap[]; fields: FieldSnap[]; relationships: RelSnap[] }
 
 async function connect(): Promise<sql.ConnectionPool> {
-  dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
+  LoadHarnessEnv();
   return new sql.ConnectionPool({
     server: process.env['DB_HOST'] ?? 'localhost',
     port: Number(process.env['DB_PORT'] ?? 1433),

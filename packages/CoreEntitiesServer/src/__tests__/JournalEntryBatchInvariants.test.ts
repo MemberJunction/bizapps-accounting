@@ -50,7 +50,7 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
       'ApprovedAt', 'ApprovedByUserID', 'ArchiveReason', 'ArchivedAt', 'ArchivedByUserID',
       'CancelReason', 'CancelledAt', 'CancelledByUserID', 'ApprovedContentHash',
       'ERPNotPostedConfirmedAt', 'ERPNotPostedConfirmedByUserID', 'ERPNotPostedBasis',
-      'SentAt', 'SentByUserID', 'SendAttemptCount', 'ErrorMessage',
+      'SentAt', 'SentByUserID', 'SendAttemptCount', 'ErrorMessage', 'ApprovalTaskID', 'ApprovalTaskRaisedAt',
     ]);
     Metadata.Provider = {
       Entities: [batchInfo],
@@ -171,6 +171,57 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
     expect(result.Errors.some(e => getErrorText(e).includes('cancelled only through Cancel'))).toBe(true);
   });
 
+  // ─── the approval Task pointer is set once (#313) ─────────────────────────
+
+  describe('ApprovalTaskID is set once, by the build', () => {
+    const STAMPED_TASK = '7a5c0d1e-0000-4000-8000-0000000074a5';
+    const OTHER_TASK = '0badf00d-0000-4000-8000-00000000f0f0';
+    const setOnceErrors = (r: { Errors: unknown[] }) => r.Errors.filter(e => getErrorText(e).includes('approval Task is set once'));
+
+    it('refuses re-pointing a Pending batch at another Task', () => {
+      asSaved('Pending', { ApprovalTaskID: STAMPED_TASK });
+      batch.ApprovalTaskID = OTHER_TASK;
+      const result = batch.Validate();
+      expect(result.Success).toBe(false);
+      expect(setOnceErrors(result).length).toBe(1);
+    });
+
+    it('refuses clearing the stamp', () => {
+      asSaved('Pending', { ApprovalTaskID: STAMPED_TASK });
+      batch.ApprovalTaskID = null;
+      expect(setOnceErrors(batch.Validate()).length).toBe(1);
+    });
+
+    it('refuses a re-point carried by the same save that approves the batch', () => {
+      asSaved('Pending', { ApprovalTaskID: STAMPED_TASK });
+      batch.SetMany({ ApprovedAt: new Date(), ApprovedByUserID: 'U1' }, true);
+      batch.Status = 'Approved';
+      batch.ApprovalTaskID = OTHER_TASK;
+      const result = batch.Validate();
+      expect(result.Success).toBe(false);
+      expect(setOnceErrors(result).length).toBe(1);
+    });
+
+    it('lets an approval that leaves the stamp alone through', () => {
+      asSaved('Pending', { ApprovalTaskID: STAMPED_TASK });
+      batch.SetMany({ ApprovedAt: new Date(), ApprovedByUserID: 'U1' }, true);
+      batch.Status = 'Approved';
+      expect(setOnceErrors(batch.Validate())).toEqual([]);
+    });
+
+    it('lets the build stamp a batch that has none', () => {
+      asSaved('Pending', { ApprovalTaskID: null });
+      batch.ApprovalTaskID = STAMPED_TASK;
+      expect(setOnceErrors(batch.Validate())).toEqual([]);
+    });
+
+    it('treats the same Task in different letter case as unchanged', () => {
+      asSaved('Pending', { ApprovalTaskID: STAMPED_TASK });
+      batch.ApprovalTaskID = STAMPED_TASK.toUpperCase();
+      expect(setOnceErrors(batch.Validate())).toEqual([]);
+    });
+  });
+
   it('a batch cancelled after it was sent, without the ERP-check attestation, fails validation', () => {
     asSaved('Failed', { ApprovedAt: new Date(), ApprovedByUserID: 'U1', SentAt: new Date() });
     batch.SetMany({ CancelReason: 'Wrong period', CancelledAt: new Date(), CancelledByUserID: 'U1' }, true);
@@ -259,6 +310,8 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
   describe('Archive() keeps the member entries locked; Cancel() releases them', () => {
     let teardown: Mock<JournalEntryBatchEntityServer['ReleaseMembersAndDeleteSummary']>;
     let save: ReturnType<typeof vi.spyOn>;
+    /** The transaction verbs the instance's provider received, in order. */
+    let transaction: string[];
     const USER = { ID: 'U-CANCELLER' } as UserInfo;
 
     // Cancel() authorizes itself through JournalEntryBatchDispatchServices (#214). These cases are
@@ -270,6 +323,7 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
       assertMayCancelPending: vi.fn(async () => undefined),
       assertMayCancelApproved: vi.fn(async () => undefined),
       recordCancellation: vi.fn(async () => undefined),
+      recordArchive: vi.fn(async () => undefined),
     } satisfies JournalEntryBatchCancelGate;
     class PermissiveDispatchServices extends JournalEntryBatchDispatchServices {
       public override CreateCancelGate(): JournalEntryBatchCancelGate { return cancelGate; }
@@ -279,6 +333,8 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
 
     beforeEach(() => {
       cancelGate.recordCancellation.mockReset().mockResolvedValue(undefined);
+      cancelGate.recordArchive.mockReset().mockResolvedValue(undefined);
+      transaction = [];
       save = vi.spyOn(BaseEntity.prototype, 'Save').mockResolvedValue(true);
       teardown = vi.fn<JournalEntryBatchEntityServer['ReleaseMembersAndDeleteSummary']>().mockResolvedValue(undefined);
       batch.ReleaseMembersAndDeleteSummary = teardown;
@@ -288,9 +344,9 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
       Object.defineProperty(batch, 'ProviderToUse', {
         configurable: true,
         get: () => ({
-          BeginTransaction: vi.fn().mockResolvedValue(undefined),
-          CommitTransaction: vi.fn().mockResolvedValue(undefined),
-          RollbackTransaction: vi.fn().mockResolvedValue(undefined),
+          BeginTransaction: vi.fn(async () => { transaction.push('begin'); }),
+          CommitTransaction: vi.fn(async () => { transaction.push('commit'); }),
+          RollbackTransaction: vi.fn(async () => { transaction.push('rollback'); }),
           RunView: vi.fn().mockResolvedValue({ Success: true, Results: [] }),
         }),
       });
@@ -300,7 +356,7 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
 
     it('Archive() never runs the teardown, and leaves the summary pointer intact', async () => {
       asSaved('Pending', { SummaryJournalEntryID: 'SUM1' });
-      await batch.Archive('Conversion cutover — these were posted in the legacy system');
+      await batch.Archive('Conversion cutover — these were posted in the legacy system', USER);
 
       expect(teardown).not.toHaveBeenCalled();
       expect(batch.SummaryJournalEntryID).toBe('SUM1');
@@ -319,13 +375,43 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
 
     it('Archive() refuses a Sent batch, naming the actual status', async () => {
       asSaved('Sent');
-      await expect(batch.Archive('too late')).rejects.toThrow(/is Sent/);
+      await expect(batch.Archive('too late', USER)).rejects.toThrow(/is Sent/);
       expect(teardown).not.toHaveBeenCalled();
     });
 
     it('Archive() refuses a blank reason', async () => {
       asSaved('Pending');
-      await expect(batch.Archive('   ')).rejects.toThrow(/reason/i);
+      await expect(batch.Archive('   ', USER)).rejects.toThrow(/reason/i);
+    });
+
+    // ─── the approval Task hears about an archive (golive #325) ──────────────
+
+    it.each(['Pending', 'Approved', 'Failed'])('Archive() records a %s batch\'s archive on the approval Task, inside its transaction', async (from) => {
+      asSaved(from, { SummaryJournalEntryID: 'SUM1' });
+      cancelGate.recordArchive.mockImplementation(async () => { transaction.push('record'); });
+      await batch.Archive('  Posted in the legacy system  ', USER);
+
+      expect(cancelGate.recordArchive).toHaveBeenCalledWith('B1', { reason: 'Posted in the legacy system', fromStatus: from }, USER);
+      expect(transaction).toEqual(['begin', 'record', 'commit']);
+      expect(batch.ArchivedByUserID).toBe('U-CANCELLER');
+    });
+
+    it('Archive() rolls back and reloads the instance when the approval Task cannot record it', async () => {
+      const load = vi.fn(async () => true);
+      batch.Load = load as never;
+      cancelGate.recordArchive.mockRejectedValue(new Error('has no linked Person'));
+      asSaved('Approved', { SummaryJournalEntryID: 'SUM1' });
+
+      await expect(batch.Archive('Posted in the legacy system', USER)).rejects.toThrow('has no linked Person');
+      expect(transaction).toEqual(['begin', 'rollback']);
+      expect(load).toHaveBeenCalledWith('B1');
+    });
+
+    it('Archive() refuses without a context user — the archive is recorded as someone', async () => {
+      asSaved('Pending', { SummaryJournalEntryID: 'SUM1' });
+      await expect(batch.Archive('Posted in the legacy system')).rejects.toThrow(/context user is required/);
+      expect(save).not.toHaveBeenCalled();
+      expect(cancelGate.recordArchive).not.toHaveBeenCalled();
     });
 
     // ─── cancel after approval (#183) ─────────────────────────────────────────

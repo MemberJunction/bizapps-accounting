@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
-import { RunView, RunViewParams } from '@memberjunction/core';
+import { IMetadataProvider, Metadata, RunView, RunViewParams, UserInfo } from '@memberjunction/core';
 import { AccountingBatchesPageComponent, BatchItem } from './accounting-batches.component';
 import {
   BuildJournalEntryBatchOptionsInput,
@@ -20,6 +20,23 @@ import { AUGUST_CLOSE_IN_CHICAGO, useBusinessClock, viewResult } from '../../../
  */
 const BUSINESS_DAY = '2026-08-31';
 const BATCH_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Batches';
+const COMPANY_PROFILE_ENTITY = 'MJ_BizApps_Accounting: Accounting Company Profiles';
+const COMPANY_ID = '00000000-0000-0000-0000-0000000000c1';
+const BUILDER_USER_ID = '00000000-0000-0000-0000-0000000000b1';
+const APPROVER_USER_ID = '00000000-0000-0000-0000-0000000000a1';
+const OTHER_USER_ID = '00000000-0000-0000-0000-0000000000f1';
+/** The user recorded as having approved a batch, who may cancel it past approval. */
+const APPROVED_BY_USER_ID = '00000000-0000-0000-0000-0000000000d1';
+/** The MJ system user, which the nightly job builds as. */
+const SYSTEM_USER_ID = '00000000-0000-0000-0000-0000000000e1';
+
+/** Sign in as `userId`: the page reads the current user from the global provider. */
+function signInAs(userId: string): void {
+  const user = new UserInfo();
+  user.ID = userId;
+  const provider: Pick<IMetadataProvider, 'CurrentUser'> = { CurrentUser: user };
+  vi.spyOn(Metadata, 'Provider', 'get').mockReturnValue(provider as IMetadataProvider);
+}
 
 const LISTED_BATCH: BatchItem = {
   ID: '00000000-0000-0000-0000-000000000001',
@@ -35,6 +52,9 @@ const LISTED_BATCH: BatchItem = {
   ExternalJournalEntryBatchRef: null,
   ArchiveReason: null,
   CancelReason: null,
+  CompanyID: COMPANY_ID,
+  BatchedByUserID: BUILDER_USER_ID,
+  ApprovedByUserID: null,
 };
 
 describe('AccountingBatchesPageComponent — Build Batch modal cutoff (DOM)', () => {
@@ -556,8 +576,12 @@ describe('AccountingBatchesPageComponent — Build Batch selection after Clear A
 });
 
 describe('AccountingBatchesPageComponent — Cancel a batch (#183, golive #302)', () => {
-  const APPROVED: BatchItem = { ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000002', JournalEntryBatchNumber: 'JEB-TEST-0002', Status: 'Approved' };
-  const FAILED: BatchItem = { ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000003', JournalEntryBatchNumber: 'JEB-TEST-0003', Status: 'Failed' };
+  const APPROVED: BatchItem = {
+    ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000002', JournalEntryBatchNumber: 'JEB-TEST-0002', Status: 'Approved', ApprovedByUserID: APPROVED_BY_USER_ID,
+  };
+  const FAILED: BatchItem = {
+    ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000003', JournalEntryBatchNumber: 'JEB-TEST-0003', Status: 'Failed', ApprovedByUserID: APPROVED_BY_USER_ID,
+  };
   let cancelCalls: { ID: string; Reason: string; Confirm: boolean }[];
   /**
    * What the server answers an unconfirmed Failed cancel, standing in for its ERP lookup (#207):
@@ -566,9 +590,19 @@ describe('AccountingBatchesPageComponent — Cancel a batch (#183, golive #302)'
   let unconfirmedFailedAnswer: CancelJournalEntryBatchResult | null;
 
   beforeEach(() => {
-    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) =>
-      p.EntityName === BATCH_ENTITY ? viewResult([LISTED_BATCH, APPROVED, FAILED]) : viewResult([], 0),
-    );
+    // The company's approver may cancel at every status these cases cover.
+    signInAs(APPROVER_USER_ID);
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+      if (p.EntityName === BATCH_ENTITY) return viewResult([LISTED_BATCH, APPROVED, FAILED]);
+      if (p.EntityName === COMPANY_PROFILE_ENTITY) return viewResult([{ ID: COMPANY_ID, ApprovalCFOUserID: APPROVER_USER_ID }]);
+      return viewResult([], 0);
+    });
+    // The dialog reads the cancel reason's limit from the batch entity's metadata when it opens (#307).
+    const signedInUser = Metadata.Provider.CurrentUser;
+    vi.spyOn(Metadata, 'Provider', 'get').mockReturnValue({
+      CurrentUser: signedInUser,
+      EntityByName: (name: string) => (name === BATCH_ENTITY ? { Fields: [{ Name: 'CancelReason', MaxLength: 1000 }] } : undefined),
+    } as unknown as IMetadataProvider);
     cancelCalls = [];
     unconfirmedFailedAnswer = null;
     vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'CancelBatch').mockImplementation(async (id, reason, confirm = false) => {
@@ -678,5 +712,159 @@ describe('AccountingBatchesPageComponent — Cancel a batch (#183, golive #302)'
     expect(page.ActionMessage).toMatch(/so the batch posted/);
     expect(page.CancelERPCheckReason).toBeNull();
     expect(page.CancelModalVisible).toBe(false); // the refusal is on the page, not behind the modal
+  });
+
+  it('limits the cancel reason to the length the batch\'s CancelReason metadata reports (#307)', async () => {
+    const fixture = TestBed.createComponent(AccountingBatchesPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
+    fixture.componentInstance.OnCancel(LISTED_BATCH, new Event('click'));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(document.getElementById('aidp-cancel-reason')?.getAttribute('maxlength')).toBe('1000');
+  });
+});
+
+/**
+ * golive #325: a Cancel or Archive whose response is lost (a gateway timeout) may still have gone
+ * through on the server. The list reloads after every answer, so it shows the batch's real status
+ * instead of inviting a second attempt.
+ */
+describe('AccountingBatchesPageComponent — a failed Cancel or Archive reloads the list (golive #325)', () => {
+  const TIMEOUT = 'GraphQL Error (Code: 504)';
+  let listedStatus: string;
+  let batchReads: number;
+
+  beforeEach(() => {
+    listedStatus = 'Pending';
+    batchReads = 0;
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+      if (p.EntityName !== BATCH_ENTITY) return viewResult([], 0);
+      batchReads++;
+      return viewResult([{ ...LISTED_BATCH, Status: listedStatus }]);
+    });
+    signInAs(BUILDER_USER_ID);
+    const signedInUser = Metadata.Provider.CurrentUser;
+    vi.spyOn(Metadata, 'Provider', 'get').mockReturnValue({
+      CurrentUser: signedInUser,
+      EntityByName: (name: string) => (name === BATCH_ENTITY ? { Fields: [{ Name: 'CancelReason', MaxLength: 1000 }] } : undefined),
+    } as unknown as IMetadataProvider);
+  });
+
+  async function render(): Promise<AccountingBatchesPageComponent> {
+    const fixture = TestBed.createComponent(AccountingBatchesPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
+    return fixture.componentInstance;
+  }
+
+  it('shows the batch Cancelled, and the error, when the cancel went through but its response timed out', async () => {
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'CancelBatch').mockImplementation(async () => {
+      listedStatus = 'Cancelled';
+      return { Success: false, ErrorMessage: TIMEOUT };
+    });
+    const page = await render();
+    page.OnCancel(LISTED_BATCH, new Event('click'));
+    page.CancelReasonDraft = 'Built with the wrong entries';
+    await page.ConfirmCancel();
+
+    expect(batchReads).toBe(2);
+    expect(page.Batches.map((b) => b.Status)).toEqual(['Cancelled']);
+    expect(page.ActionMessageIsError).toBe(true);
+    expect(page.ActionMessage).toBe(TIMEOUT);
+  });
+
+  it('shows the batch Archived, and the error, when the archive went through but its response timed out', async () => {
+    vi.spyOn(JournalEntryBatchDispatchClient.prototype, 'ArchiveBatch').mockImplementation(async () => {
+      listedStatus = 'Archived';
+      return { Success: false, ErrorMessage: TIMEOUT };
+    });
+    const page = await render();
+    page.OnArchive(LISTED_BATCH, new Event('click'));
+    page.ArchiveReasonDraft = 'Posted in the legacy system';
+    await page.ConfirmArchive();
+
+    expect(batchReads).toBe(2);
+    expect(page.Batches.map((b) => b.Status)).toEqual(['Archived']);
+    expect(page.ActionMessageIsError).toBe(true);
+    expect(page.ActionMessage).toBe(TIMEOUT);
+  });
+});
+
+/**
+ * The Cancel button shows only to the users the server lets cancel the batch. On a Pending batch
+ * (#308): the company's approver or the batch's builder; a batch the nightly job built has the system
+ * user as its builder, so only the approver sees it. Past approval (#339): the company's approver or
+ * the user who approved the batch.
+ */
+describe('AccountingBatchesPageComponent — who sees Cancel (#308, #339, DOM)', () => {
+  const NIGHTLY: BatchItem = {
+    ...LISTED_BATCH,
+    ID: '00000000-0000-0000-0000-000000000004',
+    JournalEntryBatchNumber: 'JEB-TEST-0004',
+    BatchedByUserID: SYSTEM_USER_ID,
+  };
+  const APPROVED: BatchItem = {
+    ...LISTED_BATCH, ID: '00000000-0000-0000-0000-000000000002', JournalEntryBatchNumber: 'JEB-TEST-0002', Status: 'Approved', ApprovedByUserID: APPROVED_BY_USER_ID,
+  };
+  /** The profile read the page answers with; a case can make it fail. */
+  let profilesRead: boolean;
+
+  beforeEach(() => {
+    profilesRead = true;
+    vi.spyOn(RunView.prototype, 'RunView').mockImplementation(async (p: RunViewParams) => {
+      if (p.EntityName === BATCH_ENTITY) return viewResult([LISTED_BATCH, NIGHTLY, APPROVED]);
+      if (p.EntityName === COMPANY_PROFILE_ENTITY) {
+        return profilesRead
+          ? viewResult([{ ID: COMPANY_ID, ApprovalCFOUserID: APPROVER_USER_ID }])
+          : { ...viewResult([]), Success: false, ErrorMessage: 'read refused' };
+      }
+      return viewResult([], 0);
+    });
+  });
+
+  /** The batch numbers whose row shows a Cancel button. */
+  async function rowsOfferingCancel(): Promise<string[]> {
+    const fixture = TestBed.createComponent(AccountingBatchesPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await vi.waitFor(() => expect(fixture.componentInstance.IsLoading).toBe(false));
+    fixture.detectChanges();
+    const rows: HTMLElement[] = Array.from(fixture.nativeElement.querySelectorAll('tr'));
+    return rows
+      .filter(row => Array.from(row.querySelectorAll('button')).some(b => b.textContent?.trim() === 'Cancel'))
+      .map(row => row.querySelector('.mja-batch-num')?.textContent?.trim() ?? '');
+  }
+
+  it("shows the builder Cancel on their own Pending batch, not on the nightly job's, and not past approval", async () => {
+    signInAs(BUILDER_USER_ID);
+    expect(await rowsOfferingCancel()).toEqual(['JEB-TEST-0001']);
+  });
+
+  it("shows the company's approver Cancel on every Pending batch, the nightly job's included", async () => {
+    signInAs(APPROVER_USER_ID);
+    expect(await rowsOfferingCancel()).toEqual(['JEB-TEST-0001', 'JEB-TEST-0004', 'JEB-TEST-0002']);
+  });
+
+  it('shows the user who approved a batch Cancel on it, and not on the Pending batches', async () => {
+    signInAs(APPROVED_BY_USER_ID);
+    expect(await rowsOfferingCancel()).toEqual(['JEB-TEST-0002']);
+  });
+
+  it('shows anyone else no Cancel', async () => {
+    signInAs(OTHER_USER_ID);
+    expect(await rowsOfferingCancel()).toEqual([]);
+  });
+
+  it('shows Cancel only to the builder and the user who approved the batch when the approvers cannot be read', async () => {
+    profilesRead = false;
+    signInAs(APPROVER_USER_ID);
+    expect(await rowsOfferingCancel()).toEqual([]);
+    signInAs(BUILDER_USER_ID);
+    expect(await rowsOfferingCancel()).toEqual(['JEB-TEST-0001']);
+    signInAs(APPROVED_BY_USER_ID);
+    expect(await rowsOfferingCancel()).toEqual(['JEB-TEST-0002']);
   });
 });

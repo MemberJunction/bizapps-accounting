@@ -333,6 +333,17 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
     };
   }
 
+  /**
+   * The company's books-closed-through date from its Accounting Company Profile, or null when it has
+   * none or nothing is closed (bc-aidp-next-golive#316). A DATE value: read its day with
+   * `ToCalendarDay`, then test it with `IsInClosedBooks` (./books-closed.ts).
+   */
+  public BooksClosedThroughFor(companyId: string | null | undefined): Date | null {
+    const key = uuidKey(companyId);
+    const profile = key ? this.CompanyProfiles.find(p => uuidKey(p.ID) === key) : undefined;
+    return profile?.BooksClosedThroughDate ?? null;
+  }
+
   // ─── the legal-entity walk (bc-aidp-next-golive#313) ─────────────────────────
 
   /**

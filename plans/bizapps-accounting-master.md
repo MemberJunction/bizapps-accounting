@@ -249,6 +249,7 @@ __mj_BizAppsAccounting.AccountingCompanyProfile
   FiscalYearStartMonth TINYINT NOT NULL DEFAULT 1,
   FiscalYearStartDay TINYINT NOT NULL DEFAULT 1,
   PostingStartDate DATE NULL,             -- floor under every batch filter (§7.2)
+  BooksClosedThroughDate DATE NULL,       -- last day finance has closed; no posting date on or before it (§7.2, golive #316)
   ParentAccountingCompanyID UNIQUEIDENTIFIER NULL,  -- parent; Division/Department/Branch use the books of the first non-such ancestor; nests; no cycles; not self (golive#313)
   ApprovalCFOUserID UNIQUEIDENTIFIER NULL FK → __mj.User,  -- designated batch approver
   IsActive BIT NOT NULL DEFAULT 1,
@@ -528,6 +529,14 @@ batch is approved, and a `Sent` batch is not archived (`trg_JournalEntryBatch_Im
   the later of the two bounds each company. NULL, or a company with no profile row, means no floor.
   The preview reports how many entries the floor held back (`BeforePostingStartCount`); an
   explicit-ID build holding such an entry is refused, and a view build drops them with a warning.
+- **Books closed through (golive #316, 2026-10-11):** `AccountingCompanyProfile.BooksClosedThroughDate`
+  (nullable) is the last day of the latest month finance has closed. Finance sets it when a close
+  finishes and moves it back to reopen a month; only the Finance role's
+  `MJ.BizApps.Accounting.BooksClosedThroughDate.Set` may change it, and record changes keep the
+  history. Every build refuses a posting date on or before it. NULL means nothing is closed. It is a
+  date, not a period: D2 stands, and the ERP's own lock stays the backstop. A batch the ERP rejects
+  raises `ERP_POSTING_REJECTED` for finance. Orders reads the same date to block progress dated into
+  a closed month and to move a supersede's reversal to the first open day.
 - **Arbitrary batches via MJ User Views:** build a view of desired records → "generate batch from
   view"; the engine validates the view resolves ONLY unbatched entries (rejects loudly otherwise).
 - The whole batch (header + summary lines + dimensions + control totals + JE locks) commits in

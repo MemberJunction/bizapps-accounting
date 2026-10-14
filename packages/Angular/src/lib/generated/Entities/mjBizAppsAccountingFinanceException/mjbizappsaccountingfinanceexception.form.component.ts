@@ -15,7 +15,11 @@ export class mjBizAppsAccountingFinanceExceptionFormComponent extends BaseFormCo
     override async ngOnInit() {
         await super.ngOnInit();
         this.initSections([
-            { sectionKey: 'details', sectionName: 'Details', isExpanded: true }
+            { sectionKey: 'details', sectionName: 'Details', isExpanded: true },
+            { sectionKey: 'exceptionDetails', sectionName: 'Exception Details', isExpanded: true },
+            { sectionKey: 'source', sectionName: 'Source', isExpanded: true },
+            { sectionKey: 'review', sectionName: 'Review', isExpanded: true },
+            { sectionKey: 'systemMetadata', sectionName: 'System Metadata', isExpanded: false }
         ]);
     }
 }

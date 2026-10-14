@@ -94,6 +94,9 @@ export class mjBizAppsAccountingAccountingCompanyProfile_ {
     @Field({nullable: true, description: `The first EffectiveDate this company posts to the ERP. Journal entries dated before it never enter a posting batch (for example, history brought in at cutover that the ERP already holds). NULL means no floor: every Pending entry is a candidate.`}) 
     PostingStartDate?: Date;
         
+    @Field({nullable: true, description: `The last day of the latest month finance has closed for this company. A journal entry batch, progress measurement or correction dated on or before it is in a closed month. NULL means nothing is closed. Set by finance when a close finishes; moving it back reopens a month.`}) 
+    BooksClosedThroughDate?: Date;
+        
     @Field({nullable: true}) 
     @MaxLength(50)
     Name?: string;
@@ -210,6 +213,9 @@ export class CreatemjBizAppsAccountingAccountingCompanyProfileInput {
     PostingStartDate: Date | null;
 
     @Field({ nullable: true })
+    BooksClosedThroughDate: Date | null;
+
+    @Field({ nullable: true })
     Name?: string;
 
     @Field({ nullable: true })
@@ -284,6 +290,9 @@ export class UpdatemjBizAppsAccountingAccountingCompanyProfileInput {
 
     @Field({ nullable: true })
     PostingStartDate?: Date | null;
+
+    @Field({ nullable: true })
+    BooksClosedThroughDate?: Date | null;
 
     @Field({ nullable: true })
     Name?: string;
@@ -1852,7 +1861,7 @@ export class mjBizAppsAccountingFinanceException_ {
     @MaxLength(1000)
     Summary?: string;
         
-    @Field({nullable: true, description: `The detector's identity for this occurrence (e.g. the source record ID, or record ID and month). Unique per type: raising the same key again returns the existing row unchanged.`}) 
+    @Field({nullable: true, description: `The detector's identity for this occurrence (e.g. the source record ID, or record ID and month). Unique per type: raising the same key again returns the existing row. If that row is still Open and the repeat raise carries a different creator, its SourceCreatedByUserID, CreatorUnresolved and Summary are updated to match; nothing else changes, and Reviewed or Corrected rows are never touched.`}) 
     @MaxLength(400)
     DedupeKey?: string;
         
@@ -2728,7 +2737,7 @@ export class mjBizAppsAccountingGLAccount_ {
     @Field(() => Boolean, {nullable: true, description: `Whether the account is available for new JE lines. Inactive accounts retain historical data.`}) 
     IsActive?: boolean;
         
-    @Field(() => Boolean, {nullable: true, description: `TRUE if the account was created by spSeedDefaultChartOfAccounts. Lets reports distinguish platform-shipped accounts from deployment customizations.`}) 
+    @Field(() => Boolean, {nullable: true, description: `TRUE if the account was created by the starter-chart seed, AccountingCompanyProfileEntityServer.SeedDefaultChartOfAccounts(). Lets reports distinguish platform-shipped accounts from deployment customizations.`}) 
     IsSystemSeeded?: boolean;
         
     @Field({nullable: true, description: `Optional description for the account.`}) 
@@ -3874,7 +3883,7 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     @MaxLength(36)
     ID: string;
         
-    @Field({nullable: true, description: `Gap-free batch number assigned by spAssignNextJournalEntryBatchNumber. Format 'BATCH-{CompanyCode}-{seq:000000}'.`}) 
+    @Field({nullable: true, description: `Gap-free batch number assigned by spAssignNextJournalEntryBatchNumber. Format 'BATCH-{seq:000000}': one global sequence shared by every company, with no company segment.`}) 
     @MaxLength(40)
     JournalEntryBatchNumber?: string;
         
@@ -3958,7 +3967,7 @@ export class mjBizAppsAccountingJournalEntryBatch_ {
     ArchivedByUserID?: string;
         
     @Field({nullable: true, description: `Why this batch was cancelled. Required when an approved batch is cancelled (CK_JournalEntryBatch_CancelAudit); optional when a Pending batch is. Frozen once Cancelled.`}) 
-    @MaxLength(500)
+    @MaxLength(1000)
     CancelReason?: string;
         
     @Field({nullable: true, description: `When the batch was cancelled. Required when an approved batch is cancelled.`}) 
