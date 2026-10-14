@@ -36,8 +36,8 @@
     "@mj-biz-apps/common-entities": "5.50.2"
   },
   "dependencies": {
-    "@mj-biz-apps/accounting-entities": "0.22.0",
-    "@mj-biz-apps/accounting-engine-base": "0.22.0"
+    "@mj-biz-apps/accounting-entities": "^0.22.0",
+    "@mj-biz-apps/accounting-engine-base": "^0.22.0"
   },
   "peerDependencies": {
     "@memberjunction/core": "^6.1.5",
