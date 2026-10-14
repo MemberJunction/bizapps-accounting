@@ -7,11 +7,11 @@ One `GLAccountLink` per company, pointing at that company's own `11300`. **Until
 | | |
 |---|---|
 | **Role** | `Unbilled Receivable` (ID `3EFC77F3-2468-463F-9197-D0A8A6762A36`, seeded by the row in `metadata/gl-account-roles`, which reaches a host through the release's `*__Metadata_Sync.sql`) |
-| **Account** | `11300 Unbilled Revenue (Contract Asset)`, account type `Asset` — Jeremy's 9/18 chart of accounts |
+| **Account** | `11300 Unbilled Revenue (Contract Asset)`, account type `Asset` — Finance's 9/18 chart of accounts |
 | **Level** | Company. Not product, not category, not product type |
-| **How many** | Exactly one per company. The role is `Cardinality: One`, so a second Active link for the same company is refused by the tie guard |
+| **How many** | Exactly one per company. The role is `Cardinality: One`, so the tie guard refuses a second Active link for the same company with the same `StartedAt`; a link with a later `StartedAt` supersedes the earlier one |
 
-Each company needs its **own** 11300 account, not a shared one. Orders refuses an account belonging to another company outright (D6 — accounting derives a journal entry's company from the account, so a cross-company link would book revenue to the wrong legal entity with nothing downstream to catch it).
+Each legal entity needs its **own** 11300 account, not a shared one. A Division, Department or Branch keeps no books of its own: its entries use its legal entity's account, found through a link on the Division's own record or, failing that, on the legal entity's (golive #313). Orders refuses an account belonging to another legal entity outright (orders D6 — accounting derives a journal entry's company from the account, so a cross-company link would book revenue to the wrong legal entity with nothing downstream to catch it).
 
 ## Why the account exists
 
@@ -21,13 +21,11 @@ Orders maintains the position on the order line itself — `BilledToDate` and `R
 
 ## The name is a cross-repo contract
 
-bizapps-orders writes this role's `Name` down in one place — `GL_ROLE.UnbilledReceivable = 'Unbilled Receivable'` in `packages/CoreEntitiesServer/src/GLAccountResolver.ts` — and resolves roles by accounting's exact `Name` string, case- and whitespace-insensitive but otherwise literal. Spaced Title Case matches every role orders resolves; `BankAccount` is the one unspaced role and it is FP&A's. **If the two repos ever disagree by one character the role never resolves**, and every company then looks unlinked: orders refuses each entry that needs this account, with a message saying no `Unbilled Receivable` account is linked, even though one is. Rename it in both repos or neither.
+bizapps-orders writes this role's `Name` down in one place — `GL_ROLE.UnbilledReceivable = 'Unbilled Receivable'` in `packages/CoreEntitiesServer/src/GLAccountResolver.ts` — and resolves roles by accounting's exact `Name` string, ignoring case and leading or trailing spaces but otherwise literal. Spaced Title Case matches every role orders resolves; `BankAccount` is the one unspaced role and it is FP&A's. **If the two repos ever disagree by one character the role never resolves**, and every company then looks unlinked: orders refuses each entry that needs this account, with a message saying no `Unbilled Receivable` account is linked, even though one is. Rename it in both repos or neither.
 
 ## How the row reaches a database
 
-`metadata/gl-account-roles/.gl-account-roles.json` is the **source of truth**, and it is the only thing this PR contributes. A release reaches hosts through one `*__Metadata_Sync.sql` migration that the build engineer generates from the JSON when cutting the release — PRs do not carry seed migrations of their own (`scripts/check-release-seed-coverage.mjs`: *"NOT a PR gate. PRs contribute JSON only; the build engineer generates one Metadata_Sync per release."*).
-
-The row already exists on the shared MJ dev database under this UUID, because an earlier revision of this change carried a migration that was run there once before Amith corrected the approach. A later `mj sync push` matches it by `primaryKey.ID` and no-ops, so there is nothing to undo.
+`metadata/gl-account-roles/.gl-account-roles.json` is the **source of truth**; the change that added this role contributed only its row there. A release reaches hosts through one `*__Metadata_Sync.sql` migration that the build engineer generates from the JSON when cutting the release — PRs do not carry seed migrations of their own (`scripts/check-release-seed-coverage.mjs`: *"NOT a PR gate. PRs contribute JSON only; the build engineer generates one Metadata_Sync per release."*). This row shipped in `V202609282330__v0.16.x__Metadata_Sync.sql`.
 
 ## What happens for a company with no link
 
@@ -39,4 +37,4 @@ Where this bites first: on a company billed by instalment, an up-front line is e
 
 ## Open question, not blocking
 
-One contract-asset account or two? Strictly, an unconditional right to consideration is a receivable and a conditional one is a contract asset; a future instalment on a contract we must still perform against is conditional, so both cases are the same account. Finance may still want them presented separately. This is built for one, and splitting later is additive — a second role and a second link, with no change to what is already seeded (plan §14.1, Johanna).
+One contract-asset account or two? Strictly, an unconditional right to consideration is a receivable and a conditional one is a contract asset; a future instalment on a contract we must still perform against is conditional, so both cases are the same account. Finance may still want them presented separately. This is built for one, and splitting later is additive — a second role and a second link, with no change to what is already seeded. Finance has to confirm it; the question is item 1 of §14 in bizapps-orders `plans/payment-schedules-and-percent-complete-revrec.md`, a plan that was never merged to bizapps-orders `next`.

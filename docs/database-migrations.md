@@ -52,6 +52,10 @@ so in the header, as `V202609111415` and `V202609261000` do:
 -- that has the prior migrations.
 ```
 
+Keep the statements in the same shape: add a table's new columns in **one** `ALTER TABLE … ADD`,
+with their constraints written inline in that statement, not one statement per column followed by
+separate `ADD CONSTRAINT`s. Fewer statements are easier to review and convert to PostgreSQL.
+
 Guards **are** still required wherever the starting point genuinely differs from one database to
 another:
 
@@ -89,8 +93,11 @@ hand-authored half above it is now equally off limits, because it has already be
 everywhere.
 
 **Do not run `scripts/rebuild-db.sh` as part of feature work.** It stays in the repo for the one case
-it is still correct for — standing up a brand-new empty database from nothing — and its own header
-says so. It is not a development loop.
+it is still correct for — standing up a brand-new empty database from nothing. It is not a
+development loop. The script itself still follows the old practice (#348): its header
+describes editing the baseline in place, it trims the generated half of the baseline file in your
+working tree before applying it, and the next steps it prints end with `scripts/append-codegen.sh`,
+which rewrites that half. Do not commit the baseline changes it leaves behind.
 
 **A migration that depends on CodeGen metadata cannot assume it exists.** Entity and field rows are
 created by CodeGen, which runs *after* migrations. A migration that reads `__mj.Entity` must skip
