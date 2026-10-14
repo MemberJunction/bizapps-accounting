@@ -59,7 +59,7 @@ importers:
   packages/Actions:
     dependencies:
       '@mj-biz-apps/accounting-core-entities-server':
-        specifier: 0.22.0
+        specifier: ^0.22.0
         version: link:../CoreEntitiesServer
       zod:
         specifier: ^3.25.28
@@ -114,10 +114,10 @@ importers:
   packages/Angular:
     dependencies:
       '@mj-biz-apps/accounting-engine-base':
-        specifier: 0.22.0
+        specifier: ^0.22.0
         version: link:../EngineBase
       '@mj-biz-apps/accounting-entities':
-        specifier: 0.22.0
+        specifier: ^0.22.0
         version: link:../Entities
       ag-grid-angular:
         specifier: ^35.0.1
@@ -223,10 +223,10 @@ importers:
   packages/CoreEntitiesServer:
     dependencies:
       '@mj-biz-apps/accounting-engine-base':
-        specifier: 0.22.0
+        specifier: ^0.22.0
         version: link:../EngineBase
       '@mj-biz-apps/accounting-entities':
-        specifier: 0.22.0
+        specifier: ^0.22.0
         version: link:../Entities
     devDependencies:
       '@memberjunction/actions':
@@ -275,7 +275,7 @@ importers:
   packages/EngineBase:
     dependencies:
       '@mj-biz-apps/accounting-entities':
-        specifier: 0.22.0
+        specifier: ^0.22.0
         version: link:../Entities
     devDependencies:
       '@memberjunction/core':
@@ -347,13 +347,13 @@ importers:
   packages/Server:
     dependencies:
       '@mj-biz-apps/accounting-actions':
-        specifier: 0.22.0
+        specifier: ^0.22.0
         version: link:../Actions
       '@mj-biz-apps/accounting-core-entities-server':
-        specifier: 0.22.0
+        specifier: ^0.22.0
         version: link:../CoreEntitiesServer
       '@mj-biz-apps/accounting-entities':
-        specifier: 0.22.0
+        specifier: ^0.22.0
         version: link:../Entities
       class-validator:
         specifier: ^0.14.3
