@@ -132,7 +132,9 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
     const result = await rv.RunView<mjBizAppsAccountingGLAccountEntity>(
       {
         EntityName: 'MJ_BizApps_Accounting: GL Accounts',
-        ExtraFilter: `CompanyID = '${companyId}'`,
+        // Validated, not escaped (package-wide SqlGuards posture): this id is interpolated into a
+        // SQL predicate, so anything that is not a plain UUID is refused outright.
+        ExtraFilter: `CompanyID = ${sqlGuidLiteral(companyId, 'AccountingCompanyProfileEntityServer.loadExistingGLAccountCodes')}`,
         ResultType: 'simple',
         Fields: ['Code'],
       },
