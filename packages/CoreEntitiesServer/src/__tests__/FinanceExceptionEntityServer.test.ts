@@ -71,7 +71,7 @@ describe('FinanceExceptionEntityServer (status guard)', () => {
     row.ReviewedAt = new Date();
     const result = row.Validate();
     expect(result.Success).toBe(false);
-    expect(result.Errors.some(e => /change only through Accounting\.ClearFinanceException/.test(e.Message))).toBe(true);
+    expect(result.Errors.some(e => /change only by clearing it/.test(e.Message))).toBe(true);
   });
 
   it('allows Open to Reviewed through the sanctioned clearance save', async () => {
@@ -88,7 +88,7 @@ describe('FinanceExceptionEntityServer (status guard)', () => {
   it('keeps a terminal row terminal, even through the clearance save', async () => {
     const row = await loaded('Corrected');
     row.ReviewNote = 'rewritten';
-    expect(row.Validate().Errors.some(e => /terminal/.test(e.Message))).toBe(true);
+    expect(row.Validate().Errors.some(e => /which is final/.test(e.Message))).toBe(true);
     expect(await SaveFinanceExceptionClearance(row)).toBe(false);
   });
 

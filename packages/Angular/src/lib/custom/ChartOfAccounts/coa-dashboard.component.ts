@@ -380,7 +380,7 @@ export class ChartOfAccountsDashboardComponent extends BaseDashboard {
     try {
       const entity = await this.md.GetEntityObject<mjBizAppsAccountingGLAccountEntity>(GL_ACCOUNT_ENTITY);
       if (this.Model.ID) {
-        if (!(await entity.Load(this.Model.ID))) throw new Error('Account no longer exists.');
+        if (!(await entity.Load(this.Model.ID))) throw new Error('This account no longer exists. It may have been deleted; refresh the page.');
       } else {
         entity.NewRecord();
       }
@@ -392,7 +392,7 @@ export class ChartOfAccountsDashboardComponent extends BaseDashboard {
       entity.CurrencyCode = (this.Model.CurrencyCode ?? '').trim() || null; // combobox clear can write null
       entity.IsActive = this.Model.IsActive;
       entity.Description = this.Model.Description.trim() || null;
-      if (!(await entity.Save())) throw new Error(entity.LatestResult?.CompleteMessage ?? 'Save failed.');
+      if (!(await entity.Save())) throw new Error(entity.LatestResult?.CompleteMessage ?? 'The account was not saved. Try again.');
 
       // No manual reload: the save fires a BaseEntity event → the engine updates its GL-account cache →
       // ObserveProperty emits → the tree re-hydrates automatically (reactive).

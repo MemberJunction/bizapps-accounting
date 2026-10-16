@@ -28,7 +28,7 @@ export class JournalEntryClient {
     try {
       const res = await this.dataProvider.RouteOperation<{ JournalEntryID: string; Reason: string }, GenerateReversalOutputWire>(
         'Accounting.GenerateJournalEntryReversal', { JournalEntryID: journalEntryID, Reason: reason });
-      if (!res.Success || !res.Output) return { Success: false, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
+      if (!res.Success || !res.Output) return { Success: false, ErrorMessage: res.ErrorMessage ?? 'The server returned no result. Try again; if it keeps happening, ask an administrator to check the server logs.' };
       return { Success: true, ReversalJournalEntryID: res.Output.ReversalJournalEntryID, ReversalEntryNumber: res.Output.ReversalEntryNumber };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

@@ -144,7 +144,7 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
       const md = new Metadata();
       const entry = await md.GetEntityObject<JournalEntryEntity>(JE_ENTITY, this.ProviderToUse.CurrentUser);
       if (!(await entry.Load(id))) {
-        this.ActionMessage = 'That journal entry could not be loaded into the workspace.';
+        this.ActionMessage = 'That journal entry could not be opened. It may have been deleted, or you may not have access to it.';
         this.ActionIsError = true;
         this.cdr.markForCheck();
         return;
@@ -229,7 +229,7 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
   /** "Keep as draft tab" — the tab already holds the state; this makes that explicit + clean. */
   public KeepAsDraft(): void {
     if (this.tabs.ActiveId) this.tabs.MarkClean(this.tabs.ActiveId);
-    this.ActionMessage = 'Kept as a draft tab — it stays for this session (drafts are not saved to the database in v1).';
+    this.ActionMessage = 'Kept as a draft tab. Drafts last only for this browser session and are not saved, so closing the app discards it.';
     this.ActionIsError = false;
     this.cdr.markForCheck();
   }
@@ -644,7 +644,7 @@ export class JEWorkspacePageComponent extends BaseAngularComponent implements On
 
       if (!result.Success) {
         this.applyEngineErrors(result.Errors ?? []);
-        this.setError('The ledger rejected this entry — see the errors above.');
+        this.setError('The entry was not created. Fix the problems listed above, then submit again.');
         return;
       }
 

@@ -152,7 +152,7 @@ export class JournalEntryLineEntityServer extends JournalEntryLineEntity {
           result.Errors.push(
             new ValidationErrorInfo(
               'JournalEntryLineEntityServer.Validate',
-              `Line ${this.LineNumber || ''}: GL Account ${gl.Code || gl.ID} is inactive.`,
+              `Line ${this.LineNumber || ''}: GL account ${gl.Code || gl.ID} is inactive. Pick an active account.`,
               null,
             ),
           );
@@ -163,7 +163,7 @@ export class JournalEntryLineEntityServer extends JournalEntryLineEntity {
           result.Errors.push(
             new ValidationErrorInfo(
               'JournalEntryLineEntityServer.Validate',
-              `Line ${this.LineNumber || ''}: GL Account ${gl.Code || gl.ID} belongs to company ${gl.CompanyID}, but parent Journal Entry belongs to company ${this.ParentJournalEntry.CompanyID} (single-company isolation rule D3).`,
+              `Line ${this.LineNumber || ''}: GL account ${gl.Code || gl.ID} belongs to company ${gl.CompanyID}, but this journal entry belongs to company ${this.ParentJournalEntry.CompanyID}. Every line must use an account of the entry's company.`,
               null,
             ),
           );
@@ -187,7 +187,7 @@ export class JournalEntryLineEntityServer extends JournalEntryLineEntity {
         result.Errors.push(
           new ValidationErrorInfo(
             'JournalEntryLineEntityServer.Validate',
-            `Line ${this.LineNumber || ''}: a dimension tag must carry BOTH DimensionID and DimensionValueID.`,
+            `Line ${this.LineNumber || ''}: each dimension on a line needs both a dimension and a value.`,
             null,
           ),
         );
@@ -200,7 +200,7 @@ export class JournalEntryLineEntityServer extends JournalEntryLineEntity {
         result.Errors.push(
           new ValidationErrorInfo(
             'JournalEntryLineEntityServer.Validate',
-            `Line ${this.LineNumber || ''}: dimension ${dim.DimensionID} is tagged more than once (one value per dimension per line — UQ_JELDimension_Line_Dimension).`,
+            `Line ${this.LineNumber || ''}: dimension ${dim.DimensionID} is used more than once. A line takes one value per dimension.`,
             null,
           ),
         );

@@ -222,7 +222,7 @@
       <div class="bw-warn">
         <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
         Your exclusions skip <b>&nbsp;{{ Preview?.OutOfOrderSkipCount }} older entr{{ Preview?.OutOfOrderSkipCount === 1 ? 'y' : 'ies' }}&nbsp;</b>
-        — later entries will batch ahead of them (allowed, but visible · MOD-8).
+        — later entries will be batched before them. This is allowed; check that it is what you intend.
       </div>
     }
     @if (BeforePostingStartCount > 0) {

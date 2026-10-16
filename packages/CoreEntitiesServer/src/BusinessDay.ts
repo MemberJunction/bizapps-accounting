@@ -130,7 +130,7 @@ function toDateOnly(value: Date | string): Date {
   }
   const d = value instanceof Date ? value : new Date(value);
   if (!value || Number.isNaN(d.getTime())) {
-    throw new Error(`BusinessDay: invalid date-only value: ${String(value)}`);
+    throw new Error(`'${String(value)}' is not a valid date.`);
   }
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 }

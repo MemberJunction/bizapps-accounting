@@ -114,17 +114,17 @@ describe('validateDraftShape (stage 1 — MALFORMED_DRAFT)', () => {
       { GLAccountID: GL.aAR, DebitAmount: 100 },
       { GLAccountID: GL.aRev, DebitAmount: 100 },
     ] }));
-    expect(errs.some(e => /one debit AND one credit/.test(e.Message))).toBe(true);
+    expect(errs.some(e => /one debit line and one credit line/.test(e.Message))).toBe(true);
   });
 
   it('rejects an invalid EffectiveDate', () => {
     const errs = validateDraftShape(balancedDraft({ EffectiveDate: 'not-a-date' }));
-    expect(errs.some(e => /EffectiveDate/.test(e.Message))).toBe(true);
+    expect(errs.some(e => /effective date/.test(e.Message))).toBe(true);
   });
 
   it('rejects an empty EntryType code (shape only — existence is stage 1b)', () => {
     const errs = validateDraftShape(balancedDraft({ EntryType: '  ' }));
-    expect(errs.some(e => /EntryType/.test(e.Message))).toBe(true);
+    expect(errs.some(e => /no entry type/.test(e.Message))).toBe(true);
   });
 });
 

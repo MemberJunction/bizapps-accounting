@@ -375,7 +375,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
       this.ProviderToUse.CurrentUser,
     );
     if (!(await entity.Load(r.ID))) {
-      this.EditorError = `Could not load account ${r.Code}.`;
+      this.EditorError = `Could not open account ${r.Code}. It may have been deleted; refresh the page and try again.`;
       this.cdr.markForCheck();
       return;
     }
@@ -547,11 +547,11 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
     try {
       const entity = await this.ProviderToUse.GetEntityObject<mjBizAppsAccountingGLAccountEntity>(GL_ENTITY, this.ProviderToUse.CurrentUser);
       const loaded = await entity.Load(r.ID);
-      if (!loaded) throw new Error(`Could not load account ${r.Code}.`);
+      if (!loaded) throw new Error(`Could not open account ${r.Code}. It may have been deleted; refresh the page and try again.`);
       entity.IsActive = !r.IsActive;
       const saved = await entity.Save();
       if (!saved) {
-        this.LoadError = this.friendlySaveError(entity.LatestResult?.CompleteMessage, `Could not update ${r.Code}.`);
+        this.LoadError = this.friendlySaveError(entity.LatestResult?.CompleteMessage, `Account ${r.Code} was not ${r.IsActive ? 'retired' : 'reactivated'}. Try again.`);
         return;
       }
       await this.load(true);

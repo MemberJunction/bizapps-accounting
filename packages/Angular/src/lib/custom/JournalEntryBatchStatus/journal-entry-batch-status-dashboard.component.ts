@@ -333,7 +333,7 @@ export class JournalEntryBatchStatusDashboardComponent extends BaseDashboard {
         this.BuildPreviewVisible = false;
         await this.loadAll();
       } else {
-        this.setActionMessage(res.ErrorMessage ?? 'Build failed.', true);
+        this.setActionMessage(res.ErrorMessage ?? 'The journal entry batch was not built. Try again.', true);
       }
     } finally {
       this.Building = false;

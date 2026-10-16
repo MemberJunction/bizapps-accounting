@@ -174,19 +174,19 @@ export class BuildJournalEntryBatchOperation extends BaseRemotableOperation<Buil
   public readonly OperationKey = 'Accounting.BuildJournalEntryBatch';
 
   protected async InternalExecute(input: BuildJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<BuildJournalEntryBatchOutput> {
-    if (!input?.TargetSystem) throw new Error('BuildJournalEntryBatch: TargetSystem is required.');
+    if (!input?.TargetSystem) throw new Error('The batch was not built: no target ERP was given.');
     const gate = new TasksAppApprovalGate(provider);
     const options = toOptions(input);
     const source = input.Source ?? 'Standard';
 
     switch (source) {
       case 'View': {
-        if (!input.ViewID) throw new Error('BuildJournalEntryBatch: Source=View requires a ViewID.');
+        if (!input.ViewID) throw new Error('The batch was not built: no view was chosen to pick entries from.');
         const batches = await buildJournalEntryBatchFromView(input.ViewID, input.TargetSystem, user.ID, user, provider, gate, options);
         return { Batches: batches, NothingToBatch: false };
       }
       case 'Explicit': {
-        if (!input.JournalEntryIDs?.length) throw new Error('BuildJournalEntryBatch: Source=Explicit requires JournalEntryIDs.');
+        if (!input.JournalEntryIDs?.length) throw new Error('The batch was not built: no journal entries were chosen.');
         const batches = await buildJournalEntryBatchFromExplicitIds(input.JournalEntryIDs, input.TargetSystem, user.ID, user, provider, gate, options.postingDate);
         return { Batches: batches, NothingToBatch: false };
       }
@@ -213,7 +213,7 @@ export class BuildJournalEntryBatchOperation extends BaseRemotableOperation<Buil
       }
       default:
         // Total today; the default keeps it total if the union ever widens.
-        throw new Error(`BuildJournalEntryBatch: unknown Source '${source}'.`);
+        throw new Error(`The batch was not built: '${source}' is not a known way to pick entries.`);
     }
   }
 }
@@ -227,9 +227,9 @@ export class RegenerateJournalEntryBatchOperation extends BaseRemotableOperation
   public readonly OperationKey = 'Accounting.RegenerateJournalEntryBatch';
 
   protected async InternalExecute(input: RegenerateJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<BuildJournalEntryBatchResult> {
-    if (!input?.JournalEntryBatchID) throw new Error('RegenerateJournalEntryBatch: JournalEntryBatchID is required.');
+    if (!input?.JournalEntryBatchID) throw new Error('The batch was not rebuilt: no batch was given.');
     requireSqlGuid(input.JournalEntryBatchID, 'RegenerateJournalEntryBatch');
-    if (!input?.TargetSystem) throw new Error('RegenerateJournalEntryBatch: TargetSystem is required.');
+    if (!input?.TargetSystem) throw new Error('The batch was not rebuilt: no target ERP was given.');
     // A re-gather to NOTHING cancels the batch and throws EmptyJournalEntryBatchError (surfaced to the caller
     // as a failed operation with that message) — never a silent empty batch.
     return regenerateJournalEntryBatch(input.JournalEntryBatchID, input.TargetSystem, user, provider);
@@ -271,7 +271,7 @@ export class DispatchJournalEntryBatchOperation extends BaseRemotableOperation<D
   public readonly OperationKey = 'Accounting.DispatchJournalEntryBatch';
 
   protected async InternalExecute(input: DispatchJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<DispatchJournalEntryBatchOutput> {
-    if (!input?.JournalEntryBatchID) throw new Error('DispatchJournalEntryBatch: JournalEntryBatchID is required.');
+    if (!input?.JournalEntryBatchID) throw new Error('The batch was not sent: no batch was given.');
     requireSqlGuid(input.JournalEntryBatchID, 'DispatchJournalEntryBatch');
     try {
       const batch = await sendJournalEntryBatch(input.JournalEntryBatchID, user, {
@@ -301,7 +301,7 @@ export class ResumeJournalEntryBatchPostingOperation extends BaseRemotableOperat
   public readonly OperationKey = 'Accounting.ResumeJournalEntryBatchPosting';
 
   protected async InternalExecute(input: ResumeJournalEntryBatchPostingInput, provider: IMetadataProvider, user: UserInfo): Promise<ResumeJournalEntryBatchPostingOutput> {
-    if (!input?.JournalEntryBatchID) throw new Error('ResumeJournalEntryBatchPosting: JournalEntryBatchID is required.');
+    if (!input?.JournalEntryBatchID) throw new Error('Posting was not resumed: no batch was given.');
     requireSqlGuid(input.JournalEntryBatchID, 'ResumeJournalEntryBatchPosting');
     const { batch, journalEntriesPosted } = await resumeJournalEntryBatchPosting(input.JournalEntryBatchID, user, provider);
     return { Status: batch.Status, JournalEntriesPosted: journalEntriesPosted };
@@ -348,11 +348,11 @@ export class RecordJournalEntryBatchDecisionOperation extends BaseRemotableOpera
   public readonly OperationKey = 'Accounting.RecordJournalEntryBatchDecision';
 
   protected async InternalExecute(input: RecordJournalEntryBatchDecisionInput, provider: IMetadataProvider, user: UserInfo): Promise<RecordJournalEntryBatchDecisionOutput> {
-    if (!input?.JournalEntryBatchID) throw new Error('RecordBatchDecision: JournalEntryBatchID is required.');
+    if (!input?.JournalEntryBatchID) throw new Error('The decision was not recorded: no batch was given.');
     // Boundary validation: this id reaches SQL predicates (Task Link resolution) — a UUID or nothing.
     requireSqlGuid(input.JournalEntryBatchID, 'RecordBatchDecision');
     if (!IsTaskDecisionOutcomeCode(input?.Decision)) {
-      throw new Error(`RecordBatchDecision: invalid decision '${input?.Decision}'. Expected ${TaskDecisionOutcomeCodes.join(' | ')}.`);
+      throw new Error(`The decision was not recorded: '${input?.Decision}' is not a valid decision. Use one of: ${TaskDecisionOutcomeCodes.join(', ')}.`);
     }
     const personId = await this.resolveCurrentPersonId(user, provider);
     await new TasksAppApprovalGate(provider).recordDecision(
@@ -393,7 +393,7 @@ export class GetJournalEntryBatchApprovalStateOperation extends BaseRemotableOpe
   public readonly OperationKey = 'Accounting.GetJournalEntryBatchApprovalState';
 
   protected async InternalExecute(input: GetJournalEntryBatchApprovalStateInput, provider: IMetadataProvider, user: UserInfo): Promise<GetJournalEntryBatchApprovalStateOutput> {
-    if (!input?.JournalEntryBatchID) throw new Error('GetBatchApprovalState: JournalEntryBatchID is required.');
+    if (!input?.JournalEntryBatchID) throw new Error('Cannot check the approval: no batch was given.');
     // Boundary validation: this id reaches SQL predicates (Task Link resolution) — a UUID or nothing.
     // Validated HERE (not just in the gate) so a malformed id fails the operation loudly instead of
     // being folded into the try/catch below as "not approved".
@@ -424,12 +424,12 @@ export class ArchiveJournalEntryBatchOperation extends BaseRemotableOperation<Ar
   public readonly OperationKey = 'Accounting.ArchiveJournalEntryBatch';
 
   protected async InternalExecute(input: ArchiveJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<ArchiveJournalEntryBatchOutput> {
-    if (!input?.JournalEntryBatchID) throw new Error('ArchiveJournalEntryBatch: JournalEntryBatchID is required.');
+    if (!input?.JournalEntryBatchID) throw new Error('The batch was not archived: no batch was given.');
     requireSqlGuid(input.JournalEntryBatchID, 'ArchiveJournalEntryBatch');
-    if (!input?.Reason?.trim()) throw new Error('ArchiveJournalEntryBatch: Reason is required — it is the only record of why this batch will never post.');
+    if (!input?.Reason?.trim()) throw new Error('The batch was not archived: a reason is required, because it is the only record of why this batch will never post.');
 
     const batch = await provider.GetEntityObject<JournalEntryBatchEntityServer>(BATCH_ENTITY, user);
-    if (!(await batch.Load(input.JournalEntryBatchID))) throw new Error(`ArchiveJournalEntryBatch: batch ${input.JournalEntryBatchID} not found.`);
+    if (!(await batch.Load(input.JournalEntryBatchID))) throw new Error(`The batch was not archived: batch ${input.JournalEntryBatchID} was not found.`);
     await batch.Archive(input.Reason, user);
     return { Status: batch.Status, ArchivedAt: batch.ArchivedAt?.toISOString() ?? null };
   }
@@ -475,7 +475,7 @@ export class CancelJournalEntryBatchOperation extends BaseRemotableOperation<Can
   public readonly OperationKey = 'Accounting.CancelJournalEntryBatch';
 
   protected async InternalExecute(input: CancelJournalEntryBatchInput, provider: IMetadataProvider, user: UserInfo): Promise<CancelJournalEntryBatchOutput> {
-    if (!input?.JournalEntryBatchID) throw new Error('CancelJournalEntryBatch: JournalEntryBatchID is required.');
+    if (!input?.JournalEntryBatchID) throw new Error('The batch was not cancelled: no batch was given.');
     requireSqlGuid(input.JournalEntryBatchID, 'CancelJournalEntryBatch');
     try {
       const batch = await cancelJournalEntryBatch(input.JournalEntryBatchID, user, provider, {

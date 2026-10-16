@@ -104,7 +104,7 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
     try {
       const drafts = input?.Drafts ?? [];
       if (drafts.length === 0) {
-        return { Success: false, Errors: [{ Code: 'MALFORMED_DRAFT', Message: 'Drafts must contain at least one journal-entry draft.' }] };
+        return { Success: false, Errors: [{ Code: 'MALFORMED_DRAFT', Message: 'No journal entries were submitted to book.' }] };
       }
 
       await this.Config(false, contextUser, provider);
@@ -139,7 +139,7 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
             }
             return {
               Success: false,
-              Errors: (result.Errors ?? [{ Code: 'INTERNAL_ERROR', Message: 'draft write failed' }]).map(e => ({ ...e, DraftIndex: i })),
+              Errors: (result.Errors ?? [{ Code: 'INTERNAL_ERROR', Message: 'The journal entry could not be saved.' }]).map(e => ({ ...e, DraftIndex: i })),
             };
           }
           results.push(result);
@@ -174,7 +174,7 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
     // This is a defense-in-depth floor only (trigger 50019 is the un-bypassable DB floor).
     const companies = [...new Set(normalized.map(l => l.CompanyID.toLowerCase()))];
     if (companies.length !== 1 || !companies[0]) {
-      return this.writeFailure(`journal entries are single-company (plan D3); draft lines resolve to ${companies.length} companies — the pipeline should have rejected this with MULTI_COMPANY_DRAFT`, undefined);
+      return this.writeFailure(`The journal entry was not saved: its lines resolve to ${companies.length} companies, and an entry can cover only one. Validation should have caught this first.`, undefined);
     }
 
     // Assemble the encapsulated entity: header + Lines + Dimensions in memory, then ONE
@@ -183,7 +183,7 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
     // between validation and write (defensive — never expected on the same call).
     const entryType = this.Base.JournalEntryTypeByCode(draft.EntryType);
     if (!entryType) {
-      return this.writeFailure(`journal-entry type '${draft.EntryType}' vanished between validation and write`, undefined);
+      return this.writeFailure(`The journal entry was not saved: entry type '${draft.EntryType}' was removed while the entry was being saved. Try again.`, undefined);
     }
 
     const je = await provider.GetEntityObject<JournalEntryEntityServer>(JE_ENTITY, contextUser);
@@ -214,7 +214,7 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
     }
 
     if (!(await je.Save())) {
-      return this.writeFailure('journal entry save failed (rolled back)', je.LatestResult?.CompleteMessage);
+      return this.writeFailure('The journal entry could not be saved, and nothing was written.', je.LatestResult?.CompleteMessage);
     }
 
     return {
@@ -226,7 +226,7 @@ export class AccountingEngine extends BaseSingleton<AccountingEngine> {
   }
 
   private writeFailure(stage: string, detail: string | undefined): CreateJournalEntryResult {
-    const message = `${stage}: ${detail ?? 'unknown error'}`;
+    const message = detail ? `${stage} Reason: ${detail}` : stage;
     LogError(`AccountingEngine.CreateJournalEntry: ${message}`);
     return { Success: false, Errors: [{ Code: 'INTERNAL_ERROR', Message: message }] };
   }

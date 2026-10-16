@@ -313,8 +313,8 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
 
       // Both failures are reported; neither overwrites the other.
       const errors: string[] = [];
-      if (!failed?.Success) errors.push(failed?.ErrorMessage ?? 'Could not load failed dispatches.');
-      if (!stranded.Success) errors.push(`Could not count stranded journal entries: ${stranded.ErrorMessage ?? 'unknown error'}`);
+      if (!failed?.Success) errors.push(failed?.ErrorMessage ?? 'Could not load failed dispatches. Refresh the page to try again.');
+      if (!stranded.Success) errors.push(`Could not count the journal entries held by failed or partly posted batches. ${stranded.ErrorMessage ?? 'Refresh the page to try again.'}`);
       this.LoadError = errors.length > 0 ? errors.join(' ') : null;
     } catch (e) {
       if (token !== this.loadToken) return;
@@ -569,7 +569,7 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
         this.SelectedBatch = null;
         this.Refresh();
       } else {
-        this.setError(res.ErrorMessage ?? 'Dispatch failed.');
+        this.setError(res.ErrorMessage ?? `Batch ${batch.JournalEntryBatchNumber} was not sent to the ERP. Try again.`);
       }
     } catch (e) {
       this.setError(e instanceof Error ? e.message : String(e));
@@ -652,7 +652,7 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
       this.Refresh(); // refetch-on-mutating-action (§8)
     } else {
       // Includes the ERP holding the batch: that refusal has no override, and points to Retry.
-      this.setError(res.ErrorMessage ?? 'Cancel failed.');
+      this.setError(res.ErrorMessage ?? `Batch ${batch.JournalEntryBatchNumber} was not cancelled. Try again.`);
     }
   }
 
@@ -691,7 +691,7 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
         this.SelectedBatch = null;
         this.Refresh();
       } else {
-        this.setError(res.ErrorMessage ?? 'Resume failed.');
+        this.setError(res.ErrorMessage ?? `GL posting for batch ${batchNumber ?? batchId} did not finish. Try again.`);
       }
     } catch (e) {
       this.setError(e instanceof Error ? e.message : String(e));
