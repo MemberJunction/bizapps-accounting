@@ -89,13 +89,13 @@ describe('recordDispatchFailure', () => {
         const batch = fakeBatch('Sent', { saves: false });
 
         await expect(recordDispatchFailure('BATCH-1', 'boom', USER, providerFor(batch)))
-            .rejects.toThrow(/did not save: illegal transition/);
+            .rejects.toThrow(/did not work: illegal transition/);
     });
 
     it('throws when the batch cannot be loaded', async () => {
         const batch = fakeBatch('Sent', { found: false });
 
         await expect(recordDispatchFailure('BATCH-1', 'boom', USER, providerFor(batch)))
-            .rejects.toThrow(/batch BATCH-1 not found/);
+            .rejects.toThrow(/batch BATCH-1 was not found/);
     });
 });

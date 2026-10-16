@@ -113,7 +113,7 @@ export class BatchesCategoryComponent extends CategoryShellBase {
         this.BuildIsError = false;
         await this.loadApprovalBadge();
       } else {
-        this.BuildMessage = res.ErrorMessage ?? 'Build failed.';
+        this.BuildMessage = res.ErrorMessage ?? 'The journal entry batch was not built. Try again.';
         this.BuildIsError = true;
       }
     } finally {

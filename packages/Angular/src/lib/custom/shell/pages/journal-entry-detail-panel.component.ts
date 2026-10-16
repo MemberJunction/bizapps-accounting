@@ -238,7 +238,7 @@ export class JournalEntryDetailPanelComponent extends BaseAngularComponent {
         await this.load(this.Header.ID); // refetch-on-mutating-action
         this.Changed.emit();
       } else {
-        this.setError(res.ErrorMessage ?? 'Reversal failed.');
+        this.setError(res.ErrorMessage ?? `The reversing entry for ${this.Header.EntryNumber} was not created. Try again.`);
       }
     } catch (e) {
       this.setError(e instanceof Error ? e.message : String(e));
@@ -299,7 +299,7 @@ export class JournalEntryDetailPanelComponent extends BaseAngularComponent {
       );
 
       if (!headerRes.Success) {
-        this.LoadError = headerRes.ErrorMessage ?? 'This journal entry could not be loaded.';
+        this.LoadError = headerRes.ErrorMessage ?? 'This journal entry could not be loaded. Refresh the page to try again.';
         return;
       }
       const header = (headerRes.Results?.[0] ?? null) as JEDetailHeader | null;

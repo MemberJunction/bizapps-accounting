@@ -245,7 +245,7 @@ describe('autoPostJournalEntryBatch — only the MJ system user may auto-post (#
         const provider = { GetEntityObject: vi.fn(), RunView: async () => ({ Success: true, Results: [] }) } as unknown as IMetadataProvider;
         // Past the caller check, the build runs and throws its own error for this empty world.
         await expect(autoPostJournalEntryBatch('11111111-0000-4000-8000-000000000001', 'BusinessCentral', USER, provider, OPTIONS))
-            .rejects.toThrow(/^buildJournalEntryBatch: /);
+            .rejects.toThrow(/^The batch was not built: /);
     });
 
     it('refuses any other user before anything is read', async () => {
@@ -268,8 +268,8 @@ describe('autoPostJournalEntryBatch — only the MJ system user may auto-post (#
 
 describe('autoPostJournalEntryBatch — the scheduled-posting waiver refuses before building', () => {
     it.each([
-        [{}, /requires an explicit EntryTypeCodes include-list/],
-        [{ entryTypeCodes: [] }, /requires an explicit EntryTypeCodes include-list/],
+        [{}, /needs a list of the entry types it may post/],
+        [{ entryTypeCodes: [] }, /needs a list of the entry types it may post/],
         [{ entryTypeCodes: ['OrderBooking'], excludeEntryTypeCodes: ['Refund'] }, /does not accept ExcludeEntryTypeCodes/],
     ])('refuses %j', async (options, message) => {
         expect(() => assertAutoPostPolicy(options)).toThrow(message);
@@ -286,7 +286,7 @@ describe('autoPostJournalEntryBatch — the scheduled-posting waiver refuses bef
             .then(() => null, (e: unknown) => e);
         expect(error).toBeInstanceOf(Error);
         expect(error).not.toBeInstanceOf(AutoPostDispatchError);
-        expect((error as Error).message).toMatch(/^buildJournalEntryBatch: /);
+        expect((error as Error).message).toMatch(/^The batch was not built: /);
     });
 });
 
@@ -363,7 +363,7 @@ describe('sendJournalEntryBatch — retrying a Failed batch', () => {
         const poster = acceptingPoster();
 
         await expect(send({ gate: approvedGate(), poster, provider, confirmNotAlreadyPostedInERP: true }))
-            .rejects.toThrow(/summary JE lines for batch .* failed to load: timeout/);
+            .rejects.toThrow(/Could not load the summary entry lines of batch .*: timeout/);
         expect(poster).not.toHaveBeenCalled();
         expect(batch.Save).not.toHaveBeenCalled();
         expect(batch.Status).toBe('Failed');
@@ -412,7 +412,7 @@ describe('sendJournalEntryBatch — a send refused because another dispatch sent
 
         const sent = send({ poster: acceptingPoster(), provider });
 
-        await expect(sent).rejects.toThrow(/Approved→Sent failed: deadlock victim/);
+        await expect(sent).rejects.toThrow(/saving it as Sent \(from Approved\) failed: deadlock victim/);
         await expect(sent).rejects.not.toBeInstanceOf(JournalEntryBatchSendRefusedError);
     });
 });
@@ -752,7 +752,7 @@ describe('sendJournalEntryBatch — a Failed retry whose approved-content seal n
         const lookup = lookupReturning(preflight);
 
         await expect(send({ poster, lookup, provider, confirmNotAlreadyPostedInERP: true }))
-            .rejects.toThrow(/no longer matches its approved content — refusing to dispatch\. Batch JEB-0001 no longer matches/);
+            .rejects.toThrow(/no longer matches its approved content\. Batch JEB-0001 no longer matches/);
         expect(lookup).toHaveBeenCalledOnce();
         expect(poster).not.toHaveBeenCalled();
         expect(batch.Save).not.toHaveBeenCalled();
@@ -866,7 +866,7 @@ describe('resumeJournalEntryBatchPosting', () => {
     it('stops loudly on an entry that still will not save, leaving the rest for the next resume', async () => {
         const { entries, provider } = world('Posted', { 'je-1': batched(), 'je-2': batched() }, { failingEntryIds: ['je-1'] });
 
-        await expect(resumeJournalEntryBatchPosting(BATCH_ID, USER, provider)).rejects.toThrow(/JE je-1 Batched→GLPosted failed: lock trigger/);
+        await expect(resumeJournalEntryBatchPosting(BATCH_ID, USER, provider)).rejects.toThrow(/Journal entry je-1 could not be marked posted to the GL: lock trigger/);
         expect(entries['je-1'].Status).toBe('Batched');
     });
 
@@ -874,7 +874,7 @@ describe('resumeJournalEntryBatchPosting', () => {
     it('stops loudly on an entry that will not load instead of saving a new record', async () => {
         const { entries, provider } = world('Posted', { 'je-1': batched() }, { missingEntryIds: ['je-1'] });
 
-        await expect(resumeJournalEntryBatchPosting(BATCH_ID, USER, provider)).rejects.toThrow(/JE je-1 not found/);
+        await expect(resumeJournalEntryBatchPosting(BATCH_ID, USER, provider)).rejects.toThrow(/Journal entry je-1 was not found/);
         expect(entries['je-1'].Status).toBe('Batched');
     });
 
@@ -934,6 +934,6 @@ describe('findStrandedJournalEntries', () => {
             RunViews: async () => [{ Success: false, ErrorMessage: 'timeout' }, { Success: true, Results: [] }],
         } as unknown as IMetadataProvider;
 
-        await expect(findStrandedJournalEntries(USER, provider)).rejects.toThrow(/Failed scan failed: timeout/);
+        await expect(findStrandedJournalEntries(USER, provider)).rejects.toThrow(/Could not check Failed batches for stuck journal entries: timeout/);
     });
 });

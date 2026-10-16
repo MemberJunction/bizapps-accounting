@@ -134,7 +134,7 @@
               }
             </button>
           </div>
-          <p class="ds-fail__error">{{ b.ErrorMessage || 'The ERP send failed but returned no message.' }}</p>
+          <p class="ds-fail__error">{{ b.ErrorMessage || 'The ERP rejected this batch without giving a reason. Check the batch in the ERP before you retry.' }}</p>
         </article>
       }
     </section>

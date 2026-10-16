@@ -15,11 +15,11 @@ export class RunERPSyncAction extends BaseAction {
   protected async InternalRunAction(params: RunActionParams): Promise<ActionResultSimple> {
     const provider = Metadata.Provider;
     if (!provider) {
-      return { Success: false, ResultCode: 'ERROR', Message: 'Metadata.Provider is not initialized' };
+      return { Success: false, ResultCode: 'ERROR', Message: 'The ERP sync could not run: the server has no metadata provider loaded.' };
     }
     const user = params.ContextUser;
     if (!user) {
-      return { Success: false, ResultCode: 'ERROR', Message: 'ContextUser is required' };
+      return { Success: false, ResultCode: 'ERROR', Message: 'The ERP sync could not run: no user was given to run it as.' };
     }
     const objects = params.Params.find((p) => p.Name === 'Objects')?.Value as Array<'accounts' | 'dimensions' | 'dimensionValues'> | undefined;
     const companyIds = params.Params.find((p) => p.Name === 'CompanyIDs')?.Value as string[] | undefined;

@@ -243,9 +243,9 @@ export class JeDashboardPageComponent extends AccountingDashboardBase implements
     );
 
     // RunView reports failure in the result, it does not throw — so check, don't assume.
-    if (!recent.Success) throw new Error(recent.ErrorMessage ?? 'Could not load recent journal entries');
-    if (!awaiting.Success) throw new Error(awaiting.ErrorMessage ?? 'Could not load entries awaiting approval');
-    if (!oldest.Success) throw new Error(oldest.ErrorMessage ?? 'Could not load the oldest unposted entries');
+    if (!recent.Success) throw new Error(recent.ErrorMessage ?? 'Could not load recent journal entries. Refresh the page to try again.');
+    if (!awaiting.Success) throw new Error(awaiting.ErrorMessage ?? 'Could not load entries awaiting approval. Refresh the page to try again.');
+    if (!oldest.Success) throw new Error(oldest.ErrorMessage ?? 'Could not load the oldest unposted entries. Refresh the page to try again.');
 
     return { recent: recent.Results ?? [], awaiting: awaiting.Results ?? [], oldest: oldest.Results ?? [] };
   }

@@ -229,7 +229,7 @@ export class JournalEntryBatchDispatchClient {
     try {
       const res = await this.dataProvider.RouteOperation<BuildJournalEntryBatchOptionsInput, BuildJournalEntryBatchOutputWire>(
         'Accounting.BuildJournalEntryBatch', input);
-      if (!res.Success || !res.Output) return { ...empty, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
+      if (!res.Success || !res.Output) return { ...empty, ErrorMessage: res.ErrorMessage ?? 'The server returned no result. Try again; if it keeps happening, ask an administrator to check the server logs.' };
       return this.toBuildResult(res.Output.Batches, res.Output.NothingToBatch);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -245,7 +245,7 @@ export class JournalEntryBatchDispatchClient {
     try {
       const res = await this.dataProvider.RouteOperation<PreviewJournalEntryBatchOptionsInput, PreviewJournalEntryBatchOutputWire>(
         'Accounting.PreviewJournalEntryBatch', options ?? {});
-      if (!res.Success || !res.Output) return { Success: false, Candidates: [], TotalDebits: 0, TotalCredits: 0, GrossDebits: 0, GrossCredits: 0, OutOfOrderSkipCount: 0, BeforePostingStartCount: 0, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
+      if (!res.Success || !res.Output) return { Success: false, Candidates: [], TotalDebits: 0, TotalCredits: 0, GrossDebits: 0, GrossCredits: 0, OutOfOrderSkipCount: 0, BeforePostingStartCount: 0, ErrorMessage: res.ErrorMessage ?? 'The server returned no result. Try again; if it keeps happening, ask an administrator to check the server logs.' };
       return {
         Success: true,
         Candidates: res.Output.Candidates ?? [],
@@ -273,7 +273,7 @@ export class JournalEntryBatchDispatchClient {
     try {
       const res = await this.dataProvider.RouteOperation<{ JournalEntryBatchID: string; TargetSystem: string }, BuildJournalEntryBatchResultWire>(
         'Accounting.RegenerateJournalEntryBatch', { JournalEntryBatchID: batchID, TargetSystem: targetSystem });
-      if (!res.Success || !res.Output) return { ...empty, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
+      if (!res.Success || !res.Output) return { ...empty, ErrorMessage: res.ErrorMessage ?? 'The server returned no result. Try again; if it keeps happening, ask an administrator to check the server logs.' };
       return this.toBuildResult([res.Output], false);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -293,7 +293,7 @@ export class JournalEntryBatchDispatchClient {
     try {
       const res = await this.dataProvider.RouteOperation<{ JournalEntryBatchID: string; ConfirmNotAlreadyPostedInERP: boolean }, DispatchJournalEntryBatchOutputWire>(
         'Accounting.DispatchJournalEntryBatch', { JournalEntryBatchID: batchID, ConfirmNotAlreadyPostedInERP: confirmNotAlreadyPostedInERP });
-      if (!res.Success || !res.Output) return { Success: false, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
+      if (!res.Success || !res.Output) return { Success: false, ErrorMessage: res.ErrorMessage ?? 'The server returned no result. Try again; if it keeps happening, ask an administrator to check the server logs.' };
       return {
         Success: true,
         Status: res.Output.Status,
@@ -313,7 +313,7 @@ export class JournalEntryBatchDispatchClient {
     try {
       const res = await this.dataProvider.RouteOperation<{ JournalEntryBatchID: string; Decision: JournalEntryBatchDecision; Notes: string | null }, RecordJournalEntryBatchDecisionOutputWire>(
         'Accounting.RecordJournalEntryBatchDecision', { JournalEntryBatchID: batchID, Decision: decision, Notes: notes ?? null });
-      if (!res.Success) return { Success: false, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
+      if (!res.Success) return { Success: false, ErrorMessage: res.ErrorMessage ?? 'The server returned no result. Try again; if it keeps happening, ask an administrator to check the server logs.' };
       return { Success: true };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -330,7 +330,7 @@ export class JournalEntryBatchDispatchClient {
     try {
       const res = await this.dataProvider.RouteOperation<{ JournalEntryBatchID: string; Reason: string }, ArchiveJournalEntryBatchOutputWire>(
         'Accounting.ArchiveJournalEntryBatch', { JournalEntryBatchID: batchID, Reason: reason });
-      if (!res.Success || !res.Output) return { Success: false, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
+      if (!res.Success || !res.Output) return { Success: false, ErrorMessage: res.ErrorMessage ?? 'The server returned no result. Try again; if it keeps happening, ask an administrator to check the server logs.' };
       return { Success: true, Status: res.Output.Status };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -354,7 +354,7 @@ export class JournalEntryBatchDispatchClient {
     try {
       const res = await this.dataProvider.RouteOperation<{ JournalEntryBatchID: string; Reason: string; ConfirmNotAlreadyPostedInERP: boolean }, CancelJournalEntryBatchOutputWire>(
         'Accounting.CancelJournalEntryBatch', { JournalEntryBatchID: batchID, Reason: reason, ConfirmNotAlreadyPostedInERP: confirmNotAlreadyPostedInERP });
-      if (!res.Success || !res.Output) return { Success: false, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
+      if (!res.Success || !res.Output) return { Success: false, ErrorMessage: res.ErrorMessage ?? 'The server returned no result. Try again; if it keeps happening, ask an administrator to check the server logs.' };
       return {
         Success: true,
         Status: res.Output.Status,
@@ -376,7 +376,7 @@ export class JournalEntryBatchDispatchClient {
     try {
       const res = await this.dataProvider.RouteOperation<{ JournalEntryBatchID: string }, ResumeJournalEntryBatchPostingOutputWire>(
         'Accounting.ResumeJournalEntryBatchPosting', { JournalEntryBatchID: batchID });
-      if (!res.Success || !res.Output) return { Success: false, JournalEntriesPosted: 0, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
+      if (!res.Success || !res.Output) return { Success: false, JournalEntriesPosted: 0, ErrorMessage: res.ErrorMessage ?? 'The server returned no result. Try again; if it keeps happening, ask an administrator to check the server logs.' };
       return { Success: true, JournalEntriesPosted: res.Output.JournalEntriesPosted };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -390,7 +390,7 @@ export class JournalEntryBatchDispatchClient {
     try {
       const res = await this.dataProvider.RouteOperation<Record<string, never>, GetStrandedJournalEntriesOutputWire>(
         'Accounting.GetStrandedJournalEntries', {});
-      if (!res.Success || !res.Output) return { Success: false, Batches: [], JournalEntryCount: 0, ErrorMessage: res.ErrorMessage ?? 'No response from server.' };
+      if (!res.Success || !res.Output) return { Success: false, Batches: [], JournalEntryCount: 0, ErrorMessage: res.ErrorMessage ?? 'The server returned no result. Try again; if it keeps happening, ask an administrator to check the server logs.' };
       return { Success: true, Batches: res.Output.Batches ?? [], JournalEntryCount: res.Output.JournalEntryCount ?? 0 };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -404,7 +404,7 @@ export class JournalEntryBatchDispatchClient {
     try {
       const res = await this.dataProvider.RouteOperation<{ JournalEntryBatchID: string }, GetJournalEntryBatchApprovalStateOutputWire>(
         'Accounting.GetJournalEntryBatchApprovalState', { JournalEntryBatchID: batchID });
-      if (!res.Success || !res.Output) return { Success: false, Approved: false, Reason: res.ErrorMessage ?? 'No response from server.' };
+      if (!res.Success || !res.Output) return { Success: false, Approved: false, Reason: res.ErrorMessage ?? 'The server returned no result. Try again; if it keeps happening, ask an administrator to check the server logs.' };
       return { Success: true, Approved: res.Output.Approved, Reason: res.Output.Reason };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

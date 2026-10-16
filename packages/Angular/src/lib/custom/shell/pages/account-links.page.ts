@@ -230,7 +230,7 @@ export class AccountLinksPageComponent extends BaseAngularComponent implements O
         },
         this.ProviderToUse.CurrentUser,
       );
-      if (!res.Success) throw new Error(res.ErrorMessage ?? 'could not load account links');
+      if (!res.Success) throw new Error(res.ErrorMessage ?? 'Could not load account links. Refresh the page to try again.');
       // Name each link's target off the engine caches Config just loaded — no extra round-trip.
       this.Rows = (res.Results ?? []).map((r) => ({ ...r, TargetName: this.targetNameFor(r.Entity, r.RecordID) }));
 

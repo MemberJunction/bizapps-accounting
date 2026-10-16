@@ -50,7 +50,7 @@ export async function getNextJournalEntryNumber(
   const value = rows?.[0]?.EntryNumber;
   if (!value || typeof value !== 'string') {
     throw new Error(
-      `SequenceService.getNextJournalEntryNumber: sproc returned no value for CompanyID=${companyId}, FiscalYear=${fiscalYear}`,
+      `Could not get the next journal entry number for company ${companyId}, fiscal year ${fiscalYear}: the number sequence returned nothing.`,
     );
   }
   return value;
@@ -80,7 +80,7 @@ export async function getNextJournalEntryBatchNumber(
   const value = rows?.[0]?.JournalEntryBatchNumber;
   if (!value || typeof value !== 'string') {
     throw new Error(
-      'SequenceService.getNextJournalEntryBatchNumber: sproc returned no value',
+      'Could not get the next batch number: the number sequence returned nothing.',
     );
   }
   return value;
@@ -88,7 +88,7 @@ export async function getNextJournalEntryBatchNumber(
 
 function getSqlServerProvider(provider: IMetadataProvider): SQLServerDataProvider {
   if (!provider) {
-    throw new Error('SequenceService: an IMetadataProvider must be injected — there is no global fallback');
+    throw new Error('The number sequence service was called without a database provider; the calling code must pass one.');
   }
   return provider as SQLServerDataProvider;
 }

@@ -93,7 +93,7 @@ export abstract class AccountingDashboardBase extends BaseAngularComponent {
       { ...params, Fields: ['ID'], MaxRows: 1, ResultType: 'simple' },
       this.ProviderToUse.CurrentUser,
     );
-    if (!res.Success) throw new Error(res.ErrorMessage ?? 'count failed');
+    if (!res.Success) throw new Error(res.ErrorMessage ?? 'Could not load the dashboard totals. Refresh the page to try again.');
     return res.TotalRowCount ?? 0;
   }
 

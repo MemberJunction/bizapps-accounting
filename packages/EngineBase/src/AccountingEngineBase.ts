@@ -373,7 +373,7 @@ export class AccountingEngineBase extends BaseEngine<AccountingEngineBase> {
     if (roleRow.Cardinality === 'Many') {
       throw new AccountingResolutionError(
         'ROLE_NOT_SINGULAR',
-        `Role '${roleRow.Name}' has Cardinality=Many. ResolveLinkedAccount refuses it rather than returning an arbitrary account. Use ResolveLinkedAccounts.`,
+        `The account role '${roleRow.Name}' can link to several accounts, so no single account can be picked for it. The calling code must use ResolveLinkedAccounts.`,
       );
     }
     const candidates = this.linkCandidates(entityId, recordId, roleRow.ID, forCompanyID);

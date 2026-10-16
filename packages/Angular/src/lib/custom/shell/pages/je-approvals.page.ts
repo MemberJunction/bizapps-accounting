@@ -130,7 +130,7 @@ export class JEApprovalsPageComponent extends BaseAngularComponent implements On
         },
         this.ProviderToUse.CurrentUser,
       );
-      if (!res.Success) throw new Error(res.ErrorMessage ?? 'Could not load the review queue.');
+      if (!res.Success) throw new Error(res.ErrorMessage ?? 'Could not load the review queue. Refresh the page to try again.');
 
       const rows = res.Results ?? [];
       const amounts = await this.loadAmounts(rows.map((r) => r.ID));

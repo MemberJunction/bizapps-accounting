@@ -167,7 +167,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
     // Loud on failure: treating a failed query as "no dimensions" would silently strip tags
     // from everything that reads the hydrated collection (reversals, dispatch, UI).
     if (!res.Success) {
-      throw new Error(`JournalEntryEntityServer.hydrateLineDimensions: failed to load dimension tags for JE ${this.ID}: ${res.ErrorMessage ?? 'unknown error'}`);
+      throw new Error(`Could not load the dimensions on the lines of journal entry ${this.ID}: ${res.ErrorMessage ?? 'unknown error'}`);
     }
     const byLine = new Map<string, mjBizAppsAccountingJournalEntryLineDimensionEntity[]>();
     for (const dim of res.Results ?? []) {
@@ -229,15 +229,15 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
       // A JE is born Pending — every sanctioned creation path (manual entry, the engine,
       // reversals, the batch summary) starts there; lifecycle moves happen through the batch process.
       if (this.Status && this.Status !== 'Pending') {
-        fail(`A new journal entry must start at Status='Pending' (got '${this.Status}') — Batched/GLPosted are reached only through the batch process.`);
+        fail(`A new journal entry must start as Pending, not '${this.Status}'; it becomes Batched or GL-posted only through batching.`);
       }
     } else {
       const oldStatus = this.GetFieldByName('Status')?.OldValue as string | undefined;
       if (oldStatus && this.Status !== oldStatus) {
         if (!(JE_LEGAL_TRANSITIONS[oldStatus] ?? []).includes(this.Status)) {
-          fail(`Illegal journal entry status transition '${oldStatus}' → '${this.Status}'. Legal from '${oldStatus}': ${(JE_LEGAL_TRANSITIONS[oldStatus] ?? []).filter(s => s !== oldStatus).join(', ') || '(terminal)'}.`);
+          fail(`A journal entry cannot go from ${oldStatus} to ${this.Status}. From ${oldStatus} it can go to: ${(JE_LEGAL_TRANSITIONS[oldStatus] ?? []).filter(s => s !== oldStatus).join(', ') || 'nothing; it is final'}.`);
         } else if (oldStatus === 'Batched' && this.Status === 'Pending' && this.JournalEntryBatchID) {
-          fail(`Batched→Pending is only the reversible unlock of a Pending or Cancelled batch — JournalEntryBatchID must be cleared in the same save.`);
+          fail(`A batched journal entry returns to Pending only when its batch releases it, and that clears its batch link (JournalEntryBatchID) in the same save.`);
         }
       }
     }
@@ -276,7 +276,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
         result.Errors.push(
           new ValidationErrorInfo(
             'JournalEntryEntityServer.ValidateAsync',
-            'JournalEntry typed \'Reversal\' must specify ReversesJournalEntryID.',
+            'A Reversal entry must name the journal entry it reverses (ReversesJournalEntryID).',
             null,
           ),
         );
@@ -286,7 +286,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
         result.Errors.push(
           new ValidationErrorInfo(
             'JournalEntryEntityServer.ValidateAsync',
-            'JournalEntry specifying ReversesJournalEntryID must be typed with JournalEntryType Code=\'Reversal\'.',
+            'An entry that reverses another journal entry must have the Reversal entry type.',
             null,
           ),
         );
@@ -335,7 +335,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
         result.Errors.push(
           new ValidationErrorInfo(
             'JournalEntryEntityServer.ValidateAsync',
-            `Line GL Account id '${bad}' is not a valid UUID.`,
+            `A line's GL account ID '${bad}' is not a valid ID.`,
             null,
           ),
         );
@@ -363,7 +363,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
               result.Errors.push(
                 new ValidationErrorInfo(
                   'JournalEntryEntityServer.ValidateAsync',
-                  `Line ${line.LineNumber || ''}: GL Account ${line.GLAccountID} not found.`,
+                  `Line ${line.LineNumber || ''}: GL account ${line.GLAccountID} was not found.`,
                   null,
                 ),
               );
@@ -374,7 +374,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
               result.Errors.push(
                 new ValidationErrorInfo(
                   'JournalEntryEntityServer.ValidateAsync',
-                  `Line ${line.LineNumber || ''}: GL Account ${gl.Code || gl.ID} is inactive.`,
+                  `Line ${line.LineNumber || ''}: GL account ${gl.Code || gl.ID} is inactive. Pick an active account.`,
                   null,
                 ),
               );
@@ -384,7 +384,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
               result.Errors.push(
                 new ValidationErrorInfo(
                   'JournalEntryEntityServer.ValidateAsync',
-                  `Line ${line.LineNumber || ''}: GL Account ${gl.Code || gl.ID} belongs to company ${gl.CompanyID}, but Journal Entry belongs to company ${this.CompanyID} (single-company isolation rule D3).`,
+                  `Line ${line.LineNumber || ''}: GL account ${gl.Code || gl.ID} belongs to company ${gl.CompanyID}, but this journal entry belongs to company ${this.CompanyID}. Every line must use an account of the entry's company.`,
                   null,
                 ),
               );
@@ -439,7 +439,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
       const saved = await super.Save(options);
       if (!saved) {
         throw new Error(
-          `Failed to save JournalEntry: ${this.LatestResult?.CompleteMessage ?? 'unknown error'}`,
+          `The journal entry could not be saved: ${this.LatestResult?.CompleteMessage ?? 'unknown error'}`,
         );
       }
 
@@ -460,10 +460,10 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
 
   private async assignEntryNumber(): Promise<void> {
     if (!this.ContextCurrentUser) {
-      throw new Error('JournalEntryEntityServer.assignEntryNumber: ContextCurrentUser is required');
+      throw new Error('A journal entry number cannot be assigned without a signed-in user.');
     }
     if (!this.CompanyID) {
-      throw new Error('JournalEntryEntityServer.assignEntryNumber: CompanyID must be set before save (journal entries are single-company, plan D3)');
+      throw new Error('Choose a company before saving the journal entry.');
     }
     const fiscalYear = await this.deriveFiscalYear();
     this.EntryNumber = await getNextJournalEntryNumber(
@@ -483,17 +483,17 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
   private async deriveFiscalYear(): Promise<number> {
     const effectiveDate = this.EffectiveDate;
     if (!effectiveDate) {
-      throw new Error('JournalEntryEntityServer.deriveFiscalYear: EffectiveDate must be set before save (NOT NULL constraint)');
+      throw new Error('Enter an effective date before saving the journal entry.');
     }
     // Defensive: a raw-loaded value can arrive as an ISO string at runtime despite the Date type.
     const d = effectiveDate instanceof Date ? effectiveDate : new Date(effectiveDate);
     if (Number.isNaN(d.getTime())) {
-      throw new Error(`JournalEntryEntityServer.deriveFiscalYear: invalid EffectiveDate value: ${String(effectiveDate)}`);
+      throw new Error(`The effective date '${String(effectiveDate)}' is not a valid date.`);
     }
     await AccountingEngineBase.Instance.ConfigEx({ contextUser: this.ContextCurrentUser, provider: this.ProviderToUse as unknown as IMetadataProvider });
     const day = ToCalendarDay(d);
     if (day === null) {
-      throw new Error(`JournalEntryEntityServer.deriveFiscalYear: EffectiveDate has no calendar day: ${String(effectiveDate)}`);
+      throw new Error(`The effective date '${String(effectiveDate)}' cannot be read as a calendar day.`);
     }
     return FiscalYearOf(day, AccountingEngineBase.Instance.FiscalYearStartFor(this.CompanyID));
   }
@@ -514,7 +514,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
 
     const batchId = this.JournalEntryBatchID;
     if (!batchId) {
-      return 'A journal entry can only transition to GLPosted as a member of a dispatched batch, but JournalEntryBatchID is not set.';
+      return 'A journal entry can be marked GL-posted only as part of a sent batch, and this entry is in no batch.';
     }
     const provider = this.ProviderToUse as unknown as IRunViewProvider;
     const res = await provider.RunView<{ Status: string }>(
@@ -530,14 +530,14 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
     );
     // Loud on failure: silently skipping would reopen the forged-posting hole this check closes.
     if (!res.Success) {
-      throw new Error(`JournalEntryEntityServer.validateGLPostedTransition: could not read owning batch ${batchId}: ${res.ErrorMessage ?? 'unknown error'}`);
+      throw new Error(`Could not check batch ${batchId}, which holds this journal entry: ${res.ErrorMessage ?? 'unknown error'}`);
     }
     const batchStatus = res.Results?.[0]?.Status;
     if (!batchStatus) {
-      return `Cannot transition to GLPosted: owning batch ${batchId} was not found.`;
+      return `This journal entry cannot be marked GL-posted: its batch ${batchId} was not found.`;
     }
     if (batchStatus !== 'Sent' && batchStatus !== 'Posted') {
-      return `Cannot transition to GLPosted: owning batch ${batchId} is '${batchStatus}' — only the batch dispatch flow (batch Sent/Posted) may mark a journal entry GL-posted.`;
+      return `This journal entry cannot be marked GL-posted: its batch ${batchId} is ${batchStatus}, and only a Sent or Posted batch can mark its entries GL-posted.`;
     }
     return null;
   }
@@ -556,7 +556,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
       this.ContextCurrentUser,
     );
     if (res.Success && res.Results.length === 0) {
-      throw new Error(`JournalEntry.FileID ${fileId} does not reference an existing file (W9).`);
+      throw new Error(`The attached file (${fileId}) does not exist. Remove the attachment or attach the file again.`);
     }
   }
 
@@ -575,7 +575,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
     contextUser?: UserInfo,
   ): Promise<mjBizAppsAccountingJournalEntryEntity> {
     if (!this.IsSaved) {
-      throw new Error('GenerateReversal: the JournalEntry must be saved before it can be reversed.');
+      throw new Error('The journal entry must be saved before it can be reversed.');
     }
     const user = contextUser ?? this.ContextCurrentUser;
     const provider = this.ProviderToUse as unknown as IMetadataProvider;
@@ -585,10 +585,10 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
     // be reversed again (double-reversing would orphan the back-pointer).
     const reversalTypeId = await RequireJournalEntryTypeID('Reversal', user, provider);
     if (this.EntryTypeID?.toLowerCase() === reversalTypeId.toLowerCase() || this.ReversesJournalEntryID) {
-      throw new Error('GenerateReversal: a reversal entry cannot itself be reversed.');
+      throw new Error('A reversal entry cannot itself be reversed.');
     }
     if (this.ReversedByJournalEntryID) {
-      throw new Error(`GenerateReversal: ${this.EntryNumber} has already been reversed (by JE ${this.ReversedByJournalEntryID}).`);
+      throw new Error(`Journal entry ${this.EntryNumber} has already been reversed (by journal entry ${this.ReversedByJournalEntryID}).`);
     }
 
     // Make sure this JE's own lines (+ dimension tags) are hydrated to copy from.
@@ -619,7 +619,7 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
     }
 
     if (!(await reversal.Save())) {
-      throw new Error(`GenerateReversal: failed to save reversal: ${reversal.LatestResult?.CompleteMessage ?? 'unknown'}`);
+      throw new Error(`The reversal could not be saved: ${reversal.LatestResult?.CompleteMessage ?? 'unknown error'}`);
     }
     await this.BackReferenceReversal(reversal.ID);
     return reversal;

@@ -259,7 +259,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
   /** "Keep as draft tab" — the tab already holds the state; this just makes that explicit + clean. */
   public KeepAsDraft(): void {
     if (this.tabs.ActiveId) this.tabs.MarkClean(this.tabs.ActiveId);
-    this.ActionMessage = 'Kept as a draft tab — it stays for this session (drafts are not saved to the database in v1).';
+    this.ActionMessage = 'Kept as a draft tab. Drafts last only for this browser session and are not saved, so closing the app discards it.';
     this.ActionIsError = false;
     this.cdr.markForCheck();
   }
@@ -511,7 +511,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
     if (this.IsBuilt) return 'This tab is already built.';
     if (!this.Preview || this.Preview.Candidates.length === 0) return 'Nothing matches these criteria.';
     if (this.IncludedCount === 0) return 'Every entry is excluded — nothing to build.';
-    if (!this.IsBalanced) return 'The selection does not balance (Dr ≠ Cr) — it would be rejected by the ledger.';
+    if (!this.IsBalanced) return 'The selected entries do not balance: total debits must equal total credits. Include or exclude entries until they match.';
     if (this.PostingDateProblem) return this.PostingDateProblem;
     if (this.PostingDateWarning && !this.PostingDateConfirmed) return `Confirm posting this batch in ${this.PostingMonth}.`;
     return null;
@@ -546,7 +546,7 @@ export class JournalEntryBatchWorkspacePageComponent extends BaseAngularComponen
       this.openNewDraft();
       this.ActionMessage = taskRaised
         ? `Built batch ${builtNumber} — sent for CFO approval. Its tab is kept for review; this is a fresh batch.`
-        : `Built batch ${builtNumber}. ⚠ Its approval task could not be raised — the batch is valid and can be retried from Batch approvals.`;
+        : `Built batch ${builtNumber}, but its approval request was not created, so no one will be asked to approve it. The batch is valid; retry the approval request from Batch approvals.`;
       this.ActionIsError = false;
     } catch (e) {
       this.setError(e instanceof Error ? e.message : String(e));
