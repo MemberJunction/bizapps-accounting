@@ -102,7 +102,7 @@ export class JournalEntryBatchWorkspaceClient {
       IncludedJournalEntryIDs: includedIds,
     });
     if (!res.Success || !res.Output) {
-      const msg = res.ErrorMessage ?? 'Preview failed.';
+      const msg = res.ErrorMessage ?? 'Could not load the entries that match these criteria. Try again.';
       LogError(`JournalEntryBatchWorkspaceClient.Preview: ${msg}`);
       throw new Error(msg);
     }
@@ -127,7 +127,7 @@ export class JournalEntryBatchWorkspaceClient {
       },
     );
     if (!res.Success || !res.Output) {
-      const msg = res.ErrorMessage ?? 'Build failed.';
+      const msg = res.ErrorMessage ?? 'The journal entry batch was not built. Try again.';
       LogError(`JournalEntryBatchWorkspaceClient.Build: ${msg}`);
       throw new Error(msg);
     }

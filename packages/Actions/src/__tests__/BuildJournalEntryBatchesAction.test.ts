@@ -393,7 +393,7 @@ describe('BuildJournalEntryBatchesAction', () => {
         expect(failSpy).not.toHaveBeenCalled();
         expect(result.Success).toBe(false);
         expect(result.Message).toContain('(Sent:');
-        expect(result.Message).toContain('sent by another dispatch');
+        expect(result.Message).toContain('another send of batch');
     });
 
     // ─── A build failure must not strand the companies already dispatched ────────────────

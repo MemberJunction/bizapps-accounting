@@ -44,16 +44,16 @@ export class FinanceExceptionEntityServer extends mjBizAppsAccountingFinanceExce
 
   public override async Delete(_options?: EntityDeleteOptions): Promise<boolean> {
     throw new Error(
-      `Finance exception ${this.ID} cannot be deleted. Clear it through Accounting.ClearFinanceException as Reviewed or Corrected; deleting an Open exception would unblock its month without a review.`,
+      `Finance exception ${this.ID} cannot be deleted. Clear it as Reviewed or Corrected instead; deleting an Open exception would unblock its month without a review.`,
     );
   }
 
   private newRowRefusal(): string | null {
     if (this.Status !== 'Open') {
-      return `A finance exception is raised Open; '${this.Status}' is reached only through Accounting.ClearFinanceException.`;
+      return `A finance exception is raised Open; it becomes '${this.Status}' only when someone clears it.`;
     }
     if (this.ReviewedByUserID || this.ReviewedAt || this.ReviewNote) {
-      return 'A new finance exception carries no review; ReviewedByUserID, ReviewedAt and ReviewNote are written by Accounting.ClearFinanceException.';
+      return 'A new finance exception carries no review; the reviewer, review date and note are filled in when someone clears it.';
     }
     return null;
   }
@@ -61,15 +61,15 @@ export class FinanceExceptionEntityServer extends mjBizAppsAccountingFinanceExce
   private savedRowRefusal(): string | null {
     const storedStatus = this.storedStatus();
     if (TERMINAL.has(storedStatus) && this.Dirty) {
-      return `Finance exception ${this.ID} is ${storedStatus}, which is terminal: it cannot be changed.`;
+      return `Finance exception ${this.ID} is ${storedStatus}, which is final: it cannot be changed.`;
     }
     const reviewChanged = REVIEW_FIELDS.some(name => this.Fields.find(f => f.Name === name)?.Dirty);
     if (!reviewChanged) return null;
     if (!sanctionedSaves.has(this)) {
-      return `The status and review of finance exception ${this.ID} change only through Accounting.ClearFinanceException.`;
+      return `The status and review of finance exception ${this.ID} change only by clearing it, not by editing the record.`;
     }
     if (storedStatus !== 'Open' || !TERMINAL.has(this.Status)) {
-      return `Finance exception ${this.ID} can only move from Open to Reviewed or Corrected (was ${storedStatus}, now ${this.Status}).`;
+      return `Finance exception ${this.ID} can only move from Open to Reviewed or Corrected, not from ${storedStatus} to ${this.Status}.`;
     }
     return null;
   }

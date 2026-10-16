@@ -137,7 +137,7 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
 
       const result = je.Validate();
       expect(result.Success).toBe(false);
-      expect(result.Errors.some(e => getErrorText(e).includes('at least 2 line items'))).toBe(true);
+      expect(result.Errors.some(e => getErrorText(e).includes('at least two lines'))).toBe(true);
     });
 
     it('does not let TWO UNTOUCHED ROWS satisfy the double-entry rule', () => {
@@ -153,7 +153,7 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
 
       const result = je.Validate();
       expect(result.Success).toBe(false);
-      expect(result.Errors.some(e => getErrorText(e).includes('Found 0 line(s)'))).toBe(true);
+      expect(result.Errors.some(e => getErrorText(e).includes('this one has 0'))).toBe(true);
     });
 
     it('refuses a BLANK line among real ones, by number', () => {
@@ -198,7 +198,7 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
 
       const result = je.Validate();
       expect(result.Success).toBe(false);
-      expect(result.Errors.some(e => getErrorText(e).includes('Unbalanced Journal Entry'))).toBe(true);
+      expect(result.Errors.some(e => getErrorText(e).includes('The entry does not balance'))).toBe(true);
     });
 
     it('accepts a four-line entry whose credits accumulate past the penny in binary floating point', () => {
@@ -222,7 +222,7 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
 
       const result = je.Validate();
       expect(
-        result.Errors.some(e => getErrorText(e).includes('Unbalanced Journal Entry')),
+        result.Errors.some(e => getErrorText(e).includes('The entry does not balance')),
       ).toBe(false);
     });
 
@@ -245,7 +245,7 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
 
       const result = je.Validate();
       expect(result.Success).toBe(false);
-      expect(result.Errors.some(e => getErrorText(e).includes('Unbalanced Journal Entry'))).toBe(true);
+      expect(result.Errors.some(e => getErrorText(e).includes('The entry does not balance'))).toBe(true);
     });
 
     it('fails validation when a line specifies both Debit and Credit amounts', () => {
@@ -294,7 +294,7 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
       je.EntryTypeID = JET_REVERSAL;
       const result = await je.ValidateAsync();
       expect(result.Success).toBe(false);
-      expect(result.Errors.some(e => getErrorText(e).includes('must specify ReversesJournalEntryID'))).toBe(true);
+      expect(result.Errors.some(e => getErrorText(e).includes('must name the journal entry it reverses'))).toBe(true);
     });
 
     it('fails async validation when ReversesJournalEntryID is set but the type is not Reversal', async () => {
@@ -302,7 +302,7 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
       je.ReversesJournalEntryID = 'JE_SOME_ORIGINAL';
       const result = await je.ValidateAsync();
       expect(result.Success).toBe(false);
-      expect(result.Errors.some(e => getErrorText(e).includes("Code='Reversal'"))).toBe(true);
+      expect(result.Errors.some(e => getErrorText(e).includes('must have the Reversal entry type'))).toBe(true);
     });
 
     it('fails validation when a reversal-shaped entry is unbalanced (sync rules still run)', () => {
@@ -348,7 +348,7 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
 
       const result = je.Validate();
       expect(result.Success).toBe(false);
-      expect(result.Errors.some(e => getErrorText(e).includes('belongs to company CO_999, but parent Journal Entry belongs to company CO_100'))).toBe(true);
+      expect(result.Errors.some(e => getErrorText(e).includes('belongs to company CO_999, but this journal entry belongs to company CO_100'))).toBe(true);
     });
 
     it('a NEW journal entry must start Pending — creating one directly as GLPosted fails (status-graph hardening)', () => {
@@ -359,14 +359,14 @@ describe('JournalEntryEntityServer & JournalEntryLineEntityServer (Extended Vali
       je.Status = 'GLPosted';
       const result = je.Validate();
       expect(result.Success).toBe(false);
-      expect(result.Errors.some(e => getErrorText(e).includes("must start at Status='Pending'"))).toBe(true);
+      expect(result.Errors.some(e => getErrorText(e).includes('must start as Pending'))).toBe(true);
     });
 
     it('a NEW journal entry created directly as Batched also fails', () => {
       je.Status = 'Batched';
       const result = je.Validate();
       expect(result.Success).toBe(false);
-      expect(result.Errors.some(e => getErrorText(e).includes("must start at Status='Pending'"))).toBe(true);
+      expect(result.Errors.some(e => getErrorText(e).includes('must start as Pending'))).toBe(true);
     });
 
     it('passes validation for a valid, balanced 2-line Journal Entry with matching company GL accounts', () => {

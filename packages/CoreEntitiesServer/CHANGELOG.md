@@ -1,5 +1,13 @@
 # @mj-biz-apps/accounting-core-entities-server
 
+## 0.22.2
+
+### Patch Changes
+
+- de62630: Rewrite the Accounting app's error and warning messages so they say what went wrong and what to do next, without internal class, field or action names.
+  - @mj-biz-apps/accounting-engine-base@0.22.2
+  - @mj-biz-apps/accounting-entities@0.22.2
+
 ## 0.22.1
 
 ### Patch Changes

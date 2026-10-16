@@ -160,7 +160,7 @@ export class DimensionsPageComponent extends BaseAngularComponent implements OnI
         { EntityName: DIM_ENTITY, Fields: ['ID', 'Code', 'Name', 'IsActive'], OrderBy: 'DisplayOrder ASC, Code ASC', ResultType: 'simple' },
         this.ProviderToUse.CurrentUser,
       );
-      if (!res.Success) throw new Error(res.ErrorMessage ?? 'could not load dimensions');
+      if (!res.Success) throw new Error(res.ErrorMessage ?? 'Could not load dimensions. Refresh the page to try again.');
       this.Dimensions = res.Results ?? [];
       if (!this.SelectedID && this.Dimensions.length > 0) this.SelectedID = this.Dimensions[0].ID;
       this.applyValueParams();

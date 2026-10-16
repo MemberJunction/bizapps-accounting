@@ -60,7 +60,7 @@ export async function RequireJournalEntryTypeID(
 ): Promise<string> {
   const row = await LookupJournalEntryTypeByCode(code, contextUser, provider);
   if (!row) {
-    throw new Error(`JournalEntryType '${code}' does not exist — its owning app must seed it (issue #24).`);
+    throw new Error(`Journal entry type '${code}' does not exist. The app that books this type must set it up first.`);
   }
   return row.ID;
 }
@@ -76,7 +76,7 @@ export async function GetJournalEntryBatchSummaryEntryType(
 ): Promise<JournalEntryTypeRow> {
   const row = await lookupOne('IsJournalEntryBatchSummary=1', contextUser, provider);
   if (!row) {
-    throw new Error("No JournalEntryType is flagged IsJournalEntryBatchSummary — seed metadata/journal-entry-types (the 'JournalEntryBatchSummary' system row) before batching.");
+    throw new Error("No journal entry type is marked as the batch summary type, so batches cannot be built. Install the Accounting metadata (the 'JournalEntryBatchSummary' system type) first.");
   }
   return row;
 }
@@ -92,7 +92,7 @@ async function lookupOne(
     contextUser,
   );
   if (!res.Success) {
-    throw new Error(`JournalEntryType lookup failed (${extraFilter}): ${res.ErrorMessage}`);
+    throw new Error(`Could not look up journal entry types (${extraFilter}): ${res.ErrorMessage ?? 'unknown error'}`);
   }
   return res.Results?.[0] ?? null;
 }

@@ -94,7 +94,7 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
   private readonly orchestration = new TaskOrchestrationService();
 
   constructor(private readonly provider: IMetadataProvider) {
-    if (!provider) throw new Error('TasksAppApprovalGate: an IMetadataProvider must be injected — there is no global fallback');
+    if (!provider) throw new Error('The batch approval gate was created without a database provider; the calling code must pass one.');
   }
 
   /** The injected provider viewed through its RunView interface. */
@@ -140,7 +140,7 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     // on the same provider as the open build transaction, so it sees the uncommitted Task.)
     const task = await this.resolveBatchTask(batchId, contextUser);
     if (!task) {
-      throw new Error(`Approval Task for batch ${batchId} was created but its Task Link did not persist — check tasks-app schema/permissions.`);
+      throw new Error(`The approval task for batch ${batchId} was created, but its link to the batch was not saved. Check the Tasks app setup and permissions.`);
     }
     // Hand the ID back so the engine stamps JournalEntryBatch.ApprovalTaskID in the build
     // transaction — "does this batch have a task?" becomes a column read, not a Task-Link walk.
@@ -157,9 +157,9 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     // ApprovalTaskID inside the build transaction, so a legitimately-built batch always has it;
     // a missing value fails closed.
     const task = await this.resolveStampedApprovalTask(batchId, contextUser);
-    if (!task) throw new Error(`Batch ${batchId} has no stamped approval Task — it was not raised through TasksAppApprovalGate.onBatchBuilt.`);
+    if (!task) throw new Error(`Batch ${batchId} cannot be sent: it has no approval task, so it was not built through the approval process.`);
     if (!(await this.hasTerminalDecision(task.ID, 'Approval', contextUser))) {
-      throw new Error(`Batch ${batchId} is not approved — no terminal Approved/ApprovedWithConditions decision on its approval Task.`);
+      throw new Error(`Batch ${batchId} is not approved yet: its approval task has no Approved decision.`);
     }
   }
 
@@ -207,13 +207,13 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     if (!UUIDsEqual(cfoUserId, contextUser.ID)) {
       throw new Error(
         `Batch ${batch.JournalEntryBatchNumber ?? batchId}: only the configured approver for company ${batch.CompanyID} ` +
-        `(AccountingCompanyProfile.ApprovalCFOUserID) may record an approval decision — the current user is not that approver.`,
+        `(the Approval CFO on its Accounting Company Profile) can approve or reject it, and you are not that approver.`,
       );
     }
     if (UUIDsEqual(contextUser.ID, batch.BatchedByUserID)) {
       throw new Error(
-        `Batch ${batch.JournalEntryBatchNumber ?? batchId}: the user who built a batch may not approve it — ` +
-        `separation of duties requires an approver other than JournalEntryBatch.BatchedByUserID.`,
+        `Batch ${batch.JournalEntryBatchNumber ?? batchId}: the user who built a batch may not approve it. ` +
+        `Someone other than the builder must approve it.`,
       );
     }
     const task = await this.resolveBatchTask(batchId, contextUser);
@@ -240,7 +240,7 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     if (!allowed.some(id => UUIDsEqual(id, contextUser.ID))) {
       throw new Error(
         `Batch ${batch.JournalEntryBatchNumber ?? batchId}: only the company's configured approver ` +
-        `(AccountingCompanyProfile.ApprovalCFOUserID) or the user who approved this batch may cancel it after approval.`,
+        `(the Approval CFO on its Accounting Company Profile) or the user who approved this batch may cancel it after approval.`,
       );
     }
     // Same condition recordCancellation uses (#223): the stamped ApprovalTaskID, not a Task Link.
@@ -263,7 +263,7 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
     if (!allowed.some(id => UUIDsEqual(id, contextUser.ID))) {
       throw new Error(
         `Batch ${batch.JournalEntryBatchNumber ?? batchId}: only the company's configured approver ` +
-        `(AccountingCompanyProfile.ApprovalCFOUserID) or the user who built this batch may cancel it before approval.`,
+        `(the Approval CFO on its Accounting Company Profile) or the user who built this batch may cancel it before approval.`,
       );
     }
     // Same condition recordCancellation uses (#223): the stamped ApprovalTaskID, not a Task Link.
@@ -324,7 +324,7 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
   private noLinkedPersonError(batch: mjBizAppsAccountingJournalEntryBatchEntity, contextUser: UserInfo): Error {
     return new Error(
       `Batch ${batch.JournalEntryBatchNumber ?? batch.ID}: the cancel cannot be recorded on its approval Task because user ` +
-      `${contextUser.Email ?? contextUser.ID} has no linked Person (MJ_BizApps_Common: People.LinkedUserID). ` +
+      `${contextUser.Email ?? contextUser.ID} has no linked Person record. ` +
       'An administrator must link this user to a Person before the batch can be cancelled.',
     );
   }
@@ -342,13 +342,13 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
       { EntityName: PERSON_ENTITY, ExtraFilter: `LinkedUserID=${sqlGuidLiteral(contextUser.ID, 'TasksAppApprovalGate.resolvePersonIdForUser')}`, Fields: ['ID'], MaxRows: 1, ResultType: 'simple', BypassCache: true },
       contextUser,
     );
-    if (!res.Success) throw new Error(`TasksAppApprovalGate: Person lookup failed: ${res.ErrorMessage ?? 'unknown'}`);
+    if (!res.Success) throw new Error(`Could not look up the person linked to the current user: ${res.ErrorMessage ?? 'unknown error'}`);
     return res.Results?.[0]?.ID ?? null;
   }
 
   private async loadBatch(batchId: string, contextUser: UserInfo): Promise<mjBizAppsAccountingJournalEntryBatchEntity> {
     const batch = await this.provider.GetEntityObject<mjBizAppsAccountingJournalEntryBatchEntity>(BATCH_ENTITY, contextUser);
-    if (!(await batch.Load(batchId))) throw new Error(`TasksAppApprovalGate: batch ${batchId} not found`);
+    if (!(await batch.Load(batchId))) throw new Error(`Batch ${batchId} was not found.`);
     return batch;
   }
 
@@ -359,10 +359,10 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
    */
   private async resolveCFOUserIdForCompany(companyId: string, contextUser: UserInfo): Promise<string> {
     const acp = await this.provider.GetEntityObject<mjBizAppsAccountingAccountingCompanyProfileEntity>(ACP_ENTITY, contextUser);
-    if (!(await acp.Load(companyId))) throw new Error(`TasksAppApprovalGate: no AccountingCompanyProfile for company ${companyId}`);
+    if (!(await acp.Load(companyId))) throw new Error(`Company ${companyId} has no Accounting Company Profile, so its batch approver cannot be found.`);
     const cfo = acp.ApprovalCFOUserID;
     if (!cfo) {
-      throw new Error(`No CFO configured for company ${companyId}; set AccountingCompanyProfile.ApprovalCFOUserID before batching for approval.`);
+      throw new Error(`No CFO configured for company ${companyId}. Set the Approval CFO on the company's Accounting Company Profile before building batches for approval.`);
     }
     return cfo;
   }
@@ -373,13 +373,13 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
       contextUser,
     );
     const type = res.Results?.[0];
-    if (!res.Success || !type) throw new Error(`TasksAppApprovalGate: TaskType '${APPROVAL_REQUEST_TASK_TYPE}' not found (is bizapps-tasks metadata seeded?)`);
+    if (!res.Success || !type) throw new Error(`The '${APPROVAL_REQUEST_TASK_TYPE}' task type is not set up, so no approval task can be raised. Make sure the Tasks app metadata is installed.`);
     return type.ID;
   }
 
   private resolveUserEntityId(): string {
     const entity = this.provider.EntityByName(USER_ENTITY);
-    if (!entity) throw new Error(`TasksAppApprovalGate: entity '${USER_ENTITY}' not found in metadata`);
+    if (!entity) throw new Error(`The '${USER_ENTITY}' entity is missing from the metadata, so the approval task cannot be linked.`);
     return entity.ID;
   }
 
@@ -402,7 +402,7 @@ export class TasksAppApprovalGate implements JournalEntryBatchApprovalGate, Jour
   /** Resolve the Journal Entry Batches EntityID for Task Link filtering. */
   private batchEntityId(): string {
     const entity = this.provider.EntityByName(BATCH_ENTITY);
-    if (!entity) throw new Error(`TasksAppApprovalGate: entity '${BATCH_ENTITY}' not found in metadata`);
+    if (!entity) throw new Error(`The '${BATCH_ENTITY}' entity is missing from the metadata, so the approval task cannot be linked.`);
     return entity.ID;
   }
 

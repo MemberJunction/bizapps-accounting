@@ -20,7 +20,7 @@ export const DEFAULT_FISCAL_YEAR_START: Readonly<FiscalYearStart> = Object.freez
 export function FiscalYearOf(day: string, start: FiscalYearStart): number {
   const [year, month, dayOfMonth] = day.split('-').map(Number);
   if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(dayOfMonth)) {
-    throw new Error(`FiscalYearOf: '${day}' is not a YYYY-MM-DD calendar day`);
+    throw new Error(`Cannot work out the fiscal year: '${day}' is not a YYYY-MM-DD calendar date.`);
   }
   const beforeStart = month < start.Month || (month === start.Month && dayOfMonth < start.Day);
   return beforeStart ? year - 1 : year;

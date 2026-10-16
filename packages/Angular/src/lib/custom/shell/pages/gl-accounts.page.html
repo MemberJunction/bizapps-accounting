@@ -53,7 +53,7 @@
   @if (OrphanCount > 0) {
     <mj-alert
       Variant="warning"
-      Message="Some accounts point at a parent that isn't in this chart, or their parent chain loops back on itself. They're listed at the top of their company's chart and marked, rather than dropped — a rollup parent must be another account in the SAME company's chart.">
+      Message="Some accounts have a parent that is missing from this chart, or a chain of parents that loops back on itself. They are listed at the top of their company's chart and marked. Give each one a parent from the same company's chart, or clear its parent.">
     </mj-alert>
   }
 

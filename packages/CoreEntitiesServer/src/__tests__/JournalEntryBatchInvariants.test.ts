@@ -73,7 +73,7 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
     batch.Status = 'Sent';
     const result = batch.Validate();
     expect(result.Success).toBe(false);
-    expect(result.Errors.some(e => getErrorText(e).includes("must start at Status='Pending'"))).toBe(true);
+    expect(result.Errors.some(e => getErrorText(e).includes('must start as Pending'))).toBe(true);
   });
 
   it('a NEW Pending batch passes the lifecycle rules', () => {
@@ -122,7 +122,7 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
     batch.SetMany({ ID: 'B1', JournalEntryBatchNumber: 'JEB-000001', Status: status, ...extra }, true, true);
 
   const archiveAudit = { ArchiveReason: 'Superseded by the conversion opening balances', ArchivedAt: new Date(), ArchivedByUserID: 'U1' };
-  const transitionErrors = (r: { Errors: unknown[] }) => r.Errors.filter(e => getErrorText(e).includes('Illegal batch status transition'));
+  const transitionErrors = (r: { Errors: unknown[] }) => r.Errors.filter(e => getErrorText(e).includes('A batch cannot go from'));
 
   it.each(['Pending', 'Approved', 'Failed'])('%s → Archived is legal', (from) => {
     asSaved(from);
@@ -381,7 +381,7 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
 
     it('Cancel() refuses without a context user — the cancel is authorized as someone', async () => {
       asSaved('Pending', { SummaryJournalEntryID: 'SUM1' });
-      await expect(batch.Cancel()).rejects.toThrow(/context user is required/);
+      await expect(batch.Cancel()).rejects.toThrow(/needs a signed-in user/);
       expect(save).not.toHaveBeenCalled();
       expect(teardown).not.toHaveBeenCalled();
     });

@@ -81,6 +81,11 @@ export class GLAccountEntityServer extends mjBizAppsAccountingGLAccountEntity {
   /** The identity fields locked once JE lines reference this account. */
   private static readonly LOCKED_IDENTITY_FIELDS: ReadonlyArray<string> = ['CompanyID', 'Code', 'AccountType', 'CurrencyCode'];
 
+  /** How each locked field is named in the message a person reads. */
+  private static readonly LOCKED_FIELD_LABELS: Readonly<Record<string, string>> = {
+    CompanyID: 'company', Code: 'code', AccountType: 'account type', CurrencyCode: 'currency',
+  };
+
   /**
    * Identity lock — IMMEDIATE and UNCONDITIONAL (Amith 2026-07-29, supersedes the
    * referenced-by-JE-lines gate): the identity fields are frozen the moment the record is
@@ -132,7 +137,7 @@ export class GLAccountEntityServer extends mjBizAppsAccountingGLAccountEntity {
         result.Errors.push(
           new ValidationErrorInfo(
             'GLAccountEntityServer.ValidateAsync',
-            `GLAccount ${this.Code ?? this.ID}: ${changedLocked.join(', ')} cannot change — identity fields are immutable from creation (Amith 2026-07-29). Remap via ExternalSystem/ExternalAccountID; deactivate via IsActive; corrections are a new account.`,
+            `GL account ${this.Code ?? this.ID}: the ${changedLocked.map(f => GLAccountEntityServer.LOCKED_FIELD_LABELS[f] ?? f).join(', ')} cannot change after the account is created. To post it under a different ERP account, change its External Account ID; to stop using it, deactivate it; to correct it, create a new account.`,
             null,
           ),
         );
@@ -158,7 +163,7 @@ export class GLAccountEntityServer extends mjBizAppsAccountingGLAccountEntity {
     );
     // Loud on failure: answering "no profile" would let a Division own an account.
     if (!res.Success) {
-      throw new Error(`GLAccountEntityServer: failed to read the owning company's profile for ${this.CompanyID}: ${res.ErrorMessage ?? 'unknown error'}`);
+      throw new Error(`Could not check the company that owns GL account ${this.Code ?? '(no code)'} (company ${this.CompanyID}): ${res.ErrorMessage ?? 'unknown error'}`);
     }
     return res.Results?.[0]?.EntityType ?? null;
   }

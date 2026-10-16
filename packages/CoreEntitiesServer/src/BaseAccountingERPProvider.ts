@@ -257,7 +257,7 @@ export class BusinessCentralERPProvider extends BaseAccountingERPProvider {
     const lines: ERPPostedJournalLine[] = [];
     for (const entry of read.entries) {
       const line = parseBCGLEntry(entry);
-      if (!line) return { status: 'Error', error: `GetGLEntries returned an entry for document ${docNumber} without an account, date or amounts.` };
+      if (!line) return { status: 'Error', error: `the ERP returned a ledger entry for document ${docNumber} with no account, date or amounts.` };
       lines.push(line);
     }
     return { status: 'Ok', lines, externalJournalEntryBatchRef: docNumber };
@@ -269,11 +269,11 @@ export class BusinessCentralERPProvider extends BaseAccountingERPProvider {
   ): Promise<{ status: 'Error'; error: string } | { status: 'Ok'; entries: unknown[] }> {
     const result = await this.runConnectionVerb('GetGLEntries', connection, user, { ...filter, MaxResults: BC_LOOKUP_MAX_RESULTS });
     if (!result.Success) {
-      return { status: 'Error', error: result.Message ?? result.ResultCode ?? 'GetGLEntries failed.' };
+      return { status: 'Error', error: result.Message ?? result.ResultCode ?? 'the ERP ledger lookup failed and gave no reason.' };
     }
     const entries = outputParam(result, 'GLEntries');
     if (!Array.isArray(entries)) {
-      return { status: 'Error', error: 'GetGLEntries returned no GLEntries output.' };
+      return { status: 'Error', error: 'the ERP ledger lookup returned no list of entries.' };
     }
     if (entries.length >= BC_LOOKUP_MAX_RESULTS) {
       return { status: 'Error', error: `${subject} has ${BC_LOOKUP_MAX_RESULTS} or more G/L entries, more than one lookup reads.` };
@@ -332,11 +332,11 @@ export class QuickBooksERPProvider extends BaseAccountingERPProvider {
       MaxResults: QBO_LOOKUP_MAX_RESULTS,
     });
     if (!result.Success) {
-      return { status: 'Error', error: result.Message ?? result.ResultCode ?? 'GetGLEntries failed.' };
+      return { status: 'Error', error: result.Message ?? result.ResultCode ?? 'the ERP ledger lookup failed and gave no reason.' };
     }
     const transactions = outputParam(result, 'Transactions');
     if (!Array.isArray(transactions)) {
-      return { status: 'Error', error: 'GetGLEntries returned no Transactions output.' };
+      return { status: 'Error', error: 'the ERP ledger lookup returned no list of transactions.' };
     }
     if (transactions.length >= QBO_LOOKUP_MAX_RESULTS) {
       return { status: 'Error', error: `QuickBooks Online has ${QBO_LOOKUP_MAX_RESULTS} or more journal entries on ${input.PostingDate}, more than one lookup reads.` };
@@ -349,10 +349,10 @@ export class QuickBooksERPProvider extends BaseAccountingERPProvider {
     const entries: QuickBooksJournalEntry[] = [];
     for (const transaction of transactions) {
       const raw = rawQBOJournalEntry(transaction);
-      if (!raw) return { status: 'Error', error: 'GetGLEntries returned a journal entry without its QuickBooks Online record.' };
+      if (!raw) return { status: 'Error', error: 'the ERP returned a journal entry without its QuickBooks Online record.' };
       if (raw.DocNumber !== docNumber) continue;
       const entry = parseQBOJournalEntry(raw);
-      if (!entry) return { status: 'Error', error: `GetGLEntries returned a journal entry for document ${docNumber} without an id, date, account or amounts.` };
+      if (!entry) return { status: 'Error', error: `the ERP returned a journal entry for document ${docNumber} with no ID, date, account or amounts.` };
       entries.push(entry);
     }
     return {

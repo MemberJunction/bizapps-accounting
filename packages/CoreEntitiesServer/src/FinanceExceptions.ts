@@ -450,7 +450,7 @@ export async function ClearFinanceException(
 ): Promise<AccountingClearFinanceExceptionOutput> {
   // FIRST, BEFORE ANY READ: who may clear is the control.
   if (!UserCanClearFinanceExceptions(reviewer, provider)) {
-    return { Success: false, Errors: [{ Code: 'NOT_AUTHORIZED', Message: `Clearing a finance exception requires the ${FINANCE_EXCEPTIONS_CLEAR_AUTH} authorization (the Finance role).` }] };
+    return { Success: false, Errors: [{ Code: 'NOT_AUTHORIZED', Message: `You need the Finance role to clear a finance exception (authorization ${FINANCE_EXCEPTIONS_CLEAR_AUTH}).` }] };
   }
   const invalid = inputRefusal(input);
   if (invalid || !input) return { Success: false, Errors: [invalid ?? { Code: 'MALFORMED_INPUT', Message: 'Input is required.' }] };

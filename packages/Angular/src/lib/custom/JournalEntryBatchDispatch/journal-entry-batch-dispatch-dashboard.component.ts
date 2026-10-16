@@ -131,7 +131,7 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
         this.setActionMessage(msg, false);
         await this.loadBatches(); // an approval flips Pending→Approved; a rejection flips Pending→Cancelled
       } else {
-        this.setActionMessage(res.ErrorMessage ?? 'Failed to record decision.', true);
+        this.setActionMessage(res.ErrorMessage ?? `Your decision on batch ${row.JournalEntryBatchNumber} was not recorded. Try again.`, true);
       }
     } finally {
       row.Busy = false;
@@ -160,7 +160,7 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
         );
         await this.loadBatches();
       } else {
-        this.setActionMessage(res.ErrorMessage ?? 'Regenerate failed.', true);
+        this.setActionMessage(res.ErrorMessage ?? `Batch ${row.JournalEntryBatchNumber} was not regenerated. Try again.`, true);
       }
     } finally {
       row.Busy = false;
@@ -194,7 +194,7 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
           true,
         );
       } else {
-        this.setActionMessage(res.ErrorMessage ?? 'Dispatch failed.', true);
+        this.setActionMessage(res.ErrorMessage ?? `Batch ${row.JournalEntryBatchNumber} was not sent to the ERP. Try again.`, true);
       }
       await this.loadBatches();
     } finally {
@@ -222,7 +222,7 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
         this.setActionMessage(`Archived batch ${row.JournalEntryBatchNumber} — no ERP call; its journal entries stay locked to it.`, false);
         await this.loadBatches();
       } else {
-        this.setActionMessage(res.ErrorMessage ?? 'Archive failed.', true);
+        this.setActionMessage(res.ErrorMessage ?? `Batch ${row.JournalEntryBatchNumber} was not archived. Try again.`, true);
       }
     } finally {
       row.Busy = false;
@@ -271,7 +271,7 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
         this.setActionMessage(`Cancelled batch ${row.JournalEntryBatchNumber} — its journal entries return to the next build.`, false);
         await this.loadBatches();
       } else {
-        this.setActionMessage(res.ErrorMessage ?? 'Cancel failed.', true);
+        this.setActionMessage(res.ErrorMessage ?? `Batch ${row.JournalEntryBatchNumber} was not cancelled. Try again.`, true);
       }
     } finally {
       row.Busy = false;
@@ -364,7 +364,7 @@ export class JournalEntryBatchDispatchDashboardComponent extends BaseDashboard {
     );
     if (!res.Success) {
       this.Batches = [];
-      this.LoadError = res.ErrorMessage ?? 'Failed to load journal entry batches.';
+      this.LoadError = res.ErrorMessage ?? 'Could not load journal entry batches. Refresh the page to try again.';
       return;
     }
     this.Batches = (res.Results ?? []).map(b => this.toRow(b));
