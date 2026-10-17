@@ -1,5 +1,5 @@
 -- =============================================================================
--- Migration: V202610161900__v0.22.x__Batch_Approval_Assignee_Person.sql
+-- Migration: V202610161900__v0.23.x__Batch_Approval_Assignee_Person.sql
 -- Description: open journal entry batch approval tasks are reassigned from the
 --              CFO's user record to the CFO's Person (#387).
 -- =============================================================================
