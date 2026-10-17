@@ -34,7 +34,7 @@ import {
 } from '@mj-biz-apps/accounting-entities';
 import { UsesParentBooks } from '@mj-biz-apps/accounting-engine-base';
 import { ParentBooksAccountOwnerError } from './GLAccountEntityServer.js';
-import { sqlGuidLiteral } from './SqlGuards.js';
+import { isSqlGuid, sqlGuidLiteral } from './SqlGuards.js';
 
 import {
   DEFAULT_CHART_OF_ACCOUNTS,
@@ -63,12 +63,16 @@ export class AccountingCompanyProfileEntityServer extends mjBizAppsAccountingAcc
    * (bc-aidp-next-golive#313). Those types keep no books, so their entries resolve their legal
    * entity's accounts and an account the company owned would never be used, or would book entries
    * under a company with no ERP connection. `GLAccountEntityServer` refuses the same state on the
-   * account side. Checked only when EntityType changes, so other edits to such a profile still save.
+   * account side. Checked when a profile is created with such a type, and when a saved profile's
+   * EntityType changes to one, so other edits to such a profile still save. A GL account belongs to
+   * the company, not its profile, so a company can own accounts before it has a profile.
    */
   public override async ValidateAsync(): Promise<ValidationResult> {
     const result = await super.ValidateAsync();
     const entityTypeChanged = this.GetFieldByName('EntityType')?.Dirty ?? false;
-    if (this.IsSaved && entityTypeChanged && UsesParentBooks(this.EntityType)) {
+    // A new profile on a brand-new company has no usable ID yet and that company owns nothing.
+    const typeIsNew = this.IsSaved ? entityTypeChanged : isSqlGuid(this.ID);
+    if (typeIsNew && UsesParentBooks(this.EntityType)) {
       const ownedCode = await this.firstActiveGLAccountCode();
       const error = ownedCode === null ? null : ParentBooksAccountOwnerError(ownedCode, this.ID, this.EntityType);
       if (error) {
