@@ -144,6 +144,48 @@ describe('AccountingCompanyProfileEntityServer — a company with active account
     expect((await acp.ValidateAsync()).Success).toBe(true);
   });
 
+  const newProfile = (entityType: string, id: string | null = COMPANY): AccountingCompanyProfileEntityServer => {
+    const acp = new AccountingCompanyProfileEntityServer(info);
+    acp.NewRecord();
+    if (id !== null) acp.ID = id;
+    acp.CompanyCode = 'BRAND';
+    acp.EntityType = entityType as AccountingCompanyProfileEntityServer['EntityType'];
+    acp.FunctionalCurrencyCode = 'USD';
+    return acp;
+  };
+
+  it.each(['Division', 'Department', 'Branch'])('refuses a new %s profile on a company that owns an active account', async (type) => {
+    const acp = newProfile(type);
+    const calls = stubRunView(acp, [{ Code: '1200' }]);
+
+    const result = await acp.ValidateAsync();
+
+    expect(result.Success).toBe(false);
+    expect(result.Errors.some(e => e.Message.includes('GL account 1200') && e.Message.includes('Deactivate its accounts first'))).toBe(true);
+    expect(calls[0]).toEqual({ EntityName: GL_ENTITY, ExtraFilter: `CompanyID='${COMPANY}' AND IsActive=1` });
+  });
+
+  it('accepts a new Division profile on a company with no active accounts', async () => {
+    const acp = newProfile('Division');
+    stubRunView(acp, []);
+    expect((await acp.ValidateAsync()).Success).toBe(true);
+  });
+
+  it('does not read accounts for a new profile of a type that keeps books', async () => {
+    const acp = newProfile('Subsidiary');
+    const calls = stubRunView(acp, [{ Code: '1200' }]);
+    expect((await acp.ValidateAsync()).Success).toBe(true);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('does not read accounts for a new Division whose company has no ID yet', async () => {
+    const acp = newProfile('Division', null);
+    acp.ID = '';
+    const calls = stubRunView(acp, [{ Code: '1200' }]);
+    expect((await acp.ValidateAsync()).Success).toBe(true);
+    expect(calls).toHaveLength(0);
+  });
+
   it('does not read accounts when EntityType is unchanged or becomes a type that keeps books', async () => {
     const unchanged = await savedProfile('Division');
     unchanged.ParentAccountingCompanyID = '22222222-0000-0000-0000-000000000313';
