@@ -47,6 +47,9 @@
         [EditMode]="EditMode" [FormContext]="formContext" LinkType="Record"></mj-form-field>
     <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="IsActive" Type="checkbox"
         [EditMode]="EditMode" [FormContext]="formContext"></mj-form-field>
+    <!-- A manual journal entry with a line on a control account always needs the company's Approval CFO (golive #353). -->
+    <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="IsControlAccount" Type="checkbox"
+        [EditMode]="EditMode" [FormContext]="formContext"></mj-form-field>
     <mj-form-field [Record]="record" [ShowLabel]="true" FieldName="Description" Type="textarea"
         [EditMode]="EditMode" [FormContext]="formContext"></mj-form-field>
     <!--

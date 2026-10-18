@@ -15,11 +15,15 @@
  *          async, issue #24: the code lives on the type row the FK points at).
  *   - W6 (Block 1) GenerateReversal: create a new Pending JE with Dr/Cr swapped.
  *   - W9 (Block 1) attachment validation: a non-null FileID must reference an existing __mj.File.
+ *   - Manual-entry approval (golive #353): a manual entry saved while its company has a
+ *     ManualJournalEntryApprovalThreshold is routed for approval and its Task raised in the same
+ *     transaction; see ManualJournalEntryApproval.ts.
  */
 
 import {
   BaseEntity,
   DatabaseProviderBase,
+  EntityDeleteOptions,
   EntitySaveOptions,
   IMetadataProvider,
   IRunViewProvider,
@@ -41,6 +45,12 @@ import { ToCalendarDay } from '@mj-biz-apps/common-entities';
 import { JournalEntryLineEntityServer } from './JournalEntryLineEntityServer.js';
 import { laterBusinessDate, loadTodayBusiness } from './BusinessDay.js';
 import { LookupJournalEntryTypeByID, RequireJournalEntryTypeID } from './JournalEntryTypes.js';
+import {
+  IsManualJournalEntry,
+  ManualJournalEntryApprovalError,
+  ManualJournalEntryApprovalService,
+  type ManualJournalEntrySaveAction,
+} from './ManualJournalEntryApproval.js';
 import { getNextJournalEntryNumber } from './SequenceService.js';
 import { isSqlGuid, sqlGuidLiteral } from './SqlGuards.js';
 
@@ -414,8 +424,16 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
       }
     }
 
+    // Manual-entry approval (golive #353): decided BEFORE the transaction, from reads only, so an
+    // entry nobody may approve is refused before anything is written, as numbering is above.
+    const approval = await this.planApproval();
+
     try {
       await dbProvider.BeginTransaction();
+
+      // The approval Task being replaced: the entry's content changed, or it no longer needs approval.
+      const supersededTaskId = approval ? this.ApprovalTaskID : null;
+      if (approval) this.applyApprovalAction(approval);
 
       // THE HEADER AND ITS LINES, AS ONE GRAPH.
       //
@@ -436,11 +454,26 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
       // OrderEntityServer prices and books its lines itself and must keep ownership of when they
       // are written. A journal entry has no such walk: the lines are complete when they arrive, so
       // letting the graph persist them is the whole point.
-      const saved = await super.Save(options);
+      const saved = await this.withLinesSavedThroughEntry(() => super.Save(options));
       if (!saved) {
         throw new Error(
           `The journal entry could not be saved: ${this.LatestResult?.CompleteMessage ?? 'unknown error'}`,
         );
+      }
+
+      if (approval) {
+        const service = new ManualJournalEntryApprovalService(this.ProviderToUse as unknown as IMetadataProvider);
+        if (supersededTaskId) await service.CloseSupersededTask(supersededTaskId, this.ContextCurrentUser);
+        if (approval.Action === 'Raise') {
+          // The Task links to the entry, so it is raised after the insert; its ID is stamped in the
+          // same transaction, because the approval is read from this column, never from a Task Link.
+          this.ApprovalTaskID = await service.RaiseApprovalTask(this, approval.Plan, this.ContextCurrentUser);
+          if (!(await this.withLinesSavedThroughEntry(() => super.Save(options)))) {
+            throw new Error(
+              `The journal entry could not be linked to its approval task: ${this.LatestResult?.CompleteMessage ?? 'unknown error'}`,
+            );
+          }
+        }
       }
 
       await dbProvider.CommitTransaction();
@@ -454,6 +487,72 @@ export class JournalEntryEntityServer extends JournalEntryEntity {
       }
       return false;
     }
+  }
+
+  /** The lines are deleted with the entry, so the standalone-line approval guard lets them go. */
+  public override async Delete(options?: EntityDeleteOptions): Promise<boolean> {
+    return this.withLinesSavedThroughEntry(() => super.Delete(options));
+  }
+
+  // ─── Manual-entry approval (golive #353) ──────────────────────────────────
+
+  /**
+   * Run a write with every line (kept and removed) marked as going through this entry, so the
+   * line-level approval guard defers to this entry's own approval routing.
+   */
+  private async withLinesSavedThroughEntry<T>(write: () => Promise<T>): Promise<T> {
+    const lines = [...this.Lines.Items, ...this.Lines.Removed] as JournalEntryLineEntityServer[];
+    for (const line of lines) line.SavingThroughJournalEntry = true;
+    try {
+      return await write();
+    } finally {
+      for (const line of lines) line.SavingThroughJournalEntry = false;
+    }
+  }
+
+  /**
+   * True when this save changes what an approval covers: a new entry, or a change to the company,
+   * the effective date, the entry type, or any line's account, amounts or dimension tags (a line
+   * added, removed or edited). Description and the batch/posting columns are not covered.
+   */
+  public HasApprovalRelevantChanges(): boolean {
+    if (!this.IsSaved) return true;
+    if (['CompanyID', 'EffectiveDate', 'EntryTypeID'].some(f => this.GetFieldByName(f)?.Dirty)) return true;
+    if (this.Lines.Removed.length > 0) return true;
+    return (this.Lines.Items as JournalEntryLineEntityServer[]).some(line =>
+      !line.IsSaved ||
+      ['GLAccountID', 'DebitAmount', 'CreditAmount'].some(f => line.GetFieldByName(f)?.Dirty) ||
+      line.Dimensions.Dirty,
+    );
+  }
+
+  /** Ask the approval service what this save must do; refuse the save when nobody may approve it. */
+  private async planApproval(): Promise<ManualJournalEntrySaveAction | null> {
+    // A booking-path entry (D25 origin pair set), a non-Pending one, or a save that changes nothing an
+    // approval covers (a batch lock or release, a description) never needs routing: no query at all.
+    if (!IsManualJournalEntry(this) || this.Status !== 'Pending' || !this.HasApprovalRelevantChanges()) return null;
+    if (!this.ContextCurrentUser) {
+      throw new Error('A manual journal entry cannot be saved without a signed-in user: its approval needs to know who raised it.');
+    }
+    const service = new ManualJournalEntryApprovalService(this.ProviderToUse as unknown as IMetadataProvider);
+    try {
+      return await service.PlanForSave(this, this.ContextCurrentUser);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      LogError(`JournalEntryEntityServer.Save: manual-entry approval routing failed: ${msg}`);
+      throw err instanceof ManualJournalEntryApprovalError ? err : new Error(`Cannot route the journal entry's approval: ${msg}`);
+    }
+  }
+
+  /** Stamp the approval routing onto the header (inside Save's transaction, before the write). */
+  private applyApprovalAction(action: ManualJournalEntrySaveAction): void {
+    const raise = action.Action === 'Raise';
+    this.ApprovalLevel = raise ? action.Plan.Level : null;
+    this.ApprovalRequestedByUserID = raise ? this.ContextCurrentUser.ID : null;
+    // A changed entry's earlier approval does not cover the new content; RaiseApprovalTask stamps the new Task.
+    this.ApprovalTaskID = null;
+    this.ApprovedAt = null;
+    this.ApprovedByUserID = null;
   }
 
   // ─── W2: numbering (plan D19) ─────────────────────────────────────────────

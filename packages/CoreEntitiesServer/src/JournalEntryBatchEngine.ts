@@ -53,7 +53,8 @@
  *
  * THE §7.2 BATCH-REWORK SLICE LANDED 2026-07-29 (S-D of the donor port): criteria-driven
  * candidate filtering (cutoff/startDate/companies/type-codes — pendingCandidateFilter, plus every
- * company's PostingStartDate floor on every build, preview and sweep),
+ * company's PostingStartDate floor on every build, preview and sweep, and the manual entries
+ * awaiting approval, which no build takes — golive #353, APPROVED_OR_NO_APPROVAL_NEEDED_CLAUSE),
  * explicit-ID builds (buildJournalEntryBatchFromExplicitIds — re-verifies Pending, one batch per company),
  * view-defined batches (buildJournalEntryBatchFromView — snapshot + classify + loud rejects), and the
  * read-only previewBatch that runs the SAME filter/order/netting as the build. The
@@ -403,27 +404,40 @@ export interface BuildJournalEntryBatchOptions {
  * PostingStartDate keeps the entries dated before it out of every batch.
  */
 export async function pendingCandidateFilter(options: BuildJournalEntryBatchOptions, contextUser: UserInfo, p: Providers): Promise<string> {
-  const { criteria, postingStart } = await candidateFilterParts(options, contextUser, p);
-  return [...criteria, ...postingStart].join(' AND ');
+  const { criteria, postingStart, approval } = await candidateFilterParts(options, contextUser, p);
+  return [...criteria, ...postingStart, ...approval].join(' AND ');
 }
 
 /**
- * The candidate filter in its two halves: `criteria` (status, type, date window, scope) and
+ * A manual entry awaiting approval (golive #353) is never a candidate: it has an ApprovalLevel and
+ * no ApprovedAt. Entries that need no approval have no level. CK_JournalEntry_ApprovedBeforeBatch is
+ * the database floor under this clause.
+ */
+export const APPROVED_OR_NO_APPROVAL_NEEDED_CLAUSE = '(ApprovalLevel IS NULL OR ApprovedAt IS NOT NULL)';
+
+/** True when an entry is awaiting manual-entry approval, so no batch may take it (golive #353). */
+export function IsAwaitingManualApproval(row: { ApprovalLevel?: string | null; ApprovedAt?: Date | string | null }): boolean {
+  return !!row.ApprovalLevel && !row.ApprovedAt;
+}
+
+/**
+ * The candidate filter in three parts: `criteria` (status, type, date window, scope),
  * `postingStart` (one clause per company whose PostingStartDate is later than the per-call
- * startDate). The preview counts what the second half removes from the first.
+ * startDate) and `approval` (manual entries awaiting approval stay out, golive #353). The preview
+ * counts what the second and third parts remove.
  */
 async function candidateFilterParts(
   options: BuildJournalEntryBatchOptions,
   contextUser: UserInfo,
   p: Providers,
-): Promise<{ criteria: string[]; postingStart: string[] }> {
+): Promise<{ criteria: string[]; postingStart: string[]; approval: string[] }> {
   // The start day is resolved once and shared by both halves: a date-time StartDate names its
   // BUSINESS day, and the PostingStartDate comparison must use that same day, not the instant's UTC day.
   const startDay = options.startDate
     ? await loadBoundDay(options.startDate, 'Batch criteria StartDate', contextUser, p.md, scopeCompanyId(options))
     : null;
   const [criteria, floors] = await Promise.all([criteriaClauses(options, startDay, contextUser, p), loadPostingStartDates(contextUser, p)]);
-  return { criteria, postingStart: postingStartClauses(floors, startDay) };
+  return { criteria, postingStart: postingStartClauses(floors, startDay), approval: [APPROVED_OR_NO_APPROVAL_NEEDED_CLAUSE] };
 }
 
 /** With exactly one company in scope its zone applies once the engine carries per-company zones;
@@ -579,8 +593,14 @@ export async function buildJournalEntryBatchFromExplicitIds(
   if (jeIds.length === 0) throw new EmptyJournalEntryBatchError('Nothing to batch: no journal entries were selected.');
   const p = resolveProviders(provider);
   const inList = jeIds.map(sqlGuid).join(',');
-  const res = await p.rv.RunView<{ ID: string; Status: string; CompanyID: string; EffectiveDate: string }>(
-    { EntityName: JE_ENTITY, ExtraFilter: `ID IN (${inList})`, Fields: ['ID', 'Status', 'CompanyID', 'EffectiveDate'], ResultType: 'simple', BypassCache: true },
+  const res = await p.rv.RunView<{ ID: string; Status: string; CompanyID: string; EffectiveDate: string; EntryNumber: string; ApprovalLevel: string | null; ApprovedAt: string | null }>(
+    {
+      EntityName: JE_ENTITY,
+      ExtraFilter: `ID IN (${inList})`,
+      Fields: ['ID', 'Status', 'CompanyID', 'EffectiveDate', 'EntryNumber', 'ApprovalLevel', 'ApprovedAt'],
+      ResultType: 'simple',
+      BypassCache: true,
+    },
     contextUser,
   );
   if (!res.Success) throw new Error(`The batch was not built: could not check the selected entries: ${res.ErrorMessage ?? 'unknown error'}`);
@@ -594,6 +614,13 @@ export async function buildJournalEntryBatchFromExplicitIds(
     );
   }
   await assertOnOrAfterPostingStart(rows, contextUser, p);
+  const awaiting = rows.filter(IsAwaitingManualApproval);
+  if (awaiting.length > 0) {
+    throw new JournalEntryBatchFromViewError(
+      `The batch was not built: ${awaiting.length} selected entr${awaiting.length === 1 ? 'y is a manual entry' : 'ies are manual entries'} ` +
+      `awaiting approval and cannot be batched until approved: ${awaiting.map(r => r.EntryNumber || r.ID).join(', ')}.`,
+    );
+  }
   const byCompany = new Map<string, string[]>();
   for (const id of jeIds) {
     const companyId = byId.get(id.toLowerCase())!.CompanyID;
@@ -648,8 +675,8 @@ export async function buildJournalEntryBatchFromView(
   options: BuildJournalEntryBatchFromViewOptions = {},
 ): Promise<BuildJournalEntryBatchResult[]> {
   const p = resolveProviders(provider);
-  const viewRes = await p.rv.RunView<{ ID: string; Status: string; CompanyID: string; EffectiveDate: string }>(
-    { ViewID: viewId, Fields: ['ID', 'Status', 'CompanyID', 'EffectiveDate'], ResultType: 'simple', BypassCache: true },
+  const viewRes = await p.rv.RunView<{ ID: string; Status: string; CompanyID: string; EffectiveDate: string; ApprovalLevel: string | null; ApprovedAt: string | null }>(
+    { ViewID: viewId, Fields: ['ID', 'Status', 'CompanyID', 'EffectiveDate', 'ApprovalLevel', 'ApprovedAt'], ResultType: 'simple', BypassCache: true },
     contextUser,
   );
   if (!viewRes.Success) throw new JournalEntryBatchFromViewError(`The batch was not built: could not run view ${viewId}: ${viewRes.ErrorMessage ?? 'unknown error'}`);
@@ -663,7 +690,7 @@ export async function buildJournalEntryBatchFromView(
   if (excluded.length > 0) {
     console.warn(`buildJournalEntryBatchFromView: excluded ${excluded.length} non-Pending entr${excluded.length === 1 ? 'y' : 'ies'} (overlap-safe): ${excluded.join(', ')}`);
   }
-  const batchable = await dropBeforePostingStart(pending, viewRes.Results ?? [], contextUser, p);
+  const batchable = dropAwaitingApproval(await dropBeforePostingStart(pending, viewRes.Results ?? [], contextUser, p), viewRes.Results ?? []);
   if (batchable.length === 0) throw new EmptyJournalEntryBatchError('Nothing to batch: the view holds no Pending entries that can be batched.');
   let inWindow = batchable;
   if (options.cutoff || options.startDate) {
@@ -694,6 +721,21 @@ async function dropBeforePostingStart(
     console.warn(`buildJournalEntryBatchFromView: excluded ${before.length} entr${before.length === 1 ? 'y' : 'ies'} dated before the company's posting start date: ${before.map(r => r.ID).join(', ')}`);
   }
   return onOrAfter.map(r => r.ID);
+}
+
+/**
+ * A view's batchable ids less the manual entries awaiting approval (golive #353). Dropped with a
+ * warning, like the entries before a posting start date: a view is a snapshot of whatever it
+ * matches, and an unapproved entry in it is ordinary, not an operator error.
+ */
+function dropAwaitingApproval(ids: string[], viewRows: Array<{ ID: string; ApprovalLevel?: string | null; ApprovedAt?: Date | string | null }>): string[] {
+  const awaiting = new Set(viewRows.filter(IsAwaitingManualApproval).map(r => r.ID));
+  if (awaiting.size === 0) return ids;
+  const dropped = ids.filter(id => awaiting.has(id));
+  if (dropped.length > 0) {
+    console.warn(`buildJournalEntryBatchFromView: excluded ${dropped.length} manual entr${dropped.length === 1 ? 'y' : 'ies'} awaiting approval: ${dropped.join(', ')}`);
+  }
+  return ids.filter(id => !awaiting.has(id));
 }
 
 /**
@@ -1956,6 +1998,11 @@ export interface JournalEntryBatchPreviewResult {
    * their company's PostingStartDate. They are not in `Candidates` and no build takes them.
    */
   BeforePostingStartCount: number;
+  /**
+   * How many entries matching the other criteria were left out because they are manual entries
+   * awaiting approval (golive #353). They are not in `Candidates` and no build takes them.
+   */
+  AwaitingApprovalCount: number;
 }
 
 /**
@@ -2026,19 +2073,22 @@ export async function previewBatch(
 ): Promise<JournalEntryBatchPreviewResult> {
   const p = resolveProviders(provider);
   const filter = await candidateFilterParts(options, contextUser, p);
-  const res = await p.rv.RunView<{ ID: string; EntryNumber: string; EffectiveDate: string; EntryTypeID: string; CompanyID: string; Description: string | null }>(
+  // Read WITHOUT the approval part and split here: the entries awaiting approval are counted from
+  // the same read instead of a second query (golive #353). The build applies the full filter.
+  const res = await p.rv.RunView<{ ID: string; EntryNumber: string; EffectiveDate: string; EntryTypeID: string; CompanyID: string; Description: string | null; ApprovalLevel: string | null; ApprovedAt: string | null }>(
     {
       EntityName: JE_ENTITY,
       ExtraFilter: [...filter.criteria, ...filter.postingStart].join(' AND '),
       OrderBy: 'EffectiveDate ASC, EntryNumber ASC', // the same oldest-first order the build uses
-      Fields: ['ID', 'EntryNumber', 'EffectiveDate', 'EntryTypeID', 'CompanyID', 'Description'],
+      Fields: ['ID', 'EntryNumber', 'EffectiveDate', 'EntryTypeID', 'CompanyID', 'Description', 'ApprovalLevel', 'ApprovedAt'],
       ResultType: 'simple',
       BypassCache: true,
     },
     contextUser,
   );
   if (!res.Success) throw new Error(`Could not load the entries for the batch preview: ${res.ErrorMessage ?? 'unknown error'}`);
-  const rows = res.Results ?? [];
+  const matching = res.Results ?? [];
+  const rows = matching.filter(r => !IsAwaitingManualApproval(r));
   const included = includedIds ?? new Set(rows.map(r => r.ID));
   const includedRows = rows.filter(r => included.has(r.ID));
 
@@ -2084,6 +2134,7 @@ export async function previewBatch(
     PerCompany: perCompanySubtotals(groups),
     OutOfOrderSkipCount: outOfOrderSkipCount(rows, included),
     BeforePostingStartCount: await countBeforePostingStart(filter, contextUser, p),
+    AwaitingApprovalCount: matching.length - rows.length,
   };
 }
 

@@ -9,6 +9,8 @@
  *     Save() persists them (and processes removals) right after the line row persists —
  *     inside the parent JournalEntryEntityServer.Save() transaction when saved through it.
  *   - Delete() removes the line's dimension rows first (FK children), then the line.
+ *   - Save() and Delete() written on their own (not through the parent entry) are refused for a
+ *     Pending manual entry under approval, because only the entry's Save re-routes it (golive #353).
  *   - Validate() checks the dimension pairs: both IDs present, one value per dimension
  *     (UQ_JELDimension_Line_Dimension), and — when the AccountingEngineBase cache is
  *     loaded — that the value belongs to the dimension it tags.
@@ -31,6 +33,8 @@ import {
 } from '@mj-biz-apps/accounting-entities';
 import { AccountingEngineBase } from '@mj-biz-apps/accounting-engine-base';
 
+import { ManualJournalEntryApprovalService } from './ManualJournalEntryApproval.js';
+
 const JEL_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Lines';
 const JELD_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Line Dimensions';
 
@@ -38,6 +42,13 @@ const JELD_ENTITY = 'MJ_BizApps_Accounting: Journal Entry Line Dimensions';
 export class JournalEntryLineEntityServer extends JournalEntryLineEntity {
   /** Optional reference to the parent JournalEntryEntityServer object in memory. */
   public ParentJournalEntry?: any;
+
+  /**
+   * Set by JournalEntryEntityServer while it saves or deletes this line as part of the entry, so the
+   * manual-entry approval guard below lets the write through: the entry's own Save re-routes its
+   * approval (golive #353). A line written on its own leaves this false.
+   */
+  public SavingThroughJournalEntry = false;
 
   // `Dimensions` is a RelatedRecordCollection on the GENERATED class now, declared in
   // metadata/entity-relationships. It replaces `_dimensions` + `_deletedDimensions` and the
@@ -104,10 +115,32 @@ export class JournalEntryLineEntityServer extends JournalEntryLineEntity {
     return ok;
   }
 
-  // `Save()` is NOT overridden any more. Persisting the tags — removals first, then inserts with the
-  // FK stamped — is what the collection contributes to the entity's save plan, inside the same
-  // transaction the parent JE opens. The hand-written version did the same thing in the same order
-  // and had to be kept in step with it by hand.
+  // Persisting the tags — removals first, then inserts with the FK stamped — is what the collection
+  // contributes to the entity's save plan, inside the same transaction the parent JE opens. The
+  // hand-written version did the same thing in the same order and had to be kept in step with it by
+  // hand. Save() is overridden only for the manual-entry approval guard.
+
+  /**
+   * Refuses a line saved ON ITS OWN that changes the account, amounts or tags of a Pending manual
+   * entry under approval (golive #353): only the entry's Save raises its approval again.
+   */
+  public override async Save(options?: EntitySaveOptions): Promise<boolean> {
+    if (this.changesWhatApprovalCovers()) await this.assertStandaloneChangeAllowed();
+    return super.Save(options);
+  }
+
+  /** True for a line written on its own that adds, re-accounts, re-amounts or re-tags a line. */
+  private changesWhatApprovalCovers(): boolean {
+    if (this.SavingThroughJournalEntry || !this.JournalEntryID) return false;
+    return !this.IsSaved ||
+      ['GLAccountID', 'DebitAmount', 'CreditAmount'].some(f => this.GetFieldByName(f)?.Dirty) ||
+      this.Dimensions.Dirty;
+  }
+
+  private async assertStandaloneChangeAllowed(): Promise<void> {
+    const service = new ManualJournalEntryApprovalService(this.ProviderToUse as unknown as IMetadataProvider);
+    await service.AssertStandaloneLineChangeAllowed(this.JournalEntryID, this.ContextCurrentUser);
+  }
 
   /**
    * Delete this line's dimension rows first (FK children), then the line itself.
@@ -116,6 +149,8 @@ export class JournalEntryLineEntityServer extends JournalEntryLineEntity {
    * different event from the parent being deleted out from under it.
    */
   public override async Delete(options?: EntityDeleteOptions): Promise<boolean> {
+    // A line deleted on its own changes what an approval covers, as an edit does (golive #353).
+    if (this.IsSaved && !this.SavingThroughJournalEntry && this.JournalEntryID) await this.assertStandaloneChangeAllowed();
     if (this.IsSaved) {
       await this.Dimensions.Load();
       for (const dim of [...this.Dimensions.Items]) {
