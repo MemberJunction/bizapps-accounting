@@ -13,7 +13,7 @@
       </mj-stat-badge>
     }
   </div>
-  <!-- Drop-downs together, search to their right — one line (Marcelo's filter-bar rule). -->
+  <!-- Drop-downs together, search to their right — one line (the filter-bar rule). -->
   <div toolbar class="al-filters">
     <label class="al-field">
       <span class="al-field__label">Role</span>
@@ -78,7 +78,7 @@
           <tr [class.al-row--active]="PreviewFor === r.ID">
             <td>{{ r.GLAccountRole || '—' }}</td>
             <td>{{ r.Entity || '—' }}</td>
-            <!-- Marcelo: "our database IDs are meaningless to them." So lead with the record's NAME
+            <!-- Database IDs are meaningless to users, so lead with the record's NAME
                  where accounting can resolve it (companies, GL accounts, dimensions + their values),
                  and say plainly when it can't — orders' Products/Categories live in an app this one
                  must not depend on. The id stays beside it, copyable, and searchable in FULL. -->
@@ -92,8 +92,8 @@
               <mj-stat-badge [Label]="r.Status" [Variant]="r.Status === 'Active' ? 'success' : 'default'"></mj-stat-badge>
             </td>
             <td>
-              <!-- "Why?" told the reader nothing (Marcelo 2026-07-16: "I don't know what the y
-                   button does or why it's there... that button is weird"). The label now names the
+              <!-- "Why?" told the reader nothing about what the
+                   button does or why it is there. The label now names the
                    thing it opens, and the chevron says a panel is coming. -->
               <button
                 type="button"

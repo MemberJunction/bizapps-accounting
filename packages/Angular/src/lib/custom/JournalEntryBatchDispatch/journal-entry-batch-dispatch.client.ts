@@ -9,8 +9,8 @@
  * BatchDispatchResolver): batch actions run the batching engine server-side, so they travel MJ's
  * Remote Operations stack — `provider.RouteOperation(key, input)` marshals them over the generic
  * ExecuteRemoteOperation mutation. This file exists only to give components typed inputs and the
- * legacy result shapes they already bind to; it holds NO logic (four-surface doctrine, Amith
- * 2026-07-28: the UI calls remote ops + prebuilt queries — nothing else).
+ * legacy result shapes they already bind to; it holds NO logic (four-surface doctrine:
+ * the UI calls remote ops + prebuilt queries — nothing else).
  *
  * Error contract (unchanged): each method catches/logs and returns a `{ Success: false,
  * ErrorMessage }`-shaped result rather than throwing — the UI renders a friendly message without

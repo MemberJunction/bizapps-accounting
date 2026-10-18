@@ -1,8 +1,9 @@
 /**
  * JournalEntryClient — thin typed wrapper over the 'Accounting.GenerateJournalEntryReversal'
  * Remote Operation (→ JournalEntryEntityServer.GenerateReversal). No hand-rolled gql: batch/JE
- * actions travel the remote-op stack via `provider.RouteOperation` (four-surface doctrine,
- * Amith 2026-07-28). No logic here — typed inputs + the legacy result shape the form binds to.
+ * actions travel the remote-op stack via `provider.RouteOperation` (four-surface doctrine:
+ * the UI calls remote ops + prebuilt queries only). No logic here — typed inputs + the legacy
+ * result shape the form binds to.
  */
 import { LogError } from '@memberjunction/core';
 import { GraphQLDataProvider } from '@memberjunction/graphql-dataprovider';

@@ -64,7 +64,7 @@ interface ParentOption {
 /**
  * GL accounts — view and manage every account, across every company the user can see.
  *
- * **The shape this page has to make legible (Marcelo 2026-07-16 expected something different):**
+ * **The shape this page has to make legible (it differs from what users tend to expect):**
  * `GLAccount.CompanyID` is **NOT NULL** with **UNIQUE (CompanyID, Code)** — "each company has its
  * own chart" (the field's own description). There is **no global pool of unowned accounts** that
  * you then "hook to companies": an account is born inside exactly one company's chart, seeded by
@@ -113,7 +113,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
   public LoadError: string | null = null;
 
   // --- filters (one line; search sits to the right of the drop-downs) ---
-  /** MULTI-select company narrowing (Marcelo 2026-08-05): empty = no narrowing ("All companies"). */
+  /** MULTI-select company narrowing: empty = no narrowing ("All companies"). */
   public FilterCompanyIDs: string[] = [];
   public FilterAccountType = '';
   /** '' = any, 'Active' | 'Inactive'. */
@@ -183,7 +183,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
   public AdvancedOpen = false;
 
   /** Count pill on the Filters button — a hidden active filter must never silently shape the list. */
-  // ── the STANDARD MJ grid (Marcelo 2026-08-05) ─────────────────────────────────
+  // ── the STANDARD MJ grid ──────────────────────────────────────────────────────
   /** Escape a value for an ExtraFilter literal (single quotes doubled). */
   private sqlLit(v: string): string {
     return v.replace(/'/g, "''");
@@ -580,7 +580,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
 
       const scoped = this.scopedAccounts(engine.GLAccounts);
       // Companies come from the SCOPE service (ACP-backed, reactive) — NOT derived from cached GL
-      // account rows (Marcelo 2026-07-30). The old derivation had two failure modes: a freshly
+      // account rows. The old derivation had two failure modes: a freshly
       // created company (whose W1 chart was seeded SERVER-side, so no client entity events) never
       // appeared, and companies deleted out-of-band lingered as ghosts — picking one produced a raw
       // FK_GLAccount_Company error at save. The scope roster tracks ACP saves live, and a company
@@ -608,7 +608,7 @@ export class GLAccountsPageComponent extends BaseAngularComponent implements OnI
   }
 
   /**
-   * Present a save failure as a human sentence, never a raw SQL dump (Marcelo 2026-07-30 — the
+   * Present a save failure as a human sentence, never a raw SQL dump (the
    * FK-ghost incident leaked a full spCreate batch into the editor). MJ's CompleteMessage appends
    * the executed SQL after "Query:"; everything from there down is log material, not UI copy. The
    * one constraint a user can actually hit from this editor gets a specific, actionable message.

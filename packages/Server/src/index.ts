@@ -20,7 +20,7 @@ import { LoadFinanceExceptionEntityServer, LoadFinanceExceptionOperations, LoadJ
 import './generated/generated.js';
 
 // NO custom hand-written resolvers remain: every custom server action travels the Remote
-// Operations stack (four-surface doctrine, Amith 2026-07-28) — see JournalEntryBatchOperations.ts /
+// Operations stack (four-surface doctrine) — see JournalEntryBatchOperations.ts /
 // GenerateReversalOperation.ts / CreateJournalEntr(y|ies)Operation.ts in core-entities-server.
 // (BatchDispatchResolver, ReadModelsResolver, and JournalEntryResolver were deleted 2026-07-29.)
 

@@ -5,10 +5,9 @@
  * This CONSOLIDATES what used to be a hand-written GraphQL resolver + client pair
  * (BatchDispatchResolver in @mj-biz-apps/accounting-server + BatchDispatchClient in the Angular
  * package) onto MJ's Remote Operations stack — the same primitive as
- * Accounting.CreateJournalEntry/CreateJournalEntries. The ruling (Marcelo 2026-07-21, reaffirmed
- * with the four-surface doctrine 2026-07-28): "everything with creating, approving, regenerating,
- * and canceling a batch must be engine + transaction based … that is our stack for all custom
- * processes where we want to enforce constraints." Every batch action runs the batching engine
+ * Accounting.CreateJournalEntry/CreateJournalEntries. The rule (reaffirmed by the four-surface
+ * doctrine): creating, approving, regenerating and canceling a batch are engine + transaction
+ * based, the stack for every custom process that enforces constraints. Every batch action runs the batching engine
  * server-side, so remote ops (the 4th client surface) are the sanctioned way to invoke them from
  * the UI; one call site works both in-process and over GraphQL via `RouteOperation`.
  *
@@ -128,8 +127,8 @@ export interface PreviewJournalEntryBatchInput extends JournalEntryBatchCriteria
 }
 
 /**
- * Read-only preview of what a build would produce — Amith's canonical remote-op example
- * (2026-07-28): an in-memory server computation invoked from the UI. Runs the SAME filter/order/
+ * Read-only preview of what a build would produce — the canonical remote-op case:
+ * an in-memory server computation invoked from the UI. Runs the SAME filter/order/
  * netting machinery as the build, so it cannot drift from what the build actually does.
  */
 @RegisterClass(BaseRemotableOperation, 'Accounting.PreviewJournalEntryBatch')

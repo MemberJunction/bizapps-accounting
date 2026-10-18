@@ -10,8 +10,7 @@
    of neutrals and we are token-only (CI gate).
 
    ── ONE SPACING TOKEN ────────────────────────────────────────────────────────
-   Marcelo: "these bubbles are not padded in space consistently. All bubbles should be spaced
-   consistently, just straight up." So EVERY gap between EVERY card — stat strip, breakdown grid,
+   Cards are spaced consistently, so EVERY gap between EVERY card — stat strip, breakdown grid,
    list grid, and the space between them — comes from `--mj-dash-gap` and nothing else. Never
    hard-code a gap below; a per-card value is exactly the drift that made this look mismatched. The
    same token, at the same value, drives the Orders/Payments dashboards in bizapps-orders. */
