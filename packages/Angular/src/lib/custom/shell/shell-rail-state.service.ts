@@ -7,8 +7,8 @@ const RAIL_COLLAPSED_SETTING = 'mj.bizapps.shell.railCollapsed';
 /**
  * Shared, app-wide collapse state for the nav rail.
  *
- * ## Why this exists (Marcelo 2026-07-21: "the collapse must be scoped app-wide — switching top-bar
- *    nav items shouldn't change it")
+ * ## Why this exists (the collapse is scoped app-wide — switching top-bar nav items must not
+ *    change it)
  * Every top-nav category shell renders its OWN `<mj-shell-rail>` instance. When the collapse state
  * lived as a FIELD on the component, each instance had its own copy: switching category mounted a
  * fresh rail that started at the default (expanded) and only restored from UserInfoEngine in an async

@@ -20,7 +20,7 @@ import { PageRefreshService } from '../../transfer-pending/shell-refresh/page-re
 })
 @RegisterClass(BaseDashboard, 'ConfigurationCategoryDashboard')
 export class ConfigurationCategoryComponent extends CategoryShellBase {
-  // Header create verb = the ACTIVE page's create (Marcelo 2026-08-05, orders-style header rule).
+  // Header create verb = the ACTIVE page's create (orders-style header rule).
   public CreateSignalCompanies = 0;
 
   public get CreateVerb(): string | null {

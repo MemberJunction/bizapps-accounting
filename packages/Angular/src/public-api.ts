@@ -24,7 +24,7 @@ import { LoadJournalEntryBatchDispatchResource } from './lib/custom/JournalEntry
 
 // Batch Status dashboard (embedded by the Batches category shell). Its former ReadModelsModule
 // siblings — TrialBalanceAR / RevenueTax / IntercompanyFlow / JEConsole — were DELETED 2026-07-29
-// (Amith PR-27 dead-code sweep): their vw_* backends were removed 2026-07-22 and the new category
+// (dead-code sweep): their vw_* backends were removed 2026-07-22 and the new category
 // shells replaced their nav items; git history keeps them if reporting (item f) resurrects one.
 import { ReadModelsModule } from './lib/custom/shared/read-models.module';
 import { LoadJournalEntryBatchStatusDashboard } from './lib/custom/JournalEntryBatchStatus/journal-entry-batch-status-dashboard.component';
@@ -92,7 +92,7 @@ export {
     type WaterfallYearGroup,
 } from './lib/components/deferred-revenue-waterfall/deferred-revenue-waterfall.component';
 export { DeferredRevenueWaterfallModule } from './lib/components/deferred-revenue-waterfall/deferred-revenue-waterfall.module';
-// (CustomerARBaseComponent + ReadModelsClient DELETED 2026-07-29 — Amith PR-27 dead-code sweep.
+// (CustomerARBaseComponent + ReadModelsClient DELETED 2026-07-29 — dead-code sweep.
 //  Their vw_* backends were removed 2026-07-22; when reporting returns (item f) the A/R reads get
 //  rebuilt on RunQuery per the four-surface doctrine, not resurrected from these. Git history has
 //  both if the shapes are ever wanted as reference.)

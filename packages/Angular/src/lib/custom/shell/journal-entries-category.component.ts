@@ -47,7 +47,7 @@ export class JournalEntriesCategoryComponent extends CategoryShellBase {
   public get RailSections(): MJLeftNavSection[] {
     return [
       {
-        // ONE flat, unlabeled group (Marcelo 2026-07-29): section labels were filler ('MAIN'/'VIEWS'
+        // ONE flat, unlabeled group: section labels were filler ('MAIN'/'VIEWS'
         // carried no information); all five category rails standardize on a single flat group.
         items: [
           { id: 'dashboard', label: 'Dashboard', icon: 'fa-solid fa-gauge-high' },

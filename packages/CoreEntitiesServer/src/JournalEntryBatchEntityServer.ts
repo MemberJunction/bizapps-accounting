@@ -1,6 +1,6 @@
 /**
  * Server-side subclass of JournalEntryBatch — the batch's OWN invariants + owned collections
- * (enriched 2026-07-29 per Marcelo's review: "some of it should be in a BaseEntity subclass").
+ * (enriched 2026-07-29: rules that touch only the batch belong on its BaseEntity subclass).
  *
  * WHAT LIVES HERE (single-aggregate concerns):
  *   - JournalEntryBatchNumber: atomic counter sproc on first save.
@@ -24,7 +24,7 @@
  * WHAT DELIBERATELY STAYS IN THE ENGINE (multi-aggregate orchestration — JournalEntryBatchEngine.ts):
  *   build/regenerate (gather candidates → net → create summary → lock N independent JEs → raise
  *   the approval task) and dispatch (gate + ERP poster seam). Those compose MANY aggregates and
- *   run behind Remote Operations per the engine+transaction ruling (Marcelo 2026-07-21).
+ *   run behind Remote Operations per the engine+transaction rule (see JournalEntryBatchOperations.ts).
  */
 
 import { createHash } from 'node:crypto';

@@ -3,10 +3,10 @@
        header stay put while the body scrolls: mj-page-layout is overflow:hidden, the header is a
        natural-height sibling, and the body owns overflow-y:auto. Deliberately TIGHT: one line, no
        subtitle, no stacking. -->
-  <!-- Header = the CATEGORY (Marcelo 2026-07-16): the sub-page name is already the rail's active
+  <!-- Header = the CATEGORY: the sub-page name is already the rail's active
        item inches away, so restating it bought nothing; the category is the context that ISN'T
        otherwise on screen.
-       NO stat capsules (Marcelo 2026-07-29): live state under the title made the header busy,
+       NO stat capsules: live state under the title made the header busy,
        broke its vertical alignment against stat-less categories, and duplicated what the rail
        badges already say. State lives on the RAIL as actionable-only count badges (shown only
        when action is needed; absence = healthy); the header stays a stable one-line orientation
@@ -28,7 +28,7 @@
           <i class="fa-solid fa-arrow-rotate-right" aria-hidden="true"></i>
         </button>
       }
-      <!-- The category's create verb, promoted from the page headers (Marcelo 2026-08-04) — the
+      <!-- The category's create verb, promoted from the page headers — the
            same slot orders' primary action occupies, so every app's top-right reads identically. -->
       @if (BuildMessage) {
         <span role="status">{{ BuildMessage }}</span>

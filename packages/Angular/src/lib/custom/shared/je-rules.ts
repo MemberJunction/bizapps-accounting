@@ -56,7 +56,7 @@ export function reversalBlockedReason(entry: ReversalCandidate): string | null {
  * no entry-type exclusion. So a Manual Pending entry IS batchable right now, and any copy saying
  * "cannot be batched until approved" is false.
  *
- * C.8's shape is still open — held as "lean yes" pending Robert (plans/QUESTIONS.md#q6 (3)) — which
+ * C.8's shape is still open — held as "lean yes" pending a decision (plans/QUESTIONS.md#q6 (3)) — which
  * is why this predicate identifies the set without asserting a control over it. Callers should
  * surface it as "awaiting review, gate not yet in force", not as a block.
  */

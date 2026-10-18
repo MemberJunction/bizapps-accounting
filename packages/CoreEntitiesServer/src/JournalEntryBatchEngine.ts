@@ -3,7 +3,7 @@
  * REWORKED 2026-07-23 for the rewritten baseline: batches are SINGLE-COMPANY (D7)
  * and the netted summary is an ORDINARY JournalEntry (typed with the IsJournalEntryBatchSummary-flagged
  * JournalEntryType — issue #24) instead of the retired JournalEntryBatchLineItem tables
- * (Amith's summary-JE model).
+ * (the summary-JE model).
  *
  *   buildJournalEntryBatch(companyId, …): gather that company's Pending JEs → ONE JournalEntryBatch
  *     (one batch per company per run, D7), net their lines to consolidated summary groups
@@ -216,8 +216,8 @@ export const AutoApproveGate: JournalEntryBatchApprovalGate = { async assertAppr
 
 /**
  * Thrown when a build finds nothing to batch (no candidate JEs, or every group netted to zero so
- * no summary line would be produced). A batch with no summary line is never persisted (Marcelo
- * 2026-07-21) — the empty case is a loud, explicit outcome, not a silent null.
+ * no summary line would be produced). A batch with no summary line is never persisted —
+ * the empty case is a loud, explicit outcome, not a silent null.
  */
 export class EmptyJournalEntryBatchError extends Error {
   public constructor(message: string) {
@@ -300,7 +300,7 @@ export async function buildJournalEntryBatch(
  * Build a batch from a SPECIFIC (already-vetted) set of Pending JE IDs belonging to ONE company —
  * the shared one-transaction core of the oldest-forward buildJournalEntryBatch, the explicit-ID build, and the
  * view build. Throws EmptyJournalEntryBatchError when the set nets to zero — a batch with no summary line is
- * never persisted (Marcelo 2026-07-21); the empty case is a loud, explicit outcome, not a silent null.
+ * never persisted; the empty case is a loud, explicit outcome, not a silent null.
  */
 async function buildJournalEntryBatchCore(
   companyId: string,
@@ -856,7 +856,7 @@ async function setSummaryPointerAndTotals(
  * its ExternalSystem matches or is unset) → the account's own Code (the account number — the
  * default; per-company charts mirror the ERP's numbers). `requireExternalAccountID` drops the Code
  * fallback and throws instead, for an ERP that knows accounts only by its own id (QuickBooks Online).
- * ⚠ OPEN with Amith: whether dispatch snapshots this resolution or re-resolves at post time
+ * ⚠ OPEN: whether dispatch snapshots this resolution or re-resolves at post time
  * (the retired batch-line-item snapshot column has no successor yet).
  */
 export async function resolveExternalAccount(
@@ -1201,7 +1201,7 @@ export async function regenerateJournalEntryBatch(
     const jeIds = await loadPendingJEIds(batch.CompanyID, contextUser, p, { postingDate: batch.PostingDate });
     const groups = NetLines(await loadNettableLines(batch.CompanyID, jeIds, contextUser, p));
     if (groups.length === 0) {
-      // Nothing to rebuild — a batch with no summary line is never persisted (Marcelo 2026-07-21):
+      // Nothing to rebuild — a batch with no summary line is never persisted:
       // keep the teardown (members back to the pool), mark the batch Cancelled, and say so loudly.
       await batch.CancelAfterTeardown();
       await dbProvider.CommitTransaction();

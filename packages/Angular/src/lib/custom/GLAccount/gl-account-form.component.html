@@ -23,8 +23,8 @@
       ── WHY [EditMode] IS GATED ON !record.IsSaved ──
 
       GLAccountEntityServer.LOCKED_IDENTITY_FIELDS = ['CompanyID','Code','AccountType','CurrencyCode'],
-      and ValidateAsync() refuses any change to them once IsSaved is true (Amith 2026-07-29:
-      "immutable from the moment the record is created — immediate + unconditional"). A plainly
+      and ValidateAsync() refuses any change to them once IsSaved is true (immutable
+      from the moment the record is created, immediately and unconditionally). A plainly
       editable control on a saved record therefore offers an edit the server ALWAYS rejects. So these
       fields are editable while creating and read-only afterwards, which is what the server enforces.
 

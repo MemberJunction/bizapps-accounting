@@ -40,8 +40,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /**
  * Dispatch status (UI plan §8.2) — the ERP-facing view of a batch: **did it land, and if not, why.**
  *
- * **How this earns its existence next to All batches** (Marcelo's core note — "if dispatch status is
- * gonna look the same as all batches, make sure this is adding some value"):
+ * **How this earns its existence next to All batches** (a page that looks the same as All batches
+ * adds nothing):
  *
  * 1. **It defaults to what is actually in flight** — Sent + Failed (see IN_FLIGHT), not the whole
  *    batch history. All batches is the archive; this is the wire.
@@ -215,10 +215,10 @@ export class DispatchStatusPageComponent extends BaseAngularComponent implements
   }
 
   /**
-   * **The value-add sort** (Marcelo: "maybe it's automatically sorting the ones that are waiting on
-   * the top"). A lifecycle CASE puts the broken first, then the waiting, then everything settled;
-   * inside each band the most recent dispatch leads. SQL Server sorts NULL `SentAt` last under DESC,
-   * so a never-sent batch can't jump the queue.
+   * **The value-add sort**: batches that need attention sort to the top. A lifecycle CASE puts the
+   * broken first, then the waiting, then everything settled; inside each band the most recent
+   * dispatch leads. SQL Server sorts NULL `SentAt` last under DESC, so a never-sent batch can't
+   * jump the queue.
    */
   private dispatchOrderBy(): string {
     return (

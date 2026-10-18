@@ -137,7 +137,7 @@ export class JournalEntryDetailPanelComponent extends BaseAngularComponent {
   /**
    * "Open in workspace" — carries the entry ID; the host routes it to the JE workspace page via the
    * category's `GoToPage('workspace', id)`. Close-as-you-leave: the workspace is the destination,
-   * so this panel gets out of the way. This is the panel's ONE open action (Marcelo 2026-08-05):
+   * so this panel gets out of the way. This is the panel's ONE open action:
    * the old "Open full" pop-out to the MJ form host was removed — the workspace IS the full-depth
    * home for an entry, so two open verbs were one too many.
    */
