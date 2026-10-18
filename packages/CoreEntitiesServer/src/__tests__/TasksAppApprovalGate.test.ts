@@ -362,3 +362,172 @@ describe('TasksAppApprovalGate.onBatchBuilt — the approval Task names the post
     expect(requests[0].Description).toContain('posting date 2026-08-31 — the journal date BusinessCentral receives');
   });
 });
+
+// ─── only an allowed decider's approval counts (golive #320 §3) ─────────────
+
+const CFO_PERSON_ID = 'c0c0c0c0-0000-4000-8000-0000000c0f00';
+const BUILDER_PERSON_ID = 'b0b0b0b0-0000-4000-8000-0000000b0d00';
+const OTHER_PERSON_ID = 'd0d0d0d0-0000-4000-8000-0000000d0d00';
+const PEOPLE_ENTITY_ID = 'e0e0e0e0-0000-4000-8000-0000000e0e00';
+
+interface AllowedDeciderWorld {
+  cfoUserId: string | null;
+  batchedByUserId: string;
+  approvedByUserId: string | null;
+  /** DecidedByPersonID of each Approved decision on the stamped Task (null = no Person recorded). */
+  approvedBy: Array<string | null>;
+  /** Person IDs bound to each user through People.LinkedUserID. */
+  peopleByUser: Record<string, string[]>;
+  /** A user's own People link (User.LinkedEntityRecordID), by user ID. */
+  userLinks?: Record<string, string>;
+  failPeopleLookup?: boolean;
+}
+
+function allowedDeciderProvider(w: AllowedDeciderWorld): IMetadataProvider {
+  return {
+    GetEntityObject: async (entityName: string) => {
+      if (entityName === BATCH_ENTITY) {
+        return {
+          Load: async () => true, ID: BATCH_ID, CompanyID: COMPANY_ID, JournalEntryBatchNumber: 'BATCH-0007',
+          ApprovalTaskID: TASK_ID, BatchedByUserID: w.batchedByUserId, ApprovedByUserID: w.approvedByUserId,
+        };
+      }
+      if (entityName === ACP_ENTITY) return { Load: async () => true, ApprovalCFOUserID: w.cfoUserId };
+      if (entityName === 'MJ_BizApps_Tasks: Tasks') {
+        const t = { ID: '', Load: async (id: string) => { t.ID = id; return true; } };
+        return t;
+      }
+      throw new Error(`allowedDeciderProvider: unexpected entity '${entityName}'`);
+    },
+    EntityByName: (entityName: string) => (entityName === BATCH_ENTITY ? { ID: BATCH_ENTITY_ID } : undefined),
+    EntityByID: (id: string) => (id === PEOPLE_ENTITY_ID ? { Name: 'MJ_BizApps_Common: People', ParentChain: [] } : undefined),
+    RunView: async (params: { EntityName: string; ExtraFilter?: string }) => {
+      const filter = params.ExtraFilter ?? '';
+      if (params.EntityName === 'MJ_BizApps_Tasks: Task Decisions') {
+        return { Success: true, Results: w.approvedBy.map(DecidedByPersonID => ({ OutcomeID: APPROVED_OUTCOME_ID, DecidedByPersonID })) };
+      }
+      if (params.EntityName === 'MJ_BizApps_Tasks: Task Decision Outcomes') {
+        return { Success: true, Results: [{ ID: APPROVED_OUTCOME_ID, Code: 'Approved' }, { ID: REJECTED_OUTCOME_ID, Code: 'Rejected' }] };
+      }
+      if (params.EntityName === 'MJ: Users') {
+        const userId = Object.keys(w.userLinks ?? {}).find(id => filter.includes(id));
+        return { Success: true, Results: userId ? [{ LinkedEntityID: PEOPLE_ENTITY_ID, LinkedEntityRecordID: w.userLinks![userId] }] : [{ LinkedEntityID: null, LinkedEntityRecordID: null }] };
+      }
+      if (params.EntityName === 'MJ_BizApps_Common: People') {
+        if (w.failPeopleLookup) return { Success: false, Results: [], ErrorMessage: 'database unavailable' };
+        const byLinkedUser = Object.entries(w.peopleByUser).filter(([userId]) => filter.includes(`LinkedUserID='${userId}'`)).flatMap(([, ids]) => ids);
+        const byOwnLink = [...filter.matchAll(/ID='([0-9a-f-]{36})'/g)].map(m => m[1]).filter(id => !filter.includes(`LinkedUserID='${id}'`));
+        return { Success: true, Results: [...new Set([...byLinkedUser, ...byOwnLink])].map(ID => ({ ID })) };
+      }
+      return { Success: true, Results: [] };
+    },
+  } as unknown as IMetadataProvider;
+}
+
+describe('TasksAppApprovalGate.assertApproved — only an allowed decider\'s approval counts', () => {
+  const base = (over: Partial<AllowedDeciderWorld> = {}): AllowedDeciderWorld => ({
+    cfoUserId: CFO_USER_ID,
+    batchedByUserId: BUILDER_USER_ID,
+    approvedByUserId: CFO_USER_ID,
+    approvedBy: [CFO_PERSON_ID],
+    peopleByUser: { [CFO_USER_ID]: [CFO_PERSON_ID], [BUILDER_USER_ID]: [BUILDER_PERSON_ID] },
+    ...over,
+  });
+
+  it('accepts an approval recorded by the CFO\'s Person (the in-app CFO path)', async () => {
+    const gate = new TasksAppApprovalGate(allowedDeciderProvider(base()));
+    await expect(gate.assertApproved(BATCH_ID, cfo)).resolves.toBeUndefined();
+  });
+
+  it('accepts the CFO\'s Person reached through the user\'s own People link', async () => {
+    const gate = new TasksAppApprovalGate(allowedDeciderProvider(base({ peopleByUser: {}, userLinks: { [CFO_USER_ID]: CFO_PERSON_ID } })));
+    await expect(gate.assertApproved(BATCH_ID, cfo)).resolves.toBeUndefined();
+  });
+
+  it('refuses an approval saved straight into the tasks app by someone else (the inbox bypass)', async () => {
+    const gate = new TasksAppApprovalGate(allowedDeciderProvider(base({ approvedBy: [OTHER_PERSON_ID] })));
+    await expect(gate.assertApproved(BATCH_ID, cfo)).rejects.toThrow(/not one made by the company's configured approver/);
+  });
+
+  it('refuses an approval by the builder\'s Person', async () => {
+    const gate = new TasksAppApprovalGate(allowedDeciderProvider(base({ approvedBy: [BUILDER_PERSON_ID] })));
+    await expect(gate.assertApproved(BATCH_ID, cfo)).rejects.toThrow(/must not be the user who built the batch/);
+  });
+
+  it('refuses every approval when the CFO built the batch', async () => {
+    const gate = new TasksAppApprovalGate(allowedDeciderProvider(base({ batchedByUserId: CFO_USER_ID })));
+    await expect(gate.assertApproved(BATCH_ID, cfo)).rejects.toThrow(/not one made by the company's configured approver/);
+  });
+
+  it('refuses when the company has no CFO configured', async () => {
+    const gate = new TasksAppApprovalGate(allowedDeciderProvider(base({ cfoUserId: null })));
+    await expect(gate.assertApproved(BATCH_ID, cfo)).rejects.toThrow(/not one made by the company's configured approver/);
+  });
+
+  it('accepts a decision with no Person when the batch\'s approval audit names the CFO (a CFO with no linked Person)', async () => {
+    const gate = new TasksAppApprovalGate(allowedDeciderProvider(base({ approvedBy: [null], peopleByUser: {} })));
+    await expect(gate.assertApproved(BATCH_ID, cfo)).resolves.toBeUndefined();
+  });
+
+  it('refuses a decision with no Person when the batch\'s approval audit names someone else', async () => {
+    const gate = new TasksAppApprovalGate(allowedDeciderProvider(base({ approvedBy: [null], approvedByUserId: OTHER_USER_ID })));
+    await expect(gate.assertApproved(BATCH_ID, cfo)).rejects.toThrow(/not one made by the company's configured approver/);
+  });
+
+  it('accepts when one of several approvals is the CFO\'s', async () => {
+    const gate = new TasksAppApprovalGate(allowedDeciderProvider(base({ approvedBy: [OTHER_PERSON_ID, CFO_PERSON_ID] })));
+    await expect(gate.assertApproved(BATCH_ID, cfo)).resolves.toBeUndefined();
+  });
+
+  it('fails closed with a message when the people lookup fails', async () => {
+    const gate = new TasksAppApprovalGate(allowedDeciderProvider(base({ failPeopleLookup: true })));
+    await expect(gate.assertApproved(BATCH_ID, cfo)).rejects.toThrow(/Could not look up the people linked to user .*database unavailable/);
+  });
+});
+
+describe('TasksAppApprovalGate.onBatchBuilt — the builder is recorded as the Task\'s creator', () => {
+  const buildProvider = (builderPeople: string[]): IMetadataProvider => ({
+    GetEntityObject: async (entityName: string) => {
+      if (entityName === BATCH_ENTITY) {
+        return {
+          Load: async () => true, ID: BATCH_ID, CompanyID: COMPANY_ID, JournalEntryBatchNumber: 'BATCH-0007',
+          TargetSystem: 'BusinessCentral', PostingDate: new Date('2026-08-31T00:00:00Z'), BatchedByUserID: BUILDER_USER_ID,
+        };
+      }
+      if (entityName === ACP_ENTITY) return { Load: async () => true, ApprovalCFOUserID: CFO_USER_ID };
+      if (entityName === 'MJ_BizApps_Tasks: Tasks') return { Load: async () => true, ID: TASK_ID };
+      throw new Error(`unexpected entity '${entityName}'`);
+    },
+    EntityByName: (entityName: string) => ({ ID: entityName === BATCH_ENTITY ? BATCH_ENTITY_ID : OTHER_USER_ID }),
+    EntityByID: () => undefined,
+    RunView: async (params: { EntityName: string; ExtraFilter?: string }) => {
+      if (params.EntityName === 'MJ_BizApps_Tasks: Task Types') return { Success: true, Results: [{ ID: TASK_ID }] };
+      if (params.EntityName === 'MJ_BizApps_Tasks: Task Links') return { Success: true, Results: [{ TaskID: TASK_ID }] };
+      if (params.EntityName === 'MJ_BizApps_Common: People') {
+        return { Success: true, Results: params.ExtraFilter?.includes(BUILDER_USER_ID) ? builderPeople.map(ID => ({ ID })) : [] };
+      }
+      return { Success: true, Results: [] };
+    },
+  } as unknown as IMetadataProvider);
+
+  const capture = (gate: TasksAppApprovalGate, requests: Array<{ CreatedByPersonID?: string }>): void => {
+    (gate as unknown as { orchestration: { CreateApprovalRequest: (req: { CreatedByPersonID?: string }) => Promise<void> } })
+      .orchestration = { CreateApprovalRequest: async (req) => { requests.push(req); } };
+  };
+
+  it('passes the builder\'s Person as CreatedByPersonID', async () => {
+    const requests: Array<{ CreatedByPersonID?: string }> = [];
+    const gate = new TasksAppApprovalGate(buildProvider([BUILDER_PERSON_ID]));
+    capture(gate, requests);
+    await gate.onBatchBuilt(BATCH_ID, cfo);
+    expect(requests[0].CreatedByPersonID).toBe(BUILDER_PERSON_ID);
+  });
+
+  it('leaves CreatedByPersonID blank, and still builds, when the builder has no Person', async () => {
+    const requests: Array<{ CreatedByPersonID?: string }> = [];
+    const gate = new TasksAppApprovalGate(buildProvider([]));
+    capture(gate, requests);
+    await expect(gate.onBatchBuilt(BATCH_ID, cfo)).resolves.toBe(TASK_ID);
+    expect(requests[0].CreatedByPersonID).toBeUndefined();
+  });
+});

@@ -112,6 +112,37 @@ describe('JournalEntryBatchEntityServer — lifecycle invariants', () => {
     expect(result.Errors.some(e => getErrorText(e).includes('ApprovedAt and ApprovedByUserID'))).toBe(true);
   });
 
+  // ─── an approval is recorded in the approving user's name (golive #320 §3) ───
+
+  const approverErrors = (r: { Errors: unknown[] }) => r.Errors.filter(e => getErrorText(e).includes('in the name of the user approving'));
+
+  it('refuses a Pending → Approved save that names someone other than the signed-in user as the approver', () => {
+    batch.SetMany({ ID: 'B1', JournalEntryBatchNumber: 'JEB-000001', Status: 'Pending' }, true, true);
+    batch.ContextCurrentUser = { ID: 'FINANCE_USER' } as UserInfo;
+    batch.Status = 'Approved';
+    batch.ApprovedAt = new Date();
+    batch.ApprovedByUserID = 'CFO_USER';
+    const result = batch.Validate();
+    expect(result.Success).toBe(false);
+    expect(approverErrors(result)).toHaveLength(1);
+  });
+
+  it('accepts a Pending → Approved save recorded as the signed-in user (case-insensitive)', () => {
+    batch.SetMany({ ID: 'B1', JournalEntryBatchNumber: 'JEB-000001', Status: 'Pending' }, true, true);
+    batch.ContextCurrentUser = { ID: '48D60BCC-044B-4CC2-9675-0D3B57BCDCBA' } as UserInfo;
+    batch.Status = 'Approved';
+    batch.ApprovedAt = new Date();
+    batch.ApprovedByUserID = '48d60bcc-044b-4cc2-9675-0d3b57bcdcba';
+    expect(approverErrors(batch.Validate())).toEqual([]);
+  });
+
+  it('does not re-check the approver on a batch that was already Approved', () => {
+    batch.SetMany({ ID: 'B1', JournalEntryBatchNumber: 'JEB-000001', Status: 'Approved', ApprovedAt: new Date(), ApprovedByUserID: 'CFO_USER' }, true, true);
+    batch.ContextCurrentUser = { ID: 'FINANCE_USER' } as UserInfo;
+    batch.ErrorMessage = 'touch';
+    expect(approverErrors(batch.Validate())).toEqual([]);
+  });
+
   // ─── the saved-record transition graph (golive #214 added Archived) ───────
 
   /**

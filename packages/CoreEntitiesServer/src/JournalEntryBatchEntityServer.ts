@@ -30,7 +30,7 @@
 import { createHash } from 'node:crypto';
 
 import { BaseEntity, DatabaseProviderBase, EntitySaveOptions, IMetadataProvider, IRunViewProvider, LogError, LogStatus, UserInfo, ValidationErrorInfo, ValidationResult } from '@memberjunction/core';
-import { RegisterClass } from '@memberjunction/global';
+import { RegisterClass, UUIDsEqual } from '@memberjunction/global';
 import {
   mjBizAppsAccountingJournalEntryBatchEntity,
   mjBizAppsAccountingJournalEntryEntity,
@@ -307,6 +307,14 @@ export class JournalEntryBatchEntityServer extends mjBizAppsAccountingJournalEnt
     // Approval audit pair: an Approved batch carries WHO and WHEN, together.
     if (this.Status === 'Approved' && (!this.ApprovedAt || !this.ApprovedByUserID)) {
       fail(`An Approved batch must carry both ApprovedAt and ApprovedByUserID.`);
+    }
+
+    // WHO is the user approving (golive #320 §3): an approval cannot be recorded in someone else's
+    // name. TasksAppApprovalGate.assertApproved trusts ApprovedByUserID for a decision that names no
+    // Person, so a save naming the CFO while signed in as someone else must not land.
+    const approver = this.ContextCurrentUser?.ID;
+    if (this.isApproving && approver && this.ApprovedByUserID && !UUIDsEqual(this.ApprovedByUserID, approver)) {
+      fail(`An approval is recorded in the name of the user approving: ApprovedByUserID must be you, not ${this.ApprovedByUserID}.`);
     }
 
     // Archive audit triple: an Archived batch says WHY it will never post, plus who and when.

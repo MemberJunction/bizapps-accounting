@@ -1,0 +1,5 @@
+---
+"@mj-biz-apps/accounting-core-entities-server": patch
+---
+
+Security: a journal entry batch is sent only on an approval from an allowed decider (bc-aidp-next-golive#320 §3). `TasksAppApprovalGate.assertApproved` used to accept any Approved decision on the batch's approval Task, so a decision saved straight into the tasks app (the Tasks inbox, or anyone allowed to create a Task Decision) counted. It now counts a decision only when it is attributed to a Person bound to the company's Approval CFO and not to the batch's builder; a decision with no Person counts only when the batch's approval audit names the Approval CFO. `JournalEntryBatchEntityServer` now refuses a Pending → Approved save whose `ApprovedByUserID` is not the signed-in user. The approval Task also records the builder's Person as its creator (`CreatedByPersonID`), so the tasks app's `PreventSelfApproval` setting refuses the builder a decision on it. The in-app CFO approval path is unchanged. A batch approved by a former Approval CFO is no longer sendable; cancel and rebuild it.
