@@ -4,12 +4,13 @@
  * whether a transaction was opened, and the order of transaction and SQL calls.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { AuthorizationInfo, EntityInfo, IMetadataProvider, RemoteOpServerContext, UserInfo } from '@memberjunction/core';
+import type { AuthorizationInfo, AuthorizationRoleInfo, EntityInfo, IMetadataProvider, RemoteOpServerContext, UserInfo } from '@memberjunction/core';
 import type { AccountingFinanceExceptionToRaise } from '@mj-biz-apps/accounting-entities';
 
 const SYSTEM_USER = { ID: '00000000-0000-4000-8000-00000000000a', Name: 'System' } as UserInfo;
+const cachedUsers = vi.hoisted(() => ({ list: [] as UserInfo[] }));
 vi.mock('@memberjunction/generic-database-provider', () => ({
-  UserCache: { Instance: { GetSystemUser: () => SYSTEM_USER } },
+  UserCache: { Instance: { GetSystemUser: () => SYSTEM_USER, get Users() { return cachedUsers.list; } } },
 }));
 
 import {
@@ -17,12 +18,17 @@ import {
   GetFinanceExceptionTypesOperation,
   RaiseFinanceExceptionsOperation,
 } from '../FinanceExceptionOperations.js';
-import { FINANCE_EXCEPTIONS_CLEAR_AUTH } from '../FinanceExceptions.js';
+import {
+  FINANCE_EXCEPTIONS_CLEAR_AUTH,
+  FINANCE_EXCEPTIONS_CLEAR_UNATTRIBUTED_AUTH,
+  FinanceExceptionClearTypeAuthName,
+} from '../FinanceExceptionClearPolicy.js';
 
 const COMPANY = '11111111-1111-4111-8111-111111111111';
 const CREATOR = '22222222-2222-4222-8222-222222222222';
 const REVIEWER = { ID: '33333333-3333-4333-8333-333333333333', Name: 'Reviewer' } as UserInfo;
 const OUTSIDER = { ID: '44444444-4444-4444-8444-444444444444', Name: 'Outsider' } as UserInfo;
+const SUPERVISOR = { ID: '88888888-8888-4888-8888-888888888888', Name: 'Supervisor' } as UserInfo;
 const EXCEPTION_ID = '55555555-5555-4555-8555-555555555555';
 const ORDER_LINES = { ID: '66666666-6666-4666-8666-666666666666', Name: 'MJ_BizApps_Orders: Order Lines' };
 
@@ -62,6 +68,8 @@ interface StubOptions {
   saveSucceeds?: boolean;
   stored?: Partial<WrittenRow> | null;
   authHolders?: string[];
+  /** Rule rights a host has granted: each is held by `holders` and counts as granted. */
+  grantedRules?: Array<{ Name: string; holders: string[] }>;
 }
 
 function stubProvider(options: StubOptions = {}) {
@@ -98,10 +106,18 @@ function stubProvider(options: StubOptions = {}) {
     return row;
   });
   const holders = options.authHolders ?? [REVIEWER.ID];
-  const auth = { ID: 'AUTH-1', Name: FINANCE_EXCEPTIONS_CLEAR_AUTH, ParentID: null, UserCanExecute: (u: UserInfo) => holders.includes(u.ID) };
+  const auth = { ID: 'AUTH-1', Name: FINANCE_EXCEPTIONS_CLEAR_AUTH, ParentID: null, IsActive: true, UserCanExecute: (u: UserInfo) => holders.includes(u.ID) };
+  const rules = (options.grantedRules ?? []).map((r, i) => ({
+    ID: `AUTH-RULE-${i}`,
+    Name: r.Name,
+    ParentID: null,
+    IsActive: true,
+    UserCanExecute: (u: UserInfo) => r.holders.includes(u.ID),
+  }));
   const provider = {
     Entities: [ORDER_LINES] as unknown as EntityInfo[],
-    Authorizations: [auth] as unknown as AuthorizationInfo[],
+    Authorizations: [auth, ...rules] as unknown as AuthorizationInfo[],
+    AuthorizationRoles: rules.map(r => ({ AuthorizationID: r.ID, RoleID: 'ROLE-ANY', Type: 'Allow' })) as unknown as AuthorizationRoleInfo[],
     TransactionDepth: options.transactionDepth ?? 0,
     BeginTransaction: tx.begin,
     CommitTransaction: tx.commit,
@@ -259,6 +275,7 @@ describe('Accounting.RaiseFinanceExceptions', () => {
 describe('Accounting.ClearFinanceException', () => {
   const openRow = (overrides: Partial<WrittenRow> = {}): Partial<WrittenRow> => ({
     ID: EXCEPTION_ID,
+    FinanceExceptionTypeID: TYPES[0].ID,
     Status: 'Open',
     SourceCreatedByUserID: CREATOR,
     CreatorUnresolved: false,
@@ -324,6 +341,69 @@ describe('Accounting.ClearFinanceException', () => {
     const [sql, params] = s.executeSQL.mock.calls[0] as unknown as [string, Record<string, unknown>];
     expect(sql).toMatch(/FROM __mj_BizAppsAccounting\.FinanceException WITH \(UPDLOCK, ROWLOCK\) WHERE ID = @ID/);
     expect(params).toEqual({ ID: EXCEPTION_ID });
+  });
+
+  it('refuses a holder of the default right when the type has its own clearing right', async () => {
+    const typeRight = FinanceExceptionClearTypeAuthName(TYPES[0].Code);
+    const s = stubProvider({ stored: openRow(), grantedRules: [{ Name: typeRight, holders: [SUPERVISOR.ID] }] });
+    const result = await clear(s, {});
+    expect(result.Output).toEqual({ Success: false, Status: 'Open', Errors: [expect.objectContaining({ Code: 'TYPE_NOT_AUTHORIZED' })] });
+    expect(result.Output?.Errors?.[0].Message).toContain(typeRight);
+    expect(s.saved).toHaveLength(0);
+  });
+
+  it('lets a holder of only a per-type right through the gate and clear that type', async () => {
+    const s = stubProvider({
+      stored: openRow(),
+      authHolders: [],
+      grantedRules: [{ Name: FinanceExceptionClearTypeAuthName(TYPES[0].Code), holders: [SUPERVISOR.ID] }],
+    });
+    const result = await clear(s, {}, SUPERVISOR);
+    expect(result.Output).toEqual({ Success: true, Status: 'Reviewed' });
+    expect(s.saved[0]).toMatchObject({ ReviewedByUserID: SUPERVISOR.ID });
+  });
+
+  it('lets the unattributed right clear an exception whose creator is unresolved', async () => {
+    const s = stubProvider({
+      stored: openRow({ SourceCreatedByUserID: null, CreatorUnresolved: true }),
+      grantedRules: [{ Name: FINANCE_EXCEPTIONS_CLEAR_UNATTRIBUTED_AUTH, holders: [REVIEWER.ID] }],
+    });
+    const result = await clear(s, {});
+    expect(result.Output).toEqual({ Success: true, Status: 'Reviewed' });
+  });
+
+  it('refuses a system-created exception to a reviewer without the unattributed right', async () => {
+    const s = stubProvider({
+      stored: openRow({ SourceCreatedByUserID: SYSTEM_USER.ID }),
+      grantedRules: [{ Name: FINANCE_EXCEPTIONS_CLEAR_UNATTRIBUTED_AUTH, holders: [SUPERVISOR.ID] }],
+    });
+    const result = await clear(s, {});
+    expect(result.Output?.Errors?.[0].Code).toBe('UNATTRIBUTED_NOT_AUTHORIZED');
+    expect(s.saved).toHaveLength(0);
+  });
+
+  it('reports TYPE_UNKNOWN when the exception names a type that cannot be read', async () => {
+    const s = stubProvider({ stored: openRow({ FinanceExceptionTypeID: 'AAAAAAAA-0000-4000-8000-0000000000FF' }) });
+    const result = await clear(s, {});
+    expect(result.Output).toEqual({ Success: false, Status: 'Open', Errors: [expect.objectContaining({ Code: 'TYPE_UNKNOWN' })] });
+    expect(s.saved).toHaveLength(0);
+  });
+
+  it('reports SAVE_FAILED when the type catalog cannot be read', async () => {
+    const s = stubProvider({ stored: openRow() });
+    s.raw.RunView.mockResolvedValueOnce({ Success: false, Results: [], ErrorMessage: 'timeout' } as never);
+    const result = await clear(s, {});
+    expect(result.Output?.Errors?.[0]).toMatchObject({ Code: 'SAVE_FAILED', Message: expect.stringContaining('timeout') });
+    expect(s.tx.rollback).toHaveBeenCalledTimes(1);
+  });
+
+  it('checks the creator before the rule: a per-type holder still cannot clear their own record', async () => {
+    const s = stubProvider({
+      stored: openRow({ SourceCreatedByUserID: SUPERVISOR.ID }),
+      grantedRules: [{ Name: FinanceExceptionClearTypeAuthName(TYPES[0].Code), holders: [SUPERVISOR.ID] }],
+    });
+    const result = await clear(s, {}, SUPERVISOR);
+    expect(result.Output?.Errors?.[0].Code).toBe('CREATOR_CANNOT_CLEAR');
   });
 
   it('rolls back and reports SAVE_FAILED when the save fails', async () => {
